@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "py-security-suite"
+version = "0.1.0"
+description = "Offline-first security scanner orchestration and reporting for Python projects"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "Python Security Suite contributors" }]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Intended Audience :: System Administrators",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.11",
+  "Topic :: Security",
+]
+dependencies = []
+
+[project.scripts]
+py-security-suite = "py_security_suite.cli:main"
+pysec = "py_security_suite.cli:main"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+py_security_suite = ["rules/*.yml", "rules/*.toml", "rules/*.txt"]
+
+[tool.pyright]
+include = ["src", "tests"]
+pythonVersion = "3.11"
+typeCheckingMode = "strict"

@@ -1,0 +1,65 @@
+# Copy to .github/workflows/python-security.yml after replacing every
+# <approved-commit-sha> and the isolation verification command.
+name: Python security
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  scan:
+    # This label must select an enterprise runner that can enforce scanner-child
+    # egress denial while retaining the runner agent's GitHub control channel.
+    runs-on: [self-hosted, pysec-isolated]
+    env:
+      PYTHONPATH: ${{ github.workspace }}/src
+
+    steps:
+      - name: Check out the exact revision
+        uses: actions/checkout@<approved-commit-sha>
+        with:
+          persist-credentials: false
+
+      - name: Verify the enterprise isolation boundary
+        # Replace this with an organization-owned check. It must fail unless
+        # network denial for scanner subprocesses is active.
+        run: enterprise-verify-pysec-isolation
+
+      - name: Run all required scanners and preserve the policy exit code
+        id: security_scan
+        shell: bash
+        run: |
+          set +e
+          python -m py_security_suite scan . \
+            --config pysec.toml \
+            --output python-security-report \
+            --network-isolated \
+            --github-summary
+          scan_exit=$?
+          echo "exit_code=$scan_exit" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Upload the complete sanitized report
+        if: always()
+        uses: actions/upload-artifact@<approved-commit-sha>
+        with:
+          name: python-security-report
+          path: python-security-report/
+          if-no-files-found: error
+
+      - name: Publish SARIF when code scanning is enabled
+        if: always()
+        uses: github/codeql-action/upload-sarif@<approved-commit-sha>
+        with:
+          sarif_file: python-security-report/results.sarif
+          category: python-security-suite
+
+      - name: Apply the suite policy result after publishing reports
+        if: always()
+        shell: bash
+        run: exit "${{ steps.security_scan.outputs.exit_code }}"
+

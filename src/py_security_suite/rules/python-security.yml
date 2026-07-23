@@ -1,0 +1,35 @@
+rules:
+  - id: python.subprocess-shell-true
+    languages: [python]
+    message: Avoid shell=True with subprocess APIs; pass an argument vector instead.
+    severity: ERROR
+    metadata:
+      cwe: ["CWE-78: Improper Neutralization of Special Elements used in an OS Command"]
+      category: security
+      confidence: HIGH
+    patterns:
+      - pattern-either:
+          - pattern: subprocess.$FUNC(..., shell=True, ...)
+          - pattern: $OBJ.$FUNC(..., shell=True, ...)
+
+  - id: python.unsafe-yaml-load
+    languages: [python]
+    message: Use yaml.safe_load for untrusted YAML input.
+    severity: ERROR
+    metadata:
+      cwe: ["CWE-502: Deserialization of Untrusted Data"]
+      category: security
+      confidence: HIGH
+    pattern: yaml.load(...)
+
+  - id: python.dynamic-code-execution
+    languages: [python]
+    message: Dynamic code execution can allow attacker-controlled input to run.
+    severity: WARNING
+    metadata:
+      cwe: ["CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code"]
+      category: security
+      confidence: MEDIUM
+    pattern-either:
+      - pattern: eval(...)
+      - pattern: exec(...)

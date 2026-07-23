@@ -1,0 +1,139 @@
+schema_version = "1"
+# quick | standard | extended | deep | supply-chain | artifact |
+# comprehensive | production | release
+profile = "standard"
+
+[isolation]
+network = "deny"
+require_attestation = true
+execute_target_code = false
+
+[execution]
+max_workers = 4
+max_output_bytes = 16777216
+
+[policy]
+# Empty means every selected and applicable scanner is required.
+required_scanners = []
+block_severities = ["critical", "high"]
+incomplete_is_blocking = true
+
+[reports]
+include_sanitized_evidence = true
+
+[tools.bandit]
+enabled = true
+executable = "bandit"
+timeout_seconds = 300
+
+[tools.semgrep]
+enabled = true
+executable = "semgrep"
+timeout_seconds = 600
+# Point this at an enterprise-approved, immutable rule bundle.
+rules_path = "security-rules/semgrep"
+
+[tools.detect-secrets]
+enabled = true
+executable = "detect-secrets"
+timeout_seconds = 300
+
+[tools.osv-scanner]
+enabled = true
+executable = "osv-scanner"
+timeout_seconds = 300
+# Populate this directory in the connected update lane.
+database_path = "security-data/osv"
+
+[tools.cyclonedx-py]
+enabled = true
+executable = "cyclonedx-py"
+timeout_seconds = 300
+
+[tools.ruff]
+enabled = true
+executable = "ruff"
+timeout_seconds = 300
+
+[tools.zizmor]
+enabled = true
+executable = "zizmor"
+timeout_seconds = 300
+
+[tools.pysa]
+enabled = true
+executable = "pyre"
+timeout_seconds = 1200
+
+[tools.trivy]
+enabled = true
+executable = "trivy"
+timeout_seconds = 900
+# Optional local cache containing organization-approved Trivy assets.
+database_path = "security-data/trivy"
+
+[tools.guarddog]
+enabled = true
+executable = "guarddog"
+timeout_seconds = 900
+
+[tools.scancode]
+enabled = true
+executable = "scancode"
+timeout_seconds = 1800
+
+[tools.gitleaks]
+enabled = true
+executable = "gitleaks"
+timeout_seconds = 900
+# Optional organization configuration. The bundled default rules are extended
+# automatically when this setting is omitted.
+# rules_path = "security-rules/gitleaks.toml"
+
+[tools.trufflehog]
+enabled = true
+executable = "trufflehog"
+timeout_seconds = 900
+
+[tools.codeql]
+enabled = true
+executable = "run-codeql"
+timeout_seconds = 1800
+# run-codeql is allowed to use only this pre-staged CodeQL executable.
+auxiliary_executable = "security-tools/codeql/codeql"
+# Isolated home containing .codeql/packages/codeql/python-queries.
+database_path = "security-data/run-codeql-home"
+
+[tools.syft]
+enabled = true
+executable = "syft"
+timeout_seconds = 600
+artifacts_path = "dist"
+
+[tools.grype]
+enabled = true
+executable = "grype"
+timeout_seconds = 900
+database_path = "security-data/grype"
+artifacts_path = "dist"
+
+[tools.check-wheel-contents]
+enabled = true
+executable = "check-wheel-contents"
+timeout_seconds = 300
+artifacts_path = "dist"
+
+[tools.twine]
+enabled = true
+executable = "twine"
+timeout_seconds = 300
+artifacts_path = "dist"
+
+[tools.pypi-attestations]
+enabled = true
+executable = "pypi-attestations"
+timeout_seconds = 300
+artifacts_path = "dist"
+provenance_path = "dist"
+database_path = "security-data/sigstore-trust-home"
+repository_url = "https://github.com/example/example"

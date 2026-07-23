@@ -1,0 +1,11 @@
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Exclude generated suite artifacts and isolated tool environments"
+paths = [
+  '''(^|[\\/])\.artifacts([\\/]|$)''',
+  '''(^|[\\/])\.pysec-tools([\\/]|$)''',
+  '''(^|[\\/])build([\\/]|$)''',
+  '''(^|[\\/])dist([\\/]|$)''',
+]

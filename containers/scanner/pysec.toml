@@ -1,0 +1,41 @@
+schema_version = "1"
+profile = "standard"
+
+[isolation]
+network = "deny"
+require_attestation = true
+execute_target_code = false
+
+[execution]
+max_workers = 1
+max_output_bytes = 33554432
+
+[policy]
+required_scanners = ["bandit", "semgrep", "detect-secrets", "osv-scanner"]
+block_severities = ["critical", "high"]
+incomplete_is_blocking = true
+
+[reports]
+include_sanitized_evidence = true
+
+[tools.bandit]
+enabled = true
+executable = "/usr/local/bin/bandit"
+timeout_seconds = 300
+
+[tools.semgrep]
+enabled = true
+executable = "/usr/local/bin/semgrep"
+timeout_seconds = 600
+rules_path = "/opt/pysec-suite/src/py_security_suite/rules/python-security.yml"
+
+[tools.detect-secrets]
+enabled = true
+executable = "/usr/local/bin/detect-secrets"
+timeout_seconds = 300
+
+[tools.osv-scanner]
+enabled = true
+executable = "/usr/local/bin/osv-scanner"
+timeout_seconds = 300
+database_path = "/opt/osv-db"
