@@ -11,7 +11,7 @@ for published releases.
 - Expanded the suite to 252 passing tests while preserving actionable per-file
   coverage reporting in consolidated reports.
 - Resolved four consecutive reports' lowest-coverage files, raised combined
-  line-and-branch coverage to 91.19%, and added runtime-guard coverage for
+  line-and-branch coverage to 91.26%, and added runtime-guard coverage for
   offline linters, staging, Pysa, Trivy, Cosign, artifact scanners, passive
   evidence adapters, cross-tool finding correlation, offline databases,
   applicability decisions, malformed evidence, temporary-file cleanup, SARIF
@@ -30,6 +30,13 @@ for published releases.
 - Split summary rendering into focused report sections, keeping the public
   artifact contract stable while reducing `render_summary` from Radon rank E
   during dogfooding to rank A in the final implementation.
+- Strengthened `pysec inspect` with a checksum-backed scan-policy disposition,
+  applicability-aware scanner accounting, policy reasons, and actionable
+  finding ID, lifecycle, scanner-rule, owner, location, and remediation detail.
+- Corrected terminal scanner health so an applicable disabled or skipped tool
+  is an execution gap rather than being mislabeled as not applicable.
+- Reused the typed `Outcome` model for inspection dispositions, eliminating a
+  Bandit B105 false positive without adding a security suppression.
 
 ### Added
 

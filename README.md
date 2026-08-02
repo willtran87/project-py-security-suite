@@ -84,8 +84,11 @@ After a scan, verify and understand the result from one concise command:
 pysec inspect PATH_TO_REPORT --limit 5
 ```
 
-`inspect` verifies the report checksum chain before showing scanner health,
-finding severity, domains, lifecycle, ownership, and prioritized actions.
+`inspect` verifies the report checksum chain before showing the `ALLOW`,
+`REVIEW`, or `BLOCK` scan-policy disposition, policy reasons, applicability-
+aware scanner health, finding severity, domains, lifecycle, ownership, native
+scanner rules, and prioritized remediation. Applicable disabled or skipped
+tools are reported as execution gaps, never as not applicable.
 
 ```text
 python -m py_security_suite scan PATH_TO_PROJECT \

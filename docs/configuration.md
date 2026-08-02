@@ -269,6 +269,13 @@ JSON form is stable automation input. It does not run scanner version commands,
 execute target code, attest network isolation, or predict the policy outcome of
 the eventual scan.
 
+`inspect` verifies the report checksum chain before reading normalized JSON.
+Its JSON form retains `policy_reasons` for compatibility and adds structured
+`scan_policy`, applicability-aware `tool_health`, integrity status, and cited
+`top_actions`. A skipped scanner only counts as not applicable when its
+manifest record explicitly has `applicable: false`; otherwise it is an
+execution gap.
+
 `verify-report` validates the complete `checksums.sha256` chain and the scan
 manifest. `verify` accepts a detached passport **directory** created by
 `attest`, not the embedded `security-passport.json` statement file.

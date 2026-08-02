@@ -495,9 +495,11 @@ prunes generated artifacts, virtual environments, installed scanner trees,
 build outputs, and symlinked directories before descent.
 
 After scanning, use `pysec inspect REPORT` as the terminal and release-log entry
-point. It verifies checksums first and then shows the outcome, scanner health,
-domain and lifecycle counts, ownership, and the highest-priority actions. Use
-`--limit 0` for summary-only output or `--format json` for dashboards.
+point. It verifies checksums first and then shows the scan-policy disposition
+and reasons, applicability-aware scanner health, domain and lifecycle counts,
+and the highest-priority actions with finding ID, scanner rule, owner,
+location, and remediation. Use `--limit 0` for summary-only output or
+`--format json` for dashboards.
 
 ## Intelligence, baseline, and Security Passport lanes
 

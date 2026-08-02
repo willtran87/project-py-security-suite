@@ -5,6 +5,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
+from .models import Outcome
 from .passport import verify_report
 
 
@@ -17,6 +18,12 @@ _SEVERITY_ORDER = {
     "informational": 4,
     "unknown": 5,
 }
+_POLICY_DISPOSITIONS = {
+    Outcome.PASS: "allow",
+    Outcome.WARN: "review",
+    Outcome.FAIL: "block",
+    Outcome.INCOMPLETE: "block",
+}
 
 
 def inspect_report(report: Path, *, limit: int = 5) -> dict[str, Any]:
@@ -27,53 +34,81 @@ def inspect_report(report: Path, *, limit: int = 5) -> dict[str, Any]:
     verification = verify_report(root)
     manifest = _read_object(root / "scan-manifest.json")
     findings_document = _read_object(root / "findings.json")
-    findings = findings_document.get("findings")
-    tools = manifest.get("tools")
-    if not isinstance(findings, list) or not all(
-        isinstance(item, dict) for item in findings
-    ):
-        raise ValueError("report findings must be a list of objects")
-    if not isinstance(tools, list) or not all(isinstance(item, dict) for item in tools):
-        raise ValueError("report tools must be a list of objects")
-
-    severity = Counter(str(item.get("severity") or "unknown") for item in findings)
-    domains = Counter(str(item.get("domain") or "unknown") for item in findings)
-    lifecycle = Counter(str(item.get("status") or "unknown") for item in findings)
-    tool_health = Counter(str(item.get("status") or "unknown") for item in tools)
+    findings = _object_list(findings_document.get("findings"), "findings")
+    tools = _object_list(manifest.get("tools"), "tools")
+    outcome, policy_reasons = _policy_metadata(manifest)
     sorted_findings = sorted(findings, key=_finding_key)
     return {
         "schema_version": "1.0",
         "verified": True,
-        "scan": {
-            "id": manifest.get("scan_id"),
-            "target": manifest.get("target"),
-            "profile": manifest.get("profile"),
-            "outcome": manifest.get("outcome"),
-            "duration_seconds": manifest.get("duration_seconds"),
-            "finished_at": manifest.get("finished_at"),
+        "scan": _scan_summary(manifest, outcome),
+        "findings": _findings_summary(findings),
+        "tool_health": _tool_health(tools),
+        "scan_policy": {
+            "disposition": _POLICY_DISPOSITIONS[Outcome(outcome)],
+            "reasons": policy_reasons,
         },
-        "findings": {
-            "total": len(findings),
-            "blocking": sum(bool(item.get("blocking")) for item in findings),
-            "by_severity": dict(sorted(severity.items())),
-            "by_domain": dict(sorted(domains.items())),
-            "by_lifecycle": dict(sorted(lifecycle.items())),
-        },
-        "tool_health": {
-            "selected": len(tools),
-            "by_status": dict(sorted(tool_health.items())),
-        },
-        "policy_reasons": manifest.get("policy_reasons") or [],
+        # Retain the original field for consumers of the 1.0 inspection shape.
+        "policy_reasons": policy_reasons,
         "top_actions": [_action(item) for item in sorted_findings[:limit]],
         "integrity": {
+            "status": "verified",
             "files_verified": verification["file_count"],
             "checksums_sha256": verification["checksums_sha256"],
         },
-        "entrypoints": {
-            "html": str(root / "index.html"),
-            "summary": str(root / "summary.md"),
-            "action_plan": str(root / "action-plan.md"),
-        },
+        "entrypoints": _entrypoints(root),
+    }
+
+
+def _object_list(value: object, name: str) -> list[dict[str, Any]]:
+    if not isinstance(value, list) or not all(isinstance(item, dict) for item in value):
+        raise ValueError(f"report {name} must be a list of objects")
+    return value
+
+
+def _policy_metadata(manifest: dict[str, Any]) -> tuple[str, list[str]]:
+    outcome = str(manifest.get("outcome") or "")
+    try:
+        parsed_outcome = Outcome(outcome)
+    except ValueError as exc:
+        raise ValueError("report outcome is invalid") from exc
+    reasons = manifest.get("policy_reasons") or []
+    if not isinstance(reasons, list) or not all(
+        isinstance(item, str) for item in reasons
+    ):
+        raise ValueError("report policy reasons must be a list of strings")
+    return parsed_outcome.value, reasons
+
+
+def _scan_summary(manifest: dict[str, Any], outcome: str) -> dict[str, Any]:
+    return {
+        "id": manifest.get("scan_id"),
+        "target": manifest.get("target"),
+        "profile": manifest.get("profile"),
+        "outcome": outcome,
+        "duration_seconds": manifest.get("duration_seconds"),
+        "finished_at": manifest.get("finished_at"),
+    }
+
+
+def _findings_summary(findings: list[dict[str, Any]]) -> dict[str, Any]:
+    severity = Counter(str(item.get("severity") or "unknown") for item in findings)
+    domains = Counter(str(item.get("domain") or "unknown") for item in findings)
+    lifecycle = Counter(str(item.get("status") or "unknown") for item in findings)
+    return {
+        "total": len(findings),
+        "blocking": sum(bool(item.get("blocking")) for item in findings),
+        "by_severity": dict(sorted(severity.items())),
+        "by_domain": dict(sorted(domains.items())),
+        "by_lifecycle": dict(sorted(lifecycle.items())),
+    }
+
+
+def _entrypoints(root: Path) -> dict[str, str]:
+    return {
+        "html": str(root / "index.html"),
+        "summary": str(root / "summary.md"),
+        "action_plan": str(root / "action-plan.md"),
     }
 
 
@@ -82,24 +117,33 @@ def render_inspection(document: dict[str, Any]) -> str:
     scan = document["scan"]
     findings = document["findings"]
     health = document["tool_health"]
-    status = health["by_status"]
+    integrity = document["integrity"]
+    policy = document["scan_policy"]
     lines = [
         (
             f"{str(scan['outcome']).upper()}: {scan['target']} "
             f"({scan['profile']}; {scan['id']})"
         ),
         (
+            f"Decision: {str(policy['disposition']).upper()}; report integrity: "
+            f"{str(integrity['status']).upper()} ({integrity['files_verified']} files)"
+        ),
+        (
             f"Findings: {findings['total']} total, {findings['blocking']} blocking; "
             f"severity {_counts(findings['by_severity'])}"
         ),
         (
-            f"Tools: {status.get('completed', 0)} completed, "
-            f"{status.get('skipped', 0)} not applicable, "
-            f"{_problem_tool_count(status)} with execution problems"
+            f"Tools: {health['completed']}/{health['applicable']} applicable completed; "
+            f"{health['not_applicable']} not applicable; "
+            f"{health['execution_gaps']} execution gaps"
         ),
         f"Domains: {_counts(findings['by_domain'])}",
         f"Lifecycle: {_counts(findings['by_lifecycle'])}",
     ]
+    reasons = policy["reasons"]
+    if reasons:
+        lines.append("Policy reasons:")
+        lines.extend(f"- {reason}" for reason in reasons)
     actions = document["top_actions"]
     if actions:
         lines.append("Top actions:")
@@ -107,17 +151,20 @@ def render_inspection(document: dict[str, Any]) -> str:
             location = item["path"]
             if item["line"] is not None:
                 location = f"{location}:{item['line']}"
+            evidence = [f"finding {item['finding_id']}", *item["source_rules"]]
+            if item["owners"]:
+                evidence.append("owner " + ", ".join(item["owners"]))
             lines.append(
-                f"- [{str(item['severity']).upper()}] {item['title']} — "
-                f"{location} — {', '.join(item['tools'])}"
+                f"- [{str(item['severity']).upper()}/{str(item['status']).upper()}] "
+                f"{item['title']} | {location}"
             )
+            lines.append("  Evidence: " + "; ".join(evidence))
+            if item["remediation"]:
+                lines.append(f"  Action: {item['remediation']}")
     lines.extend(
         [
-            (
-                f"Integrity: {document['integrity']['files_verified']} report files "
-                "verified"
-            ),
             f"Open: {document['entrypoints']['html']}",
+            f"Actions: {document['entrypoints']['action_plan']}",
         ]
     )
     return "\n".join(lines)
@@ -143,18 +190,8 @@ def _finding_key(item: dict[str, Any]) -> tuple[int, int, int, str]:
 
 
 def _action(item: dict[str, Any]) -> dict[str, Any]:
-    locations = item.get("locations") or []
-    location = locations[0] if locations and isinstance(locations[0], dict) else {}
-    sources = item.get("sources") or []
-    tools = sorted(
-        {
-            str(source.get("tool"))
-            for source in sources
-            if isinstance(source, dict) and source.get("tool")
-        }
-    )
-    evidence = item.get("evidence") or {}
-    owners = evidence.get("owners") if isinstance(evidence, dict) else []
+    location = _primary_location(item.get("locations"))
+    sources = _sources(item.get("sources"))
     return {
         "finding_id": item.get("finding_id"),
         "title": item.get("title"),
@@ -163,16 +200,54 @@ def _action(item: dict[str, Any]) -> dict[str, Any]:
         "domain": item.get("domain"),
         "path": location.get("path", "<repository>"),
         "line": location.get("start_line"),
-        "tools": tools,
-        "owners": owners if isinstance(owners, list) else [],
+        "tools": sorted({str(source["tool"]) for source in sources}),
+        "source_rules": sorted({_source_rule(source) for source in sources}),
+        "owners": _owners(item.get("evidence")),
+        "remediation": str(item.get("remediation") or ""),
     }
+
+
+def _primary_location(value: object) -> dict[str, Any]:
+    if isinstance(value, list) and value and isinstance(value[0], dict):
+        return value[0]
+    return {}
+
+
+def _sources(value: object) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    return [
+        source for source in value if isinstance(source, dict) and source.get("tool")
+    ]
+
+
+def _source_rule(source: dict[str, Any]) -> str:
+    tool = str(source["tool"])
+    rule = source.get("rule_id")
+    return f"{tool}/{rule}" if rule else tool
+
+
+def _owners(value: object) -> list[str]:
+    if not isinstance(value, dict) or not isinstance(value.get("owners"), list):
+        return []
+    return [str(owner) for owner in value["owners"]]
 
 
 def _counts(values: dict[str, int]) -> str:
     return ", ".join(f"{name}={count}" for name, count in values.items()) or "none"
 
 
-def _problem_tool_count(values: dict[str, int]) -> int:
-    return sum(
-        count for name, count in values.items() if name not in {"completed", "skipped"}
-    )
+def _tool_health(tools: list[dict[str, Any]]) -> dict[str, Any]:
+    applicable = [item for item in tools if item.get("applicable", True) is not False]
+    not_applicable = len(tools) - len(applicable)
+    completed = sum(str(item.get("status")) == "completed" for item in applicable)
+    by_status = Counter(str(item.get("status") or "unknown") for item in tools)
+    return {
+        "selected": len(tools),
+        "applicable": len(applicable),
+        "completed": completed,
+        "not_applicable": not_applicable,
+        "execution_gaps": len(applicable) - completed,
+        "coverage_complete": completed == len(applicable),
+        "by_status": dict(sorted(by_status.items())),
+    }
