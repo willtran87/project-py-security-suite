@@ -8,11 +8,12 @@ for published releases.
 - Raised combined statement-and-branch coverage above the enforced 80% gate
   with fail-closed tests for CodeQL, CycloneDX, Security Passport integrity,
   portfolio adapters, and passive test-evidence parsing.
-- Expanded the suite to 217 passing tests while preserving actionable per-file
+- Expanded the suite to 228 passing tests while preserving actionable per-file
   coverage hotspots in consolidated reports.
-- Resolved the previous report's ten lowest-coverage files, raised combined
-  coverage to 83.18%, and added runtime-guard coverage for offline linters,
-  staging, Pysa, Trivy, and Cosign.
+- Resolved two consecutive reports' lowest-coverage files, raised combined
+  line-and-branch coverage to 86.61%, and added runtime-guard coverage for
+  offline linters, staging, Pysa, Trivy, Cosign, artifact scanners, passive
+  evidence adapters, and cross-tool finding correlation.
 
 ### Added
 
