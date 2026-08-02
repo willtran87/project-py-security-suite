@@ -80,9 +80,7 @@ class TwineAdapter(ScannerAdapter):
                         "Correct the package metadata, rebuild from a clean tree, and "
                         "rerun `twine check --strict`."
                     ),
-                    severity=(
-                        Severity.MEDIUM if level == "ERROR" else Severity.LOW
-                    ),
+                    severity=(Severity.MEDIUM if level == "ERROR" else Severity.LOW),
                     confidence=Confidence.HIGH,
                     area="artifact-metadata",
                     classifications=["PYPA-PACKAGE-METADATA"],

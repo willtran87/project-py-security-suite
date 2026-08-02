@@ -1,0 +1,66 @@
+name: Bug report
+description: Report a reproducible problem without sensitive data.
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include secrets, private source, customer data, signing keys, or unsanitized scanner output. Security vulnerabilities must use private vulnerability reporting.
+  - type: input
+    id: version
+    attributes:
+      label: Suite version or commit
+      placeholder: 0.1.0 or commit SHA
+    validations:
+      required: true
+  - type: dropdown
+    id: execution
+    attributes:
+      label: Execution boundary
+      options:
+        - Isolated native execution
+        - Connected preparation lane
+        - CI runner
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Platform and Python version
+      placeholder: Windows 11 x86-64, Python 3.13
+    validations:
+      required: true
+  - type: input
+    id: profile
+    attributes:
+      label: Scan profile and affected tool
+      placeholder: comprehensive / semgrep
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Observed behavior
+      description: Include sanitized diagnostics and the exact exit status.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Provide bounded steps that do not require private material.
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Evidence safety
+      options:
+        - label: I removed credentials, private code, customer data, signing material, and restricted databases.
+          required: true

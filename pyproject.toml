@@ -9,6 +9,7 @@ description = "Offline-first security scanner orchestration and reporting for Py
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [{ name = "Python Security Suite contributors" }]
+keywords = ["python", "security", "sast", "sbom", "offline", "sarif"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Environment :: Console",
@@ -16,13 +17,42 @@ classifiers = [
   "Intended Audience :: System Administrators",
   "Programming Language :: Python :: 3 :: Only",
   "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
   "Topic :: Security",
+  "Typing :: Typed",
 ]
-dependencies = []
+dependencies = ["defusedxml>=0.7.1,<0.8"]
+
+[project.urls]
+Documentation = "https://github.com/willtran87/project-py-security-suite/tree/main/docs"
+Issues = "https://github.com/willtran87/project-py-security-suite/issues"
+Repository = "https://github.com/willtran87/project-py-security-suite"
+Security = "https://github.com/willtran87/project-py-security-suite/security/policy"
+
+[dependency-groups]
+dev = [
+  "coverage[toml]>=7.10,<8",
+  "hypothesis>=6.140,<7",
+  "hypothesis-jsonschema>=0.23,<0.24",
+  "pyfakefs>=5.9,<6",
+  "pytest>=8.4,<10",
+  "pytest-mock>=3.15,<4",
+  "pytest-randomly>=4.0,<5",
+  "pytest-socket>=0.7,<0.8",
+  "pytest-subprocess>=1.5,<2",
+  "pytest-timeout>=2.4,<3",
+  "pytest-xdist>=3.8,<4",
+  "responses>=0.25,<0.26",
+  "respx>=0.22,<0.23",
+  "time-machine>=2.19,<3",
+  "tox>=4.30,<5",
+]
 
 [project.scripts]
 py-security-suite = "py_security_suite.cli:main"
 pysec = "py_security_suite.cli:main"
+pysec-evidence = "py_security_suite.evidence_ingest:main"
 
 [tool.setuptools]
 package-dir = { "" = "src" }
@@ -32,9 +62,35 @@ include-package-data = true
 where = ["src"]
 
 [tool.setuptools.package-data]
-py_security_suite = ["rules/*.yml", "rules/*.toml", "rules/*.txt"]
+py_security_suite = [
+  "py.typed",
+  "rules/*.ini",
+  "rules/*.yaml",
+  "rules/*.yml",
+  "rules/*.toml",
+  "rules/*.txt",
+  "rules/*.psd1",
+  "rules/*.json",
+]
 
 [tool.pyright]
 include = ["src", "tests"]
 pythonVersion = "3.11"
 typeCheckingMode = "strict"
+
+[tool.coverage.run]
+branch = true
+source = ["py_security_suite"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+
+[tool.pytest.ini_options]
+addopts = [
+  "--disable-socket",
+  "--strict-config",
+  "--strict-markers",
+]
+timeout = 30
+timeout_method = "thread"

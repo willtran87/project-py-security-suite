@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/py-security-suite/risk-acceptance.schema.json",
+  "title": "Python Security Suite governed risk acceptances",
+  "type": "object",
+  "required": ["schema_version", "acceptances"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "acceptances": {
+      "type": "array",
+      "maxItems": 1000,
+      "items": {
+        "type": "object",
+        "required": ["fingerprint", "disposition", "owner", "rationale", "expires"],
+        "additionalProperties": false,
+        "properties": {
+          "fingerprint": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "finding_id": { "type": "string", "maxLength": 80 },
+          "disposition": {
+            "enum": ["accepted_risk", "false_positive", "approved_suppression"]
+          },
+          "owner": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "rationale": { "type": "string", "minLength": 1, "maxLength": 2000 },
+          "expires": { "type": "string", "format": "date" }
+        }
+      }
+    }
+  }
+}

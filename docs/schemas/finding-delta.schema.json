@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://project-py-security-suite.example/schemas/finding-delta.schema.json",
+  "title": "Python Security Suite Finding Delta",
+  "type": "object",
+  "required": ["schema_version", "configured"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "configured": {"type": "boolean"},
+    "baseline": {"type": "object"},
+    "counts": {"type": "object"},
+    "match_strategies": {"type": "object"},
+    "resolved": {"type": "array", "items": {"type": "object"}}
+  }
+}

@@ -16,7 +16,7 @@ from ..models import (
     normalize_repo_path,
 )
 from .base import ScannerAdapter
-from .common import map_severity
+from .common import database_freshness_error, map_severity
 
 
 class OsvScannerAdapter(ScannerAdapter):
@@ -29,7 +29,9 @@ class OsvScannerAdapter(ScannerAdapter):
         resolved = database.expanduser().resolve()
         if not resolved.is_dir():
             return f"offline OSV database directory does not exist: {resolved}"
-        return None
+        return database_freshness_error(
+            resolved, "all.zip", self.config.maximum_database_age_days
+        )
 
     def environment(self) -> CommandEnvironment:
         database = self.config.database_path
@@ -77,14 +79,10 @@ class OsvScannerAdapter(ScannerAdapter):
             if not isinstance(packages, list):
                 continue
             for package_result in packages:
-                findings.extend(
-                    self._package_findings(package_result, path)
-                )
+                findings.extend(self._package_findings(package_result, path))
         return findings
 
-    def _package_findings(
-        self, package_result: Any, path: str
-    ) -> list[Finding]:
+    def _package_findings(self, package_result: Any, path: str) -> list[Finding]:
         if not isinstance(package_result, dict):
             raise TypeError("OSV package result must be an object")
         package = package_result.get("package") or {}
@@ -102,9 +100,7 @@ class OsvScannerAdapter(ScannerAdapter):
                 continue
             advisory = str(vulnerability.get("id") or "OSV-UNKNOWN")
             summary = str(
-                vulnerability.get("summary")
-                or vulnerability.get("details")
-                or advisory
+                vulnerability.get("summary") or vulnerability.get("details") or advisory
             )
             native_severity = _native_severity(vulnerability)
             severity = map_severity(native_severity, default=Severity.HIGH)

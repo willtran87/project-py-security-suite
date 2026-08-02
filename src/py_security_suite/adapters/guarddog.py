@@ -18,6 +18,7 @@ from ..models import (
 )
 from .base import ScannerAdapter
 from .common import map_severity, string_list
+from .staging import maintained_files
 
 
 class GuardDogAdapter(ScannerAdapter):
@@ -30,7 +31,7 @@ class GuardDogAdapter(ScannerAdapter):
                 "GuardDog does not support native Windows execution and this "
                 "suite does not require Docker; run this profile on Linux or macOS"
             )
-        if not any(target.rglob("*.py")):
+        if not maintained_files(target, frozenset({".py"})):
             return "no Python source or package content was found"
         return None
 
@@ -70,23 +71,15 @@ class GuardDogAdapter(ScannerAdapter):
             risks = item.get("risks") or []
             if not isinstance(risks, list):
                 raise TypeError("GuardDog risks must be a list")
-            for risk in risks:
-                if isinstance(risk, dict):
-                    findings.append(_risk_finding(risk, target))
+            findings.extend(
+                _risk_finding(risk, target) for risk in risks if isinstance(risk, dict)
+            )
         return findings
 
 
 def _risk_finding(risk: dict[str, Any], target: Path) -> Finding:
-    rule_id = str(
-        risk.get("threat_rule")
-        or risk.get("name")
-        or "guarddog.unknown"
-    )
-    message = str(
-        risk.get("threat_description")
-        or risk.get("description")
-        or rule_id
-    )
+    rule_id = str(risk.get("threat_rule") or risk.get("name") or "guarddog.unknown")
+    message = str(risk.get("threat_description") or risk.get("description") or rule_id)
     raw_path, line = _location(
         str(risk.get("file_path") or risk.get("threat_location") or "")
     )
@@ -131,10 +124,7 @@ def _risk_finding(risk: dict[str, Any], target: Path) -> Finding:
                 kind="tool_rule",
                 identifier=rule_id,
                 title=rule_id,
-                uri=(
-                    "https://github.com/DataDog/guarddog/tree/main/"
-                    "guarddog/analyzer"
-                ),
+                uri=("https://github.com/DataDog/guarddog/tree/main/guarddog/analyzer"),
             )
         ],
         evidence={"code_retained": False},

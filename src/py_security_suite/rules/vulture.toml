@@ -1,0 +1,10 @@
+[tool.vulture]
+min_confidence = 100
+exclude = [
+  ".artifacts",
+  ".pysec-tools",
+  ".venv",
+  "build",
+  "dist",
+  "node_modules",
+]

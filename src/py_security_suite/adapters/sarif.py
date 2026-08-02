@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urlparse
@@ -27,101 +28,122 @@ def parse_sarif_findings(
     default_remediation: str,
 ) -> list[Finding]:
     document = json.loads(payload)
-    runs = document.get("runs", [])
-    if not isinstance(runs, list):
-        raise TypeError("SARIF runs must be a list")
     findings: list[Finding] = []
-    for run in runs:
-        if not isinstance(run, dict):
-            raise TypeError("SARIF run must be an object")
-        tool = run.get("tool") or {}
-        driver = tool.get("driver") if isinstance(tool, dict) else {}
+    for run in _object_list(document.get("runs", []), "runs"):
+        driver = _object(_object(run.get("tool")).get("driver"))
         rules = _rule_index(driver)
-        results = run.get("results") or []
-        if not isinstance(results, list):
-            raise TypeError("SARIF results must be a list")
-        for result in results:
-            if not isinstance(result, dict):
-                raise TypeError("SARIF result must be an object")
-            rule_id = str(result.get("ruleId") or "unknown")
-            rule = rules.get(rule_id, {})
-            message = _message(result.get("message")) or rule_id
-            title = (
-                _message(rule.get("shortDescription"))
-                or _message(rule.get("fullDescription"))
-                or message
+        findings.extend(
+            _finding(
+                result,
+                rules,
+                target,
+                tool_name=tool_name,
+                default_area=default_area,
+                default_impact=default_impact,
+                default_remediation=default_remediation,
             )
-            location = _location(result, target)
-            properties = result.get("properties") or {}
-            if not isinstance(properties, dict):
-                properties = {}
-            rule_properties = rule.get("properties") or {}
-            if not isinstance(rule_properties, dict):
-                rule_properties = {}
-            severity = _sarif_severity(
-                result.get("level"), properties, rule_properties
-            )
-            classifications = _classifications(properties, rule_properties)
-            finding_id, fingerprint = finding_identity(
+            for result in _object_list(run.get("results") or [], "results")
+        )
+    return findings
+
+
+def _finding(
+    result: dict[str, Any],
+    rules: dict[str, dict[str, Any]],
+    target: Path,
+    *,
+    tool_name: str,
+    default_area: str,
+    default_impact: str,
+    default_remediation: str,
+) -> Finding:
+    rule_id = str(result.get("ruleId") or "unknown")
+    rule = rules.get(rule_id, {})
+    message = _message(result.get("message")) or rule_id
+    title = (
+        _message(rule.get("shortDescription"))
+        or _message(rule.get("fullDescription"))
+        or message
+    )
+    location = _location(result, target)
+    properties = _object(result.get("properties"))
+    rule_properties = _object(rule.get("properties"))
+    severity = _sarif_severity(result.get("level"), properties, rule_properties)
+    tags = _tags(properties, rule_properties)
+    domain = _domain(tags)
+    finding_id, fingerprint = finding_identity(
+        tool=tool_name,
+        rule_id=rule_id,
+        path=location.path,
+        start_line=location.start_line,
+    )
+    help_text = _message(rule.get("help"))
+    help_uri = _safe_uri(rule.get("helpUri")) or _derived_help_uri(tool_name, rule_id)
+    impact = str(properties.get("impact") or "").strip() or help_text
+    remediation = str(
+        properties.get("recommended_action") or properties.get("remediation") or ""
+    ).strip()
+    if domain == "quality":
+        impact = impact or (
+            "The code pattern can conceal an implementation mistake or make future "
+            "maintenance and review less reliable."
+        )
+        remediation = remediation or (
+            "Make the intent explicit using the cited CodeQL guidance, add or update "
+            "a focused test, and rerun the quality profile."
+        )
+    classifications = _classifications(properties, rule_properties) or [
+        _rule_classification(tool_name, rule_id)
+    ]
+    return Finding(
+        finding_id=finding_id,
+        fingerprint=fingerprint,
+        title=title,
+        description=message,
+        impact=impact or default_impact,
+        remediation=remediation or default_remediation,
+        severity=severity,
+        confidence=map_confidence(
+            properties.get("confidence")
+            or rule_properties.get("confidence")
+            or properties.get("precision")
+            or rule_properties.get("precision")
+        ),
+        area=str(
+            properties.get("area")
+            or rule_properties.get("category")
+            or _area(tags, default_area)
+        ),
+        domain=domain,
+        classifications=classifications,
+        locations=[location],
+        sources=[
+            Source(
                 tool=tool_name,
                 rule_id=rule_id,
-                path=location.path,
-                start_line=location.start_line,
+                message=message,
+                native_severity=str(result.get("level") or severity.value),
             )
-            help_text = _message(rule.get("help"))
-            help_uri = _safe_uri(rule.get("helpUri"))
-            findings.append(
-                Finding(
-                    finding_id=finding_id,
-                    fingerprint=fingerprint,
-                    title=title,
-                    description=message,
-                    impact=(
-                        str(properties.get("impact") or "").strip()
-                        or help_text
-                        or default_impact
-                    ),
-                    remediation=(
-                        str(
-                            properties.get("recommended_action")
-                            or properties.get("remediation")
-                            or ""
-                        ).strip()
-                        or default_remediation
-                    ),
-                    severity=severity,
-                    confidence=map_confidence(
-                        properties.get("confidence")
-                        or rule_properties.get("confidence")
-                    ),
-                    area=str(
-                        properties.get("area")
-                        or rule_properties.get("category")
-                        or default_area
-                    ),
-                    classifications=classifications,
-                    locations=[location],
-                    sources=[
-                        Source(
-                            tool=tool_name,
-                            rule_id=rule_id,
-                            message=message,
-                            native_severity=str(
-                                result.get("level") or severity.value
-                            ),
-                        )
-                    ],
-                    citations=[
-                        Citation(
-                            kind="tool_rule",
-                            identifier=rule_id,
-                            title=title,
-                            uri=help_uri,
-                        )
-                    ],
-                )
+        ],
+        citations=[
+            Citation(
+                kind="tool_rule",
+                identifier=rule_id,
+                title=title,
+                uri=help_uri,
             )
-    return findings
+        ],
+    )
+
+
+def _object(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _object_list(value: Any, label: str) -> list[dict[str, Any]]:
+    if not isinstance(value, list) or not all(isinstance(item, dict) for item in value):
+        raise TypeError(f"SARIF {label} must be a list of objects")
+    return [item for item in value if isinstance(item, dict)]
 
 
 def _rule_index(driver: Any) -> dict[str, dict[str, Any]]:
@@ -154,7 +176,11 @@ def _location(result: dict[str, Any], target: Path) -> Location:
     if not isinstance(physical, dict):
         physical = {}
     artifact = physical.get("artifactLocation") or {}
-    uri = str(artifact.get("uri") or "<repository>") if isinstance(artifact, dict) else "<repository>"
+    uri = (
+        str(artifact.get("uri") or "<repository>")
+        if isinstance(artifact, dict)
+        else "<repository>"
+    )
     path = _uri_path(uri)
     region = physical.get("region") or {}
     if not isinstance(region, dict):
@@ -181,12 +207,11 @@ def _sarif_severity(
     properties: dict[str, Any],
     rule_properties: dict[str, Any],
 ) -> Severity:
-    raw_score = (
-        properties.get("security-severity")
-        or rule_properties.get("security-severity")
+    raw_score = properties.get("security-severity") or rule_properties.get(
+        "security-severity"
     )
     try:
-        score = float(raw_score)
+        score = float(str(raw_score))
     except (TypeError, ValueError):
         score = -1
     if score >= 9:
@@ -197,7 +222,12 @@ def _sarif_severity(
         return Severity.MEDIUM
     if score >= 0:
         return Severity.LOW
-    return map_severity(level)
+    effective_level = (
+        level
+        or properties.get("problem.severity")
+        or rule_properties.get("problem.severity")
+    )
+    return map_severity(effective_level, default=Severity.INFORMATIONAL)
 
 
 def _classifications(
@@ -208,13 +238,55 @@ def _classifications(
         + string_list(properties.get("tags"))
         + string_list(rule_properties.get("tags"))
     )
-    return list(
-        dict.fromkeys(
-            value
-            for value in values
-            if value.upper().startswith(("CWE-", "OWASP", "MITRE"))
+    normalized: list[str] = []
+    for value in values:
+        lowered = value.casefold()
+        if "cwe-" in lowered:
+            suffix = lowered.rsplit("cwe-", maxsplit=1)[-1]
+            if suffix.isdigit():
+                normalized.append(f"CWE-{suffix}")
+        elif value.upper().startswith(("OWASP", "MITRE")):
+            normalized.append(value)
+    return list(dict.fromkeys(normalized))
+
+
+def _rule_classification(tool_name: str, rule_id: str) -> str:
+    value = f"{tool_name}-{rule_id}".upper()
+    return re.sub(r"[^A-Z0-9]+", "-", value).strip("-") or "SARIF-UNKNOWN"
+
+
+def _tags(properties: dict[str, Any], rule_properties: dict[str, Any]) -> list[str]:
+    return [
+        value.casefold()
+        for value in (
+            string_list(properties.get("tags"))
+            + string_list(rule_properties.get("tags"))
         )
-    )
+    ]
+
+
+def _domain(tags: list[str]) -> str:
+    if any(
+        tag == "quality"
+        or tag.startswith(("maintainability", "readability", "correctness"))
+        for tag in tags
+    ) and not any(tag == "security" for tag in tags):
+        return "quality"
+    return "security"
+
+
+def _area(tags: list[str], default: str) -> str:
+    for candidate in ("reliability", "correctness", "maintainability", "readability"):
+        if candidate in tags:
+            return "code-quality"
+    return default
+
+
+def _derived_help_uri(tool_name: str, rule_id: str) -> str | None:
+    if tool_name != "codeql" or not rule_id.startswith("py/"):
+        return None
+    slug = rule_id.replace("/", "-")
+    return f"https://codeql.github.com/codeql-query-help/python/{slug}/"
 
 
 def _integer(value: Any) -> int | None:

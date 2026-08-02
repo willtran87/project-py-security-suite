@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+import hashlib
+import json
+import tempfile
 import unittest
+from datetime import date, timedelta
+from pathlib import Path
 
-from py_security_suite.config import load_config
+from py_security_suite.config import SuiteConfig, load_config
 from py_security_suite.models import (
     Confidence,
     Finding,
+    FindingStatus,
     Inventory,
     Outcome,
     Severity,
@@ -27,6 +33,29 @@ def finding(severity: Severity) -> Finding:
         confidence=Confidence.HIGH,
         area="test",
     )
+
+
+def production_runs(suite: SuiteConfig) -> list[ToolRun]:
+    runs: list[ToolRun] = []
+    for name in suite.required_tools:
+        suite.tools[name].executable_sha256 = "a" * 64
+        runs.append(
+            ToolRun(
+                tool=name,
+                status=ToolStatus.COMPLETED,
+                command=[name],
+                duration_seconds=0.1,
+                executable_sha256="a" * 64,
+                executable_integrity_verified=True,
+                executable_unchanged=True,
+            )
+        )
+    suite.tools["codeql"].auxiliary_executable_sha256 = "b" * 64
+    codeql = next(run for run in runs if run.tool == "codeql")
+    codeql.auxiliary_executable_sha256 = "b" * 64
+    codeql.auxiliary_executable_integrity_verified = True
+    codeql.auxiliary_executable_unchanged = True
+    return runs
 
 
 class PolicyTests(unittest.TestCase):
@@ -96,6 +125,21 @@ class PolicyTests(unittest.TestCase):
             network_isolation_attested=True,
         )
         self.assertEqual(decision.outcome, Outcome.FAIL)
+
+    def test_known_exploited_finding_blocks_regardless_of_native_severity(self) -> None:
+        item = finding(Severity.LOW)
+        item.evidence["risk_intelligence"] = {
+            "known_exploited": [{"cve": "CVE-2026-12345"}]
+        }
+        decision = evaluate_policy(
+            config=self.config,
+            findings=[item],
+            tool_runs=self.completed,
+            network_isolation_attested=True,
+        )
+        self.assertEqual(decision.outcome, Outcome.FAIL)
+        self.assertTrue(item.blocking)
+        self.assertIn("known-exploited findings 1", decision.reasons[0])
         self.assertTrue(item.blocking)
 
     def test_medium_finding_warns(self) -> None:
@@ -107,17 +151,73 @@ class PolicyTests(unittest.TestCase):
         )
         self.assertEqual(decision.outcome, Outcome.WARN)
 
+    def test_governed_risk_acceptance_suppresses_exact_finding(self) -> None:
+        item = finding(Severity.HIGH)
+        item.fingerprint = "sha256:" + "a" * 64
+        expires = (date.today() + timedelta(days=30)).isoformat()
+        document = {
+            "schema_version": "1.0",
+            "acceptances": [
+                {
+                    "fingerprint": item.fingerprint,
+                    "finding_id": item.finding_id,
+                    "disposition": "accepted_risk",
+                    "owner": "security@example.invalid",
+                    "rationale": "Time-bounded fixture acceptance.",
+                    "expires": expires,
+                }
+            ],
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = Path(directory) / "acceptances.json"
+            data = json.dumps(document).encode("utf-8")
+            ledger.write_bytes(data)
+            self.config.policy.risk_acceptance_path = ledger
+            self.config.policy.risk_acceptance_sha256 = hashlib.sha256(data).hexdigest()
+            decision = evaluate_policy(
+                config=self.config,
+                findings=[item],
+                tool_runs=self.completed,
+                network_isolation_attested=True,
+            )
+
+        self.assertEqual(decision.outcome, Outcome.PASS)
+        self.assertEqual(item.status, FindingStatus.SUPPRESSED)
+        self.assertFalse(item.blocking)
+        self.assertIn("governed acceptance", decision.reasons[0])
+
+    def test_expired_or_stale_risk_acceptance_is_incomplete(self) -> None:
+        item = finding(Severity.MEDIUM)
+        item.fingerprint = "sha256:" + "b" * 64
+        document = {
+            "schema_version": "1.0",
+            "acceptances": [
+                {
+                    "fingerprint": "sha256:" + "c" * 64,
+                    "disposition": "false_positive",
+                    "owner": "security@example.invalid",
+                    "rationale": "Stale fixture acceptance.",
+                    "expires": (date.today() + timedelta(days=30)).isoformat(),
+                }
+            ],
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = Path(directory) / "acceptances.json"
+            ledger.write_text(json.dumps(document), encoding="utf-8")
+            self.config.policy.risk_acceptance_path = ledger
+            decision = evaluate_policy(
+                config=self.config,
+                findings=[item],
+                tool_runs=self.completed,
+                network_isolation_attested=True,
+            )
+
+        self.assertEqual(decision.outcome, Outcome.INCOMPLETE)
+        self.assertIn("does not match a current finding", " ".join(decision.reasons))
+
     def test_production_gate_requires_history_lock_and_deep_dataflow(self) -> None:
         config = load_config(profile_override="production")
-        runs = [
-            ToolRun(
-                tool=name,
-                status=ToolStatus.COMPLETED,
-                command=[name],
-                duration_seconds=0.1,
-            )
-            for name in config.required_tools
-        ]
+        runs = production_runs(config)
         pysa = next(run for run in runs if run.tool == "pysa")
         pysa.status = ToolStatus.SKIPPED
         pysa.applicable = False
@@ -150,17 +250,37 @@ class PolicyTests(unittest.TestCase):
         self.assertIn("cyclonedx-py", reasons)
         self.assertIn("guarddog", reasons)
 
+    def test_production_gate_requires_dynamic_and_governance_evidence(self) -> None:
+        config = load_config(profile_override="production")
+        runs = production_runs(config)
+        for tool in ("crosshair", "atheris", "mutmut", "pytm", "scorecard"):
+            run = next(item for item in runs if item.tool == tool)
+            run.status = ToolStatus.SKIPPED
+            run.applicable = False
+        decision = evaluate_policy(
+            config=config,
+            findings=[],
+            tool_runs=runs,
+            network_isolation_attested=True,
+            inventory=Inventory(
+                python_files=1,
+                dependency_files=[],
+                total_files=1,
+                skipped_symlinks=0,
+                vcs_history_available=True,
+            ),
+        )
+        self.assertEqual(decision.outcome, Outcome.INCOMPLETE)
+        reasons = " ".join(decision.reasons)
+        self.assertIn("crosshair evidence", reasons)
+        self.assertIn("atheris evidence", reasons)
+        self.assertIn("mutmut evidence", reasons)
+        self.assertIn("pytm evidence", reasons)
+        self.assertIn("scorecard evidence", reasons)
+
     def test_production_gate_blocks_medium_findings(self) -> None:
         config = load_config(profile_override="production")
-        runs = [
-            ToolRun(
-                tool=name,
-                status=ToolStatus.COMPLETED,
-                command=[name],
-                duration_seconds=0.1,
-            )
-            for name in config.required_tools
-        ]
+        runs = production_runs(config)
         decision = evaluate_policy(
             config=config,
             findings=[finding(Severity.MEDIUM)],

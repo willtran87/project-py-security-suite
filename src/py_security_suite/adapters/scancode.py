@@ -9,7 +9,6 @@ from typing import Any
 
 from ..execution import (
     CommandEnvironment,
-    resolve_executable,
     run_command,
     sanitize_diagnostic,
 )
@@ -66,15 +65,19 @@ class ScanCodeAdapter(ScannerAdapter):
                 applicable=False,
             )
             return AdapterResult([], run, self._diagnostic(run, None))
-        prerequisite = self.prerequisite_error()
-        executable = resolve_executable(self.config.executable)
-        if prerequisite or executable is None:
+        prerequisite = self.prerequisite_error()  # pylint: disable=assignment-from-none
+        executable, integrity_error = self._prepare_executable()
+        if prerequisite or integrity_error or executable is None:
             run = ToolRun(
                 tool=self.name,
                 status=ToolStatus.UNAVAILABLE,
                 command=[self.config.executable],
                 duration_seconds=0.0,
-                error=prerequisite or f"executable not found: {self.config.executable}",
+                error=(
+                    prerequisite
+                    or integrity_error
+                    or f"executable not found: {self.config.executable}"
+                ),
             )
             return AdapterResult([], run, self._diagnostic(run, None))
 
@@ -99,8 +102,7 @@ class ScanCodeAdapter(ScannerAdapter):
                 environment=environment,
             )
             version_value = (
-                version_execution.stdout.strip()
-                or version_execution.stderr.strip()
+                version_execution.stdout.strip() or version_execution.stderr.strip()
             )
             version = (
                 sanitize_diagnostic(
@@ -108,8 +110,7 @@ class ScanCodeAdapter(ScannerAdapter):
                     maximum=200,
                 )
                 if (
-                    version_execution.exit_code == 0
-                    and not version_execution.timed_out
+                    version_execution.exit_code == 0 and not version_execution.timed_out
                 )
                 else "unknown"
             ) or "unknown"
@@ -123,6 +124,15 @@ class ScanCodeAdapter(ScannerAdapter):
                 max_output_bytes=self.max_output_bytes,
                 environment=environment,
             )
+            changed_error = self._executable_changed_error()
+            if changed_error:
+                run = self._tool_run(
+                    execution,
+                    ToolStatus.FAILED,
+                    error=changed_error,
+                    version=version,
+                )
+                return AdapterResult([], run, self._diagnostic(run, execution))
             if execution.timed_out:
                 run = self._tool_run(
                     execution,
@@ -254,25 +264,20 @@ class ScanCodeAdapter(ScannerAdapter):
                 continue
             licenses = sorted(
                 {
-                    str(
-                        item.get("license_expression")
-                        or item.get("key")
-                        or "unknown"
-                    )
+                    str(item.get("license_expression") or item.get("key") or "unknown")
                     for item in _license_results(file_result)
                 }
             )
-            packages = []
-            for package in file_result.get("packages") or []:
-                if isinstance(package, dict):
-                    packages.append(
-                        {
-                            "type": package.get("type"),
-                            "name": package.get("name"),
-                            "version": package.get("version"),
-                            "purl": package.get("purl"),
-                        }
-                    )
+            packages = [
+                {
+                    "type": package.get("type"),
+                    "name": package.get("name"),
+                    "version": package.get("version"),
+                    "purl": package.get("purl"),
+                }
+                for package in file_result.get("packages") or []
+                if isinstance(package, dict)
+            ]
             if licenses or packages:
                 inventory.append(
                     {
@@ -309,9 +314,11 @@ def _license_results(file_result: dict[str, Any]) -> list[dict[str, Any]]:
             matches = detection.get("matches") or [{}]
             if not isinstance(matches, list):
                 matches = [{}]
-            for match in matches:
-                if isinstance(match, dict):
-                    values.append({"license_expression": expression, **match})
+            values.extend(
+                {"license_expression": expression, **match}
+                for match in matches
+                if isinstance(match, dict)
+            )
     legacy = file_result.get("licenses") or []
     if isinstance(legacy, list):
         values.extend(item for item in legacy if isinstance(item, dict))
@@ -425,5 +432,5 @@ def _remove_staging_prefix(payload: str, staging_name: str) -> str:
         path = str(file_result.get("path") or "")
         normalized = path.replace("\\", "/")
         if normalized.startswith(prefix):
-            file_result["path"] = normalized[len(prefix):]
+            file_result["path"] = normalized[len(prefix) :]
     return json.dumps(document)

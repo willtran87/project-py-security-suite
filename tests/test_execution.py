@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import hashlib
+import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -10,14 +12,24 @@ from py_security_suite.execution import (
     CommandEnvironment,
     isolated_environment,
     run_command,
+    sha256_file,
 )
 
 
 class IsolatedEnvironmentTests(unittest.TestCase):
+    def test_file_sha256_is_streamed_and_stable(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "scanner"
+            path.write_bytes(b"approved scanner entry point")
+            self.assertEqual(
+                sha256_file(path),
+                hashlib.sha256(b"approved scanner entry point").hexdigest(),
+            )
+
     def test_ambient_proxy_configuration_is_not_forwarded(self) -> None:
         ambient = {
-            "HTTP_PROXY": "http://proxy.invalid",
-            "HTTPS_PROXY": "http://proxy.invalid",
+            "HTTP_PROXY": "https://proxy.invalid",
+            "HTTPS_PROXY": "https://proxy.invalid",
             "ALL_PROXY": "socks5://proxy.invalid",
             "NO_PROXY": "internal.example",
         }

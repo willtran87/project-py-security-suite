@@ -10,11 +10,17 @@ param(
         "deep",
         "supply-chain",
         "artifact",
+        "quality",
+        "iac-deep",
+        "governance",
+        "repo-health",
+        "repo",
         "comprehensive",
         "production",
         "release"
     )]
-    [string]$Profile = "",
+    [Alias("Profile")]
+    [string]$ScanProfile = "",
     [switch]$NetworkIsolated
 )
 
@@ -48,8 +54,8 @@ $arguments = @(
     "--output", $outputPath,
     "--overwrite"
 )
-if ($Profile) {
-    $arguments += @("--profile", $Profile)
+if ($ScanProfile) {
+    $arguments += @("--profile", $ScanProfile)
 }
 if ($NetworkIsolated) {
     $arguments += "--network-isolated"
@@ -63,6 +69,6 @@ if ($NetworkIsolated) {
 
 & $venvPython @arguments
 $scanExit = $LASTEXITCODE
-Write-Host "Python Security Suite native exit code: $scanExit"
-Write-Host "Report: $outputPath"
+Write-Output "Python Security Suite native exit code: $scanExit"
+Write-Output "Report: $outputPath"
 exit $scanExit

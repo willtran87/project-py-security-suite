@@ -4,6 +4,11 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.coverage
+coverage.json
+junit.xml
+hypothesis-junit.xml
+schemathesis-junit.xml
 .venv/
 build/
 dist/

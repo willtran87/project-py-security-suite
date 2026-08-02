@@ -1,0 +1,40 @@
+name: Feature request
+description: Propose a scanner, report, policy, or operational improvement.
+title: "[Feature]: "
+labels: ["enhancement", "triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or assurance gap
+      description: Describe the risk, workflow, or decision this would improve.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed capability
+    validations:
+      required: true
+  - type: dropdown
+    id: offline
+    attributes:
+      label: Isolated execution support
+      options:
+        - Fully local with pre-staged inputs
+        - Evidence ingestion from a separate lane
+        - Connected preparation only
+        - Unknown
+    validations:
+      required: true
+  - type: textarea
+    id: trust
+    attributes:
+      label: Trust-boundary and report impact
+      description: Note required executables, databases, licenses, schemas, network access, and normalized evidence.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered

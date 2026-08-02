@@ -1,6 +1,6 @@
 # Python Security Suite operations
 
-Last reviewed: 2026-07-23
+Last reviewed: 2026-08-01
 
 ## Operating model
 
@@ -26,6 +26,7 @@ For the current native baseline:
 - Windows x86-64;
 - Python 3.11 with `pip` in the connected preparation lane;
 - Python 3.11 with `venv` in the isolated execution lane;
+- .NET 8 SDK or newer in both lanes when installing DevSkim;
 - PowerShell 5.1 or later; and
 - an enterprise control capable of enforcing and verifying scanner-child
   network denial.
@@ -40,13 +41,16 @@ Run only in an approved connected update lane:
 
 The default output is `.artifacts/native-bundle`. It contains:
 
-- pinned top-level Bandit, Semgrep, detect-secrets, Ruff, CycloneDX Python,
-  zizmor, ScanCode, `run-codeql`, PyPI attestations,
+- pinned top-level Bandit, Semgrep, detect-secrets, Ruff, Pylint, mypy,
+  Vulture, Radon, Tach, REUSE, Flawfinder, CycloneDX Python, zizmor, ScanCode,
+  `run-codeql`, PyPI attestations,
   check-wheel-contents, Twine, and suite wheels, plus their resolved
   transitive wheel set;
 - the pinned Windows OSV-Scanner executable;
-- pinned, checksum-verified Windows Trivy, Gitleaks, Syft, Grype, and
-  TruffleHog release archives;
+- pinned, checksum-verified Windows actionlint, Hadolint, Trivy, Gitleaks,
+  Syft, Grype, and TruffleHog assets;
+- a checksum-pinned DevSkim NuGet tool package installed from a local-only
+  NuGet configuration;
 - the pinned PyPI OSV advisory snapshot and a connected-lane Grype database;
   and
 - `bundle-manifest.json` with the size and SHA-256 digest of every file.
@@ -64,6 +68,16 @@ therefore accepts only the explicitly reviewed SHA-256 snapshot embedded in
 the preparation script. Updating advisory data is a governed source change:
 validate every JSON record, review additions and removals, update the approved
 digest, and rebuild the bundle. A checksum mismatch stops preparation.
+
+The runtime accepts a Grype database for at most ten days from its build time,
+allowing a bounded approval and transfer window. An older database fails the
+scan; rebuild and reapprove the native bundle instead of disabling age
+validation.
+
+REUSE 6.2.0 is published as source. The connected preparation lane builds its
+pinned source distribution into a wheel and places that wheel and its resolved
+dependencies in the hash-manifested wheelhouse. The isolated installer never
+builds it and still uses `pip --no-index`.
 
 ## 2. Transfer and inspect
 
@@ -92,12 +106,18 @@ The installer:
 3. creates `.pysec-tools`;
 4. installs wheels with `pip --no-index --no-compile`;
 5. copies OSV-Scanner and its advisory data;
-6. extracts Trivy, Gitleaks, Syft, Grype, and TruffleHog from their verified
-   archives and restores the staged Grype database;
+6. extracts actionlint, Hadolint, Trivy, Gitleaks, Syft, Grype, and TruffleHog
+   from verified assets, installs DevSkim from the local NuGet source, and
+   restores the staged Grype database;
 7. writes an absolute-path native configuration with the bundled Gitleaks
-   exclusions;
+   exclusions and the installed SHA-256 of every scanner entry point;
 8. verifies scanner versions; and
 9. records tool versions and installed packages in `native-install.json`.
+
+The CodeQL CLI remains a separately governed asset. After staging it, set both
+`auxiliary_executable` and `auxiliary_executable_sha256` in the generated
+configuration. Production and release scans remain `INCOMPLETE` until that
+helper binding is approved and verified.
 
 To replace a previously marked tool directory:
 
@@ -135,11 +155,19 @@ Custom paths are supported:
 
 The Windows bundle directly installs the scanners used by `quick`, `standard`,
 `extended`, `artifact`, and most of `supply-chain`. The remaining
-comprehensive tools have these requirements:
+comprehensive tools have these requirements. The expanded portfolio also
+requires staged ShellCheck, Cosign, Node.js/Pyright, PSScriptAnalyzer, deptry,
+diff-cover, and the isolated Checkov sidecar when their inputs are applicable:
 
 | Tool | Native staging requirement |
 |---|---|
 | CodeQL | `run-codeql` is bundled; separately stage the licensed CodeQL CLI and an isolated home containing `.codeql/packages/codeql/python-queries` |
+| KICS | Upstream no longer ships native release binaries. In the connected build lane, compile the pinned KICS source without Docker and transfer the executable together with the matching `assets/queries` tree; set `tools.kics.rules_path` to that tree. |
+| Conftest | Binary is bundled; configure an approved local Rego directory in `tools.conftest.rules_path`. |
+| Vale | Binary is bundled; stage reviewed style packages and configure the local `.vale.ini` in `tools.vale.rules_path`. |
+| pipdeptree | Wheel is bundled; set `auxiliary_executable` to the Python interpreter from the already-created target runtime environment, never the scanner environment by accident. |
+| CrossHair, Atheris, mutmut | Execute them in separately sandboxed trusted lanes and emit the bounded assurance schema consumed by `pysec-evidence assurance`. |
+| check-manifest, ClamAV, GitHub attestations | Run build-, malware-, and host-bound verification in their appropriate companion lanes; ingest only the bounded JSON result. |
 | Pysa | Linux, macOS, or WSL Python environment with approved models |
 | GuardDog 3.x | Linux/macOS Python environment with its sandbox support |
 
@@ -182,6 +210,96 @@ and disables TUF refresh.
 An applicable missing asset makes the result `INCOMPLETE`. A conditional tool
 with no relevant repository input is shown as `not applicable`.
 
+### Ingest test evidence without executing the project
+
+Run tests in a separate disposable build/test lane, not in the static scanner
+boundary. Produce branch-aware coverage.py JSON and JUnit XML, then transfer
+those files with the immutable checkout:
+
+```powershell
+New-Item -ItemType Directory -Force .artifacts/test-evidence | Out-Null
+$env:COVERAGE_FILE = ".artifacts/test-evidence/.coverage"
+python -m coverage run --branch -m pytest `
+  --junitxml=.artifacts/test-evidence/junit.xml
+python -m coverage json -o .artifacts/test-evidence/coverage.json
+```
+
+Configure `tools.coverage.artifacts_path`,
+`tools.coverage.minimum_coverage_percent`, and `tools.junit.artifacts_path`.
+The bundled `pysec-evidence` helper validates and normalizes those files using
+bounded standard-library I/O and the hardened `defusedxml` parser. It never
+imports the target, invokes a test runner, retains captured process output, or
+expands XML entities. Missing
+evidence is visibly `not applicable` outside organization policies that make
+the companion test lane mandatory.
+
+### Ingest trusted-lane assurance evidence
+
+Hypothesis, Schemathesis, CrossHair, Atheris, mutmut, OWASP ZAP, OWASP pytm,
+in-toto, reproducible-build verification, final OCI-image scanning, YARA, check-manifest, ClamAV, and
+GitHub attestation verification intentionally do not execute inside the static scanner boundary.
+Their companion lanes emit this bounded schema:
+
+```json
+{
+  "kind": "crosshair",
+  "producer": "crosshair 0.x",
+  "revision": "FULL_COMMIT_SHA",
+  "findings": [
+    {
+      "rule_id": "postcondition",
+      "title": "Postcondition can fail",
+      "message": "Counterexample: value=-1",
+      "path": "src/package/module.py",
+      "line": 42,
+      "severity": "high",
+      "classification": "CONTRACT-POSTCONDITION",
+      "citation": "https://crosshair.readthedocs.io/en/latest/contracts.html",
+      "evidence": {"counterexample": "value=-1"}
+    }
+  ]
+}
+```
+
+Use the corresponding `kind` and configured filename. The validator caps file
+size and finding count, bounds every string, permits only scalar evidence, and
+does not retain raw stdout, stack traces, corpus files, malware bytes, or
+credentials. Enterprise promotion policy should independently bind `revision`
+and the companion report digest to the scanned revision.
+
+Validate the complete fail-closed evidence set before scanning:
+
+```powershell
+.\scripts\validate-production-evidence.ps1 `
+  -EvidenceDirectory .artifacts\test-evidence `
+  -Profile production
+```
+
+Use `-Profile release` to additionally require packaging, malware,
+attestation, in-toto, reproducibility, and final OCI-image evidence. The OCI
+producer must scan the immutable image archive or digest with locally staged
+Syft, Grype, and Trivy data and emit bounded `oci-image.json`; the suite never
+pulls an image while isolated.
+
+### Govern accepted risk
+
+Copy `security/risk-acceptances.example.json`, add only exact normalized
+fingerprints, and configure both `policy.risk_acceptance_path` and the approved
+SHA-256. Every entry requires a disposition, owner, rationale, and ISO expiry
+no more than 366 days away. Expired, duplicate, malformed, ID-mismatched, or
+stale unmatched entries make the result `INCOMPLETE`. Governed findings remain
+in `findings.json` for audit but are excluded from active SARIF, SonarQube, and
+action queues.
+
+### Import normalized findings into SonarQube
+
+Every report includes `sonarqube-external-issues.json`. Configure
+`sonar.externalIssuesReportPaths` in the self-hosted Sonar scanner to point at
+that file. The
+export preserves the suite rule, mapped severity/type, actionable message,
+file, and line range; the complete citations and source excerpts remain in
+`summary.md`, `index.html`, `findings.json`, and `results.sarif`.
+
 ScanCode is intentionally a bounded governance inventory pass. The aggregate
 scans package metadata, requirements and lockfiles, license/copying/notice
 files, the root README, and conventional vendored-source roots. It excludes
@@ -207,8 +325,9 @@ Use the strict profile against a full immutable checkout, not a source archive:
 ```
 
 The gate blocks medium-or-higher findings and reports `INCOMPLETE` when VCS
-history, required scanner coverage, isolation evidence, a dependency lock, or
-configured deep Python data-flow analysis is missing. Review
+history, required scanner coverage, isolation evidence, a dependency lock,
+configured deep Python data-flow analysis, or required revision-bound dynamic
+and governance evidence is missing. Review
 `assurance-case.md` before promotion; it identifies artifact provenance,
 dynamic testing, and threat-review evidence that the source scan cannot
 produce.
@@ -338,3 +457,68 @@ Verify the report using the digests in:
 
 The installer independently verifies the native bundle before any package is
 installed.
+
+Also review `scan-manifest.json`:
+
+- `inventory.source_sha256` must equal `source_sha256_after`;
+- `inventory.source_integrity_verified` must be `true`; and
+- each applicable production scanner must report
+  `executable_integrity_verified: true` and `executable_unchanged: true`.
+
+These checks detect content or entry-point substitution during the scan. They
+complement, but do not replace, an enterprise read-only checkout, signed
+artifact transport, and publisher/provenance verification.
+
+For finding triage, open `index.html` first. Its prioritized table leads to a
+finding card containing the exact file/range, highlighted source context,
+scanner and rule, classification links, impact, and recommended action.
+`summary.md` carries the same first 20 actionable findings into the GitHub job
+summary. Secret-bearing content is deliberately absent from every format; use
+the protected checkout and cited line when validating a secret finding.
+
+Before committing runner time to a production scan, perform the same offline
+readiness assessment against the target and governed configuration:
+
+```powershell
+pysec doctor . --config .pysec-tools\pysec.native.toml --profile production
+```
+
+The text view identifies unavailable or disabled applicable tools immediately.
+Use `--format json` to archive the preflight in runner diagnostics. Discovery
+prunes generated artifacts, virtual environments, installed scanner trees,
+build outputs, and symlinked directories before descent.
+
+After scanning, use `pysec inspect REPORT` as the terminal and release-log entry
+point. It verifies checksums first and then shows the outcome, scanner health,
+domain and lifecycle counts, ownership, and the highest-priority actions. Use
+`--limit 0` for summary-only output or `--format json` for dashboards.
+
+## Intelligence, baseline, and Security Passport lanes
+
+The connected preparation lane downloads the authoritative CISA KEV JSON and
+FIRST EPSS CSV, receives the product-specific CycloneDX VEX from its approved
+owner, validates each native format, and records SHA-256 plus acquisition time.
+Transfer only those reviewed snapshots into `security-data/intelligence`.
+
+The isolated scan rejects an unbound, stale, oversized, malformed, symlinked,
+or digest-mismatched snapshot. KEV matches become `P0` and block policy even if
+the originating scanner assigned a lower severity. EPSS affects priority, not
+severity. VEX state is displayed but never suppresses a finding by itself.
+
+After the isolated scan, move the complete report into an approval lane. Keep
+the release private key and optional password file outside the checkout and
+report. Run `pysec attest`, then move the signed passport, report, approved
+public key, and approved Cosign executable into the deployment boundary. Run
+`pysec verify` before promotion. Verification failure rejects the release.
+
+At the first handoff, validate the report itself with
+`pysec verify-report REPORT`. This checks every manifest entry without requiring
+a signing key. `pysec verify PASSPORT --report REPORT` is the stronger detached
+passport operation and expects `PASSPORT` to be a directory created by
+`pysec attest`.
+
+For environments where the approval signer is a separate service, use
+`pysec attest REPORT --output PASSPORT --unsigned`, sign
+`security-passport.json` externally, and populate version-compatible signature material using
+the documented passport layout before final verification. `--allow-unsigned`
+checks integrity only and is not a production authenticity control.

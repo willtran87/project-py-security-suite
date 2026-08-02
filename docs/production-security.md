@@ -1,6 +1,6 @@
 # Production security gate
 
-Last reviewed: 2026-07-23
+Last reviewed: 2026-08-01
 
 ## Purpose
 
@@ -43,6 +43,18 @@ Run the native profile inside an independently enforced egress-denied boundary:
   -NetworkIsolated
 ```
 
+Before promotion, verify that the generated manifest records:
+
+- matching target before/after SHA-256 values;
+- `source_integrity_verified: true`;
+- approved and unchanged scanner entry points; and
+- both an approved `run-codeql` entry point and CodeQL CLI helper when CodeQL
+  is applicable.
+
+The suite fails closed when these integrity claims are absent in production or
+release profiles. The enterprise runner should still mount the checkout
+read-only where possible; change detection is evidence, not access control.
+
 After the approved build has produced `dist/`, run the `release` profile
 against the same immutable checkout. Stage each PyPI Integrity API provenance
 object as `dist/FILENAME.provenance.json` and configure the expected Trusted
@@ -56,14 +68,17 @@ configuration, or isolation assertion was missing.
 
 | Layer | Suite coverage | Required production companion |
 |---|---|---|
-| Python source | Bandit, Semgrep, Ruff, Pysa, CodeQL through `run-codeql` | Security review of sensitive business logic and authorization |
+| Python source and structure | Bandit, Semgrep, Ruff, Pylint, mypy, Pyright, deptry, Vulture, Radon, Tach, Pysa, CodeQL through `run-codeql` | Security review of sensitive business logic, authorization, and intentional architecture changes |
 | Secrets | detect-secrets, Gitleaks, and TruffleHog | Full history, rotation workflow, and secret-manager controls |
 | Dependencies | OSV-Scanner, GuardDog, CycloneDX | Governed lock updates, advisory freshness SLA, and dependency-owner review |
-| CI, IaC, deployment | zizmor and Trivy | Scan the exact deployment definitions and final container/image |
-| License and component origin | ScanCode and Trivy | Legal policy and exceptions |
-| Built artifact | `release`: Syft, Grype, wheel-content checks, Twine, and offline PyPI attestation verification | Source-to-build reproducibility and organization release signature |
-| Runtime behavior | Deliberately not executed | Sandboxed unit/integration, abuse-case, fuzz, API, and DAST evidence |
-| Design risk | Not automatable | Threat model, architecture review, and time-bounded risk acceptance |
+| CI, IaC, deployment | zizmor, actionlint, Hadolint, Checkov, Trivy, PSScriptAnalyzer, and ShellCheck | Scan the exact deployment definitions, scripts, generated plans, and final container/image |
+| License and component origin | ScanCode, Trivy, and opt-in REUSE metadata compliance | Legal policy and exceptions |
+| Test evidence | Passive coverage.py, diff-cover, and JUnit ingestion | Execute unit, integration, property, and fuzz tests in disposable companion lanes and bind their reports to the same revision |
+| Built artifact | `release`: Syft, Grype, wheel-content checks, Twine, offline PyPI attestation verification, and Cosign | Source-to-build reproducibility and organization release signature |
+| Final OCI image | Bounded `oci-image` findings and digest evidence | Scan the immutable image archive with staged Syft, Grype, and Trivy databases; never pull during the isolated gate |
+| Repository governance | Validated OpenSSF Scorecard JSON | Generate the JSON in a separately authorized connected lane and bind it to the scanned revision |
+| Runtime behavior | Hypothesis and Schemathesis JUnit plus Atheris, mutmut, and ZAP evidence are normalized; target behavior is deliberately not executed by the scanner | Sandboxed unit/integration, abuse-case, fuzz, API, and DAST execution |
+| Design risk | OWASP pytm threats are normalized when a model exists | Human threat-model and architecture review plus time-bounded risk acceptance |
 
 The generated `assurance-case.md` records these boundaries for each run.
 
@@ -76,7 +91,7 @@ The following offline controls are now implemented:
    disables automatic updates.
 2. **TruffleHog** with verification and update checks disabled. Raw credential
    material is never retained in normalized findings or evidence.
-3. **`check-wheel-contents` and `twine check --strict`** for promoted Python
+3. **`check-wheel-contents`, maintained-source SHA-256 parity, and `twine check --strict`** for promoted Python
    distributions.
 4. **PyPI attestations** using a local distribution, local provenance object,
    expected Trusted Publisher repository, and `--offline`.
@@ -85,16 +100,33 @@ The following offline controls are now implemented:
    and scans a temporary source mirror. It does not use the wrapper's
    `--no-fail` option because that option can also suppress analysis errors;
    a finding exit is accepted only when the expected Python SARIF exists.
+6. **Pylint, Radon, Ruff formatting, and REUSE** for independently attributed
+   correctness, complexity, consistency, and file-license metadata evidence.
+7. **Passive coverage.py and JUnit ingestion** for bounded, sanitized test
+   evidence without running target code in the scanner boundary.
+8. **PSScriptAnalyzer and ShellCheck** for repository automation safety.
+9. **deptry, Pyright, and diff-cover** for dependency contracts, independent
+   typing, and changed-line coverage.
+10. **Checkov** with all remote downloads disabled for deep IaC policy, and
+    **Cosign** for staged release signature and identity verification.
+11. **OpenSSF Scorecard evidence ingestion**. Collection remains in the
+    connected governance lane; only bounded JSON crosses into the scanner.
 
-The remaining controls are project-owned dynamic or connected stages:
+The following project-owned controls now have first-class evidence adapters but
+still execute in dynamic or connected companion stages:
 
 1. **Hypothesis** for security invariants and edge cases, and **Atheris** for
    coverage-guided fuzzing of parsers, serializers, and native extensions.
 2. **Schemathesis** for OpenAPI/GraphQL property and stateful testing, plus
    **OWASP ZAP** where an isolated deployed web application is available.
-3. **OpenSSF Scorecard** in a separate connected governance lane for repository
-   posture. It is intentionally excluded from the air-gapped source scan
-   because many checks depend on hosting-provider metadata.
+3. **OWASP pytm** for model-as-code threats, **in-toto** for authorized build
+   steps, reproducible-build comparison, and **YARA** for local organization
+   malware rules.
+
+Production now fails closed without completed Hypothesis, CrossHair, Atheris,
+mutmut, pytm, and Scorecard evidence. Release additionally requires
+check-manifest, ClamAV, GitHub attestation, in-toto, reproducibility, YARA,
+final OCI-image evidence, and offline PyPI attestation verification.
 
 Dynamic tools execute application behavior and must use disposable test
 credentials, synthetic data, resource limits, and a network policy appropriate

@@ -60,7 +60,9 @@ class TruffleHogAdapter(ScannerAdapter):
                 or result.get("detector_name")
                 or "unknown-detector"
             )
-            metadata = result.get("SourceMetadata") or result.get("source_metadata") or {}
+            metadata = (
+                result.get("SourceMetadata") or result.get("source_metadata") or {}
+            )
             path, line_number = _location(metadata)
             normalized = normalize_repo_path(target, path)
             finding_id, fingerprint = finding_identity(
@@ -89,9 +91,7 @@ class TruffleHogAdapter(ScannerAdapter):
                         "then add a narrowly governed test-data exclusion if necessary."
                     ),
                     severity=Severity.HIGH,
-                    confidence=(
-                        Confidence.HIGH if verified else Confidence.MEDIUM
-                    ),
+                    confidence=(Confidence.HIGH if verified else Confidence.MEDIUM),
                     area="secrets",
                     classifications=["CWE-798"],
                     locations=[

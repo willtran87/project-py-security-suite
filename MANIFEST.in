@@ -1,0 +1,18 @@
+include CHANGELOG.md
+include CONTRIBUTING.md
+include README.md
+include SECURITY.md
+include pyproject.toml
+include pysec.example.toml
+include tach.toml
+include tox.toml
+include uv.lock
+recursive-include companion pyproject.toml uv.lock
+recursive-include containers *.toml Dockerfile
+recursive-include docs *.json *.md
+recursive-include examples *.yml
+recursive-include scripts *.ps1
+recursive-include security *.json
+recursive-include src/py_security_suite py.typed
+recursive-include src/py_security_suite/rules *.ini *.json *.psd1 *.toml *.txt *.yaml *.yml
+recursive-include tests *.py

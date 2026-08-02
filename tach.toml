@@ -1,0 +1,97 @@
+# Architectural contract for the suite itself. Keep dependencies explicit so
+# reviews can distinguish intentional boundary changes from accidental coupling.
+source_roots = ["src"]
+root_module = "forbid"
+exact = true
+forbid_circular_dependencies = true
+layers_explicit_depends_on = true
+layers = ["entrypoints", "application", "integrations", "services", "core"]
+
+[[modules]]
+path = "py_security_suite"
+depends_on = []
+layer = "core"
+
+[[modules]]
+path = "py_security_suite.models"
+depends_on = []
+layer = "core"
+
+[[modules]]
+path = "py_security_suite.execution"
+depends_on = []
+layer = "core"
+
+[[modules]]
+path = "py_security_suite.config"
+depends_on = ["py_security_suite.models"]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.inventory"
+depends_on = ["py_security_suite.models"]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.correlation"
+depends_on = ["py_security_suite.models"]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.source_context"
+depends_on = ["py_security_suite.models"]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.policy"
+depends_on = ["py_security_suite.config", "py_security_suite.models"]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.reports"
+depends_on = ["py_security_suite.models", "py_security_suite.source_context"]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.adapters"
+depends_on = [
+    "py_security_suite.config",
+    "py_security_suite.execution",
+    "py_security_suite.models",
+]
+layer = "integrations"
+
+[[modules]]
+path = "py_security_suite.orchestrator"
+depends_on = [
+    "py_security_suite",
+    "py_security_suite.adapters",
+    "py_security_suite.config",
+    "py_security_suite.correlation",
+    "py_security_suite.inventory",
+    "py_security_suite.models",
+    "py_security_suite.policy",
+    "py_security_suite.reports",
+    "py_security_suite.source_context",
+]
+layer = "application"
+
+[[modules]]
+path = "py_security_suite.cli"
+depends_on = [
+    "py_security_suite",
+    "py_security_suite.config",
+    "py_security_suite.orchestrator",
+    "py_security_suite.policy",
+]
+layer = "entrypoints"
+
+[[modules]]
+path = "py_security_suite.__main__"
+depends_on = ["py_security_suite.cli"]
+layer = "entrypoints"
+
+[[modules]]
+path = "py_security_suite.evidence_ingest"
+depends_on = ["py_security_suite"]
+layer = "entrypoints"

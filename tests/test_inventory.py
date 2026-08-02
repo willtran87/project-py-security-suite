@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from py_security_suite.inventory import inventory_target
+from py_security_suite.inventory import inventory_target, source_snapshot
 from py_security_suite.models import normalize_repo_path
 
 
@@ -29,14 +29,14 @@ class InventoryTests(unittest.TestCase):
             (target / "pylock.toml").write_text("", encoding="utf-8")
             (target / ".git").mkdir()
             (target / "dist").mkdir()
-            (target / "dist" / "example-1.0-py3-none-any.whl").write_bytes(
-                b"fixture"
-            )
+            (target / "dist" / "example-1.0-py3-none-any.whl").write_bytes(b"fixture")
             for excluded_directory in (".artifacts", ".pysec-tools"):
                 excluded = target / excluded_directory
                 excluded.mkdir()
                 (excluded / "dependency.py").write_text("", encoding="utf-8")
-                (excluded / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
+                (excluded / "pyproject.toml").write_text(
+                    "[project]\n", encoding="utf-8"
+                )
 
             inventory = inventory_target(target)
 
@@ -53,6 +53,36 @@ class InventoryTests(unittest.TestCase):
             inventory.distribution_files,
             ["dist/example-1.0-py3-none-any.whl"],
         )
+        self.assertEqual(inventory.hashed_files, 4)
+        self.assertGreater(inventory.hashed_bytes, 0)
+
+    def test_integrity_snapshot_detects_source_and_distribution_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            target = Path(temporary_directory)
+            (target / "app.py").write_text("value = 1\n", encoding="utf-8")
+            (target / "dist").mkdir()
+            artifact = target / "dist" / "example.whl"
+            artifact.write_bytes(b"first")
+            initial = source_snapshot(target)
+            artifact.write_bytes(b"second")
+            changed_artifact = source_snapshot(target)
+            (target / "app.py").write_text("value = 2\n", encoding="utf-8")
+            changed_source = source_snapshot(target)
+
+        self.assertNotEqual(initial[0], changed_artifact[0])
+        self.assertNotEqual(changed_artifact[0], changed_source[0])
+
+    def test_integrity_snapshot_ignores_explicit_report_output(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            target = Path(temporary_directory)
+            (target / "app.py").write_text("value = 1\n", encoding="utf-8")
+            output = target / "custom-report"
+            initial = source_snapshot(target, excluded_paths=(output,))
+            output.mkdir()
+            (output / "summary.md").write_text("report", encoding="utf-8")
+            after = source_snapshot(target, excluded_paths=(output,))
+
+        self.assertEqual(initial, after)
 
 
 if __name__ == "__main__":

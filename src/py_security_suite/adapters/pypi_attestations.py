@@ -6,7 +6,6 @@ from pathlib import Path
 
 from ..execution import (
     CommandEnvironment,
-    resolve_executable,
     run_command,
     sanitize_diagnostic,
 )
@@ -32,6 +31,8 @@ class PyPiAttestationsAdapter(ScannerAdapter):
     def not_applicable_reason(self, target: Path) -> str | None:
         if not distribution_files(target, self.config):
             return "no built wheel or source distribution was found"
+        if not self.config.repository_url:
+            return "no PyPI Trusted Publisher repository is configured for these local, unpublished artifacts"
         return None
 
     def prerequisite_error(self) -> str | None:
@@ -64,7 +65,9 @@ class PyPiAttestationsAdapter(ScannerAdapter):
         )
 
     def build_command(self, executable: str, target: Path) -> list[str]:
-        raise NotImplementedError("attestations are verified one distribution at a time")
+        raise NotImplementedError(
+            "attestations are verified one distribution at a time"
+        )
 
     def parse(self, payload: str, target: Path) -> list[Finding]:
         if payload.strip():
@@ -84,21 +87,23 @@ class PyPiAttestationsAdapter(ScannerAdapter):
             )
             return AdapterResult([], tool_run, self._diagnostic(tool_run, None))
         prerequisite = self.prerequisite_error()
-        executable = resolve_executable(self.config.executable)
-        if prerequisite or executable is None:
+        executable, integrity_error = self._prepare_executable()
+        if prerequisite or integrity_error or executable is None:
             tool_run = ToolRun(
                 tool=self.name,
                 status=ToolStatus.UNAVAILABLE,
                 command=[self.config.executable],
                 duration_seconds=0.0,
-                error=prerequisite or f"executable not found: {self.config.executable}",
+                error=(
+                    prerequisite
+                    or integrity_error
+                    or f"executable not found: {self.config.executable}"
+                ),
             )
             return AdapterResult([], tool_run, self._diagnostic(tool_run, None))
 
         version = self._detect_version(executable, target)
-        provenance_root = configured_path(
-            target, self.config.provenance_path, "dist"
-        )
+        provenance_root = configured_path(target, self.config.provenance_path, "dist")
         findings: list[Finding] = []
         commands: list[list[str]] = []
         diagnostics: list[dict[str, object]] = []
@@ -147,11 +152,28 @@ class PyPiAttestationsAdapter(ScannerAdapter):
                     "stderr": sanitize_diagnostic(execution.stderr, maximum=512),
                 }
             )
+            changed_error = self._executable_changed_error()
+            if changed_error:
+                tool_run = ToolRun(
+                    tool=self.name,
+                    status=ToolStatus.FAILED,
+                    command=command,
+                    duration_seconds=round(time.monotonic() - started, 3),
+                    version=version,
+                    exit_code=execution.exit_code,
+                    error=changed_error,
+                )
+                return AdapterResult(
+                    findings,
+                    tool_run,
+                    {
+                        **self._diagnostic(tool_run, execution),
+                        "verifications": diagnostics,
+                    },
+                )
             if execution.timed_out:
                 status = ToolStatus.TIMED_OUT
-                error = (
-                    f"attestation verification timed out for {distribution.name}"
-                )
+                error = f"attestation verification timed out for {distribution.name}"
                 tool_run = ToolRun(
                     tool=self.name,
                     status=status,
@@ -185,6 +207,25 @@ class PyPiAttestationsAdapter(ScannerAdapter):
                         detail=message,
                     )
                 )
+
+        changed_error = self._executable_changed_error()
+        if changed_error:
+            tool_run = ToolRun(
+                tool=self.name,
+                status=ToolStatus.FAILED,
+                command=commands[-1] if commands else [executable, "verify", "pypi"],
+                duration_seconds=round(time.monotonic() - started, 3),
+                version=version,
+                error=changed_error,
+            )
+            return AdapterResult(
+                findings,
+                tool_run,
+                {
+                    **self._diagnostic(tool_run, None),
+                    "verifications": diagnostics,
+                },
+            )
 
         tool_run = ToolRun(
             tool=self.name,

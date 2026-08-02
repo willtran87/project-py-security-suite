@@ -1,0 +1,17 @@
+requires = ["tox>=4.30,<5"]
+env_list = ["py311", "py312", "py313", "py314"]
+
+[env_run_base]
+description = "run the complete isolated unit and property-test suite"
+package = "wheel"
+dependency_groups = ["dev"]
+commands = [
+  [
+    "python",
+    "-m",
+    "pytest",
+    "-q",
+    "--junitxml={tox_root}/.artifacts/tox-{env_name}.xml",
+    "tests",
+  ],
+]

@@ -20,7 +20,7 @@ from .artifacts import (
     extracted_distribution_tree,
 )
 from .base import AdapterResult, ScannerAdapter
-from .common import map_severity
+from .common import database_freshness_error, map_severity
 
 
 class GrypeAdapter(ScannerAdapter):
@@ -38,7 +38,11 @@ class GrypeAdapter(ScannerAdapter):
             return "a staged offline Grype database directory is required"
         if not database.expanduser().resolve().is_dir():
             return f"Grype database directory does not exist: {database}"
-        return None
+        return database_freshness_error(
+            database.expanduser().resolve(),
+            "vulnerability.db",
+            self.config.maximum_database_age_days,
+        )
 
     def environment(self) -> CommandEnvironment:
         cache = self.config.database_path or (
@@ -49,6 +53,10 @@ class GrypeAdapter(ScannerAdapter):
                 "GRYPE_DB_CACHE_DIR": str(cache.expanduser().resolve()),
                 "GRYPE_DB_AUTO_UPDATE": "false",
                 "GRYPE_CHECK_FOR_APP_UPDATE": "false",
+                # Permit controlled transfer but fail closed on stale bundles.
+                "GRYPE_DB_MAX_ALLOWED_BUILT_AGE": (
+                    f"{self.config.maximum_database_age_days * 24:g}h"
+                ),
             }
         )
 

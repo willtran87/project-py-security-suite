@@ -17,6 +17,7 @@ from ..models import (
     normalize_repo_path,
 )
 from .base import ScannerAdapter
+from .staging import maintained_files
 
 
 class RuffAdapter(ScannerAdapter):
@@ -24,7 +25,7 @@ class RuffAdapter(ScannerAdapter):
     accepted_exit_codes = frozenset({0, 1})
 
     def not_applicable_reason(self, target: Path) -> str | None:
-        if not any(target.rglob("*.py")):
+        if not maintained_files(target, frozenset({".py"})):
             return "no Python source files were found"
         return None
 
@@ -105,9 +106,7 @@ class RuffAdapter(ScannerAdapter):
                     confidence=Confidence.MEDIUM,
                     area=area,
                     classifications=classifications,
-                    locations=[
-                        Location(path=path, start_line=line, end_line=end_line)
-                    ],
+                    locations=[Location(path=path, start_line=line, end_line=end_line)],
                     sources=[
                         Source(
                             tool=self.name,
@@ -146,9 +145,7 @@ def _rule_metadata(rule_id: str) -> tuple[Severity, str, list[str]]:
         "S608": (Severity.MEDIUM, "injection", ["CWE-89"]),
         "S609": (Severity.HIGH, "process-execution", ["CWE-78"]),
     }
-    return metadata.get(
-        rule_id, (Severity.MEDIUM, "python-code", [])
-    )
+    return metadata.get(rule_id, (Severity.MEDIUM, "python-code", []))
 
 
 def _integer(value: Any) -> int | None:

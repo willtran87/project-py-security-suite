@@ -48,8 +48,7 @@ class GitleaksAdapter(ScannerAdapter):
 
     def build_command(self, executable: str, target: Path) -> list[str]:
         self._report_path = (
-            Path(tempfile.gettempdir())
-            / f"pysec-gitleaks-{uuid.uuid4().hex}.json"
+            Path(tempfile.gettempdir()) / f"pysec-gitleaks-{uuid.uuid4().hex}.json"
         )
         self._mode = "git" if (target / ".git").is_dir() else "dir"
         command = [
@@ -89,9 +88,7 @@ class GitleaksAdapter(ScannerAdapter):
                 continue
             rule_id = str(result.get("RuleID") or "gitleaks.unknown")
             description = str(result.get("Description") or rule_id)
-            path = normalize_repo_path(
-                target, str(result.get("File") or "<unknown>")
-            )
+            path = normalize_repo_path(target, str(result.get("File") or "<unknown>"))
             line = _integer(result.get("StartLine"))
             commit = str(result.get("Commit") or "")
             finding_id, fingerprint = finding_identity(

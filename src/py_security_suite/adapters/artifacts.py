@@ -6,8 +6,9 @@ import tarfile
 import tempfile
 import zipfile
 from contextlib import contextmanager
+from collections.abc import Iterator
 from pathlib import Path
-from typing import BinaryIO, Iterator
+from typing import IO
 
 from ..config import ToolConfig
 
@@ -69,9 +70,7 @@ def artifact_manifest(target: Path, config: ToolConfig) -> dict[str, object]:
 
 
 @contextmanager
-def extracted_distribution_tree(
-    target: Path, config: ToolConfig
-) -> Iterator[Path]:
+def extracted_distribution_tree(target: Path, config: ToolConfig) -> Iterator[Path]:
     """Safely expand distributions for scanners that treat archives as opaque.
 
     Archive entries are copied without executing target code. Paths escaping the
@@ -106,7 +105,7 @@ def _safe_destination(root: Path, member_name: str) -> Path:
     return candidate
 
 
-def _copy_limited(source: BinaryIO, destination: Path, size: int) -> int:
+def _copy_limited(source: IO[bytes], destination: Path, size: int) -> int:
     if size < 0 or size > _MAX_MEMBER_BYTES:
         raise ValueError(f"archive member is too large: {size} bytes")
     destination.parent.mkdir(parents=True, exist_ok=True)

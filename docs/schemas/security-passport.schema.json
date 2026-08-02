@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://project-py-security-suite.example/schemas/security-passport.schema.json",
+  "title": "Python Security Suite Security Passport",
+  "type": "object",
+  "required": ["_type", "subject", "predicateType", "predicate"],
+  "properties": {
+    "_type": {"const": "https://in-toto.io/Statement/v1"},
+    "subject": {"type": "array", "minItems": 1, "items": {"type": "object"}},
+    "predicateType": {"const": "https://slsa.dev/verification_summary/v1"},
+    "predicate": {
+      "type": "object",
+      "required": ["verifier", "policy", "verificationResult", "verifiedLevels", "pysec"],
+      "properties": {
+        "verificationResult": {"enum": ["PASSED", "FAILED"]},
+        "pysec": {"type": "object", "required": ["schema_version", "outcome", "profile"]}
+      }
+    }
+  }
+}

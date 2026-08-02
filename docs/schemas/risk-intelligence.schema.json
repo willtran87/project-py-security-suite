@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://project-py-security-suite.example/schemas/risk-intelligence.schema.json",
+  "title": "Python Security Suite Risk Intelligence Summary",
+  "type": "object",
+  "required": ["schema_version", "configured", "enriched_findings", "snapshots"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "configured": {"type": "boolean"},
+    "enriched_findings": {"type": "integer", "minimum": 0},
+    "snapshots": {"type": "object"},
+    "errors": {"type": "array", "items": {"type": "string"}}
+  }
+}

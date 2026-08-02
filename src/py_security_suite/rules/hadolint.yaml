@@ -1,0 +1,3 @@
+ignored:
+  # Separate verified download steps produce clearer build evidence.
+  - DL3059

@@ -6,6 +6,7 @@ import shutil
 import subprocess  # nosec B404 - scanner execution is this module's purpose
 import tempfile
 import time
+import hashlib
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -32,6 +33,14 @@ class RawExecution:
 @dataclass(slots=True)
 class CommandEnvironment:
     extra: dict[str, str] = field(default_factory=dict)
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def resolve_executable(executable: str) -> str | None:
@@ -104,6 +113,7 @@ def run_command(
                 "XDG_CACHE_HOME": private_root / "cache",
             }
             for name, path in private_locations.items():
+                path.mkdir(parents=True, exist_ok=True)
                 process_environment.setdefault(name, str(path))
             # Executables are resolved by adapters, arguments are passed as a
             # vector, shell execution is disabled, and the environment is reduced.
@@ -112,18 +122,13 @@ def run_command(
                 cwd=cwd,
                 env=process_environment,
                 stdin=subprocess.DEVNULL,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                capture_output=True,
                 timeout=timeout_seconds,
                 check=False,
                 creationflags=creation_flags,
             )
-        stdout, stdout_truncated = _decode_and_cap(
-            completed.stdout, max_output_bytes
-        )
-        stderr, stderr_truncated = _decode_and_cap(
-            completed.stderr, max_output_bytes
-        )
+        stdout, stdout_truncated = _decode_and_cap(completed.stdout, max_output_bytes)
+        stderr, stderr_truncated = _decode_and_cap(completed.stderr, max_output_bytes)
         return RawExecution(
             command=command,
             exit_code=completed.returncode,
@@ -136,16 +141,8 @@ def run_command(
     except subprocess.TimeoutExpired as exc:
         stdout_bytes = exc.stdout or b""
         stderr_bytes = exc.stderr or b""
-        if isinstance(stdout_bytes, str):
-            stdout_bytes = stdout_bytes.encode("utf-8", errors="replace")
-        if isinstance(stderr_bytes, str):
-            stderr_bytes = stderr_bytes.encode("utf-8", errors="replace")
-        stdout, stdout_truncated = _decode_and_cap(
-            stdout_bytes, max_output_bytes
-        )
-        stderr, stderr_truncated = _decode_and_cap(
-            stderr_bytes, max_output_bytes
-        )
+        stdout, stdout_truncated = _decode_and_cap(stdout_bytes, max_output_bytes)
+        stderr, stderr_truncated = _decode_and_cap(stderr_bytes, max_output_bytes)
         return RawExecution(
             command=command,
             exit_code=None,

@@ -31,6 +31,6 @@ docker run `
     --overwrite
 
 $scanExit = $LASTEXITCODE
-Write-Host "Python Security Suite exit code: $scanExit"
-Write-Host "Report: $(Join-Path $artifactRoot $ReportName)"
+Write-Output "Python Security Suite exit code: $scanExit"
+Write-Output "Report: $(Join-Path $artifactRoot $ReportName)"
 exit $scanExit

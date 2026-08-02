@@ -18,6 +18,7 @@ from ..models import (
 )
 from .base import ScannerAdapter
 from .common import map_severity
+from .staging import maintained_repository_files
 
 
 class TrivyAdapter(ScannerAdapter):
@@ -35,9 +36,7 @@ class TrivyAdapter(ScannerAdapter):
             "requirements.txt",
         }
         suffixes = {".tf", ".yaml", ".yml", ".json"}
-        for path in target.rglob("*"):
-            if not path.is_file() or _excluded(path, target):
-                continue
+        for path in maintained_repository_files(target):
             if path.name.casefold() in names or path.suffix.casefold() in suffixes:
                 return None
         return "no supported deployment, dependency, or license files were found"
@@ -115,7 +114,9 @@ def _misconfigurations(result: dict[str, Any], path: str) -> list[Finding]:
                 finding_id=finding_id,
                 fingerprint=fingerprint,
                 title=title,
-                description=str(item.get("Description") or item.get("Message") or title),
+                description=str(
+                    item.get("Description") or item.get("Message") or title
+                ),
                 impact=(
                     "The deployment or infrastructure configuration may expose "
                     "the application, credentials, data, or runtime privileges."
@@ -156,9 +157,7 @@ def _misconfigurations(result: dict[str, Any], path: str) -> list[Finding]:
     return findings
 
 
-def _licenses(
-    result: dict[str, Any], default_path: str, target: Path
-) -> list[Finding]:
+def _licenses(result: dict[str, Any], default_path: str, target: Path) -> list[Finding]:
     values = result.get("Licenses") or []
     if not isinstance(values, list):
         return []
@@ -172,9 +171,7 @@ def _licenses(
         name = str(item.get("Name") or "UNKNOWN")
         category = str(item.get("Category") or "unknown")
         package = str(item.get("PkgName") or "")
-        path = normalize_repo_path(
-            target, str(item.get("FilePath") or default_path)
-        )
+        path = normalize_repo_path(target, str(item.get("FilePath") or default_path))
         if path == "<outside-target>":
             path = default_path
         rule_id = f"license/{name}"
@@ -226,14 +223,6 @@ def _licenses(
             )
         )
     return findings
-
-
-def _excluded(path: Path, target: Path) -> bool:
-    try:
-        parts = path.relative_to(target).parts
-    except ValueError:
-        return True
-    return any(part in {".artifacts", ".git", ".pysec-tools"} for part in parts)
 
 
 def _integer(value: Any) -> int | None:

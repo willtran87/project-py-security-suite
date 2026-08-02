@@ -16,11 +16,8 @@ from py_security_suite.models import Severity, json_ready
 
 class AdapterParserTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temp = tempfile.TemporaryDirectory()
-        self.target = Path(self.temp.name).resolve()
-
-    def tearDown(self) -> None:
-        self.temp.cleanup()
+        temporary = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with
+        self.target = Path(self.enterContext(temporary)).resolve()
 
     def test_bandit_json_is_normalized(self) -> None:
         payload = json.dumps(
@@ -46,9 +43,7 @@ class AdapterParserTests(unittest.TestCase):
         self.assertIn("CWE-78", finding.classifications)
 
     def test_bandit_uses_native_absolute_exclusion_paths(self) -> None:
-        command = BanditAdapter(ToolConfig(), 4096).build_command(
-            "bandit", self.target
-        )
+        command = BanditAdapter(ToolConfig(), 4096).build_command("bandit", self.target)
         self.assertEqual(command[command.index("-r") + 1], str(self.target))
         excluded_paths = command[command.index("-x") + 1].split(",")
         self.assertEqual(
@@ -103,9 +98,9 @@ class AdapterParserTests(unittest.TestCase):
                 }
             }
         )
-        finding = DetectSecretsAdapter(ToolConfig(), 4096).parse(
-            payload, self.target
-        )[0]
+        finding = DetectSecretsAdapter(ToolConfig(), 4096).parse(payload, self.target)[
+            0
+        ]
         serialized = json.dumps(json_ready(finding))
         self.assertNotIn("must-not-be-retained", serialized)
         self.assertTrue(finding.evidence["redacted"])
@@ -146,9 +141,7 @@ class AdapterParserTests(unittest.TestCase):
                                     {
                                         "id": "GHSA-AAAA-BBBB-CCCC",
                                         "summary": "Example vulnerability",
-                                        "database_specific": {
-                                            "severity": "CRITICAL"
-                                        },
+                                        "database_specific": {"severity": "CRITICAL"},
                                     }
                                 ],
                             }
@@ -157,9 +150,7 @@ class AdapterParserTests(unittest.TestCase):
                 ]
             }
         )
-        finding = OsvScannerAdapter(ToolConfig(), 4096).parse(
-            payload, self.target
-        )[0]
+        finding = OsvScannerAdapter(ToolConfig(), 4096).parse(payload, self.target)[0]
         self.assertEqual(finding.severity, Severity.CRITICAL)
         self.assertEqual(finding.locations[0].package, "example")
         self.assertEqual(finding.citations[0].identifier, "GHSA-AAAA-BBBB-CCCC")

@@ -29,6 +29,7 @@ class DetectSecretsAdapter(ScannerAdapter):
                 ".artifacts",
                 ".git",
                 ".hg",
+                ".mypy_cache",
                 ".nox",
                 ".pysec-tools",
                 ".pytest_cache",
@@ -53,7 +54,10 @@ class DetectSecretsAdapter(ScannerAdapter):
             "--all-files",
             "--no-verify",
             "--exclude-files",
-            r"(^|[\\/])\.(artifacts|pysec-tools|pytest_cache|ruff_cache)([\\/]|$)",
+            (
+                r"(^|[\\/])\.(artifacts|mypy_cache|pysec-tools|"
+                r"pytest_cache|ruff_cache)([\\/]|$)"
+            ),
         ]
 
     def parse(self, payload: str, target: Path) -> list[Finding]:
@@ -119,10 +123,7 @@ class DetectSecretsAdapter(ScannerAdapter):
                                 kind="taxonomy",
                                 identifier="CWE-798",
                                 title="Use of Hard-coded Credentials",
-                                uri=(
-                                    "https://cwe.mitre.org/data/definitions/"
-                                    "798.html"
-                                ),
+                                uri=("https://cwe.mitre.org/data/definitions/798.html"),
                             ),
                         ],
                         evidence={"redacted": True},
@@ -140,7 +141,6 @@ def _integer(value: Any) -> int | None:
 
 def _rule_id(detector: str) -> str:
     normalized = "".join(
-        character.lower() if character.isalnum() else "-"
-        for character in detector
+        character.lower() if character.isalnum() else "-" for character in detector
     ).strip("-")
     return f"detect-secrets.{normalized or 'unknown'}"

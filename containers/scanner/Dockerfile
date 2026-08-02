@@ -4,9 +4,12 @@ FROM python:3.11.13-slim-bookworm
 ARG BANDIT_VERSION=1.9.4
 ARG SEMGREP_VERSION=1.170.0
 ARG DETECT_SECRETS_VERSION=1.5.0
+ARG DEFUSED_XML_VERSION=0.7.1
 ARG OSV_SCANNER_VERSION=2.3.8
-ARG OSV_SCANNER_LINUX_AMD64_SHA256=bc98e15319ed0d515e3f9235287ba53cdc5535d576d24fd573978ecfe9ab92dc
-ARG OSV_PYPI_DATABASE_SHA256=4b29a3ec3f5680ad6fc43714a00ec3ed726d2214eac73031279e9b0f02549627
+# trivy:ignore:DS-0031 -- public integrity checksum, not secret material
+ARG OSV_SCANNER_LINUX_AMD64_SHA256=bc98e15319ed0d515e3f9235287ba53cdc5535d576d24fd573978ecfe9ab92dc  # pragma: allowlist secret
+# trivy:ignore:DS-0031 -- public integrity checksum, not secret material
+ARG OSV_PYPI_DATABASE_SHA256=4b29a3ec3f5680ad6fc43714a00ec3ed726d2214eac73031279e9b0f02549627  # pragma: allowlist secret
 
 LABEL org.opencontainers.image.title="Python Security Suite scanner bundle"
 LABEL org.opencontainers.image.description="Offline runtime for the Python Security Suite standard profile"
@@ -27,6 +30,7 @@ RUN python -m pip install \
       "bandit==${BANDIT_VERSION}" \
       "semgrep==${SEMGREP_VERSION}" \
       "detect-secrets==${DETECT_SECRETS_VERSION}" \
+      "defusedxml==${DEFUSED_XML_VERSION}" \
     && mkdir -p /opt/pysec-bundle /opt/osv-db/osv-scanner/PyPI
 
 RUN python - "${OSV_SCANNER_VERSION}" "${OSV_SCANNER_LINUX_AMD64_SHA256}" <<'PY'
@@ -81,6 +85,7 @@ COPY pyproject.toml README.md /opt/pysec-suite/
 COPY src /opt/pysec-suite/src
 COPY containers/scanner/pysec.toml /opt/pysec-suite/pysec.toml
 
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN python -m pip install --no-deps /opt/pysec-suite \
     && python -m pip freeze --all | sort > /opt/pysec-bundle/python-packages.txt
 

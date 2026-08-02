@@ -1,6 +1,6 @@
 schema_version = "1"
-# quick | standard | extended | deep | supply-chain | artifact |
-# comprehensive | production | release
+# quick | standard | extended | deep | supply-chain | artifact | quality |
+# repo | iac-deep | governance | comprehensive | production | release
 profile = "standard"
 
 [isolation]
@@ -17,13 +17,36 @@ max_output_bytes = 16777216
 required_scanners = []
 block_severities = ["critical", "high"]
 incomplete_is_blocking = true
+# Optional, bounded acceptance ledger. Production policy should pin its digest.
+# risk_acceptance_path = "security/risk-acceptances.json"
+# risk_acceptance_sha256 = "<organization-approved-ledger-sha256>"
 
 [reports]
 include_sanitized_evidence = true
+# Optional prior findings report for new/existing/regressed/resolved analysis.
+# Both values are required together; organization policy should pin the digest.
+# baseline_path = "security-data/previous/findings.json"
+# baseline_sha256 = "<organization-approved-baseline-sha256>"
+
+[intelligence]
+# Snapshots are acquired in the connected lane and consumed without network access.
+# Every configured snapshot requires its organization-approved SHA-256.
+# kev_path = "security-data/intelligence/known_exploited_vulnerabilities.json"
+# kev_sha256 = "<organization-approved-kev-sha256>"
+# epss_path = "security-data/intelligence/epss_scores-current.csv.gz"
+# epss_sha256 = "<organization-approved-epss-sha256>"
+# vex_path = "security-data/intelligence/product-vex.cdx.json"
+# vex_sha256 = "<organization-approved-vex-sha256>"
+maximum_age_days = 3
+epss_high_probability = 0.10
+epss_high_percentile = 0.90
 
 [tools.bandit]
 enabled = true
 executable = "bandit"
+# Set every applicable tool entry point to its organization-approved SHA-256.
+# Production and release profiles fail closed when this binding is absent.
+# executable_sha256 = "<organization-approved-sha256>"
 timeout_seconds = 300
 
 [tools.semgrep]
@@ -44,10 +67,14 @@ executable = "osv-scanner"
 timeout_seconds = 300
 # Populate this directory in the connected update lane.
 database_path = "security-data/osv"
+maximum_database_age_days = 10
 
 [tools.cyclonedx-py]
 enabled = true
 executable = "cyclonedx-py"
+# Required when uv.lock is selected. Stage and hash uv in the offline bundle.
+auxiliary_executable = "uv"
+# auxiliary_executable_sha256 = "<organization-approved-uv-sha256>"
 timeout_seconds = 300
 
 [tools.ruff]
@@ -55,9 +82,119 @@ enabled = true
 executable = "ruff"
 timeout_seconds = 300
 
+[tools.ruff-quality]
+enabled = true
+executable = "ruff"
+timeout_seconds = 300
+
+[tools.ruff-format]
+enabled = true
+executable = "ruff"
+timeout_seconds = 300
+
+[tools.pylint]
+enabled = true
+executable = "pylint"
+timeout_seconds = 600
+# The default is a suite-controlled policy; point this at an approved override
+# only when the organization intentionally owns the policy lifecycle.
+# rules_path = "security-rules/pylint.ini"
+
+[tools.mypy]
+enabled = true
+executable = "mypy"
+timeout_seconds = 600
+
+[tools.pyright]
+enabled = true
+# Use the pinned Node.js executable and staged Pyright CLI.
+executable = "node"
+database_path = "security-tools/pyright/index.js"
+rules_path = "security-tools/rules/pyrightconfig.json"
+timeout_seconds = 600
+
+[tools.deptry]
+enabled = true
+executable = "deptry"
+timeout_seconds = 600
+
+[tools.vulture]
+enabled = true
+executable = "vulture"
+timeout_seconds = 300
+
+[tools.tach]
+enabled = true
+executable = "tach"
+timeout_seconds = 300
+
+[tools.radon]
+enabled = true
+executable = "radon"
+timeout_seconds = 300
+
+[tools.coverage]
+enabled = true
+executable = "pysec-evidence"
+timeout_seconds = 60
+artifacts_path = "coverage.json"
+minimum_coverage_percent = 80.0
+
+[tools.junit]
+enabled = true
+executable = "pysec-evidence"
+timeout_seconds = 60
+artifacts_path = "junit.xml"
+
+# Property tests execute only in a disposable companion lane. For Python
+# projects the production profile fails closed when this evidence is absent.
+[tools.hypothesis]
+enabled = true
+executable = "pysec-evidence"
+timeout_seconds = 60
+artifacts_path = "hypothesis-junit.xml"
+
+# Applicable when the repository contains an OpenAPI schema.
+[tools.schemathesis]
+enabled = true
+executable = "pysec-evidence"
+timeout_seconds = 60
+artifacts_path = "schemathesis-junit.xml"
+
+[tools.diff-cover]
+enabled = true
+executable = "diff-cover"
+timeout_seconds = 300
+artifacts_path = "coverage.xml"
+minimum_coverage_percent = 80.0
+compare_branch = "origin/main"
+
+[tools.psscriptanalyzer]
+enabled = true
+executable = "powershell.exe"
+timeout_seconds = 600
+rules_path = "security-rules/psscriptanalyzer.psd1"
+# Directory containing the staged PSScriptAnalyzer module.
+database_path = "security-tools/powershell-modules"
+
+[tools.shellcheck]
+enabled = true
+executable = "shellcheck"
+timeout_seconds = 300
+
 [tools.zizmor]
 enabled = true
 executable = "zizmor"
+timeout_seconds = 300
+
+[tools.actionlint]
+enabled = true
+executable = "actionlint"
+timeout_seconds = 300
+
+[tools.hadolint]
+enabled = true
+executable = "hadolint"
 timeout_seconds = 300
 
 [tools.pysa]
@@ -72,6 +209,11 @@ timeout_seconds = 900
 # Optional local cache containing organization-approved Trivy assets.
 database_path = "security-data/trivy"
 
+[tools.checkov]
+enabled = true
+executable = "checkov"
+timeout_seconds = 1200
+
 [tools.guarddog]
 enabled = true
 executable = "guarddog"
@@ -81,6 +223,11 @@ timeout_seconds = 900
 enabled = true
 executable = "scancode"
 timeout_seconds = 1800
+
+[tools.reuse]
+enabled = true
+executable = "reuse"
+timeout_seconds = 600
 
 [tools.gitleaks]
 enabled = true
@@ -95,12 +242,24 @@ enabled = true
 executable = "trufflehog"
 timeout_seconds = 900
 
+[tools.devskim]
+enabled = true
+executable = "devskim"
+timeout_seconds = 900
+
+[tools.flawfinder]
+enabled = true
+executable = "flawfinder"
+timeout_seconds = 600
+
 [tools.codeql]
 enabled = true
 executable = "run-codeql"
 timeout_seconds = 1800
 # run-codeql is allowed to use only this pre-staged CodeQL executable.
 auxiliary_executable = "security-tools/codeql/codeql"
+# Bind the CodeQL CLI separately from the run-codeql wrapper.
+# auxiliary_executable_sha256 = "<organization-approved-codeql-sha256>"
 # Isolated home containing .codeql/packages/codeql/python-queries.
 database_path = "security-data/run-codeql-home"
 
@@ -137,3 +296,141 @@ artifacts_path = "dist"
 provenance_path = "dist"
 database_path = "security-data/sigstore-trust-home"
 repository_url = "https://github.com/example/example"
+
+[tools.cosign]
+enabled = true
+executable = "cosign"
+timeout_seconds = 300
+artifacts_path = "dist"
+provenance_path = "dist"
+# Choose public-key verification:
+# public_key_path = "security-data/release-signing.pub"
+# Or keyless verification with all three settings:
+# database_path = "security-data/sigstore-trusted-root.json"
+# certificate_identity = "https://github.com/org/repo/.github/workflows/release.yml@refs/heads/main"
+# certificate_oidc_issuer = "https://token.actions.githubusercontent.com"
+
+[tools.scorecard]
+enabled = true
+executable = "pysec-evidence"
+timeout_seconds = 60
+# Generated only in the separately authorized connected governance lane.
+artifacts_path = "scorecard.json"
+
+[tools.conftest]
+enabled = true
+executable = "conftest"
+timeout_seconds = 600
+# Approved, locally staged OPA/Rego policy; remote policy pulls are never used.
+rules_path = "security-rules/conftest"
+
+[tools.kics]
+enabled = true
+executable = "kics"
+timeout_seconds = 1200
+# KICS must be built/staged with its matching local assets/queries tree.
+rules_path = "security-data/kics/queries"
+
+[tools.pipdeptree]
+enabled = true
+executable = "pipdeptree"
+timeout_seconds = 300
+# Python from the approved, already-created target runtime environment.
+auxiliary_executable = ".venv/Scripts/python.exe"
+
+[tools.git-sizer]
+enabled = true
+executable = "git-sizer"
+timeout_seconds = 600
+
+[tools.validate-pyproject]
+enabled = true
+executable = "validate-pyproject"
+timeout_seconds = 300
+
+[tools.vale]
+enabled = true
+executable = "vale"
+timeout_seconds = 600
+# Configuration and style packages must already be present locally.
+rules_path = "security-rules/vale/.vale.ini"
+
+[tools.kube-linter]
+enabled = true
+executable = "kube-linter"
+timeout_seconds = 600
+
+# The remaining tools execute target behavior, build metadata, scan release
+# bytes, or verify host-bound provenance in separately controlled lanes. This
+# suite only validates and ingests their bounded JSON evidence.
+[tools.crosshair]
+enabled = true
+executable = "pysec-evidence"
+timeout_seconds = 60
+artifacts_path = "crosshair.json"
+
+[tools.atheris]
+enabled = true
+executable = "pysec-evidence"
+timeout_seconds = 60
+artifacts_path = "atheris.json"
+
+[tools.mutmut]
+enabled = true
+executable = "pysec-evidence"
+timeout_seconds = 60
+artifacts_path = "mutmut.json"
+
+[tools.check-manifest]
+enabled = true
+executable = "pysec-evidence"
+timeout_seconds = 60
+artifacts_path = "check-manifest.json"
+
+[tools.clamav]
+enabled = true
+executable = "pysec-evidence"
+timeout_seconds = 60
+artifacts_path = "clamav.json"
+
+[tools.github-attestation]
+enabled = true
+executable = "pysec-evidence"
+timeout_seconds = 60
+artifacts_path = "github-attestation.json"
+
+[tools.zap]
+enabled = true
+executable = "pysec-evidence"
+timeout_seconds = 60
+artifacts_path = "zap.json"
+
+[tools.pytm]
+enabled = true
+executable = "pysec-evidence"
+timeout_seconds = 60
+artifacts_path = "pytm.json"
+
+[tools.in-toto]
+enabled = true
+executable = "pysec-evidence"
+timeout_seconds = 60
+artifacts_path = "in-toto.json"
+
+[tools.reproducible-build]
+enabled = true
+executable = "pysec-evidence"
+timeout_seconds = 60
+artifacts_path = "reproducible-build.json"
+
+[tools.oci-image]
+enabled = true
+executable = "pysec-evidence"
+timeout_seconds = 60
+artifacts_path = "oci-image.json"
+
+[tools.yara]
+enabled = true
+executable = "pysec-evidence"
+timeout_seconds = 60
+artifacts_path = "yara.json"

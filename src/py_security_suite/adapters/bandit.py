@@ -143,7 +143,7 @@ def _area_for(rule_id: str, classifications: list[str], title: str) -> str:
     }
     if rule_id in rule_areas:
         return rule_areas[rule_id]
-    combined = " ".join(classifications + [title]).lower()
+    combined = " ".join([*classifications, title]).lower()
     if any(value in combined for value in ("command", "sql", "injection", "cwe-78")):
         return "injection"
     if any(value in combined for value in ("crypto", "hash", "tls", "ssl")):

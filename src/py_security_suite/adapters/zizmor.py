@@ -5,6 +5,7 @@ from pathlib import Path
 from ..models import Finding
 from .base import ScannerAdapter
 from .sarif import parse_sarif_findings
+from .staging import maintained_repository_files
 
 
 class ZizmorAdapter(ScannerAdapter):
@@ -16,9 +17,14 @@ class ZizmorAdapter(ScannerAdapter):
         dependabot_yaml = target / ".github" / "dependabot.yaml"
         actions = any(
             path.name in {"action.yml", "action.yaml"}
-            for path in target.rglob("action.y*ml")
+            for path in maintained_repository_files(target)
         )
-        if not workflows.is_dir() and not dependabot.is_file() and not dependabot_yaml.is_file() and not actions:
+        if (
+            not workflows.is_dir()
+            and not dependabot.is_file()
+            and not dependabot_yaml.is_file()
+            and not actions
+        ):
             return "no GitHub Actions, composite actions, or Dependabot configuration found"
         return None
 

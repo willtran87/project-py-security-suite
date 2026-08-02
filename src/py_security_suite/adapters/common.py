@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from ..models import Confidence, Severity
@@ -17,10 +19,33 @@ def map_severity(value: Any, *, default: Severity = Severity.UNKNOWN) -> Severit
         "medium": Severity.MEDIUM,
         "low": Severity.LOW,
         "info": Severity.INFORMATIONAL,
+        "information": Severity.INFORMATIONAL,
         "informational": Severity.INFORMATIONAL,
         "unknown": Severity.UNKNOWN,
     }
     return mapping.get(normalized, default)
+
+
+def database_freshness_error(
+    root: Path, filename: str, maximum_age_days: float
+) -> str | None:
+    """Validate a staged database marker's age without consulting a network."""
+    candidates = sorted(
+        path
+        for path in root.rglob(filename)
+        if path.is_file() and not path.is_symlink()
+    )
+    if not candidates:
+        return f"offline database freshness marker {filename!r} was not found"
+    newest = max(candidates, key=lambda path: path.stat().st_mtime)
+    modified = datetime.fromtimestamp(newest.stat().st_mtime, tz=UTC)
+    age_days = (datetime.now(UTC) - modified).total_seconds() / 86400
+    if age_days > maximum_age_days:
+        return (
+            f"offline database is {age_days:.1f} days old; "
+            f"maximum allowed age is {maximum_age_days:g} days"
+        )
+    return None
 
 
 def map_confidence(value: Any) -> Confidence:
@@ -41,4 +66,3 @@ def string_list(value: Any) -> list[str]:
     if isinstance(value, Iterable) and not isinstance(value, (bytes, dict)):
         return [str(item) for item in value]
     return [str(value)]
-

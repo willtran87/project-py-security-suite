@@ -7,16 +7,19 @@ import tempfile
 import time
 from pathlib import Path
 
+from ..config import ToolConfig
 from ..execution import (
     CommandEnvironment,
     RawExecution,
     resolve_executable,
     run_command,
     sanitize_diagnostic,
+    sha256_file,
 )
 from ..models import Finding, ToolRun, ToolStatus
 from .base import AdapterResult, ScannerAdapter
 from .sarif import parse_sarif_findings
+from .staging import maintained_files
 
 
 _MIRROR_SKIP_DIRECTORIES = {
@@ -40,18 +43,37 @@ class CodeQlAdapter(ScannerAdapter):
 
     name = "codeql"
 
+    def __init__(self, config: ToolConfig, max_output_bytes: int) -> None:
+        super().__init__(config, max_output_bytes)
+        self._auxiliary_path: Path | None = None
+        self._auxiliary_sha256: str | None = None
+        self._auxiliary_integrity_verified: bool | None = None
+        self._auxiliary_unchanged: bool | None = None
+
     def not_applicable_reason(self, target: Path) -> str | None:
-        if not any(target.rglob("*.py")):
+        if not maintained_files(target, frozenset({".py"})):
             return "no Python source files were found"
         return None
 
     def prerequisite_error(self) -> str | None:
         codeql = self.config.auxiliary_executable or "codeql"
-        if resolve_executable(codeql) is None:
+        resolved_codeql = resolve_executable(codeql)
+        if resolved_codeql is None:
             return (
                 "a pre-staged CodeQL CLI is required on the configured path; "
                 "run-codeql auto-download is prohibited"
             )
+        self._auxiliary_path = Path(resolved_codeql).resolve()
+        try:
+            self._auxiliary_sha256 = sha256_file(self._auxiliary_path)
+        except OSError:
+            return "the pre-staged CodeQL CLI could not be hashed"
+        expected = self.config.auxiliary_executable_sha256
+        self._auxiliary_integrity_verified = (
+            self._auxiliary_sha256 == expected if expected else None
+        )
+        if expected and not self._auxiliary_integrity_verified:
+            return "CodeQL CLI SHA-256 does not match the approved digest"
         home = self.config.database_path
         if home is None:
             return (
@@ -66,7 +88,11 @@ class CodeQlAdapter(ScannerAdapter):
 
     def environment(self) -> CommandEnvironment:
         home = self.config.database_path
-        codeql = resolve_executable(self.config.auxiliary_executable or "codeql")
+        codeql = (
+            str(self._auxiliary_path)
+            if self._auxiliary_path is not None
+            else resolve_executable(self.config.auxiliary_executable or "codeql")
+        )
         extra: dict[str, str] = {
             "RCQL_DOWNLOAD_RETRY_ATTEMPTS": "1",
             "RCQL_DOWNLOAD_TIMEOUT_SECONDS": "1",
@@ -107,7 +133,11 @@ class CodeQlAdapter(ScannerAdapter):
         )
 
     def _detect_version(self, executable: str, target: Path) -> str:
-        codeql = resolve_executable(self.config.auxiliary_executable or "codeql")
+        codeql = (
+            str(self._auxiliary_path)
+            if self._auxiliary_path is not None
+            else resolve_executable(self.config.auxiliary_executable or "codeql")
+        )
         if codeql is None:
             return "run-codeql; CodeQL unknown"
         execution = run_command(
@@ -136,14 +166,18 @@ class CodeQlAdapter(ScannerAdapter):
             )
             return AdapterResult([], tool_run, self._diagnostic(tool_run, None))
         prerequisite = self.prerequisite_error()
-        executable = resolve_executable(self.config.executable)
-        if prerequisite or executable is None:
+        executable, integrity_error = self._prepare_executable()
+        if prerequisite or integrity_error or executable is None:
             tool_run = ToolRun(
                 tool=self.name,
                 status=ToolStatus.UNAVAILABLE,
                 command=[self.config.executable],
                 duration_seconds=0.0,
-                error=prerequisite or f"executable not found: {self.config.executable}",
+                error=(
+                    prerequisite
+                    or integrity_error
+                    or f"executable not found: {self.config.executable}"
+                ),
             )
             return AdapterResult([], tool_run, self._diagnostic(tool_run, None))
 
@@ -162,9 +196,26 @@ class CodeQlAdapter(ScannerAdapter):
                 max_output_bytes=self.max_output_bytes,
                 environment=self.environment(),
             )
+            changed_error = self._executable_changed_error()
+            auxiliary_changed_error = self._auxiliary_changed_error()
+            if changed_error or auxiliary_changed_error:
+                tool_run = ToolRun(
+                    tool=self.name,
+                    status=ToolStatus.FAILED,
+                    command=command,
+                    duration_seconds=round(time.monotonic() - started, 3),
+                    version=version,
+                    exit_code=execution.exit_code,
+                    error=changed_error or auxiliary_changed_error,
+                )
+                return AdapterResult(
+                    [], tool_run, self._diagnostic(tool_run, execution)
+                )
             if execution.timed_out or execution.exit_code not in {0, 1}:
                 return self._failure(execution, version, started)
-            sarif_files = sorted((mirror / ".codeql" / "reports").glob("python-*.sarif"))
+            sarif_files = sorted(
+                (mirror / ".codeql" / "reports").glob("python-*.sarif")
+            )
             if len(sarif_files) != 1:
                 tool_run = ToolRun(
                     tool=self.name,
@@ -173,11 +224,11 @@ class CodeQlAdapter(ScannerAdapter):
                     duration_seconds=round(time.monotonic() - started, 3),
                     version=version,
                     exit_code=execution.exit_code,
-                    error=(
-                        "run-codeql did not create exactly one Python SARIF report"
-                    ),
+                    error=("run-codeql did not create exactly one Python SARIF report"),
                 )
-                return AdapterResult([], tool_run, self._diagnostic(tool_run, execution))
+                return AdapterResult(
+                    [], tool_run, self._diagnostic(tool_run, execution)
+                )
             data = sarif_files[0].read_bytes()
             if len(data) > self.max_output_bytes:
                 tool_run = ToolRun(
@@ -190,7 +241,9 @@ class CodeQlAdapter(ScannerAdapter):
                     error="CodeQL SARIF exceeded execution.max_output_bytes",
                     stdout_truncated=True,
                 )
-                return AdapterResult([], tool_run, self._diagnostic(tool_run, execution))
+                return AdapterResult(
+                    [], tool_run, self._diagnostic(tool_run, execution)
+                )
             try:
                 findings = self.parse(data.decode("utf-8"), mirror)
             except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
@@ -203,7 +256,9 @@ class CodeQlAdapter(ScannerAdapter):
                     exit_code=execution.exit_code,
                     error=f"could not parse CodeQL output: {exc}",
                 )
-                return AdapterResult([], tool_run, self._diagnostic(tool_run, execution))
+                return AdapterResult(
+                    [], tool_run, self._diagnostic(tool_run, execution)
+                )
 
         for finding in findings:
             for source in finding.sources:
@@ -223,6 +278,37 @@ class CodeQlAdapter(ScannerAdapter):
         diagnostic["repository_codeql_config_used"] = False
         diagnostic["auto_download_allowed"] = False
         return AdapterResult(findings, tool_run, diagnostic)
+
+    def _auxiliary_changed_error(self) -> str | None:
+        path = self._auxiliary_path
+        initial = self._auxiliary_sha256
+        if path is None or initial is None:
+            return None
+        try:
+            current = sha256_file(path)
+        except OSError:
+            self._auxiliary_unchanged = False
+            return "CodeQL CLI became unreadable during execution"
+        self._auxiliary_unchanged = current == initial
+        if not self._auxiliary_unchanged:
+            return "CodeQL CLI changed during execution"
+        return None
+
+    def _diagnostic(
+        self, tool_run: ToolRun, execution: RawExecution | None
+    ) -> dict[str, object]:
+        tool_run.auxiliary_executable_sha256 = self._auxiliary_sha256
+        tool_run.auxiliary_executable_integrity_verified = (
+            self._auxiliary_integrity_verified
+        )
+        tool_run.auxiliary_executable_unchanged = self._auxiliary_unchanged
+        diagnostic = super()._diagnostic(tool_run, execution)
+        diagnostic["auxiliary_executable_sha256"] = self._auxiliary_sha256
+        diagnostic["auxiliary_executable_integrity_verified"] = (
+            self._auxiliary_integrity_verified
+        )
+        diagnostic["auxiliary_executable_unchanged"] = self._auxiliary_unchanged
+        return diagnostic
 
     def _failure(
         self, execution: RawExecution, version: str, started: float
@@ -258,10 +344,7 @@ def _copy_target(source: Path, destination: Path) -> None:
             if (
                 path.is_symlink()
                 or directory in _MIRROR_SKIP_DIRECTORIES
-                or (
-                    relative_root.as_posix() == ".github"
-                    and directory == "codeql"
-                )
+                or (relative_root.as_posix() == ".github" and directory == "codeql")
             ):
                 continue
             kept.append(directory)

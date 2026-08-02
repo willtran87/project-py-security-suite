@@ -3,12 +3,15 @@ from __future__ import annotations
 import hashlib
 import html
 import json
+import re
 from pathlib import Path
 from typing import Any
 
 from .models import (
     Citation,
     Finding,
+    FindingStatus,
+    Location,
     Outcome,
     ScanManifest,
     Severity,
@@ -16,6 +19,8 @@ from .models import (
     ToolRun,
     json_ready,
 )
+from .source_context import source_language
+from .passport import build_security_passport_statement
 
 
 REPORT_FILES = (
@@ -24,9 +29,11 @@ REPORT_FILES = (
     "assurance-case.md",
     "index.html",
     "results.sarif",
+    "sonarqube-external-issues.json",
     "findings.json",
     "scan-manifest.json",
     "checksums.sha256",
+    "security-passport.json",
 )
 
 _SEVERITY_ORDER = {
@@ -44,6 +51,22 @@ _TOOL_REFERENCES = {
     "osv-scanner": "https://google.github.io/osv-scanner/",
     "cyclonedx-py": "https://cyclonedx-bom-tool.readthedocs.io/",
     "ruff": "https://docs.astral.sh/ruff/rules/#flake8-bandit-s",
+    "ruff-quality": "https://docs.astral.sh/ruff/linter/",
+    "ruff-format": "https://docs.astral.sh/ruff/formatter/",
+    "pylint": "https://pylint.readthedocs.io/",
+    "mypy": "https://mypy.readthedocs.io/",
+    "vulture": "https://github.com/jendrikseipp/vulture",
+    "radon": "https://radon.readthedocs.io/",
+    "tach": "https://docs.gauge.sh/",
+    "coverage": "https://coverage.readthedocs.io/",
+    "junit": "https://github.com/testmoapp/junitxml",
+    "hypothesis": "https://hypothesis.readthedocs.io/",
+    "schemathesis": "https://schemathesis.readthedocs.io/",
+    "actionlint": "https://github.com/rhysd/actionlint",
+    "hadolint": "https://github.com/hadolint/hadolint",
+    "devskim": "https://github.com/microsoft/DevSkim",
+    "flawfinder": "https://dwheeler.com/flawfinder/",
+    "reuse": "https://reuse.software/",
     "zizmor": "https://docs.zizmor.sh/",
     "pysa": "https://pyre-check.org/docs/pysa-basics/",
     "trivy": "https://trivy.dev/docs/latest/",
@@ -57,6 +80,33 @@ _TOOL_REFERENCES = {
     "check-wheel-contents": "https://github.com/jwodder/check-wheel-contents",
     "twine": "https://twine.readthedocs.io/en/stable/#twine-check",
     "pypi-attestations": "https://docs.pypi.org/attestations/",
+    "psscriptanalyzer": "https://learn.microsoft.com/powershell/utility-modules/psscriptanalyzer/overview",
+    "shellcheck": "https://github.com/koalaman/shellcheck",
+    "deptry": "https://deptry.com/",
+    "diff-cover": "https://github.com/Bachmann1234/diff-cover",
+    "checkov": "https://www.checkov.io/",
+    "cosign": "https://docs.sigstore.dev/cosign/",
+    "pyright": "https://microsoft.github.io/pyright/",
+    "scorecard": "https://scorecard.dev/",
+    "conftest": "https://www.conftest.dev/",
+    "kics": "https://docs.kics.io/latest/",
+    "pipdeptree": "https://pipdeptree.readthedocs.io/",
+    "git-sizer": "https://github.com/github/git-sizer",
+    "validate-pyproject": "https://validate-pyproject.readthedocs.io/",
+    "vale": "https://vale.sh/",
+    "kube-linter": "https://docs.kubelinter.io/",
+    "crosshair": "https://crosshair.readthedocs.io/",
+    "atheris": "https://github.com/google/atheris",
+    "mutmut": "https://mutmut.readthedocs.io/",
+    "check-manifest": "https://github.com/mgedmin/check-manifest",
+    "clamav": "https://docs.clamav.net/",
+    "github-attestation": "https://docs.github.com/en/actions/security-guides/using-artifact-attestations-to-establish-provenance-for-builds",
+    "zap": "https://www.zaproxy.org/docs/automate/automation-framework/",
+    "pytm": "https://owasp.org/www-project-pytm/",
+    "in-toto": "https://in-toto.io/docs/getting-started/",
+    "oci-image": "https://opencontainers.org/",
+    "reproducible-build": "https://reproducible-builds.org/tools/",
+    "yara": "https://yara.readthedocs.io/",
 }
 
 
@@ -76,25 +126,41 @@ def write_reports(
         "assurance_case": "assurance-case.md",
         "html": "index.html",
         "sarif": "results.sarif",
+        "sonarqube_external_issues": "sonarqube-external-issues.json",
         "findings": "findings.json",
         "manifest": "scan-manifest.json",
         "checksums": "checksums.sha256",
+        "security_passport": "security-passport.json",
     }
     for name in sorted(derived_artifacts or {}):
         if "/" in name or "\\" in name or name in REPORT_FILES:
             raise ValueError(f"unsafe or reserved derived artifact name: {name}")
         manifest.artifacts[name] = name
+    active_findings = [
+        finding
+        for finding in findings
+        if finding.status is not FindingStatus.SUPPRESSED
+    ]
     _write_text(output / "summary.md", render_summary(manifest, findings))
-    _write_text(output / "action-plan.md", render_action_plan(manifest, findings))
+    _write_text(
+        output / "action-plan.md", render_action_plan(manifest, active_findings)
+    )
     _write_text(output / "assurance-case.md", render_assurance_case(manifest))
     _write_text(output / "index.html", render_html(manifest, findings))
-    _write_json(output / "results.sarif", render_sarif(findings))
+    _write_json(output / "results.sarif", render_sarif(active_findings))
+    _write_json(
+        output / "sonarqube-external-issues.json",
+        render_sonarqube_external_issues(active_findings),
+    )
     _write_json(
         output / "findings.json",
         {
             "schema_version": "1.0",
             "scan_id": manifest.scan_id,
             "outcome": manifest.outcome,
+            "target": manifest.target,
+            "profile": manifest.profile,
+            "source_sha256": manifest.inventory.source_sha256,
             "findings": findings,
         },
     )
@@ -107,11 +173,24 @@ def write_reports(
     for name, value in sorted((derived_artifacts or {}).items()):
         _write_json(output / name, value)
     _write_json(output / "scan-manifest.json", manifest)
+    _write_json(
+        output / "security-passport.json",
+        build_security_passport_statement(output, manifest),
+    )
     _write_checksums(output)
 
 
 def render_summary(manifest: ScanManifest, findings: list[Finding]) -> str:
-    counts = manifest.finding_counts
+    active_findings = [
+        finding
+        for finding in findings
+        if finding.status is not FindingStatus.SUPPRESSED
+    ]
+    accepted = len(findings) - len(active_findings)
+    counts = {
+        severity.value: sum(finding.severity is severity for finding in active_findings)
+        for severity in Severity
+    }
     tool_versions = {run.tool: run.version for run in manifest.tools}
     lines = [
         f"# Security result: {manifest.outcome.value.upper()}",
@@ -119,7 +198,7 @@ def render_summary(manifest: ScanManifest, findings: list[Finding]) -> str:
         f"- **Scan:** `{_markdown_code(manifest.scan_id)}`",
         f"- **Profile:** `{_markdown_code(manifest.profile)}`",
         f"- **Target:** `{_markdown_code(manifest.target)}`",
-        f"- **Findings:** {len(findings)} total; "
+        f"- **Findings:** {len(active_findings)} active, {accepted} governed; "
         f"{counts.get('critical', 0)} critical, {counts.get('high', 0)} high, "
         f"{counts.get('medium', 0)} medium, {counts.get('low', 0)} low",
         f"- **Applicable scanners completed:** "
@@ -130,6 +209,11 @@ def render_summary(manifest: ScanManifest, findings: list[Finding]) -> str:
         f"{'yes' if manifest.network_isolation_attested else 'no'}",
         f"- **Unisolated diagnostic execution:** "
         f"{'yes' if manifest.diagnostic_without_isolation else 'no'}",
+        f"- **Target content integrity:** "
+        f"{'verified unchanged' if manifest.inventory.source_integrity_verified else 'not verified'} "
+        f"(`sha256:{_markdown_code(manifest.inventory.source_sha256)}`; "
+        f"{manifest.inventory.hashed_files} files, "
+        f"{manifest.inventory.hashed_bytes} bytes)",
         f"- **Immediate next step:** {_next_action(manifest.outcome)}",
         "",
         "## Decision",
@@ -137,12 +221,48 @@ def render_summary(manifest: ScanManifest, findings: list[Finding]) -> str:
     ]
     lines.extend(f"- {reason}" for reason in manifest.policy_reasons)
 
+    lifecycle = {
+        status.value: sum(finding.status is status for finding in active_findings)
+        for status in (
+            FindingStatus.NEW,
+            FindingStatus.EXISTING,
+            FindingStatus.REGRESSION,
+        )
+    }
+    resolved = (
+        int(manifest.baseline.get("counts", {}).get("resolved", 0))
+        if isinstance(manifest.baseline.get("counts"), dict)
+        else 0
+    )
+    lines.extend(
+        [
+            "",
+            "## Finding lifecycle",
+            "",
+            f"- New: {lifecycle['new']}",
+            f"- Existing: {lifecycle['existing']}",
+            f"- Regressed: {lifecycle['regression']}",
+            f"- Resolved since baseline: {resolved}",
+        ]
+    )
+
+    lines.extend(["", "## Findings by domain", ""])
+    lines.append("| Domain | Findings | Blocking |")
+    lines.append("|---|---:|---:|")
+    for domain, domain_findings in _domain_summary(active_findings):
+        lines.append(
+            f"| {_markdown_table(domain)} | {len(domain_findings)} | "
+            f"{sum(1 for finding in domain_findings if finding.blocking)} |"
+        )
+    if not active_findings:
+        lines.append("| No findings | 0 | 0 |")
+
     lines.extend(["", "## Findings by area", ""])
     lines.append(
         "| Area | Critical | High | Medium | Low | Informational/Unknown | Total |"
     )
     lines.append("|---|---:|---:|---:|---:|---:|---:|")
-    for area, area_counts in _area_summary(findings):
+    for area, area_counts in _area_summary(active_findings):
         lines.append(
             f"| {_markdown_table(area)} | {area_counts['critical']} | "
             f"{area_counts['high']} | {area_counts['medium']} | "
@@ -153,29 +273,39 @@ def render_summary(manifest: ScanManifest, findings: list[Finding]) -> str:
     if not findings:
         lines.append("| No findings | 0 | 0 | 0 | 0 | 0 | 0 |")
 
+    lines.extend(_render_markdown_findings(active_findings, tool_versions))
+
     lines.extend(["", "## Tool coverage", ""])
-    lines.append("| Tool | Version | Applicability | Status | Findings | Duration |")
-    lines.append("|---|---|---:|---:|---:|---:|")
-    for run in manifest.tools:
-        lines.append(
+    lines.append(
+        "| Tool | Version | Applicability | Status | Entry-point integrity | "
+        "Findings | Duration |"
+    )
+    lines.append("|---|---|---:|---:|---|---:|---:|")
+    lines.extend(
+        (
             f"| {_markdown_table(run.tool)} | {_markdown_table(run.version)} | "
             f"{'applicable' if run.applicable else 'not applicable'} | "
-            f"{_markdown_table(run.status.value)} | {run.finding_count} | "
-            f"{run.duration_seconds:.3f}s |"
+            f"{_markdown_table(run.status.value)} | "
+            f"{_markdown_table(_executable_integrity_label(run))} | "
+            f"{run.finding_count} | {run.duration_seconds:.3f}s |"
         )
+        for run in manifest.tools
+    )
 
     gaps = [run for run in manifest.tools if run.status.value != "completed"]
     lines.extend(["", "## Coverage gaps and actions", ""])
     lines.append("| Tool | Status | Reason | Required action | Reference |")
     lines.append("|---|---|---|---|---|")
-    for run in gaps:
-        lines.append(
+    lines.extend(
+        (
             f"| {_markdown_table(run.tool)} | "
             f"{_markdown_table(run.status.value)} | "
             f"{_markdown_table(run.error or 'No diagnostic supplied')} | "
             f"{_markdown_table(_coverage_action(run, manifest))} | "
             f"{_markdown_tool_reference(run.tool)} |"
         )
+        for run in gaps
+    )
     if not gaps:
         lines.append("| All selected tools | completed | - | No action | - |")
 
@@ -196,62 +326,11 @@ def render_summary(manifest: ScanManifest, findings: list[Finding]) -> str:
         }
     ]
     if derived:
-        lines.extend(["", "## Derived security evidence", ""])
+        lines.extend(["", "## Derived assurance evidence", ""])
         lines.extend(
             f"- [`{_markdown_code(value)}`]({_markdown_code(value)})"
             for value in derived
         )
-
-    lines.extend(["", "## Findings requiring review", ""])
-    if findings:
-        ordered = sorted(findings, key=_finding_sort_key)
-        for index, finding in enumerate(ordered[:20], start=1):
-            sources = "; ".join(
-                _markdown_source(source, tool_versions)
-                for source in finding.sources
-            ) or "No scanner attribution recorded"
-            classifications = "; ".join(
-                _markdown_classification(item)
-                for item in finding.classifications
-            ) or "Unclassified"
-            references = "; ".join(
-                _markdown_citation(item) for item in finding.citations
-            ) or "No external reference"
-            lines.extend(
-                [
-                    f"### {index}. {finding.severity.value.upper()} - "
-                    f"{_markdown_text(finding.title)}",
-                    "",
-                    f"- **Finding ID:** `{_markdown_code(finding.finding_id)}`",
-                    f"- **Priority:** `{_finding_priority(finding)}`",
-                    f"- **Location:** `{_markdown_code(_location_text(finding))}`",
-                    f"- **Found by:** {sources}",
-                    f"- **Area / confidence:** "
-                    f"`{_markdown_code(finding.area)}` / "
-                    f"`{_markdown_code(finding.confidence.value)}`",
-                    f"- **Classification:** {classifications}",
-                    f"- **References:** {references}",
-                    "",
-                    f"**What was detected:** "
-                    f"{_markdown_text(finding.description)}",
-                    "",
-                    f"**Why it matters:** {_markdown_text(finding.impact)}",
-                    "",
-                    f"**Recommended action:** "
-                    f"{_markdown_text(finding.remediation)}",
-                    "",
-                ]
-            )
-        if len(ordered) > 20:
-            lines.extend(
-                [
-                    f"{len(ordered) - 20} additional finding(s) are available in "
-                    "`index.html`, `findings.json`, and `results.sarif`.",
-                    "",
-                ]
-            )
-    else:
-        lines.extend(["- No normalized findings.", ""])
 
     lines.extend(
         [
@@ -260,20 +339,84 @@ def render_summary(manifest: ScanManifest, findings: list[Finding]) -> str:
             _next_action(manifest.outcome),
             "",
             "1. Open the cited location and validate whether the scanner's premise "
-            "is true in this execution context.",
+            + "is true in this execution context.",
             "2. Choose a disposition: fix, accepted risk, false positive, or "
-            "approved suppression.",
+            + "approved suppression.",
             "3. Record the owner and rationale in the repository's normal review "
-            "system.",
+            + "system.",
             "4. Rerun the isolated suite and confirm the finding ID is resolved or "
-            "intentionally governed.",
+            + "intentionally governed.",
             "",
             "The downloadable artifact contains detailed findings, citations, "
-            "tool health, the scan manifest, sanitized diagnostics, and checksums.",
+            + "tool health, the scan manifest, sanitized diagnostics, and checksums.",
             "",
         ]
     )
     return "\n".join(lines)
+
+
+def _render_markdown_findings(
+    findings: list[Finding],
+    tool_versions: dict[str, str],
+) -> list[str]:
+    lines = ["", "## Findings requiring review", ""]
+    if not findings:
+        return [*lines, "- No normalized findings.", ""]
+    ordered = sorted(findings, key=_finding_sort_key)
+    for index, finding in enumerate(ordered[:20], start=1):
+        sources = (
+            "; ".join(
+                _markdown_source(source, tool_versions) for source in finding.sources
+            )
+            or "No scanner attribution recorded"
+        )
+        classifications = (
+            "; ".join(
+                _markdown_classification(item) for item in finding.classifications
+            )
+            or "Unclassified"
+        )
+        references = (
+            "; ".join(_markdown_citation(item) for item in finding.citations)
+            or "No external reference"
+        )
+        lines.extend(
+            [
+                f"### {index}. {finding.severity.value.upper()} - "
+                f"{_markdown_text(finding.title)}",
+                "",
+                f"- **Finding ID:** `{_markdown_code(finding.finding_id)}`",
+                f"- **Priority:** `{_finding_priority(finding)}`",
+                f"- **Lifecycle:** `{finding.status.value}`",
+                f"- **Owners:** {_finding_owners(finding)}",
+                f"- **Threat intelligence:** {_threat_intelligence_summary(finding)}",
+                f"- **Location:** `{_markdown_code(_location_text(finding))}`",
+                f"- **Found by:** {sources}",
+                f"- **Domain / area / confidence:** "
+                f"`{_markdown_code(finding.domain)}` / "
+                f"`{_markdown_code(finding.area)}` / "
+                f"`{_markdown_code(finding.confidence.value)}`",
+                f"- **Classification:** {classifications}",
+                f"- **References:** {references}",
+                "",
+                f"**What was detected:** {_markdown_text(finding.description)}",
+                "",
+                *_markdown_source_excerpt(finding),
+                f"**Why it matters:** {_markdown_text(finding.impact)}",
+                "",
+                f"**Recommended action:** {_markdown_text(finding.remediation)}",
+                "",
+            ]
+        )
+    if len(ordered) > 20:
+        lines.extend(
+            [
+                f"{len(ordered) - 20} additional finding(s) are available in "
+                "`index.html`, `findings.json`, and `results.sarif`.",
+                "",
+            ]
+        )
+    return lines
 
 
 def render_action_plan(manifest: ScanManifest, findings: list[Finding]) -> str:
@@ -287,15 +430,17 @@ def render_action_plan(manifest: ScanManifest, findings: list[Finding]) -> str:
         "",
         "## Finding actions",
         "",
-        "| Priority | Severity | Finding | Area | Location | Sources | Action |",
-        "|---|---|---|---|---|---|---|",
+        "| Priority | Domain | Severity | Finding | Area | Location | Sources | Action |",
+        "|---|---|---|---|---|---|---|---|",
     ]
     for finding in sorted(findings, key=_finding_sort_key):
-        sources = ", ".join(
-            f"{source.tool}/{source.rule_id}" for source in finding.sources
-        ) or "unattributed"
+        sources = (
+            ", ".join(f"{source.tool}/{source.rule_id}" for source in finding.sources)
+            or "unattributed"
+        )
         lines.append(
             f"| {_finding_priority(finding)} | "
+            f"{_markdown_table(finding.domain)} | "
             f"{_markdown_table(finding.severity.value)} | "
             f"`{_markdown_code(finding.finding_id)}` "
             f"{_markdown_table(finding.title)} | "
@@ -305,7 +450,7 @@ def render_action_plan(manifest: ScanManifest, findings: list[Finding]) -> str:
             f"{_markdown_table(finding.remediation)} |"
         )
     if not findings:
-        lines.append("| - | - | No normalized findings | - | - | - | No action |")
+        lines.append("| - | - | - | No normalized findings | - | - | - | No action |")
 
     lines.extend(
         [
@@ -317,8 +462,8 @@ def render_action_plan(manifest: ScanManifest, findings: list[Finding]) -> str:
         ]
     )
     gaps = [run for run in manifest.tools if run.status.value != "completed"]
-    for run in gaps:
-        lines.append(
+    lines.extend(
+        (
             f"| {_markdown_table(run.tool)} | "
             f"{'applicable' if run.applicable else 'not applicable'} | "
             f"{_markdown_table(run.status.value)} | "
@@ -326,6 +471,8 @@ def render_action_plan(manifest: ScanManifest, findings: list[Finding]) -> str:
             f"{_markdown_table(_coverage_action(run, manifest))} | "
             f"{_markdown_tool_reference(run.tool)} |"
         )
+        for run in gaps
+    )
     if not gaps:
         lines.append(
             "| All selected tools | applicable | completed | - | No action | - |"
@@ -339,11 +486,10 @@ def render_action_plan(manifest: ScanManifest, findings: list[Finding]) -> str:
             "|---|---|",
         ]
     )
-    for reason in manifest.policy_reasons:
-        lines.append(
-            f"| {_markdown_table(reason)} | "
-            f"{_markdown_table(_policy_action(reason))} |"
-        )
+    lines.extend(
+        (f"| {_markdown_table(reason)} | {_markdown_table(_policy_action(reason))} |")
+        for reason in manifest.policy_reasons
+    )
     if not manifest.policy_reasons:
         lines.append("| All configured policy requirements | No action |")
     lines.extend(
@@ -352,8 +498,8 @@ def render_action_plan(manifest: ScanManifest, findings: list[Finding]) -> str:
             "## Disposition record",
             "",
             "For each finding, record an owner and one disposition: fixed, accepted "
-            "risk, false positive, or approved suppression. Preserve the finding ID "
-            "and cited scanner rule in the review record, then rerun the suite.",
+            + "risk, false positive, or approved suppression. Preserve the finding ID "
+            + "and cited scanner rule in the review record, then rerun the suite.",
             "",
         ]
     )
@@ -361,6 +507,23 @@ def render_action_plan(manifest: ScanManifest, findings: list[Finding]) -> str:
 
 
 def render_assurance_case(manifest: ScanManifest) -> str:
+    executed = [run for run in manifest.tools if run.executable_sha256 is not None]
+    verified = [
+        run
+        for run in executed
+        if run.executable_integrity_verified and run.executable_unchanged
+    ]
+    auxiliary = [
+        run for run in manifest.tools if run.auxiliary_executable_sha256 is not None
+    ]
+    auxiliary_verified = [
+        run
+        for run in auxiliary
+        if run.auxiliary_executable_integrity_verified
+        and run.auxiliary_executable_unchanged
+    ]
+    entrypoint_count = len(executed) + len(auxiliary)
+    verified_entrypoint_count = len(verified) + len(auxiliary_verified)
     rows = [
         _assurance_row(
             manifest,
@@ -368,6 +531,30 @@ def render_assurance_case(manifest: ScanManifest) -> str:
             ("bandit", "semgrep", "ruff"),
             "Review and remediate cited source findings.",
             "https://csrc.nist.gov/pubs/sp/800/218/final",
+        ),
+        _assurance_row(
+            manifest,
+            "Code quality and architecture",
+            (
+                "ruff-quality",
+                "ruff-format",
+                "pylint",
+                "mypy",
+                "vulture",
+                "radon",
+                "tach",
+            ),
+            "Resolve correctness, complexity, formatting, typing, dead-code, "
+            "and architecture findings before promotion.",
+            "https://docs.gauge.sh/",
+        ),
+        _assurance_row(
+            manifest,
+            "Automated test evidence",
+            ("coverage", "junit"),
+            "Generate branch-enabled coverage JSON and passing JUnit XML in a "
+            "disposable test lane, then attach both reports to the scan.",
+            "https://coverage.readthedocs.io/en/latest/commands/cmd_reporting.html",
         ),
         _assurance_row(
             manifest,
@@ -395,7 +582,7 @@ def render_assurance_case(manifest: ScanManifest) -> str:
         _assurance_row(
             manifest,
             "Deployment, IaC, and CI configuration",
-            ("trivy", "zizmor"),
+            ("trivy", "zizmor", "actionlint", "hadolint"),
             "Scan the final deployment definitions and CI workflows used for the "
             "release.",
             "https://csrc.nist.gov/pubs/sp/800/218/final",
@@ -403,7 +590,7 @@ def render_assurance_case(manifest: ScanManifest) -> str:
         _assurance_row(
             manifest,
             "License and source inventory",
-            ("scancode", "trivy"),
+            ("scancode", "trivy", "reuse"),
             "Review policy-disallowed licenses and preserve component inventory.",
             "https://spdx.dev/use/specifications/",
         ),
@@ -436,6 +623,49 @@ def render_assurance_case(manifest: ScanManifest) -> str:
     rows.extend(
         [
             (
+                "Target content integrity",
+                (
+                    "verified unchanged"
+                    if manifest.inventory.source_integrity_verified
+                    else "coverage gap"
+                ),
+                (
+                    f"Before/after source snapshots covered "
+                    f"{manifest.inventory.hashed_files} files and "
+                    f"{manifest.inventory.hashed_bytes} bytes; initial digest "
+                    f"sha256:{manifest.inventory.source_sha256}."
+                ),
+                (
+                    "Investigate target writes or concurrent edits and rerun from "
+                    "an immutable checkout."
+                    if not manifest.inventory.source_integrity_verified
+                    else "Preserve the scan manifest and checksums with the release."
+                ),
+                "https://slsa.dev/spec/v1.0/levels",
+            ),
+            (
+                "Scanner entry-point integrity",
+                (
+                    "verified"
+                    if entrypoint_count
+                    and verified_entrypoint_count == entrypoint_count
+                    else "coverage gap"
+                ),
+                (
+                    f"{verified_entrypoint_count}/{entrypoint_count} resolved "
+                    "scanner and helper entry points "
+                    "matched an approved SHA-256 digest and remained unchanged "
+                    "through execution."
+                ),
+                (
+                    "Pin approved executable_sha256 values (and CodeQL auxiliary "
+                    "CLI digest), then rerun."
+                    if verified_entrypoint_count != entrypoint_count
+                    else "Preserve the approved tool configuration with the release."
+                ),
+                "https://csrc.nist.gov/pubs/sp/800/218/final",
+            ),
+            (
                 "Source provenance and history",
                 vcs_status,
                 vcs_evidence,
@@ -445,8 +675,7 @@ def render_assurance_case(manifest: ScanManifest) -> str:
             (
                 "Dynamic, API, and runtime behavior",
                 "external evidence required",
-                "Target code execution is prohibited in this static scanning "
-                "boundary.",
+                "Target code execution is prohibited in this static scanning boundary.",
                 "Run unit/integration, property, fuzz, and applicable DAST/API "
                 "security tests in a separate disposable sandbox.",
                 "https://owasp.org/www-project-application-security-verification-standard/",
@@ -470,8 +699,8 @@ def render_assurance_case(manifest: ScanManifest) -> str:
         f"- **Policy outcome:** `{_markdown_code(manifest.outcome.value)}`",
         "",
         "This document states what the scan demonstrated and what still requires "
-        "separate release evidence. It is not a certification or a guarantee that "
-        "the software is vulnerability-free.",
+        + "separate release evidence. It is not a certification or a guarantee that "
+        + "the software is vulnerability-free.",
         "",
         "| Control area | Status | Evidence boundary | Required next action | Reference |",
         "|---|---|---|---|---|",
@@ -488,8 +717,8 @@ def render_assurance_case(manifest: ScanManifest) -> str:
             "## Production promotion rule",
             "",
             "Promote only when the suite outcome is `PASS`, all required external "
-            "evidence above is attached to the same immutable artifact digest, "
-            "and every accepted risk has an owner, rationale, and expiry date.",
+            + "evidence above is attached to the same immutable artifact digest, "
+            + "and every accepted risk has an owner, rationale, and expiry date.",
             "",
         ]
     )
@@ -498,16 +727,37 @@ def render_assurance_case(manifest: ScanManifest) -> str:
 
 def render_html(manifest: ScanManifest, findings: list[Finding]) -> str:
     tool_versions = {run.tool: run.version for run in manifest.tools}
-    ordered = sorted(findings, key=_finding_sort_key)
+    active_findings = [
+        finding
+        for finding in findings
+        if finding.status is not FindingStatus.SUPPRESSED
+    ]
+    accepted = len(findings) - len(active_findings)
+    ordered = sorted(active_findings, key=_finding_sort_key)
     finding_cards = "".join(
         _render_html_finding(finding, tool_versions) for finding in ordered
     ) or (
         "<section class='empty'><h3>No normalized findings</h3>"
         "<p>The selected scanners completed without reporting a finding.</p></section>"
     )
-    reasons = "".join(
-        f"<li>{html.escape(reason)}</li>" for reason in manifest.policy_reasons
-    ) or "<li>No policy reason was recorded.</li>"
+    finding_rows = "".join(
+        "<tr>"
+        f"<td><span class='badge {html.escape(finding.severity.value)}'>"
+        f"{html.escape(_finding_priority(finding))}</span></td>"
+        f"<td>{html.escape(finding.severity.value.upper())}</td>"
+        f"<td><a href='#{html.escape(finding.finding_id, quote=True)}'>"
+        f"<strong>{html.escape(finding.title)}</strong></a><br>"
+        f"<code>{html.escape(finding.finding_id)}</code></td>"
+        f"<td><code>{html.escape(_location_text(finding))}</code></td>"
+        f"<td>{html.escape(_finding_tools(finding))}</td>"
+        f"<td>{html.escape(finding.remediation)}</td>"
+        "</tr>"
+        for finding in ordered
+    ) or ("<tr><td colspan='6'>No normalized findings require review.</td></tr>")
+    reasons = (
+        "".join(f"<li>{html.escape(reason)}</li>" for reason in manifest.policy_reasons)
+        or "<li>No policy reason was recorded.</li>"
+    )
     gap_rows = "".join(
         "<tr>"
         f"<td><strong>{html.escape(run.tool)}</strong></td>"
@@ -531,25 +781,32 @@ def render_html(manifest: ScanManifest, findings: list[Finding]) -> str:
         f"<td>{'applicable' if run.applicable else 'not applicable'}</td>"
         f"<td><span class='status {html.escape(run.status.value)}'>"
         f"{html.escape(run.status.value)}</span></td>"
+        f"<td>{html.escape(_executable_integrity_label(run))}</td>"
         f"<td>{run.finding_count}</td>"
         f"<td>{run.duration_seconds:.3f}s</td>"
         f"<td>{html.escape(run.error or 'None')}</td>"
         "</tr>"
         for run in manifest.tools
     )
-    area_rows = "".join(
-        "<tr>"
-        f"<td><strong>{html.escape(area)}</strong></td>"
-        f"<td>{area_counts['critical']}</td>"
-        f"<td>{area_counts['high']}</td>"
-        f"<td>{area_counts['medium']}</td>"
-        f"<td>{area_counts['low']}</td>"
-        f"<td>{area_counts['informational'] + area_counts['unknown']}</td>"
-        f"<td>{area_counts['total']}</td>"
-        "</tr>"
-        for area, area_counts in _area_summary(findings)
-    ) or "<tr><td>No findings</td><td colspan='6'>0</td></tr>"
-    counts = manifest.finding_counts
+    area_rows = (
+        "".join(
+            "<tr>"
+            f"<td><strong>{html.escape(area)}</strong></td>"
+            f"<td>{area_counts['critical']}</td>"
+            f"<td>{area_counts['high']}</td>"
+            f"<td>{area_counts['medium']}</td>"
+            f"<td>{area_counts['low']}</td>"
+            f"<td>{area_counts['informational'] + area_counts['unknown']}</td>"
+            f"<td>{area_counts['total']}</td>"
+            "</tr>"
+            for area, area_counts in _area_summary(active_findings)
+        )
+        or "<tr><td>No findings</td><td colspan='6'>0</td></tr>"
+    )
+    counts = {
+        severity.value: sum(finding.severity is severity for finding in active_findings)
+        for severity in Severity
+    }
     outcome = html.escape(manifest.outcome.value)
     completed = _completed_tools(manifest.tools)
     applicable = _applicable_tools(manifest.tools)
@@ -599,6 +856,9 @@ th {{ background: #e8eef5; color: #17395f; }}
 .finding.low, .finding.informational {{ border-left-color: #315b7d; }}
 .finding-header {{ display: flex; align-items: flex-start; gap: .75rem; }}
 .finding-header h3 {{ margin: 0; flex: 1; }}
+.finding-location {{ background: #eef3f8; border-left: .25rem solid #47627f;
+  margin: 1rem 0; padding: .65rem .8rem; }}
+.finding-location code {{ font-weight: 700; }}
 .badge, .status {{ display: inline-block; border-radius: 999px; font-weight: 700;
   font-size: .78rem; letter-spacing: .02em; padding: .2rem .55rem; }}
 .badge {{ background: #e8eef5; color: #17395f; white-space: nowrap; }}
@@ -617,6 +877,20 @@ th {{ background: #e8eef5; color: #17395f; }}
 .detail {{ background: #f7f9fb; border-radius: .35rem; padding: .75rem .9rem; }}
 .detail h4 {{ margin: 0 0 .35rem; color: #17395f; }}
 .detail p {{ margin: 0; }}
+.detail.action {{ background: #e9f5ee; border: 1px solid #b9d8c5; }}
+.source-context {{ margin: 1rem 0; }}
+.source-context h4 {{ margin: 0 0 .45rem; color: #17395f; }}
+.source-context pre {{ background: #111b2b; color: #e7edf5; border-radius: .4rem;
+  margin: 0; overflow-x: auto; padding: .65rem 0; }}
+.code-line {{ display: grid; grid-template-columns: 4.5rem 1fr;
+  min-height: 1.55rem; padding: 0 .8rem; }}
+.code-line.highlight {{ background: #5b4616; border-left: .3rem solid #f0c15b;
+  padding-left: .5rem; }}
+.line-number {{ color: #93a4ba; border-right: 1px solid #405067;
+  margin-right: .85rem; padding-right: .65rem; text-align: right;
+  user-select: none; }}
+.code-text {{ white-space: pre; }}
+.redaction-note {{ color: #59677a; font-size: .9rem; margin: .45rem 0 0; }}
 .compact {{ margin: .35rem 0 0; padding-left: 1.25rem; }}
 .empty {{ background: #fff; padding: 1rem; border-radius: .4rem; }}
 .footer-note {{ color: #59677a; font-size: .9rem; }}
@@ -624,6 +898,9 @@ th {{ background: #e8eef5; color: #17395f; }}
   .page {{ padding: 1rem; }}
   .finding-header {{ display: block; }}
   .finding-header .badge {{ margin-bottom: .5rem; }}
+  table {{ display: block; overflow-x: auto; white-space: normal; }}
+  .metadata {{ grid-template-columns: 1fr; }}
+  .code-line {{ grid-template-columns: 3.5rem 1fr; }}
 }}
 </style>
 </head>
@@ -636,13 +913,21 @@ profile <code>{html.escape(manifest.profile)}</code> &middot;
 target <code>{html.escape(manifest.target)}</code></p>
 </header>
 <section class="stats" aria-label="Scan summary">
-<div class="stat"><strong>{len(findings)}</strong><span>Total findings</span></div>
-<div class="stat"><strong>{counts.get('critical', 0)}</strong><span>Critical</span></div>
-<div class="stat"><strong>{counts.get('high', 0)}</strong><span>High</span></div>
-<div class="stat"><strong>{counts.get('medium', 0)}</strong><span>Medium</span></div>
-<div class="stat"><strong>{counts.get('low', 0)}</strong><span>Low</span></div>
+<div class="stat"><strong>{
+        len(active_findings)
+    }</strong><span>Active findings</span></div>
+<div class="stat"><strong>{accepted}</strong><span>Governed findings</span></div>
+<div class="stat"><strong>{
+        counts.get("critical", 0)
+    }</strong><span>Critical</span></div>
+<div class="stat"><strong>{counts.get("high", 0)}</strong><span>High</span></div>
+<div class="stat"><strong>{counts.get("medium", 0)}</strong><span>Medium</span></div>
+<div class="stat"><strong>{counts.get("low", 0)}</strong><span>Low</span></div>
 <div class="stat"><strong>{completed}/{applicable}</strong>
 <span>Scanners completed</span></div>
+<div class="stat"><strong>{
+        "yes" if manifest.inventory.source_integrity_verified else "no"
+    }</strong><span>Target unchanged</span></div>
 </section>
 <section class="decision">
 <h2>Decision</h2><ul>{reasons}</ul>
@@ -651,6 +936,14 @@ target <code>{html.escape(manifest.target)}</code></p>
 <p><a href="assurance-case.md">Open the production assurance case</a></p>
 </section>
 <main>
+<h2>Prioritized findings</h2>
+<p>Start here. Each item links the security meaning to a precise source
+location, scanner rule, and recommended action.</p>
+<table>
+<thead><tr><th>Priority</th><th>Severity</th><th>Finding</th>
+<th>File and line</th><th>Found by</th><th>Recommended action</th></tr></thead>
+<tbody>{finding_rows}</tbody>
+</table>
 <h2>Findings by area</h2>
 <table>
 <thead><tr><th>Area</th><th>Critical</th><th>High</th><th>Medium</th>
@@ -661,8 +954,9 @@ target <code>{html.escape(manifest.target)}</code></p>
 {finding_cards}
 <h2>Tool coverage</h2>
 <table>
-<thead><tr><th>Tool</th><th>Version</th><th>Applicability</th><th>Status</th><th>Findings</th>
-<th>Duration</th><th>Diagnostic</th></tr></thead>
+<thead><tr><th>Tool</th><th>Version</th><th>Applicability</th><th>Status</th>
+<th>Entry-point integrity</th><th>Findings</th><th>Duration</th>
+<th>Diagnostic</th></tr></thead>
 <tbody>{tools}</tbody>
 </table>
 <h2>Coverage gaps and actions</h2>
@@ -681,8 +975,18 @@ target <code>{html.escape(manifest.target)}</code></p>
 <h2>Scan integrity</h2>
 <p>Network policy: <code>{html.escape(manifest.network_policy)}</code>;
 isolation attested: <strong>{str(manifest.network_isolation_attested).lower()}</strong>;
-unisolated diagnostic: <strong>{str(manifest.diagnostic_without_isolation).lower()}</strong>;
+unisolated diagnostic: <strong>{
+        str(manifest.diagnostic_without_isolation).lower()
+    }</strong>;
 target code execution: <strong>{str(manifest.execute_target_code).lower()}</strong>.</p>
+<p>Target source digest:
+<code>sha256:{html.escape(manifest.inventory.source_sha256)}</code>;
+after scan:
+<code>sha256:{html.escape(manifest.inventory.source_sha256_after)}</code>;
+unchanged: <strong>{
+        str(manifest.inventory.source_integrity_verified).lower()
+    }</strong>; scope: {manifest.inventory.hashed_files} files,
+{manifest.inventory.hashed_bytes} bytes.</p>
 <p class="footer-note">Detected secret values and raw scanner output are not retained.
 Use <code>checksums.sha256</code> to verify the downloadable artifact.</p>
 </main>
@@ -697,9 +1001,7 @@ def render_sarif(findings: list[Finding]) -> dict[str, Any]:
     results: list[dict[str, Any]] = []
     for finding in findings:
         source = finding.sources[0] if finding.sources else None
-        rule_id = (
-            f"{source.tool}/{source.rule_id}" if source else finding.finding_id
-        )
+        rule_id = f"{source.tool}/{source.rule_id}" if source else finding.finding_id
         rule = {
             "id": rule_id,
             "name": _sarif_name(rule_id),
@@ -719,7 +1021,7 @@ def render_sarif(findings: list[Finding]) -> dict[str, Any]:
                 "security-severity": str(_sarif_security_score(finding.severity)),
                 "tags": list(
                     dict.fromkeys(
-                        ["security", finding.area, *finding.classifications]
+                        [finding.domain, finding.area, *finding.classifications]
                     )
                 ),
             },
@@ -732,15 +1034,16 @@ def render_sarif(findings: list[Finding]) -> dict[str, Any]:
             "ruleId": rule_id,
             "level": _sarif_level(finding.severity),
             "message": {"text": finding.title},
-            "partialFingerprints": {
-                "primaryLocationLineHash": finding.fingerprint
-            },
+            "partialFingerprints": {"primaryLocationLineHash": finding.fingerprint},
             "properties": {
                 "finding_id": finding.finding_id,
                 "priority": _finding_priority(finding),
+                "domain": finding.domain,
                 "area": finding.area,
                 "blocking": finding.blocking,
                 "confidence": finding.confidence.value,
+                "lifecycle": finding.status.value,
+                "owners": _owner_values(finding),
                 "classifications": finding.classifications,
                 "impact": finding.impact,
                 "recommended_action": finding.remediation,
@@ -767,20 +1070,29 @@ def render_sarif(findings: list[Finding]) -> dict[str, Any]:
         }
         if finding.locations:
             location = finding.locations[0]
-            physical: dict[str, Any] = {
-                "artifactLocation": {"uri": location.path}
-            }
+            physical: dict[str, Any] = {"artifactLocation": {"uri": location.path}}
             if location.start_line:
-                physical["region"] = {
+                region: dict[str, Any] = {
                     "startLine": location.start_line,
                     "endLine": location.end_line or location.start_line,
                 }
+                if location.snippet and not location.snippet_redacted:
+                    highlighted = _highlighted_snippet(location)
+                    if highlighted:
+                        region["snippet"] = {"text": highlighted}
+                    snippet_start = location.snippet_start_line or location.start_line
+                    physical["contextRegion"] = {
+                        "startLine": snippet_start,
+                        "endLine": (
+                            snippet_start + len(location.snippet.splitlines()) - 1
+                        ),
+                        "snippet": {"text": location.snippet},
+                    }
+                physical["region"] = region
             result["locations"] = [{"physicalLocation": physical}]
         results.append(result)
     return {
-        "$schema": (
-            "https://json.schemastore.org/sarif-2.1.0.json"
-        ),
+        "$schema": ("https://json.schemastore.org/sarif-2.1.0.json"),
         "version": "2.1.0",
         "runs": [
             {
@@ -794,6 +1106,45 @@ def render_sarif(findings: list[Finding]) -> dict[str, Any]:
             }
         ],
     }
+
+
+def render_sonarqube_external_issues(findings: list[Finding]) -> dict[str, Any]:
+    """Render SonarQube's portable generic external-issue format."""
+
+    issues: list[dict[str, Any]] = []
+    for finding in findings:
+        source = finding.sources[0] if finding.sources else None
+        location = (
+            finding.locations[0] if finding.locations else Location(path="<repository>")
+        )
+        issue: dict[str, Any] = {
+            "engineId": "py-security-suite",
+            "ruleId": f"{source.tool}/{source.rule_id}"
+            if source
+            else finding.finding_id,
+            "severity": {
+                Severity.CRITICAL: "BLOCKER",
+                Severity.HIGH: "CRITICAL",
+                Severity.MEDIUM: "MAJOR",
+                Severity.LOW: "MINOR",
+                Severity.INFORMATIONAL: "INFO",
+                Severity.UNKNOWN: "INFO",
+            }[finding.severity],
+            "type": "VULNERABILITY"
+            if finding.domain in {"security", "supply-chain"}
+            else "CODE_SMELL",
+            "primaryLocation": {
+                "message": f"{finding.title}. Recommended action: {finding.remediation}",
+                "filePath": location.path,
+            },
+        }
+        if location.start_line:
+            issue["primaryLocation"]["textRange"] = {
+                "startLine": location.start_line,
+                "endLine": location.end_line or location.start_line,
+            }
+        issues.append(issue)
+    return {"issues": issues}
 
 
 def _area_summary(
@@ -821,6 +1172,17 @@ def _area_summary(
     )
 
 
+def _domain_summary(findings: list[Finding]) -> list[tuple[str, list[Finding]]]:
+    domains: dict[str, list[Finding]] = {}
+    for finding in findings:
+        domain = finding.domain.strip() or "unclassified"
+        domains.setdefault(domain, []).append(finding)
+    return sorted(
+        domains.items(),
+        key=lambda item: (-len(item[1]), item[0].casefold()),
+    )
+
+
 def _location_text(finding: Finding) -> str:
     if not finding.locations:
         return "<unknown>"
@@ -828,6 +1190,8 @@ def _location_text(finding: Finding) -> str:
     value = location.path
     if location.start_line:
         value += f":{location.start_line}"
+        if location.end_line and location.end_line != location.start_line:
+            value += f"-{location.end_line}"
     if location.package:
         package = location.package
         if location.version:
@@ -838,15 +1202,10 @@ def _location_text(finding: Finding) -> str:
     return value
 
 
-def _markdown_source(
-    source: Source, tool_versions: dict[str, str]
-) -> str:
+def _markdown_source(source: Source, tool_versions: dict[str, str]) -> str:
     version = _source_version(source, tool_versions)
     tool_label = source.tool if version == "unknown" else f"{source.tool} {version}"
-    return (
-        f"`{_markdown_code(tool_label)}` rule "
-        f"`{_markdown_code(source.rule_id)}`"
-    )
+    return f"`{_markdown_code(tool_label)}` rule `{_markdown_code(source.rule_id)}`"
 
 
 def _markdown_classification(value: str) -> str:
@@ -879,27 +1238,33 @@ def _html_tool_reference(tool: str) -> str:
     )
 
 
-def _render_html_finding(
-    finding: Finding, tool_versions: dict[str, str]
-) -> str:
+def _render_html_finding(finding: Finding, tool_versions: dict[str, str]) -> str:
     severity = html.escape(finding.severity.value)
-    sources = "".join(
-        "<li>"
-        f"<strong>{html.escape(source.tool)}</strong> "
-        f"{html.escape(_source_version(source, tool_versions))} - "
-        f"rule <code>{html.escape(source.rule_id)}</code>"
-        "</li>"
-        for source in finding.sources
-    ) or "<li>No scanner attribution recorded.</li>"
-    classifications = " ".join(
-        _html_classification(value) for value in finding.classifications
-    ) or "<span class='badge'>Unclassified</span>"
-    citations = "".join(
-        f"<li>{_html_citation(citation)}</li>"
-        for citation in finding.citations
-    ) or "<li>No external reference.</li>"
+    sources = (
+        "".join(
+            "<li>"
+            f"<strong>{html.escape(source.tool)}</strong> "
+            f"{html.escape(_source_version(source, tool_versions))} - "
+            f"rule <code>{html.escape(source.rule_id)}</code>"
+            "</li>"
+            for source in finding.sources
+        )
+        or "<li>No scanner attribution recorded.</li>"
+    )
+    classifications = (
+        " ".join(_html_classification(value) for value in finding.classifications)
+        or "<span class='badge'>Unclassified</span>"
+    )
+    citations = (
+        "".join(
+            f"<li>{_html_citation(citation)}</li>" for citation in finding.citations
+        )
+        or "<li>No external reference.</li>"
+    )
+    source_context = _html_source_excerpt(finding)
     return (
-        f"<article class='finding {severity}'>"
+        f"<article class='finding {severity}' "
+        f"id='{html.escape(finding.finding_id, quote=True)}'>"
         "<div class='finding-header'>"
         f"<span class='badge {severity}'>"
         f"{html.escape(finding.severity.value.upper())}</span>"
@@ -909,13 +1274,18 @@ def _render_html_finding(
         f"<div><strong>Finding ID:</strong> "
         f"<code>{html.escape(finding.finding_id)}</code></div>"
         f"<div><strong>Priority:</strong> {_finding_priority(finding)}</div>"
-        f"<div><strong>Location:</strong> "
-        f"<code>{html.escape(_location_text(finding))}</code></div>"
+        f"<div><strong>Lifecycle:</strong> {html.escape(finding.status.value)}</div>"
+        f"<div><strong>Owners:</strong> {html.escape(', '.join(_owner_values(finding)) or 'Unassigned')}</div>"
+        f"<div><strong>Threat intelligence:</strong> {html.escape(_threat_intelligence_summary(finding))}</div>"
+        f"<div><strong>Domain:</strong> {html.escape(finding.domain)}</div>"
         f"<div><strong>Area:</strong> {html.escape(finding.area)}</div>"
         f"<div><strong>Confidence:</strong> "
         f"{html.escape(finding.confidence.value)}</div>"
         f"<div><strong>Classification:</strong> {classifications}</div>"
         "</div>"
+        "<div class='finding-location'><strong>Review this location:</strong> "
+        f"<code>{html.escape(_location_text(finding))}</code></div>"
+        f"{source_context}"
         "<div class='detail-grid'>"
         "<section class='detail'><h4>What was detected</h4>"
         f"<p>{html.escape(finding.description)}</p></section>"
@@ -925,16 +1295,116 @@ def _render_html_finding(
         f"<ul class='compact'>{citations}</ul></section>"
         "<section class='detail'><h4>Why it matters</h4>"
         f"<p>{html.escape(finding.impact)}</p></section>"
-        "<section class='detail'><h4>Recommended action</h4>"
+        "<section class='detail action'><h4>Recommended action</h4>"
         f"<p>{html.escape(finding.remediation)}</p></section>"
         "</div>"
         "</article>"
     )
 
 
-def _source_version(
-    source: Source, tool_versions: dict[str, str]
-) -> str:
+def _finding_tools(finding: Finding) -> str:
+    return (
+        ", ".join(f"{source.tool}/{source.rule_id}" for source in finding.sources)
+        or "unattributed"
+    )
+
+
+def _markdown_source_excerpt(finding: Finding) -> list[str]:
+    location = _primary_snippet_location(finding)
+    if location is None or location.snippet is None:
+        return [
+            "**Source evidence:** No safe local source excerpt was available; "
+            + "use the cited file and line above.",
+            "",
+        ]
+    start = location.snippet_start_line or location.start_line or 1
+    lines = location.snippet.splitlines() or [""]
+    numbered = []
+    for offset, value in enumerate(lines):
+        number = start + offset
+        marker = ">" if _line_is_highlighted(location, number) else " "
+        numbered.append(f"{marker} {number:>5} | {value}")
+    body = "\n".join(numbered)
+    fence = "`" * max(3, _longest_backtick_run(body) + 1)
+    language = source_language(location.path)
+    result = [
+        f"**Source evidence - `{_markdown_code(_location_text(finding))}`:**",
+        "",
+        f"{fence}{language}",
+        body,
+        fence,
+        "",
+    ]
+    if location.snippet_redacted:
+        result.extend(
+            [
+                "_The secret-bearing line is deliberately redacted from every "
+                + "report format. Inspect it only in the protected checkout._",
+                "",
+            ]
+        )
+    return result
+
+
+def _html_source_excerpt(finding: Finding) -> str:
+    location = _primary_snippet_location(finding)
+    if location is None or location.snippet is None:
+        return (
+            "<section class='source-context'><h4>Source evidence</h4>"
+            "<p>No safe local source excerpt was available; use the cited file "
+            "and line.</p></section>"
+        )
+    start = location.snippet_start_line or location.start_line or 1
+    lines = location.snippet.splitlines() or [""]
+    rendered = "".join(
+        "<span class='code-line"
+        f"{' highlight' if _line_is_highlighted(location, start + offset) else ''}'>"
+        f"<span class='line-number'>{start + offset}</span>"
+        f"<span class='code-text'>{html.escape(value)}</span></span>"
+        for offset, value in enumerate(lines)
+    )
+    note = (
+        "<p class='redaction-note'>The secret-bearing line is deliberately "
+        "redacted. Inspect it only in the protected checkout.</p>"
+        if location.snippet_redacted
+        else ""
+    )
+    return (
+        "<section class='source-context'><h4>Source evidence &mdash; "
+        f"<code>{html.escape(_location_text(finding))}</code></h4>"
+        f"<pre aria-label='Source excerpt'>{rendered}</pre>{note}</section>"
+    )
+
+
+def _primary_snippet_location(finding: Finding) -> Location | None:
+    return next(
+        (location for location in finding.locations if location.snippet is not None),
+        None,
+    )
+
+
+def _line_is_highlighted(location: Location, number: int) -> bool:
+    start = location.start_line or number
+    end = location.end_line or start
+    return start <= number <= end
+
+
+def _highlighted_snippet(location: Location) -> str:
+    if location.snippet is None:
+        return ""
+    snippet_start = location.snippet_start_line or location.start_line or 1
+    return "\n".join(
+        value
+        for offset, value in enumerate(location.snippet.splitlines())
+        if _line_is_highlighted(location, snippet_start + offset)
+    )
+
+
+def _longest_backtick_run(value: str) -> int:
+    return max((len(match.group(0)) for match in re.finditer(r"`+", value)), default=0)
+
+
+def _source_version(source: Source, tool_versions: dict[str, str]) -> str:
     version = source.version
     if version == "unknown":
         version = tool_versions.get(source.tool, "unknown")
@@ -944,7 +1414,7 @@ def _source_version(
     tool = source.tool.casefold()
     for prefix in (f"{tool} version: ", f"{tool} "):
         if lowered.startswith(prefix):
-            return version[len(prefix):]
+            return version[len(prefix) :]
     return version
 
 
@@ -967,8 +1437,7 @@ def _html_citation(citation: Citation) -> str:
     uri = _reference_uri(citation)
     if uri:
         return (
-            f"<a href='{html.escape(uri, quote=True)}' rel='noreferrer'>"
-            f"{escaped}</a>"
+            f"<a href='{html.escape(uri, quote=True)}' rel='noreferrer'>{escaped}</a>"
         )
     return escaped
 
@@ -994,10 +1463,7 @@ def _reference_uri(citation: Citation) -> str | None:
 def _classification_uri(value: str) -> str | None:
     normalized = value.upper().split(":", 1)[0].strip()
     if normalized.startswith("CWE-") and normalized[4:].isdigit():
-        return (
-            "https://cwe.mitre.org/data/definitions/"
-            f"{normalized[4:]}.html"
-        )
+        return f"https://cwe.mitre.org/data/definitions/{normalized[4:]}.html"
     return None
 
 
@@ -1031,6 +1497,39 @@ def _applicable_tools(tools: list[ToolRun]) -> int:
     return sum(1 for tool in tools if tool.applicable)
 
 
+def _executable_integrity_label(run: ToolRun) -> str:
+    primary = _integrity_label(
+        run.executable_sha256,
+        run.executable_integrity_verified,
+        run.executable_unchanged,
+    )
+    if run.auxiliary_executable_sha256 is None:
+        return primary
+    auxiliary = _integrity_label(
+        run.auxiliary_executable_sha256,
+        run.auxiliary_executable_integrity_verified,
+        run.auxiliary_executable_unchanged,
+    )
+    return f"{primary}; helper: {auxiliary}"
+
+
+def _integrity_label(
+    digest: str | None,
+    approved: bool | None,
+    unchanged: bool | None,
+) -> str:
+    if digest is None:
+        return "not checked"
+    short_digest = digest[:12]
+    if unchanged is False:
+        return f"changed ({short_digest}...)"
+    if approved and unchanged:
+        return f"approved and unchanged ({short_digest}...)"
+    if unchanged:
+        return f"observed, not approved ({short_digest}...)"
+    return f"observed, post-check unavailable ({short_digest}...)"
+
+
 def _finding_sort_key(finding: Finding) -> tuple[int, str]:
     return (_SEVERITY_ORDER[finding.severity], finding.finding_id)
 
@@ -1048,6 +1547,15 @@ def _next_action(outcome: Outcome) -> str:
 
 
 def _finding_priority(finding: Finding) -> str:
+    intelligence = finding.evidence.get("risk_intelligence", {})
+    if isinstance(intelligence, dict) and intelligence.get("known_exploited"):
+        return "P0"
+    if "EPSS-HIGH" in finding.classifications and finding.severity in {
+        Severity.CRITICAL,
+        Severity.HIGH,
+        Severity.MEDIUM,
+    }:
+        return "P1"
     return {
         Severity.CRITICAL: "P0",
         Severity.HIGH: "P1",
@@ -1056,6 +1564,49 @@ def _finding_priority(finding: Finding) -> str:
         Severity.INFORMATIONAL: "P4",
         Severity.UNKNOWN: "P4",
     }[finding.severity]
+
+
+def _owner_values(finding: Finding) -> list[str]:
+    owners = finding.evidence.get("owners", [])
+    return [str(value) for value in owners[:20]] if isinstance(owners, list) else []
+
+
+def _finding_owners(finding: Finding) -> str:
+    owners = _owner_values(finding)
+    return ", ".join(f"`{_markdown_code(value)}`" for value in owners) or "Unassigned"
+
+
+def _threat_intelligence_summary(finding: Finding) -> str:
+    intelligence = finding.evidence.get("risk_intelligence", {})
+    if not isinstance(intelligence, dict):
+        return "No matched offline intelligence"
+    values: list[str] = []
+    known = intelligence.get("known_exploited", [])
+    if isinstance(known, list) and known:
+        values.append("CISA KEV: known exploitation")
+    epss = intelligence.get("epss", [])
+    if isinstance(epss, list) and epss:
+        highest = max(
+            (value for value in epss if isinstance(value, dict)),
+            key=lambda value: float(value.get("probability", 0.0)),
+            default=None,
+        )
+        if highest is not None:
+            values.append(
+                f"EPSS {float(highest.get('probability', 0.0)):.1%} "
+                f"(percentile {float(highest.get('percentile', 0.0)):.1%})"
+            )
+    vex = intelligence.get("vex", [])
+    if isinstance(vex, list) and vex:
+        states = sorted(
+            {
+                str(value.get("state") or "unknown")
+                for value in vex
+                if isinstance(value, dict)
+            }
+        )
+        values.append("VEX: " + ", ".join(states))
+    return "; ".join(values) or "No matched offline intelligence"
 
 
 def _coverage_action(run: ToolRun, manifest: ScanManifest) -> str:
@@ -1162,17 +1713,20 @@ def _assurance_row(
         status = "partial coverage"
     else:
         status = "coverage gap"
-    evidence = ", ".join(
-        f"{run.tool}: {'not applicable' if not run.applicable else run.status.value}"
-        for run in selected
-    ) or "No relevant scanner was selected."
+    evidence = (
+        ", ".join(
+            f"{run.tool}: {'not applicable' if not run.applicable else run.status.value}"
+            for run in selected
+        )
+        or "No relevant scanner was selected."
+    )
     return control, status, evidence, action, reference
 
 
 def _sarif_name(rule_id: str) -> str:
-    return "".join(
-        character if character.isalnum() else "_" for character in rule_id
-    )[:120]
+    return "".join(character if character.isalnum() else "_" for character in rule_id)[
+        :120
+    ]
 
 
 def _sarif_level(severity: Severity) -> str:

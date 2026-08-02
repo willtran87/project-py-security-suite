@@ -1,0 +1,362 @@
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+from typing import Any
+
+from defusedxml import ElementTree as DefusedET  # type: ignore[import-untyped]
+from defusedxml.common import DefusedXmlException  # type: ignore[import-untyped]
+
+from . import __version__
+
+_MAX_REPORT_BYTES = 64 * 1024 * 1024
+_MAX_JUNIT_REPORTS = 128
+_ASSURANCE_KINDS = frozenset(
+    {
+        "atheris",
+        "check-manifest",
+        "clamav",
+        "crosshair",
+        "github-attestation",
+        "in-toto",
+        "mutmut",
+        "oci-image",
+        "pytm",
+        "reproducible-build",
+        "yara",
+        "zap",
+    }
+)
+_MAX_ASSURANCE_FINDINGS = 10_000
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        prog="pysec-evidence",
+        description="Validate pre-generated test evidence without executing target code.",
+    )
+    parser.add_argument("--version", action="version", version=__version__)
+    subparsers = parser.add_subparsers(dest="kind", required=True)
+    coverage = subparsers.add_parser("coverage")
+    coverage.add_argument("path", type=Path)
+    junit = subparsers.add_parser("junit")
+    junit.add_argument("path", type=Path)
+    scorecard = subparsers.add_parser("scorecard")
+    scorecard.add_argument("path", type=Path)
+    assurance = subparsers.add_parser("assurance")
+    assurance.add_argument("evidence_kind", choices=sorted(_ASSURANCE_KINDS))
+    assurance.add_argument("path", type=Path)
+    args = parser.parse_args(argv)
+    try:
+        if args.kind == "coverage":
+            document = _coverage_document(args.path)
+        elif args.kind == "junit":
+            document = _junit_document(args.path)
+        elif args.kind == "scorecard":
+            document = _scorecard_document(args.path)
+        else:
+            document = _assurance_document(args.path, args.evidence_kind)
+    except (OSError, TypeError, ValueError, DefusedXmlException) as exc:
+        print(f"invalid {args.kind} evidence: {exc}", file=sys.stderr)
+        return 2
+    json.dump(document, sys.stdout, sort_keys=True, separators=(",", ":"))
+    sys.stdout.write("\n")
+    return 0
+
+
+def _read_bounded(path: Path) -> bytes:
+    if path.is_symlink() or not path.is_file():
+        raise ValueError(f"report is not a regular file: {path}")
+    size = path.stat().st_size
+    if size > _MAX_REPORT_BYTES:
+        raise ValueError(f"report exceeds {_MAX_REPORT_BYTES} bytes: {path}")
+    return path.read_bytes()
+
+
+def _coverage_document(path: Path) -> dict[str, Any]:
+    payload = json.loads(_read_bounded(path))
+    if not isinstance(payload, dict):
+        raise TypeError("coverage JSON root must be an object")
+    meta = payload.get("meta")
+    totals = payload.get("totals")
+    files = payload.get("files")
+    if not isinstance(meta, dict) or not isinstance(totals, dict):
+        raise TypeError("coverage JSON requires meta and totals objects")
+    if not isinstance(files, dict):
+        raise TypeError("coverage JSON requires a files object")
+    normalized_files: list[dict[str, Any]] = []
+    for name, value in sorted(files.items()):
+        if not isinstance(value, dict) or not isinstance(value.get("summary"), dict):
+            raise TypeError(f"coverage file entry is invalid: {name}")
+        summary = value["summary"]
+        normalized_files.append(
+            {
+                "path": str(name),
+                "summary": _coverage_summary(summary),
+                "missing_lines": _integer_list(value.get("missing_lines")),
+                "missing_branches": _branch_list(value.get("missing_branches")),
+            }
+        )
+    return {
+        "schema_version": "1.0",
+        "kind": "coverage",
+        "report": str(path.resolve()),
+        "meta": {
+            "format": _integer(meta.get("format")),
+            "branch_coverage": bool(meta.get("branch_coverage", False)),
+            "timestamp": str(meta.get("timestamp") or ""),
+        },
+        "totals": _coverage_summary(totals),
+        "files": normalized_files,
+    }
+
+
+def _coverage_summary(value: dict[str, Any]) -> dict[str, int | float]:
+    return {
+        "covered_lines": _integer(value.get("covered_lines")),
+        "num_statements": _integer(value.get("num_statements")),
+        "percent_covered": _number(value.get("percent_covered")),
+        "missing_lines": _integer(value.get("missing_lines")),
+        "num_branches": _integer(value.get("num_branches")),
+        "covered_branches": _integer(value.get("covered_branches")),
+        "missing_branches": _integer(value.get("missing_branches")),
+        "num_partial_branches": _integer(value.get("num_partial_branches")),
+    }
+
+
+def _junit_document(path: Path) -> dict[str, Any]:
+    reports = _junit_paths(path)
+    totals = {"tests": 0, "failures": 0, "errors": 0, "skipped": 0, "time": 0.0}
+    failures: list[dict[str, Any]] = []
+    for report in reports:
+        data = _read_bounded(report)
+        lowered = data[:4096].lower()
+        if b"<!doctype" in lowered or b"<!entity" in lowered:
+            raise ValueError(f"DTD and entity declarations are not allowed: {report}")
+        root = DefusedET.fromstring(
+            data,
+            forbid_dtd=True,
+            forbid_entities=True,
+            forbid_external=True,
+        )
+        cases = [node for node in root.iter() if _local_name(node.tag) == "testcase"]
+        totals["tests"] += len(cases)
+        for case in cases:
+            totals["time"] += _number(case.attrib.get("time"))
+            result = next(
+                (
+                    child
+                    for child in case
+                    if _local_name(child.tag) in {"failure", "error", "skipped"}
+                ),
+                None,
+            )
+            if result is None:
+                continue
+            result_type = _local_name(result.tag)
+            total_key = "skipped" if result_type == "skipped" else f"{result_type}s"
+            totals[total_key] += 1
+            if result_type == "skipped":
+                continue
+            failures.append(
+                {
+                    "report": str(report.resolve()),
+                    "name": str(case.attrib.get("name") or "unnamed test"),
+                    "classname": str(case.attrib.get("classname") or ""),
+                    "file": str(case.attrib.get("file") or ""),
+                    "line": _optional_integer(case.attrib.get("line")),
+                    "time": _number(case.attrib.get("time")),
+                    "result": result_type,
+                    "message": _bounded_text(result.attrib.get("message")),
+                    "type": _bounded_text(result.attrib.get("type")),
+                }
+            )
+    return {
+        "schema_version": "1.0",
+        "kind": "junit",
+        "report_count": len(reports),
+        "totals": totals,
+        "failures": failures,
+    }
+
+
+def _scorecard_document(path: Path) -> dict[str, Any]:
+    payload = json.loads(_read_bounded(path))
+    if not isinstance(payload, dict):
+        raise TypeError("Scorecard JSON root must be an object")
+    checks = payload.get("checks")
+    if not isinstance(checks, list):
+        raise TypeError("Scorecard JSON requires a checks list")
+    normalized: list[dict[str, Any]] = []
+    for check in checks:
+        if not isinstance(check, dict):
+            raise TypeError("Scorecard checks must be objects")
+        details = check.get("details", [])
+        if not isinstance(details, list):
+            details = []
+        documentation = check.get("documentation", {})
+        if not isinstance(documentation, dict):
+            documentation = {}
+        normalized.append(
+            {
+                "name": _bounded_text(check.get("name"), 100),
+                "score": _number(check.get("score")),
+                "reason": _bounded_text(check.get("reason"), 500),
+                "details": [_bounded_text(value, 300) for value in details[:50]],
+                "documentation": {
+                    "url": _https_url(documentation.get("url")),
+                    "short": _bounded_text(documentation.get("short"), 300),
+                },
+            }
+        )
+    return {
+        "schema_version": "1.0",
+        "kind": "scorecard",
+        "repository": _bounded_text(
+            payload.get("repo") or payload.get("repository"), 300
+        ),
+        "score": _number(payload.get("score")),
+        "date": _bounded_text(payload.get("date"), 100),
+        "checks": normalized,
+    }
+
+
+def _assurance_document(path: Path, kind: str) -> dict[str, Any]:
+    payload = json.loads(_read_bounded(path))
+    if not isinstance(payload, dict):
+        raise TypeError("assurance JSON root must be an object")
+    if payload.get("kind") != kind:
+        raise ValueError(f"assurance evidence kind must be {kind!r}")
+    findings = payload.get("findings", [])
+    if not isinstance(findings, list):
+        raise TypeError("assurance evidence requires a findings list")
+    if len(findings) > _MAX_ASSURANCE_FINDINGS:
+        raise ValueError(
+            f"assurance evidence exceeds {_MAX_ASSURANCE_FINDINGS} findings"
+        )
+    normalized: list[dict[str, Any]] = []
+    for value in findings:
+        if not isinstance(value, dict):
+            raise TypeError("assurance findings must be objects")
+        evidence = value.get("evidence", {})
+        if not isinstance(evidence, dict):
+            evidence = {}
+        normalized.append(
+            {
+                "rule_id": _bounded_text(value.get("rule_id"), 160),
+                "title": _bounded_text(value.get("title"), 300),
+                "message": _bounded_text(
+                    value.get("message") or value.get("description"), 1_000
+                ),
+                "path": _bounded_text(value.get("path"), 500),
+                "line": _optional_integer(value.get("line")),
+                "severity": _assurance_severity(value.get("severity")),
+                "classification": _bounded_text(value.get("classification"), 160),
+                "citation": _https_url(value.get("citation")),
+                "impact": _bounded_text(value.get("impact"), 1_000),
+                "remediation": _bounded_text(value.get("remediation"), 1_000),
+                "area": _bounded_text(value.get("area"), 100),
+                "domain": _bounded_text(value.get("domain"), 100),
+                "fingerprint": _bounded_text(value.get("fingerprint"), 200),
+                "evidence": {
+                    _bounded_text(key, 100): _bounded_scalar(item)
+                    for key, item in list(evidence.items())[:50]
+                },
+            }
+        )
+    return {
+        "schema_version": "1.0",
+        "kind": kind,
+        "producer": _bounded_text(payload.get("producer"), 200),
+        "revision": _bounded_text(payload.get("revision"), 200),
+        "findings": normalized,
+    }
+
+
+def _junit_paths(path: Path) -> list[Path]:
+    if path.is_file() and not path.is_symlink():
+        return [path]
+    if not path.is_dir() or path.is_symlink():
+        raise ValueError(f"JUnit evidence path does not exist: {path}")
+    reports = sorted(
+        candidate
+        for candidate in path.rglob("*.xml")
+        if candidate.is_file() and not candidate.is_symlink()
+    )
+    if not reports:
+        raise ValueError(f"no JUnit XML reports were found under: {path}")
+    if len(reports) > _MAX_JUNIT_REPORTS:
+        raise ValueError(f"more than {_MAX_JUNIT_REPORTS} JUnit reports were found")
+    return reports
+
+
+def _integer(value: object) -> int:
+    try:
+        return int(str(value or 0))
+    except (TypeError, ValueError) as exc:
+        raise TypeError(f"expected an integer, received {value!r}") from exc
+
+
+def _optional_integer(value: object) -> int | None:
+    return None if value in (None, "") else _integer(value)
+
+
+def _number(value: object) -> float:
+    try:
+        return round(float(str(value or 0.0)), 6)
+    except (TypeError, ValueError) as exc:
+        raise TypeError(f"expected a number, received {value!r}") from exc
+
+
+def _integer_list(value: object) -> list[int]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise TypeError("expected a list of line numbers")
+    return [_integer(item) for item in value]
+
+
+def _branch_list(value: object) -> list[list[int]]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise TypeError("expected a list of branch pairs")
+    branches: list[list[int]] = []
+    for item in value:
+        if not isinstance(item, list) or len(item) != 2:
+            raise TypeError("coverage branch entries must be two-item lists")
+        branches.append([_integer(item[0]), _integer(item[1])])
+    return branches
+
+
+def _local_name(tag: str) -> str:
+    return tag.rsplit("}", 1)[-1]
+
+
+def _bounded_text(value: object, maximum: int = 300) -> str:
+    text = " ".join(str(value or "").split())
+    return text if len(text) <= maximum else text[: maximum - 3] + "..."
+
+
+def _https_url(value: object) -> str:
+    text = _bounded_text(value, 500)
+    return text if text.startswith("https://") else ""
+
+
+def _assurance_severity(value: object) -> str:
+    normalized = _bounded_text(value, 30).casefold() or "medium"
+    if normalized not in {"critical", "high", "medium", "low", "informational", "info"}:
+        raise ValueError(f"unsupported assurance severity: {normalized!r}")
+    return normalized
+
+
+def _bounded_scalar(value: object) -> str | int | float | bool | None:
+    if value is None or isinstance(value, (int, float, bool)):
+        return value
+    return _bounded_text(value, 500)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -6,7 +6,7 @@ from dataclasses import asdict, dataclass, field, is_dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 
 class Severity(StrEnum):
@@ -57,6 +57,9 @@ class Location:
     package: str | None = None
     version: str | None = None
     ecosystem: str | None = None
+    snippet: str | None = None
+    snippet_start_line: int | None = None
+    snippet_redacted: bool = False
 
 
 @dataclass(slots=True)
@@ -87,6 +90,7 @@ class Finding:
     severity: Severity
     confidence: Confidence
     area: str
+    domain: str = "security"
     status: FindingStatus = FindingStatus.NEW
     classifications: list[str] = field(default_factory=list)
     locations: list[Location] = field(default_factory=list)
@@ -109,6 +113,12 @@ class ToolRun:
     stdout_truncated: bool = False
     stderr_truncated: bool = False
     applicable: bool = True
+    executable_sha256: str | None = None
+    executable_integrity_verified: bool | None = None
+    executable_unchanged: bool | None = None
+    auxiliary_executable_sha256: str | None = None
+    auxiliary_executable_integrity_verified: bool | None = None
+    auxiliary_executable_unchanged: bool | None = None
 
 
 @dataclass(slots=True)
@@ -121,6 +131,13 @@ class Inventory:
     lock_files: list[str] = field(default_factory=list)
     vcs_history_available: bool = False
     distribution_files: list[str] = field(default_factory=list)
+    source_sha256: str = ""
+    source_sha256_after: str = ""
+    source_integrity_verified: bool = False
+    hashed_files: int = 0
+    hashed_bytes: int = 0
+    hashed_files_after: int = 0
+    hashed_bytes_after: int = 0
 
 
 @dataclass(slots=True)
@@ -143,6 +160,10 @@ class ScanManifest:
     policy_reasons: list[str]
     diagnostic_without_isolation: bool = False
     artifacts: dict[str, str] = field(default_factory=dict)
+    configuration_sha256: str = ""
+    risk_acceptance_sha256: str = ""
+    intelligence: dict[str, Any] = field(default_factory=dict)
+    baseline: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -163,11 +184,18 @@ def isoformat(value: datetime) -> str:
 
 def normalize_repo_path(target: Path, path: str | Path) -> str:
     candidate = Path(path)
-    if candidate.is_absolute():
-        try:
-            candidate = candidate.resolve().relative_to(target.resolve())
-        except ValueError:
-            return "<outside-target>"
+    if not candidate.is_absolute() and ".." in candidate.parts:
+        return "<outside-target>"
+    try:
+        resolved_target = target.resolve()
+        resolved_candidate = (
+            candidate.resolve()
+            if candidate.is_absolute()
+            else (resolved_target / candidate).resolve()
+        )
+        candidate = resolved_candidate.relative_to(resolved_target)
+    except (OSError, ValueError):
+        return "<outside-target>"
     normalized = candidate.as_posix()
     if normalized.startswith("./"):
         normalized = normalized[2:]
@@ -202,8 +230,8 @@ def json_ready(value: Any) -> Any:
         return str(value)
     if isinstance(value, Path):
         return value.as_posix()
-    if is_dataclass(value):
-        return {key: json_ready(item) for key, item in asdict(value).items()}
+    if is_dataclass(value) and not isinstance(value, type):
+        return {key: json_ready(item) for key, item in asdict(cast(Any, value)).items()}
     if isinstance(value, dict):
         return {str(key): json_ready(item) for key, item in value.items()}
     if isinstance(value, (list, tuple)):

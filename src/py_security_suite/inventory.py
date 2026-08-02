@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import os
 import tomllib
 from pathlib import Path
@@ -8,24 +9,28 @@ from typing import Any
 from .models import Inventory
 
 
-_SKIP_DIRECTORIES = {
-    ".artifacts",
-    ".git",
-    ".hg",
-    ".nox",
-    ".pysec-tools",
-    ".pytest_cache",
-    ".ruff_cache",
-    ".svn",
-    ".tox",
-    ".venv",
-    "env",
-    "venv",
-    "__pycache__",
-    "build",
-    "dist",
-    "node_modules",
-}
+_SKIP_DIRECTORIES = frozenset(
+    {
+        ".artifacts",
+        ".git",
+        ".hg",
+        ".mypy_cache",
+        ".nox",
+        ".pysec-tools",
+        ".pytest_cache",
+        ".ruff_cache",
+        ".svn",
+        ".tox",
+        ".venv",
+        "env",
+        "venv",
+        "__pycache__",
+        "build",
+        "dist",
+        "node_modules",
+    }
+)
+_INTEGRITY_SKIP_DIRECTORIES = _SKIP_DIRECTORIES - {"build", "dist"}
 _DEPENDENCY_FILES = {
     "requirements.txt",
     "requirements-dev.txt",
@@ -46,48 +51,121 @@ _LOCK_FILES = {
 }
 
 
-def inventory_target(target: Path) -> Inventory:
+def inventory_target(
+    target: Path, *, excluded_paths: tuple[Path, ...] = ()
+) -> Inventory:
     python_files = 0
-    total_files = 0
-    skipped_symlinks = 0
     dependency_files: list[str] = []
     lock_files: list[str] = []
     distribution_files = _distribution_files(target)
-    for root, directories, filenames in os.walk(target, followlinks=False):
-        root_path = Path(root)
-        kept_directories: list[str] = []
-        for directory in directories:
-            path = root_path / directory
-            if path.is_symlink():
-                skipped_symlinks += 1
-            elif directory not in _SKIP_DIRECTORIES:
-                kept_directories.append(directory)
-        directories[:] = kept_directories
-        for filename in filenames:
-            path = root_path / filename
-            if path.is_symlink():
-                skipped_symlinks += 1
-                continue
-            total_files += 1
-            relative = path.relative_to(target).as_posix()
-            if path.suffix == ".py":
-                python_files += 1
-            if filename.casefold() in _DEPENDENCY_FILES:
-                dependency_files.append(relative)
-            if filename.casefold() in _LOCK_FILES or filename.casefold().startswith(
-                "pylock."
-            ):
-                lock_files.append(relative)
+    maintained_files, skipped_symlinks = _maintained_files(target, excluded_paths)
+    integrity_files, _ = _maintained_files(
+        target,
+        excluded_paths,
+        skip_directories=_INTEGRITY_SKIP_DIRECTORIES,
+    )
+    source_sha256, hashed_bytes = _source_digest(target, integrity_files)
+    for path in maintained_files:
+        relative = path.relative_to(target).as_posix()
+        if path.suffix == ".py":
+            python_files += 1
+        if path.name.casefold() in _DEPENDENCY_FILES:
+            dependency_files.append(relative)
+        if path.name.casefold() in _LOCK_FILES or path.name.casefold().startswith(
+            "pylock."
+        ):
+            lock_files.append(relative)
     return Inventory(
         python_files=python_files,
         dependency_files=sorted(dependency_files),
-        total_files=total_files,
+        total_files=len(maintained_files),
         skipped_symlinks=skipped_symlinks,
         declared_dependencies=_declares_dependencies(target),
         lock_files=sorted(lock_files),
         vcs_history_available=(target / ".git").exists(),
         distribution_files=sorted(distribution_files),
+        source_sha256=source_sha256,
+        hashed_files=len(integrity_files),
+        hashed_bytes=hashed_bytes,
     )
+
+
+def source_snapshot(
+    target: Path, *, excluded_paths: tuple[Path, ...] = ()
+) -> tuple[str, int, int]:
+    files, _ = _maintained_files(
+        target,
+        excluded_paths,
+        skip_directories=_INTEGRITY_SKIP_DIRECTORIES,
+    )
+    digest, total_bytes = _source_digest(target, files)
+    return digest, len(files), total_bytes
+
+
+def _maintained_files(
+    target: Path,
+    excluded_paths: tuple[Path, ...],
+    *,
+    skip_directories: frozenset[str] = _SKIP_DIRECTORIES,
+) -> tuple[list[Path], int]:
+    resolved_target = target.resolve()
+    excluded = tuple(path.resolve() for path in excluded_paths)
+    files: list[Path] = []
+    skipped_symlinks = 0
+    for root, directories, filenames in os.walk(resolved_target, followlinks=False):
+        root_path = Path(root)
+        kept_directories: list[str] = []
+        for directory in sorted(directories):
+            path = root_path / directory
+            if path.is_symlink():
+                skipped_symlinks += 1
+            elif directory not in skip_directories and not _is_excluded(path, excluded):
+                kept_directories.append(directory)
+        directories[:] = kept_directories
+        for filename in sorted(filenames):
+            path = root_path / filename
+            if path.is_symlink():
+                skipped_symlinks += 1
+                continue
+            if not _is_excluded(path, excluded):
+                files.append(path)
+    return sorted(
+        files,
+        key=lambda path: path.relative_to(resolved_target).as_posix(),
+    ), skipped_symlinks
+
+
+def _is_excluded(path: Path, excluded: tuple[Path, ...]) -> bool:
+    resolved = path.resolve()
+    for root in excluded:
+        if resolved == root:
+            return True
+        try:
+            resolved.relative_to(root)
+            return True
+        except ValueError:
+            continue
+    return False
+
+
+def _source_digest(target: Path, paths: list[Path]) -> tuple[str, int]:
+    aggregate = hashlib.sha256()
+    total_bytes = 0
+    resolved_target = target.resolve()
+    for path in paths:
+        content = hashlib.sha256()
+        size = 0
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                content.update(chunk)
+                size += len(chunk)
+        relative = path.relative_to(resolved_target).as_posix().encode("utf-8")
+        aggregate.update(len(relative).to_bytes(8, "big"))
+        aggregate.update(relative)
+        aggregate.update(size.to_bytes(8, "big"))
+        aggregate.update(content.digest())
+        total_bytes += size
+    return aggregate.hexdigest(), total_bytes
 
 
 def _declares_dependencies(target: Path) -> bool:
@@ -126,8 +204,7 @@ def _declares_dependencies(target: Path) -> bool:
         except OSError:
             return True
         if any(
-            line.strip() and not line.lstrip().startswith(("#", "--"))
-            for line in lines
+            line.strip() and not line.lstrip().startswith(("#", "--")) for line in lines
         ):
             return True
     return False

@@ -14,6 +14,7 @@ from ..execution import (
     resolve_executable,
     run_command,
     sanitize_diagnostic,
+    sha256_file,
 )
 from ..models import Finding, ToolRun, ToolStatus
 
@@ -26,6 +27,18 @@ class AdapterResult:
     artifacts: dict[str, Any] = field(default_factory=dict)
 
 
+@dataclass(slots=True, frozen=True)
+class ScannerReadiness:
+    """A bounded, non-executing scanner readiness assessment."""
+
+    tool: str
+    status: str
+    reason: str | None = None
+    executable: str | None = None
+    executable_sha256: str | None = None
+    executable_integrity_verified: bool | None = None
+
+
 class ScannerAdapter(ABC):
     name: str
     accepted_exit_codes: frozenset[int] = frozenset({0})
@@ -33,6 +46,10 @@ class ScannerAdapter(ABC):
     def __init__(self, config: ToolConfig, max_output_bytes: int) -> None:
         self.config = config
         self.max_output_bytes = max_output_bytes
+        self._executable_path: Path | None = None
+        self._executable_sha256: str | None = None
+        self._executable_integrity_verified: bool | None = None
+        self._executable_unchanged: bool | None = None
 
     def prerequisite_error(self) -> str | None:
         return None
@@ -42,6 +59,9 @@ class ScannerAdapter(ABC):
 
     def environment(self) -> CommandEnvironment:
         return CommandEnvironment()
+
+    def version_command(self, executable: str) -> list[str]:
+        return [executable, "--version"]
 
     @abstractmethod
     def build_command(self, executable: str, target: Path) -> list[str]:
@@ -55,14 +75,14 @@ class ScannerAdapter(ABC):
         return {}
 
     def run(self, target: Path) -> AdapterResult:
-        not_applicable = self.not_applicable_reason(target)
-        if not_applicable:
+        readiness = self.preflight(target)
+        if readiness.status == "not_applicable":
             tool_run = ToolRun(
                 tool=self.name,
                 status=ToolStatus.SKIPPED,
                 command=[self.config.executable],
                 duration_seconds=0.0,
-                error=not_applicable,
+                error=readiness.reason,
                 applicable=False,
             )
             return AdapterResult(
@@ -70,10 +90,11 @@ class ScannerAdapter(ABC):
                 tool_run=tool_run,
                 diagnostic=self._diagnostic(tool_run, None),
             )
-        prerequisite = self.prerequisite_error()
-        executable = resolve_executable(self.config.executable)
-        if prerequisite or executable is None:
-            error = prerequisite or f"executable not found: {self.config.executable}"
+        executable = readiness.executable
+        if readiness.status != "ready" or executable is None:
+            error = (
+                readiness.reason or f"executable not found: {self.config.executable}"
+            )
             tool_run = ToolRun(
                 tool=self.name,
                 status=ToolStatus.UNAVAILABLE,
@@ -96,6 +117,19 @@ class ScannerAdapter(ABC):
             max_output_bytes=self.max_output_bytes,
             environment=self.environment(),
         )
+        changed_error = self._executable_changed_error()
+        if changed_error:
+            tool_run = self._tool_run(
+                execution,
+                ToolStatus.FAILED,
+                error=changed_error,
+                version=version,
+            )
+            return AdapterResult(
+                findings=[],
+                tool_run=tool_run,
+                diagnostic=self._diagnostic(tool_run, execution),
+            )
         if execution.timed_out:
             tool_run = self._tool_run(
                 execution,
@@ -154,6 +188,46 @@ class ScannerAdapter(ABC):
             artifacts=artifacts,
         )
 
+    def preflight(self, target: Path) -> ScannerReadiness:
+        """Validate applicability, offline assets, and executable integrity.
+
+        The scanner is never executed and its version command is not invoked.
+        """
+        not_applicable = self.not_applicable_reason(  # pylint: disable=assignment-from-none
+            target
+        )
+        if not_applicable:
+            return ScannerReadiness(
+                tool=self.name,
+                status="not_applicable",
+                reason=not_applicable,
+            )
+        prerequisite = self.prerequisite_error()  # pylint: disable=assignment-from-none
+        if prerequisite:
+            return ScannerReadiness(
+                tool=self.name,
+                status="unavailable",
+                reason=prerequisite,
+            )
+        executable, integrity_error = self._prepare_executable()
+        if integrity_error or executable is None:
+            return ScannerReadiness(
+                tool=self.name,
+                status="unavailable",
+                reason=(
+                    integrity_error or f"executable not found: {self.config.executable}"
+                ),
+                executable_sha256=self._executable_sha256,
+                executable_integrity_verified=self._executable_integrity_verified,
+            )
+        return ScannerReadiness(
+            tool=self.name,
+            status="ready",
+            executable=executable,
+            executable_sha256=self._executable_sha256,
+            executable_integrity_verified=self._executable_integrity_verified,
+        )
+
     def _tool_run(
         self,
         execution: RawExecution,
@@ -174,11 +248,55 @@ class ScannerAdapter(ABC):
             error=error,
             stdout_truncated=execution.stdout_truncated,
             stderr_truncated=execution.stderr_truncated,
+            **self._integrity_fields(),
         )
+
+    def _prepare_executable(self) -> tuple[str | None, str | None]:
+        executable = resolve_executable(self.config.executable)
+        if executable is None:
+            return None, f"executable not found: {self.config.executable}"
+        path = Path(executable).resolve()
+        try:
+            digest = sha256_file(path)
+        except OSError:
+            return None, "scanner executable could not be hashed"
+        self._executable_path = path
+        self._executable_sha256 = digest
+        expected = self.config.executable_sha256
+        self._executable_integrity_verified = digest == expected if expected else None
+        self._executable_unchanged = None
+        if expected and digest != expected:
+            return (
+                None,
+                "scanner executable SHA-256 does not match the approved digest",
+            )
+        return str(path), None
+
+    def _executable_changed_error(self) -> str | None:
+        path = self._executable_path
+        initial = self._executable_sha256
+        if path is None or initial is None:
+            return None
+        try:
+            current = sha256_file(path)
+        except OSError:
+            self._executable_unchanged = False
+            return "scanner executable became unreadable during execution"
+        self._executable_unchanged = current == initial
+        if not self._executable_unchanged:
+            return "scanner executable changed during execution"
+        return None
+
+    def _integrity_fields(self) -> dict[str, Any]:
+        return {
+            "executable_sha256": self._executable_sha256,
+            "executable_integrity_verified": (self._executable_integrity_verified),
+            "executable_unchanged": self._executable_unchanged,
+        }
 
     def _detect_version(self, executable: str, target: Path) -> str:
         execution = run_command(
-            [executable, "--version"],
+            self.version_command(executable),
             cwd=target,
             timeout_seconds=min(self.config.timeout_seconds, 10),
             max_output_bytes=2048,
@@ -190,10 +308,13 @@ class ScannerAdapter(ABC):
         first_line = value.splitlines()[0] if value else ""
         return sanitize_diagnostic(first_line, maximum=200) or "unknown"
 
-    @staticmethod
     def _diagnostic(
-        tool_run: ToolRun, execution: RawExecution | None
+        self, tool_run: ToolRun, execution: RawExecution | None
     ) -> dict[str, Any]:
+        if tool_run.executable_sha256 is None:
+            tool_run.executable_sha256 = self._executable_sha256
+            tool_run.executable_integrity_verified = self._executable_integrity_verified
+            tool_run.executable_unchanged = self._executable_unchanged
         stderr = execution.stderr if execution else ""
         return {
             "tool": tool_run.tool,
@@ -206,10 +327,11 @@ class ScannerAdapter(ABC):
             "error": tool_run.error,
             "stderr_bytes": len(stderr.encode("utf-8")),
             "stderr_sha256": (
-                hashlib.sha256(stderr.encode("utf-8")).hexdigest()
-                if stderr
-                else None
+                hashlib.sha256(stderr.encode("utf-8")).hexdigest() if stderr else None
             ),
             "raw_output_retained": False,
             "applicable": tool_run.applicable,
+            "executable_sha256": tool_run.executable_sha256,
+            "executable_integrity_verified": (tool_run.executable_integrity_verified),
+            "executable_unchanged": tool_run.executable_unchanged,
         }

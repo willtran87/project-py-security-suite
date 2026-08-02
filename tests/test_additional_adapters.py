@@ -21,11 +21,8 @@ from py_security_suite.models import Severity, json_ready
 
 class AdditionalAdapterTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temp = tempfile.TemporaryDirectory()
-        self.target = Path(self.temp.name).resolve()
-
-    def tearDown(self) -> None:
-        self.temp.cleanup()
+        temporary = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with
+        self.target = Path(self.enterContext(temporary)).resolve()
 
     def test_ruff_security_json_is_normalized(self) -> None:
         payload = json.dumps(
@@ -64,9 +61,7 @@ class AdditionalAdapterTests(unittest.TestCase):
             path=".github/workflows/ci.yml",
             line=12,
         )
-        finding = ZizmorAdapter(ToolConfig(), 4096).parse(
-            payload, self.target
-        )[0]
+        finding = ZizmorAdapter(ToolConfig(), 4096).parse(payload, self.target)[0]
         self.assertEqual(finding.area, "ci-cd")
         self.assertEqual(finding.locations[0].start_line, 12)
 
@@ -109,9 +104,7 @@ class AdditionalAdapterTests(unittest.TestCase):
                 ]
             }
         )
-        finding = TrivyAdapter(ToolConfig(), 4096).parse(
-            payload, self.target
-        )[0]
+        finding = TrivyAdapter(ToolConfig(), 4096).parse(payload, self.target)[0]
         self.assertEqual(finding.severity, Severity.HIGH)
         self.assertEqual(finding.area, "deployment-configuration")
 
@@ -132,23 +125,19 @@ class AdditionalAdapterTests(unittest.TestCase):
                 ],
             }
         )
-        finding = GuardDogAdapter(ToolConfig(), 4096).parse(
-            payload, self.target
-        )[0]
-        self.assertNotIn(
-            "must-not-be-retained", json.dumps(json_ready(finding))
-        )
+        finding = GuardDogAdapter(ToolConfig(), 4096).parse(payload, self.target)[0]
+        self.assertNotIn("must-not-be-retained", json.dumps(json_ready(finding)))
         self.assertEqual(finding.area, "package-integrity")
 
     @unittest.skipUnless(os.name == "nt", "native Windows applicability")
     def test_guarddog_is_not_applicable_to_native_windows(self) -> None:
         (self.target / "app.py").write_text("pass\n", encoding="utf-8")
-        reason = GuardDogAdapter(ToolConfig(), 4096).not_applicable_reason(
-            self.target
-        )
+        reason = GuardDogAdapter(ToolConfig(), 4096).not_applicable_reason(self.target)
         self.assertIn("does not support native Windows", reason or "")
 
-    def test_scancode_unknown_license_is_actionable_and_inventory_is_compact(self) -> None:
+    def test_scancode_unknown_license_is_actionable_and_inventory_is_compact(
+        self,
+    ) -> None:
         payload = json.dumps(
             {
                 "files": [
@@ -200,9 +189,7 @@ class AdditionalAdapterTests(unittest.TestCase):
         adapter = GitleaksAdapter(ToolConfig(), 4096)
         adapter._report_path = report
         finding = adapter.parse("", self.target)[0]
-        self.assertNotIn(
-            "must-not-be-retained", json.dumps(json_ready(finding))
-        )
+        self.assertNotIn("must-not-be-retained", json.dumps(json_ready(finding)))
         self.assertTrue(finding.evidence["redacted"])
         self.assertFalse(report.exists())
 
@@ -217,11 +204,35 @@ class AdditionalAdapterTests(unittest.TestCase):
 
     def test_codeql_sarif_is_normalized(self) -> None:
         payload = _sarif(rule_id="py/sql-injection", path="db.py", line=21)
-        finding = CodeQlAdapter(ToolConfig(), 4096).parse(
-            payload, self.target
-        )[0]
+        finding = CodeQlAdapter(ToolConfig(), 4096).parse(payload, self.target)[0]
         self.assertEqual(finding.area, "data-flow")
         self.assertEqual(finding.locations[0].path, "db.py")
+        self.assertEqual(finding.classifications, ["CODEQL-PY-SQL-INJECTION"])
+
+    def test_codeql_quality_metadata_is_preserved(self) -> None:
+        document = json.loads(
+            _sarif(
+                rule_id="py/implicit-string-concatenation-in-list",
+                path="src/app.py",
+                line=8,
+            )
+        )
+        rule = document["runs"][0]["tool"]["driver"]["rules"][0]
+        rule.pop("helpUri")
+        rule["properties"] = {
+            "tags": ["quality", "maintainability", "external/cwe/cwe-665"],
+            "problem.severity": "warning",
+            "precision": "high",
+        }
+        document["runs"][0]["results"][0].pop("level")
+        finding = CodeQlAdapter(ToolConfig(), 4096).parse(
+            json.dumps(document), self.target
+        )[0]
+        self.assertEqual(finding.domain, "quality")
+        self.assertEqual(finding.severity.value, "medium")
+        self.assertEqual(finding.confidence.value, "high")
+        self.assertEqual(finding.classifications, ["CWE-665"])
+        self.assertIn("codeql-query-help", finding.citations[0].uri or "")
 
 
 def _sarif(*, rule_id: str, path: str, line: int) -> str:

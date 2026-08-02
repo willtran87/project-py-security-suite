@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/py-security-suite/assurance-evidence.schema.json",
+  "title": "Python Security Suite bounded assurance evidence",
+  "type": "object",
+  "required": ["kind", "producer", "revision", "findings"],
+  "additionalProperties": false,
+  "properties": {
+    "kind": { "const": "yara" },
+    "producer": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "revision": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "findings": {
+      "type": "array",
+      "maxItems": 20,
+      "items": {
+        "type": "object",
+        "required": ["rule_id", "title", "message", "severity"],
+        "additionalProperties": false,
+        "properties": {
+          "rule_id": { "type": "string", "minLength": 1, "maxLength": 160 },
+          "title": { "type": "string", "minLength": 1, "maxLength": 300 },
+          "message": { "type": "string", "maxLength": 1000 },
+          "path": { "type": "string", "maxLength": 500 },
+          "line": { "type": "integer", "minimum": 1 },
+          "severity": {
+            "enum": ["critical", "high", "medium", "low", "informational", "info"]
+          },
+          "classification": { "type": "string", "maxLength": 160 },
+          "citation": { "type": "string", "pattern": "^https://", "maxLength": 500 },
+          "impact": { "type": "string", "maxLength": 1000 },
+          "remediation": { "type": "string", "maxLength": 1000 },
+          "area": { "type": "string", "maxLength": 100 },
+          "domain": { "type": "string", "maxLength": 100 },
+          "fingerprint": { "type": "string", "maxLength": 200 },
+          "evidence": {
+            "type": "object",
+            "maxProperties": 20,
+            "additionalProperties": {
+              "type": ["string", "number", "integer", "boolean", "null"]
+            }
+          }
+        }
+      }
+    }
+  }
+}

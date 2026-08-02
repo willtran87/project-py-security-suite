@@ -1,6 +1,6 @@
 # Python Security Suite documentation
 
-Last reviewed: 2026-07-23
+Last reviewed: 2026-08-01
 
 Markdown files in this directory are the canonical project documentation.
 
@@ -10,8 +10,14 @@ Markdown files in this directory are the canonical project documentation.
 | [Operations](operations.md) | Native no-Docker preparation, isolated installation, scanning, GitHub publication, and troubleshooting |
 | [Configuration](configuration.md) | TOML schema, profiles, policy layering, CLI flags, and exit codes |
 | [Compatibility and coverage matrix](compatibility-matrix.md) | Tool roles, overlap, applicability, platform support, limitations, and acquisition |
+| [Tool selection](tool-selection.md) | Admission criteria, added tools, rejected candidates, and review cadence |
 | [Production security gate](production-security.md) | Strict release profile, residual risk, and companion dynamic and artifact controls |
+| [Offline companion assurance](companion-assurance.md) | Property tests, fuzzing, API/DAST, threat modeling, reproducibility, provenance, and malware evidence |
+| [Security Passport and risk intelligence](security-passport.md) | Signed release evidence, offline verification, KEV/EPSS/VEX enrichment, lifecycle baselines, and effectiveness metrics |
 | [Project README](../README.md) | Concise introduction and quick-start paths |
+| [Security policy](../SECURITY.md) | Private vulnerability reporting and supported-code policy |
+| [Contributing](../CONTRIBUTING.md) | Trust-model constraints, validation, and pull-request expectations |
+| [Changelog](../CHANGELOG.md) | Release-facing record of notable behavior and security changes |
 
 ## Documentation rules
 
@@ -35,6 +41,13 @@ The current native baseline is Windows x86-64 with Python 3.11:
 - detect-secrets 1.5.0
 - OSV-Scanner 2.3.8
 - Ruff 0.15.22
+- mypy 2.1.0
+- Vulture 2.16
+- Tach 0.35.0
+- Flawfinder 2.0.20
+- actionlint 1.7.12
+- Hadolint 2.14.0
+- Microsoft DevSkim CLI 1.0.70
 - CycloneDX Python 7.3.0
 - zizmor 1.28.0
 - ScanCode Toolkit 32.5.0
@@ -47,29 +60,51 @@ The current native baseline is Windows x86-64 with Python 3.11:
 - Twine 6.2.0
 - PyPI attestations 0.0.29
 - `run-codeql` 1.6.0
+- deptry 0.24.0
+- diff-cover 10.2.0
+- Checkov 3.2.494
+- PSScriptAnalyzer 1.25.0
+- ShellCheck 0.11.0
+- Pyright 1.1.411 on Node.js 20.20.2
+- Cosign 3.1.2
 
-The latest repository `comprehensive` self-scan selected all 19 adapters.
-Thirteen of 15 applicable scanners completed with zero findings and no
-failure, timeout, or parse error. CycloneDX, zizmor, Pysa, and GuardDog were
-correctly `not applicable` for this repository and native host.
-
-CodeQL and PyPI attestation verification were correctly `unavailable` because
-the separately governed CodeQL CLI/query pack and expected publisher,
-provenance objects, and trust cache were not staged. The diagnostic result is
-therefore `INCOMPLETE`; the connected workstation also did not attest an
-external egress-denied boundary. This is fail-closed behavior, not a clean
-production result.
+The current `comprehensive` profile selects all 62 adapters. The 2026-08-01
+dogfood baseline completed all 35 applicable adapters; 27 conditional adapters
+were correctly not applicable, with zero unavailable, failed, timed-out, or
+parse-error tools. The externally isolated run correctly produced `FAIL`: two
+high-severity Cosign findings block the intentionally unsigned wheel and source
+distribution, while 31 medium testing findings retain the 80% coverage target.
+Code security, secrets, dependency-vulnerability, architecture, and quality
+perspectives were clean. No public signing service was contacted for this run.
+The native `doctor` preflight reports 35 ready and 27 not-applicable tools with
+zero disabled or unavailable prerequisites before scanner execution.
 
 The checked report is in
-`.artifacts/native-comprehensive-final-self-scan`. It includes:
+`.artifacts/final-self-scan-v17`. It includes:
 
-- the GitHub-ready Markdown, HTML, SARIF, and normalized JSON reports;
+- the GitHub-ready Markdown, HTML, SARIF, SonarQube external-issue, and
+  normalized JSON reports;
 - a sanitized evidence record for each selected scanner;
-- an artifact CycloneDX SBOM whose two components came from safely expanded
-  wheel and source distributions;
-- `artifact-manifest.json` with SHA-256 bindings for both distributions; and
+- source and artifact CycloneDX SBOMs, including a frozen, offline, integrity-
+  verified `uv.lock` export for source dependencies;
+- `artifact-manifest.json` with SHA-256 bindings for both distributions;
+- Pylint, Radon, coverage, and JUnit derived assurance summaries;
+- target-bound finding lifecycle, live digest-pinned KEV/EPSS evidence,
+  effectiveness metrics, SSDF claims, and a Security Passport;
 - a checksum manifest that was independently verified after generation.
 
-The source test suite currently has 50 tests, including fixtures for all
+The source test suite currently has 174 tests, including property-test replay
+and fixtures for all
 adapters, private scanner-home isolation, artifact digest binding, and
-path-traversal rejection during distribution expansion.
+path-traversal rejection during distribution expansion, hardened XML evidence
+ingestion, archive-link rejection, governed risk acceptance, database
+freshness, detection validation, repository-health additions, trusted-lane
+evidence validation, and the SonarQube export. Combined line-and-branch
+coverage is 74.70%; the report deliberately keeps the 80% policy target visible
+as actionable debt.
+
+The companion detection proof is in
+`.artifacts/detection-validation-v7`; its summary confirms six normalized
+findings across Bandit, Semgrep, and detect-secrets, with required attribution,
+classification, location, citations, impact, and remediation, 100% expected-
+perspective recall, and zero findings on the safe negative control.

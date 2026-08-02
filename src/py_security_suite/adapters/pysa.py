@@ -15,13 +15,14 @@ from ..models import (
     normalize_repo_path,
 )
 from .base import ScannerAdapter
+from .staging import maintained_files
 
 
 class PysaAdapter(ScannerAdapter):
     name = "pysa"
 
     def not_applicable_reason(self, target: Path) -> str | None:
-        if not any(target.rglob("*.py")):
+        if not maintained_files(target, frozenset({".py"})):
             return "no Python source files were found"
         if not (
             (target / ".pyre_configuration").is_file()
@@ -52,13 +53,9 @@ class PysaAdapter(ScannerAdapter):
                 or f"Pysa issue {rule_id}"
             )
             description = str(
-                result.get("description")
-                or result.get("long_description")
-                or title
+                result.get("description") or result.get("long_description") or title
             )
-            path = normalize_repo_path(
-                target, str(result.get("path") or "<unknown>")
-            )
+            path = normalize_repo_path(target, str(result.get("path") or "<unknown>"))
             line = _integer(result.get("line"))
             finding_id, fingerprint = finding_identity(
                 tool=self.name,

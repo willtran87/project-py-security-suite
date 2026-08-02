@@ -1,0 +1,15 @@
+{
+  "typeCheckingMode": "basic",
+  "pythonVersion": "3.11",
+  "exclude": [
+    "**/.artifacts",
+    "**/.pysec-tools",
+    "**/.venv",
+    "**/build",
+    "**/dist",
+    "**/node_modules",
+    "**/tests"
+  ],
+  "reportMissingImports": "warning",
+  "reportMissingTypeStubs": "none"
+}

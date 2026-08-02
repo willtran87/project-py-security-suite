@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Callable, Hashable
+from typing import TypeVar
 
 from .models import (
     Confidence,
@@ -24,6 +26,7 @@ _CONFIDENCE_ORDER = {
     Confidence.MEDIUM: 2,
     Confidence.HIGH: 3,
 }
+_T = TypeVar("_T")
 
 
 def correlate_findings(findings: list[Finding]) -> list[Finding]:
@@ -67,9 +70,7 @@ def correlate_findings(findings: list[Finding]) -> list[Finding]:
         )
         primary.classifications = list(
             dict.fromkeys(
-                value
-                for item in observations
-                for value in item.classifications
+                value for item in observations for value in item.classifications
             )
         )
         correlated.append(primary)
@@ -87,9 +88,9 @@ def _logical_rule(finding: Finding) -> str:
     return finding.title.casefold()
 
 
-def _unique(values: list, *, key):
-    seen = set()
-    result = []
+def _unique(values: list[_T], *, key: Callable[[_T], Hashable]) -> list[_T]:
+    seen: set[Hashable] = set()
+    result: list[_T] = []
     for value in values:
         identity = key(value)
         if identity not in seen:
@@ -106,4 +107,3 @@ def _sort_key(finding: Finding) -> tuple[int, str, int, str]:
         location.start_line or 0 if location else 0,
         finding.finding_id,
     )
-
