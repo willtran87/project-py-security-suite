@@ -73,15 +73,15 @@ dogfood baseline completed all 35 applicable adapters; 27 conditional adapters
 were correctly not applicable, with zero unavailable, failed, timed-out, or
 parse-error tools. The externally isolated run correctly produced `FAIL`: two
 high-severity Cosign findings block the intentionally unsigned wheel and source
-distribution, while six medium per-file testing findings identify the remaining
-coverage hotspots after the repository-wide 80% gate passed.
+distribution. No production source file remains below the 80% per-file coverage
+threshold, and the repository-wide coverage gate passes with useful headroom.
 Code security, secrets, dependency-vulnerability, architecture, and quality
 perspectives were clean. No public signing service was contacted for this run.
 The native `doctor` preflight reports 35 ready and 27 not-applicable tools with
 zero disabled or unavailable prerequisites before scanner execution.
 
 The checked report is in
-`.artifacts/final-self-scan-v28`. It includes:
+`.artifacts/final-self-scan-v29`. It includes:
 
 - the GitHub-ready Markdown, HTML, SARIF, SonarQube external-issue, and
   normalized JSON reports;
@@ -94,16 +94,16 @@ The checked report is in
   effectiveness metrics, SSDF claims, and a Security Passport;
 - a checksum manifest that was independently verified after generation.
 
-The source test suite currently records 238 passing tests and one platform-
+The source test suite currently records 249 passing tests and one platform-
 limited symlink test skip. It includes property-test replay and fixtures for all
 adapters, private scanner-home isolation, artifact digest binding, path-
 traversal rejection during distribution expansion, hardened XML evidence
 ingestion, archive-link rejection, governed risk acceptance, database
 freshness, detection validation, repository-health additions, trusted-lane
 evidence validation, and the SonarQube export. Combined line-and-branch
-coverage is 89.47%, so the repository-wide 80% policy gate passes with useful
-headroom. The report
-retains six per-file coverage hotspots as actionable, non-blocking test debt.
+coverage is 90.93%, and branch coverage is 82.80%, so both measures pass the
+80% policy threshold. No production source file remains below the per-file
+coverage reporting threshold.
 
 The companion detection proof is in
 `.artifacts/detection-validation-v7`; its summary confirms six normalized

@@ -497,9 +497,9 @@ The native Windows self-scan process verifies:
   errors; 27 conditional scanners were correctly not applicable;
 - Pylint, Radon, Ruff formatting, coverage, and JUnit adapters executed through
   approved entry-point bindings and emitted normalized derived evidence;
-- the separately generated branch-coverage evidence records 89.47% combined
-  line-and-branch coverage, satisfying the 80% repository gate while retaining
-  six per-file hotspots; JUnit records 238 passing tests,
+- the separately generated branch-coverage evidence records 90.93% combined
+  line-and-branch coverage and 82.80% branch coverage, satisfying both 80%
+  repository gates with no per-file hotspots; JUnit records 249 passing tests,
   one platform-limited symlink skip, and no failures or errors;
 - CycloneDX completed from `uv.lock` through a frozen offline export with a
   hash-verified helper; zizmor, actionlint, Pysa, GuardDog, Flawfinder, and
@@ -513,7 +513,7 @@ The native Windows self-scan process verifies:
   unchanged; and
 - the isolated comprehensive outcome was `FAIL` with exactly two blocking
   Cosign findings for intentionally absent wheel and source-distribution
-  signatures, plus six non-blocking per-file testing-coverage findings; and
+  signatures and no testing-coverage findings; and
 - code security, secrets, dependency-vulnerability, architecture, and quality
   perspectives had no findings. Release remains blocked until an approved
   signing lane supplies bundles for both exact artifact digests.
