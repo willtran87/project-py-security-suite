@@ -315,7 +315,9 @@ deep scan `INCOMPLETE`; `run-codeql` is never permitted to download them.
 - Every finding preserves tool, version, native rule, native severity,
   priority, classifications, location, impact, remediation, and citations.
 - `action-plan.md` provides a compact finding-remediation table and a separate
-  coverage-restoration table with official tool references.
+  coverage-restoration table with official tool references. Applicable
+  execution gaps stay prominent; conditional not-applicable controls remain
+  auditable in a collapsed informational section.
 - `assurance-case.md` records which control areas were verified, partially
   covered, not applicable, or require external release evidence.
 

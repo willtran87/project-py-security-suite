@@ -363,9 +363,12 @@ report/
     `-- osv-scanner.json
 ```
 
-- `summary.md` is optimized for GitHub workflow summaries and rapid triage.
+- `summary.md` is optimized for GitHub workflow summaries and rapid triage; it
+  leads with the scan-policy disposition and separates applicable execution
+  gaps from conditional controls that did not match the repository.
 - `action-plan.md` separates prioritized finding remediation from scanner
-  coverage-restoration work.
+  coverage-restoration work and collapses informational not-applicable rows
+  without removing their reasons, re-enable conditions, or references.
 - `assurance-case.md` states what the static scan demonstrated and identifies
   required artifact, provenance, dynamic-test, and threat-review evidence.
 - `index.html` is a self-contained complete human report.
@@ -499,8 +502,8 @@ The native Windows self-scan process verifies:
   errors; 27 conditional scanners were correctly not applicable;
 - Pylint, Radon, Ruff formatting, coverage, and JUnit adapters executed through
   approved entry-point bindings and emitted normalized derived evidence;
-- the separately generated branch-coverage evidence records 91.07% combined
-  line-and-branch coverage and 83.03% branch coverage, satisfying both 80%
+- the separately generated branch-coverage evidence records 91.19% combined
+  line-and-branch coverage and 83.25% branch coverage, satisfying both 80%
   repository gates with no per-file hotspots; JUnit records 252 passing tests,
   one platform-limited symlink skip, and no failures or errors;
 - CycloneDX completed from `uv.lock` through a frozen offline export with a

@@ -186,25 +186,53 @@ def render_summary(manifest: ScanManifest, findings: list[Finding]) -> str:
         for finding in findings
         if finding.status is not FindingStatus.SUPPRESSED
     ]
-    accepted = len(findings) - len(active_findings)
+    coverage_gaps = _applicable_scanner_gaps(manifest.tools)
+    not_applicable = _not_applicable_scanners(manifest.tools)
+    tool_versions = {run.tool: run.version for run in manifest.tools}
+    lines = _render_summary_header(
+        manifest,
+        active_findings,
+        governed_count=len(findings) - len(active_findings),
+        coverage_gap_count=len(coverage_gaps),
+    )
+    lines.extend(["", "## Decision", ""])
+    lines.extend(f"- {reason}" for reason in manifest.policy_reasons)
+    lines.extend(_render_finding_lifecycle(manifest, active_findings))
+    lines.extend(_render_finding_rollups(active_findings))
+    lines.extend(_render_markdown_findings(active_findings, tool_versions))
+    lines.extend(_render_tool_coverage(manifest.tools, coverage_gaps, not_applicable))
+    lines.extend(_render_coverage_actions(manifest, coverage_gaps, not_applicable))
+    lines.extend(_render_derived_evidence(manifest))
+    lines.extend(_render_triage_workflow(manifest.outcome))
+    return "\n".join(lines)
+
+
+def _render_summary_header(
+    manifest: ScanManifest,
+    active_findings: list[Finding],
+    *,
+    governed_count: int,
+    coverage_gap_count: int,
+) -> list[str]:
     counts = {
         severity.value: sum(finding.severity is severity for finding in active_findings)
         for severity in Severity
     }
-    tool_versions = {run.tool: run.version for run in manifest.tools}
-    lines = [
+    return [
         f"# Security result: {manifest.outcome.value.upper()}",
         "",
         f"- **Scan:** `{_markdown_code(manifest.scan_id)}`",
         f"- **Profile:** `{_markdown_code(manifest.profile)}`",
         f"- **Target:** `{_markdown_code(manifest.target)}`",
-        f"- **Findings:** {len(active_findings)} active, {accepted} governed; "
+        f"- **Scan-policy disposition:** {_policy_disposition(manifest.outcome)}",
+        f"- **Findings:** {len(active_findings)} active, {governed_count} governed; "
         f"{counts.get('critical', 0)} critical, {counts.get('high', 0)} high, "
         f"{counts.get('medium', 0)} medium, {counts.get('low', 0)} low",
         f"- **Applicable scanners completed:** "
         f"{_completed_tools(manifest.tools)}/{_applicable_tools(manifest.tools)}",
         f"- **Not applicable:** "
         f"{len(manifest.tools) - _applicable_tools(manifest.tools)} selected tool(s)",
+        f"- **Applicable scanner execution gaps:** {coverage_gap_count}",
         f"- **Network isolation attested:** "
         f"{'yes' if manifest.network_isolation_attested else 'no'}",
         f"- **Unisolated diagnostic execution:** "
@@ -215,12 +243,12 @@ def render_summary(manifest: ScanManifest, findings: list[Finding]) -> str:
         f"{manifest.inventory.hashed_files} files, "
         f"{manifest.inventory.hashed_bytes} bytes)",
         f"- **Immediate next step:** {_next_action(manifest.outcome)}",
-        "",
-        "## Decision",
-        "",
     ]
-    lines.extend(f"- {reason}" for reason in manifest.policy_reasons)
 
+
+def _render_finding_lifecycle(
+    manifest: ScanManifest, active_findings: list[Finding]
+) -> list[str]:
     lifecycle = {
         status.value: sum(finding.status is status for finding in active_findings)
         for status in (
@@ -234,19 +262,19 @@ def render_summary(manifest: ScanManifest, findings: list[Finding]) -> str:
         if isinstance(manifest.baseline.get("counts"), dict)
         else 0
     )
-    lines.extend(
-        [
-            "",
-            "## Finding lifecycle",
-            "",
-            f"- New: {lifecycle['new']}",
-            f"- Existing: {lifecycle['existing']}",
-            f"- Regressed: {lifecycle['regression']}",
-            f"- Resolved since baseline: {resolved}",
-        ]
-    )
+    return [
+        "",
+        "## Finding lifecycle",
+        "",
+        f"- New: {lifecycle['new']}",
+        f"- Existing: {lifecycle['existing']}",
+        f"- Regressed: {lifecycle['regression']}",
+        f"- Resolved since baseline: {resolved}",
+    ]
 
-    lines.extend(["", "## Findings by domain", ""])
+
+def _render_finding_rollups(active_findings: list[Finding]) -> list[str]:
+    lines = ["", "## Findings by domain", ""]
     lines.append("| Domain | Findings | Blocking |")
     lines.append("|---|---:|---:|")
     for domain, domain_findings in _domain_summary(active_findings):
@@ -270,12 +298,28 @@ def render_summary(manifest: ScanManifest, findings: list[Finding]) -> str:
             f"{area_counts['informational'] + area_counts['unknown']} | "
             f"{area_counts['total']} |"
         )
-    if not findings:
+    if not active_findings:
         lines.append("| No findings | 0 | 0 | 0 | 0 | 0 | 0 |")
+    return lines
 
-    lines.extend(_render_markdown_findings(active_findings, tool_versions))
 
-    lines.extend(["", "## Tool coverage", ""])
+def _render_tool_coverage(
+    tools: list[ToolRun],
+    coverage_gaps: list[ToolRun],
+    not_applicable: list[ToolRun],
+) -> list[str]:
+    lines = [
+        "",
+        "## Tool coverage",
+        "",
+        f"- Applicable scanners: {_applicable_tools(tools)}",
+        f"- Completed scanners: {_completed_tools(tools)}",
+        f"- Applicable execution gaps: {len(coverage_gaps)}",
+        f"- Conditional controls not applicable: {len(not_applicable)}",
+        "",
+        f"<details><summary>All {len(tools)} selected scanner results</summary>",
+        "",
+    ]
     lines.append(
         "| Tool | Version | Applicability | Status | Entry-point integrity | "
         "Findings | Duration |"
@@ -289,11 +333,18 @@ def render_summary(manifest: ScanManifest, findings: list[Finding]) -> str:
             f"{_markdown_table(_executable_integrity_label(run))} | "
             f"{run.finding_count} | {run.duration_seconds:.3f}s |"
         )
-        for run in manifest.tools
+        for run in tools
     )
+    lines.extend(["", "</details>"])
+    return lines
 
-    gaps = [run for run in manifest.tools if run.status.value != "completed"]
-    lines.extend(["", "## Coverage gaps and actions", ""])
+
+def _render_coverage_actions(
+    manifest: ScanManifest,
+    coverage_gaps: list[ToolRun],
+    not_applicable: list[ToolRun],
+) -> list[str]:
+    lines = ["", "## Coverage gaps and actions", ""]
     lines.append("| Tool | Status | Reason | Required action | Reference |")
     lines.append("|---|---|---|---|---|")
     lines.extend(
@@ -304,11 +355,36 @@ def render_summary(manifest: ScanManifest, findings: list[Finding]) -> str:
             f"{_markdown_table(_coverage_action(run, manifest))} | "
             f"{_markdown_tool_reference(run.tool)} |"
         )
-        for run in gaps
+        for run in coverage_gaps
     )
-    if not gaps:
-        lines.append("| All selected tools | completed | - | No action | - |")
+    if not coverage_gaps:
+        lines.append("| All applicable tools | completed | - | No action | - |")
 
+    if not_applicable:
+        lines.extend(
+            [
+                "",
+                f"<details><summary>{len(not_applicable)} not-applicable controls "
+                "(informational)</summary>",
+                "",
+                "| Tool | Reason | Re-enable condition | Reference |",
+                "|---|---|---|---|",
+            ]
+        )
+        lines.extend(
+            (
+                f"| {_markdown_table(run.tool)} | "
+                f"{_markdown_table(run.error or 'No diagnostic supplied')} | "
+                f"{_markdown_table(_coverage_action(run, manifest))} | "
+                f"{_markdown_tool_reference(run.tool)} |"
+            )
+            for run in not_applicable
+        )
+        lines.extend(["", "</details>"])
+    return lines
+
+
+def _render_derived_evidence(manifest: ScanManifest) -> list[str]:
     derived = [
         value
         for key, value in manifest.artifacts.items()
@@ -325,34 +401,37 @@ def render_summary(manifest: ScanManifest, findings: list[Finding]) -> str:
             "assurance_case",
         }
     ]
-    if derived:
-        lines.extend(["", "## Derived assurance evidence", ""])
-        lines.extend(
+    if not derived:
+        return []
+    return [
+        "",
+        "## Derived assurance evidence",
+        "",
+        *(
             f"- [`{_markdown_code(value)}`]({_markdown_code(value)})"
             for value in derived
-        )
+        ),
+    ]
 
-    lines.extend(
-        [
-            "## Triage workflow",
-            "",
-            _next_action(manifest.outcome),
-            "",
-            "1. Open the cited location and validate whether the scanner's premise "
-            + "is true in this execution context.",
-            "2. Choose a disposition: fix, accepted risk, false positive, or "
-            + "approved suppression.",
-            "3. Record the owner and rationale in the repository's normal review "
-            + "system.",
-            "4. Rerun the isolated suite and confirm the finding ID is resolved or "
-            + "intentionally governed.",
-            "",
-            "The downloadable artifact contains detailed findings, citations, "
-            + "tool health, the scan manifest, sanitized diagnostics, and checksums.",
-            "",
-        ]
-    )
-    return "\n".join(lines)
+
+def _render_triage_workflow(outcome: Outcome) -> list[str]:
+    return [
+        "## Triage workflow",
+        "",
+        _next_action(outcome),
+        "",
+        "1. Open the cited location and validate whether the scanner's premise "
+        + "is true in this execution context.",
+        "2. Choose a disposition: fix, accepted risk, false positive, or "
+        + "approved suppression.",
+        "3. Record the owner and rationale in the repository's normal review system.",
+        "4. Rerun the isolated suite and confirm the finding ID is resolved or "
+        + "intentionally governed.",
+        "",
+        "The downloadable artifact contains detailed findings, citations, tool "
+        + "health, the scan manifest, sanitized diagnostics, and checksums.",
+        "",
+    ]
 
 
 def _render_markdown_findings(
@@ -420,12 +499,19 @@ def _render_markdown_findings(
 
 
 def render_action_plan(manifest: ScanManifest, findings: list[Finding]) -> str:
+    coverage_gaps = _applicable_scanner_gaps(manifest.tools)
+    not_applicable = _not_applicable_scanners(manifest.tools)
+    blocking = sum(1 for finding in findings if finding.blocking)
     lines = [
         "# Security action plan",
         "",
         f"- **Scan:** `{_markdown_code(manifest.scan_id)}`",
         f"- **Outcome:** `{_markdown_code(manifest.outcome.value)}`",
         f"- **Profile:** `{_markdown_code(manifest.profile)}`",
+        f"- **Scan-policy disposition:** {_policy_disposition(manifest.outcome)}",
+        f"- **Blocking findings:** {blocking}",
+        f"- **Applicable scanner execution gaps:** {len(coverage_gaps)}",
+        f"- **Conditional controls not applicable:** {len(not_applicable)}",
         f"- **Immediate next step:** {_next_action(manifest.outcome)}",
         "",
         "## Finding actions",
@@ -461,7 +547,6 @@ def render_action_plan(manifest: ScanManifest, findings: list[Finding]) -> str:
             "|---|---|---|---|---|---|",
         ]
     )
-    gaps = [run for run in manifest.tools if run.status.value != "completed"]
     lines.extend(
         (
             f"| {_markdown_table(run.tool)} | "
@@ -471,12 +556,33 @@ def render_action_plan(manifest: ScanManifest, findings: list[Finding]) -> str:
             f"{_markdown_table(_coverage_action(run, manifest))} | "
             f"{_markdown_tool_reference(run.tool)} |"
         )
-        for run in gaps
+        for run in coverage_gaps
     )
-    if not gaps:
+    if not coverage_gaps:
         lines.append(
-            "| All selected tools | applicable | completed | - | No action | - |"
+            "| All applicable tools | applicable | completed | - | No action | - |"
         )
+    if not_applicable:
+        lines.extend(
+            [
+                "",
+                f"<details><summary>{len(not_applicable)} not-applicable controls "
+                "(informational)</summary>",
+                "",
+                "| Tool | Reason | Re-enable condition | Reference |",
+                "|---|---|---|---|",
+            ]
+        )
+        lines.extend(
+            (
+                f"| {_markdown_table(run.tool)} | "
+                f"{_markdown_table(run.error or 'No diagnostic supplied')} | "
+                f"{_markdown_table(_coverage_action(run, manifest))} | "
+                f"{_markdown_tool_reference(run.tool)} |"
+            )
+            for run in not_applicable
+        )
+        lines.extend(["", "</details>"])
     lines.extend(
         [
             "",
@@ -1497,6 +1603,16 @@ def _applicable_tools(tools: list[ToolRun]) -> int:
     return sum(1 for tool in tools if tool.applicable)
 
 
+def _applicable_scanner_gaps(tools: list[ToolRun]) -> list[ToolRun]:
+    return [
+        tool for tool in tools if tool.applicable and tool.status.value != "completed"
+    ]
+
+
+def _not_applicable_scanners(tools: list[ToolRun]) -> list[ToolRun]:
+    return [tool for tool in tools if not tool.applicable]
+
+
 def _executable_integrity_label(run: ToolRun) -> str:
     primary = _integrity_label(
         run.executable_sha256,
@@ -1538,11 +1654,22 @@ def _next_action(outcome: Outcome) -> str:
     return {
         Outcome.PASS: "No policy-blocking action is required.",
         Outcome.WARN: "Review the non-blocking findings and record disposition.",
-        Outcome.FAIL: "Remediate new blocking findings before merge.",
+        Outcome.FAIL: (
+            "Remediate or govern blocking findings, then rerun before release or merge."
+        ),
         Outcome.INCOMPLETE: (
             "Restore required scanner coverage or isolation evidence, then rerun; "
             "do not interpret this result as clean."
         ),
+    }[outcome]
+
+
+def _policy_disposition(outcome: Outcome) -> str:
+    return {
+        Outcome.PASS: "`ALLOW`",
+        Outcome.WARN: "`REVIEW`",
+        Outcome.FAIL: "`BLOCK`",
+        Outcome.INCOMPLETE: "`BLOCK` (incomplete evidence)",
     }[outcome]
 
 

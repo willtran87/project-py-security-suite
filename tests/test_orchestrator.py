@@ -21,6 +21,7 @@ from py_security_suite.models import (
 )
 from py_security_suite.orchestrator import scan_project
 from py_security_suite.passport import verify_report
+from py_security_suite.reports import render_action_plan, render_summary
 
 
 class FakeBandit(ScannerAdapter):
@@ -194,6 +195,7 @@ class OrchestratorTests(unittest.TestCase):
             self.assertIn("# Security action plan", action_plan)
             self.assertIn("bandit/B602", action_plan)
             self.assertIn("## Policy and release-evidence actions", action_plan)
+            self.assertIn("**Scan-policy disposition:** `BLOCK`", action_plan)
             self.assertIn("# Production security assurance case", assurance_case)
             self.assertIn("Built artifact integrity and provenance", assurance_case)
             self.assertIn("Dynamic, API, and runtime behavior", assurance_case)
@@ -252,6 +254,40 @@ class OrchestratorTests(unittest.TestCase):
             physical = sarif_result["locations"][0]["physicalLocation"]
             self.assertIn("subprocess.run", physical["region"]["snippet"]["text"])
             self.assertEqual(physical["contextRegion"]["startLine"], 5)
+
+            result.manifest.tools.extend(
+                [
+                    ToolRun(
+                        tool="required-offline",
+                        status=ToolStatus.UNAVAILABLE,
+                        command=["required-offline"],
+                        duration_seconds=0.0,
+                        error="approved executable is missing",
+                    ),
+                    ToolRun(
+                        tool="conditional-offline",
+                        status=ToolStatus.SKIPPED,
+                        command=["conditional-offline"],
+                        duration_seconds=0.0,
+                        error="no matching project content was found",
+                        applicable=False,
+                    ),
+                ]
+            )
+            prioritized_summary = render_summary(result.manifest, result.findings)
+            prioritized_plan = render_action_plan(result.manifest, result.findings)
+            self.assertIn("Applicable scanner execution gaps:** 1", prioritized_summary)
+            self.assertIn("Conditional controls not applicable: 1", prioritized_summary)
+            self.assertIn("<summary>1 not-applicable controls", prioritized_summary)
+            actionable, informational = prioritized_plan.split("<details>", 1)
+            self.assertIn("required-offline", actionable)
+            self.assertNotIn("conditional-offline", actionable)
+            self.assertIn("conditional-offline", informational)
+            result.manifest.artifacts = {}
+            self.assertNotIn(
+                "## Derived assurance evidence",
+                render_summary(result.manifest, result.findings),
+            )
 
     def test_missing_isolation_attestation_still_writes_incomplete_report(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

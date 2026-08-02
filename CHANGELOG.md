@@ -11,7 +11,7 @@ for published releases.
 - Expanded the suite to 252 passing tests while preserving actionable per-file
   coverage reporting in consolidated reports.
 - Resolved four consecutive reports' lowest-coverage files, raised combined
-  line-and-branch coverage to 91.07%, and added runtime-guard coverage for
+  line-and-branch coverage to 91.19%, and added runtime-guard coverage for
   offline linters, staging, Pysa, Trivy, Cosign, artifact scanners, passive
   evidence adapters, cross-tool finding correlation, offline databases,
   applicability decisions, malformed evidence, temporary-file cleanup, SARIF
@@ -24,6 +24,12 @@ for published releases.
 - Corrected Grype freshness preflight to read its authoritative internal
   `db_metadata.build_timestamp` instead of the later filesystem modification
   time, preventing a stale cache from failing only after scanner execution.
+- Reworked Markdown triage so the scan-policy disposition, blocking findings,
+  and applicable scanner execution gaps appear first; conditional controls
+  remain fully auditable in a collapsed informational section.
+- Split summary rendering into focused report sections, keeping the public
+  artifact contract stable while reducing `render_summary` from Radon rank E
+  during dogfooding to rank A in the final implementation.
 
 ### Added
 

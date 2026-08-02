@@ -264,6 +264,10 @@ or detected secret values.
 `scan-manifest.json`, `summary.md`, and `index.html` expose target-content
 integrity and per-tool entry-point integrity. The CodeQL record separately
 binds its `run-codeql` wrapper and the governed CodeQL CLI helper.
+The Markdown reports lead with an explicit `ALLOW`, `REVIEW`, or `BLOCK`
+scan-policy disposition. Applicable scanner failures remain in the primary
+action table, while not-applicable conditional controls are retained in a
+collapsed, auditable section so they do not obscure remediation work.
 
 Each normalized finding identifies its security or quality domain, scanner
 version and native rule, stable finding ID, priority, location, area,

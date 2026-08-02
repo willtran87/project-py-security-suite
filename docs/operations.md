@@ -477,6 +477,10 @@ scanner and rule, classification links, impact, and recommended action.
 `summary.md` carries the same first 20 actionable findings into the GitHub job
 summary. Secret-bearing content is deliberately absent from every format; use
 the protected checkout and cited line when validating a secret finding.
+Both Markdown views put the scan-policy disposition and applicable execution
+gaps before conditional controls. Expand the not-applicable section during
+coverage review to confirm each reason and the condition that would re-enable
+the control.
 
 Before committing runner time to a production scan, perform the same offline
 readiness assessment against the target and governed configuration:
