@@ -499,6 +499,14 @@ class PassportTests(unittest.TestCase):
                 )
             with self.assertRaisesRegex(ValueError, "already exists"):
                 create_attestation(report=report, output=passport, signing_key=None)
+            unbound = verify_attestation(
+                passport=passport,
+                report=None,
+                public_key=None,
+                allow_unsigned=True,
+            )
+            self.assertIsNone(unbound["report_integrity_verified"])
+            self.assertIn("source_report_not_verified", unbound["release_blockers"])
 
     def test_unsigned_passport_verifies_report_and_detects_tampering(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -520,6 +528,17 @@ class PassportTests(unittest.TestCase):
             )
             self.assertTrue(verified["verified"])
             self.assertTrue(verified["integrity_only"])
+            self.assertEqual(verified["verification_status"], "verified")
+            self.assertEqual(verified["verification_scope"], "integrity-only")
+            self.assertTrue(verified["passport_integrity_verified"])
+            self.assertTrue(verified["report_integrity_verified"])
+            self.assertEqual(verified["authenticity_status"], "not_verified")
+            self.assertTrue(verified["policy_passed"])
+            self.assertEqual(verified["policy_verification_result"], "PASSED")
+            self.assertEqual(verified["release_decision"], "not_approved")
+            self.assertEqual(
+                verified["release_blockers"], ["signer_authenticity_not_verified"]
+            )
             (passport / "security-passport.json").write_text("{}", encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "checksum mismatch"):
                 verify_attestation(
@@ -588,6 +607,48 @@ class PassportTests(unittest.TestCase):
                 )
             self.assertTrue(verified["authentic"])
             self.assertFalse(verified["integrity_only"])
+            self.assertEqual(
+                verified["verification_scope"], "authenticity-and-integrity"
+            )
+            self.assertEqual(verified["authenticity_status"], "verified")
+            self.assertTrue(verified["policy_passed"])
+            self.assertEqual(verified["release_decision"], "approved")
+            self.assertEqual(verified["release_blockers"], [])
+
+    def test_verified_failed_policy_is_not_mislabeled_as_integrity_failure(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            report = _fixture_report(root)
+            statement_path = report / "security-passport.json"
+            statement = json.loads(statement_path.read_text(encoding="utf-8"))
+            statement["predicate"]["verificationResult"] = "FAILED"
+            statement["predicate"]["pysec"]["outcome"] = "fail"
+            statement_path.write_text(json.dumps(statement), encoding="utf-8")
+            manifest_path = report / "scan-manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["outcome"] = "fail"
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            _write_checksums(report)
+            passport = root / "passport"
+            create_attestation(report=report, output=passport, signing_key=None)
+            verified = verify_attestation(
+                passport=passport,
+                report=report,
+                public_key=None,
+                allow_unsigned=True,
+            )
+        self.assertTrue(verified["verified"])
+        self.assertTrue(verified["report_integrity_verified"])
+        self.assertFalse(verified["policy_passed"])
+        self.assertEqual(verified["policy_verification_result"], "FAILED")
+        self.assertEqual(verified["outcome"], "fail")
+        self.assertEqual(verified["release_decision"], "not_approved")
+        self.assertEqual(
+            verified["release_blockers"],
+            ["signer_authenticity_not_verified", "scan_policy_not_satisfied"],
+        )
 
     def test_cosign_v3_signing_fails_closed_without_network_approval(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

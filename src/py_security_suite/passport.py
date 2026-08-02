@@ -387,15 +387,39 @@ def verify_attestation(
         if report_verification["checksums_sha256"] != expected:
             raise ValueError("report checksum manifest does not match the passport")
         _verify_statement_inputs(statement, report.expanduser().resolve())
+    policy_verification_result = str(statement["predicate"]["verificationResult"])
+    policy_passed = policy_verification_result == "PASSED"
+    release_blockers: list[str] = []
+    if not authentic:
+        release_blockers.append("signer_authenticity_not_verified")
+    if report_verification is None:
+        release_blockers.append("source_report_not_verified")
+    if not policy_passed:
+        release_blockers.append("scan_policy_not_satisfied")
     return {
         "schema_version": "1.0",
         "verified": True,
+        "verification_status": "verified",
+        "verification_scope": (
+            "authenticity-and-integrity" if authentic else "integrity-only"
+        ),
+        "passport_integrity_verified": True,
+        "report_integrity_verified": (
+            None if report_verification is None else report_verification["verified"]
+        ),
         "authentic": authentic,
+        "authenticity_status": "verified" if authentic else "not_verified",
         "integrity_only": not authentic,
         "passport_files_verified": verified_files,
         "report": report_verification,
-        "verification_result": statement["predicate"]["verificationResult"],
+        # Retain the original name for API compatibility. This is the SLSA
+        # policy result, not the outcome of checksum or signature verification.
+        "verification_result": policy_verification_result,
+        "policy_verification_result": policy_verification_result,
+        "policy_passed": policy_passed,
         "outcome": statement["predicate"]["pysec"]["outcome"],
+        "release_decision": "approved" if not release_blockers else "not_approved",
+        "release_blockers": release_blockers,
     }
 
 

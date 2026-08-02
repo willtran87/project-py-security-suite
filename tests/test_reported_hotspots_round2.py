@@ -1,14 +1,19 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import tempfile
 import unittest
-from contextlib import nullcontext
+from contextlib import closing, nullcontext
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
 from py_security_suite.adapters.diff_cover import DiffCoverAdapter, _integer, _number
-from py_security_suite.adapters.grype import GrypeAdapter
+from py_security_suite.adapters.grype import (
+    GrypeAdapter,
+    _grype_database_freshness_error,
+)
 from py_security_suite.adapters.mypy import MypyAdapter
 from py_security_suite.adapters.psscriptanalyzer import (
     PSScriptAnalyzerAdapter,
@@ -392,6 +397,57 @@ class EvidenceAndArtifactAdapterTests(unittest.TestCase):
         finding = adapter.parse(payload, self.root)[0]
         self.assertIn("2.0", finding.remediation)
         self.assertEqual(finding.locations[0].path, "<artifact>")
+
+    def test_grype_freshness_uses_internal_build_timestamp(self) -> None:
+        database_root = self.root / "grype-db"
+        database_root.mkdir()
+        self.assertIn(
+            "was not found",
+            _grype_database_freshness_error(database_root, 10) or "",
+        )
+        database = database_root / "vulnerability.db"
+        with closing(sqlite3.connect(database)) as connection:
+            connection.execute(
+                "CREATE TABLE db_metadata (build_timestamp datetime NOT NULL)"
+            )
+            connection.commit()
+        self.assertIn(
+            "metadata is invalid",
+            _grype_database_freshness_error(database_root, 10) or "",
+        )
+        with closing(sqlite3.connect(database)) as connection:
+            connection.execute(
+                "INSERT INTO db_metadata VALUES (?)", (datetime.now(UTC).isoformat(),)
+            )
+            connection.commit()
+        configured = GrypeAdapter(ToolConfig(database_path=database_root), 4096)
+        self.assertIsNone(configured.prerequisite_error())
+        naive = datetime.now(UTC).replace(tzinfo=None).isoformat()
+        with closing(sqlite3.connect(database)) as connection:
+            connection.execute("UPDATE db_metadata SET build_timestamp = ?", (naive,))
+            connection.commit()
+        self.assertIsNone(_grype_database_freshness_error(database_root, 10))
+        stale = (datetime.now(UTC) - timedelta(days=11)).isoformat()
+        with closing(sqlite3.connect(database)) as connection:
+            connection.execute("UPDATE db_metadata SET build_timestamp = ?", (stale,))
+            connection.commit()
+        self.assertIn(
+            "11.0 days old",
+            _grype_database_freshness_error(database_root, 10) or "",
+        )
+        future = (datetime.now(UTC) + timedelta(days=2)).isoformat()
+        with closing(sqlite3.connect(database)) as connection:
+            connection.execute("UPDATE db_metadata SET build_timestamp = ?", (future,))
+            connection.commit()
+        self.assertIn(
+            "future", _grype_database_freshness_error(database_root, 10) or ""
+        )
+        duplicate = database_root / "nested" / "vulnerability.db"
+        duplicate.parent.mkdir()
+        duplicate.write_bytes(b"invalid")
+        self.assertIn(
+            "exactly one", _grype_database_freshness_error(database_root, 10) or ""
+        )
 
     def test_pypi_attestation_preflight_environment_and_run_outcomes(self) -> None:
         config = ToolConfig(

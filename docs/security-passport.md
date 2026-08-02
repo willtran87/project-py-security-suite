@@ -1,6 +1,6 @@
 # Security Passport, intelligence, and lifecycle evidence
 
-Last reviewed: 2026-08-01
+Last reviewed: 2026-08-02
 
 ## Objective
 
@@ -131,6 +131,30 @@ pysec verify PASSPORT --report REPORT \
   --public-key APPROVED_PUBLIC_KEY \
   --cosign-executable APPROVED_COSIGN \
   --cosign-sha256 APPROVED_COSIGN_SHA256
+```
+
+Add `--format text` for a concise operator decision. JSON remains the default
+for integrations. Verification output deliberately separates five concepts:
+
+| Field | Meaning |
+|---|---|
+| `verification_status` | Passport checksum and structure verification completed |
+| `verification_scope` | `integrity-only` or `authenticity-and-integrity` |
+| `report_integrity_verified` | The supplied source report and every bound input digest verified |
+| `policy_verification_result` | The SLSA policy result: `PASSED` or `FAILED` |
+| `release_decision` | `approved` only when authenticity, source-report verification, and policy all pass |
+
+The legacy `verification_result` field is retained and remains an alias for the
+SLSA policy result. It does not describe checksum or signature verification.
+`release_blockers` explains every unmet approval condition using stable,
+machine-readable identifiers.
+
+For example, a valid unsigned passport bound to a failing report produces:
+
+```text
+VERIFIED (integrity only): 2 passport files; 88 report files
+Policy: FAIL (FAILED); release decision: NOT APPROVED
+Blockers: signer authenticity not verified; scan policy not satisfied
 ```
 
 `pysec attest ... --unsigned` is an approval-handoff operation.

@@ -305,12 +305,16 @@ pysec verify .artifacts\release-passport `
   --report .artifacts\release-scan `
   --public-key C:\trust\release.pub `
   --cosign-executable C:\approved\cosign.exe `
-  --cosign-sha256 APPROVED_COSIGN_SHA256
+  --cosign-sha256 APPROVED_COSIGN_SHA256 `
+  --format text
 ```
 
 `--unsigned` and `--allow-unsigned` support a clearly labeled integrity-only
 handoff; they never claim signer authenticity. See the
 [Security Passport and risk intelligence guide](docs/security-passport.md).
+The verification response separates transport integrity, signer authenticity,
+source-report verification, policy outcome, and release approval so a valid
+passport for a blocked scan is never mislabeled as an integrity failure.
 `action-plan.md` separates
 finding remediation from scanner-coverage restoration and policy evidence.
 `assurance-case.md` distinguishes evidence demonstrated by the scan from

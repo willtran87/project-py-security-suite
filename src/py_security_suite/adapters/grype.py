@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import tempfile
+from contextlib import closing
+from datetime import UTC, datetime
 from pathlib import Path
 
 from ..execution import CommandEnvironment
@@ -20,7 +23,7 @@ from .artifacts import (
     extracted_distribution_tree,
 )
 from .base import AdapterResult, ScannerAdapter
-from .common import database_freshness_error, map_severity
+from .common import map_severity
 
 
 class GrypeAdapter(ScannerAdapter):
@@ -38,9 +41,8 @@ class GrypeAdapter(ScannerAdapter):
             return "a staged offline Grype database directory is required"
         if not database.expanduser().resolve().is_dir():
             return f"Grype database directory does not exist: {database}"
-        return database_freshness_error(
+        return _grype_database_freshness_error(
             database.expanduser().resolve(),
-            "vulnerability.db",
             self.config.maximum_database_age_days,
         )
 
@@ -180,3 +182,40 @@ class GrypeAdapter(ScannerAdapter):
                 )
             )
         return findings
+
+
+def _grype_database_freshness_error(root: Path, maximum_age_days: float) -> str | None:
+    candidates = sorted(
+        path
+        for path in root.rglob("vulnerability.db")
+        if path.is_file() and not path.is_symlink()
+    )
+    if not candidates:
+        return "offline Grype database 'vulnerability.db' was not found"
+    if len(candidates) != 1:
+        return "offline Grype cache must contain exactly one vulnerability.db"
+    database = candidates[0]
+    try:
+        uri = f"{database.as_uri()}?mode=ro"
+        with closing(sqlite3.connect(uri, uri=True, timeout=1.0)) as connection:
+            row = connection.execute(
+                "SELECT build_timestamp FROM db_metadata LIMIT 1"
+            ).fetchone()
+        if row is None or not row[0]:
+            raise ValueError("build timestamp is missing")
+        built_at = datetime.fromisoformat(str(row[0]).replace("Z", "+00:00"))
+        if built_at.tzinfo is None:
+            built_at = built_at.replace(tzinfo=UTC)
+        age_days = (
+            datetime.now(UTC) - built_at.astimezone(UTC)
+        ).total_seconds() / 86400
+    except (OSError, sqlite3.Error, ValueError) as exc:
+        return f"offline Grype database metadata is invalid: {type(exc).__name__}"
+    if age_days < -1:
+        return "offline Grype database build timestamp is unexpectedly in the future"
+    if age_days > maximum_age_days:
+        return (
+            f"offline Grype database is {age_days:.1f} days old; "
+            f"maximum allowed age is {maximum_age_days:g} days"
+        )
+    return None

@@ -12,6 +12,7 @@ from py_security_suite.cli import (
     _append_github_summary,
     _is_suite_report,
     _prepare_output,
+    _render_attestation_verification,
     build_parser,
     main,
 )
@@ -42,8 +43,11 @@ class CliSafetyTests(unittest.TestCase):
             ]
         )
         self.assertTrue(connected_attest.allow_signing_network)
-        verify = parser.parse_args(["verify", "passport", "--allow-unsigned"])
+        verify = parser.parse_args(
+            ["verify", "passport", "--allow-unsigned", "--format", "text"]
+        )
         self.assertEqual(verify.command, "verify")
+        self.assertEqual(verify.format, "text")
         doctor = parser.parse_args(["doctor", ".", "--format", "json"])
         self.assertEqual(doctor.command, "doctor")
         verify_report = parser.parse_args(["verify-report", "report"])
@@ -97,6 +101,38 @@ class CliSafetyTests(unittest.TestCase):
         ):
             self.assertEqual(main(["verify-report", "report", "--format", "json"]), 0)
         self.assertTrue(json.loads(output.call_args.args[0])["verified"])
+
+    def test_passport_verification_text_separates_integrity_policy_and_approval(
+        self,
+    ) -> None:
+        verification: dict[str, object] = {
+            "verification_scope": "integrity-only",
+            "passport_files_verified": 2,
+            "report": {"file_count": 88},
+            "outcome": "fail",
+            "policy_verification_result": "FAILED",
+            "release_decision": "not_approved",
+            "release_blockers": [
+                "signer_authenticity_not_verified",
+                "scan_policy_not_satisfied",
+            ],
+        }
+        rendered = _render_attestation_verification(verification)
+        self.assertIn("VERIFIED (integrity only)", rendered)
+        self.assertIn("Policy: FAIL (FAILED)", rendered)
+        self.assertIn("release decision: NOT APPROVED", rendered)
+        self.assertIn("signer authenticity not verified", rendered)
+
+        with (
+            patch(
+                "py_security_suite.cli.verify_attestation",
+                return_value=verification,
+            ),
+            patch("builtins.print") as output,
+        ):
+            code = main(["verify", "passport", "--format", "text"])
+        self.assertEqual(code, 0)
+        self.assertEqual(output.call_args.args[0], rendered)
 
     def test_inspect_report_supports_text_output(self) -> None:
         inspection = {

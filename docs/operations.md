@@ -70,9 +70,11 @@ validate every JSON record, review additions and removals, update the approved
 digest, and rebuild the bundle. A checksum mismatch stops preparation.
 
 The runtime accepts a Grype database for at most ten days from its build time,
-allowing a bounded approval and transfer window. An older database fails the
-scan; rebuild and reapprove the native bundle instead of disabling age
-validation.
+allowing a bounded approval and transfer window. Preflight reads the database's
+authoritative `db_metadata.build_timestamp`; it does not trust the later file
+copy or extraction timestamp. An older or malformed database is unavailable
+before execution and makes the policy result `INCOMPLETE`; refresh, rebuild,
+and reapprove the native bundle instead of disabling age validation.
 
 REUSE 6.2.0 is published as source. The connected preparation lane builds its
 pinned source distribution into a wheel and places that wheel and its resolved

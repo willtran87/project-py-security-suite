@@ -139,6 +139,12 @@ def build_parser() -> argparse.ArgumentParser:
     verify.add_argument("--cosign-executable", default="cosign")
     verify.add_argument("--cosign-sha256", default="")
     verify.add_argument("--allow-unsigned", action="store_true")
+    verify.add_argument(
+        "--format",
+        choices=("json", "text"),
+        default="json",
+        help="machine-readable JSON or concise operator text",
+    )
 
     verify_report_parser = subparsers.add_parser(
         "verify-report", help="verify a generated report checksum chain"
@@ -220,7 +226,11 @@ def main(argv: list[str] | None = None) -> int:
                 cosign_sha256=args.cosign_sha256,
                 allow_unsigned=args.allow_unsigned,
             )
-            print(json.dumps(verification, sort_keys=True))
+            print(
+                _render_attestation_verification(verification)
+                if args.format == "text"
+                else json.dumps(verification, sort_keys=True)
+            )
             return 0
         if args.command == "verify-report":
             verification = verify_report(args.report)
@@ -332,3 +342,31 @@ def _append_github_summary(summary: Path) -> None:
     with Path(destination).open("a", encoding="utf-8", newline="\n") as handle:
         handle.write(summary.read_text(encoding="utf-8"))
         handle.write("\n")
+
+
+def _render_attestation_verification(verification: dict[str, object]) -> str:
+    scope = str(verification.get("verification_scope") or "unknown").replace("-", " ")
+    passport_files = int(str(verification.get("passport_files_verified") or 0))
+    report = verification.get("report")
+    report_detail = "source report not supplied"
+    if isinstance(report, dict):
+        report_detail = f"{int(report.get('file_count') or 0)} report files"
+    outcome = str(verification.get("outcome") or "unknown").upper()
+    policy = str(
+        verification.get("policy_verification_result")
+        or verification.get("verification_result")
+        or "UNKNOWN"
+    )
+    decision = str(verification.get("release_decision") or "not_approved").replace(
+        "_", " "
+    )
+    lines = [
+        f"VERIFIED ({scope}): {passport_files} passport files; {report_detail}",
+        f"Policy: {outcome} ({policy}); release decision: {decision.upper()}",
+    ]
+    blockers = verification.get("release_blockers")
+    if isinstance(blockers, list) and blockers:
+        lines.append(
+            "Blockers: " + "; ".join(str(value).replace("_", " ") for value in blockers)
+        )
+    return "\n".join(lines)

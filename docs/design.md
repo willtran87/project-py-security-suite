@@ -436,7 +436,9 @@ See [configuration.md](configuration.md) for the complete supported schema.
   changed source or distribution artifact makes the result `INCOMPLETE`.
 - Native package installation uses `pip --no-index`.
 - OSV-Scanner requires a local advisory database and disables resolution.
-- OSV and Grype reject missing or older-than-policy database markers.
+- OSV rejects missing or older-than-policy database markers; Grype reads the
+  authoritative internal database build timestamp so copied stale databases
+  cannot appear fresh from their filesystem metadata.
 - `uv.lock` is exported with hash-verified `uv --frozen --offline`; the
   temporary pinned graph is converted by CycloneDX without dependency access.
 - Semgrep uses local rules with metrics and version checks disabled.
@@ -497,9 +499,9 @@ The native Windows self-scan process verifies:
   errors; 27 conditional scanners were correctly not applicable;
 - Pylint, Radon, Ruff formatting, coverage, and JUnit adapters executed through
   approved entry-point bindings and emitted normalized derived evidence;
-- the separately generated branch-coverage evidence records 90.93% combined
-  line-and-branch coverage and 82.80% branch coverage, satisfying both 80%
-  repository gates with no per-file hotspots; JUnit records 249 passing tests,
+- the separately generated branch-coverage evidence records 91.07% combined
+  line-and-branch coverage and 83.03% branch coverage, satisfying both 80%
+  repository gates with no per-file hotspots; JUnit records 252 passing tests,
   one platform-limited symlink skip, and no failures or errors;
 - CycloneDX completed from `uv.lock` through a frozen offline export with a
   hash-verified helper; zizmor, actionlint, Pysa, GuardDog, Flawfinder, and

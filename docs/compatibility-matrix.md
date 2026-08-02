@@ -1,6 +1,6 @@
 # Python Security Suite compatibility and coverage matrix
 
-Last reviewed: 2026-08-01
+Last reviewed: 2026-08-02
 
 See the [documentation index](index.md), [solution design](design.md), and
 [operations guide](operations.md) for the surrounding architecture.
@@ -26,7 +26,8 @@ imported runtime.
 OSV and Grype additionally reject missing or older-than-policy database
 markers. The default maximum is ten days and can only be adjusted through
 `maximum_database_age_days`; Grype receives the same limit in its native
-environment.
+environment and validates the database's internal build timestamp rather than
+its filesystem modification time.
 
 Governed risk acceptances use exact finding fingerprints, optional finding-ID
 binding, an approved ledger SHA-256, required owner/rationale, and an expiry no
