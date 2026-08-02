@@ -74,9 +74,11 @@ governance without running a scanner or importing target code:
 pysec doctor PATH_TO_PROJECT --config pysec.toml --profile production
 ```
 
-`READY` means the applicable prerequisites are present; it does not replace the
-scan or create the required external network boundary. Use `--format json` for
-CI and inventory automation.
+`READY` and `PROCEED TO ISOLATED SCAN` mean every applicable required
+prerequisite is present. Optional tools that need attention remain visible but
+do not create a false required-tool blocker. This preflight decision never
+replaces the scan, the external network boundary, or release approval. Use
+`--format json` for CI and inventory automation.
 
 After a scan, verify and understand the result from one concise command:
 

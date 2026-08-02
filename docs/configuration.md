@@ -265,9 +265,14 @@ pysec --version
 `doctor` performs a non-executing prerequisite assessment and exits `0` when
 all applicable required tools and governed context files are ready, `2` when
 readiness is incomplete, and `3` for invalid invocation or configuration. Its
-JSON form is stable automation input. It does not run scanner version commands,
-execute target code, attest network isolation, or predict the policy outcome of
-the eventual scan.
+JSON form is stable automation input. The structured `decision` distinguishes a
+preflight `proceed` from `block`, lists required-tool and governed-context
+blocking reasons, and always sets `release_approval` to false. `summary`
+separates selected, applicable, required-ready, not-applicable, and
+attention-needed counts; `optional_attention_tools` remains visible without
+blocking the run. Doctor does not run scanner version commands, execute target
+code, attest network isolation, or predict the policy outcome of the eventual
+scan.
 
 `inspect` verifies the report checksum chain before reading normalized JSON.
 Its JSON form retains `policy_reasons` for compatibility and adds structured

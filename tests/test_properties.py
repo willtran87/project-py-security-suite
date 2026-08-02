@@ -56,6 +56,7 @@ class SecurityPropertyTests(unittest.TestCase):
             len(cast(list[object], document["findings"])),
         )
 
+    @settings(deadline=None)
     @given(_SEGMENTS)
     def test_normalize_repo_path_preserves_only_in_target_paths(
         self, segments: list[str]
@@ -65,6 +66,7 @@ class SecurityPropertyTests(unittest.TestCase):
             relative = Path(*segments)
             self.assertEqual(normalize_repo_path(target, relative), relative.as_posix())
 
+    @settings(deadline=None)
     @given(st.text(alphabet="abcdefghijklmnopqrstuvwxyz", min_size=1, max_size=24))
     def test_normalize_repo_path_rejects_relative_traversal(
         self, filename: str
@@ -77,6 +79,7 @@ class SecurityPropertyTests(unittest.TestCase):
                 "<outside-target>",
             )
 
+    @settings(deadline=None)
     @given(
         tool=st.text(min_size=16, max_size=50),
         rule=st.text(min_size=16, max_size=50),

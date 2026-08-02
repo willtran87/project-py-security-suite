@@ -492,8 +492,12 @@ readiness assessment against the target and governed configuration:
 pysec doctor . --config .pysec-tools\pysec.native.toml --profile production
 ```
 
-The text view identifies unavailable or disabled applicable tools immediately.
-Use `--format json` to archive the preflight in runner diagnostics. Discovery
+The text view leads with `PROCEED TO ISOLATED SCAN` or `BLOCK PRE-FLIGHT`, then
+shows required and applicable readiness counts. Attention items are labeled
+`required`, `optional`, or `required context`, so an operator can distinguish a
+hard prerequisite from a useful conditional control. The decision is preflight
+only and never grants release approval. Use `--format json` to archive the same
+structured decision and blocking reasons in runner diagnostics. Discovery
 prunes generated artifacts, virtual environments, installed scanner trees,
 build outputs, and symlinked directories before descent.
 

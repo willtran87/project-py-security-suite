@@ -5,13 +5,20 @@ for published releases.
 
 ## Unreleased
 
+- Made `pysec doctor` decision-oriented: it now distinguishes preflight
+  proceed/block from release approval, reports required/applicable readiness,
+  labels optional attention without false blocking, and emits structured
+  blocking reasons for CI consumers.
+- Removed wall-clock deadlines from filesystem-backed security property tests
+  while retaining generated examples and assertions, preventing cold Windows
+  I/O from creating non-reproducible assurance failures.
 - Raised combined statement-and-branch coverage above the enforced 80% gate
   with fail-closed tests for CodeQL, CycloneDX, Security Passport integrity,
   portfolio adapters, and passive test-evidence parsing.
-- Expanded the suite to 252 passing tests while preserving actionable per-file
+- Expanded the suite to 254 passing tests while preserving actionable per-file
   coverage reporting in consolidated reports.
 - Resolved four consecutive reports' lowest-coverage files, raised combined
-  line-and-branch coverage to 91.31%, and added runtime-guard coverage for
+  line-and-branch coverage to 91.42%, and added runtime-guard coverage for
   offline linters, staging, Pysa, Trivy, Cosign, artifact scanners, passive
   evidence adapters, cross-tool finding correlation, offline databases,
   applicability decisions, malformed evidence, temporary-file cleanup, SARIF
