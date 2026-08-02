@@ -497,9 +497,9 @@ The native Windows self-scan process verifies:
   errors; 27 conditional scanners were correctly not applicable;
 - Pylint, Radon, Ruff formatting, coverage, and JUnit adapters executed through
   approved entry-point bindings and emitted normalized derived evidence;
-- the separately generated branch-coverage evidence records 80.05% combined
+- the separately generated branch-coverage evidence records 83.18% combined
   line-and-branch coverage, satisfying the 80% repository gate while retaining
-  the ten lowest-coverage per-file hotspots; JUnit records 204 passing tests,
+  the ten lowest-coverage per-file hotspots; JUnit records 217 passing tests,
   one platform-limited symlink skip, and no failures or errors;
 - CycloneDX completed from `uv.lock` through a frozen offline export with a
   hash-verified helper; zizmor, actionlint, Pysa, GuardDog, Flawfinder, and

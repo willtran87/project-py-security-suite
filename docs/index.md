@@ -81,7 +81,7 @@ The native `doctor` preflight reports 35 ready and 27 not-applicable tools with
 zero disabled or unavailable prerequisites before scanner execution.
 
 The checked report is in
-`.artifacts/final-self-scan-v20`. It includes:
+`.artifacts/final-self-scan-v22`. It includes:
 
 - the GitHub-ready Markdown, HTML, SARIF, SonarQube external-issue, and
   normalized JSON reports;
@@ -94,14 +94,15 @@ The checked report is in
   effectiveness metrics, SSDF claims, and a Security Passport;
 - a checksum manifest that was independently verified after generation.
 
-The source test suite currently records 204 passing tests and one platform-
+The source test suite currently records 217 passing tests and one platform-
 limited symlink test skip. It includes property-test replay and fixtures for all
 adapters, private scanner-home isolation, artifact digest binding, path-
 traversal rejection during distribution expansion, hardened XML evidence
 ingestion, archive-link rejection, governed risk acceptance, database
 freshness, detection validation, repository-health additions, trusted-lane
 evidence validation, and the SonarQube export. Combined line-and-branch
-coverage is 80.05%, so the repository-wide 80% policy gate passes. The report
+coverage is 83.18%, so the repository-wide 80% policy gate passes with useful
+headroom. The report
 retains ten per-file coverage hotspots as actionable, non-blocking test debt.
 
 The companion detection proof is in
