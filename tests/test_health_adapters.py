@@ -9,12 +9,50 @@ from py_security_suite.adapters.pylint import PylintAdapter
 from py_security_suite.adapters.radon import RadonAdapter
 from py_security_suite.adapters.reuse import ReuseAdapter
 from py_security_suite.adapters.ruff_format import RuffFormatAdapter
-from py_security_suite.adapters.test_evidence import CoverageAdapter, JUnitAdapter
+from py_security_suite.adapters.test_evidence import (
+    CoverageAdapter,
+    HypothesisAdapter,
+    JUnitAdapter,
+    SchemathesisAdapter,
+    _integer,
+    _number,
+    _optional_integer,
+)
 from py_security_suite.config import ToolConfig
 from py_security_suite.evidence_ingest import _coverage_document, _junit_document
 
 
 class HealthAdapterTests(unittest.TestCase):
+    def test_test_evidence_applicability_and_commands_are_deterministic(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            coverage = CoverageAdapter(ToolConfig(), 1024)
+            junit = JUnitAdapter(ToolConfig(), 1024)
+            self.assertIn("coverage.json", coverage.not_applicable_reason(root) or "")
+            self.assertIn("JUnit", junit.not_applicable_reason(root) or "")
+            (root / "coverage.json").write_text("{}", encoding="utf-8")
+            reports = root / "junit.xml"
+            reports.mkdir()
+            (reports / "one.xml").write_text("<testsuite/>", encoding="utf-8")
+            self.assertIsNone(coverage.not_applicable_reason(root))
+            self.assertIsNone(junit.not_applicable_reason(root))
+            self.assertEqual(coverage.build_command("ingest", root)[1], "coverage")
+            self.assertEqual(junit.build_command("ingest", root)[1], "junit")
+
+    def test_specialized_test_evidence_fails_closed_only_when_applicable(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            hypothesis = HypothesisAdapter(ToolConfig(), 1024)
+            schemathesis = SchemathesisAdapter(ToolConfig(), 1024)
+            self.assertIn(
+                "no Python source", hypothesis.not_applicable_reason(root) or ""
+            )
+            self.assertIn("no OpenAPI", schemathesis.not_applicable_reason(root) or "")
+            (root / "app.py").write_text("value = 1\n", encoding="utf-8")
+            (root / "openapi.yaml").write_text("openapi: 3.1.0\n", encoding="utf-8")
+            self.assertIsNone(hypothesis.not_applicable_reason(root))
+            self.assertIsNone(schemathesis.not_applicable_reason(root))
+
     def test_pylint_preserves_rule_attribution_and_precise_location(self) -> None:
         payload = json.dumps(
             {
@@ -127,6 +165,63 @@ class HealthAdapterTests(unittest.TestCase):
         self.assertEqual(finding.locations[0].start_line, 12)
         self.assertEqual(finding.evidence["minimum_percent"], 80.0)
 
+    def test_coverage_adapter_orders_hotspots_and_validates_evidence(self) -> None:
+        adapter = CoverageAdapter(ToolConfig(minimum_coverage_percent=80), 1024)
+        payload = json.dumps(
+            {
+                "kind": "coverage",
+                "totals": {"num_statements": 20, "percent_covered": 90},
+                "files": [
+                    {
+                        "path": "src/healthy.py",
+                        "summary": {"num_statements": 10, "percent_covered": 100},
+                        "missing_lines": [],
+                    },
+                    {
+                        "path": "src/small.py",
+                        "summary": {"num_statements": 5, "percent_covered": 50},
+                        "missing_lines": [3],
+                    },
+                    {
+                        "path": "src/large.py",
+                        "summary": {"num_statements": 20, "percent_covered": 50},
+                        "missing_lines": [8, "9"],
+                    },
+                ],
+            }
+        )
+        findings = adapter.parse(payload, Path("."))
+        self.assertEqual(
+            [item.locations[0].path for item in findings],
+            ["src/large.py", "src/small.py"],
+        )
+        artifact = adapter.derived_artifacts(payload, Path("."))
+        self.assertEqual(artifact["coverage-summary.json"]["finding_hotspot_limit"], 10)
+        invalid_payloads = (
+            ({"kind": "coverage", "totals": [], "files": []}, "totals object"),
+            ({"kind": "coverage", "totals": {}, "files": [1]}, "file result"),
+            (
+                {"kind": "coverage", "totals": {}, "files": [{"summary": []}]},
+                "file summary",
+            ),
+            (
+                {
+                    "kind": "coverage",
+                    "totals": {},
+                    "files": [
+                        {"summary": {"num_statements": 1}, "missing_lines": {"bad": 1}}
+                    ],
+                },
+                "missing_lines",
+            ),
+        )
+        for document, message in invalid_payloads:
+            with (
+                self.subTest(message=message),
+                self.assertRaisesRegex(TypeError, message),
+            ):
+                adapter.parse(json.dumps(document), Path("."))
+
     def test_junit_adapter_never_needs_failure_body(self) -> None:
         payload = json.dumps(
             {
@@ -148,6 +243,39 @@ class HealthAdapterTests(unittest.TestCase):
         self.assertEqual(finding.domain, "testing")
         self.assertEqual(finding.sources[0].tool, "junit")
         self.assertNotIn("body", finding.evidence)
+
+    def test_junit_defaults_artifacts_and_type_guards(self) -> None:
+        adapter = JUnitAdapter(ToolConfig(), 1024)
+        payload = json.dumps(
+            {
+                "kind": "junit",
+                "failures": [{"name": "unnamed", "result": "error"}],
+            }
+        )
+        finding = adapter.parse(payload, Path("."))[0]
+        self.assertEqual(finding.locations[0].path, "<test-suite>")
+        self.assertIsNone(finding.locations[0].start_line)
+        self.assertEqual(finding.sources[0].native_severity, "error")
+        self.assertEqual(
+            adapter.derived_artifacts(payload, Path("."))["junit-summary.json"]["kind"],
+            "junit",
+        )
+        with self.assertRaisesRegex(TypeError, "failures list"):
+            adapter.parse('{"kind":"junit","failures":{}}', Path("."))
+        with self.assertRaisesRegex(TypeError, "failure must be an object"):
+            adapter.parse('{"kind":"junit","failures":[1]}', Path("."))
+        with self.assertRaisesRegex(TypeError, "validated junit"):
+            adapter.parse('{"kind":"coverage"}', Path("."))
+
+    def test_evidence_number_conversions_are_strict(self) -> None:
+        self.assertEqual(_integer("2"), 2)
+        self.assertEqual(_optional_integer(""), None)
+        self.assertEqual(_optional_integer("3"), 3)
+        self.assertEqual(_number("2.5"), 2.5)
+        with self.assertRaisesRegex(TypeError, "expected integer"):
+            _integer("bad")
+        with self.assertRaisesRegex(TypeError, "expected numeric"):
+            _number("bad")
 
     def test_evidence_ingestion_is_bounded_and_drops_junit_output_bodies(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

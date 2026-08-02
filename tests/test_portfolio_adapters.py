@@ -19,11 +19,16 @@ from py_security_suite.adapters.test_evidence import (
     SchemathesisAdapter,
 )
 from py_security_suite.adapters.portfolio import (
+    ConftestAdapter,
     GitSizerAdapter,
     KicsAdapter,
+    KubeLinterAdapter,
     PipdeptreeAdapter,
     ValeAdapter,
     ValidatePyprojectAdapter,
+    _concern_metrics,
+    _integer,
+    _number,
 )
 from py_security_suite.config import ToolConfig
 from py_security_suite.evidence_ingest import _assurance_document
@@ -31,6 +36,56 @@ from py_security_suite.reports import render_sonarqube_external_issues
 
 
 class PortfolioAdapterTests(unittest.TestCase):
+    def test_local_policy_adapters_are_explicit_about_applicability(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            policy = root / "policy"
+            policy.mkdir()
+            config_file = root / ".vale.ini"
+            config_file.write_text("StylesPath = styles\n", encoding="utf-8")
+            conftest = ConftestAdapter(ToolConfig(rules_path=policy), 4096)
+            kics = KicsAdapter(ToolConfig(rules_path=policy), 4096)
+            vale = ValeAdapter(ToolConfig(rules_path=config_file), 4096)
+
+            self.assertIn(
+                "structured configuration", conftest.not_applicable_reason(root) or ""
+            )
+            self.assertIn(
+                "infrastructure-as-code", kics.not_applicable_reason(root) or ""
+            )
+            self.assertIn("documentation", vale.not_applicable_reason(root) or "")
+
+            (root / "service.toml").write_text("enabled = true\n", encoding="utf-8")
+            (root / "deploy.yaml").write_text(
+                "apiVersion: v1\nkind: Pod\n", encoding="utf-8"
+            )
+            (root / "README.md").write_text("# Service\n", encoding="utf-8")
+            self.assertIsNone(conftest.not_applicable_reason(root))
+            self.assertIsNone(kics.not_applicable_reason(root))
+            self.assertIsNone(vale.not_applicable_reason(root))
+            self.assertIn("--policy", conftest.build_command("conftest", root))
+            self.assertIn(
+                "--queries-path",
+                kics.build_file_command("kics", root, root / "out" / "results.json"),
+            )
+            self.assertIn("--config", vale.build_command("vale", root))
+            self.assertEqual(conftest.environment().extra["NO_COLOR"], "1")
+
+    def test_policy_adapters_reject_missing_local_rules(self) -> None:
+        root = Path(".")
+        conftest = ConftestAdapter(ToolConfig(), 4096)
+        kics = KicsAdapter(ToolConfig(), 4096)
+        vale = ValeAdapter(ToolConfig(), 4096)
+        self.assertIn("policy directory", conftest.not_applicable_reason(root) or "")
+        self.assertIn("query library", kics.not_applicable_reason(root) or "")
+        self.assertIn("Vale configuration", vale.not_applicable_reason(root) or "")
+        with self.assertRaisesRegex(ValueError, "local policy"):
+            conftest.build_command("conftest", root)
+        with self.assertRaisesRegex(ValueError, "query library"):
+            kics.build_file_command("kics", root, root / "results.json")
+        with self.assertRaisesRegex(ValueError, "configuration"):
+            vale.build_command("vale", root)
+
     def test_kics_normalizes_location_classification_and_tool_citation(self) -> None:
         payload = json.dumps(
             {
@@ -73,6 +128,28 @@ class PortfolioAdapterTests(unittest.TestCase):
         self.assertEqual(len(findings), 3)
         self.assertTrue(all(item.domain == "supply-chain" for item in findings))
 
+    def test_pipdeptree_preflight_command_artifact_and_validation(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            adapter = PipdeptreeAdapter(ToolConfig(), 4096)
+            self.assertIn("target Python", adapter.not_applicable_reason(root) or "")
+            configured = PipdeptreeAdapter(
+                ToolConfig(auxiliary_executable="python-approved"), 4096
+            )
+            self.assertIn("pyproject", configured.not_applicable_reason(root) or "")
+            (root / "pyproject.toml").write_text(
+                "[project]\nname='x'\n", encoding="utf-8"
+            )
+            self.assertIsNone(configured.not_applicable_reason(root))
+            command = configured.build_command("pipdeptree", root)
+            self.assertEqual(command[1:3], ["--python", "python-approved"])
+            self.assertEqual(
+                configured.derived_artifacts("{}", root),
+                {"pipdeptree-summary.json": {}},
+            )
+            with self.assertRaisesRegex(TypeError, "must be an object"):
+                configured.parse("[]", root)
+
     def test_git_sizer_recurses_over_v2_concern_metrics(self) -> None:
         payload = json.dumps(
             {
@@ -87,6 +164,42 @@ class PortfolioAdapterTests(unittest.TestCase):
         self.assertEqual(finding.area, "repository-health")
         self.assertEqual(finding.severity.value, "medium")
 
+    def test_git_sizer_handles_nested_lists_low_concern_and_repository_state(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            adapter = GitSizerAdapter(ToolConfig(), 4096)
+            self.assertIn(
+                "not a full Git checkout", adapter.not_applicable_reason(root) or ""
+            )
+            (root / ".git").mkdir()
+            self.assertIsNone(adapter.not_applicable_reason(root))
+            self.assertEqual(
+                adapter.build_command("git-sizer", root)[1:],
+                ["--json", "--json-version", "2"],
+            )
+            payload = json.dumps(
+                {
+                    "history": [
+                        {"description": "branches", "value": 9, "level_of_concern": 1},
+                        {"description": "healthy", "value": 1, "levelOfConcern": 0},
+                    ]
+                }
+            )
+            findings = adapter.parse(payload, root)
+            self.assertEqual(len(findings), 1)
+            self.assertEqual(findings[0].severity.value, "low")
+            self.assertEqual(
+                adapter.derived_artifacts(payload, root)["git-sizer.json"]["history"][
+                    0
+                ]["value"],
+                9,
+            )
+            with self.assertRaisesRegex(TypeError, "must be an object"):
+                adapter.parse("[]", root)
+            self.assertEqual(_concern_metrics("not-a-metric"), [])
+
     def test_validate_pyproject_distinguishes_valid_json_from_invalid_text(
         self,
     ) -> None:
@@ -94,6 +207,24 @@ class PortfolioAdapterTests(unittest.TestCase):
         self.assertEqual(adapter.parse('{"project":{"name":"demo"}}', Path(".")), [])
         finding = adapter.parse("Invalid file: pyproject.toml", Path("."))[0]
         self.assertEqual(finding.locations[0].path, "pyproject.toml")
+
+    def test_validate_pyproject_preflight_environment_and_type_guard(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            adapter = ValidatePyprojectAdapter(ToolConfig(), 4096)
+            self.assertIn("no pyproject", adapter.not_applicable_reason(root) or "")
+            (root / "pyproject.toml").write_text(
+                "[project]\nname='x'\n", encoding="utf-8"
+            )
+            self.assertIsNone(adapter.not_applicable_reason(root))
+            self.assertEqual(
+                adapter.environment().extra["VALIDATE_PYPROJECT_NO_NETWORK"], "1"
+            )
+            self.assertEqual(
+                adapter.build_command("validate-pyproject", root)[1], "--dump-json"
+            )
+            invalid = adapter.parse("[]", root)
+            self.assertEqual(invalid[0].sources[0].tool, "validate-pyproject")
 
     def test_vale_preserves_file_line_and_rule(self) -> None:
         payload = json.dumps(
@@ -111,6 +242,70 @@ class PortfolioAdapterTests(unittest.TestCase):
         finding = ValeAdapter(ToolConfig(), 4096).parse(payload, Path("."))[0]
         self.assertEqual(finding.sources[0].rule_id, "Docs.Weasel")
         self.assertEqual(finding.locations[0].start_line, 9)
+
+    def test_vale_and_kics_validate_structures_and_preserve_artifacts(self) -> None:
+        root = Path(".")
+        vale = ValeAdapter(ToolConfig(), 4096)
+        with self.assertRaisesRegex(TypeError, "must be an object"):
+            vale.parse("[]", root)
+        with self.assertRaisesRegex(TypeError, "alerts must be a list"):
+            vale.parse('{"README.md": {}}', root)
+        with self.assertRaisesRegex(TypeError, "alert must be an object"):
+            vale.parse('{"README.md": [1]}', root)
+        informational = vale.parse(
+            '{"README.md":[{"Check":"Docs.Rule","Message":"note"}]}', root
+        )[0]
+        self.assertEqual(informational.severity.value, "informational")
+
+        kics = KicsAdapter(ToolConfig(), 4096)
+        with self.assertRaisesRegex(TypeError, "queries list"):
+            kics.parse("[]", root)
+        with self.assertRaisesRegex(TypeError, "files list"):
+            kics.parse('{"queries":[{"files":{}}]}', root)
+        with self.assertRaisesRegex(TypeError, "occurrence"):
+            kics.parse('{"queries":[{"files":[1]}]}', root)
+        self.assertEqual(
+            kics.derived_artifacts('{"queries":[]}', root),
+            {"kics-iac.json": {"queries": []}},
+        )
+
+    def test_kube_linter_detects_manifests_and_normalizes_reports(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            adapter = KubeLinterAdapter(ToolConfig(), 4096)
+            self.assertIn("no Kubernetes", adapter.not_applicable_reason(root) or "")
+            manifest = root / "pod.yaml"
+            manifest.write_text("apiVersion: v1\nkind: Pod\n", encoding="utf-8")
+            self.assertIsNone(adapter.not_applicable_reason(root))
+            self.assertEqual(adapter.build_command("kube-linter", root)[1], "lint")
+            finding = adapter.parse(
+                json.dumps(
+                    {
+                        "Reports": [
+                            {
+                                "Check": "run-as-non-root",
+                                "Diagnostic": {"Message": "container runs as root"},
+                                "Object": {
+                                    "Metadata": {"FilePath": str(manifest), "Line": 4}
+                                },
+                            }
+                        ]
+                    }
+                ),
+                root,
+            )[0]
+            self.assertEqual(finding.locations[0].path, "pod.yaml")
+            self.assertEqual(finding.locations[0].start_line, 4)
+            with self.assertRaisesRegex(TypeError, "reports list"):
+                adapter.parse('{"Reports":{}}', root)
+            with self.assertRaisesRegex(TypeError, "report must be an object"):
+                adapter.parse('{"Reports":[1]}', root)
+
+    def test_portfolio_numeric_helpers_fail_safely(self) -> None:
+        self.assertEqual(_integer("7"), 7)
+        self.assertEqual(_integer(object()), 0)
+        self.assertEqual(_number("2.5"), 2.5)
+        self.assertEqual(_number(object()), 0.0)
 
     def test_assurance_ingestion_is_bounded_and_sanitized(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

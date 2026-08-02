@@ -5,6 +5,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 from py_security_suite.config import IntelligenceConfig
@@ -19,6 +20,14 @@ from py_security_suite.models import (
     Source,
 )
 from py_security_suite.passport import (
+    _cosign_major_version,
+    _prepare_directory,
+    _read_json,
+    _read_signing_password,
+    _safe_relative,
+    _validate_statement,
+    _verify_checksums,
+    _verify_statement_inputs,
     create_attestation,
     verify_attestation,
     verify_report,
@@ -237,6 +246,260 @@ class FindingDeltaTests(unittest.TestCase):
 
 
 class PassportTests(unittest.TestCase):
+    def test_passport_input_binding_rejects_bad_shapes_paths_and_digests(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            report = Path(directory).resolve()
+            evidence = report / "evidence.json"
+            evidence.write_text("{}", encoding="utf-8")
+            valid = {
+                "predicate": {
+                    "inputAttestations": [
+                        {
+                            "uri": "evidence.json",
+                            "digest": {"sha256": _digest(evidence)},
+                        }
+                    ]
+                }
+            }
+            _verify_statement_inputs(valid, report)
+            _verify_statement_inputs({"predicate": []}, report)
+            invalid: tuple[tuple[dict[str, Any], str], ...] = (
+                ({"predicate": {"inputAttestations": {}}}, "must be a list"),
+                ({"predicate": {"inputAttestations": [1]}}, "must be an object"),
+                (
+                    {
+                        "predicate": {
+                            "inputAttestations": [
+                                {"uri": "../escape", "digest": {"sha256": "a" * 64}}
+                            ]
+                        }
+                    },
+                    "unsafe evidence path",
+                ),
+                (
+                    {
+                        "predicate": {
+                            "inputAttestations": [
+                                {"uri": "missing.json", "digest": {"sha256": "a" * 64}}
+                            ]
+                        }
+                    },
+                    "unavailable",
+                ),
+                (
+                    {
+                        "predicate": {
+                            "inputAttestations": [
+                                {"uri": "evidence.json", "digest": {"sha256": "a" * 64}}
+                            ]
+                        }
+                    },
+                    "digest mismatch",
+                ),
+                (
+                    {
+                        "predicate": {
+                            "inputAttestations": [
+                                {"uri": "evidence.json", "digest": []}
+                            ]
+                        }
+                    },
+                    "digest mismatch",
+                ),
+            )
+            for statement, message in invalid:
+                with (
+                    self.subTest(message=message),
+                    self.assertRaisesRegex(ValueError, message),
+                ):
+                    _verify_statement_inputs(statement, report)
+
+    def test_json_and_output_directory_guards_prevent_unsafe_replacement(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            missing = root / "missing.json"
+            with self.assertRaisesRegex(ValueError, "bounded regular file"):
+                _read_json(missing)
+            sequence = root / "sequence.json"
+            sequence.write_text("[]", encoding="utf-8")
+            with self.assertRaisesRegex(TypeError, "root must be an object"):
+                _read_json(sequence)
+
+            output = root / "passport"
+            output.mkdir()
+            with self.assertRaisesRegex(ValueError, "already exists"):
+                _prepare_directory(output, overwrite=False)
+            with self.assertRaisesRegex(ValueError, "not a Security Passport"):
+                _prepare_directory(output, overwrite=True)
+            (output / "verification-material.json").write_text("{}", encoding="utf-8")
+            _prepare_directory(output, overwrite=True)
+
+            regular_file = root / "not-a-directory"
+            regular_file.write_text("fixture", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "not a regular directory"):
+                _prepare_directory(regular_file, overwrite=True)
+
+    def test_report_validation_rejects_incomplete_scan_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            report = root / "report"
+            report.mkdir()
+            (report / "scan-manifest.json").write_text(
+                '{"schema_version":"1.0"}', encoding="utf-8"
+            )
+            _write_checksums(report)
+            with self.assertRaisesRegex(ValueError, "scan manifest is invalid"):
+                verify_report(report)
+
+    def test_passport_path_and_statement_validation_rejects_ambiguous_evidence(
+        self,
+    ) -> None:
+        self.assertEqual(
+            _safe_relative("nested/evidence.json"), Path("nested/evidence.json")
+        )
+        for value in ("", "/absolute", "../escape", "nested\\windows"):
+            with (
+                self.subTest(value=value),
+                self.assertRaisesRegex(ValueError, "unsafe"),
+            ):
+                _safe_relative(value)
+
+        valid = {
+            "_type": "https://in-toto.io/Statement/v1",
+            "predicateType": "https://slsa.dev/verification_summary/v1",
+            "subject": [{"name": "source:test"}],
+            "predicate": {
+                "verificationResult": "PASSED",
+                "policy": {"digest": {"sha256": "a" * 64}},
+            },
+        }
+        _validate_statement(valid)
+        invalid = (
+            ({**valid, "_type": "wrong"}, "in-toto"),
+            ({**valid, "predicateType": "wrong"}, "SLSA"),
+            ({**valid, "subject": []}, "subjects"),
+            (
+                {**valid, "predicate": {"verificationResult": "UNKNOWN"}},
+                "verificationResult",
+            ),
+            (
+                {
+                    **valid,
+                    "predicate": {"verificationResult": "PASSED", "policy": []},
+                },
+                "policy digest",
+            ),
+        )
+        for document, message in invalid:
+            with (
+                self.subTest(message=message),
+                self.assertRaisesRegex(ValueError, message),
+            ):
+                _validate_statement(document)
+
+    def test_checksum_manifest_validation_covers_malformed_and_missing_inputs(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with self.assertRaisesRegex(ValueError, "checksum manifest is missing"):
+                _verify_checksums(root)
+            checksum = root / "checksums.sha256"
+            checksum.write_text("", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "entry count"):
+                _verify_checksums(root)
+            checksum.write_text("malformed\n", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "line is invalid"):
+                _verify_checksums(root)
+            checksum.write_text(f"{'x' * 64}  evidence.json\n", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "digest or path"):
+                _verify_checksums(root)
+            checksum.write_text(f"{'a' * 64}  missing.json\n", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "unavailable"):
+                _verify_checksums(root)
+            evidence = root / "evidence.json"
+            evidence.write_text("{}", encoding="utf-8")
+            checksum.write_text(f"{'a' * 64}  evidence.json\n", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "checksum mismatch"):
+                _verify_checksums(root)
+            digest = _digest(evidence)
+            checksum.write_text(
+                f"{digest}  evidence.json\n{digest}  evidence.json\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "digest or path"):
+                _verify_checksums(root)
+            checksum.write_text(f"{digest}  evidence.json\n", encoding="utf-8")
+            self.assertEqual(_verify_checksums(root), 1)
+            with patch("py_security_suite.passport._MAX_FILE_BYTES", 1):
+                with self.assertRaisesRegex(ValueError, "manifest is too large"):
+                    _verify_checksums(root)
+        with tempfile.NamedTemporaryFile() as temporary:
+            with self.assertRaisesRegex(ValueError, "not a regular directory"):
+                _verify_checksums(Path(temporary.name))
+
+    def test_signing_password_and_cosign_version_validation_is_bounded(self) -> None:
+        self.assertEqual(_read_signing_password(None), "")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            password = root / "password.txt"
+            password.write_text("secret\r\n", encoding="utf-8")
+            self.assertEqual(_read_signing_password(password), "secret")
+            password.write_text("", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "is empty"):
+                _read_signing_password(password)
+            password.write_bytes(b"x" * 4097)
+            with self.assertRaisesRegex(ValueError, "bounded"):
+                _read_signing_password(password)
+
+            cosign = root / "cosign.exe"
+            cosign.write_bytes(b"fixture")
+            versions = (
+                (
+                    RawExecution([str(cosign)], 0, '{"gitVersion":"v3.1.0"}', "", 0.01),
+                    3,
+                ),
+                (RawExecution([str(cosign)], 0, "cosign version 2.4.1", "", 0.01), 2),
+            )
+            for execution, expected in versions:
+                with (
+                    self.subTest(expected=expected),
+                    patch(
+                        "py_security_suite.passport.run_command", return_value=execution
+                    ),
+                ):
+                    self.assertEqual(_cosign_major_version(cosign, root), expected)
+            failures = (
+                RawExecution([str(cosign)], 1, "", "failed", 0.01),
+                RawExecution([str(cosign)], 0, "unknown", "", 0.01),
+                RawExecution([str(cosign)], None, "", "", 0.01, timed_out=True),
+            )
+            for execution in failures:
+                with (
+                    patch(
+                        "py_security_suite.passport.run_command", return_value=execution
+                    ),
+                    self.assertRaisesRegex(ValueError, "major version"),
+                ):
+                    _cosign_major_version(cosign, root)
+
+    def test_unsigned_passport_requires_explicit_integrity_only_acceptance(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            report = _fixture_report(root)
+            passport = root / "passport"
+            create_attestation(report=report, output=passport, signing_key=None)
+            with self.assertRaisesRegex(ValueError, "allow-unsigned"):
+                verify_attestation(
+                    passport=passport,
+                    report=None,
+                    public_key=None,
+                )
+            with self.assertRaisesRegex(ValueError, "already exists"):
+                create_attestation(report=report, output=passport, signing_key=None)
+
     def test_unsigned_passport_verifies_report_and_detects_tampering(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

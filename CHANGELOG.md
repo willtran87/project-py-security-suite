@@ -5,6 +5,12 @@ for published releases.
 
 ## Unreleased
 
+- Raised combined statement-and-branch coverage above the enforced 80% gate
+  with fail-closed tests for CodeQL, CycloneDX, Security Passport integrity,
+  portfolio adapters, and passive test-evidence parsing.
+- Expanded the suite to 204 passing tests while preserving actionable per-file
+  coverage hotspots in consolidated reports.
+
 ### Added
 
 - Offline-first orchestration for 62 governed security, supply-chain, quality,
