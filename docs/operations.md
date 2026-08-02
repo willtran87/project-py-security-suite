@@ -474,6 +474,9 @@ artifact transport, and publisher/provenance verification.
 For finding triage, open `index.html` first. Its prioritized table leads to a
 finding card containing the exact file/range, highlighted source context,
 scanner and rule, classification links, impact, and recommended action.
+The decision badge and scanner-health grid provide the release-log summary;
+the primary coverage-gap table contains only applicable execution gaps. Expand
+the not-applicable controls beneath it when reviewing conditional coverage.
 `summary.md` carries the same first 20 actionable findings into the GitHub job
 summary. Secret-bearing content is deliberately absent from every format; use
 the protected checkout and cited line when validating a secret finding.

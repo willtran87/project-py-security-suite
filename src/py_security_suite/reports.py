@@ -831,22 +831,17 @@ def render_assurance_case(manifest: ScanManifest) -> str:
     return "\n".join(lines)
 
 
-def render_html(manifest: ScanManifest, findings: list[Finding]) -> str:
-    tool_versions = {run.tool: run.version for run in manifest.tools}
-    active_findings = [
-        finding
-        for finding in findings
-        if finding.status is not FindingStatus.SUPPRESSED
-    ]
-    accepted = len(findings) - len(active_findings)
-    ordered = sorted(active_findings, key=_finding_sort_key)
-    finding_cards = "".join(
+def _html_finding_cards(ordered: list[Finding], tool_versions: dict[str, str]) -> str:
+    return "".join(
         _render_html_finding(finding, tool_versions) for finding in ordered
     ) or (
         "<section class='empty'><h3>No normalized findings</h3>"
         "<p>The selected scanners completed without reporting a finding.</p></section>"
     )
-    finding_rows = "".join(
+
+
+def _html_finding_rows(ordered: list[Finding]) -> str:
+    return "".join(
         "<tr>"
         f"<td><span class='badge {html.escape(finding.severity.value)}'>"
         f"{html.escape(_finding_priority(finding))}</span></td>"
@@ -860,11 +855,19 @@ def render_html(manifest: ScanManifest, findings: list[Finding]) -> str:
         "</tr>"
         for finding in ordered
     ) or ("<tr><td colspan='6'>No normalized findings require review.</td></tr>")
-    reasons = (
+
+
+def _html_policy_reasons(manifest: ScanManifest) -> str:
+    return (
         "".join(f"<li>{html.escape(reason)}</li>" for reason in manifest.policy_reasons)
         or "<li>No policy reason was recorded.</li>"
     )
-    gap_rows = "".join(
+
+
+def _html_coverage_gap_rows(
+    manifest: ScanManifest, coverage_gaps: list[ToolRun]
+) -> str:
+    return "".join(
         "<tr>"
         f"<td><strong>{html.escape(run.tool)}</strong></td>"
         f"<td>{'applicable' if run.applicable else 'not applicable'}</td>"
@@ -874,13 +877,38 @@ def render_html(manifest: ScanManifest, findings: list[Finding]) -> str:
         f"<td>{html.escape(_coverage_action(run, manifest))}</td>"
         f"<td>{_html_tool_reference(run.tool)}</td>"
         "</tr>"
-        for run in manifest.tools
-        if run.status.value != "completed"
+        for run in coverage_gaps
     ) or (
-        "<tr><td>All selected tools</td><td>applicable</td>"
+        "<tr><td>All applicable tools</td><td>applicable</td>"
         "<td>completed</td><td>-</td><td>No action</td><td>-</td></tr>"
     )
-    tools = "".join(
+
+
+def _html_not_applicable_details(
+    manifest: ScanManifest, not_applicable: list[ToolRun]
+) -> str:
+    if not not_applicable:
+        return ""
+    rows = "".join(
+        "<tr>"
+        f"<td><strong>{html.escape(run.tool)}</strong></td>"
+        f"<td>{html.escape(run.error or 'No diagnostic supplied')}</td>"
+        f"<td>{html.escape(_coverage_action(run, manifest))}</td>"
+        f"<td>{_html_tool_reference(run.tool)}</td>"
+        "</tr>"
+        for run in not_applicable
+    )
+    return (
+        "<details class='coverage-details'><summary>"
+        f"{len(not_applicable)} not-applicable controls (informational)"
+        "</summary><table><thead><tr><th>Tool</th><th>Reason</th>"
+        "<th>Re-enable condition</th><th>Reference</th></tr></thead>"
+        f"<tbody>{rows}</tbody></table></details>"
+    )
+
+
+def _html_tool_rows(tools: list[ToolRun]) -> str:
+    return "".join(
         "<tr>"
         f"<td><strong>{html.escape(run.tool)}</strong></td>"
         f"<td>{html.escape(run.version)}</td>"
@@ -892,9 +920,12 @@ def render_html(manifest: ScanManifest, findings: list[Finding]) -> str:
         f"<td>{run.duration_seconds:.3f}s</td>"
         f"<td>{html.escape(run.error or 'None')}</td>"
         "</tr>"
-        for run in manifest.tools
+        for run in tools
     )
-    area_rows = (
+
+
+def _html_area_rows(active_findings: list[Finding]) -> str:
+    return (
         "".join(
             "<tr>"
             f"<td><strong>{html.escape(area)}</strong></td>"
@@ -909,11 +940,36 @@ def render_html(manifest: ScanManifest, findings: list[Finding]) -> str:
         )
         or "<tr><td>No findings</td><td colspan='6'>0</td></tr>"
     )
-    counts = {
-        severity.value: sum(finding.severity is severity for finding in active_findings)
+
+
+def _severity_counts(findings: list[Finding]) -> dict[str, int]:
+    return {
+        severity.value: sum(finding.severity is severity for finding in findings)
         for severity in Severity
     }
+
+
+def render_html(manifest: ScanManifest, findings: list[Finding]) -> str:
+    tool_versions = {run.tool: run.version for run in manifest.tools}
+    active_findings = [
+        finding
+        for finding in findings
+        if finding.status is not FindingStatus.SUPPRESSED
+    ]
+    accepted = len(findings) - len(active_findings)
+    ordered = sorted(active_findings, key=_finding_sort_key)
+    coverage_gaps = _applicable_scanner_gaps(manifest.tools)
+    not_applicable = _not_applicable_scanners(manifest.tools)
+    finding_cards = _html_finding_cards(ordered, tool_versions)
+    finding_rows = _html_finding_rows(ordered)
+    reasons = _html_policy_reasons(manifest)
+    gap_rows = _html_coverage_gap_rows(manifest, coverage_gaps)
+    not_applicable_details = _html_not_applicable_details(manifest, not_applicable)
+    tools = _html_tool_rows(manifest.tools)
+    area_rows = _html_area_rows(active_findings)
+    counts = _severity_counts(active_findings)
     outcome = html.escape(manifest.outcome.value)
+    decision = _policy_decision_value(manifest.outcome)
     completed = _completed_tools(manifest.tools)
     applicable = _applicable_tools(manifest.tools)
     return f"""<!doctype html>
@@ -942,13 +998,23 @@ code {{ overflow-wrap: anywhere; }}
 .banner.warn {{ border-color: #9a6e00; }}
 .banner.pass {{ border-color: #247044; }}
 .lede {{ color: #506074; margin-bottom: 0; }}
-.stats {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+.stats {{ display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: .75rem; margin: 1rem 0 1.5rem; }}
 .stat {{ background: #fff; border: 1px solid #d5dde7; border-radius: .4rem;
   padding: .85rem 1rem; }}
 .stat strong {{ display: block; font-size: 1.45rem; }}
 .stat span {{ color: #59677a; font-size: .9rem; }}
 .decision {{ background: #eef3f8; border-radius: .4rem; padding: .75rem 1.1rem; }}
+.decision h2 {{ display: flex; align-items: center; gap: .65rem; }}
+.decision-badge {{ border-radius: 999px; font-size: .8rem; letter-spacing: .04em;
+  padding: .25rem .65rem; }}
+.decision-badge.block {{ background: #f8dddd; color: #8c1616; }}
+.decision-badge.review {{ background: #fff0c7; color: #6e4e00; }}
+.decision-badge.allow {{ background: #dcefe4; color: #185c36; }}
+.coverage-details {{ margin: 1rem 0 2rem; }}
+.coverage-details summary {{ color: #17395f; cursor: pointer; font-weight: 700;
+  padding: .65rem 0; }}
+.coverage-details table {{ margin-bottom: 0; }}
 table {{ width: 100%; border-collapse: collapse; margin: 1rem 0 2rem;
   background: #fff; }}
 th, td {{ text-align: left; vertical-align: top; padding: .65rem;
@@ -1002,6 +1068,7 @@ th {{ background: #e8eef5; color: #17395f; }}
 .footer-note {{ color: #59677a; font-size: .9rem; }}
 @media (max-width: 650px) {{
   .page {{ padding: 1rem; }}
+  .stats {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
   .finding-header {{ display: block; }}
   .finding-header .badge {{ margin-bottom: .5rem; }}
   table {{ display: block; overflow-x: auto; white-space: normal; }}
@@ -1030,13 +1097,18 @@ target <code>{html.escape(manifest.target)}</code></p>
 <div class="stat"><strong>{counts.get("medium", 0)}</strong><span>Medium</span></div>
 <div class="stat"><strong>{counts.get("low", 0)}</strong><span>Low</span></div>
 <div class="stat"><strong>{completed}/{applicable}</strong>
-<span>Scanners completed</span></div>
+<span>Applicable completed</span></div>
+<div class="stat"><strong>{len(coverage_gaps)}</strong>
+<span>Execution gaps</span></div>
+<div class="stat"><strong>{len(not_applicable)}</strong>
+<span>Not applicable</span></div>
 <div class="stat"><strong>{
         "yes" if manifest.inventory.source_integrity_verified else "no"
     }</strong><span>Target unchanged</span></div>
 </section>
 <section class="decision">
-<h2>Decision</h2><ul>{reasons}</ul>
+<h2>Decision: <span class="decision-badge {decision.lower()}">{decision}</span></h2>
+<ul>{reasons}</ul>
 <p><strong>Next action:</strong> {html.escape(_next_action(manifest.outcome))}</p>
 <p><a href="action-plan.md">Open the prioritized action plan</a></p>
 <p><a href="assurance-case.md">Open the production assurance case</a></p>
@@ -1071,6 +1143,7 @@ location, scanner rule, and recommended action.</p>
 <th>Reason</th><th>Required action</th><th>Reference</th></tr></thead>
 <tbody>{gap_rows}</tbody>
 </table>
+{not_applicable_details}
 <h2>Triage workflow</h2>
 <ol>
 <li>Open the cited location and validate the scanner premise in context.</li>
@@ -1665,11 +1738,17 @@ def _next_action(outcome: Outcome) -> str:
 
 
 def _policy_disposition(outcome: Outcome) -> str:
+    decision = _policy_decision_value(outcome)
+    suffix = " (incomplete evidence)" if outcome is Outcome.INCOMPLETE else ""
+    return f"`{decision}`{suffix}"
+
+
+def _policy_decision_value(outcome: Outcome) -> str:
     return {
-        Outcome.PASS: "`ALLOW`",
-        Outcome.WARN: "`REVIEW`",
-        Outcome.FAIL: "`BLOCK`",
-        Outcome.INCOMPLETE: "`BLOCK` (incomplete evidence)",
+        Outcome.PASS: "ALLOW",
+        Outcome.WARN: "REVIEW",
+        Outcome.FAIL: "BLOCK",
+        Outcome.INCOMPLETE: "BLOCK",
     }[outcome]
 
 

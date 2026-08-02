@@ -267,6 +267,10 @@ or detected secret values.
 `scan-manifest.json`, `summary.md`, and `index.html` expose target-content
 integrity and per-tool entry-point integrity. The CodeQL record separately
 binds its `run-codeql` wrapper and the governed CodeQL CLI helper.
+The self-contained HTML dashboard shows the scan-policy decision as a visible
+badge and separates applicable execution gaps from expandable, informational
+not-applicable controls. Its summary grid includes completed/applicable,
+execution-gap, conditional-control, and target-integrity counts.
 The Markdown reports lead with an explicit `ALLOW`, `REVIEW`, or `BLOCK`
 scan-policy disposition. Applicable scanner failures remain in the primary
 action table, while not-applicable conditional controls are retained in a

@@ -21,7 +21,7 @@ from py_security_suite.models import (
 )
 from py_security_suite.orchestrator import scan_project
 from py_security_suite.passport import verify_report
-from py_security_suite.reports import render_action_plan, render_summary
+from py_security_suite.reports import render_action_plan, render_html, render_summary
 
 
 class FakeBandit(ScannerAdapter):
@@ -202,6 +202,10 @@ class OrchestratorTests(unittest.TestCase):
             self.assertIn("Target content integrity", assurance_case)
             self.assertIn("Scanner entry-point integrity", assurance_case)
             self.assertIn("Open the prioritized action plan", report_html)
+            self.assertIn(
+                'Decision: <span class="decision-badge block">BLOCK</span>',
+                report_html,
+            )
             self.assertIn("Open the production assurance case", report_html)
             self.assertIn("What was detected", report_html)
             self.assertIn("Prioritized findings", report_html)
@@ -276,6 +280,7 @@ class OrchestratorTests(unittest.TestCase):
             )
             prioritized_summary = render_summary(result.manifest, result.findings)
             prioritized_plan = render_action_plan(result.manifest, result.findings)
+            prioritized_html = render_html(result.manifest, result.findings)
             self.assertIn("Applicable scanner execution gaps:** 1", prioritized_summary)
             self.assertIn("Conditional controls not applicable: 1", prioritized_summary)
             self.assertIn("<summary>1 not-applicable controls", prioritized_summary)
@@ -283,6 +288,19 @@ class OrchestratorTests(unittest.TestCase):
             self.assertIn("required-offline", actionable)
             self.assertNotIn("conditional-offline", actionable)
             self.assertIn("conditional-offline", informational)
+            self.assertIn("Applicable completed", prioritized_html)
+            self.assertIn("Execution gaps", prioritized_html)
+            self.assertIn("Not applicable", prioritized_html)
+            self.assertIn("1 not-applicable controls", prioritized_html)
+            coverage_section = prioritized_html.split(
+                "<h2>Coverage gaps and actions</h2>", 1
+            )[1]
+            html_actionable, html_informational = coverage_section.split(
+                "<details class='coverage-details'>", 1
+            )
+            self.assertIn("required-offline", html_actionable)
+            self.assertNotIn("conditional-offline", html_actionable)
+            self.assertIn("conditional-offline", html_informational)
             result.manifest.artifacts = {}
             self.assertNotIn(
                 "## Derived assurance evidence",

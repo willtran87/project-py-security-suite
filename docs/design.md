@@ -371,7 +371,9 @@ report/
   without removing their reasons, re-enable conditions, or references.
 - `assurance-case.md` states what the static scan demonstrated and identifies
   required artifact, provenance, dynamic-test, and threat-review evidence.
-- `index.html` is a self-contained complete human report.
+- `index.html` is a self-contained complete human report with an explicit
+  decision badge, a balanced scanner-health summary, actionable coverage gaps,
+  and expandable not-applicable control evidence.
 - `results.sarif` supports GitHub code-scanning ingestion.
 - `findings.json` is the stable machine-readable finding collection.
 - `scan-manifest.json` records tool health, versions, inventory, policy
@@ -502,8 +504,8 @@ The native Windows self-scan process verifies:
   errors; 27 conditional scanners were correctly not applicable;
 - Pylint, Radon, Ruff formatting, coverage, and JUnit adapters executed through
   approved entry-point bindings and emitted normalized derived evidence;
-- the separately generated branch-coverage evidence records 91.26% combined
-  line-and-branch coverage and 83.30% branch coverage, satisfying both 80%
+- the separately generated branch-coverage evidence records 91.31% combined
+  line-and-branch coverage and 83.37% branch coverage, satisfying both 80%
   repository gates with no per-file hotspots; JUnit records 252 passing tests,
   one platform-limited symlink skip, and no failures or errors;
 - CycloneDX completed from `uv.lock` through a frozen offline export with a

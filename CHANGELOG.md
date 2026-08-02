@@ -11,7 +11,7 @@ for published releases.
 - Expanded the suite to 252 passing tests while preserving actionable per-file
   coverage reporting in consolidated reports.
 - Resolved four consecutive reports' lowest-coverage files, raised combined
-  line-and-branch coverage to 91.26%, and added runtime-guard coverage for
+  line-and-branch coverage to 91.31%, and added runtime-guard coverage for
   offline linters, staging, Pysa, Trivy, Cosign, artifact scanners, passive
   evidence adapters, cross-tool finding correlation, offline databases,
   applicability decisions, malformed evidence, temporary-file cleanup, SARIF
@@ -37,6 +37,11 @@ for published releases.
   is an execution gap rather than being mislabeled as not applicable.
 - Reused the typed `Outcome` model for inspection dispositions, eliminating a
   Bandit B105 false positive without adding a security suppression.
+- Refined the self-contained HTML dashboard with an explicit decision badge, a
+  balanced scanner-health grid, prominent execution-gap and applicability
+  counts, and a collapsed audit table for conditional controls.
+- Decomposed HTML report assembly from Radon rank D to rank A while preserving
+  the offline single-file artifact and strict content-security policy.
 
 ### Added
 
