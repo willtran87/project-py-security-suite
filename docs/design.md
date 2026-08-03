@@ -510,7 +510,7 @@ The native Windows self-scan process verifies:
   approved entry-point bindings and emitted normalized derived evidence;
 - the separately generated branch-coverage evidence records 91.94% combined
   line-and-branch coverage and 84.43% branch coverage, satisfying both 80%
-  repository gates with no per-file hotspots; JUnit records 274 passing tests,
+  repository gates with no per-file hotspots; JUnit records 275 passing tests,
   one platform-limited symlink skip, and no failures or errors;
 - CycloneDX completed from `uv.lock` through a frozen offline export with a
   hash-verified helper; zizmor, actionlint, Pysa, GuardDog, Flawfinder, and

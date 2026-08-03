@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import tempfile
@@ -17,6 +18,7 @@ from py_security_suite.cli import (
     main,
 )
 from py_security_suite.models import Outcome
+from py_security_suite.reports import REPORT_FILES
 
 
 class CliSafetyTests(unittest.TestCase):
@@ -273,7 +275,7 @@ class CliSafetyTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "symbolic link or junction"):
                     _prepare_output(target=target, output=output, overwrite=False)
 
-    def test_marked_report_can_be_replaced(self) -> None:
+    def test_verified_complete_report_can_be_replaced(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             target = root / "target"
@@ -291,9 +293,49 @@ class CliSafetyTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
+            for name in REPORT_FILES:
+                path = output / name
+                if path.name in {"checksums.sha256", "scan-manifest.json"}:
+                    continue
+                path.write_text("fixture\n", encoding="utf-8")
+            entries = [
+                f"{hashlib.sha256(path.read_bytes()).hexdigest()}  "
+                f"{path.relative_to(output).as_posix()}"
+                for path in sorted(output.rglob("*"))
+                if path.is_file() and path.name != "checksums.sha256"
+            ]
+            (output / "checksums.sha256").write_text(
+                "\n".join(entries) + "\n",
+                encoding="utf-8",
+                newline="\n",
+            )
+            self.assertTrue(_is_suite_report(marker))
+            summary = output / "summary.md"
+            original_summary = summary.read_text(encoding="utf-8")
+            summary.write_text("tampered\n", encoding="utf-8")
+            self.assertFalse(_is_suite_report(marker))
+            summary.write_text(original_summary, encoding="utf-8")
             self.assertTrue(_is_suite_report(marker))
             _prepare_output(target=target, output=output, overwrite=True)
             self.assertFalse(output.exists())
+
+    def test_incomplete_report_cannot_be_replaced(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / "target"
+            target.mkdir()
+            output = root / "report"
+            output.mkdir()
+            marker = output / "scan-manifest.json"
+            marker.write_text(
+                '{"schema_version":"1.0","suite_version":"0.1.0",'
+                '"scan_id":"scan-fixture"}',
+                encoding="utf-8",
+            )
+            self.assertFalse(_is_suite_report(marker))
+            with self.assertRaisesRegex(ValueError, "refusing to overwrite"):
+                _prepare_output(target=target, output=output, overwrite=True)
+            self.assertTrue(marker.is_file())
 
     def test_bad_report_markers_are_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

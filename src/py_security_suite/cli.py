@@ -15,6 +15,7 @@ from .policy import exit_code
 from .passport import create_attestation, verify_attestation, verify_report
 from .path_safety import resolve_regular_directory, resolve_unlinked_path
 from .report_inspection import inspect_report, render_inspection
+from .reports import REPORT_FILES
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -328,18 +329,14 @@ def _remove_existing_output(output: Path, overwrite: bool) -> None:
 
 
 def _is_suite_report(marker: Path) -> bool:
-    if not marker.is_file():
+    root = marker.parent
+    if marker.name != "scan-manifest.json" or not marker.is_file():
         return False
     try:
-        document = json.loads(marker.read_text(encoding="utf-8"))
+        verify_report(root)
     except (OSError, ValueError):
         return False
-    return (
-        isinstance(document, dict)
-        and document.get("schema_version") == "1.0"
-        and "suite_version" in document
-        and "scan_id" in document
-    )
+    return all((root / name).is_file() for name in REPORT_FILES)
 
 
 def _append_github_summary(summary: Path) -> None:

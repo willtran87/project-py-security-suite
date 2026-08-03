@@ -5,6 +5,8 @@ for published releases.
 
 ## Unreleased
 
+- Require a complete, checksum-verified canonical report before `--overwrite`
+  may recursively replace a non-empty output directory.
 - Reject symbolic links and Windows junctions in every governed path component
   inside the scan target, before path normalization can erase their identity.
 - Extended governed path checks to passive artifact/provenance roots and reject
