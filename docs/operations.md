@@ -442,10 +442,11 @@ boundary and use `-NetworkIsolated`.
 `scan-manifest.json`. Choose a new directory if the destination contains
 unrelated files. A requested output that is itself a symbolic link or junction
 is rejected before path resolution. Reports are rendered and checksummed in a
-private sibling staging directory, then published with one final rename;
-rendering failures remove staging and never leave a partial report at the
-requested destination. A destination that appears during generation is not
-overwritten.
+private sibling staging directory, then the complete checksum chain and scan
+manifest are independently read back and verified before one final rename.
+Rendering or self-verification failures remove staging and never leave a partial
+report at the requested destination. A destination that appears during
+generation is not overwritten.
 
 ## Verification
 

@@ -473,8 +473,9 @@ See [configuration.md](configuration.md) for the complete supported schema.
   detect-secrets findings through the real aggregate path.
 - Report overwrite requires a valid suite manifest and rejects unsafe roots or
   linked destinations. Report publication is failure-atomic: a private sibling
-  staging tree is checksummed before its final rename, and a destination that
-  appears during rendering is never overwritten.
+  staging tree is checksummed, then its checksum chain and manifest are read
+  back and verified before the final rename; a destination that appears during
+  rendering is never overwritten.
 
 ### Controls supplied by the enterprise platform
 

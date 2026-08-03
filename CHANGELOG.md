@@ -5,9 +5,10 @@ for published releases.
 
 ## Unreleased
 
-- Made report publication failure-atomic through private sibling staging and a
-  final rename; corrected output-link validation to occur before path
-  resolution and added publication-time link/collision checks.
+- Made report publication failure-atomic through private sibling staging,
+  checksum-chain and manifest self-verification, and a final rename; corrected
+  output-link validation to occur before path resolution and added
+  publication-time link/collision checks.
 - Hardened generated Markdown, HTML, and SARIF citation links with strict
   HTTP(S) parsing, host and port validation, credential rejection, bounded
   length, and control/Markdown-delimiter filtering.

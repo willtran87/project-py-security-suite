@@ -411,6 +411,31 @@ class OrchestratorTests(unittest.TestCase):
             self.assertTrue(collided_output.is_dir())
             self.assertEqual(list(root.glob(".collided-report.staging-*")), [])
 
+            invalid_output = root / "invalid-report"
+
+            def write_invalid_checksums(staging: Path) -> None:
+                (staging / "checksums.sha256").write_text(
+                    f"{'0' * 64}  summary.md\n",
+                    encoding="utf-8",
+                    newline="\n",
+                )
+
+            with (
+                patch(
+                    "py_security_suite.reports._write_checksums",
+                    side_effect=write_invalid_checksums,
+                ),
+                self.assertRaisesRegex(ValueError, "checksum mismatch"),
+            ):
+                scan_project(
+                    target=target,
+                    output=invalid_output,
+                    config=load_config(profile_override="quick"),
+                    network_isolation_attested=False,
+                )
+            self.assertFalse(invalid_output.exists())
+            self.assertEqual(list(root.glob(".invalid-report.staging-*")), [])
+
     def test_unisolated_diagnostic_runs_tools_but_remains_incomplete(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

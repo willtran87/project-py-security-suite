@@ -23,7 +23,7 @@ from .models import (
     json_ready,
 )
 from .source_context import source_language
-from .passport import build_security_passport_statement
+from .passport import build_security_passport_statement, verify_report
 
 
 REPORT_FILES = (
@@ -140,6 +140,7 @@ def write_reports(
             include_evidence=include_evidence,
             derived_artifacts=derived_artifacts,
         )
+        verify_report(staging)
         if output.exists() or output.is_symlink():
             raise FileExistsError(f"report output appeared during generation: {output}")
         staging.rename(output)
