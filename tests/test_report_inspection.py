@@ -6,7 +6,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from py_security_suite.report_inspection import inspect_report, render_inspection
+from py_security_suite.report_inspection import (
+    _line_number,
+    _safe_text,
+    _safe_web_uri,
+    inspect_report,
+    render_inspection,
+)
 
 
 class ReportInspectionTests(unittest.TestCase):
@@ -32,6 +38,7 @@ class ReportInspectionTests(unittest.TestCase):
         self.assertEqual(
             document["top_actions"][0]["citations"][0]["identifier"], "CWE-78"
         )
+        self.assertEqual(document["top_actions"][0]["citations"][2]["uri"], "")
         self.assertEqual(document["top_actions"][0]["owners"], ["@security"])
         self.assertTrue(
             document["top_actions"][0]["details"].endswith("index.html#PYSEC-HIGH")
@@ -61,8 +68,26 @@ class ReportInspectionTests(unittest.TestCase):
         self.assertIn("Action: Remediate the fixture.", rendered)
         self.assertIn("Review: ", rendered)
         self.assertIn("index.html#PYSEC-HIGH", rendered)
+        self.assertNotIn("javascript:", rendered)
         self.assertIn("app.py:7", rendered)
         self.assertIn("Low fixture | <repository>", complete_rendered)
+
+    def test_terminal_text_and_citation_uris_are_safely_bounded(self) -> None:
+        sanitized = _safe_text("trusted\x1b[31m\u202espoof")
+        self.assertEqual(sanitized, "trusted�[31m�spoof")
+        self.assertNotIn("\x1b", sanitized)
+        self.assertNotIn("\u202e", sanitized)
+        self.assertEqual(len(_safe_text("x" * 5000)), 4096)
+        self.assertTrue(_safe_text("x" * 5000).endswith("…"))
+        self.assertEqual(
+            _safe_web_uri("https://example.test/reference"),
+            "https://example.test/reference",
+        )
+        self.assertEqual(_safe_web_uri("javascript:alert(1)"), "")
+        self.assertEqual(_safe_web_uri("https://[invalid"), "")
+        self.assertEqual(_line_number(7), 7)
+        self.assertIsNone(_line_number("7\x1b[31m"))
+        self.assertIsNone(_line_number(True))
 
     def test_limit_is_bounded(self) -> None:
         with self.assertRaisesRegex(ValueError, "between 0 and 100"):
@@ -165,6 +190,11 @@ def _finding(
                 "uri": "https://cwe.example/78",
             },
             {"identifier": "B602"},
+            {
+                "identifier": "unsafe-link",
+                "title": "Unsafe citation",
+                "uri": "javascript:alert(1)",
+            },
         ],
         "evidence": {"owners": ["@security"]},
         "remediation": "Remediate the fixture.",

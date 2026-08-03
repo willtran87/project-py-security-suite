@@ -4,13 +4,14 @@ import json
 from collections import Counter
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 from .models import Outcome
 from .passport import verify_report
 
 
 _MAX_JSON_BYTES = 128 * 1024 * 1024
+_MAX_DISPLAY_TEXT = 4096
 _SEVERITY_ORDER = {
     "critical": 0,
     "high": 1,
@@ -38,6 +39,7 @@ def inspect_report(report: Path, *, limit: int = 5) -> dict[str, Any]:
     findings = _object_list(findings_document.get("findings"), "findings")
     tools = _object_list(manifest.get("tools"), "tools")
     outcome, policy_reasons = _policy_metadata(manifest)
+    policy_reasons = [_safe_text(reason) for reason in policy_reasons]
     sorted_findings = sorted(findings, key=_finding_key)
     return {
         "schema_version": "1.0",
@@ -83,19 +85,23 @@ def _policy_metadata(manifest: dict[str, Any]) -> tuple[str, list[str]]:
 
 def _scan_summary(manifest: dict[str, Any], outcome: str) -> dict[str, Any]:
     return {
-        "id": manifest.get("scan_id"),
-        "target": manifest.get("target"),
-        "profile": manifest.get("profile"),
+        "id": _safe_text(manifest.get("scan_id")),
+        "target": _safe_text(manifest.get("target")),
+        "profile": _safe_text(manifest.get("profile")),
         "outcome": outcome,
         "duration_seconds": manifest.get("duration_seconds"),
-        "finished_at": manifest.get("finished_at"),
+        "finished_at": _safe_text(manifest.get("finished_at")),
     }
 
 
 def _findings_summary(findings: list[dict[str, Any]]) -> dict[str, Any]:
-    severity = Counter(str(item.get("severity") or "unknown") for item in findings)
-    domains = Counter(str(item.get("domain") or "unknown") for item in findings)
-    lifecycle = Counter(str(item.get("status") or "unknown") for item in findings)
+    severity = Counter(
+        _safe_text(item.get("severity") or "unknown") for item in findings
+    )
+    domains = Counter(_safe_text(item.get("domain") or "unknown") for item in findings)
+    lifecycle = Counter(
+        _safe_text(item.get("status") or "unknown") for item in findings
+    )
     return {
         "total": len(findings),
         "blocking": sum(bool(item.get("blocking")) for item in findings),
@@ -107,9 +113,9 @@ def _findings_summary(findings: list[dict[str, Any]]) -> dict[str, Any]:
 
 def _entrypoints(root: Path) -> dict[str, str]:
     return {
-        "html": str(root / "index.html"),
-        "summary": str(root / "summary.md"),
-        "action_plan": str(root / "action-plan.md"),
+        "html": _safe_text(root / "index.html"),
+        "summary": _safe_text(root / "summary.md"),
+        "action_plan": _safe_text(root / "action-plan.md"),
     }
 
 
@@ -144,7 +150,7 @@ def render_inspection(document: dict[str, Any]) -> str:
     reasons = policy["reasons"]
     if reasons:
         lines.append("Policy reasons:")
-        lines.extend(f"- {reason}" for reason in reasons)
+        lines.extend(f"- {_safe_text(reason)}" for reason in reasons)
     actions = document["top_actions"]
     if actions:
         lines.append("Top actions:")
@@ -215,22 +221,22 @@ def _finding_key(item: dict[str, Any]) -> tuple[int, int, int, str]:
 def _action(item: dict[str, Any], root: Path) -> dict[str, Any]:
     location = _primary_location(item.get("locations"))
     sources = _sources(item.get("sources"))
-    finding_id = str(item.get("finding_id") or "")
+    finding_id = _safe_text(item.get("finding_id") or "")
     return {
         "finding_id": finding_id,
-        "title": item.get("title"),
-        "severity": item.get("severity"),
-        "status": item.get("status"),
-        "domain": item.get("domain"),
-        "path": location.get("path", "<repository>"),
-        "line": location.get("start_line"),
-        "tools": sorted({str(source["tool"]) for source in sources}),
+        "title": _safe_text(item.get("title")),
+        "severity": _safe_text(item.get("severity")),
+        "status": _safe_text(item.get("status")),
+        "domain": _safe_text(item.get("domain")),
+        "path": _safe_text(location.get("path", "<repository>")),
+        "line": _line_number(location.get("start_line")),
+        "tools": sorted({_safe_text(source["tool"]) for source in sources}),
         "source_rules": sorted({_source_rule(source) for source in sources}),
         "classifications": _strings(item.get("classifications")),
         "citations": _citations(item.get("citations")),
         "owners": _owners(item.get("evidence")),
-        "remediation": str(item.get("remediation") or ""),
-        "details": f"{root / 'index.html'}#{quote(finding_id, safe='')}",
+        "remediation": _safe_text(item.get("remediation") or ""),
+        "details": f"{_safe_text(root / 'index.html')}#{quote(finding_id, safe='')}",
     }
 
 
@@ -238,6 +244,12 @@ def _primary_location(value: object) -> dict[str, Any]:
     if isinstance(value, list) and value and isinstance(value[0], dict):
         return value[0]
     return {}
+
+
+def _line_number(value: object) -> int | None:
+    if isinstance(value, int) and not isinstance(value, bool) and value > 0:
+        return value
+    return None
 
 
 def _sources(value: object) -> list[dict[str, Any]]:
@@ -249,21 +261,21 @@ def _sources(value: object) -> list[dict[str, Any]]:
 
 
 def _source_rule(source: dict[str, Any]) -> str:
-    tool = str(source["tool"])
+    tool = _safe_text(source["tool"])
     rule = source.get("rule_id")
-    return f"{tool}/{rule}" if rule else tool
+    return f"{tool}/{_safe_text(rule)}" if rule else tool
 
 
 def _owners(value: object) -> list[str]:
     if not isinstance(value, dict) or not isinstance(value.get("owners"), list):
         return []
-    return [str(owner) for owner in value["owners"]]
+    return [_safe_text(owner) for owner in value["owners"]]
 
 
 def _strings(value: object) -> list[str]:
     if not isinstance(value, list):
         return []
-    return [str(item) for item in value]
+    return [_safe_text(item) for item in value]
 
 
 def _citations(value: object) -> list[dict[str, str]]:
@@ -271,9 +283,9 @@ def _citations(value: object) -> list[dict[str, str]]:
         return []
     return [
         {
-            "identifier": str(item.get("identifier") or ""),
-            "title": str(item.get("title") or ""),
-            "uri": str(item.get("uri") or ""),
+            "identifier": _safe_text(item.get("identifier") or ""),
+            "title": _safe_text(item.get("title") or ""),
+            "uri": _safe_web_uri(item.get("uri")),
         }
         for item in value
         if isinstance(item, dict)
@@ -281,14 +293,17 @@ def _citations(value: object) -> list[dict[str, str]]:
 
 
 def _counts(values: dict[str, int]) -> str:
-    return ", ".join(f"{name}={count}" for name, count in values.items()) or "none"
+    return (
+        ", ".join(f"{_safe_text(name)}={count}" for name, count in values.items())
+        or "none"
+    )
 
 
 def _tool_health(tools: list[dict[str, Any]]) -> dict[str, Any]:
     applicable = [item for item in tools if item.get("applicable", True) is not False]
     not_applicable = len(tools) - len(applicable)
     completed = sum(str(item.get("status")) == "completed" for item in applicable)
-    by_status = Counter(str(item.get("status") or "unknown") for item in tools)
+    by_status = Counter(_safe_text(item.get("status") or "unknown") for item in tools)
     return {
         "selected": len(tools),
         "applicable": len(applicable),
@@ -298,3 +313,22 @@ def _tool_health(tools: list[dict[str, Any]]) -> dict[str, Any]:
         "coverage_complete": completed == len(applicable),
         "by_status": dict(sorted(by_status.items())),
     }
+
+
+def _safe_text(value: object) -> str:
+    text = str(value)
+    sanitized = "".join(
+        character if character.isprintable() else "�" for character in text
+    )
+    if len(sanitized) <= _MAX_DISPLAY_TEXT:
+        return sanitized
+    return sanitized[: _MAX_DISPLAY_TEXT - 1] + "…"
+
+
+def _safe_web_uri(value: object) -> str:
+    uri = _safe_text(value or "").strip()
+    try:
+        parsed = urlsplit(uri)
+    except ValueError:
+        return ""
+    return uri if parsed.scheme.lower() in {"http", "https"} and parsed.netloc else ""

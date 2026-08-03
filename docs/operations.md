@@ -510,6 +510,12 @@ link to the full HTML evidence card. Action-plan finding IDs use the same deep
 links when viewed from a GitHub artifact. Use `--limit 0` for summary-only
 output or `--format json` for dashboards.
 
+Inspection treats report content as untrusted even after checksum validation.
+Terminal-facing values are length-bounded, non-printing and bidirectional
+control characters are visibly neutralized, and citation links are emitted only
+for well-formed HTTP(S) URLs. Checksum verification proves report consistency,
+not signer identity; use a verified Security Passport when authenticity matters.
+
 ## Intelligence, baseline, and Security Passport lanes
 
 The connected preparation lane downloads the authoritative CISA KEV JSON and

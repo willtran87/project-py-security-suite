@@ -5,6 +5,9 @@ for published releases.
 
 ## Unreleased
 
+- Hardened `pysec inspect` as an untrusted-report boundary: terminal-facing
+  values are bounded and neutralize control/bidirectional characters, while
+  citation links are restricted to well-formed HTTP(S) references.
 - Added finding classifications, authoritative citations, and direct HTML
   evidence links to `pysec inspect`; action-plan finding IDs now deep-link to
   their full cited finding cards for faster GitHub artifact triage.
@@ -18,10 +21,10 @@ for published releases.
 - Raised combined statement-and-branch coverage above the enforced 80% gate
   with fail-closed tests for CodeQL, CycloneDX, Security Passport integrity,
   portfolio adapters, and passive test-evidence parsing.
-- Expanded the suite to 254 passing tests while preserving actionable per-file
+- Expanded the suite to 255 passing tests while preserving actionable per-file
   coverage reporting in consolidated reports.
 - Resolved four consecutive reports' lowest-coverage files, raised combined
-  line-and-branch coverage to 91.48%, and added runtime-guard coverage for
+  line-and-branch coverage to 91.50%, and added runtime-guard coverage for
   offline linters, staging, Pysa, Trivy, Cosign, artifact scanners, passive
   evidence adapters, cross-tool finding correlation, offline databases,
   applicability decisions, malformed evidence, temporary-file cleanup, SARIF
