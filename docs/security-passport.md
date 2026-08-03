@@ -32,8 +32,14 @@ sequenceDiagram
 ```
 
 Passport creation uses a sibling staging directory and publishes it only after
-all signing material and checksums are complete. A failed signing attempt
-leaves an existing passport intact and removes incomplete staging material.
+all signing material is complete and the generated checksum manifest has been
+read back successfully. Verification requires the manifest to cover the exact
+evidence file set, so injected unchecksummed files fail validation. Requested
+output links and junctions are rejected before path resolution, a destination
+that appears without `--overwrite` is preserved, an overwrite target must
+itself be a checksum-verified structurally valid Passport, and the prior
+Passport is restored if the final replacement fails. Failed signing and
+publication attempts remove incomplete staging material.
 
 The signer key is never copied into the report. An optional password file is
 bounded, read only for the signing operation, supplied as `COSIGN_PASSWORD` to

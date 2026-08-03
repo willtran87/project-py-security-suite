@@ -329,9 +329,33 @@ class PassportTests(unittest.TestCase):
             output.mkdir()
             with self.assertRaisesRegex(ValueError, "already exists"):
                 _prepare_directory(output, overwrite=False)
-            with self.assertRaisesRegex(ValueError, "not a Security Passport"):
+            with self.assertRaisesRegex(ValueError, "not a valid Security Passport"):
                 _prepare_directory(output, overwrite=True)
-            (output / "verification-material.json").write_text("{}", encoding="utf-8")
+            (output / "verification-material.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": "1.0",
+                        "signed": False,
+                        "report_checksums_sha256": "a" * 64,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (output / "security-passport.json").write_text(
+                json.dumps(
+                    {
+                        "_type": "https://in-toto.io/Statement/v1",
+                        "subject": [{"name": "source", "digest": {}}],
+                        "predicateType": ("https://slsa.dev/verification_summary/v1"),
+                        "predicate": {
+                            "verificationResult": "PASSED",
+                            "policy": {"digest": {}},
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            _write_checksums(output)
             _prepare_directory(output, overwrite=True)
 
             regular_file = root / "not-a-directory"
@@ -431,6 +455,11 @@ class PassportTests(unittest.TestCase):
                 _verify_checksums(root)
             checksum.write_text(f"{digest}  evidence.json\n", encoding="utf-8")
             self.assertEqual(_verify_checksums(root), 1)
+            extra = root / "unchecksummed.json"
+            extra.write_text("{}", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "exact evidence file set"):
+                _verify_checksums(root)
+            extra.unlink()
             with patch("py_security_suite.passport._MAX_FILE_BYTES", 1):
                 with self.assertRaisesRegex(ValueError, "manifest is too large"):
                     _verify_checksums(root)
@@ -729,6 +758,120 @@ class PassportTests(unittest.TestCase):
                     )
             self.assertEqual((passport / "checksums.sha256").read_bytes(), original)
             self.assertEqual(list(root.glob(".passport.staging-*")), [])
+
+    def test_passport_publication_verifies_staging_and_preserves_collisions(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            report = _fixture_report(root)
+            passport = root / "passport"
+            original_verify = _verify_checksums
+
+            def verify_and_create_collision(path: Path) -> int:
+                count = original_verify(path)
+                if path != report:
+                    passport.mkdir()
+                    (passport / "sentinel.txt").write_text("keep", encoding="utf-8")
+                return count
+
+            with (
+                patch(
+                    "py_security_suite.passport._verify_checksums",
+                    side_effect=verify_and_create_collision,
+                ),
+                self.assertRaisesRegex(ValueError, "already exists"),
+            ):
+                create_attestation(report=report, output=passport, signing_key=None)
+            self.assertEqual(
+                (passport / "sentinel.txt").read_text(encoding="utf-8"), "keep"
+            )
+            self.assertEqual(list(root.glob(".passport.staging-*")), [])
+
+            invalid = root / "invalid-passport"
+
+            def write_invalid_checksums(staging: Path) -> None:
+                (staging / "checksums.sha256").write_text(
+                    f"{'0' * 64}  security-passport.json\n",
+                    encoding="utf-8",
+                    newline="\n",
+                )
+
+            with (
+                patch(
+                    "py_security_suite.passport._write_checksums",
+                    side_effect=write_invalid_checksums,
+                ),
+                self.assertRaisesRegex(ValueError, "checksum mismatch"),
+            ):
+                create_attestation(report=report, output=invalid, signing_key=None)
+            self.assertFalse(invalid.exists())
+            self.assertEqual(list(root.glob(".invalid-passport.staging-*")), [])
+
+    def test_passport_overwrite_rolls_back_failed_publication(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            report = _fixture_report(root)
+            passport = root / "passport"
+            create_attestation(report=report, output=passport, signing_key=None)
+            original = (passport / "checksums.sha256").read_bytes()
+            original_replace = Path.replace
+
+            def fail_staging_replace(source: Path, target: Path) -> Path:
+                if source.name.startswith(".passport.staging-"):
+                    raise OSError("simulated publication failure")
+                return original_replace(source, target)
+
+            with (
+                patch.object(Path, "replace", fail_staging_replace),
+                self.assertRaisesRegex(OSError, "publication failure"),
+            ):
+                create_attestation(
+                    report=report,
+                    output=passport,
+                    signing_key=None,
+                    overwrite=True,
+                )
+            self.assertEqual((passport / "checksums.sha256").read_bytes(), original)
+            self.assertEqual(list(root.glob(".passport.staging-*")), [])
+            self.assertEqual(list(root.glob(".passport.backup-*")), [])
+
+    def test_passport_overwrite_publishes_verified_replacement(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            report = _fixture_report(root)
+            passport = root / "passport"
+            create_attestation(report=report, output=passport, signing_key=None)
+            material = create_attestation(
+                report=report,
+                output=passport,
+                signing_key=None,
+                overwrite=True,
+            )
+            verified = verify_attestation(
+                passport=passport,
+                report=report,
+                public_key=None,
+                allow_unsigned=True,
+            )
+            self.assertFalse(material["signed"])
+            self.assertTrue(verified["passport_integrity_verified"])
+            self.assertEqual(list(root.glob(".passport.staging-*")), [])
+            self.assertEqual(list(root.glob(".passport.backup-*")), [])
+
+    def test_passport_output_link_is_rejected_before_resolution(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            report = _fixture_report(root)
+            with (
+                patch.object(Path, "is_junction", return_value=True, create=True),
+                self.assertRaisesRegex(ValueError, "symbolic link or junction"),
+            ):
+                create_attestation(
+                    report=report,
+                    output=root / "passport-link",
+                    signing_key=None,
+                )
 
     def test_cosign_v3_uses_bundle_after_explicit_network_approval(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

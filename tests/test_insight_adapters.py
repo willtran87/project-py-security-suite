@@ -70,6 +70,26 @@ class InsightAdapterTests(unittest.TestCase):
         self.assertEqual(findings[1].locations[0].start_line, 12)
         self.assertEqual(findings[1].domain, "testing")
 
+    def test_diff_cover_does_not_flag_files_above_threshold(self) -> None:
+        payload = json.dumps(
+            {
+                "total_percent_covered": 93,
+                "total_num_violations": 3,
+                "num_changed_lines": 49,
+                "src_stats": {
+                    "src/app.py": {
+                        "percent_covered": 93.88,
+                        "violation_lines": [10, 20, 30],
+                        "covered_lines": list(range(1, 47)),
+                    }
+                },
+            }
+        )
+        findings = DiffCoverAdapter(
+            ToolConfig(minimum_coverage_percent=80), 4096
+        ).parse(payload, Path("."))
+        self.assertEqual(findings, [])
+
     def test_shellcheck_maps_rule_and_precise_range(self) -> None:
         payload = json.dumps(
             [

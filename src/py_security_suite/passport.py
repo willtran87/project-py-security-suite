@@ -118,7 +118,10 @@ def create_attestation(
     overwrite: bool = False,
 ) -> dict[str, Any]:
     report = report.expanduser().resolve()
-    output = output.expanduser().resolve()
+    requested_output = output.expanduser().absolute()
+    if _is_link_like(requested_output):
+        raise ValueError("attestation output cannot be a symbolic link or junction")
+    output = requested_output.resolve()
     verification = verify_report(report)
     statement_source = report / _STATEMENT_NAME
     if not statement_source.is_file() or statement_source.is_symlink():
@@ -157,7 +160,8 @@ def create_attestation(
         }
         _write_json(staging / "verification-material.json", material)
         _write_checksums(staging)
-        _publish_staging(staging, output)
+        _verify_checksums(staging)
+        _publish_staging(staging, output, overwrite=overwrite)
     except Exception:
         shutil.rmtree(staging, ignore_errors=True)
         raise
@@ -318,11 +322,21 @@ def _read_signing_password(path: Path | None) -> str:
     return password
 
 
-def _publish_staging(staging: Path, output: Path) -> None:
-    if output.exists():
-        _prepare_directory(output, overwrite=True)
-        shutil.rmtree(output)
-    staging.replace(output)
+def _publish_staging(staging: Path, output: Path, *, overwrite: bool) -> None:
+    if not output.exists() and not _is_link_like(output):
+        staging.replace(output)
+        return
+    _prepare_directory(output, overwrite)
+    backup = Path(tempfile.mkdtemp(prefix=f".{output.name}.backup-", dir=output.parent))
+    backup.rmdir()
+    output.replace(backup)
+    try:
+        staging.replace(output)
+    except Exception:
+        if backup.exists() and not output.exists():
+            backup.replace(output)
+        raise
+    shutil.rmtree(backup)
 
 
 def verify_attestation(
@@ -544,6 +558,19 @@ def _verify_checksums(root: Path) -> int:
             raise ValueError(f"checksummed file is too large: {raw_relative}")
         if sha256_file(path) != expected:
             raise ValueError(f"checksum mismatch: {raw_relative}")
+    actual: set[str] = set()
+    for path in root.rglob("*"):
+        relative_name = path.relative_to(root).as_posix()
+        if relative_name == "checksums.sha256":
+            continue
+        if _is_link_like(path):
+            raise ValueError(f"evidence tree contains a link: {relative_name}")
+        if path.is_file():
+            actual.add(relative_name)
+        elif not path.is_dir():
+            raise ValueError(f"evidence tree contains a special file: {relative_name}")
+    if actual != seen:
+        raise ValueError("checksum manifest does not cover the exact evidence file set")
     return len(lines)
 
 
@@ -564,16 +591,39 @@ def _read_json(path: Path) -> dict[str, Any]:
 
 
 def _prepare_directory(path: Path, overwrite: bool) -> None:
+    if _is_link_like(path):
+        raise ValueError(f"attestation output is not a regular directory: {path}")
     if path.exists():
         if not overwrite:
             raise ValueError(f"attestation output already exists: {path}")
-        if path.is_symlink() or not path.is_dir():
+        if not path.is_dir():
             raise ValueError(f"attestation output is not a regular directory: {path}")
         marker = path / "verification-material.json"
-        if not marker.is_file() or marker.is_symlink():
-            raise ValueError(
-                "refusing to overwrite a directory that is not a Security Passport"
+        try:
+            _verify_checksums(path)
+            material = _read_json(marker)
+            statement = _read_json(path / _STATEMENT_NAME)
+            _validate_statement(statement)
+            valid_material = (
+                material.get("schema_version") == "1.0"
+                and isinstance(material.get("signed"), bool)
+                and _is_digest(str(material.get("report_checksums_sha256") or ""))
             )
+        except (OSError, TypeError, ValueError) as exc:
+            raise ValueError(
+                "refusing to overwrite a directory that is not a valid "
+                "Security Passport"
+            ) from exc
+        if not valid_material:
+            raise ValueError(
+                "refusing to overwrite a directory that is not a valid "
+                "Security Passport"
+            )
+
+
+def _is_link_like(path: Path) -> bool:
+    is_junction = getattr(path, "is_junction", None)
+    return path.is_symlink() or (callable(is_junction) and bool(is_junction()))
 
 
 def _write_json(path: Path, value: Any) -> None:

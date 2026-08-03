@@ -5,6 +5,13 @@ for published releases.
 
 ## Unreleased
 
+- Hardened report and Security Passport integrity verification to reject
+  unchecksummed injected files; Passport publication now adds pre-resolution
+  link and junction rejection, staged checksum read-back, validation of existing
+  overwrite targets, collision-safe semantics, and failed-swap rollback.
+- Corrected Diff Cover normalization so a file is reported only when its own
+  changed-line coverage is below policy, eliminating false findings for files
+  above the configured threshold that still have some uncovered lines.
 - Made `pysec verify` fail closed for release automation: it now exits `0` only
   for an approved passport and exits `1` when integrity succeeds but signature,
   source-report, or scan-policy approval remains unsatisfied.

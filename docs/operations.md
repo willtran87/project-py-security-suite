@@ -383,6 +383,18 @@ For `pysec verify`, exit `0` means the passport's release decision is
 unsigned integrity-only passport therefore never returns a release-gate
 success status.
 
+Passport output follows the same defensive publication model as scan reports.
+It rejects symbolic links and junctions before resolving the requested path,
+requires checksum manifests to cover the exact evidence file set, verifies
+staged checksums before publication, never replaces a destination that appears
+unless `--overwrite` was supplied, validates an existing Passport before
+replacement, and restores it if the final replacement cannot complete.
+
+Changed-line coverage findings are threshold-accurate at both repository and
+file scope. Uncovered changed lines remain in Diff Cover evidence, while a
+normalized file finding is emitted only when that file is below the configured
+minimum percentage.
+
 ## Troubleshooting
 
 ### Required scanner is unavailable

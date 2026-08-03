@@ -68,10 +68,9 @@ class DiffCoverAdapter(JsonFileScannerAdapter):
             missing = raw_stat.get("violation_lines") or []
             if not isinstance(missing, list):
                 raise TypeError("diff-cover violation_lines must be a list")
-            if missing:
-                candidates.append(
-                    (_number(raw_stat.get("percent_covered")), str(raw_path), raw_stat)
-                )
+            percent = _number(raw_stat.get("percent_covered"))
+            if missing and percent < threshold:
+                candidates.append((percent, str(raw_path), raw_stat))
         for percent, raw_path, stat in sorted(candidates)[: self.maximum_file_findings]:
             missing = [_integer(value) for value in stat.get("violation_lines", [])]
             findings.append(
