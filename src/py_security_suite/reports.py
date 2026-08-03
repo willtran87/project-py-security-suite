@@ -158,6 +158,29 @@ def is_complete_report(output: Path) -> bool:
 
 
 def _publish_report(staging: Path, output: Path, *, replace_existing: bool) -> None:
+    lock = output.parent / f".{output.name}.publish-lock"
+    try:
+        lock.mkdir()
+    except FileExistsError as exc:
+        raise FileExistsError(
+            f"report publication is already active or requires recovery: {lock}"
+        ) from exc
+    try:
+        _publish_report_locked(
+            staging,
+            output,
+            replace_existing=replace_existing,
+        )
+    finally:
+        lock.rmdir()
+
+
+def _publish_report_locked(
+    staging: Path,
+    output: Path,
+    *,
+    replace_existing: bool,
+) -> None:
     if not output.exists() and not output.is_symlink():
         staging.rename(output)
         return

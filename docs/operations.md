@@ -426,6 +426,13 @@ rolls back the old report if the successor cannot be published. A partial
 report, a copied manifest marker, or any tampered evidence is refused and left
 untouched. Empty output directories still require the explicit flag.
 
+The final publication window is serialized by a sibling
+`.REPORT.publish-lock` directory. A concurrent publisher is refused before it
+can move either report. If a process is interrupted during publication, retain
+the lock and any `.REPORT.backup-*` directory as recovery evidence: verify the
+backup with `pysec verify-report`, restore it if the destination is absent, and
+remove the lock only after the incident is resolved.
+
 ## Troubleshooting
 
 ### Required scanner is unavailable

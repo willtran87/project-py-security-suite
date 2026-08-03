@@ -5,6 +5,8 @@ for published releases.
 
 ## Unreleased
 
+- Serialize final report publication with an atomic sibling lock so concurrent
+  publishers cannot race the verified rename and rollback window.
 - Preserve the prior verified report throughout replacement generation and
   roll it back if atomic publication of the verified successor fails.
 - Require a complete, checksum-verified canonical report before `--overwrite`

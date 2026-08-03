@@ -584,6 +584,28 @@ class OrchestratorTests(unittest.TestCase):
                 verify_report(replaced_output)["scan_id"], first.manifest.scan_id
             )
 
+            publication_lock = root / ".replaced-report.publish-lock"
+            publication_lock.mkdir()
+            with self.assertRaisesRegex(
+                FileExistsError,
+                "already active or requires recovery",
+            ):
+                scan_project(
+                    target=target,
+                    output=replaced_output,
+                    config=load_config(profile_override="quick"),
+                    network_isolation_attested=False,
+                    replace_existing=True,
+                )
+            self.assertEqual(
+                (replaced_output / "checksums.sha256").read_bytes(),
+                original_checksums,
+            )
+            self.assertEqual(
+                verify_report(replaced_output)["scan_id"], first.manifest.scan_id
+            )
+            publication_lock.rmdir()
+
             second = scan_project(
                 target=target,
                 output=replaced_output,
@@ -597,6 +619,7 @@ class OrchestratorTests(unittest.TestCase):
             )
             self.assertEqual(list(root.glob(".replaced-report.staging-*")), [])
             self.assertEqual(list(root.glob(".replaced-report.backup-*")), [])
+            self.assertFalse(publication_lock.exists())
 
     def test_unisolated_diagnostic_runs_tools_but_remains_incomplete(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
