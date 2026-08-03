@@ -194,6 +194,7 @@ class OrchestratorTests(unittest.TestCase):
             self.assertIn("Entry-point integrity", markdown)
             self.assertIn("# Security action plan", action_plan)
             self.assertIn("bandit/B602", action_plan)
+            self.assertIn("](index.html#PYSEC-", action_plan)
             self.assertIn("## Policy and release-evidence actions", action_plan)
             self.assertIn("**Scan-policy disposition:** `BLOCK`", action_plan)
             self.assertIn("# Production security assurance case", assurance_case)

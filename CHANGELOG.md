@@ -5,6 +5,9 @@ for published releases.
 
 ## Unreleased
 
+- Added finding classifications, authoritative citations, and direct HTML
+  evidence links to `pysec inspect`; action-plan finding IDs now deep-link to
+  their full cited finding cards for faster GitHub artifact triage.
 - Made `pysec doctor` decision-oriented: it now distinguishes preflight
   proceed/block from release approval, reports required/applicable readiness,
   labels optional attention without false blocking, and emits structured
@@ -18,7 +21,7 @@ for published releases.
 - Expanded the suite to 254 passing tests while preserving actionable per-file
   coverage reporting in consolidated reports.
 - Resolved four consecutive reports' lowest-coverage files, raised combined
-  line-and-branch coverage to 91.42%, and added runtime-guard coverage for
+  line-and-branch coverage to 91.48%, and added runtime-guard coverage for
   offline linters, staging, Pysa, Trivy, Cosign, artifact scanners, passive
   evidence adapters, cross-tool finding correlation, offline databases,
   applicability decisions, malformed evidence, temporary-file cleanup, SARIF

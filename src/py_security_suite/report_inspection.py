@@ -4,6 +4,7 @@ import json
 from collections import Counter
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 from .models import Outcome
 from .passport import verify_report
@@ -50,7 +51,7 @@ def inspect_report(report: Path, *, limit: int = 5) -> dict[str, Any]:
         },
         # Retain the original field for consumers of the 1.0 inspection shape.
         "policy_reasons": policy_reasons,
-        "top_actions": [_action(item) for item in sorted_findings[:limit]],
+        "top_actions": [_action(item, root) for item in sorted_findings[:limit]],
         "integrity": {
             "status": "verified",
             "files_verified": verification["file_count"],
@@ -148,19 +149,7 @@ def render_inspection(document: dict[str, Any]) -> str:
     if actions:
         lines.append("Top actions:")
         for item in actions:
-            location = item["path"]
-            if item["line"] is not None:
-                location = f"{location}:{item['line']}"
-            evidence = [f"finding {item['finding_id']}", *item["source_rules"]]
-            if item["owners"]:
-                evidence.append("owner " + ", ".join(item["owners"]))
-            lines.append(
-                f"- [{str(item['severity']).upper()}/{str(item['status']).upper()}] "
-                f"{item['title']} | {location}"
-            )
-            lines.append("  Evidence: " + "; ".join(evidence))
-            if item["remediation"]:
-                lines.append(f"  Action: {item['remediation']}")
+            lines.extend(_render_action(item))
     lines.extend(
         [
             f"Open: {document['entrypoints']['html']}",
@@ -168,6 +157,40 @@ def render_inspection(document: dict[str, Any]) -> str:
         ]
     )
     return "\n".join(lines)
+
+
+def _render_action(item: dict[str, Any]) -> list[str]:
+    lines = [
+        f"- [{str(item['severity']).upper()}/{str(item['status']).upper()}] "
+        f"{item['title']} | {_action_location(item)}",
+        "  Evidence: " + "; ".join(_action_evidence(item)),
+    ]
+    lines.extend(
+        f"  Reference: {_reference_text(citation)}" for citation in item["citations"]
+    )
+    if item["remediation"]:
+        lines.append(f"  Action: {item['remediation']}")
+    lines.append(f"  Review: {item['details']}")
+    return lines
+
+
+def _action_location(item: dict[str, Any]) -> str:
+    location = str(item["path"])
+    return f"{location}:{item['line']}" if item["line"] is not None else location
+
+
+def _action_evidence(item: dict[str, Any]) -> list[str]:
+    evidence = [f"finding {item['finding_id']}", *item["source_rules"]]
+    if item["classifications"]:
+        evidence.append("classification " + ", ".join(item["classifications"]))
+    if item["owners"]:
+        evidence.append("owner " + ", ".join(item["owners"]))
+    return evidence
+
+
+def _reference_text(citation: dict[str, str]) -> str:
+    reference = citation["title"] or citation["identifier"]
+    return f"{reference} - {citation['uri']}" if citation["uri"] else reference
 
 
 def _read_object(path: Path) -> dict[str, Any]:
@@ -189,11 +212,12 @@ def _finding_key(item: dict[str, Any]) -> tuple[int, int, int, str]:
     )
 
 
-def _action(item: dict[str, Any]) -> dict[str, Any]:
+def _action(item: dict[str, Any], root: Path) -> dict[str, Any]:
     location = _primary_location(item.get("locations"))
     sources = _sources(item.get("sources"))
+    finding_id = str(item.get("finding_id") or "")
     return {
-        "finding_id": item.get("finding_id"),
+        "finding_id": finding_id,
         "title": item.get("title"),
         "severity": item.get("severity"),
         "status": item.get("status"),
@@ -202,8 +226,11 @@ def _action(item: dict[str, Any]) -> dict[str, Any]:
         "line": location.get("start_line"),
         "tools": sorted({str(source["tool"]) for source in sources}),
         "source_rules": sorted({_source_rule(source) for source in sources}),
+        "classifications": _strings(item.get("classifications")),
+        "citations": _citations(item.get("citations")),
         "owners": _owners(item.get("evidence")),
         "remediation": str(item.get("remediation") or ""),
+        "details": f"{root / 'index.html'}#{quote(finding_id, safe='')}",
     }
 
 
@@ -231,6 +258,26 @@ def _owners(value: object) -> list[str]:
     if not isinstance(value, dict) or not isinstance(value.get("owners"), list):
         return []
     return [str(owner) for owner in value["owners"]]
+
+
+def _strings(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value]
+
+
+def _citations(value: object) -> list[dict[str, str]]:
+    if not isinstance(value, list):
+        return []
+    return [
+        {
+            "identifier": str(item.get("identifier") or ""),
+            "title": str(item.get("title") or ""),
+            "uri": str(item.get("uri") or ""),
+        }
+        for item in value
+        if isinstance(item, dict)
+    ]
 
 
 def _counts(values: dict[str, int]) -> str:

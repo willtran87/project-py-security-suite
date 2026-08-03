@@ -505,8 +505,10 @@ After scanning, use `pysec inspect REPORT` as the terminal and release-log entry
 point. It verifies checksums first and then shows the scan-policy disposition
 and reasons, applicability-aware scanner health, domain and lifecycle counts,
 and the highest-priority actions with finding ID, scanner rule, owner,
-location, and remediation. Use `--limit 0` for summary-only output or
-`--format json` for dashboards.
+location, classification, authoritative references, remediation, and a direct
+link to the full HTML evidence card. Action-plan finding IDs use the same deep
+links when viewed from a GitHub artifact. Use `--limit 0` for summary-only
+output or `--format json` for dashboards.
 
 ## Intelligence, baseline, and Security Passport lanes
 

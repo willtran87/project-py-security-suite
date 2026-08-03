@@ -6,6 +6,7 @@ import json
 import re
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 from .models import (
     Citation,
@@ -528,8 +529,9 @@ def render_action_plan(manifest: ScanManifest, findings: list[Finding]) -> str:
             f"| {_finding_priority(finding)} | "
             f"{_markdown_table(finding.domain)} | "
             f"{_markdown_table(finding.severity.value)} | "
-            f"`{_markdown_code(finding.finding_id)}` "
-            f"{_markdown_table(finding.title)} | "
+            f"[`{_markdown_code(finding.finding_id)}` "
+            f"{_markdown_table(finding.title)}]"
+            f"(index.html#{quote(finding.finding_id, safe='')}) | "
             f"{_markdown_table(finding.area)} | "
             f"`{_markdown_code(_location_text(finding))}` | "
             f"{_markdown_table(sources)} | "

@@ -28,11 +28,21 @@ class ReportInspectionTests(unittest.TestCase):
         self.assertEqual(document["scan_policy"]["disposition"], "block")
         self.assertEqual(document["top_actions"][0]["finding_id"], "PYSEC-HIGH")
         self.assertEqual(document["top_actions"][0]["source_rules"], ["bandit/B602"])
+        self.assertEqual(document["top_actions"][0]["classifications"], ["CWE-78"])
+        self.assertEqual(
+            document["top_actions"][0]["citations"][0]["identifier"], "CWE-78"
+        )
         self.assertEqual(document["top_actions"][0]["owners"], ["@security"])
+        self.assertTrue(
+            document["top_actions"][0]["details"].endswith("index.html#PYSEC-HIGH")
+        )
         self.assertEqual(complete_document["top_actions"][1]["path"], "<repository>")
         self.assertEqual(complete_document["top_actions"][1]["source_rules"], [])
+        self.assertEqual(complete_document["top_actions"][1]["classifications"], [])
+        self.assertEqual(complete_document["top_actions"][1]["citations"], [])
         self.assertEqual(complete_document["top_actions"][1]["owners"], [])
         rendered = render_inspection(document)
+        complete_rendered = render_inspection(complete_document)
         self.assertIn("FAIL: fixture", rendered)
         self.assertIn("Decision: BLOCK; report integrity: VERIFIED", rendered)
         self.assertIn("1 blocking", rendered)
@@ -40,9 +50,19 @@ class ReportInspectionTests(unittest.TestCase):
             "1/2 applicable completed; 1 not applicable; 1 execution gaps", rendered
         )
         self.assertIn("Policy reasons:", rendered)
-        self.assertIn("finding PYSEC-HIGH; bandit/B602; owner @security", rendered)
+        self.assertIn(
+            "finding PYSEC-HIGH; bandit/B602; classification CWE-78; owner @security",
+            rendered,
+        )
+        self.assertIn(
+            "Reference: CWE command injection - https://cwe.example/78", rendered
+        )
+        self.assertIn("Reference: B602", rendered)
         self.assertIn("Action: Remediate the fixture.", rendered)
+        self.assertIn("Review: ", rendered)
+        self.assertIn("index.html#PYSEC-HIGH", rendered)
         self.assertIn("app.py:7", rendered)
+        self.assertIn("Low fixture | <repository>", complete_rendered)
 
     def test_limit_is_bounded(self) -> None:
         with self.assertRaisesRegex(ValueError, "between 0 and 100"):
@@ -137,13 +157,25 @@ def _finding(
         "domain": "security",
         "locations": [{"path": "app.py", "start_line": line}],
         "sources": [{"tool": "bandit", "rule_id": "B602"}],
+        "classifications": ["CWE-78"],
+        "citations": [
+            {
+                "identifier": "CWE-78",
+                "title": "CWE command injection",
+                "uri": "https://cwe.example/78",
+            },
+            {"identifier": "B602"},
+        ],
         "evidence": {"owners": ["@security"]},
         "remediation": "Remediate the fixture.",
     }
     if sparse:
         finding.pop("locations")
         finding.pop("sources")
+        finding.pop("classifications")
+        finding.pop("citations")
         finding.pop("evidence")
+        finding["remediation"] = ""
     return finding
 
 
