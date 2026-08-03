@@ -42,12 +42,13 @@ def scan_project(
     network_isolation_attested: bool,
     diagnostic_without_isolation: bool = False,
     adapter_types: Mapping[str, type[ScannerAdapter]] | None = None,
+    replace_existing: bool = False,
 ) -> ScanResult:
     target = resolve_regular_directory(target, "scan target")
     output = resolve_unlinked_path(output, "report output")
     if not target.is_dir():
         raise ValueError(f"scan target is not a directory: {target}")
-    if output.exists():
+    if output.exists() and not replace_existing:
         raise ValueError(f"report output already exists: {output}")
     resolve_asset_paths(config, target)
 
@@ -182,6 +183,7 @@ def scan_project(
         diagnostics=diagnostics,
         include_evidence=config.reports.include_sanitized_evidence,
         derived_artifacts=derived_artifacts,
+        replace_existing=replace_existing,
     )
     return ScanResult(
         outcome=decision.outcome,

@@ -493,6 +493,111 @@ class OrchestratorTests(unittest.TestCase):
             self.assertFalse(invalid_output.exists())
             self.assertEqual(list(root.glob(".invalid-report.staging-*")), [])
 
+            replacement_file = root / "replacement-file"
+            replacement_file.write_text("preserve me", encoding="utf-8")
+            with self.assertRaisesRegex(
+                FileExistsError,
+                "not a replaceable directory",
+            ):
+                scan_project(
+                    target=target,
+                    output=replacement_file,
+                    config=load_config(profile_override="quick"),
+                    network_isolation_attested=False,
+                    replace_existing=True,
+                )
+            self.assertEqual(
+                replacement_file.read_text(encoding="utf-8"),
+                "preserve me",
+            )
+
+            unverified_output = root / "unverified-output"
+            unverified_output.mkdir()
+            user_file = unverified_output / "user-data.txt"
+            user_file.write_text("preserve me", encoding="utf-8")
+            with self.assertRaisesRegex(
+                FileExistsError,
+                "not a complete verified suite report",
+            ):
+                scan_project(
+                    target=target,
+                    output=unverified_output,
+                    config=load_config(profile_override="quick"),
+                    network_isolation_attested=False,
+                    replace_existing=True,
+                )
+            self.assertEqual(user_file.read_text(encoding="utf-8"), "preserve me")
+
+            replaced_output = root / "replaced-report"
+            first = scan_project(
+                target=target,
+                output=replaced_output,
+                config=load_config(profile_override="quick"),
+                network_isolation_attested=False,
+            )
+            original_checksums = (replaced_output / "checksums.sha256").read_bytes()
+            with (
+                patch(
+                    "py_security_suite.reports.render_html",
+                    side_effect=RuntimeError("replacement rendering failure"),
+                ),
+                self.assertRaisesRegex(RuntimeError, "replacement rendering failure"),
+            ):
+                scan_project(
+                    target=target,
+                    output=replaced_output,
+                    config=load_config(profile_override="quick"),
+                    network_isolation_attested=False,
+                    replace_existing=True,
+                )
+            self.assertEqual(
+                (replaced_output / "checksums.sha256").read_bytes(),
+                original_checksums,
+            )
+            self.assertEqual(
+                verify_report(replaced_output)["scan_id"], first.manifest.scan_id
+            )
+
+            original_rename = Path.rename
+
+            def fail_staging_rename(source: Path, target_path: Path) -> Path:
+                if source.name.startswith(".replaced-report.staging-"):
+                    raise OSError("replacement publication failure")
+                return original_rename(source, target_path)
+
+            with (
+                patch.object(Path, "rename", fail_staging_rename),
+                self.assertRaisesRegex(OSError, "publication failure"),
+            ):
+                scan_project(
+                    target=target,
+                    output=replaced_output,
+                    config=load_config(profile_override="quick"),
+                    network_isolation_attested=False,
+                    replace_existing=True,
+                )
+            self.assertEqual(
+                (replaced_output / "checksums.sha256").read_bytes(),
+                original_checksums,
+            )
+            self.assertEqual(
+                verify_report(replaced_output)["scan_id"], first.manifest.scan_id
+            )
+
+            second = scan_project(
+                target=target,
+                output=replaced_output,
+                config=load_config(profile_override="quick"),
+                network_isolation_attested=False,
+                replace_existing=True,
+            )
+            self.assertNotEqual(second.manifest.scan_id, first.manifest.scan_id)
+            self.assertEqual(
+                verify_report(replaced_output)["scan_id"], second.manifest.scan_id
+            )
+            self.assertEqual(list(root.glob(".replaced-report.staging-*")), [])
+            self.assertEqual(list(root.glob(".replaced-report.backup-*")), [])
+
     def test_unisolated_diagnostic_runs_tools_but_remains_incomplete(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

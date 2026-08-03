@@ -5,6 +5,8 @@ for published releases.
 
 ## Unreleased
 
+- Preserve the prior verified report throughout replacement generation and
+  roll it back if atomic publication of the verified successor fails.
 - Require a complete, checksum-verified canonical report before `--overwrite`
   may recursively replace a non-empty output directory.
 - Reject symbolic links and Windows junctions in every governed path component

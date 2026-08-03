@@ -317,7 +317,8 @@ class CliSafetyTests(unittest.TestCase):
             summary.write_text(original_summary, encoding="utf-8")
             self.assertTrue(_is_suite_report(marker))
             _prepare_output(target=target, output=output, overwrite=True)
-            self.assertFalse(output.exists())
+            self.assertTrue(output.is_dir())
+            self.assertTrue(_is_suite_report(marker))
 
     def test_incomplete_report_cannot_be_replaced(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import shutil
 import sys
 from pathlib import Path
 
@@ -15,7 +14,7 @@ from .policy import exit_code
 from .passport import create_attestation, verify_attestation, verify_report
 from .path_safety import resolve_regular_directory, resolve_unlinked_path
 from .report_inspection import inspect_report, render_inspection
-from .reports import REPORT_FILES
+from .reports import is_complete_report
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -276,6 +275,7 @@ def main(argv: list[str] | None = None) -> int:
             config=config,
             network_isolation_attested=args.network_isolated,
             diagnostic_without_isolation=args.diagnostic_without_isolation,
+            replace_existing=args.overwrite,
         )
         if args.github_summary:
             _append_github_summary(output / "summary.md")
@@ -292,7 +292,7 @@ def main(argv: list[str] | None = None) -> int:
 def _prepare_output(*, target: Path, output: Path, overwrite: bool) -> Path:
     output = resolve_unlinked_path(output, "report output")
     _validate_output_scope(target, output)
-    _remove_existing_output(output, overwrite)
+    _validate_existing_output(output, overwrite)
     output.parent.mkdir(parents=True, exist_ok=True)
     return output
 
@@ -309,7 +309,7 @@ def _validate_output_scope(target: Path, output: Path) -> None:
         raise ValueError("report output cannot contain the scan target")
 
 
-def _remove_existing_output(output: Path, overwrite: bool) -> None:
+def _validate_existing_output(output: Path, overwrite: bool) -> None:
     if not output.exists():
         return
     if not output.is_dir():
@@ -325,18 +325,12 @@ def _remove_existing_output(output: Path, overwrite: bool) -> None:
             "refusing to overwrite a non-empty directory that is not a "
             "Python Security Suite report"
         )
-    shutil.rmtree(output)
 
 
 def _is_suite_report(marker: Path) -> bool:
-    root = marker.parent
     if marker.name != "scan-manifest.json" or not marker.is_file():
         return False
-    try:
-        verify_report(root)
-    except (OSError, ValueError):
-        return False
-    return all((root / name).is_file() for name in REPORT_FILES)
+    return is_complete_report(marker.parent)
 
 
 def _append_github_summary(summary: Path) -> None:

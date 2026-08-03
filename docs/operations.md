@@ -418,10 +418,13 @@ symbolic link or Windows junction is rejected even when the final file is a
 regular file. Explicit absolute paths outside the repository remain supported
 for administrator-staged tool bundles and trust stores.
 
-`--overwrite` removes a non-empty destination only after the existing directory
-passes the report checksum verifier and contains every canonical report file.
-A partial report, a copied manifest marker, or any tampered evidence is refused
-and left untouched. Empty output directories still require the explicit flag.
+`--overwrite` replaces a non-empty destination only after the existing
+directory passes the report checksum verifier and contains every canonical
+report file. The old verified report remains available while scanners run and
+the successor is staged and verified; publication uses a same-volume rename and
+rolls back the old report if the successor cannot be published. A partial
+report, a copied manifest marker, or any tampered evidence is refused and left
+untouched. Empty output directories still require the explicit flag.
 
 ## Troubleshooting
 

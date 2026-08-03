@@ -123,9 +123,10 @@ def write_reports(
     diagnostics: dict[str, dict[str, Any]],
     include_evidence: bool,
     derived_artifacts: dict[str, Any] | None = None,
+    replace_existing: bool = False,
 ) -> None:
     output = output.expanduser().absolute()
-    if output.exists() or output.is_symlink():
+    if (output.exists() or output.is_symlink()) and not replace_existing:
         raise FileExistsError(f"report output already exists: {output}")
     output.parent.mkdir(parents=True, exist_ok=True)
     staging = Path(
@@ -141,12 +142,47 @@ def write_reports(
             derived_artifacts=derived_artifacts,
         )
         verify_report(staging)
-        if output.exists() or output.is_symlink():
-            raise FileExistsError(f"report output appeared during generation: {output}")
-        staging.rename(output)
+        _publish_report(staging, output, replace_existing=replace_existing)
     finally:
         if staging.exists():
             shutil.rmtree(staging)
+
+
+def is_complete_report(output: Path) -> bool:
+    """Return whether an existing directory is a complete verified report."""
+    try:
+        verify_report(output)
+    except (OSError, ValueError):
+        return False
+    return all((output / name).is_file() for name in REPORT_FILES)
+
+
+def _publish_report(staging: Path, output: Path, *, replace_existing: bool) -> None:
+    if not output.exists() and not output.is_symlink():
+        staging.rename(output)
+        return
+    if not replace_existing:
+        raise FileExistsError(f"report output appeared during generation: {output}")
+    if output.is_symlink() or not output.is_dir():
+        raise FileExistsError(f"report output is not a replaceable directory: {output}")
+    if any(output.iterdir()) and not is_complete_report(output):
+        raise FileExistsError(
+            f"report output is not a complete verified suite report: {output}"
+        )
+    backup = Path(tempfile.mkdtemp(prefix=f".{output.name}.backup-", dir=output.parent))
+    backup.rmdir()
+    published = False
+    output.rename(backup)
+    try:
+        staging.rename(output)
+        published = True
+    except BaseException:
+        if not output.exists() and not output.is_symlink():
+            backup.rename(output)
+        raise
+    finally:
+        if published and backup.exists():
+            shutil.rmtree(backup)
 
 
 def _write_report_contents(
