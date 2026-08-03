@@ -5,6 +5,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from py_security_suite.adapters.base import AdapterResult, ScannerAdapter
 from py_security_suite.config import load_config
@@ -26,6 +27,7 @@ from py_security_suite.reports import (
     render_action_plan,
     render_html,
     render_summary,
+    write_reports,
 )
 
 
@@ -171,6 +173,14 @@ class OrchestratorTests(unittest.TestCase):
             self.assertEqual(findings["outcome"], "fail")
             self.assertEqual(manifest["outcome"], "fail")
             self.assertEqual(passport["predicate"]["verificationResult"], "FAILED")
+            with self.assertRaisesRegex(FileExistsError, "already exists"):
+                write_reports(
+                    output=output,
+                    findings=result.findings,
+                    manifest=result.manifest,
+                    diagnostics={},
+                    include_evidence=False,
+                )
             self.assertTrue(verify_report(output)["verified"])
             self.assertTrue(manifest["inventory"]["source_integrity_verified"])
             self.assertEqual(
@@ -355,6 +365,51 @@ class OrchestratorTests(unittest.TestCase):
                 "do not interpret this result as clean",
                 (output / "summary.md").read_text("utf-8"),
             )
+
+    def test_report_publication_is_atomic_and_cleans_failed_staging(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / "project"
+            target.mkdir()
+            config = load_config(profile_override="quick")
+            failed_output = root / "failed-report"
+            with (
+                patch(
+                    "py_security_suite.reports.render_html",
+                    side_effect=RuntimeError("fixture rendering failure"),
+                ),
+                self.assertRaisesRegex(RuntimeError, "fixture rendering failure"),
+            ):
+                scan_project(
+                    target=target,
+                    output=failed_output,
+                    config=config,
+                    network_isolation_attested=False,
+                )
+            self.assertFalse(failed_output.exists())
+            self.assertEqual(list(root.glob(".failed-report.staging-*")), [])
+
+            collided_output = root / "collided-report"
+
+            def create_collision(*_args: object, **_kwargs: object) -> str:
+                collided_output.mkdir()
+                return "<!doctype html><title>Fixture</title>"
+
+            with (
+                patch(
+                    "py_security_suite.reports.render_html",
+                    side_effect=create_collision,
+                ),
+                self.assertRaisesRegex(FileExistsError, "appeared during generation"),
+            ):
+                scan_project(
+                    target=target,
+                    output=collided_output,
+                    config=load_config(profile_override="quick"),
+                    network_isolation_attested=False,
+                )
+            self.assertTrue(collided_output.is_dir())
+            self.assertEqual(list(root.glob(".collided-report.staging-*")), [])
 
     def test_unisolated_diagnostic_runs_tools_but_remains_incomplete(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

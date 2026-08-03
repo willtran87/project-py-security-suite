@@ -258,10 +258,9 @@ def main(argv: list[str] | None = None) -> int:
                 "cannot be used together"
             )
         target = args.target.expanduser().resolve()
-        output = args.output.expanduser().resolve()
-        _prepare_output(
+        output = _prepare_output(
             target=target,
-            output=output,
+            output=args.output,
             overwrite=args.overwrite,
         )
         config = load_config(
@@ -288,7 +287,18 @@ def main(argv: list[str] | None = None) -> int:
         return 3
 
 
-def _prepare_output(*, target: Path, output: Path, overwrite: bool) -> None:
+def _prepare_output(*, target: Path, output: Path, overwrite: bool) -> Path:
+    output = output.expanduser().absolute()
+    if _is_link_like(output):
+        raise ValueError("report output cannot be a symbolic link or junction")
+    output = output.resolve()
+    _validate_output_scope(target, output)
+    _remove_existing_output(output, overwrite)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    return output
+
+
+def _validate_output_scope(target: Path, output: Path) -> None:
     anchor = Path(output.anchor)
     if output == anchor or output.parent == anchor:
         raise ValueError(
@@ -298,24 +308,30 @@ def _prepare_output(*, target: Path, output: Path, overwrite: bool) -> None:
         raise ValueError("report output cannot be the scan target")
     if target.is_relative_to(output):
         raise ValueError("report output cannot contain the scan target")
-    if output.is_symlink():
-        raise ValueError("report output cannot be a symbolic link")
-    if output.exists():
-        if not output.is_dir():
-            raise ValueError(f"report output exists and is not a directory: {output}")
-        if not overwrite:
-            raise ValueError(
-                f"report output already exists; choose a new path or use --overwrite: {output}"
-            )
-        entries = list(output.iterdir())
-        marker = output / "scan-manifest.json"
-        if entries and not _is_suite_report(marker):
-            raise ValueError(
-                "refusing to overwrite a non-empty directory that is not a "
-                "Python Security Suite report"
-            )
-        shutil.rmtree(output)
-    output.parent.mkdir(parents=True, exist_ok=True)
+
+
+def _remove_existing_output(output: Path, overwrite: bool) -> None:
+    if not output.exists():
+        return
+    if not output.is_dir():
+        raise ValueError(f"report output exists and is not a directory: {output}")
+    if not overwrite:
+        raise ValueError(
+            f"report output already exists; choose a new path or use --overwrite: {output}"
+        )
+    entries = list(output.iterdir())
+    marker = output / "scan-manifest.json"
+    if entries and not _is_suite_report(marker):
+        raise ValueError(
+            "refusing to overwrite a non-empty directory that is not a "
+            "Python Security Suite report"
+        )
+    shutil.rmtree(output)
+
+
+def _is_link_like(path: Path) -> bool:
+    is_junction = getattr(path, "is_junction", None)
+    return path.is_symlink() or (callable(is_junction) and bool(is_junction()))
 
 
 def _is_suite_report(marker: Path) -> bool:

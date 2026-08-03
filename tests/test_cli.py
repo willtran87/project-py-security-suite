@@ -221,6 +221,22 @@ class CliSafetyTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "use --overwrite"):
                 _prepare_output(target=target, output=empty, overwrite=False)
 
+    def test_output_safety_checks_links_before_resolution(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / "target"
+            target.mkdir()
+            output = root / "report"
+            with patch.object(Path, "is_symlink", return_value=True):
+                with self.assertRaisesRegex(ValueError, "symbolic link or junction"):
+                    _prepare_output(target=target, output=output, overwrite=False)
+            with (
+                patch.object(Path, "is_symlink", return_value=False),
+                patch.object(Path, "is_junction", return_value=True, create=True),
+            ):
+                with self.assertRaisesRegex(ValueError, "symbolic link or junction"):
+                    _prepare_output(target=target, output=output, overwrite=False)
+
     def test_marked_report_can_be_replaced(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

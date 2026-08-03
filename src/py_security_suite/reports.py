@@ -4,6 +4,8 @@ import hashlib
 import html
 import json
 import re
+import shutil
+import tempfile
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote, urlsplit
@@ -122,7 +124,59 @@ def write_reports(
     include_evidence: bool,
     derived_artifacts: dict[str, Any] | None = None,
 ) -> None:
-    output.mkdir(parents=True, exist_ok=False)
+    output = output.expanduser().absolute()
+    if output.exists() or output.is_symlink():
+        raise FileExistsError(f"report output already exists: {output}")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(
+        tempfile.mkdtemp(prefix=f".{output.name}.staging-", dir=output.parent)
+    )
+    try:
+        _write_report_contents(
+            output=staging,
+            findings=findings,
+            manifest=manifest,
+            diagnostics=diagnostics,
+            include_evidence=include_evidence,
+            derived_artifacts=derived_artifacts,
+        )
+        if output.exists() or output.is_symlink():
+            raise FileExistsError(f"report output appeared during generation: {output}")
+        staging.rename(output)
+    finally:
+        if staging.exists():
+            shutil.rmtree(staging)
+
+
+def _write_report_contents(
+    *,
+    output: Path,
+    findings: list[Finding],
+    manifest: ScanManifest,
+    diagnostics: dict[str, dict[str, Any]],
+    include_evidence: bool,
+    derived_artifacts: dict[str, Any] | None,
+) -> None:
+    _register_report_artifacts(manifest, derived_artifacts)
+    active_findings = [
+        finding
+        for finding in findings
+        if finding.status is not FindingStatus.SUPPRESSED
+    ]
+    _write_primary_report_files(output, manifest, findings, active_findings)
+    _write_evidence(output, manifest, diagnostics, include_evidence)
+    _write_derived_artifacts(output, derived_artifacts)
+    _write_json(output / "scan-manifest.json", manifest)
+    _write_json(
+        output / "security-passport.json",
+        build_security_passport_statement(output, manifest),
+    )
+    _write_checksums(output)
+
+
+def _register_report_artifacts(
+    manifest: ScanManifest, derived_artifacts: dict[str, Any] | None
+) -> None:
     manifest.artifacts = {
         "summary": "summary.md",
         "action_plan": "action-plan.md",
@@ -139,11 +193,14 @@ def write_reports(
         if "/" in name or "\\" in name or name in REPORT_FILES:
             raise ValueError(f"unsafe or reserved derived artifact name: {name}")
         manifest.artifacts[name] = name
-    active_findings = [
-        finding
-        for finding in findings
-        if finding.status is not FindingStatus.SUPPRESSED
-    ]
+
+
+def _write_primary_report_files(
+    output: Path,
+    manifest: ScanManifest,
+    findings: list[Finding],
+    active_findings: list[Finding],
+) -> None:
     _write_text(output / "summary.md", render_summary(manifest, findings))
     _write_text(
         output / "action-plan.md", render_action_plan(manifest, active_findings)
@@ -167,20 +224,27 @@ def write_reports(
             "findings": findings,
         },
     )
+
+
+def _write_evidence(
+    output: Path,
+    manifest: ScanManifest,
+    diagnostics: dict[str, dict[str, Any]],
+    include_evidence: bool,
+) -> None:
     if include_evidence:
         evidence = output / "evidence"
         evidence.mkdir()
         for tool, diagnostic in sorted(diagnostics.items()):
             _write_json(evidence / f"{tool}.json", diagnostic)
         manifest.artifacts["evidence"] = "evidence/"
+
+
+def _write_derived_artifacts(
+    output: Path, derived_artifacts: dict[str, Any] | None
+) -> None:
     for name, value in sorted((derived_artifacts or {}).items()):
         _write_json(output / name, value)
-    _write_json(output / "scan-manifest.json", manifest)
-    _write_json(
-        output / "security-passport.json",
-        build_security_passport_statement(output, manifest),
-    )
-    _write_checksums(output)
 
 
 def render_summary(manifest: ScanManifest, findings: list[Finding]) -> str:

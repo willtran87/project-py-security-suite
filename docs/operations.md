@@ -440,7 +440,12 @@ boundary and use `-NetworkIsolated`.
 
 `--overwrite` only replaces an existing directory containing a valid suite
 `scan-manifest.json`. Choose a new directory if the destination contains
-unrelated files.
+unrelated files. A requested output that is itself a symbolic link or junction
+is rejected before path resolution. Reports are rendered and checksummed in a
+private sibling staging directory, then published with one final rename;
+rendering failures remove staging and never leave a partial report at the
+requested destination. A destination that appears during generation is not
+overwritten.
 
 ## Verification
 
