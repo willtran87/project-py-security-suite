@@ -181,6 +181,24 @@ class CliSafetyTests(unittest.TestCase):
             )
         self.assertEqual(code, 3)
 
+    def test_scan_target_link_is_rejected_before_resolution(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / "target"
+            target.mkdir()
+            with patch.object(Path, "is_junction", return_value=True, create=True):
+                code = main(
+                    [
+                        "scan",
+                        str(target),
+                        "--output",
+                        str(root / "report"),
+                        "--profile",
+                        "quick",
+                    ]
+                )
+        self.assertEqual(code, 3)
+
     def test_successful_scan_returns_policy_exit_code(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             target = Path(directory) / "target"

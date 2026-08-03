@@ -13,7 +13,7 @@ from .doctor import assess_readiness, render_readiness
 from .orchestrator import scan_project
 from .policy import exit_code
 from .passport import create_attestation, verify_attestation, verify_report
-from .path_safety import resolve_unlinked_path
+from .path_safety import resolve_regular_directory, resolve_unlinked_path
 from .report_inspection import inspect_report, render_inspection
 
 
@@ -258,7 +258,7 @@ def main(argv: list[str] | None = None) -> int:
                 "--network-isolated and --diagnostic-without-isolation "
                 "cannot be used together"
             )
-        target = args.target.expanduser().resolve()
+        target = resolve_regular_directory(args.target, "scan target")
         output = _prepare_output(
             target=target,
             output=args.output,

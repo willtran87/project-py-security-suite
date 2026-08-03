@@ -7,6 +7,8 @@ for published releases.
 
 - Consolidated CLI, scan, doctor, report-output, and Security Passport path
   validation onto the shared path-safety primitives to prevent boundary drift.
+- Closed the remaining CLI scan-target bypass by validating the requested target
+  before resolution rather than passing an already-resolved path downstream.
 - Added shared pre-resolution path validation for configuration, scanner assets,
   policy ledgers, finding baselines, and intelligence snapshots so governed
   repository-relative inputs cannot hide links or junctions during resolution.
