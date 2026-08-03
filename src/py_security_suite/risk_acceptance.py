@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from .models import Finding, FindingStatus
+from .path_safety import resolve_regular_file
 
 
 _MAX_FILE_BYTES = 1024 * 1024
@@ -117,9 +118,7 @@ def validate_risk_acceptances(
 
 
 def _load_document(path: Path) -> tuple[dict[str, Any], str]:
-    resolved = path.expanduser().resolve()
-    if not resolved.is_file() or resolved.is_symlink():
-        raise ValueError(f"risk-acceptance file is not a regular file: {resolved}")
+    resolved = resolve_regular_file(path, "risk-acceptance file")
     data = resolved.read_bytes()
     if len(data) > _MAX_FILE_BYTES:
         raise ValueError("risk-acceptance file exceeds 1 MiB")

@@ -10,6 +10,7 @@ from typing import Any
 from collections.abc import Mapping
 
 from .models import Severity
+from .path_safety import resolve_regular_file
 
 
 class ConfigurationError(ValueError):
@@ -848,9 +849,10 @@ def _deep_merge(base: dict[str, Any], overlay: Mapping[str, Any]) -> dict[str, A
 def _load_toml(path: Path | None) -> dict[str, Any]:
     if path is None:
         return {}
-    resolved = path.expanduser().resolve()
-    if not resolved.is_file():
-        raise ConfigurationError(f"configuration file does not exist: {resolved}")
+    try:
+        resolved = resolve_regular_file(path, "configuration file")
+    except ValueError as exc:
+        raise ConfigurationError(str(exc)) from exc
     try:
         with resolved.open("rb") as handle:
             value = tomllib.load(handle)

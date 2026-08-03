@@ -8,6 +8,12 @@ from py_security_suite.config import ConfigurationError, load_config
 
 
 class ConfigTests(unittest.TestCase):
+    def test_missing_or_linked_configuration_is_rejected_as_non_regular(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            missing = Path(directory) / "missing.toml"
+            with self.assertRaisesRegex(ConfigurationError, "not a regular file"):
+                load_config(repository_config=missing)
+
     def test_defaults_select_standard_offline_profile(self) -> None:
         config = load_config()
         self.assertEqual(config.profile, "standard")

@@ -28,6 +28,7 @@ from .models import (
     json_ready,
 )
 from .policy import evaluate_policy
+from .path_safety import resolve_unlinked_path
 from .reports import write_reports
 from .risk_intelligence import enrich_findings
 from .source_context import attach_source_context
@@ -192,23 +193,35 @@ def scan_project(
 
 def resolve_asset_paths(config: SuiteConfig, target: Path) -> None:
     """Resolve repository-relative offline assets against the scan target."""
-    for tool in config.tools.values():
-        if tool.rules_path is not None and not tool.rules_path.is_absolute():
-            tool.rules_path = (target / tool.rules_path).resolve()
-        if tool.database_path is not None and not tool.database_path.is_absolute():
-            tool.database_path = (target / tool.database_path).resolve()
-        if tool.public_key_path is not None and not tool.public_key_path.is_absolute():
-            tool.public_key_path = (target / tool.public_key_path).resolve()
+    for tool_name, tool in config.tools.items():
+        for setting in ("rules_path", "database_path", "public_key_path"):
+            value = getattr(tool, setting)
+            if value is not None:
+                candidate = value if value.is_absolute() else target / value
+                setattr(
+                    tool,
+                    setting,
+                    resolve_unlinked_path(candidate, f"{tool_name} {setting}"),
+                )
     acceptance = config.policy.risk_acceptance_path
-    if acceptance is not None and not acceptance.is_absolute():
-        config.policy.risk_acceptance_path = (target / acceptance).resolve()
+    if acceptance is not None:
+        candidate = acceptance if acceptance.is_absolute() else target / acceptance
+        config.policy.risk_acceptance_path = resolve_unlinked_path(
+            candidate, "risk-acceptance file"
+        )
     baseline = config.reports.baseline_path
-    if baseline is not None and not baseline.is_absolute():
-        config.reports.baseline_path = (target / baseline).resolve()
+    if baseline is not None:
+        candidate = baseline if baseline.is_absolute() else target / baseline
+        config.reports.baseline_path = resolve_unlinked_path(candidate, "baseline")
     for setting in ("kev_path", "epss_path", "vex_path"):
         value = getattr(config.intelligence, setting)
-        if value is not None and not value.is_absolute():
-            setattr(config.intelligence, setting, (target / value).resolve())
+        if value is not None:
+            candidate = value if value.is_absolute() else target / value
+            setattr(
+                config.intelligence,
+                setting,
+                resolve_unlinked_path(candidate, f"{setting} snapshot"),
+            )
 
 
 def _configuration_digest(config: SuiteConfig) -> str:

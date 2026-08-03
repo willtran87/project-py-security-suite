@@ -5,6 +5,9 @@ for published releases.
 
 ## Unreleased
 
+- Added shared pre-resolution path validation for configuration, scanner assets,
+  policy ledgers, finding baselines, and intelligence snapshots so governed
+  repository-relative inputs cannot hide links or junctions during resolution.
 - Rejected report, Passport, signing-key, password, signing-config, and public-key
   links or junctions before path resolution, and bounded untrusted evidence-tree
   traversal independently of checksum-manifest size.

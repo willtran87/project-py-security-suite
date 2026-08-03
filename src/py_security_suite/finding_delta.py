@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from .models import Finding, FindingStatus
+from .path_safety import resolve_regular_file
 
 _MAX_BASELINE_BYTES = 64 * 1024 * 1024
 _MAX_BASELINE_FINDINGS = 100_000
@@ -139,9 +140,7 @@ def apply_finding_delta(
 def _load_baseline(
     path: Path, approved: str, *, expected_target: str
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    resolved = path.expanduser().resolve()
-    if not resolved.is_file() or resolved.is_symlink():
-        raise ValueError(f"baseline is not a regular file: {resolved}")
+    resolved = resolve_regular_file(path, "baseline")
     data = resolved.read_bytes()
     if len(data) > _MAX_BASELINE_BYTES:
         raise ValueError("baseline exceeds 64 MiB")

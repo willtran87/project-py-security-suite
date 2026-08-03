@@ -401,6 +401,12 @@ resolution and bounds both checksum entries and total traversed evidence-tree
 entries. Copy approved material into regular files and directories inside the
 controlled lane instead of linking to it.
 
+Repository-relative governed inputs follow the same rule before they are
+resolved against the target. Configuration files, scanner rules and databases,
+public keys, risk acceptances, finding baselines, and intelligence snapshots
+must be direct paths rather than symbolic links or junctions. This prevents
+normalization from erasing the identity of a configured trust input.
+
 ## Troubleshooting
 
 ### Required scanner is unavailable

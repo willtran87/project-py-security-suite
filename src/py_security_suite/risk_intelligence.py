@@ -13,6 +13,7 @@ from typing import Any
 
 from .config import IntelligenceConfig
 from .models import Citation, Finding, json_ready
+from .path_safety import resolve_regular_file
 
 _MAX_SNAPSHOT_BYTES = 128 * 1024 * 1024
 _MAX_DECOMPRESSED_BYTES = 256 * 1024 * 1024
@@ -154,9 +155,7 @@ def _validated_snapshot(
     maximum_age_days: float,
     loader: Any,
 ) -> tuple[dict[str, dict[str, Any]], dict[str, Any]]:
-    resolved = path.expanduser().resolve()
-    if not resolved.is_file() or resolved.is_symlink():
-        raise ValueError(f"snapshot is not a regular file: {resolved}")
+    resolved = resolve_regular_file(path, "snapshot")
     size = resolved.stat().st_size
     if size > _MAX_SNAPSHOT_BYTES:
         raise ValueError(f"snapshot exceeds {_MAX_SNAPSHOT_BYTES} bytes")

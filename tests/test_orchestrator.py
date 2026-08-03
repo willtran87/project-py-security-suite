@@ -20,7 +20,7 @@ from py_security_suite.models import (
     ToolRun,
     ToolStatus,
 )
-from py_security_suite.orchestrator import scan_project
+from py_security_suite.orchestrator import resolve_asset_paths, scan_project
 from py_security_suite.passport import verify_report
 from py_security_suite.reports import (
     _safe_http_reference,
@@ -114,6 +114,42 @@ class MutatingSecrets(FakeSecrets):
 
 
 class OrchestratorTests(unittest.TestCase):
+    def test_governed_asset_paths_are_resolved_without_losing_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory).resolve()
+            config = load_config(profile_override="quick")
+            tool = config.tools["bandit"]
+            tool.rules_path = Path("rules.yml")
+            tool.database_path = Path("database")
+            tool.public_key_path = Path("release.pub")
+            config.policy.risk_acceptance_path = Path("acceptances.json")
+            config.reports.baseline_path = Path("baseline.json")
+            config.intelligence.kev_path = Path("kev.json")
+            config.intelligence.epss_path = Path("epss.csv")
+            config.intelligence.vex_path = Path("vex.json")
+
+            resolve_asset_paths(config, target)
+
+            self.assertEqual(tool.rules_path, (target / "rules.yml").resolve())
+            self.assertEqual(tool.database_path, (target / "database").resolve())
+            self.assertEqual(tool.public_key_path, (target / "release.pub").resolve())
+            self.assertEqual(
+                config.policy.risk_acceptance_path,
+                (target / "acceptances.json").resolve(),
+            )
+            self.assertEqual(
+                config.reports.baseline_path, (target / "baseline.json").resolve()
+            )
+            self.assertEqual(
+                config.intelligence.kev_path, (target / "kev.json").resolve()
+            )
+            self.assertEqual(
+                config.intelligence.epss_path, (target / "epss.csv").resolve()
+            )
+            self.assertEqual(
+                config.intelligence.vex_path, (target / "vex.json").resolve()
+            )
+
     def test_end_to_end_report_is_coordinated(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
