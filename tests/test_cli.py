@@ -131,8 +131,26 @@ class CliSafetyTests(unittest.TestCase):
             patch("builtins.print") as output,
         ):
             code = main(["verify", "passport", "--format", "text"])
-        self.assertEqual(code, 0)
+        self.assertEqual(code, 1)
         self.assertEqual(output.call_args.args[0], rendered)
+
+        approved = {
+            **verification,
+            "verification_scope": "authenticity-and-integrity",
+            "outcome": "pass",
+            "policy_verification_result": "PASSED",
+            "release_decision": "approved",
+            "release_blockers": [],
+        }
+        with (
+            patch(
+                "py_security_suite.cli.verify_attestation",
+                return_value=approved,
+            ),
+            patch("builtins.print"),
+        ):
+            code = main(["verify", "passport", "--format", "json"])
+        self.assertEqual(code, 0)
 
     def test_inspect_report_supports_text_output(self) -> None:
         inspection = {

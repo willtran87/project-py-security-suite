@@ -231,7 +231,7 @@ def main(argv: list[str] | None = None) -> int:
                 if args.format == "text"
                 else json.dumps(verification, sort_keys=True)
             )
-            return 0
+            return 0 if verification.get("release_decision") == "approved" else 1
         if args.command == "verify-report":
             verification = verify_report(args.report)
             if args.format == "json":

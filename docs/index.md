@@ -81,7 +81,7 @@ The native `doctor` preflight reports 35 ready and 27 not-applicable tools with
 zero disabled or unavailable prerequisites before scanner execution.
 
 The checked report is in
-`.artifacts/final-self-scan-v48`. It includes:
+`.artifacts/final-self-scan-v51`. It includes:
 
 - the GitHub-ready Markdown, HTML, SARIF, SonarQube external-issue, and
   normalized JSON reports;

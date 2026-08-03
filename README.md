@@ -328,6 +328,9 @@ handoff; they never claim signer authenticity. See the
 The verification response separates transport integrity, signer authenticity,
 source-report verification, policy outcome, and release approval so a valid
 passport for a blocked scan is never mislabeled as an integrity failure.
+The command exits `0` only for `release_decision: approved`; a verified passport
+that is unsigned, lacks its source report, or carries a failing scan policy exits
+`1` so a CI promotion gate cannot mistake transport integrity for approval.
 `action-plan.md` separates
 finding remediation from scanner-coverage restoration and policy evidence.
 `assurance-case.md` distinguishes evidence demonstrated by the scan from

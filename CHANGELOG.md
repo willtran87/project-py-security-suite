@@ -5,6 +5,9 @@ for published releases.
 
 ## Unreleased
 
+- Made `pysec verify` fail closed for release automation: it now exits `0` only
+  for an approved passport and exits `1` when integrity succeeds but signature,
+  source-report, or scan-policy approval remains unsatisfied.
 - Made report publication failure-atomic through private sibling staging,
   checksum-chain and manifest self-verification, and a final rename; corrected
   output-link validation to occur before path resolution and added

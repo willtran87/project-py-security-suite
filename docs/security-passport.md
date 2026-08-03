@@ -160,3 +160,15 @@ Blockers: signer authenticity not verified; scan policy not satisfied
 `pysec attest ... --unsigned` is an approval-handoff operation.
 `pysec verify ... --allow-unsigned` proves only checksum integrity and must not
 be treated as signer authentication.
+
+### Verification exit codes
+
+| Exit | Decision | Meaning |
+|---:|---|---|
+| 0 | `approved` | Authentic signature, supplied source report, and passing scan policy all verified |
+| 1 | `not_approved` | Passport integrity verified, but one or more release-approval conditions failed |
+| 3 | CLI error | Passport integrity, signature, report binding, configuration, or invocation was invalid |
+
+This distinction is fail-closed for deployment automation: `--allow-unsigned`
+can demonstrate a valid handoff without producing a successful release-gate
+exit status.

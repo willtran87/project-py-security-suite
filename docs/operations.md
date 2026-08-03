@@ -367,6 +367,8 @@ sequenceDiagram
 
 ## Exit codes
 
+For `pysec scan`:
+
 | Exit | Outcome | Meaning |
 |---:|---|---|
 | 0 | `PASS` | Applicable required tools completed and no findings were reported |
@@ -374,6 +376,12 @@ sequenceDiagram
 | 1 | `FAIL` | At least one finding meets a blocking severity |
 | 2 | `INCOMPLETE` | Isolation or required scanner evidence is incomplete |
 | 3 | CLI error | Configuration, path, output-safety, or invocation error |
+
+For `pysec verify`, exit `0` means the passport's release decision is
+`approved`; exit `1` means its integrity was verified but the release is
+`not_approved`; and exit `3` means verification or invocation failed. An
+unsigned integrity-only passport therefore never returns a release-gate
+success status.
 
 ## Troubleshooting
 
