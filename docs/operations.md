@@ -516,6 +516,12 @@ control characters are visibly neutralized, and citation links are emitted only
 for well-formed HTTP(S) URLs. Checksum verification proves report consistency,
 not signer identity; use a verified Security Passport when authenticity matters.
 
+Generated Markdown, HTML, and SARIF also treat scanner and imported-evidence
+citations as untrusted. A citation becomes a link only when it is a bounded,
+well-formed HTTP(S) URL with a host, valid port, no embedded credentials, and no
+control or Markdown-delimiter characters. Rejected destinations remain visible
+as plain citation labels rather than active links.
+
 ## Intelligence, baseline, and Security Passport lanes
 
 The connected preparation lane downloads the authoritative CISA KEV JSON and

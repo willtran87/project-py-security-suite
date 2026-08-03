@@ -21,7 +21,12 @@ from py_security_suite.models import (
 )
 from py_security_suite.orchestrator import scan_project
 from py_security_suite.passport import verify_report
-from py_security_suite.reports import render_action_plan, render_html, render_summary
+from py_security_suite.reports import (
+    _safe_http_reference,
+    render_action_plan,
+    render_html,
+    render_summary,
+)
 
 
 class FakeBandit(ScannerAdapter):
@@ -64,7 +69,13 @@ class FakeBandit(ScannerAdapter):
                         "https://bandit.readthedocs.io/en/1.9.4/plugins/"
                         "b602_subprocess_popen_with_shell_equals_true.html"
                     ),
-                )
+                ),
+                Citation(
+                    kind="external",
+                    identifier="unsafe-reference",
+                    title="Unsafe reference",
+                    uri="javascript:alert(1)",
+                ),
             ],
         )
         run = ToolRun(
@@ -222,6 +233,8 @@ class OrchestratorTests(unittest.TestCase):
                 "https://cwe.mitre.org/data/definitions/78.html",
                 report_html,
             )
+            self.assertNotIn("javascript:alert", markdown)
+            self.assertNotIn("javascript:alert", report_html)
             for line in (output / "checksums.sha256").read_text("utf-8").splitlines():
                 expected, relative = line.split("  ", 1)
                 self.assertEqual(
@@ -307,6 +320,22 @@ class OrchestratorTests(unittest.TestCase):
                 "## Derived assurance evidence",
                 render_summary(result.manifest, result.findings),
             )
+
+    def test_report_reference_links_reject_ambiguous_destinations(self) -> None:
+        valid = "https://example.test/reference?id=1#section"
+        self.assertEqual(_safe_http_reference(valid), valid)
+        for unsafe in (
+            "javascript:alert(1)",
+            "https://example.test/path_(ambiguous)",
+            "https://example.test/line\nbreak",
+            "https://user@example.test/reference",
+            "https://example.test:not-a-port/reference",
+            "https://[invalid/reference",
+            "https:///missing-host",
+            "https://example.test/" + "x" * 2048,
+        ):
+            with self.subTest(unsafe=unsafe[:80]):
+                self.assertIsNone(_safe_http_reference(unsafe))
 
     def test_missing_isolation_attestation_still_writes_incomplete_report(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

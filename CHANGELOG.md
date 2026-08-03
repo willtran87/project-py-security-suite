@@ -5,6 +5,9 @@ for published releases.
 
 ## Unreleased
 
+- Hardened generated Markdown, HTML, and SARIF citation links with strict
+  HTTP(S) parsing, host and port validation, credential rejection, bounded
+  length, and control/Markdown-delimiter filtering.
 - Hardened `pysec inspect` as an untrusted-report boundary: terminal-facing
   values are bounded and neutralize control/bidirectional characters, while
   citation links are restricted to well-formed HTTP(S) references.
@@ -21,10 +24,10 @@ for published releases.
 - Raised combined statement-and-branch coverage above the enforced 80% gate
   with fail-closed tests for CodeQL, CycloneDX, Security Passport integrity,
   portfolio adapters, and passive test-evidence parsing.
-- Expanded the suite to 255 passing tests while preserving actionable per-file
+- Expanded the suite to 256 passing tests while preserving actionable per-file
   coverage reporting in consolidated reports.
 - Resolved four consecutive reports' lowest-coverage files, raised combined
-  line-and-branch coverage to 91.50%, and added runtime-guard coverage for
+  line-and-branch coverage to 91.58%, and added runtime-guard coverage for
   offline linters, staging, Pysa, Trivy, Cosign, artifact scanners, passive
   evidence adapters, cross-tool finding correlation, offline databases,
   applicability decisions, malformed evidence, temporary-file cleanup, SARIF

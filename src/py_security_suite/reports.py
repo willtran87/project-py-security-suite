@@ -6,7 +6,7 @@ import json
 import re
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 from .models import (
     Citation,
@@ -36,6 +36,8 @@ REPORT_FILES = (
     "checksums.sha256",
     "security-passport.json",
 )
+_MAX_REFERENCE_URI = 2048
+_UNSAFE_MARKDOWN_URI_CHARACTERS = frozenset("()<>\\")
 
 _SEVERITY_ORDER = {
     Severity.CRITICAL: 0,
@@ -1636,9 +1638,40 @@ def _first_reference_uri(finding: Finding) -> str | None:
 
 
 def _reference_uri(citation: Citation) -> str | None:
-    if citation.uri and citation.uri.startswith(("https://", "http://")):
-        return citation.uri
+    if citation.uri:
+        uri = _safe_http_reference(citation.uri)
+        if uri:
+            return uri
     return _classification_uri(citation.identifier)
+
+
+def _safe_http_reference(value: str) -> str | None:
+    if len(value) > _MAX_REFERENCE_URI or _has_unsafe_reference_character(value):
+        return None
+    return value if _is_well_formed_http_reference(value) else None
+
+
+def _has_unsafe_reference_character(value: str) -> bool:
+    return any(
+        not character.isprintable()
+        or character.isspace()
+        or character in _UNSAFE_MARKDOWN_URI_CHARACTERS
+        for character in value
+    )
+
+
+def _is_well_formed_http_reference(value: str) -> bool:
+    try:
+        parsed = urlsplit(value)
+        _ = parsed.port
+    except ValueError:
+        return False
+    return (
+        parsed.scheme.lower() in {"http", "https"}
+        and bool(parsed.hostname)
+        and parsed.username is None
+        and parsed.password is None
+    )
 
 
 def _classification_uri(value: str) -> str | None:
