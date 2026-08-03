@@ -412,6 +412,12 @@ the same rule. Wheel, source-distribution, and ZIP candidates inside those roots
 must also be direct regular files; linked release artifacts are rejected before
 SBOM, vulnerability, metadata, provenance, or signature analysis.
 
+For repository-relative trust inputs, every path component from the scan target
+to the configured asset is checked before normalization. An intermediate
+symbolic link or Windows junction is rejected even when the final file is a
+regular file. Explicit absolute paths outside the repository remain supported
+for administrator-staged tool bundles and trust stores.
+
 ## Troubleshooting
 
 ### Required scanner is unavailable

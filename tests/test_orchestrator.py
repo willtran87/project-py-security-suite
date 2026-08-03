@@ -154,6 +154,23 @@ class OrchestratorTests(unittest.TestCase):
                 config.intelligence.vex_path, (target / "vex.json").resolve()
             )
 
+    def test_governed_asset_paths_reject_linked_parent_components(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory).resolve()
+            linked_parent = target / "linked-parent"
+            config = load_config(profile_override="quick")
+            config.tools["bandit"].rules_path = Path("linked-parent/rules.yml")
+
+            with patch(
+                "py_security_suite.path_safety.is_link_like",
+                side_effect=lambda path: path == linked_parent,
+            ):
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "cannot contain a symbolic link or junction",
+                ):
+                    resolve_asset_paths(config, target)
+
     def test_end_to_end_report_is_coordinated(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

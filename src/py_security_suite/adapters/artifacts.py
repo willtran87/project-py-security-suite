@@ -22,7 +22,11 @@ def configured_path(target: Path, value: Path | None, default: str) -> Path:
     configured = value or Path(default)
     if not configured.is_absolute():
         configured = target / configured
-    return resolve_unlinked_path(configured, "artifact evidence path")
+    return resolve_unlinked_path(
+        configured,
+        "artifact evidence path",
+        boundary=target,
+    )
 
 
 def distribution_files(target: Path, config: ToolConfig) -> list[Path]:

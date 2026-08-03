@@ -9,11 +9,38 @@ def is_link_like(path: Path) -> bool:
     return path.is_symlink() or (callable(is_junction) and bool(is_junction()))
 
 
-def resolve_unlinked_path(path: Path, label: str) -> Path:
-    """Resolve a path only after validating the requested filesystem object."""
+def resolve_unlinked_path(
+    path: Path,
+    label: str,
+    *,
+    boundary: Path | None = None,
+) -> Path:
+    """Resolve a path after validating its governed filesystem components."""
     requested = path.expanduser().absolute()
-    if is_link_like(requested):
-        raise ValueError(f"{label} cannot be a symbolic link or junction: {requested}")
+    components = [requested]
+    if boundary is not None:
+        governed_root = boundary.expanduser().absolute()
+        try:
+            relative = requested.relative_to(governed_root)
+        except ValueError:
+            pass
+        else:
+            if ".." in relative.parts:
+                raise ValueError(f"{label} cannot traverse outside its boundary")
+            components = [governed_root]
+            current = governed_root
+            for part in relative.parts:
+                current /= part
+                components.append(current)
+    for component in components:
+        if is_link_like(component):
+            if component == requested:
+                raise ValueError(
+                    f"{label} cannot be a symbolic link or junction: {component}"
+                )
+            raise ValueError(
+                f"{label} cannot contain a symbolic link or junction: {component}"
+            )
     return requested.resolve()
 
 

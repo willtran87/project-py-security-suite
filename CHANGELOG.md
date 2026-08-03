@@ -5,6 +5,8 @@ for published releases.
 
 ## Unreleased
 
+- Reject symbolic links and Windows junctions in every governed path component
+  inside the scan target, before path normalization can erase their identity.
 - Extended governed path checks to passive artifact/provenance roots and reject
   linked wheel, sdist, or ZIP entries before artifact scanners consume them.
 - Consolidated CLI, scan, doctor, report-output, and Security Passport path

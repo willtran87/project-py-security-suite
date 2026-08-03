@@ -207,18 +207,28 @@ def resolve_asset_paths(config: SuiteConfig, target: Path) -> None:
                 setattr(
                     tool,
                     setting,
-                    resolve_unlinked_path(candidate, f"{tool_name} {setting}"),
+                    resolve_unlinked_path(
+                        candidate,
+                        f"{tool_name} {setting}",
+                        boundary=target,
+                    ),
                 )
     acceptance = config.policy.risk_acceptance_path
     if acceptance is not None:
         candidate = acceptance if acceptance.is_absolute() else target / acceptance
         config.policy.risk_acceptance_path = resolve_unlinked_path(
-            candidate, "risk-acceptance file"
+            candidate,
+            "risk-acceptance file",
+            boundary=target,
         )
     baseline = config.reports.baseline_path
     if baseline is not None:
         candidate = baseline if baseline.is_absolute() else target / baseline
-        config.reports.baseline_path = resolve_unlinked_path(candidate, "baseline")
+        config.reports.baseline_path = resolve_unlinked_path(
+            candidate,
+            "baseline",
+            boundary=target,
+        )
     for setting in ("kev_path", "epss_path", "vex_path"):
         value = getattr(config.intelligence, setting)
         if value is not None:
@@ -226,7 +236,11 @@ def resolve_asset_paths(config: SuiteConfig, target: Path) -> None:
             setattr(
                 config.intelligence,
                 setting,
-                resolve_unlinked_path(candidate, f"{setting} snapshot"),
+                resolve_unlinked_path(
+                    candidate,
+                    f"{setting} snapshot",
+                    boundary=target,
+                ),
             )
 
 

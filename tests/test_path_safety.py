@@ -44,6 +44,41 @@ class PathSafetyTests(unittest.TestCase):
                 ):
                     resolver(path, "trust input")
 
+    def test_linked_components_inside_a_boundary_are_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).absolute()
+            linked_parent = root / "linked-parent"
+            evidence = linked_parent / "evidence.json"
+            with patch(
+                "py_security_suite.path_safety.is_link_like",
+                side_effect=lambda path: path == linked_parent,
+            ):
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "cannot contain a symbolic link or junction",
+                ):
+                    resolve_unlinked_path(evidence, "evidence", boundary=root)
+
+    def test_absolute_paths_outside_a_boundary_remain_supported(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).absolute()
+            external = root.parent / "approved-external-evidence.json"
+            with patch(
+                "py_security_suite.path_safety.is_link_like",
+                side_effect=lambda path: path == root.parent,
+            ):
+                self.assertEqual(
+                    resolve_unlinked_path(external, "evidence", boundary=root),
+                    external.resolve(),
+                )
+
+    def test_relative_boundary_traversal_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).absolute()
+            escaped = root / ".." / "outside.json"
+            with self.assertRaisesRegex(ValueError, "cannot traverse outside"):
+                resolve_unlinked_path(escaped, "evidence", boundary=root)
+
 
 if __name__ == "__main__":
     unittest.main()
