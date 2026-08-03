@@ -5,6 +5,8 @@ for published releases.
 
 ## Unreleased
 
+- Require every canonical report artifact and exact scan-manifest binding during
+  verification, and prevent derived evidence from shadowing reserved bindings.
 - Serialize final report publication with an atomic sibling lock so concurrent
   publishers cannot race the verified rename and rollback window.
 - Preserve the prior verified report throughout replacement generation and

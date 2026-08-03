@@ -23,21 +23,14 @@ from .models import (
     json_ready,
 )
 from .source_context import source_language
-from .passport import build_security_passport_statement, verify_report
-
-
-REPORT_FILES = (
-    "summary.md",
-    "action-plan.md",
-    "assurance-case.md",
-    "index.html",
-    "results.sarif",
-    "sonarqube-external-issues.json",
-    "findings.json",
-    "scan-manifest.json",
-    "checksums.sha256",
-    "security-passport.json",
+from .passport import (
+    REQUIRED_REPORT_ARTIFACTS,
+    build_security_passport_statement,
+    verify_report,
 )
+
+
+REPORT_FILES = tuple(REQUIRED_REPORT_ARTIFACTS.values())
 _MAX_REFERENCE_URI = 2048
 _UNSAFE_MARKDOWN_URI_CHARACTERS = frozenset("()<>\\")
 
@@ -237,20 +230,14 @@ def _write_report_contents(
 def _register_report_artifacts(
     manifest: ScanManifest, derived_artifacts: dict[str, Any] | None
 ) -> None:
-    manifest.artifacts = {
-        "summary": "summary.md",
-        "action_plan": "action-plan.md",
-        "assurance_case": "assurance-case.md",
-        "html": "index.html",
-        "sarif": "results.sarif",
-        "sonarqube_external_issues": "sonarqube-external-issues.json",
-        "findings": "findings.json",
-        "manifest": "scan-manifest.json",
-        "checksums": "checksums.sha256",
-        "security_passport": "security-passport.json",
-    }
+    manifest.artifacts = dict(REQUIRED_REPORT_ARTIFACTS)
     for name in sorted(derived_artifacts or {}):
-        if "/" in name or "\\" in name or name in REPORT_FILES:
+        if (
+            "/" in name
+            or "\\" in name
+            or name in REPORT_FILES
+            or name in REQUIRED_REPORT_ARTIFACTS
+        ):
             raise ValueError(f"unsafe or reserved derived artifact name: {name}")
         manifest.artifacts[name] = name
 

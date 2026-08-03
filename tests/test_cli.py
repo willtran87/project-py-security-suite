@@ -18,6 +18,7 @@ from py_security_suite.cli import (
     main,
 )
 from py_security_suite.models import Outcome
+from py_security_suite.passport import REQUIRED_REPORT_ARTIFACTS
 from py_security_suite.reports import REPORT_FILES
 
 
@@ -289,6 +290,7 @@ class CliSafetyTests(unittest.TestCase):
                         "schema_version": "1.0",
                         "suite_version": "0.1.0",
                         "scan_id": "scan-fixture",
+                        "artifacts": REQUIRED_REPORT_ARTIFACTS,
                     }
                 ),
                 encoding="utf-8",

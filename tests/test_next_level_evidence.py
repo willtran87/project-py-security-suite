@@ -20,6 +20,7 @@ from py_security_suite.models import (
     Source,
 )
 from py_security_suite.passport import (
+    REQUIRED_REPORT_ARTIFACTS,
     _cosign_major_version,
     _prepare_directory,
     _read_json,
@@ -374,6 +375,32 @@ class PassportTests(unittest.TestCase):
             )
             _write_checksums(report)
             with self.assertRaisesRegex(ValueError, "scan manifest is invalid"):
+                verify_report(report)
+
+    def test_report_validation_requires_canonical_artifacts_and_bindings(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            report = _fixture_report(root)
+            summary = report / "summary.md"
+            summary.unlink()
+            _write_checksums(report)
+            with self.assertRaisesRegex(ValueError, "artifact is missing: summary.md"):
+                verify_report(report)
+
+            summary.write_text("# Fixture\n", encoding="utf-8")
+            manifest_path = report / "scan-manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest.pop("artifacts")
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            _write_checksums(report)
+            with self.assertRaisesRegex(ValueError, "artifact manifest is missing"):
+                verify_report(report)
+
+            manifest["artifacts"] = dict(REQUIRED_REPORT_ARTIFACTS)
+            manifest["artifacts"]["summary"] = "alternate-summary.md"
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            _write_checksums(report)
+            with self.assertRaisesRegex(ValueError, "binding is invalid: summary"):
                 verify_report(report)
 
     def test_passport_path_and_statement_validation_rejects_ambiguous_evidence(
@@ -1003,6 +1030,7 @@ def _fixture_report(root: Path) -> Path:
                 "suite_version": "0.1.0",
                 "scan_id": "scan-fixture",
                 "outcome": "pass",
+                "artifacts": REQUIRED_REPORT_ARTIFACTS,
             }
         ),
         encoding="utf-8",
@@ -1023,6 +1051,10 @@ def _fixture_report(root: Path) -> Path:
         ),
         encoding="utf-8",
     )
+    for relative in REQUIRED_REPORT_ARTIFACTS.values():
+        path = report / relative
+        if not path.exists() and relative != "checksums.sha256":
+            path.write_text("fixture\n", encoding="utf-8")
     _write_checksums(report)
     return report
 

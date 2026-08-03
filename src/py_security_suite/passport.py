@@ -24,6 +24,19 @@ _SIGNATURE_NAME = "security-passport.sig"
 _BUNDLE_NAME = "security-passport.sigstore.json"
 _COSIGN_VERSION = re.compile(r"(?:gitVersion[^v]*|\bcosign version\s+)?v?(\d+)\.")
 
+REQUIRED_REPORT_ARTIFACTS = {
+    "summary": "summary.md",
+    "action_plan": "action-plan.md",
+    "assurance_case": "assurance-case.md",
+    "html": "index.html",
+    "sarif": "results.sarif",
+    "sonarqube_external_issues": "sonarqube-external-issues.json",
+    "findings": "findings.json",
+    "manifest": "scan-manifest.json",
+    "checksums": "checksums.sha256",
+    "security_passport": "security-passport.json",
+}
+
 
 @dataclass(frozen=True, slots=True)
 class _SigningContext:
@@ -454,6 +467,7 @@ def verify_report(report: Path) -> dict[str, Any]:
         or not manifest.get("suite_version")
     ):
         raise ValueError("report scan manifest is invalid")
+    _verify_report_artifact_contract(report, manifest)
     checksums = report / "checksums.sha256"
     return {
         "verified": True,
@@ -462,6 +476,18 @@ def verify_report(report: Path) -> dict[str, Any]:
         "scan_id": manifest["scan_id"],
         "outcome": manifest.get("outcome"),
     }
+
+
+def _verify_report_artifact_contract(report: Path, manifest: dict[str, Any]) -> None:
+    artifacts = manifest.get("artifacts")
+    if not isinstance(artifacts, dict):
+        raise ValueError("report artifact manifest is missing or invalid")
+    for key, relative in REQUIRED_REPORT_ARTIFACTS.items():
+        if artifacts.get(key) != relative:
+            raise ValueError(f"report artifact binding is invalid: {key}")
+        path = report / relative
+        if not path.is_file() or path.is_symlink():
+            raise ValueError(f"required report artifact is missing: {relative}")
 
 
 def _report_inputs(report: Path, *, exclude: set[str]) -> list[dict[str, Any]]:

@@ -281,8 +281,9 @@ Its JSON form retains `policy_reasons` for compatibility and adds structured
 manifest record explicitly has `applicable: false`; otherwise it is an
 execution gap.
 
-`verify-report` validates the complete `checksums.sha256` chain and the scan
-manifest. `verify` accepts a detached passport **directory** created by
+`verify-report` validates the complete `checksums.sha256` chain, the scan
+manifest, every canonical report artifact, and their exact manifest bindings.
+A checksum-consistent partial report is rejected. `verify` accepts a detached passport **directory** created by
 `attest`, not the embedded `security-passport.json` statement file.
 
 `inspect` performs the same integrity verification, then presents a bounded

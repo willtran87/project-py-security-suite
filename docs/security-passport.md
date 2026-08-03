@@ -101,7 +101,8 @@ Verify the generated report before it enters the approval lane:
 pysec verify-report REPORT
 ```
 
-This validates the report checksum chain and scan manifest. The embedded
+This validates the report checksum chain, complete canonical artifact set, and
+exact scan-manifest artifact bindings. The embedded
 `REPORT/security-passport.json` is the unsigned in-toto/SLSA statement; it is
 not itself the detached passport directory accepted by `pysec verify`.
 

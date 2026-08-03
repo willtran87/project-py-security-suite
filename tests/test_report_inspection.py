@@ -13,6 +13,7 @@ from py_security_suite.report_inspection import (
     inspect_report,
     render_inspection,
 )
+from py_security_suite.passport import REQUIRED_REPORT_ARTIFACTS
 
 
 class ReportInspectionTests(unittest.TestCase):
@@ -130,6 +131,7 @@ def _write_report(
         "policy_reasons": (
             ["one blocking finding"] if policy_reasons is None else policy_reasons
         ),
+        "artifacts": REQUIRED_REPORT_ARTIFACTS,
         "tools": [
             {"tool": "bandit", "status": "completed"},
             {"tool": "osv-scanner", "status": "skipped", "applicable": False},
@@ -153,6 +155,9 @@ def _write_report(
         "action-plan.md": "# Actions\n",
         "index.html": "<!doctype html><title>Fixture</title>\n",
     }
+    for relative in REQUIRED_REPORT_ARTIFACTS.values():
+        if relative != "checksums.sha256":
+            files.setdefault(relative, "fixture\n")
     for name, value in files.items():
         (root / name).write_text(value, encoding="utf-8", newline="\n")
     checksums = [

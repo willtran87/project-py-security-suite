@@ -23,6 +23,7 @@ from py_security_suite.models import (
 from py_security_suite.orchestrator import resolve_asset_paths, scan_project
 from py_security_suite.passport import verify_report
 from py_security_suite.reports import (
+    _register_report_artifacts,
     _safe_http_reference,
     render_action_plan,
     render_html,
@@ -239,6 +240,15 @@ class OrchestratorTests(unittest.TestCase):
                     include_evidence=False,
                 )
             self.assertTrue(verify_report(output)["verified"])
+            for reserved in ("summary", "findings", "manifest"):
+                with (
+                    self.subTest(reserved=reserved),
+                    self.assertRaisesRegex(ValueError, "reserved derived artifact"),
+                ):
+                    _register_report_artifacts(
+                        result.manifest,
+                        {reserved: {"unexpected": True}},
+                    )
             self.assertTrue(manifest["inventory"]["source_integrity_verified"])
             self.assertEqual(
                 manifest["inventory"]["source_sha256"],
