@@ -5,6 +5,8 @@ for published releases.
 
 ## Unreleased
 
+- Consolidated CLI, scan, doctor, report-output, and Security Passport path
+  validation onto the shared path-safety primitives to prevent boundary drift.
 - Added shared pre-resolution path validation for configuration, scanner assets,
   policy ledgers, finding baselines, and intelligence snapshots so governed
   repository-relative inputs cannot hide links or junctions during resolution.

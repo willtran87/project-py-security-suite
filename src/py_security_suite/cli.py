@@ -13,6 +13,7 @@ from .doctor import assess_readiness, render_readiness
 from .orchestrator import scan_project
 from .policy import exit_code
 from .passport import create_attestation, verify_attestation, verify_report
+from .path_safety import resolve_unlinked_path
 from .report_inspection import inspect_report, render_inspection
 
 
@@ -288,10 +289,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _prepare_output(*, target: Path, output: Path, overwrite: bool) -> Path:
-    output = output.expanduser().absolute()
-    if _is_link_like(output):
-        raise ValueError("report output cannot be a symbolic link or junction")
-    output = output.resolve()
+    output = resolve_unlinked_path(output, "report output")
     _validate_output_scope(target, output)
     _remove_existing_output(output, overwrite)
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -327,11 +325,6 @@ def _remove_existing_output(output: Path, overwrite: bool) -> None:
             "Python Security Suite report"
         )
     shutil.rmtree(output)
-
-
-def _is_link_like(path: Path) -> bool:
-    is_junction = getattr(path, "is_junction", None)
-    return path.is_symlink() or (callable(is_junction) and bool(is_junction()))
 
 
 def _is_suite_report(marker: Path) -> bool:

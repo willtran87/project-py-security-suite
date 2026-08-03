@@ -897,7 +897,7 @@ class PassportTests(unittest.TestCase):
                         public_key=None,
                         allow_unsigned=True,
                     )
-                with self.assertRaisesRegex(ValueError, "not a regular file"):
+                with self.assertRaisesRegex(ValueError, "symbolic link or junction"):
                     _regular_file(trust_file, "public key")
 
     def test_cosign_v3_uses_bundle_after_explicit_network_approval(self) -> None:

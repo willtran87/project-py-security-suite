@@ -8,15 +8,14 @@ from .adapters import ADAPTER_TYPES
 from .config import SuiteConfig
 from .finding_delta import apply_finding_delta
 from .orchestrator import resolve_asset_paths
+from .path_safety import resolve_regular_directory
 from .risk_acceptance import validate_risk_acceptances
 from .risk_intelligence import enrich_findings
 
 
 def assess_readiness(*, target: Path, config: SuiteConfig) -> dict[str, Any]:
     """Assess a configured scan without executing target code or scanners."""
-    target = target.expanduser().resolve()
-    if not target.is_dir():
-        raise ValueError(f"scan target is not a directory: {target}")
+    target = resolve_regular_directory(target, "scan target")
     resolve_asset_paths(config, target)
     tools = _assess_tools(target, config)
     context_errors = _assess_context(target, config)

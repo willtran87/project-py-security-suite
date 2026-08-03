@@ -12,6 +12,9 @@ from typing import Any
 from . import __version__
 from .execution import CommandEnvironment, resolve_executable, run_command, sha256_file
 from .models import ScanManifest, json_ready
+from .path_safety import is_link_like as _is_link_like
+from .path_safety import resolve_regular_file as _regular_file
+from .path_safety import resolve_unlinked_path as _resolve_evidence_root
 
 _MAX_FILE_BYTES = 128 * 1024 * 1024
 _MAX_CHECKSUM_ENTRIES = 10_000
@@ -119,10 +122,7 @@ def create_attestation(
     overwrite: bool = False,
 ) -> dict[str, Any]:
     report = _resolve_evidence_root(report, "report")
-    requested_output = output.expanduser().absolute()
-    if _is_link_like(requested_output):
-        raise ValueError("attestation output cannot be a symbolic link or junction")
-    output = requested_output.resolve()
+    output = _resolve_evidence_root(output, "attestation output")
     verification = verify_report(report)
     statement_source = report / _STATEMENT_NAME
     if not statement_source.is_file() or statement_source.is_symlink():
@@ -302,23 +302,6 @@ def _signing_command(
         ]
     )
     return command, material, "cosign-detached"
-
-
-def _regular_file(path: Path, label: str) -> Path:
-    requested = path.expanduser().absolute()
-    if _is_link_like(requested):
-        raise ValueError(f"{label} is not a regular file: {requested}")
-    resolved = requested.resolve()
-    if not resolved.is_file():
-        raise ValueError(f"{label} is not a regular file: {resolved}")
-    return resolved
-
-
-def _resolve_evidence_root(path: Path, label: str) -> Path:
-    requested = path.expanduser().absolute()
-    if _is_link_like(requested):
-        raise ValueError(f"{label} cannot be a symbolic link or junction: {requested}")
-    return requested.resolve()
 
 
 def _read_signing_password(path: Path | None) -> str:
@@ -633,11 +616,6 @@ def _prepare_directory(path: Path, overwrite: bool) -> None:
                 "refusing to overwrite a directory that is not a valid "
                 "Security Passport"
             )
-
-
-def _is_link_like(path: Path) -> bool:
-    is_junction = getattr(path, "is_junction", None)
-    return path.is_symlink() or (callable(is_junction) and bool(is_junction()))
 
 
 def _write_json(path: Path, value: Any) -> None:

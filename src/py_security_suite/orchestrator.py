@@ -28,7 +28,7 @@ from .models import (
     json_ready,
 )
 from .policy import evaluate_policy
-from .path_safety import resolve_unlinked_path
+from .path_safety import resolve_regular_directory, resolve_unlinked_path
 from .reports import write_reports
 from .risk_intelligence import enrich_findings
 from .source_context import attach_source_context
@@ -43,8 +43,8 @@ def scan_project(
     diagnostic_without_isolation: bool = False,
     adapter_types: Mapping[str, type[ScannerAdapter]] | None = None,
 ) -> ScanResult:
-    target = target.expanduser().resolve()
-    output = output.expanduser().resolve()
+    target = resolve_regular_directory(target, "scan target")
+    output = resolve_unlinked_path(output, "report output")
     if not target.is_dir():
         raise ValueError(f"scan target is not a directory: {target}")
     if output.exists():
