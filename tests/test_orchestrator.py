@@ -122,6 +122,8 @@ class OrchestratorTests(unittest.TestCase):
             tool.rules_path = Path("rules.yml")
             tool.database_path = Path("database")
             tool.public_key_path = Path("release.pub")
+            tool.artifacts_path = Path("dist")
+            tool.provenance_path = Path("provenance")
             config.policy.risk_acceptance_path = Path("acceptances.json")
             config.reports.baseline_path = Path("baseline.json")
             config.intelligence.kev_path = Path("kev.json")
@@ -133,6 +135,8 @@ class OrchestratorTests(unittest.TestCase):
             self.assertEqual(tool.rules_path, (target / "rules.yml").resolve())
             self.assertEqual(tool.database_path, (target / "database").resolve())
             self.assertEqual(tool.public_key_path, (target / "release.pub").resolve())
+            self.assertEqual(tool.artifacts_path, (target / "dist").resolve())
+            self.assertEqual(tool.provenance_path, (target / "provenance").resolve())
             self.assertEqual(
                 config.policy.risk_acceptance_path,
                 (target / "acceptances.json").resolve(),

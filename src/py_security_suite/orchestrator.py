@@ -194,7 +194,13 @@ def scan_project(
 def resolve_asset_paths(config: SuiteConfig, target: Path) -> None:
     """Resolve repository-relative offline assets against the scan target."""
     for tool_name, tool in config.tools.items():
-        for setting in ("rules_path", "database_path", "public_key_path"):
+        for setting in (
+            "rules_path",
+            "database_path",
+            "public_key_path",
+            "artifacts_path",
+            "provenance_path",
+        ):
             value = getattr(tool, setting)
             if value is not None:
                 candidate = value if value.is_absolute() else target / value

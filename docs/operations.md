@@ -407,6 +407,11 @@ public keys, risk acceptances, finding baselines, and intelligence snapshots
 must be direct paths rather than symbolic links or junctions. This prevents
 normalization from erasing the identity of a configured trust input.
 
+Passive evidence roots (`artifacts_path` and `provenance_path`) are governed by
+the same rule. Wheel, source-distribution, and ZIP candidates inside those roots
+must also be direct regular files; linked release artifacts are rejected before
+SBOM, vulnerability, metadata, provenance, or signature analysis.
+
 ## Troubleshooting
 
 ### Required scanner is unavailable

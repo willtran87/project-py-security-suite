@@ -9,9 +9,12 @@ import unittest
 import zipfile
 from pathlib import Path
 from typing import cast
+from unittest.mock import patch
 
 from py_security_suite.adapters.artifacts import (
     artifact_manifest,
+    configured_path,
+    distribution_files,
     extracted_distribution_tree,
 )
 from py_security_suite.adapters.codeql import CodeQlAdapter
@@ -33,6 +36,19 @@ class ArtifactAdapterTests(unittest.TestCase):
         self.dist.mkdir()
         self.wheel = self.dist / "example-1.0-py3-none-any.whl"
         self.wheel.write_bytes(b"fixture")
+
+    def test_artifact_roots_and_distribution_links_are_rejected(self) -> None:
+        wheel = self.dist / "fixture.whl"
+        wheel.write_bytes(b"fixture")
+        with patch.object(Path, "is_junction", return_value=True, create=True):
+            with self.assertRaisesRegex(ValueError, "symbolic link or junction"):
+                configured_path(self.target, Path("dist"), "dist")
+        with patch(
+            "py_security_suite.adapters.artifacts.is_link_like",
+            side_effect=lambda path: path == wheel,
+        ):
+            with self.assertRaisesRegex(ValueError, "artifact cannot be a link"):
+                distribution_files(self.target, ToolConfig(artifacts_path=self.dist))
 
     def test_syft_retains_artifact_sbom(self) -> None:
         payload = json.dumps(

@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import IO
 
 from ..config import ToolConfig
+from ..path_safety import is_link_like, resolve_unlinked_path
 
 _MAX_ARCHIVE_MEMBERS = 100_000
 _MAX_MEMBER_BYTES = 512 * 1024 * 1024
@@ -21,22 +22,24 @@ def configured_path(target: Path, value: Path | None, default: str) -> Path:
     configured = value or Path(default)
     if not configured.is_absolute():
         configured = target / configured
-    return configured.expanduser().resolve()
+    return resolve_unlinked_path(configured, "artifact evidence path")
 
 
 def distribution_files(target: Path, config: ToolConfig) -> list[Path]:
     root = configured_path(target, config.artifacts_path, "dist")
     if not root.is_dir():
         return []
-    distributions = [
-        path.resolve()
-        for path in root.iterdir()
-        if path.is_file()
-        and (
-            path.suffix.casefold() == ".whl"
-            or path.name.casefold().endswith((".tar.gz", ".zip"))
+    distributions: list[Path] = []
+    for path in root.iterdir():
+        candidate = path.suffix.casefold() == ".whl" or path.name.casefold().endswith(
+            (".tar.gz", ".zip")
         )
-    ]
+        if not candidate:
+            continue
+        if is_link_like(path):
+            raise ValueError(f"distribution artifact cannot be a link: {path}")
+        if path.is_file():
+            distributions.append(path.resolve())
     return sorted(distributions, key=lambda item: item.name.casefold())
 
 

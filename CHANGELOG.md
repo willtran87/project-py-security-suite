@@ -5,6 +5,8 @@ for published releases.
 
 ## Unreleased
 
+- Extended governed path checks to passive artifact/provenance roots and reject
+  linked wheel, sdist, or ZIP entries before artifact scanners consume them.
 - Consolidated CLI, scan, doctor, report-output, and Security Passport path
   validation onto the shared path-safety primitives to prevent boundary drift.
 - Closed the remaining CLI scan-target bypass by validating the requested target
