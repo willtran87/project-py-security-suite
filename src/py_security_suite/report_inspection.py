@@ -32,8 +32,8 @@ def inspect_report(report: Path, *, limit: int = 5) -> dict[str, Any]:
     """Verify and summarize a report without trusting its HTML or Markdown."""
     if limit < 0 or limit > 100:
         raise ValueError("inspection limit must be between 0 and 100")
-    root = report.expanduser().resolve()
-    verification = verify_report(root)
+    verification = verify_report(report)
+    root = report.expanduser().absolute().resolve()
     manifest = _read_object(root / "scan-manifest.json")
     findings_document = _read_object(root / "findings.json")
     findings = _object_list(findings_document.get("findings"), "findings")

@@ -395,6 +395,12 @@ file scope. Uncovered changed lines remain in Diff Cover evidence, while a
 normalized file finding is emitted only when that file is below the configured
 minimum percentage.
 
+Treat report, Passport, key, password, and signing-configuration paths as direct
+trust inputs. The suite rejects a requested symbolic link or junction before
+resolution and bounds both checksum entries and total traversed evidence-tree
+entries. Copy approved material into regular files and directories inside the
+controlled lane instead of linking to it.
+
 ## Troubleshooting
 
 ### Required scanner is unavailable

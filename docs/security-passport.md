@@ -41,6 +41,12 @@ itself be a checksum-verified structurally valid Passport, and the prior
 Passport is restored if the final replacement fails. Failed signing and
 publication attempts remove incomplete staging material.
 
+Report and Passport roots, signing keys, signing password files, signing
+configuration, and verification keys are checked at the requested path before
+resolution; symbolic links and Windows junctions are not accepted as trust
+inputs. Verification also caps both manifest entries and total evidence-tree
+entries to keep hostile sparse directory trees from creating unbounded work.
+
 The signer key is never copied into the report. An optional password file is
 bounded, read only for the signing operation, supplied as `COSIGN_PASSWORD` to
 the reduced subprocess environment, and never written to diagnostics.

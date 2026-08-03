@@ -24,6 +24,7 @@ from py_security_suite.passport import (
     _prepare_directory,
     _read_json,
     _read_signing_password,
+    _regular_file,
     _safe_relative,
     _validate_statement,
     _verify_checksums,
@@ -460,6 +461,9 @@ class PassportTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "exact evidence file set"):
                 _verify_checksums(root)
             extra.unlink()
+            with patch("py_security_suite.passport._MAX_TREE_ENTRIES", 1):
+                with self.assertRaisesRegex(ValueError, "tree entry count"):
+                    _verify_checksums(root)
             with patch("py_security_suite.passport._MAX_FILE_BYTES", 1):
                 with self.assertRaisesRegex(ValueError, "manifest is too large"):
                     _verify_checksums(root)
@@ -872,6 +876,29 @@ class PassportTests(unittest.TestCase):
                     output=root / "passport-link",
                     signing_key=None,
                 )
+
+    def test_evidence_roots_and_trust_files_reject_links_before_resolution(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            report = _fixture_report(root)
+            passport = root / "passport"
+            create_attestation(report=report, output=passport, signing_key=None)
+            trust_file = root / "release.pub"
+            trust_file.write_text("fixture", encoding="utf-8")
+            with patch.object(Path, "is_junction", return_value=True, create=True):
+                with self.assertRaisesRegex(ValueError, "report cannot be"):
+                    verify_report(report)
+                with self.assertRaisesRegex(ValueError, "passport cannot be"):
+                    verify_attestation(
+                        passport=passport,
+                        report=None,
+                        public_key=None,
+                        allow_unsigned=True,
+                    )
+                with self.assertRaisesRegex(ValueError, "not a regular file"):
+                    _regular_file(trust_file, "public key")
 
     def test_cosign_v3_uses_bundle_after_explicit_network_approval(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

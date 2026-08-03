@@ -15,6 +15,7 @@ from .models import ScanManifest, json_ready
 
 _MAX_FILE_BYTES = 128 * 1024 * 1024
 _MAX_CHECKSUM_ENTRIES = 10_000
+_MAX_TREE_ENTRIES = 20_000
 _STATEMENT_NAME = "security-passport.json"
 _SIGNATURE_NAME = "security-passport.sig"
 _BUNDLE_NAME = "security-passport.sigstore.json"
@@ -117,7 +118,7 @@ def create_attestation(
     signing_config: Path | None = None,
     overwrite: bool = False,
 ) -> dict[str, Any]:
-    report = report.expanduser().resolve()
+    report = _resolve_evidence_root(report, "report")
     requested_output = output.expanduser().absolute()
     if _is_link_like(requested_output):
         raise ValueError("attestation output cannot be a symbolic link or junction")
@@ -304,10 +305,20 @@ def _signing_command(
 
 
 def _regular_file(path: Path, label: str) -> Path:
-    resolved = path.expanduser().resolve()
-    if not resolved.is_file() or resolved.is_symlink():
+    requested = path.expanduser().absolute()
+    if _is_link_like(requested):
+        raise ValueError(f"{label} is not a regular file: {requested}")
+    resolved = requested.resolve()
+    if not resolved.is_file():
         raise ValueError(f"{label} is not a regular file: {resolved}")
     return resolved
+
+
+def _resolve_evidence_root(path: Path, label: str) -> Path:
+    requested = path.expanduser().absolute()
+    if _is_link_like(requested):
+        raise ValueError(f"{label} cannot be a symbolic link or junction: {requested}")
+    return requested.resolve()
 
 
 def _read_signing_password(path: Path | None) -> str:
@@ -348,7 +359,7 @@ def verify_attestation(
     cosign_sha256: str = "",
     allow_unsigned: bool = False,
 ) -> dict[str, Any]:
-    passport = passport.expanduser().resolve()
+    passport = _resolve_evidence_root(passport, "passport")
     verified_files = _verify_checksums(passport)
     material = _read_json(passport / "verification-material.json")
     statement = _read_json(passport / _STATEMENT_NAME)
@@ -358,13 +369,11 @@ def verify_attestation(
     if signed:
         if public_key is None:
             raise ValueError("a public key is required to verify the signed passport")
-        key = public_key.expanduser().resolve()
+        key = _regular_file(public_key, "public key")
         signature_name = str(material.get("signature") or _SIGNATURE_NAME)
         signature = passport / signature_name
         if signature.parent != passport or not signature.is_file():
             raise ValueError("passport signature material is missing or invalid")
-        if not key.is_file() or key.is_symlink():
-            raise ValueError(f"public key is not a regular file: {key}")
         executable = resolve_executable(cosign_executable)
         if executable is None:
             raise ValueError(f"Cosign executable is unavailable: {cosign_executable}")
@@ -396,11 +405,12 @@ def verify_attestation(
 
     report_verification: dict[str, Any] | None = None
     if report is not None:
-        report_verification = verify_report(report.expanduser().resolve())
+        report_root = _resolve_evidence_root(report, "report")
+        report_verification = verify_report(report_root)
         expected = str(material.get("report_checksums_sha256") or "")
         if report_verification["checksums_sha256"] != expected:
             raise ValueError("report checksum manifest does not match the passport")
-        _verify_statement_inputs(statement, report.expanduser().resolve())
+        _verify_statement_inputs(statement, report_root)
     policy_verification_result = str(statement["predicate"]["verificationResult"])
     policy_passed = policy_verification_result == "PASSED"
     release_blockers: list[str] = []
@@ -452,7 +462,7 @@ def _cosign_major_version(executable: Path, cwd: Path) -> int:
 
 
 def verify_report(report: Path) -> dict[str, Any]:
-    report = report.expanduser().resolve()
+    report = _resolve_evidence_root(report, "report")
     count = _verify_checksums(report)
     manifest = _read_json(report / "scan-manifest.json")
     if (
@@ -559,7 +569,11 @@ def _verify_checksums(root: Path) -> int:
         if sha256_file(path) != expected:
             raise ValueError(f"checksum mismatch: {raw_relative}")
     actual: set[str] = set()
+    entry_count = 0
     for path in root.rglob("*"):
+        entry_count += 1
+        if entry_count > _MAX_TREE_ENTRIES:
+            raise ValueError("evidence tree entry count is invalid")
         relative_name = path.relative_to(root).as_posix()
         if relative_name == "checksums.sha256":
             continue

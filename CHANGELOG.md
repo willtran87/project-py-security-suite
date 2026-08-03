@@ -5,6 +5,9 @@ for published releases.
 
 ## Unreleased
 
+- Rejected report, Passport, signing-key, password, signing-config, and public-key
+  links or junctions before path resolution, and bounded untrusted evidence-tree
+  traversal independently of checksum-manifest size.
 - Hardened report and Security Passport integrity verification to reject
   unchecksummed injected files; Passport publication now adds pre-resolution
   link and junction rejection, staged checksum read-back, validation of existing
