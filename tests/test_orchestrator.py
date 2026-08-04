@@ -215,6 +215,7 @@ class OrchestratorTests(unittest.TestCase):
                 "artifact_path": "dist/fixture.whl",
                 "artifact_sha256": "c" * 64,
                 "artifact_size_bytes": 1234,
+                "owners": ["@release", "@security"],
             },
         )
         artifact_summary = render_summary(manifest, [artifact_finding])
@@ -229,6 +230,14 @@ class OrchestratorTests(unittest.TestCase):
         self.assertIn("Artifact identity evidence", artifact_html)
         self.assertIn("aria-label='Artifact identity'", artifact_html)
         self.assertIn("### Release artifact bindings", artifact_action_plan)
+        self.assertIn(
+            "**Finding ownership:** 1/1 findings assigned across 2 named owner queues; "
+            "0 unassigned",
+            artifact_action_plan,
+        )
+        self.assertIn("### Ownership work queues", artifact_action_plan)
+        self.assertIn("| `@release` | 0 | 1 | 0 | 0 | 0 |", artifact_action_plan)
+        self.assertIn("| `@security` | 0 | 1 | 0 | 0 | 0 |", artifact_action_plan)
         self.assertIn("Use these immutable identities", artifact_action_plan)
         self.assertIn(f"`sha256:{'c' * 64}`", artifact_action_plan)
         self.assertIn("1234 bytes", artifact_action_plan)
@@ -565,13 +574,22 @@ class OrchestratorTests(unittest.TestCase):
             self.assertIn("Entry-point integrity", markdown)
             self.assertIn("# Security action plan", action_plan)
             self.assertIn(
-                "| Priority | Severity | Finding | Domain / area | Location | "
+                "| Risk | Lifecycle | Finding | Domain / area | Location | "
                 "Evidence | Owner | Action |",
                 action_plan,
             )
+            self.assertIn("| P1 / high | new |", action_plan)
             self.assertIn("security / injection", action_plan)
-            self.assertIn("bandit/B602; [B602 -", action_plan)
+            self.assertIn("Source: bandit/B602; Class: [CWE-78]", action_plan)
+            self.assertIn("Reference: [B602 -", action_plan)
             self.assertIn("| Unassigned |", action_plan)
+            self.assertIn(
+                "**Finding ownership:** 0/1 findings assigned across 0 named owner "
+                "queues; 1 unassigned",
+                action_plan,
+            )
+            self.assertIn("### Ownership work queues", action_plan)
+            self.assertIn("| **Unassigned** | 0 | 1 | 0 | 0 | 0 | 1 | 1 |", action_plan)
             self.assertIn("bandit/B602", action_plan)
             self.assertIn("](index.html#PYSEC-", action_plan)
             self.assertIn("## Policy and release-evidence actions", action_plan)

@@ -6,6 +6,7 @@ import json
 import re
 import shutil
 import tempfile
+from collections import Counter
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote, urlsplit
@@ -638,6 +639,9 @@ def render_action_plan(manifest: ScanManifest, findings: list[Finding]) -> str:
     )
     candidate_binding_label = "binding" if approval_candidates == 1 else "bindings"
     candidate_digest_label = "digest" if unique_candidate_digests == 1 else "digests"
+    assigned_findings = sum(bool(_owner_values(finding)) for finding in findings)
+    owner_queues = {owner for finding in findings for owner in _owner_values(finding)}
+    unassigned_findings = len(findings) - assigned_findings
     lines = [
         "# Security action plan",
         "",
@@ -658,11 +662,14 @@ def render_action_plan(manifest: ScanManifest, findings: list[Finding]) -> str:
         f"- **Approval review workload:** {approval_candidates} candidate "
         f"{candidate_binding_label} across {unique_candidate_digests} unique "
         f"executable {candidate_digest_label}",
+        f"- **Finding ownership:** {assigned_findings}/{len(findings)} findings "
+        f"assigned across {len(owner_queues)} named owner queues; "
+        f"{unassigned_findings} unassigned",
         f"- **Immediate next step:** {_next_action(manifest.outcome)}",
         "",
         "## Finding actions",
         "",
-        "| Priority | Severity | Finding | Domain / area | Location | Evidence | Owner | Action |",
+        "| Risk | Lifecycle | Finding | Domain / area | Location | Evidence | Owner | Action |",
         "|---|---|---|---|---|---|---|---|",
     ]
     for finding in sorted(findings, key=_finding_sort_key):
@@ -673,22 +680,31 @@ def render_action_plan(manifest: ScanManifest, findings: list[Finding]) -> str:
         reference = (
             _markdown_citation(finding.citations[0]) if finding.citations else "-"
         )
+        classifications = (
+            ", ".join(
+                _markdown_classification(value) for value in finding.classifications
+            )
+            or "-"
+        )
         lines.append(
-            f"| {_finding_priority(finding)} | "
+            f"| {_finding_priority(finding)} / "
             f"{_markdown_table(finding.severity.value)} | "
+            f"{_markdown_table(finding.status.value)} | "
             f"[`{_markdown_code(finding.finding_id)}` "
             f"{_markdown_table(finding.title)}]"
             f"(index.html#{quote(finding.finding_id, safe='')}) | "
             f"{_markdown_table(finding.domain)} / "
             f"{_markdown_table(finding.area)} | "
             f"`{_markdown_code(_location_text(finding))}` | "
-            f"{_markdown_table(sources)}; {reference} | "
+            f"Source: {_markdown_table(sources)}; "
+            f"Class: {classifications}; Reference: {reference} | "
             f"{_finding_owners(finding)} | "
             f"{_markdown_table(finding.remediation)} |"
         )
     if not findings:
         lines.append("| - | - | - | No normalized findings | - | - | - | No action |")
 
+    lines.extend(_render_owner_work_queues(findings))
     lines.extend(_render_action_plan_artifact_identities(findings))
     lines.extend(_render_entrypoint_trust_actions(manifest.tools))
     lines.extend(
@@ -763,6 +779,43 @@ def render_action_plan(manifest: ScanManifest, findings: list[Finding]) -> str:
         ]
     )
     return "\n".join(lines)
+
+
+def _render_owner_work_queues(findings: list[Finding]) -> list[str]:
+    if not findings:
+        return []
+    queues: dict[str, list[Finding]] = {}
+    for finding in findings:
+        owners = list(dict.fromkeys(_owner_values(finding))) or ["Unassigned"]
+        for owner in owners:
+            queues.setdefault(owner, []).append(finding)
+    queue_guidance = " ".join(
+        (
+            "A finding with multiple owners appears in each applicable queue;",
+            "totals therefore represent routing workload, not unique finding count.",
+        )
+    )
+    lines = [
+        "",
+        "### Ownership work queues",
+        "",
+        queue_guidance,
+        "",
+        "| Owner | P0 | P1 | P2 | P3 | P4 | Blocking | Total |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|",
+    ]
+    for owner, owned_findings in sorted(queues.items()):
+        priorities = Counter(_finding_priority(finding) for finding in owned_findings)
+        owner_label = (
+            "**Unassigned**" if owner == "Unassigned" else f"`{_markdown_code(owner)}`"
+        )
+        lines.append(
+            f"| {owner_label} | {priorities['P0']} | {priorities['P1']} | "
+            f"{priorities['P2']} | {priorities['P3']} | {priorities['P4']} | "
+            f"{sum(finding.blocking for finding in owned_findings)} | "
+            f"{len(owned_findings)} |"
+        )
+    return lines
 
 
 def _render_action_plan_artifact_identities(findings: list[Finding]) -> list[str]:

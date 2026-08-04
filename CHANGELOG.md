@@ -5,6 +5,10 @@ for published releases.
 
 ## Unreleased
 
+- Add ownership-coverage metrics and priority-bucketed owner work queues to the
+  action plan; consolidate risk, lifecycle, scanner attribution,
+  classifications, and the first authoritative reference into a compact triage
+  row without widening the table.
 - Put finding ownership and the first authoritative citation directly in the
   action table, and include observed tool versions in digest-grouped scanner
   provenance batches so reviewers can assign and verify work without rebuilding
