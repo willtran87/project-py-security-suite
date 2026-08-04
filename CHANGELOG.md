@@ -5,6 +5,10 @@ for published releases.
 
 ## Unreleased
 
+- Make assurance-case status and next actions evidence-aware across clean,
+  finding-bearing, incomplete, not-applicable, VCS, and externally generated
+  dynamic-control states; include Cosign in artifact assurance and remove
+  contradictory requests to regenerate already passing evidence.
 - Make `verify-report` emit and atomically publish a strict, self-identifying
   report-verification receipt; bundle its version-explicit Draft 2020-12 schema
   for offline export and include the receipt in the GitHub artifact workflow.

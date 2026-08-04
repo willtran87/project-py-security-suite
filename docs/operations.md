@@ -332,7 +332,10 @@ configured deep Python data-flow analysis, or required revision-bound dynamic
 and governance evidence is missing. Review
 `assurance-case.md` before promotion; it identifies artifact provenance,
 dynamic testing, and threat-review evidence that the source scan cannot
-produce.
+produce. Read the status and next-action columns together: attached passing
+evidence is acknowledged, active findings link remediation to `action-plan.md`,
+and incomplete control areas request missing evidence without telling operators
+to regenerate evidence that already passed.
 
 See the [production security gate](production-security.md) for the complete
 release-evidence model.
@@ -345,8 +348,9 @@ commit SHA and replace the isolation placeholder with an organization-owned
 boundary check.
 
 The workflow preserves the suite exit code, publishes the Markdown summary,
-exports the inspection and its verification receipt beside the sealed report,
-uploads all three as one artifact, publishes SARIF, and only then applies the
+exports the report receipt, inspection, and inspection-verification receipt
+beside the sealed report, uploads all four as one artifact, publishes SARIF, and
+only then applies the
 policy result. The bundled
 Actionlint policy recognizes the template's `pysec-isolated` self-hosted runner
 label so the distributed example validates without weakening runner isolation.

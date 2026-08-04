@@ -80,7 +80,10 @@ configuration, or isolation assertion was missing.
 | Runtime behavior | Hypothesis and Schemathesis JUnit plus Atheris, mutmut, and ZAP evidence are normalized; target behavior is deliberately not executed by the scanner | Sandboxed unit/integration, abuse-case, fuzz, API, and DAST execution |
 | Design risk | OWASP pytm threats are normalized when a model exists | Human threat-model and architecture review plus time-bounded risk acceptance |
 
-The generated `assurance-case.md` records these boundaries for each run.
+The generated `assurance-case.md` records these boundaries for each run. Its
+next action is computed from actual applicability, completion, attached
+companion evidence, and active findings, so a passing coverage or deep-analysis
+lane is retained rather than incorrectly requested again.
 
 ## Implemented additions and companion controls
 

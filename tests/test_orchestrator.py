@@ -14,8 +14,11 @@ from py_security_suite.models import (
     Citation,
     Confidence,
     Finding,
+    FindingStatus,
+    Inventory,
     Location,
     Outcome,
+    ScanManifest,
     Severity,
     Source,
     ToolRun,
@@ -28,6 +31,7 @@ from py_security_suite.reports import (
     _register_report_artifacts,
     _safe_http_reference,
     render_action_plan,
+    render_assurance_case,
     render_html,
     render_summary,
     write_reports,
@@ -123,6 +127,152 @@ class MutatingSecrets(FakeSecrets):
 
 
 class OrchestratorTests(unittest.TestCase):
+    def test_assurance_case_actions_follow_attached_evidence_and_findings(
+        self,
+    ) -> None:
+        def complete(tool: str) -> ToolRun:
+            return ToolRun(
+                tool=tool,
+                status=ToolStatus.COMPLETED,
+                command=[tool],
+                duration_seconds=0.01,
+            )
+
+        manifest = ScanManifest(
+            schema_version="1.0",
+            suite_version="0.1.0",
+            scan_id="scan-assurance",
+            target="fixture",
+            profile="comprehensive",
+            outcome=Outcome.PASS,
+            started_at="2026-08-04T00:00:00Z",
+            finished_at="2026-08-04T00:00:01Z",
+            duration_seconds=1.0,
+            network_policy="deny",
+            network_isolation_attested=True,
+            execute_target_code=False,
+            inventory=Inventory(
+                python_files=1,
+                dependency_files=[],
+                total_files=1,
+                skipped_symlinks=0,
+                vcs_history_available=True,
+                source_sha256="a" * 64,
+                source_sha256_after="a" * 64,
+                source_integrity_verified=True,
+                hashed_files=1,
+                hashed_bytes=10,
+            ),
+            tools=[
+                complete("coverage"),
+                complete("junit"),
+                complete("codeql"),
+                ToolRun(
+                    tool="pysa",
+                    status=ToolStatus.SKIPPED,
+                    command=[],
+                    duration_seconds=0.0,
+                    applicable=False,
+                ),
+                complete("hypothesis"),
+                complete("cosign"),
+                complete("trivy"),
+                complete("scancode"),
+            ],
+            finding_counts={},
+            policy_reasons=[],
+        )
+
+        clean = render_assurance_case(manifest, [])
+        self.assertIn(
+            "Coverage, changed-line coverage, and JUnit evidence passed", clean
+        )
+        self.assertIn("At least one applicable deep data-flow engine completed", clean)
+        self.assertIn("applicable external evidence attached", clean)
+        self.assertIn("Preserve the immutable commit identity", clean)
+        self.assertNotIn("Generate branch-enabled coverage JSON", clean)
+
+        artifact_finding = Finding(
+            finding_id="PYSEC-COSIGN",
+            fingerprint="sha256:cosign",
+            title="Signature missing",
+            description="Fixture",
+            impact="Publisher identity is unavailable.",
+            remediation="Attach the approved signature bundle.",
+            severity=Severity.HIGH,
+            confidence=Confidence.HIGH,
+            area="artifact-provenance",
+            domain="supply-chain",
+            sources=[
+                Source(
+                    tool="cosign",
+                    rule_id="COSIGN-BUNDLE-MISSING",
+                    message="bundle missing",
+                )
+            ],
+        )
+        actionable = render_assurance_case(manifest, [artifact_finding])
+        self.assertIn(
+            "Built artifact integrity and provenance | findings require action",
+            actionable,
+        )
+        self.assertIn("resolve 1 active finding attributed to cosign", actionable)
+
+        next(
+            run for run in manifest.tools if run.tool == "cosign"
+        ).status = ToolStatus.FAILED
+        combined = render_assurance_case(manifest, [artifact_finding])
+        self.assertIn(
+            "Built artifact integrity and provenance | coverage gap; findings require action",
+            combined,
+        )
+        self.assertIn(
+            "restore every incomplete artifact control, and rerun. Also, Open",
+            combined,
+        )
+
+        artifact_finding.status = FindingStatus.SUPPRESSED
+        governed = render_assurance_case(manifest, [artifact_finding])
+        self.assertNotIn("resolve 1 active finding attributed to cosign", governed)
+
+        license_finding = Finding(
+            finding_id="PYSEC-LICENSE",
+            fingerprint="sha256:license",
+            title="Restricted license",
+            description="Fixture",
+            impact="Distribution terms require review.",
+            remediation="Apply the approved license policy.",
+            severity=Severity.MEDIUM,
+            confidence=Confidence.MEDIUM,
+            area="license-governance",
+            domain="governance",
+            sources=[
+                Source(
+                    tool="trivy",
+                    rule_id="license/example",
+                    message="restricted license",
+                )
+            ],
+        )
+        scoped = render_assurance_case(manifest, [license_finding])
+        self.assertIn(
+            "Deployment, IaC, and CI configuration | verified for scan scope",
+            scoped,
+        )
+        self.assertIn(
+            "License and source inventory | findings require action",
+            scoped,
+        )
+        self.assertEqual(
+            scoped.count("resolve 1 active finding attributed to trivy"),
+            1,
+        )
+
+        manifest.tools[0].status = ToolStatus.UNAVAILABLE
+        incomplete = render_assurance_case(manifest, [])
+        self.assertIn("Automated test evidence | partial coverage", incomplete)
+        self.assertIn("Generate branch-enabled coverage JSON", incomplete)
+
     def test_entrypoint_trust_actions_cover_clean_changed_and_helper_states(
         self,
     ) -> None:

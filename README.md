@@ -409,7 +409,11 @@ transport integrity for approval.
 finding remediation from scanner-coverage restoration and policy evidence.
 `assurance-case.md` distinguishes evidence demonstrated by the scan from
 dynamic testing, artifact identity, provenance, and threat-review evidence that
-must be supplied by companion release gates. The GitHub summary
+must be supplied by companion release gates. Each control's status and next
+action are derived from applicable tool health, attached companion evidence,
+and active findings: verified-clean controls retain evidence, finding-bearing
+controls point to the action plan, and incomplete controls request restoration
+instead of repeating work that already passed. The GitHub summary
 presents the first 20 findings in actionable detail; the self-contained HTML,
 JSON, and SARIF artifacts retain the complete result set.
 

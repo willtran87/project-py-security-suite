@@ -421,7 +421,10 @@ flowchart LR
   coverage-restoration work and collapses informational not-applicable rows
   without removing their reasons, re-enable conditions, or references.
 - `assurance-case.md` states what the static scan demonstrated and identifies
-  required artifact, provenance, dynamic-test, and threat-review evidence.
+  required artifact, provenance, dynamic-test, and threat-review evidence. Its
+  next actions are evidence-aware: completed clean controls retain evidence,
+  active findings require remediation, and partial controls preserve both
+  coverage-restoration and finding-remediation work.
 - `index.html` is a self-contained complete human report with an explicit
   decision badge, a balanced scanner-health summary, actionable coverage gaps,
   and expandable not-applicable control evidence.
@@ -568,9 +571,9 @@ The native Windows self-scan process verifies:
   errors; 27 conditional scanners were correctly not applicable;
 - Pylint, Radon, Ruff formatting, coverage, and JUnit adapters executed through
   approved entry-point bindings and emitted normalized derived evidence;
-- the separately generated branch-coverage evidence records 92.97% combined
-  line-and-branch coverage and 86.51% branch coverage, satisfying both 80%
-  repository gates with no per-file hotspots; JUnit records 295 passing tests,
+- the separately generated branch-coverage evidence records 92.99% combined
+  line-and-branch coverage and 86.55% branch coverage, satisfying both 80%
+  repository gates with no per-file hotspots; JUnit records 296 passing tests,
   one platform-limited symlink skip, and no failures or errors;
 - CycloneDX completed from `uv.lock` through a frozen offline export with a
   hash-verified helper; zizmor, actionlint, Pysa, GuardDog, Flawfinder, and
