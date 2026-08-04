@@ -5,6 +5,9 @@ for published releases.
 
 ## Unreleased
 
+- Verify the embedded in-toto/SLSA Security Passport during report verification,
+  require exact input coverage, and bind its source, policy, outcome, profile,
+  scanner health, finding counts, and lifecycle evidence to the scan manifest.
 - Validate every declared report artifact as a unique, present, normalized,
   in-report file or directory and reject ambiguous portable evidence paths.
 - Require every canonical report artifact and exact scan-manifest binding during

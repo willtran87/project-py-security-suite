@@ -104,8 +104,10 @@ pysec verify-report REPORT
 This validates the report checksum chain, complete canonical artifact set, and
 exact scan-manifest artifact bindings. Every additional manifest binding must
 name unique, present evidence inside the report. The embedded
-`REPORT/security-passport.json` is the unsigned in-toto/SLSA statement; it is
-not itself the detached passport directory accepted by `pysec verify`.
+`REPORT/security-passport.json` must be a valid in-toto/SLSA statement, bind the
+exact report input set by digest, and agree with manifest identity, source,
+policy, result, findings, and scanner health. It is not itself the detached
+passport directory accepted by `pysec verify`.
 
 Create a signed passport with Cosign 2 in a disconnected approval lane:
 

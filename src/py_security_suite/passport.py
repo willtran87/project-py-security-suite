@@ -468,6 +468,7 @@ def verify_report(report: Path) -> dict[str, Any]:
     ):
         raise ValueError("report scan manifest is invalid")
     _verify_report_artifact_contract(report, manifest)
+    _verify_embedded_statement(report, manifest)
     checksums = report / "checksums.sha256"
     return {
         "verified": True,
@@ -475,6 +476,120 @@ def verify_report(report: Path) -> dict[str, Any]:
         "checksums_sha256": sha256_file(checksums),
         "scan_id": manifest["scan_id"],
         "outcome": manifest.get("outcome"),
+    }
+
+
+def _verify_embedded_statement(report: Path, manifest: dict[str, Any]) -> None:
+    statement = _read_json(report / _STATEMENT_NAME)
+    _validate_statement(statement)
+    bound_inputs = _verify_statement_inputs(statement, report)
+    expected_inputs = {
+        path.relative_to(report).as_posix()
+        for path in report.rglob("*")
+        if path.is_file()
+        and not path.is_symlink()
+        and path.relative_to(report).as_posix()
+        not in {_STATEMENT_NAME, "checksums.sha256"}
+    }
+    if bound_inputs != expected_inputs:
+        raise ValueError("embedded Security Passport input set is incomplete")
+    _verify_statement_manifest_binding(statement, manifest)
+
+
+def _verify_statement_manifest_binding(
+    statement: dict[str, Any], manifest: dict[str, Any]
+) -> None:
+    outcome = manifest.get("outcome")
+    if outcome not in {"pass", "warn", "fail", "incomplete"}:
+        raise ValueError("report scan manifest outcome is invalid")
+    predicate = statement["predicate"]
+    if not isinstance(predicate, dict):
+        raise ValueError("embedded Security Passport manifest binding is invalid")
+    inventory = manifest.get("inventory")
+    tools = manifest.get("tools")
+    if not isinstance(inventory, dict) or not isinstance(tools, list):
+        raise ValueError("embedded Security Passport manifest binding is invalid")
+    _validate_statement_manifest_evidence(manifest, inventory)
+    expected_result = "PASSED" if outcome == "pass" else "FAILED"
+    profile = str(manifest["profile"])
+    expected_claims = {
+        "verificationResult": expected_result,
+        "verifiedLevels": (
+            [f"PYSEC_PROFILE_{profile.upper().replace('-', '_')}"]
+            if outcome == "pass"
+            else ["FAILED"]
+        ),
+        "slsaVersion": "1.2",
+        "timeVerified": manifest["finished_at"],
+        "resourceUri": f"urn:pysec:scan:{manifest['scan_id']}",
+        "verifier": {
+            "id": "https://github.com/william-zk/project-py-security-suite",
+            "version": {"py-security-suite": manifest["suite_version"]},
+        },
+        "policy": {
+            "uri": f"urn:pysec:profile:{profile}",
+            "digest": {"sha256": manifest["configuration_sha256"]},
+        },
+        "pysec": {
+            "schema_version": "1.0",
+            "outcome": outcome,
+            "profile": profile,
+            "network_isolation_attested": manifest["network_isolation_attested"],
+            "source_integrity_verified": inventory["source_integrity_verified"],
+            "finding_counts": manifest["finding_counts"],
+            "tool_statuses": _tool_status_counts(tools),
+            "risk_acceptance_sha256": manifest.get("risk_acceptance_sha256", ""),
+            "intelligence": manifest.get("intelligence", {}),
+            "baseline": manifest.get("baseline", {}),
+        },
+    }
+    expected_subject = {
+        "name": f"source:{manifest['target']}",
+        "digest": {"sha256": inventory["source_sha256"]},
+    }
+    subjects = statement.get("subject")
+    if (
+        not isinstance(subjects, list)
+        or expected_subject not in subjects
+        or any(predicate.get(key) != value for key, value in expected_claims.items())
+    ):
+        raise ValueError("embedded Security Passport does not match scan manifest")
+
+
+def _validate_statement_manifest_evidence(
+    manifest: dict[str, Any], inventory: dict[str, Any]
+) -> None:
+    identity_values = (
+        manifest.get("scan_id"),
+        manifest.get("suite_version"),
+        manifest.get("target"),
+        manifest.get("profile"),
+        manifest.get("finished_at"),
+    )
+    if (
+        not all(isinstance(value, str) and value for value in identity_values)
+        or not _is_digest(str(manifest.get("configuration_sha256") or ""))
+        or not _is_digest(str(inventory.get("source_sha256") or ""))
+        or not isinstance(manifest.get("network_isolation_attested"), bool)
+        or not isinstance(inventory.get("source_integrity_verified"), bool)
+        or not isinstance(manifest.get("finding_counts"), dict)
+    ):
+        raise ValueError("embedded Security Passport manifest evidence is invalid")
+
+
+def _tool_status_counts(tools: list[Any]) -> dict[str, int]:
+    return {
+        status: sum(
+            isinstance(run, dict) and run.get("status") == status for run in tools
+        )
+        for status in (
+            "completed",
+            "skipped",
+            "unavailable",
+            "failed",
+            "timed_out",
+            "parse_error",
+        )
     }
 
 
@@ -536,17 +651,22 @@ def _report_inputs(report: Path, *, exclude: set[str]) -> list[dict[str, Any]]:
     return values
 
 
-def _verify_statement_inputs(statement: dict[str, Any], report: Path) -> None:
+def _verify_statement_inputs(statement: dict[str, Any], report: Path) -> set[str]:
     predicate = statement.get("predicate", {})
     inputs = (
         predicate.get("inputAttestations", []) if isinstance(predicate, dict) else []
     )
     if not isinstance(inputs, list):
         raise ValueError("passport inputAttestations must be a list")
+    seen: set[str] = set()
     for value in inputs:
         if not isinstance(value, dict):
             raise ValueError("passport input attestation must be an object")
         relative = _safe_relative(str(value.get("uri") or ""))
+        relative_name = relative.as_posix()
+        if relative_name in seen:
+            raise ValueError(f"passport input is duplicated: {relative_name}")
+        seen.add(relative_name)
         digest = value.get("digest", {})
         expected = str(digest.get("sha256") or "") if isinstance(digest, dict) else ""
         path = (report / relative).resolve()
@@ -554,6 +674,7 @@ def _verify_statement_inputs(statement: dict[str, Any], report: Path) -> None:
             raise ValueError(f"passport input is unavailable: {relative}")
         if sha256_file(path) != expected:
             raise ValueError(f"passport input digest mismatch: {relative}")
+    return seen
 
 
 def _validate_statement(document: dict[str, Any]) -> None:

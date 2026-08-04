@@ -285,8 +285,11 @@ execution gap.
 manifest, every canonical report artifact, and their exact manifest bindings.
 A checksum-consistent partial report is rejected. Every additional declared
 artifact must also resolve to one unique, present file or explicitly marked
-directory inside the report. `verify` accepts a detached passport **directory** created by
-`attest`, not the embedded `security-passport.json` statement file.
+directory inside the report. The embedded Security Passport must be a valid
+in-toto/SLSA statement, cover the exact report input set, and agree with the
+manifest's scan identity, source, policy, result, findings, and scanner health.
+`verify` accepts a detached passport **directory** created by `attest`, not the
+embedded `security-passport.json` statement file.
 
 `inspect` performs the same integrity verification, then presents a bounded
 operational summary of outcome, scanner health, severity, domains, lifecycle,

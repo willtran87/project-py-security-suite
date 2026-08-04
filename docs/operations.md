@@ -608,9 +608,11 @@ At the first handoff, validate the report itself with
 `pysec verify-report REPORT`. This checks every checksum entry, requires the
 complete canonical report set, and validates its scan-manifest artifact bindings
 without requiring a signing key. Missing, duplicate, ambiguous, unsafe, or
-linked declared evidence is rejected. `pysec verify PASSPORT --report REPORT` is the stronger detached
-passport operation and expects `PASSPORT` to be a directory created by
-`pysec attest`.
+linked declared evidence is rejected. The embedded in-toto/SLSA statement must
+bind every report input and agree with the manifest's source, policy, outcome,
+finding counts, and tool statuses. `pysec verify PASSPORT --report REPORT` is
+the stronger detached passport operation and expects `PASSPORT` to be a
+directory created by `pysec attest`.
 
 For environments where the approval signer is a separate service, use
 `pysec attest REPORT --output PASSPORT --unsigned`, sign

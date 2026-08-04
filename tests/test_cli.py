@@ -20,6 +20,7 @@ from py_security_suite.cli import (
 from py_security_suite.models import Outcome
 from py_security_suite.passport import REQUIRED_REPORT_ARTIFACTS
 from py_security_suite.reports import REPORT_FILES
+from tests.report_fixtures import write_embedded_statement
 
 
 class CliSafetyTests(unittest.TestCase):
@@ -284,22 +285,38 @@ class CliSafetyTests(unittest.TestCase):
             output = root / "report"
             output.mkdir()
             marker = output / "scan-manifest.json"
-            marker.write_text(
-                json.dumps(
-                    {
-                        "schema_version": "1.0",
-                        "suite_version": "0.1.0",
-                        "scan_id": "scan-fixture",
-                        "artifacts": REQUIRED_REPORT_ARTIFACTS,
-                    }
-                ),
-                encoding="utf-8",
-            )
+            manifest = {
+                "schema_version": "1.0",
+                "suite_version": "0.1.0",
+                "scan_id": "scan-fixture",
+                "target": "fixture",
+                "profile": "standard",
+                "outcome": "pass",
+                "finished_at": "2026-08-03T00:00:00Z",
+                "configuration_sha256": "b" * 64,
+                "network_isolation_attested": True,
+                "inventory": {
+                    "source_sha256": "a" * 64,
+                    "source_integrity_verified": True,
+                },
+                "finding_counts": {},
+                "tools": [],
+                "risk_acceptance_sha256": "",
+                "intelligence": {},
+                "baseline": {},
+                "artifacts": REQUIRED_REPORT_ARTIFACTS,
+            }
+            marker.write_text(json.dumps(manifest), encoding="utf-8")
             for name in REPORT_FILES:
                 path = output / name
-                if path.name in {"checksums.sha256", "scan-manifest.json"}:
+                if path.name in {
+                    "checksums.sha256",
+                    "scan-manifest.json",
+                    "security-passport.json",
+                }:
                     continue
                 path.write_text("fixture\n", encoding="utf-8")
+            write_embedded_statement(output, manifest)
             entries = [
                 f"{hashlib.sha256(path.read_bytes()).hexdigest()}  "
                 f"{path.relative_to(output).as_posix()}"

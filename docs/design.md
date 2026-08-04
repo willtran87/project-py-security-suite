@@ -383,6 +383,9 @@ report/
   plus every declared derived file or directory. Missing, duplicated, linked,
   ambiguous, or boundary-crossing bindings are rejected, so a self-consistent
   but partial report cannot be presented as complete.
+- `security-passport.json` is parsed and validated as an in-toto/SLSA statement;
+  its exact input digest set and source, policy, outcome, profile, findings,
+  tool-status, intelligence, and baseline claims must agree with the manifest.
 - `sbom.cdx.json` and `scancode-inventory.json` are governed derived evidence.
 - `evidence/*.json` contains sanitized diagnostics and output hashes, not
   secret values or raw scanner output.
@@ -512,9 +515,9 @@ The native Windows self-scan process verifies:
   errors; 27 conditional scanners were correctly not applicable;
 - Pylint, Radon, Ruff formatting, coverage, and JUnit adapters executed through
   approved entry-point bindings and emitted normalized derived evidence;
-- the separately generated branch-coverage evidence records 92.03% combined
-  line-and-branch coverage and 84.63% branch coverage, satisfying both 80%
-  repository gates with no per-file hotspots; JUnit records 275 passing tests,
+- the separately generated branch-coverage evidence records 92.06% combined
+  line-and-branch coverage and 84.73% branch coverage, satisfying both 80%
+  repository gates with no per-file hotspots; JUnit records 278 passing tests,
   one platform-limited symlink skip, and no failures or errors;
 - CycloneDX completed from `uv.lock` through a frozen offline export with a
   hash-verified helper; zizmor, actionlint, Pysa, GuardDog, Flawfinder, and

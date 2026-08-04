@@ -14,6 +14,7 @@ from py_security_suite.report_inspection import (
     render_inspection,
 )
 from py_security_suite.passport import REQUIRED_REPORT_ARTIFACTS
+from tests.report_fixtures import write_embedded_statement
 
 
 class ReportInspectionTests(unittest.TestCase):
@@ -128,6 +129,16 @@ def _write_report(
         "outcome": outcome,
         "duration_seconds": 1.25,
         "finished_at": "2026-08-01T00:00:00Z",
+        "configuration_sha256": "b" * 64,
+        "network_isolation_attested": True,
+        "inventory": {
+            "source_sha256": "a" * 64,
+            "source_integrity_verified": True,
+        },
+        "finding_counts": {},
+        "risk_acceptance_sha256": "",
+        "intelligence": {},
+        "baseline": {},
         "policy_reasons": (
             ["one blocking finding"] if policy_reasons is None else policy_reasons
         ),
@@ -156,10 +167,14 @@ def _write_report(
         "index.html": "<!doctype html><title>Fixture</title>\n",
     }
     for relative in REQUIRED_REPORT_ARTIFACTS.values():
-        if relative != "checksums.sha256":
+        if relative not in {"checksums.sha256", "security-passport.json"}:
             files.setdefault(relative, "fixture\n")
     for name, value in files.items():
         (root / name).write_text(value, encoding="utf-8", newline="\n")
+    write_embedded_statement(root, manifest)
+    files["security-passport.json"] = (root / "security-passport.json").read_text(
+        encoding="utf-8"
+    )
     checksums = [
         f"{hashlib.sha256((root / name).read_bytes()).hexdigest()}  {name}"
         for name in sorted(files)

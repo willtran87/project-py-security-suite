@@ -29,12 +29,14 @@ from py_security_suite.passport import (
     _safe_relative,
     _validate_statement,
     _verify_checksums,
+    _verify_statement_manifest_binding,
     _verify_statement_inputs,
     create_attestation,
     verify_attestation,
     verify_report,
 )
 from py_security_suite.risk_intelligence import enrich_findings
+from tests.report_fixtures import write_embedded_statement
 
 
 def _finding(*, line: int = 10, title: str = "Vulnerable dependency") -> Finding:
@@ -263,8 +265,8 @@ class PassportTests(unittest.TestCase):
                     ]
                 }
             }
-            _verify_statement_inputs(valid, report)
-            _verify_statement_inputs({"predicate": []}, report)
+            self.assertEqual(_verify_statement_inputs(valid, report), {"evidence.json"})
+            self.assertEqual(_verify_statement_inputs({"predicate": []}, report), set())
             invalid: tuple[tuple[dict[str, Any], str], ...] = (
                 ({"predicate": {"inputAttestations": {}}}, "must be a list"),
                 ({"predicate": {"inputAttestations": [1]}}, "must be an object"),
@@ -307,6 +309,23 @@ class PassportTests(unittest.TestCase):
                         }
                     },
                     "digest mismatch",
+                ),
+                (
+                    {
+                        "predicate": {
+                            "inputAttestations": [
+                                {
+                                    "uri": "evidence.json",
+                                    "digest": {"sha256": _digest(evidence)},
+                                },
+                                {
+                                    "uri": "evidence.json",
+                                    "digest": {"sha256": _digest(evidence)},
+                                },
+                            ]
+                        }
+                    },
+                    "input is duplicated",
                 ),
             )
             for statement, message in invalid:
@@ -415,6 +434,7 @@ class PassportTests(unittest.TestCase):
             (evidence / "scanner.json").write_text("{}", encoding="utf-8")
             manifest["artifacts"]["evidence"] = "evidence/"
             manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            write_embedded_statement(report, manifest)
             _write_checksums(report)
             self.assertTrue(verify_report(report)["verified"])
 
@@ -448,6 +468,51 @@ class PassportTests(unittest.TestCase):
                     with self.assertRaisesRegex(ValueError, message):
                         verify_report(report)
                     manifest["artifacts"].pop(key)
+
+    def test_report_validation_binds_embedded_security_passport(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            report = _fixture_report(root)
+            statement_path = report / "security-passport.json"
+            original = json.loads(statement_path.read_text(encoding="utf-8"))
+            manifest = json.loads(
+                (report / "scan-manifest.json").read_text(encoding="utf-8")
+            )
+
+            incomplete = json.loads(json.dumps(original))
+            incomplete["predicate"]["inputAttestations"].pop()
+            statement_path.write_text(json.dumps(incomplete), encoding="utf-8")
+            _write_checksums(report)
+            with self.assertRaisesRegex(ValueError, "input set is incomplete"):
+                verify_report(report)
+
+            mismatched = json.loads(json.dumps(original))
+            mismatched["predicate"]["resourceUri"] = "urn:pysec:scan:other"
+            statement_path.write_text(json.dumps(mismatched), encoding="utf-8")
+            _write_checksums(report)
+            with self.assertRaisesRegex(ValueError, "does not match scan manifest"):
+                verify_report(report)
+
+            manifest["outcome"] = "unexpected"
+            with self.assertRaisesRegex(ValueError, "outcome is invalid"):
+                _verify_statement_manifest_binding(original, manifest)
+            manifest["outcome"] = "pass"
+            with self.assertRaisesRegex(ValueError, "manifest binding is invalid"):
+                _verify_statement_manifest_binding(
+                    {**original, "predicate": []}, manifest
+                )
+            malformed = json.loads(json.dumps(original))
+            malformed["predicate"].pop("verifier")
+            with self.assertRaisesRegex(ValueError, "does not match scan manifest"):
+                _verify_statement_manifest_binding(malformed, manifest)
+            invalid_evidence = json.loads(json.dumps(manifest))
+            invalid_evidence["inventory"]["source_sha256"] = ""
+            with self.assertRaisesRegex(ValueError, "manifest evidence is invalid"):
+                _verify_statement_manifest_binding(original, invalid_evidence)
+            invalid_structure = json.loads(json.dumps(manifest))
+            invalid_structure["tools"] = {}
+            with self.assertRaisesRegex(ValueError, "manifest binding is invalid"):
+                _verify_statement_manifest_binding(original, invalid_structure)
 
     def test_passport_path_and_statement_validation_rejects_ambiguous_evidence(
         self,
@@ -736,15 +801,11 @@ class PassportTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             report = _fixture_report(root)
-            statement_path = report / "security-passport.json"
-            statement = json.loads(statement_path.read_text(encoding="utf-8"))
-            statement["predicate"]["verificationResult"] = "FAILED"
-            statement["predicate"]["pysec"]["outcome"] = "fail"
-            statement_path.write_text(json.dumps(statement), encoding="utf-8")
             manifest_path = report / "scan-manifest.json"
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             manifest["outcome"] = "fail"
             manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            write_embedded_statement(report, manifest)
             _write_checksums(report)
             passport = root / "passport"
             create_attestation(report=report, output=passport, signing_key=None)
@@ -1078,38 +1139,39 @@ def _write_checksums(root: Path) -> None:
 def _fixture_report(root: Path) -> Path:
     report = root / "report"
     report.mkdir()
+    manifest = {
+        "schema_version": "1.0",
+        "suite_version": "0.1.0",
+        "scan_id": "scan-fixture",
+        "target": "test",
+        "profile": "standard",
+        "outcome": "pass",
+        "finished_at": "2026-08-03T00:00:00Z",
+        "configuration_sha256": "b" * 64,
+        "network_isolation_attested": False,
+        "inventory": {
+            "source_sha256": "a" * 64,
+            "source_integrity_verified": True,
+        },
+        "finding_counts": {},
+        "tools": [],
+        "risk_acceptance_sha256": "",
+        "intelligence": {},
+        "baseline": {},
+        "artifacts": REQUIRED_REPORT_ARTIFACTS,
+    }
     (report / "scan-manifest.json").write_text(
-        json.dumps(
-            {
-                "schema_version": "1.0",
-                "suite_version": "0.1.0",
-                "scan_id": "scan-fixture",
-                "outcome": "pass",
-                "artifacts": REQUIRED_REPORT_ARTIFACTS,
-            }
-        ),
-        encoding="utf-8",
-    )
-    (report / "security-passport.json").write_text(
-        json.dumps(
-            {
-                "_type": "https://in-toto.io/Statement/v1",
-                "subject": [{"name": "source:test", "digest": {"sha256": "a" * 64}}],
-                "predicateType": "https://slsa.dev/verification_summary/v1",
-                "predicate": {
-                    "verificationResult": "PASSED",
-                    "policy": {"digest": {"sha256": "b" * 64}},
-                    "inputAttestations": [],
-                    "pysec": {"outcome": "pass"},
-                },
-            }
-        ),
+        json.dumps(manifest),
         encoding="utf-8",
     )
     for relative in REQUIRED_REPORT_ARTIFACTS.values():
         path = report / relative
-        if not path.exists() and relative != "checksums.sha256":
+        if not path.exists() and relative not in {
+            "checksums.sha256",
+            "security-passport.json",
+        }:
             path.write_text("fixture\n", encoding="utf-8")
+    write_embedded_statement(report, manifest)
     _write_checksums(report)
     return report
 
