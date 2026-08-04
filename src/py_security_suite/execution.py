@@ -161,3 +161,14 @@ def sanitize_diagnostic(value: str, *, maximum: int = 4096) -> str:
     if len(cleaned) > maximum:
         cleaned = cleaned[:maximum] + "\n<truncated>"
     return cleaned.strip()
+
+
+def sanitize_terminal_text(value: str, *, maximum: int = 4096) -> str:
+    """Return one bounded, redacted line safe for an operator terminal."""
+    redacted = _SECRET_ASSIGNMENT.sub(r"\1\2<redacted>", value)
+    sanitized = "".join(
+        character if character.isprintable() else "�" for character in redacted
+    )
+    if len(sanitized) <= maximum:
+        return sanitized
+    return sanitized[: maximum - 1] + "…"

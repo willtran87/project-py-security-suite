@@ -92,6 +92,11 @@ aware scanner health, finding severity, domains, lifecycle, ownership, native
 scanner rules, and prioritized remediation. Applicable disabled or skipped
 tools are reported as execution gaps, never as not applicable.
 
+Commands with `--format json` return failures on standard error using one stable
+envelope with `status`, `command`, and a coded `error`; `attest` uses the same
+JSON contract because its success output is machine-readable. Text failures are
+single-line, bounded, control-safe, and redact credential-like assignments.
+
 ```text
 python -m py_security_suite scan PATH_TO_PROJECT \
   --output PATH_TO_REPORT \

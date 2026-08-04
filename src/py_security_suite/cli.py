@@ -9,6 +9,7 @@ from pathlib import Path
 from . import __version__
 from .config import ConfigurationError, PROFILE_TOOLS, load_config
 from .doctor import assess_readiness, render_readiness
+from .execution import sanitize_terminal_text
 from .orchestrator import scan_project
 from .policy import exit_code
 from .passport import create_attestation, verify_attestation, verify_report
@@ -292,8 +293,36 @@ def main(argv: list[str] | None = None) -> int:
         )
         return exit_code(result.outcome)
     except (ConfigurationError, OSError, ValueError) as exc:
-        print(f"pysec: error: {exc}", file=sys.stderr)
+        _emit_cli_error(args, exc)
         return 3
+
+
+def _emit_cli_error(
+    args: argparse.Namespace, exc: ConfigurationError | OSError | ValueError
+) -> None:
+    message = sanitize_terminal_text(str(exc))
+    code = (
+        "configuration_error"
+        if isinstance(exc, ConfigurationError)
+        else "io_error"
+        if isinstance(exc, OSError)
+        else "validation_error"
+    )
+    if args.command == "attest" or getattr(args, "format", None) == "json":
+        print(
+            json.dumps(
+                {
+                    "command": str(args.command),
+                    "error": {"code": code, "message": message},
+                    "schema_version": "1.0",
+                    "status": "error",
+                },
+                sort_keys=True,
+            ),
+            file=sys.stderr,
+        )
+        return
+    print(f"pysec: error [{code}]: {message}", file=sys.stderr)
 
 
 def _prepare_output(*, target: Path, output: Path, overwrite: bool) -> Path:

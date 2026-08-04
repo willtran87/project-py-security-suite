@@ -576,9 +576,12 @@ output or `--format json` for dashboards.
 
 Inspection treats report content as untrusted even after checksum validation.
 Terminal-facing values are length-bounded, non-printing and bidirectional
-control characters are visibly neutralized, and citation links are emitted only
-for well-formed HTTP(S) URLs. Checksum verification proves report consistency,
-not signer identity; use a verified Security Passport when authenticity matters.
+control characters are visibly neutralized, credential-like assignments are
+redacted, and citation links are emitted only for well-formed HTTP(S) URLs. The
+same bounded single-line sanitation applies to CLI failures. JSON-mode commands
+emit a stable coded error object on standard error for CI parsing. Checksum
+verification proves report consistency, not signer identity; use a verified
+Security Passport when authenticity matters.
 
 Generated Markdown, HTML, and SARIF also treat scanner and imported-evidence
 citations as untrusted. A citation becomes a link only when it is a bounded,

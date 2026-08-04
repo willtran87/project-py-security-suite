@@ -6,12 +6,12 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote, urlsplit
 
+from .execution import sanitize_terminal_text
 from .models import Outcome
 from .passport import verify_report
 
 
 _MAX_JSON_BYTES = 128 * 1024 * 1024
-_MAX_DISPLAY_TEXT = 4096
 _SEVERITY_ORDER = {
     "critical": 0,
     "high": 1,
@@ -316,13 +316,7 @@ def _tool_health(tools: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def _safe_text(value: object) -> str:
-    text = str(value)
-    sanitized = "".join(
-        character if character.isprintable() else "�" for character in text
-    )
-    if len(sanitized) <= _MAX_DISPLAY_TEXT:
-        return sanitized
-    return sanitized[: _MAX_DISPLAY_TEXT - 1] + "…"
+    return sanitize_terminal_text(str(value))
 
 
 def _safe_web_uri(value: object) -> str:

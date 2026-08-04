@@ -79,6 +79,7 @@ class ReportInspectionTests(unittest.TestCase):
         self.assertEqual(sanitized, "trusted�[31m�spoof")
         self.assertNotIn("\x1b", sanitized)
         self.assertNotIn("\u202e", sanitized)
+        self.assertEqual(_safe_text("token=exposed"), "token=<redacted>")
         self.assertEqual(len(_safe_text("x" * 5000)), 4096)
         self.assertTrue(_safe_text("x" * 5000).endswith("…"))
         self.assertEqual(

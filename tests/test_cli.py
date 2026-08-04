@@ -17,6 +17,7 @@ from py_security_suite.cli import (
     build_parser,
     main,
 )
+from py_security_suite.config import ConfigurationError
 from py_security_suite.models import Outcome
 from py_security_suite.passport import REQUIRED_REPORT_ARTIFACTS
 from py_security_suite.reports import REPORT_FILES
@@ -179,6 +180,56 @@ class CliSafetyTests(unittest.TestCase):
         ):
             code = main(["verify", "passport", "--format", "json"])
         self.assertEqual(code, 0)
+
+        for error, expected_code in (
+            (ConfigurationError("invalid policy"), "configuration_error"),
+            (OSError("unavailable report"), "io_error"),
+            (
+                ValueError("unsafe\x1b[31m\u202e token=exposed"),
+                "validation_error",
+            ),
+        ):
+            with (
+                self.subTest(expected_code=expected_code),
+                patch("py_security_suite.cli.verify_attestation", side_effect=error),
+                patch("builtins.print") as error_output,
+            ):
+                self.assertEqual(main(["verify", "passport", "--format", "json"]), 3)
+            payload = json.loads(error_output.call_args.args[0])
+            self.assertEqual(payload["status"], "error")
+            self.assertEqual(payload["command"], "verify")
+            self.assertEqual(payload["error"]["code"], expected_code)
+            self.assertNotIn("exposed", payload["error"]["message"])
+            self.assertNotIn("\x1b", payload["error"]["message"])
+            self.assertNotIn("\u202e", payload["error"]["message"])
+
+        with (
+            patch(
+                "py_security_suite.cli.verify_attestation",
+                side_effect=ValueError("invalid\npassport"),
+            ),
+            patch("builtins.print") as text_error,
+        ):
+            self.assertEqual(main(["verify", "passport", "--format", "text"]), 3)
+        self.assertEqual(
+            text_error.call_args.args[0],
+            "pysec: error [validation_error]: invalid�passport",
+        )
+
+        with (
+            patch(
+                "py_security_suite.cli.create_attestation",
+                side_effect=ValueError("invalid report"),
+            ),
+            patch("builtins.print") as attest_error,
+        ):
+            self.assertEqual(
+                main(["attest", "report", "--output", "passport", "--unsigned"]),
+                3,
+            )
+        self.assertEqual(
+            json.loads(attest_error.call_args.args[0])["command"], "attest"
+        )
 
     def test_inspect_report_supports_text_output(self) -> None:
         inspection = {

@@ -5,6 +5,8 @@ for published releases.
 
 ## Unreleased
 
+- Emit stable, structured JSON errors for machine-readable CLI commands and
+  redact, bound, and neutralize operator-facing error text.
 - Reject undeclared wheel, sdist, or zip files beside governed release subjects
   during deployment-time Passport verification, cap hostile directory walks,
   and bound mismatch diagnostics.

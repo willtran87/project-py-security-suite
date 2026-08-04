@@ -308,6 +308,21 @@ operational summary of outcome, scanner health, severity, domains, lifecycle,
 ownership, policy reasons, and prioritized actions. Its JSON output is suitable
 for release dashboards and downstream policy automation.
 
+Machine-readable commands use this failure shape on standard error and exit
+with code `3` for configuration, I/O, or validation failures:
+
+```json
+{
+  "command": "verify",
+  "error": {"code": "validation_error", "message": "bounded detail"},
+  "schema_version": "1.0",
+  "status": "error"
+}
+```
+
+The stable error codes are `configuration_error`, `io_error`, and
+`validation_error`. Messages are redacted, terminal-control safe, and bounded.
+
 | Option | Purpose |
 |---|---|
 | `--config PATH` | Repository TOML configuration |

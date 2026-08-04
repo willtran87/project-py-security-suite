@@ -188,6 +188,10 @@ SLSA policy result. It does not describe checksum or signature verification.
 `release_blockers` explains every unmet approval condition using stable,
 machine-readable identifiers.
 
+Validation failures from `verify --format json` use the common structured CLI
+error envelope with a stable error code and bounded, redacted message; they are
+distinct from a successfully verified but `not_approved` release decision.
+
 For example, a valid unsigned passport bound to a failing report produces:
 
 ```text
