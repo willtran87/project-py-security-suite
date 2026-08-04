@@ -17,9 +17,9 @@ from .prioritization import finding_order_key, finding_priority
 
 
 _MAX_JSON_BYTES = 128 * 1024 * 1024
-_INSPECTION_SCHEMA_ID = "urn:project-py-security-suite:schema:report-inspection:1.2"
+_INSPECTION_SCHEMA_ID = "urn:project-py-security-suite:schema:report-inspection:1.3"
 _INSPECTION_VERIFICATION_SCHEMA_ID = (
-    "urn:project-py-security-suite:schema:report-inspection-verification:1.2"
+    "urn:project-py-security-suite:schema:report-inspection-verification:1.3"
 )
 _REPORT_VERIFICATION_SCHEMA_ID = (
     "urn:project-py-security-suite:schema:report-verification:1.0"
@@ -28,6 +28,7 @@ BUNDLED_SCHEMA_RESOURCES = {
     "report-inspection-1.0": "report-inspection.schema.json",
     "report-inspection-1.1": "report-inspection-1.1.schema.json",
     "report-inspection-1.2": "report-inspection-1.2.schema.json",
+    "report-inspection-1.3": "report-inspection-1.3.schema.json",
     "report-inspection-verification-1.0": (
         "report-inspection-verification.schema.json"
     ),
@@ -36,6 +37,9 @@ BUNDLED_SCHEMA_RESOURCES = {
     ),
     "report-inspection-verification-1.2": (
         "report-inspection-verification-1.2.schema.json"
+    ),
+    "report-inspection-verification-1.3": (
+        "report-inspection-verification-1.3.schema.json"
     ),
     "report-verification-1.0": "report-verification.schema.json",
 }
@@ -84,8 +88,10 @@ def inspect_report(report: Path, *, limit: int = 5) -> dict[str, Any]:
     outcome, policy_reasons = _policy_metadata(manifest)
     policy_reasons = [_safe_text(reason) for reason in policy_reasons]
     sorted_findings = sorted(findings, key=_finding_key)
+    top_actions = [_action(item) for item in sorted_findings[:limit]]
+    action_summary = _action_summary(len(sorted_findings), len(top_actions), limit)
     return {
-        "schema_version": "1.2",
+        "schema_version": "1.3",
         "schema_id": _INSPECTION_SCHEMA_ID,
         "verified": True,
         "scan": _scan_summary(manifest, outcome),
@@ -98,7 +104,8 @@ def inspect_report(report: Path, *, limit: int = 5) -> dict[str, Any]:
         },
         # Retain the original field for consumers of the 1.0 inspection shape.
         "policy_reasons": policy_reasons,
-        "top_actions": [_action(item) for item in sorted_findings[:limit]],
+        "action_summary": action_summary,
+        "top_actions": top_actions,
         "integrity": {
             "status": "verified",
             "files_verified": verification["file_count"],
@@ -124,7 +131,7 @@ def verify_inspection(
     if document != expected:
         raise ValueError("inspection document does not match the verified report")
     return {
-        "schema_version": "1.2",
+        "schema_version": "1.3",
         "schema_id": _INSPECTION_VERIFICATION_SCHEMA_ID,
         "verified": True,
         "inspection_schema_id": str(expected["schema_id"]),
@@ -133,6 +140,7 @@ def verify_inspection(
         "report_checksums_sha256": str(expected["integrity"]["checksums_sha256"]),
         "action_limit": limit,
         "top_actions_verified": len(actions),
+        "action_summary": expected["action_summary"],
     }
 
 
@@ -252,11 +260,29 @@ def render_inspection(
     if reasons:
         lines.append("Policy reasons:")
         lines.extend(f"- {_safe_text(reason)}" for reason in reasons)
+    action_summary = document["action_summary"]
     actions = document["top_actions"]
     if actions:
-        lines.append("Top actions:")
+        header = (
+            f"Top actions ({action_summary['returned']} of "
+            f"{action_summary['available']}"
+        )
+        if action_summary["truncated"]:
+            header += (
+                f"; {action_summary['omitted']} omitted by limit "
+                f"{action_summary['limit']}"
+            )
+        lines.append(header + "):")
         for item in actions:
             lines.extend(_render_action(item, report_root=report_root))
+    elif action_summary["available"]:
+        lines.append(
+            f"Top actions: 0 of {action_summary['available']} shown; "
+            f"{action_summary['omitted']} omitted by limit "
+            f"{action_summary['limit']}"
+        )
+    else:
+        lines.append("Top actions: none")
     lines.extend(
         [
             "Open: "
@@ -376,6 +402,17 @@ def _finding_key(item: dict[str, Any]) -> tuple[int, int, int, int, str]:
         blocking=item.get("blocking"),
         status=item.get("status"),
     )
+
+
+def _action_summary(available: int, returned: int, limit: int) -> dict[str, Any]:
+    omitted = available - returned
+    return {
+        "available": available,
+        "returned": returned,
+        "omitted": omitted,
+        "limit": limit,
+        "truncated": omitted > 0,
+    }
 
 
 def _action(item: dict[str, Any]) -> dict[str, Any]:

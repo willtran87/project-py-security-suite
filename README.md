@@ -97,9 +97,9 @@ pysec inspect PATH_TO_REPORT --format json \
 pysec verify-inspection PATH_TO_REPORT-inspection.json \
   --report PATH_TO_REPORT --format json \
   --output PATH_TO_REPORT-inspection-verification.json
-pysec schema report-inspection-1.2 \
+pysec schema report-inspection-1.3 \
   --output contracts/report-inspection.schema.json
-pysec schema report-inspection-verification-1.2 \
+pysec schema report-inspection-verification-1.3 \
   --output contracts/report-inspection-verification.schema.json
 pysec schema report-verification-1.0 \
   --output contracts/report-verification.schema.json
@@ -118,13 +118,15 @@ copy-ready TOML digest candidates. Those candidates remain observations until
 an independent provenance review approves them. Inspection JSON exposes the
 same work as priority-ordered structured actions and distinguishes candidate
 policy bindings from unique executable digests. The complete output contract is
-published as an installable [Draft 2020-12 JSON Schema](src/py_security_suite/schemas/report-inspection-1.2.schema.json).
+published as an installable [Draft 2020-12 JSON Schema](src/py_security_suite/schemas/report-inspection-1.3.schema.json).
 Version 1.1 adds a nullable, validated `artifact_identity` to every prioritized
 action, binding binary findings to their repository-relative path, SHA-256, and
 byte size. Version 1.2 gives every prioritized finding an explicit priority,
 blocking decision, confidence, area, description, and impact so machines and
-people receive the same triage context. The frozen 1.0 and 1.1 contracts remain
-available for existing consumers.
+people receive the same triage context. Version 1.3 adds an `action_summary`
+that proves how many actions were available, returned, and omitted at the
+requested limit. The frozen 1.0 through 1.2 contracts remain available for
+existing consumers.
 Finding order uses the derived P0-P4 priority rather than native severity alone:
 known-exploited findings are P0 and qualifying high-EPSS findings are P1. Within
 a priority, blocking and new or regressed work appears first. Terminal actions
@@ -142,7 +144,7 @@ verification when overriding the default, so the sidecar cannot suppress
 actions and choose its own comparison depth. This proves
 consistency, not signer authenticity; use the Security Passport for approval.
 The verification receipt has its own installable strict
-[Draft 2020-12 JSON Schema](src/py_security_suite/schemas/report-inspection-verification-1.2.schema.json)
+[Draft 2020-12 JSON Schema](src/py_security_suite/schemas/report-inspection-verification-1.3.schema.json)
 and is atomically published outside the sealed report for audit retention.
 `verify-report` can atomically retain its own strict receipt before any derived
 inspection is trusted. The receipt proves report integrity and semantic

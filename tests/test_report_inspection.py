@@ -37,12 +37,12 @@ from tests.report_fixtures import write_embedded_statement
 
 _INSPECTION_SCHEMA = json.loads(
     files("py_security_suite")
-    .joinpath("schemas", "report-inspection-1.2.schema.json")
+    .joinpath("schemas", "report-inspection-1.3.schema.json")
     .read_text(encoding="utf-8")
 )
 _INSPECTION_VERIFICATION_SCHEMA = json.loads(
     files("py_security_suite")
-    .joinpath("schemas", "report-inspection-verification-1.2.schema.json")
+    .joinpath("schemas", "report-inspection-verification-1.3.schema.json")
     .read_text(encoding="utf-8")
 )
 _REPORT_VERIFICATION_SCHEMA = json.loads(
@@ -57,6 +57,7 @@ class ReportInspectionTests(unittest.TestCase):
         inspection_schema = json.loads(read_bundled_schema("report-inspection-1.0"))
         inspection_schema_1_1 = json.loads(read_bundled_schema("report-inspection-1.1"))
         inspection_schema_1_2 = json.loads(read_bundled_schema("report-inspection-1.2"))
+        inspection_schema_1_3 = json.loads(read_bundled_schema("report-inspection-1.3"))
         verification_schema = json.loads(
             read_bundled_schema("report-inspection-verification-1.0")
         )
@@ -66,6 +67,9 @@ class ReportInspectionTests(unittest.TestCase):
         verification_schema_1_2 = json.loads(
             read_bundled_schema("report-inspection-verification-1.2")
         )
+        verification_schema_1_3 = json.loads(
+            read_bundled_schema("report-inspection-verification-1.3")
+        )
         report_verification_schema = json.loads(
             read_bundled_schema("report-verification-1.0")
         )
@@ -73,15 +77,18 @@ class ReportInspectionTests(unittest.TestCase):
             inspection_schema,
             inspection_schema_1_1,
             inspection_schema_1_2,
+            inspection_schema_1_3,
             verification_schema,
             verification_schema_1_1,
             verification_schema_1_2,
+            verification_schema_1_3,
             report_verification_schema,
         ):
             Draft202012Validator.check_schema(schema)
         self.assertTrue(str(inspection_schema["$id"]).endswith(":1.0"))
         self.assertTrue(str(inspection_schema_1_1["$id"]).endswith(":1.1"))
         self.assertTrue(str(inspection_schema_1_2["$id"]).endswith(":1.2"))
+        self.assertTrue(str(inspection_schema_1_3["$id"]).endswith(":1.3"))
         with self.assertRaisesRegex(ValueError, "unknown schema"):
             read_bundled_schema("report-inspection-latest")
 
@@ -133,12 +140,28 @@ class ReportInspectionTests(unittest.TestCase):
             self.assertEqual(verification["top_actions_verified"], 1)
             self.assertEqual(verification["action_limit"], 1)
             self.assertEqual(
+                verification["action_summary"],
+                {
+                    "available": 2,
+                    "returned": 1,
+                    "omitted": 1,
+                    "limit": 1,
+                    "truncated": True,
+                },
+            )
+            self.assertEqual(
                 verification["inspection_sha256"], hashlib.sha256(payload).hexdigest()
             )
 
             tampered = json.loads(payload)
             tampered["scan_policy"]["disposition"] = "allow"
             inspection.write_text(json.dumps(tampered), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "does not match"):
+                verify_inspection(inspection, report=report, limit=1)
+
+            tampered_summary = json.loads(payload)
+            tampered_summary["action_summary"]["omitted"] = 0
+            inspection.write_text(json.dumps(tampered_summary), encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "does not match"):
                 verify_inspection(inspection, report=report, limit=1)
 
@@ -168,7 +191,7 @@ class ReportInspectionTests(unittest.TestCase):
 
         validator = Draft202012Validator(_INSPECTION_SCHEMA)
         validator.validate(document)
-        self.assertEqual(document["schema_version"], "1.2")
+        self.assertEqual(document["schema_version"], "1.3")
         self.assertEqual(document["schema_id"], _INSPECTION_SCHEMA["$id"])
         invalid = json.loads(json.dumps(document))
         invalid["entrypoint_integrity"]["actions"][0]["required_actions"] = [
@@ -176,6 +199,10 @@ class ReportInspectionTests(unittest.TestCase):
         ]
         with self.assertRaises(ValidationError):
             validator.validate(invalid)
+        missing_summary = json.loads(json.dumps(document))
+        del missing_summary["action_summary"]
+        with self.assertRaises(ValidationError):
+            validator.validate(missing_summary)
 
     def test_verified_report_is_summarized_and_prioritized(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -183,11 +210,32 @@ class ReportInspectionTests(unittest.TestCase):
             _write_report(root)
             document = inspect_report(root, limit=1)
             complete_document = inspect_report(root, limit=2)
+            summary_only = inspect_report(root, limit=0)
             local_rendered = render_inspection(document, report_root=root)
 
         self.assertTrue(document["verified"])
         self.assertEqual(document["findings"]["total"], 2)
         self.assertEqual(document["findings"]["blocking"], 1)
+        self.assertEqual(
+            document["action_summary"],
+            {
+                "available": 2,
+                "returned": 1,
+                "omitted": 1,
+                "limit": 1,
+                "truncated": True,
+            },
+        )
+        self.assertEqual(
+            complete_document["action_summary"],
+            {
+                "available": 2,
+                "returned": 2,
+                "omitted": 0,
+                "limit": 2,
+                "truncated": False,
+            },
+        )
         self.assertEqual(document["tool_health"]["by_status"]["completed"], 1)
         self.assertEqual(document["tool_health"]["applicable"], 2)
         self.assertEqual(document["tool_health"]["not_applicable"], 1)
@@ -289,6 +337,8 @@ class ReportInspectionTests(unittest.TestCase):
         complete_rendered = render_inspection(complete_document)
         self.assertIn("FAIL: fixture", rendered)
         self.assertIn("[P1 HIGH/NEW] High fixture", rendered)
+        self.assertIn("Top actions (1 of 2; 1 omitted by limit 1):", rendered)
+        self.assertIn("Top actions (2 of 2):", complete_rendered)
         self.assertIn("Context: blocking; area injection; confidence high", rendered)
         self.assertIn("Summary: Fixture description.", rendered)
         self.assertIn("Impact: Fixture security impact.", rendered)
@@ -326,6 +376,22 @@ class ReportInspectionTests(unittest.TestCase):
         self.assertIn(str(root.resolve() / "index.html"), local_rendered)
         self.assertIn(str(root.resolve() / "action-plan.md"), local_rendered)
         self.assertNotIn(str(root.resolve()), json.dumps(document))
+
+        self.assertEqual(summary_only["top_actions"], [])
+        self.assertEqual(summary_only["action_summary"]["omitted"], 2)
+        self.assertIn(
+            "Top actions: 0 of 2 shown; 2 omitted by limit 0",
+            render_inspection(summary_only),
+        )
+        empty_view = json.loads(json.dumps(summary_only))
+        empty_view["action_summary"] = {
+            "available": 0,
+            "returned": 0,
+            "omitted": 0,
+            "limit": 0,
+            "truncated": False,
+        }
+        self.assertIn("Top actions: none", render_inspection(empty_view))
 
     def test_finding_order_uses_derived_priority_before_native_severity(self) -> None:
         findings = [

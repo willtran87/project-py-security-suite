@@ -5,6 +5,10 @@ for published releases.
 
 ## Unreleased
 
+- Version inspection and inspection-verification contracts at 1.3 with an
+  exact action summary covering the requested limit, available actions,
+  returned actions, omissions, and truncation; terminal inspection now makes
+  bounded or summary-only views explicit instead of silently hiding work.
 - Make P0-P4 the authoritative finding order across Markdown, HTML, action
   queues, terminal inspection, and inspection JSON, ensuring KEV and high-EPSS
   escalation cannot be displayed below lower-priority native severities; add
