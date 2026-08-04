@@ -5,6 +5,10 @@ for published releases.
 
 ## Unreleased
 
+- Put finding ownership and the first authoritative citation directly in the
+  action table, and include observed tool versions in digest-grouped scanner
+  provenance batches so reviewers can assign and verify work without rebuilding
+  context from other report files.
 - Make the action plan bind artifact findings to full SHA-256 and byte-size
   identities, and group scanner approval candidates by executable digest so
   reviewers can perform one provenance decision before recording every affected

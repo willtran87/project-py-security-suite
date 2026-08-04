@@ -422,7 +422,8 @@ flowchart LR
   without removing their reasons, re-enable conditions, or references. It binds
   artifact findings to complete immutable identities and groups scanner approval
   candidates into unique-digest provenance review batches before presenting the
-  copy-ready policy bindings.
+  copy-ready policy bindings. Finding rows retain ownership and an authoritative
+  reference, while each provenance batch records the observed tool version.
 - `assurance-case.md` states what the static scan demonstrated and identifies
   required artifact, provenance, dynamic-test, and threat-review evidence. Its
   next actions are evidence-aware: completed clean controls retain evidence,

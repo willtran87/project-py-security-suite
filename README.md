@@ -412,7 +412,8 @@ transport integrity for approval.
 restoration and policy evidence. Artifact actions include exact digest and size
 bindings, while scanner approvals are grouped by unique executable digest so a
 reviewer can make one provenance decision and then record every affected policy
-binding.
+binding. The action table carries the assigned owner and first authoritative
+reference, and provenance batches show the observed version beside each digest.
 `assurance-case.md` distinguishes evidence demonstrated by the scan from
 dynamic testing, artifact identity, provenance, and threat-review evidence that
 must be supplied by companion release gates. Each control's status and next

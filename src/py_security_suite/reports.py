@@ -662,7 +662,7 @@ def render_action_plan(manifest: ScanManifest, findings: list[Finding]) -> str:
         "",
         "## Finding actions",
         "",
-        "| Priority | Domain | Severity | Finding | Area | Location | Sources | Action |",
+        "| Priority | Severity | Finding | Domain / area | Location | Evidence | Owner | Action |",
         "|---|---|---|---|---|---|---|---|",
     ]
     for finding in sorted(findings, key=_finding_sort_key):
@@ -670,16 +670,20 @@ def render_action_plan(manifest: ScanManifest, findings: list[Finding]) -> str:
             ", ".join(f"{source.tool}/{source.rule_id}" for source in finding.sources)
             or "unattributed"
         )
+        reference = (
+            _markdown_citation(finding.citations[0]) if finding.citations else "-"
+        )
         lines.append(
             f"| {_finding_priority(finding)} | "
-            f"{_markdown_table(finding.domain)} | "
             f"{_markdown_table(finding.severity.value)} | "
             f"[`{_markdown_code(finding.finding_id)}` "
             f"{_markdown_table(finding.title)}]"
             f"(index.html#{quote(finding.finding_id, safe='')}) | "
+            f"{_markdown_table(finding.domain)} / "
             f"{_markdown_table(finding.area)} | "
             f"`{_markdown_code(_location_text(finding))}` | "
-            f"{_markdown_table(sources)} | "
+            f"{_markdown_table(sources)}; {reference} | "
+            f"{_finding_owners(finding)} | "
             f"{_markdown_table(finding.remediation)} |"
         )
     if not findings:
@@ -854,7 +858,16 @@ def _render_entrypoint_trust_actions(tools: list[ToolRun]) -> list[str]:
             "| - | All observed entry points | - | approved; post-check unchanged | "
             "No action |"
         )
-    lines.extend(_render_entrypoint_approval_candidates(gaps))
+    versions = {
+        (run.tool, role): run.version
+        for run in tools
+        for role, digest in (
+            ("primary", run.executable_sha256),
+            ("helper", run.auxiliary_executable_sha256),
+        )
+        if digest is not None
+    }
+    lines.extend(_render_entrypoint_approval_candidates(gaps, versions))
     return lines
 
 
@@ -868,6 +881,7 @@ def _entrypoint_trust_sort_key(
 
 def _render_entrypoint_approval_candidates(
     gaps: list[tuple[str, str, str, bool | None, bool | None]],
+    versions: dict[tuple[str, str], str],
 ) -> list[str]:
     candidates = sorted(
         (state for state in gaps if state[3] is not True and state[4] is True),
@@ -876,10 +890,12 @@ def _render_entrypoint_approval_candidates(
     if not candidates:
         return []
     grouped_by_tool: dict[str, list[tuple[str, str]]] = {}
-    grouped_by_digest: dict[str, list[tuple[str, str]]] = {}
+    grouped_by_digest: dict[str, list[tuple[str, str, str]]] = {}
     for tool, role, digest, _, _ in candidates:
         grouped_by_tool.setdefault(tool, []).append((role, digest))
-        grouped_by_digest.setdefault(digest, []).append((tool, role))
+        grouped_by_digest.setdefault(digest, []).append(
+            (tool, role, versions.get((tool, role), "unknown"))
+        )
     digest_label = "digest" if len(grouped_by_digest) == 1 else "digests"
     provenance_warning = " ".join(
         (
@@ -900,14 +916,20 @@ def _render_entrypoint_approval_candidates(
         f"{len(grouped_by_digest)} unique executable {digest_label}. Review provenance "
         "once per digest, then record every affected binding.",
         "",
-        "| Exact digest | Candidate policy bindings |",
-        "|---|---|",
+        "| Exact digest | Observed version | Candidate policy bindings |",
+        "|---|---|---|",
     ]
     for digest, bindings in sorted(grouped_by_digest.items()):
-        rendered_bindings = ", ".join(
-            f"`{_markdown_code(tool)} ({role})`" for tool, role in sorted(bindings)
+        rendered_versions = ", ".join(
+            f"`{_markdown_code(version)}`"
+            for version in sorted({version for _, _, version in bindings})
         )
-        lines.append(f"| `sha256:{digest}` | {rendered_bindings} |")
+        rendered_bindings = ", ".join(
+            f"`{_markdown_code(tool)} ({role})`" for tool, role, _ in sorted(bindings)
+        )
+        lines.append(
+            f"| `sha256:{digest}` | {rendered_versions} | {rendered_bindings} |"
+        )
     lines.extend(
         [
             "",

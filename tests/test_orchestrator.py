@@ -337,6 +337,7 @@ class OrchestratorTests(unittest.TestCase):
             status=ToolStatus.COMPLETED,
             command=["candidate-tool"],
             duration_seconds=0.01,
+            version="candidate 1.2.3",
             executable_sha256="c" * 64,
             executable_integrity_verified=None,
             executable_unchanged=True,
@@ -359,7 +360,10 @@ class OrchestratorTests(unittest.TestCase):
             "2 candidate policy bindings map to 2 unique executable digests",
             rendered,
         )
-        self.assertIn(f"| `sha256:{'c' * 64}` | `candidate-tool (primary)` |", rendered)
+        self.assertIn(
+            f"| `sha256:{'c' * 64}` | `candidate 1.2.3` | `candidate-tool (primary)` |",
+            rendered,
+        )
         self.assertIn("### Copy-ready policy bindings", rendered)
         self.assertEqual(rendered.count("[tools.candidate-tool]"), 1)
         self.assertIn(f'executable_sha256 = "{"c" * 64}"', rendered)
@@ -374,6 +378,7 @@ class OrchestratorTests(unittest.TestCase):
             status=ToolStatus.COMPLETED,
             command=["shared-candidate"],
             duration_seconds=0.01,
+            version="candidate 1.2.3",
             executable_sha256="c" * 64,
             executable_integrity_verified=None,
             executable_unchanged=True,
@@ -386,7 +391,8 @@ class OrchestratorTests(unittest.TestCase):
             grouped,
         )
         self.assertIn(
-            f"| `sha256:{'c' * 64}` | `candidate-tool (primary)`, "
+            f"| `sha256:{'c' * 64}` | `candidate 1.2.3` | "
+            "`candidate-tool (primary)`, "
             "`shared-candidate (primary)` |",
             grouped,
         )
@@ -558,6 +564,14 @@ class OrchestratorTests(unittest.TestCase):
             self.assertIn("**Scanner entry-point trust:**", markdown)
             self.assertIn("Entry-point integrity", markdown)
             self.assertIn("# Security action plan", action_plan)
+            self.assertIn(
+                "| Priority | Severity | Finding | Domain / area | Location | "
+                "Evidence | Owner | Action |",
+                action_plan,
+            )
+            self.assertIn("security / injection", action_plan)
+            self.assertIn("bandit/B602; [B602 -", action_plan)
+            self.assertIn("| Unassigned |", action_plan)
             self.assertIn("bandit/B602", action_plan)
             self.assertIn("](index.html#PYSEC-", action_plan)
             self.assertIn("## Policy and release-evidence actions", action_plan)

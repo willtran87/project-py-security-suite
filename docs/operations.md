@@ -626,9 +626,10 @@ the omitted count. Use `--format json` for the complete named gap arrays, or
 open `action-plan.md` for risk-ordered entry-point state and remediation. The
 plan binds affected distributions to full SHA-256 and byte-size identities,
 groups scanner candidates by unique executable digest for provenance review,
-and retains a collapsed TOML block with every copy-ready policy binding. Treat
-all observed candidates as unapproved until provenance, version, and custody
-are independently verified.
+shows the observed version for that review, and retains a collapsed TOML block
+with every copy-ready policy binding. Finding rows include the assigned owner
+and first authoritative reference. Treat all observed candidates as unapproved
+until provenance, version, and custody are independently verified.
 For dashboards and policy automation, `inspect --format json` emits the same
 work as P0/P1/P2 `entrypoint_integrity.actions`, including stable remediation
 codes and configuration keys. Candidate-binding and unique-digest counts expose
