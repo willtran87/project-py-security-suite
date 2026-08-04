@@ -577,6 +577,10 @@ scanner and helper entry points were cryptographically approved and unchanged,
 how many were observed unchanged after execution, and any missing post-checks.
 Treat “observed unchanged” as useful tamper evidence, not organizational
 approval; production and release gates require configured approved digests.
+Terminal output previews at most five names per trust-action class and reports
+the omitted count. Use `--format json` for the complete named gap arrays, or
+open `action-plan.md` for each entry point's role, full copy-ready digest, state,
+and remediation.
 
 Inspection treats report content as untrusted even after checksum validation.
 Terminal-facing values are length-bounded, non-printing and bidirectional

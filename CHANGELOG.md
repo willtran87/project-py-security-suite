@@ -6,7 +6,8 @@ for published releases.
 ## Unreleased
 
 - Promote scanner entry-point approval and post-execution integrity to
-  first-class Markdown, HTML, terminal, and inspection-JSON summary metrics.
+  first-class Markdown, HTML, terminal, and inspection-JSON summary metrics,
+  with named and bounded trust-remediation actions.
 - Emit stable, structured JSON errors for machine-readable CLI commands and
   redact, bound, and neutralize operator-facing error text.
 - Reject undeclared wheel, sdist, or zip files beside governed release subjects

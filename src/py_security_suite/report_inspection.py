@@ -155,6 +155,16 @@ def render_inspection(document: dict[str, Any]) -> str:
         f"Domains: {_counts(findings['by_domain'])}",
         f"Lifecycle: {_counts(findings['by_lifecycle'])}",
     ]
+    approval_gaps = entrypoints["approval_gap_entrypoints"]
+    if approval_gaps:
+        lines.append(
+            "Trust action: approve digests for " + _bounded_names(approval_gaps)
+        )
+    postcheck_gaps = entrypoints["postcheck_gap_entrypoints"]
+    if postcheck_gaps:
+        lines.append(
+            "Trust action: restore post-checks for " + _bounded_names(postcheck_gaps)
+        )
     reasons = policy["reasons"]
     if reasons:
         lines.append("Policy reasons:")
@@ -329,30 +339,45 @@ def _entrypoint_integrity(tools: list[dict[str, Any]]) -> dict[str, Any]:
         for tool in tools
         for state in (
             (
+                _safe_text(tool.get("tool") or "unknown"),
                 tool.get("executable_sha256"),
                 tool.get("executable_integrity_verified"),
                 tool.get("executable_unchanged"),
             ),
             (
+                f"{_safe_text(tool.get('tool') or 'unknown')}:helper",
                 tool.get("auxiliary_executable_sha256"),
                 tool.get("auxiliary_executable_integrity_verified"),
                 tool.get("auxiliary_executable_unchanged"),
             ),
         )
-        if isinstance(state[0], str) and state[0]
+        if isinstance(state[1], str) and state[1]
     ]
     observed = len(states)
     approved = sum(
-        approval is True and unchanged is True for _, approval, unchanged in states
+        approval is True and unchanged is True for _, _, approval, unchanged in states
     )
-    unchanged = sum(value is True for _, _, value in states)
+    unchanged = sum(value is True for _, _, _, value in states)
     return {
         "observed": observed,
         "approved_and_unchanged": approved,
         "unchanged_after_execution": unchanged,
         "postcheck_gaps": observed - unchanged,
         "fully_approved": observed > 0 and approved == observed,
+        "approval_gap_entrypoints": sorted(
+            name for name, _, approval, _ in states if approval is not True
+        ),
+        "postcheck_gap_entrypoints": sorted(
+            name for name, _, _, postcheck in states if postcheck is not True
+        ),
     }
+
+
+def _bounded_names(values: list[str], *, limit: int = 5) -> str:
+    displayed = values[:limit]
+    summary = ", ".join(_safe_text(value) for value in displayed)
+    omitted = len(values) - len(displayed)
+    return f"{summary} (+{omitted} more)" if omitted else summary
 
 
 def _safe_text(value: object) -> str:

@@ -622,6 +622,9 @@ def render_action_plan(manifest: ScanManifest, findings: list[Finding]) -> str:
     coverage_gaps = _applicable_scanner_gaps(manifest.tools)
     not_applicable = _not_applicable_scanners(manifest.tools)
     blocking = sum(1 for finding in findings if finding.blocking)
+    entrypoints, approved_entrypoints, unchanged_entrypoints = (
+        _entrypoint_integrity_counts(manifest.tools)
+    )
     lines = [
         "# Security action plan",
         "",
@@ -632,6 +635,10 @@ def render_action_plan(manifest: ScanManifest, findings: list[Finding]) -> str:
         f"- **Blocking findings:** {blocking}",
         f"- **Applicable scanner execution gaps:** {len(coverage_gaps)}",
         f"- **Conditional controls not applicable:** {len(not_applicable)}",
+        f"- **Scanner entry points approved and unchanged:** "
+        f"{approved_entrypoints}/{entrypoints}",
+        f"- **Scanner entry points unchanged after execution:** "
+        f"{unchanged_entrypoints}/{entrypoints}",
         f"- **Immediate next step:** {_next_action(manifest.outcome)}",
         "",
         "## Finding actions",
@@ -659,6 +666,7 @@ def render_action_plan(manifest: ScanManifest, findings: list[Finding]) -> str:
     if not findings:
         lines.append("| - | - | - | No normalized findings | - | - | - | No action |")
 
+    lines.extend(_render_entrypoint_trust_actions(manifest.tools))
     lines.extend(
         [
             "",
@@ -731,6 +739,52 @@ def render_action_plan(manifest: ScanManifest, findings: list[Finding]) -> str:
         ]
     )
     return "\n".join(lines)
+
+
+def _render_entrypoint_trust_actions(tools: list[ToolRun]) -> list[str]:
+    states = _entrypoint_integrity_states(tools)
+    gaps = [state for state in states if state[3] is not True or state[4] is not True]
+    lines = [
+        "",
+        "## Scanner entry-point trust actions",
+        "",
+        "| Tool | Role | Digest | Approval | Post-execution | Required action |",
+        "|---|---|---|---|---|---|",
+    ]
+    for tool, role, digest, approved, unchanged in gaps:
+        actions: list[str] = []
+        if approved is not True:
+            actions.append(
+                "Independently verify provenance, then pin this SHA-256 in "
+                "organization policy."
+            )
+        if unchanged is False:
+            actions.append("Quarantine the changed toolchain and reinstall it.")
+        elif unchanged is not True:
+            actions.append("Restore post-execution digest verification.")
+        postcheck = (
+            "unchanged"
+            if unchanged is True
+            else "changed"
+            if unchanged is False
+            else "unavailable"
+        )
+        lines.append(
+            f"| {_markdown_table(tool)} | {role} | "
+            f"`sha256:{_markdown_code(digest)}` | "
+            f"{'approved' if approved is True else 'not approved'} | "
+            f"{postcheck} | {_markdown_table(' '.join(actions))} |"
+        )
+    if not states:
+        lines.append(
+            "| No observed entry points | - | - | unavailable | unavailable | "
+            "Configure scanner entry points and approved digests, then rerun. |"
+        )
+    elif not gaps:
+        lines.append(
+            "| All observed entry points | - | - | approved | unchanged | No action |"
+        )
+    return lines
 
 
 def render_assurance_case(manifest: ScanManifest) -> str:
@@ -1832,30 +1886,43 @@ def _not_applicable_scanners(tools: list[ToolRun]) -> list[ToolRun]:
 
 
 def _entrypoint_integrity_counts(tools: list[ToolRun]) -> tuple[int, int, int]:
-    states = [
-        state
-        for tool in tools
-        for state in (
-            (
-                tool.executable_sha256,
-                tool.executable_integrity_verified,
-                tool.executable_unchanged,
-            ),
-            (
-                tool.auxiliary_executable_sha256,
-                tool.auxiliary_executable_integrity_verified,
-                tool.auxiliary_executable_unchanged,
-            ),
-        )
-        if state[0] is not None
-    ]
+    states = _entrypoint_integrity_states(tools)
     return (
         len(states),
         sum(
-            approved is True and unchanged is True for _, approved, unchanged in states
+            approved is True and unchanged is True
+            for _, _, _, approved, unchanged in states
         ),
-        sum(unchanged is True for _, _, unchanged in states),
+        sum(unchanged is True for _, _, _, _, unchanged in states),
     )
+
+
+def _entrypoint_integrity_states(
+    tools: list[ToolRun],
+) -> list[tuple[str, str, str, bool | None, bool | None]]:
+    states: list[tuple[str, str, str, bool | None, bool | None]] = []
+    for tool in tools:
+        if tool.executable_sha256 is not None:
+            states.append(
+                (
+                    tool.tool,
+                    "primary",
+                    tool.executable_sha256,
+                    tool.executable_integrity_verified,
+                    tool.executable_unchanged,
+                )
+            )
+        if tool.auxiliary_executable_sha256 is not None:
+            states.append(
+                (
+                    tool.tool,
+                    "helper",
+                    tool.auxiliary_executable_sha256,
+                    tool.auxiliary_executable_integrity_verified,
+                    tool.auxiliary_executable_unchanged,
+                )
+            )
+    return states
 
 
 def _executable_integrity_label(run: ToolRun) -> str:

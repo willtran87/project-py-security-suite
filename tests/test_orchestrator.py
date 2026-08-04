@@ -23,6 +23,7 @@ from py_security_suite.models import (
 from py_security_suite.orchestrator import resolve_asset_paths, scan_project
 from py_security_suite.passport import verify_report
 from py_security_suite.reports import (
+    _render_entrypoint_trust_actions,
     _register_report_artifacts,
     _safe_http_reference,
     render_action_plan,
@@ -88,6 +89,9 @@ class FakeBandit(ScannerAdapter):
             duration_seconds=0.01,
             version="bandit 1.9.4",
             finding_count=1,
+            executable_sha256="a" * 64,
+            executable_integrity_verified=None,
+            executable_unchanged=True,
         )
         return AdapterResult([finding], run, {"tool": self.name, "status": "completed"})
 
@@ -101,6 +105,9 @@ class FakeSecrets(FakeBandit):
             status=ToolStatus.COMPLETED,
             command=["detect-secrets"],
             duration_seconds=0.01,
+            executable_sha256="b" * 64,
+            executable_integrity_verified=True,
+            executable_unchanged=None,
         )
         return AdapterResult([], run, {"tool": self.name, "status": "completed"})
 
@@ -115,6 +122,42 @@ class MutatingSecrets(FakeSecrets):
 
 
 class OrchestratorTests(unittest.TestCase):
+    def test_entrypoint_trust_actions_cover_clean_changed_and_helper_states(
+        self,
+    ) -> None:
+        self.assertIn(
+            "Configure scanner entry points",
+            "\n".join(_render_entrypoint_trust_actions([])),
+        )
+
+        clean = ToolRun(
+            tool="clean-tool",
+            status=ToolStatus.COMPLETED,
+            command=["clean-tool"],
+            duration_seconds=0.01,
+            executable_sha256="a" * 64,
+            executable_integrity_verified=True,
+            executable_unchanged=True,
+        )
+        self.assertIn(
+            "All observed entry points",
+            "\n".join(_render_entrypoint_trust_actions([clean])),
+        )
+
+        changed_helper = ToolRun(
+            tool="changed-tool",
+            status=ToolStatus.COMPLETED,
+            command=["changed-tool"],
+            duration_seconds=0.01,
+            auxiliary_executable_sha256="b" * 64,
+            auxiliary_executable_integrity_verified=True,
+            auxiliary_executable_unchanged=False,
+        )
+        rendered = "\n".join(_render_entrypoint_trust_actions([changed_helper]))
+        self.assertIn("| changed-tool | helper |", rendered)
+        self.assertIn(f"`sha256:{'b' * 64}`", rendered)
+        self.assertIn("Quarantine the changed toolchain", rendered)
+
     def test_governed_asset_paths_are_resolved_without_losing_identity(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             target = Path(directory).resolve()
@@ -285,6 +328,8 @@ class OrchestratorTests(unittest.TestCase):
             self.assertIn("bandit/B602", action_plan)
             self.assertIn("](index.html#PYSEC-", action_plan)
             self.assertIn("## Policy and release-evidence actions", action_plan)
+            self.assertIn("## Scanner entry-point trust actions", action_plan)
+            self.assertIn("Independently verify provenance", action_plan)
             self.assertIn("**Scan-policy disposition:** `BLOCK`", action_plan)
             self.assertIn("# Production security assurance case", assurance_case)
             self.assertIn("Built artifact integrity and provenance", assurance_case)

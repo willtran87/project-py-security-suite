@@ -308,7 +308,9 @@ operational summary of outcome, scanner health, severity, domains, lifecycle,
 ownership, policy reasons, and prioritized actions. Its JSON output is suitable
 for release dashboards and downstream policy automation. The additive
 `entrypoint_integrity` object separates observed entry points, approved-and-
-unchanged entry points, unchanged post-checks, and post-check gaps.
+unchanged entry points, unchanged post-checks, and post-check gaps. Its
+`approval_gap_entrypoints` and `postcheck_gap_entrypoints` arrays retain the
+complete primary/helper names for automation.
 
 Machine-readable commands use this failure shape on standard error and exit
 with code `3` for configuration, I/O, or validation failures:
