@@ -8,7 +8,8 @@ for published releases.
 - Promote scanner entry-point approval and post-execution integrity to
   first-class Markdown, HTML, terminal, and inspection-JSON summary metrics,
   with named and bounded trust-remediation actions, risk-ordered action-plan
-  rows, and provenance-gated copy-ready TOML approval candidates.
+  rows, provenance-gated copy-ready TOML approval candidates, and structured
+  machine-actionable trust records with unique-digest review workload.
 - Emit stable, structured JSON errors for machine-readable CLI commands and
   redact, bound, and neutralize operator-facing error text.
 - Reject undeclared wheel, sdist, or zip files beside governed release subjects

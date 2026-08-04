@@ -165,6 +165,15 @@ def render_inspection(document: dict[str, Any]) -> str:
         lines.append(
             "Trust action: restore post-checks for " + _bounded_names(postcheck_gaps)
         )
+    approval_candidates = entrypoints["approval_candidate_entrypoints"]
+    if approval_candidates:
+        binding_label = "binding" if approval_candidates == 1 else "bindings"
+        unique_digests = entrypoints["approval_candidate_unique_digests"]
+        digest_label = "digest" if unique_digests == 1 else "digests"
+        lines.append(
+            f"Approval workload: {approval_candidates} candidate {binding_label} "
+            f"across {unique_digests} unique {digest_label}"
+        )
     reasons = policy["reasons"]
     if reasons:
         lines.append("Policy reasons:")
@@ -340,24 +349,41 @@ def _entrypoint_integrity(tools: list[dict[str, Any]]) -> dict[str, Any]:
         for state in (
             (
                 _safe_text(tool.get("tool") or "unknown"),
+                "primary",
                 tool.get("executable_sha256"),
                 tool.get("executable_integrity_verified"),
                 tool.get("executable_unchanged"),
             ),
             (
-                f"{_safe_text(tool.get('tool') or 'unknown')}:helper",
+                _safe_text(tool.get("tool") or "unknown"),
+                "helper",
                 tool.get("auxiliary_executable_sha256"),
                 tool.get("auxiliary_executable_integrity_verified"),
                 tool.get("auxiliary_executable_unchanged"),
             ),
         )
-        if isinstance(state[1], str) and state[1]
+        if isinstance(state[2], str) and state[2]
     ]
     observed = len(states)
     approved = sum(
-        approval is True and unchanged is True for _, _, approval, unchanged in states
+        approval is True and unchanged is True
+        for _, _, _, approval, unchanged in states
     )
-    unchanged = sum(value is True for _, _, _, value in states)
+    unchanged = sum(value is True for _, _, _, _, value in states)
+    actions = sorted(
+        (
+            _entrypoint_trust_action(state)
+            for state in states
+            if state[3] is not True or state[4] is not True
+        ),
+        key=lambda action: (
+            _trust_priority_rank(action["priority"]),
+            action["entrypoint"],
+        ),
+    )
+    approval_candidates = [
+        action for action in actions if action["approval_candidate"] is True
+    ]
     return {
         "observed": observed,
         "approved_and_unchanged": approved,
@@ -365,12 +391,66 @@ def _entrypoint_integrity(tools: list[dict[str, Any]]) -> dict[str, Any]:
         "postcheck_gaps": observed - unchanged,
         "fully_approved": observed > 0 and approved == observed,
         "approval_gap_entrypoints": sorted(
-            name for name, _, approval, _ in states if approval is not True
+            _entrypoint_name(tool, role)
+            for tool, role, _, approval, _ in states
+            if approval is not True
         ),
         "postcheck_gap_entrypoints": sorted(
-            name for name, _, _, postcheck in states if postcheck is not True
+            _entrypoint_name(tool, role)
+            for tool, role, _, _, postcheck in states
+            if postcheck is not True
         ),
+        "approval_candidate_entrypoints": len(approval_candidates),
+        "approval_candidate_unique_digests": len(
+            {action["sha256"] for action in approval_candidates}
+        ),
+        "actions": actions,
     }
+
+
+def _entrypoint_trust_action(
+    state: tuple[str, str, object, object, object],
+) -> dict[str, Any]:
+    tool, role, digest_value, approval, unchanged = state
+    digest = _safe_text(digest_value)
+    priority = "P0" if unchanged is False else "P1" if unchanged is not True else "P2"
+    required_actions: list[str] = []
+    if unchanged is False:
+        required_actions.append("quarantine_changed_toolchain")
+    elif unchanged is not True:
+        required_actions.append("restore_post_execution_verification")
+    if approval is not True:
+        required_actions.extend(
+            ["verify_provenance_before_approval", "approve_exact_digest"]
+        )
+    approval_candidate = approval is not True and unchanged is True
+    field = "auxiliary_executable_sha256" if role == "helper" else "executable_sha256"
+    return {
+        "entrypoint": _entrypoint_name(tool, role),
+        "tool": tool,
+        "role": role,
+        "sha256": digest,
+        "priority": priority,
+        "approval_status": "approved" if approval is True else "not_approved",
+        "postcheck_status": (
+            "unchanged"
+            if unchanged is True
+            else "changed"
+            if unchanged is False
+            else "unavailable"
+        ),
+        "approval_candidate": approval_candidate,
+        "configuration_key": f"tools.{tool}.{field}" if approval_candidate else None,
+        "required_actions": required_actions,
+    }
+
+
+def _entrypoint_name(tool: str, role: str) -> str:
+    return f"{tool}:helper" if role == "helper" else tool
+
+
+def _trust_priority_rank(priority: object) -> int:
+    return {"P0": 0, "P1": 1, "P2": 2}.get(str(priority), 3)
 
 
 def _bounded_names(values: list[str], *, limit: int = 5) -> str:

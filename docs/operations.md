@@ -583,6 +583,10 @@ open `action-plan.md` for risk-ordered entry-point state and remediation. Its
 collapsed TOML block contains complete copy-ready digest candidates only for
 entry points observed unchanged; treat them as unapproved until provenance,
 version, and custody are independently verified.
+For dashboards and policy automation, `inspect --format json` emits the same
+work as P0/P1/P2 `entrypoint_integrity.actions`, including stable remediation
+codes and configuration keys. Candidate-binding and unique-digest counts expose
+where multiple logical controls share one executable payload.
 
 Inspection treats report content as untrusted even after checksum validation.
 Terminal-facing values are length-bounded, non-printing and bidirectional

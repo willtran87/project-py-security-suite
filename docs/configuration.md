@@ -310,7 +310,17 @@ for release dashboards and downstream policy automation. The additive
 `entrypoint_integrity` object separates observed entry points, approved-and-
 unchanged entry points, unchanged post-checks, and post-check gaps. Its
 `approval_gap_entrypoints` and `postcheck_gap_entrypoints` arrays retain the
-complete primary/helper names for automation.
+complete primary/helper names for automation. The `actions` array provides each
+gap's `entrypoint`, `tool`, `role`, exact `sha256`, `priority`, approval and
+post-check states, candidate flag, optional dotted `configuration_key`, and
+stable `required_actions` codes. `approval_candidate_entrypoints` and
+`approval_candidate_unique_digests` separate policy-binding work from the
+number of distinct executable payloads requiring provenance review.
+
+The remediation codes are `quarantine_changed_toolchain`,
+`restore_post_execution_verification`, `verify_provenance_before_approval`, and
+`approve_exact_digest`. Consumers should process actions in emitted P0, P1, P2
+order and must not interpret `approval_candidate: true` as approval.
 
 The Markdown action plan orders changed entry points before missing post-checks
 and approval-only gaps. It also emits a collapsed TOML candidate block for

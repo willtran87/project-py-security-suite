@@ -358,6 +358,10 @@ class OrchestratorTests(unittest.TestCase):
             self.assertIn("## Scanner entry-point trust actions", action_plan)
             self.assertIn("Independently verify provenance", action_plan)
             self.assertIn("1 approval gap; 1 post-execution gap", action_plan)
+            self.assertIn(
+                "Approval review workload:** 1 candidate binding across 1 unique",
+                action_plan,
+            )
             self.assertIn("**Scan-policy disposition:** `BLOCK`", action_plan)
             self.assertIn("# Production security assurance case", assurance_case)
             self.assertIn("Built artifact integrity and provenance", assurance_case)

@@ -96,7 +96,9 @@ not mislabeled as organization-approved. Terminal inspection names a bounded
 set of approval and post-check gaps, inspection JSON retains the complete lists,
 and `action-plan.md` provides a risk-ordered compact trust view plus complete,
 copy-ready TOML digest candidates. Those candidates remain observations until
-an independent provenance review approves them.
+an independent provenance review approves them. Inspection JSON exposes the
+same work as priority-ordered structured actions and distinguishes candidate
+policy bindings from unique executable digests.
 
 Commands with `--format json` return failures on standard error using one stable
 envelope with `status`, `command`, and a coded `error`; `attest` uses the same

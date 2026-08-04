@@ -630,6 +630,11 @@ def render_action_plan(manifest: ScanManifest, findings: list[Finding]) -> str:
     )
     approval_gap_label = "gap" if approval_gaps == 1 else "gaps"
     postcheck_gap_label = "gap" if postcheck_gaps == 1 else "gaps"
+    approval_candidates, unique_candidate_digests = (
+        _entrypoint_approval_candidate_counts(manifest.tools)
+    )
+    candidate_binding_label = "binding" if approval_candidates == 1 else "bindings"
+    candidate_digest_label = "digest" if unique_candidate_digests == 1 else "digests"
     lines = [
         "# Security action plan",
         "",
@@ -647,6 +652,9 @@ def render_action_plan(manifest: ScanManifest, findings: list[Finding]) -> str:
         f"- **Scanner trust actions:** {trust_gaps} affected entry points "
         f"({approval_gaps} approval {approval_gap_label}; "
         f"{postcheck_gaps} post-execution {postcheck_gap_label})",
+        f"- **Approval review workload:** {approval_candidates} candidate "
+        f"{candidate_binding_label} across {unique_candidate_digests} unique "
+        f"executable {candidate_digest_label}",
         f"- **Immediate next step:** {_next_action(manifest.outcome)}",
         "",
         "## Finding actions",
@@ -1982,6 +1990,15 @@ def _entrypoint_integrity_gap_counts(tools: list[ToolRun]) -> tuple[int, int, in
         sum(approved is not True for _, _, _, approved, _ in states),
         sum(unchanged is not True for _, _, _, _, unchanged in states),
     )
+
+
+def _entrypoint_approval_candidate_counts(tools: list[ToolRun]) -> tuple[int, int]:
+    candidates = [
+        digest
+        for _, _, digest, approved, unchanged in _entrypoint_integrity_states(tools)
+        if approved is not True and unchanged is True
+    ]
+    return len(candidates), len(set(candidates))
 
 
 def _entrypoint_integrity_states(

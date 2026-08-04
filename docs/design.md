@@ -76,7 +76,9 @@ risk-ordered remediation row with a compact digest identifier. A collapsed
 candidate block retains complete copy-ready SHA-256 values in valid TOML while
 making clear that observation is not provenance approval. Terminal inspection
 keeps a bounded preview while the JSON inspection contract retains every
-affected entry point.
+affected entry point as a priority-ordered structured action. Candidate-binding
+and unique-digest counts make shared executable review work explicit without
+collapsing the individual policy bindings.
 
 ```mermaid
 flowchart LR
@@ -531,7 +533,7 @@ The native Windows self-scan process verifies:
   errors; 27 conditional scanners were correctly not applicable;
 - Pylint, Radon, Ruff formatting, coverage, and JUnit adapters executed through
   approved entry-point bindings and emitted normalized derived evidence;
-- the separately generated branch-coverage evidence records 92.81% combined
+- the separately generated branch-coverage evidence records 92.83% combined
   line-and-branch coverage and 86.22% branch coverage, satisfying both 80%
   repository gates with no per-file hotspots; JUnit records 284 passing tests,
   one platform-limited symlink skip, and no failures or errors;

@@ -50,6 +50,35 @@ class ReportInspectionTests(unittest.TestCase):
             document["entrypoint_integrity"]["postcheck_gap_entrypoints"],
             ["semgrep"],
         )
+        self.assertEqual(
+            document["entrypoint_integrity"]["approval_candidate_entrypoints"], 1
+        )
+        self.assertEqual(
+            document["entrypoint_integrity"]["approval_candidate_unique_digests"],
+            1,
+        )
+        trust_actions = document["entrypoint_integrity"]["actions"]
+        self.assertEqual(
+            [action["entrypoint"] for action in trust_actions],
+            ["semgrep", "bandit:helper"],
+        )
+        self.assertEqual(trust_actions[0]["priority"], "P1")
+        self.assertEqual(
+            trust_actions[0]["required_actions"],
+            ["restore_post_execution_verification"],
+        )
+        self.assertFalse(trust_actions[0]["approval_candidate"])
+        self.assertIsNone(trust_actions[0]["configuration_key"])
+        self.assertEqual(trust_actions[1]["priority"], "P2")
+        self.assertEqual(trust_actions[1]["sha256"], "b" * 64)
+        self.assertEqual(
+            trust_actions[1]["configuration_key"],
+            "tools.bandit.auxiliary_executable_sha256",
+        )
+        self.assertEqual(
+            trust_actions[1]["required_actions"],
+            ["verify_provenance_before_approval", "approve_exact_digest"],
+        )
         self.assertEqual(document["scan_policy"]["disposition"], "block")
         self.assertEqual(document["top_actions"][0]["finding_id"], "PYSEC-HIGH")
         self.assertEqual(document["top_actions"][0]["source_rules"], ["bandit/B602"])
@@ -81,6 +110,10 @@ class ReportInspectionTests(unittest.TestCase):
         )
         self.assertIn("Trust action: approve digests for bandit:helper", rendered)
         self.assertIn("Trust action: restore post-checks for semgrep", rendered)
+        self.assertIn(
+            "Approval workload: 1 candidate binding across 1 unique digest",
+            rendered,
+        )
         self.assertIn("Policy reasons:", rendered)
         self.assertIn(
             "finding PYSEC-HIGH; bandit/B602; classification CWE-78; owner @security",
@@ -102,8 +135,10 @@ class ReportInspectionTests(unittest.TestCase):
             _bounded_names(["one", "two", "three"], limit=2),
             "one, two (+1 more)",
         )
-        self.assertEqual(_entrypoint_integrity([])["observed"], 0)
-        self.assertFalse(_entrypoint_integrity([])["fully_approved"])
+        empty_integrity = _entrypoint_integrity([])
+        self.assertEqual(empty_integrity["observed"], 0)
+        self.assertFalse(empty_integrity["fully_approved"])
+        self.assertEqual(empty_integrity["actions"], [])
         self.assertTrue(
             _entrypoint_integrity(
                 [
@@ -114,6 +149,28 @@ class ReportInspectionTests(unittest.TestCase):
                     }
                 ]
             )["fully_approved"]
+        )
+        changed = _entrypoint_integrity(
+            [
+                {
+                    "tool": "changed-tool",
+                    "executable_sha256": "d" * 64,
+                    "executable_integrity_verified": None,
+                    "executable_unchanged": False,
+                }
+            ]
+        )["actions"][0]
+        self.assertEqual(changed["priority"], "P0")
+        self.assertEqual(changed["postcheck_status"], "changed")
+        self.assertFalse(changed["approval_candidate"])
+        self.assertIsNone(changed["configuration_key"])
+        self.assertEqual(
+            changed["required_actions"],
+            [
+                "quarantine_changed_toolchain",
+                "verify_provenance_before_approval",
+                "approve_exact_digest",
+            ],
         )
         sanitized = _safe_text("trusted\x1b[31m\u202espoof")
         self.assertEqual(sanitized, "trusted�[31m�spoof")
