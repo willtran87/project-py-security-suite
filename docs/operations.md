@@ -587,6 +587,10 @@ For dashboards and policy automation, `inspect --format json` emits the same
 work as P0/P1/P2 `entrypoint_integrity.actions`, including stable remediation
 codes and configuration keys. Candidate-binding and unique-digest counts expose
 where multiple logical controls share one executable payload.
+Validate that document against the locally staged
+`py_security_suite/schemas/report-inspection.schema.json`; its `schema_id` URN
+must match the schema `$id`. Schema selection is deterministic inside an isolated
+boundary and never requires URL retrieval.
 
 Inspection treats report content as untrusted even after checksum validation.
 Terminal-facing values are length-bounded, non-printing and bidirectional

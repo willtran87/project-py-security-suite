@@ -78,7 +78,9 @@ making clear that observation is not provenance approval. Terminal inspection
 keeps a bounded preview while the JSON inspection contract retains every
 affected entry point as a priority-ordered structured action. Candidate-binding
 and unique-digest counts make shared executable review work explicit without
-collapsing the individual policy bindings.
+collapsing the individual policy bindings. A strict bundled Draft 2020-12
+schema and self-identifying offline URN make this output a versioned integration
+contract rather than an informal JSON shape.
 
 ```mermaid
 flowchart LR
@@ -535,7 +537,7 @@ The native Windows self-scan process verifies:
   approved entry-point bindings and emitted normalized derived evidence;
 - the separately generated branch-coverage evidence records 92.83% combined
   line-and-branch coverage and 86.22% branch coverage, satisfying both 80%
-  repository gates with no per-file hotspots; JUnit records 284 passing tests,
+  repository gates with no per-file hotspots; JUnit records 285 passing tests,
   one platform-limited symlink skip, and no failures or errors;
 - CycloneDX completed from `uv.lock` through a frozen offline export with a
   hash-verified helper; zizmor, actionlint, Pysa, GuardDog, Flawfinder, and

@@ -98,7 +98,8 @@ and `action-plan.md` provides a risk-ordered compact trust view plus complete,
 copy-ready TOML digest candidates. Those candidates remain observations until
 an independent provenance review approves them. Inspection JSON exposes the
 same work as priority-ordered structured actions and distinguishes candidate
-policy bindings from unique executable digests.
+policy bindings from unique executable digests. The complete output contract is
+published as an installable [Draft 2020-12 JSON Schema](src/py_security_suite/schemas/report-inspection.schema.json).
 
 Commands with `--format json` return failures on standard error using one stable
 envelope with `status`, `command`, and a coded `error`; `attest` uses the same

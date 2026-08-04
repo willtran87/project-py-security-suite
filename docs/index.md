@@ -9,6 +9,7 @@ Markdown files in this directory are the canonical project documentation.
 | [Design](design.md) | Architecture, trust boundaries, data flow, policy model, report contract, and roadmap |
 | [Operations](operations.md) | Native no-Docker preparation, isolated installation, scanning, GitHub publication, and troubleshooting |
 | [Configuration](configuration.md) | TOML schema, profiles, policy layering, CLI flags, and exit codes |
+| [Inspection JSON Schema](../src/py_security_suite/schemas/report-inspection.schema.json) | Installable strict Draft 2020-12 contract for verified machine-readable report inspection |
 | [Compatibility and coverage matrix](compatibility-matrix.md) | Tool roles, overlap, applicability, platform support, limitations, and acquisition |
 | [Tool selection](tool-selection.md) | Admission criteria, added tools, rejected candidates, and review cadence |
 | [Production security gate](production-security.md) | Strict release profile, residual risk, and companion dynamic and artifact controls |
@@ -81,7 +82,7 @@ The native `doctor` preflight reports 35 ready and 27 not-applicable tools with
 zero disabled or unavailable prerequisites before scanner execution.
 
 The checked report is in
-`.artifacts/final-self-scan-v83`. It includes:
+`.artifacts/final-self-scan-v85`. It includes:
 
 - the GitHub-ready Markdown, HTML, SARIF, SonarQube external-issue, and
   normalized JSON reports;
@@ -97,7 +98,7 @@ The checked report is in
   effectiveness metrics, SSDF claims, and a Security Passport;
 - a checksum manifest that was independently verified after generation.
 
-The source test suite currently records 284 passing tests and one platform-
+The source test suite currently records 285 passing tests and one platform-
 limited symlink test skip. It includes property-test replay and fixtures for all
 adapters, private scanner-home isolation, artifact digest binding, path-
 traversal rejection during distribution expansion, hardened XML evidence

@@ -322,6 +322,15 @@ The remediation codes are `quarantine_changed_toolchain`,
 `approve_exact_digest`. Consumers should process actions in emitted P0, P1, P2
 order and must not interpret `approval_candidate: true` as approval.
 
+The complete inspection document is governed by the bundled
+[Draft 2020-12 schema](../src/py_security_suite/schemas/report-inspection.schema.json).
+Output sets
+`schema_id` to `urn:project-py-security-suite:schema:report-inspection:1.0` so an
+isolated consumer can select its locally approved schema without dereferencing
+a network URL. Version `1.0` is frozen: future additive changes require a minor
+version and incompatible changes require a major version, with a matching URN
+and schema artifact.
+
 The Markdown action plan orders changed entry points before missing post-checks
 and approval-only gaps. It also emits a collapsed TOML candidate block for
 entry points that were observed unchanged but lack an approved digest. The

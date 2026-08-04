@@ -15,4 +15,5 @@ recursive-include scripts *.ps1
 recursive-include security *.json
 recursive-include src/py_security_suite py.typed
 recursive-include src/py_security_suite/rules *.ini *.json *.psd1 *.toml *.txt *.yaml *.yml
+recursive-include src/py_security_suite/schemas *.json
 recursive-include tests *.py

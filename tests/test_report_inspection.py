@@ -4,7 +4,14 @@ import hashlib
 import json
 import tempfile
 import unittest
+from importlib.resources import files
 from pathlib import Path
+
+# The isolated Pylint lane intentionally omits locked test-only dependencies.
+from jsonschema import (  # pylint: disable=import-error
+    Draft202012Validator,
+    ValidationError,
+)
 
 from py_security_suite.report_inspection import (
     _entrypoint_integrity,
@@ -19,7 +26,32 @@ from py_security_suite.passport import REQUIRED_REPORT_ARTIFACTS
 from tests.report_fixtures import write_embedded_statement
 
 
+_INSPECTION_SCHEMA = json.loads(
+    files("py_security_suite")
+    .joinpath("schemas", "report-inspection.schema.json")
+    .read_text(encoding="utf-8")
+)
+
+
 class ReportInspectionTests(unittest.TestCase):
+    def test_inspection_output_conforms_to_the_versioned_json_schema(self) -> None:
+        Draft202012Validator.check_schema(_INSPECTION_SCHEMA)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write_report(root)
+            document = inspect_report(root)
+
+        validator = Draft202012Validator(_INSPECTION_SCHEMA)
+        validator.validate(document)
+        self.assertEqual(document["schema_version"], "1.0")
+        self.assertEqual(document["schema_id"], _INSPECTION_SCHEMA["$id"])
+        invalid = json.loads(json.dumps(document))
+        invalid["entrypoint_integrity"]["actions"][0]["required_actions"] = [
+            "unversioned_action"
+        ]
+        with self.assertRaises(ValidationError):
+            validator.validate(invalid)
+
     def test_verified_report_is_summarized_and_prioritized(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

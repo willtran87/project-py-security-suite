@@ -12,6 +12,7 @@ from .passport import verify_report
 
 
 _MAX_JSON_BYTES = 128 * 1024 * 1024
+_INSPECTION_SCHEMA_ID = "urn:project-py-security-suite:schema:report-inspection:1.0"
 _SEVERITY_ORDER = {
     "critical": 0,
     "high": 1,
@@ -43,6 +44,7 @@ def inspect_report(report: Path, *, limit: int = 5) -> dict[str, Any]:
     sorted_findings = sorted(findings, key=_finding_key)
     return {
         "schema_version": "1.0",
+        "schema_id": _INSPECTION_SCHEMA_ID,
         "verified": True,
         "scan": _scan_summary(manifest, outcome),
         "findings": _findings_summary(findings),
