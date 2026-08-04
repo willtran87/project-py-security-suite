@@ -92,9 +92,10 @@ terminal rendering performs local resolution only at the presentation edge.
 Offline sidecar verification recomputes this normalized view from the sealed
 report and requires exact semantic equality, binding the sidecar digest to the
 report checksum digest without confusing consistency with signer authenticity.
-A separate strict receipt schema makes that successful comparison portable and
-archivable without adding derived content to the sealed report. The `schema`
-command retrieves either contract from installed package resources and can
+A strict report-verification receipt makes checksum and semantic validation
+portable without requiring an inspection. A separate strict receipt schema
+binds a successful inspection comparison to that sealed report. The `schema`
+command retrieves all three contracts from installed package resources and can
 atomically stage it for a disconnected consumer. Explicit `1.0` names and URNs
 prevent a policy engine from silently selecting a newer contract.
 
@@ -397,17 +398,20 @@ report/
     `-- osv-scanner.json
 ```
 
-Inspection sidecars, verification receipts, and exported schemas remain beside
+Inspection sidecars, both verification receipts, and exported schemas remain beside
 this directory rather than inside it. This preserves the sealed report's exact
 file set. The CLI exports schemas from package resources with this flow:
 
 ```mermaid
 flowchart LR
+    Verify["pysec verify-report REPORT"] --> Receipt["Atomic report-verification receipt"]
     CLI["pysec schema NAME"] --> Registry["Version-explicit local registry"]
     Registry --> Resource["Installed Draft 2020-12 resource"]
     Resource --> Stdout["Standard output"]
     Resource --> Atomic["Validated temporary file"]
     Atomic --> Export["Atomic disconnected contract export"]
+    Receipt --> Consumer["Disconnected policy or audit consumer"]
+    Export --> Consumer
 ```
 
 - `summary.md` is optimized for GitHub workflow summaries and rapid triage; it
@@ -564,9 +568,9 @@ The native Windows self-scan process verifies:
   errors; 27 conditional scanners were correctly not applicable;
 - Pylint, Radon, Ruff formatting, coverage, and JUnit adapters executed through
   approved entry-point bindings and emitted normalized derived evidence;
-- the separately generated branch-coverage evidence records 92.95% combined
-  line-and-branch coverage and 86.47% branch coverage, satisfying both 80%
-  repository gates with no per-file hotspots; JUnit records 294 passing tests,
+- the separately generated branch-coverage evidence records 92.97% combined
+  line-and-branch coverage and 86.51% branch coverage, satisfying both 80%
+  repository gates with no per-file hotspots; JUnit records 295 passing tests,
   one platform-limited symlink skip, and no failures or errors;
 - CycloneDX completed from `uv.lock` through a frozen offline export with a
   hash-verified helper; zizmor, actionlint, Pysa, GuardDog, Flawfinder, and

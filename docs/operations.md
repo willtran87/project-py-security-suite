@@ -579,6 +579,9 @@ links when viewed from a GitHub artifact. Use `--limit 0` for summary-only
 output or publish a machine-readable sidecar beside the sealed report:
 
 ```powershell
+pysec verify-report .artifacts\release-scan `
+  --format json `
+  --output .artifacts\release-scan-verification.json
 pysec inspect .artifacts\release-scan `
   --format json `
   --output .artifacts\release-scan-inspection.json
@@ -590,6 +593,8 @@ pysec schema report-inspection-1.0 `
   --output .artifacts\contracts\report-inspection.schema.json
 pysec schema report-inspection-verification-1.0 `
   --output .artifacts\contracts\report-inspection-verification.schema.json
+pysec schema report-verification-1.0 `
+  --output .artifacts\contracts\report-verification.schema.json
 ```
 
 The output is created atomically and is never permitted inside the report's
@@ -597,8 +602,10 @@ exact-file checksum boundary. A pre-existing sidecar is retained unless the
 operator explicitly supplies `--overwrite`. JSON links remain relative to the
 report directory and therefore work after the report and sidecar are downloaded
 or relocated together; terminal output resolves those links on the current
-machine. The schema-governed verification receipt is also kept outside the
-sealed report and should travel with the report and inspection sidecar. The
+machine. Both schema-governed verification receipts are kept outside the sealed
+report. The report receipt can be validated independently when an inspection is
+not needed; the inspection receipt additionally binds the derived action view.
+They should travel with the report and inspection sidecar. The
 quick view reports how many
 scanner and helper entry points were cryptographically approved and unchanged,
 how many were observed unchanged after execution, and any missing post-checks.

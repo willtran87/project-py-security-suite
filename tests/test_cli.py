@@ -65,8 +65,20 @@ class CliSafetyTests(unittest.TestCase):
         self.assertEqual(verify.format, "text")
         doctor = parser.parse_args(["doctor", ".", "--format", "json"])
         self.assertEqual(doctor.command, "doctor")
-        verify_report = parser.parse_args(["verify-report", "report"])
+        verify_report = parser.parse_args(
+            [
+                "verify-report",
+                "report",
+                "--format",
+                "json",
+                "--output",
+                "verification.json",
+                "--overwrite",
+            ]
+        )
         self.assertEqual(verify_report.command, "verify-report")
+        self.assertEqual(verify_report.output, Path("verification.json"))
+        self.assertTrue(verify_report.overwrite)
         verify_inspection = parser.parse_args(
             [
                 "verify-inspection",
@@ -226,7 +238,77 @@ class CliSafetyTests(unittest.TestCase):
             patch("builtins.print") as output,
         ):
             self.assertEqual(main(["verify-report", "report", "--format", "json"]), 0)
-        self.assertTrue(json.loads(output.call_args.args[0])["verified"])
+        receipt = json.loads(output.call_args.args[0])
+        self.assertTrue(receipt["verified"])
+        self.assertEqual(
+            receipt["schema_id"],
+            "urn:project-py-security-suite:schema:report-verification:1.0",
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            report = root / "report"
+            report.mkdir()
+            destination = root / "receipts" / "report-verification.json"
+            with (
+                patch(
+                    "py_security_suite.cli.verify_report",
+                    return_value=verification,
+                ),
+                patch("builtins.print") as output,
+            ):
+                self.assertEqual(
+                    main(
+                        [
+                            "verify-report",
+                            str(report),
+                            "--format",
+                            "json",
+                            "--output",
+                            str(destination),
+                        ]
+                    ),
+                    0,
+                )
+            self.assertEqual(json.loads(destination.read_text()), receipt)
+            self.assertEqual(json.loads(output.call_args.args[0]), receipt)
+
+            with (
+                patch(
+                    "py_security_suite.cli.verify_report",
+                    return_value=verification,
+                ),
+                patch("builtins.print") as error_output,
+            ):
+                self.assertEqual(
+                    main(
+                        [
+                            "verify-report",
+                            str(report),
+                            "--format",
+                            "json",
+                            "--output",
+                            str(destination),
+                        ]
+                    ),
+                    3,
+                )
+            self.assertEqual(json.loads(destination.read_text()), receipt)
+            self.assertIn("already exists", error_output.call_args.args[0])
+
+        for options, expected in (
+            (["--overwrite"], "--overwrite requires --output"),
+            (["--output", "verification.json"], "--output requires --format json"),
+        ):
+            with (
+                self.subTest(options=options),
+                patch("py_security_suite.cli.verify_report") as verifier,
+                patch("builtins.print") as error_output,
+            ):
+                code = main(["verify-report", "report", *options])
+            self.assertEqual(code, 3)
+            verifier.assert_not_called()
+            self.assertIn(expected, error_output.call_args.args[0])
 
     def test_verify_inspection_has_text_and_json_output(self) -> None:
         verification = {

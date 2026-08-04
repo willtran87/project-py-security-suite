@@ -5,6 +5,9 @@ for published releases.
 
 ## Unreleased
 
+- Make `verify-report` emit and atomically publish a strict, self-identifying
+  report-verification receipt; bundle its version-explicit Draft 2020-12 schema
+  for offline export and include the receipt in the GitHub artifact workflow.
 - Add version-explicit `pysec schema` discovery and atomic export for both
   report-inspection contracts, allowing disconnected CI and policy engines to
   retrieve the exact installed Draft 2020-12 schemas without source-tree or

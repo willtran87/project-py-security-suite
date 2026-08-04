@@ -258,9 +258,9 @@ pysec inspect REPORT [--limit 0-100] [--format text|json]
   [--output FILE] [--overwrite]
 pysec verify-inspection INSPECTION --report REPORT [--limit 0-100]
   [--format text|json] [--output FILE] [--overwrite]
-pysec schema {report-inspection-1.0|report-inspection-verification-1.0}
+pysec schema {report-inspection-1.0|report-inspection-verification-1.0|report-verification-1.0}
   [--output FILE] [--overwrite]
-pysec verify-report REPORT
+pysec verify-report REPORT [--format text|json] [--output FILE] [--overwrite]
 pysec attest REPORT --output PASSPORT (--signing-key KEY | --unsigned)
 pysec verify PASSPORT [--report REPORT] [verification options]
 pysec list-tools [--profile NAME] [--format text|json]
@@ -321,6 +321,7 @@ avoid implicit upgrades:
 |---|---|
 | `report-inspection-1.0` | `urn:project-py-security-suite:schema:report-inspection:1.0` |
 | `report-inspection-verification-1.0` | `urn:project-py-security-suite:schema:report-inspection-verification:1.0` |
+| `report-verification-1.0` | `urn:project-py-security-suite:schema:report-verification:1.0` |
 
 `verify-report` validates the complete `checksums.sha256` chain, the scan
 manifest, every canonical report artifact, and their exact manifest bindings.
@@ -332,6 +333,13 @@ manifest's scan identity, source, policy, result, findings, and scanner health.
 Its exact source and distribution subject set must also agree with the validated
 `artifact-manifest.json`; missing, duplicate, invented, or altered subjects are
 rejected.
+With `--format json`, success is a self-identifying
+`report-verification:1.0` receipt containing the verified file count, checksum-
+manifest digest, scan ID, and outcome. `--output FILE` requires JSON format,
+publishes atomically outside the sealed report, rejects linked paths, and
+preserves an existing receipt unless `--overwrite` is explicit. This receipt
+proves consistency of the supplied bytes; it is not signer authentication or a
+release-approval decision.
 `verify` accepts a detached passport **directory** created by `attest`, not the
 embedded `security-passport.json` statement file. When the Passport declares
 distribution subjects, `verify --artifact-root ROOT` must resolve and hash each

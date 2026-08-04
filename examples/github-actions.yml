@@ -47,6 +47,10 @@ jobs:
         if: always()
         shell: bash
         run: |
+          python -m py_security_suite verify-report python-security-report \
+            --format json \
+            --output python-security-report-verification.json \
+            > /dev/null
           python -m py_security_suite inspect python-security-report \
             --format json \
             --output python-security-report-inspection.json \
@@ -65,6 +69,7 @@ jobs:
           name: python-security-report
           path: |
             python-security-report/
+            python-security-report-verification.json
             python-security-report-inspection.json
             python-security-report-inspection-verification.json
           if-no-files-found: error

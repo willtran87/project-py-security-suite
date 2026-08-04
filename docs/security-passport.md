@@ -98,7 +98,8 @@ future domain-specific positive and negative corpora.
 Verify the generated report before it enters the approval lane:
 
 ```text
-pysec verify-report REPORT
+pysec verify-report REPORT --format json \
+  --output REPORT-verification.json
 ```
 
 This validates the report checksum chain, complete canonical artifact set, and
@@ -110,6 +111,10 @@ policy, result, findings, and scanner health. Its duplicate-free subject set
 must match the source inventory and every distribution digest in
 `artifact-manifest.json`. It is not itself the detached passport directory
 accepted by `pysec verify`.
+The optional output is an atomically published, strict
+`report-verification:1.0` receipt for disconnected audit retention. It records
+integrity and semantic consistency only; Passport signature verification is
+still required for publisher authenticity and release approval.
 
 Create a signed passport with Cosign 2 in a disconnected approval lane:
 

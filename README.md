@@ -90,6 +90,8 @@ Publish a schema-governed JSON sidecar for CI or a GitHub artifact without
 changing the sealed report:
 
 ```text
+pysec verify-report PATH_TO_REPORT --format json \
+  --output PATH_TO_REPORT-verification.json
 pysec inspect PATH_TO_REPORT --format json \
   --output PATH_TO_REPORT-inspection.json
 pysec verify-inspection PATH_TO_REPORT-inspection.json \
@@ -99,6 +101,8 @@ pysec schema report-inspection-1.0 \
   --output contracts/report-inspection.schema.json
 pysec schema report-inspection-verification-1.0 \
   --output contracts/report-inspection-verification.schema.json
+pysec schema report-verification-1.0 \
+  --output contracts/report-verification.schema.json
 ```
 
 `inspect` verifies the report checksum chain before showing the `ALLOW`,
@@ -130,7 +134,10 @@ consistency, not signer authenticity; use the Security Passport for approval.
 The verification receipt has its own installable strict
 [Draft 2020-12 JSON Schema](src/py_security_suite/schemas/report-inspection-verification.schema.json)
 and is atomically published outside the sealed report for audit retention.
-`schema` reads these exact contracts from the installed package and prints them
+`verify-report` can atomically retain its own strict receipt before any derived
+inspection is trusted. The receipt proves report integrity and semantic
+binding, not signer authenticity or release approval. `schema` reads all three
+exact contracts from the installed package and prints them
 or atomically exports them for disconnected validators. Names are deliberately
 version-explicit; there is no network lookup and no ambiguous `latest` alias.
 Existing exports are preserved unless `--overwrite` is supplied.
@@ -343,7 +350,9 @@ Every report includes an unsigned `security-passport.json` statement. In the
 separate approval lane, verify the report and create signed passport material:
 
 ```powershell
-pysec verify-report .artifacts\release-scan
+pysec verify-report .artifacts\release-scan `
+  --format json `
+  --output .artifacts\release-scan-verification.json
 ```
 
 ```powershell

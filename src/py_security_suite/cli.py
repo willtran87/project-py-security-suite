@@ -19,6 +19,7 @@ from .report_inspection import (
     BUNDLED_SCHEMA_RESOURCES,
     inspect_report,
     read_bundled_schema,
+    report_verification_receipt,
     render_inspection,
     verify_inspection,
 )
@@ -168,6 +169,17 @@ def build_parser() -> argparse.ArgumentParser:
     verify_report_parser.add_argument(
         "--format", choices=("text", "json"), default="text"
     )
+    verify_report_parser.add_argument(
+        "--output",
+        type=Path,
+        metavar="FILE",
+        help="atomically write the portable JSON verification receipt",
+    )
+    verify_report_parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="replace an existing report-verification receipt",
+    )
 
     verify_inspection_parser = subparsers.add_parser(
         "verify-inspection",
@@ -307,17 +319,7 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 0 if verification.get("release_decision") == "approved" else 1
         if args.command == "verify-report":
-            verification = verify_report(args.report)
-            if args.format == "json":
-                print(json.dumps(verification, indent=2, sort_keys=True))
-            else:
-                print(
-                    "VERIFIED: "
-                    f"{verification['file_count']} files; "
-                    f"outcome {str(verification['outcome']).upper()}; "
-                    f"scan {verification['scan_id']}"
-                )
-            return 0
+            return _verify_report_command(args)
         if args.command == "verify-inspection":
             if args.overwrite and not args.output:
                 raise ValueError("verify-inspection --overwrite requires --output")
@@ -416,6 +418,34 @@ def _schema_command(args: argparse.Namespace) -> int:
             label="schema output",
         )
     print(rendered_schema)
+    return 0
+
+
+def _verify_report_command(args: argparse.Namespace) -> int:
+    """Verify a sealed report and optionally publish its portable receipt."""
+    if args.overwrite and not args.output:
+        raise ValueError("verify-report --overwrite requires --output")
+    if args.output and args.format != "json":
+        raise ValueError("verify-report --output requires --format json")
+    verification = report_verification_receipt(verify_report(args.report))
+    rendered = json.dumps(verification, indent=2, sort_keys=True)
+    if args.output:
+        _write_atomic_output(
+            output=args.output,
+            content=rendered,
+            overwrite=args.overwrite,
+            label="report verification output",
+            forbidden_root=args.report,
+        )
+    if args.format == "json":
+        print(rendered)
+    else:
+        print(
+            "VERIFIED: "
+            f"{verification['file_count']} files; "
+            f"outcome {str(verification['outcome']).upper()}; "
+            f"scan {verification['scan_id']}"
+        )
     return 0
 
 
@@ -552,9 +582,7 @@ def _write_atomic_output(
     if protected_root is not None and (
         destination == protected_root or destination.is_relative_to(protected_root)
     ):
-        raise ValueError(
-            "inspection output must be outside the sealed report directory"
-        )
+        raise ValueError(f"{label} must be outside the sealed report directory")
     if destination.exists():
         if not destination.is_file():
             raise ValueError(f"{label} exists and is not a file: {destination}")

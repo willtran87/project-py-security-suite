@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:report-verification:1.0",
+  "title": "Python Security Suite report verification receipt",
+  "description": "Portable evidence that a complete report checksum chain and its semantic bindings were verified.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "schema_id",
+    "verified",
+    "file_count",
+    "checksums_sha256",
+    "scan_id",
+    "outcome"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "schema_id": {
+      "const": "urn:project-py-security-suite:schema:report-verification:1.0"
+    },
+    "verified": { "const": true },
+    "file_count": { "type": "integer", "minimum": 1 },
+    "checksums_sha256": { "$ref": "#/$defs/sha256" },
+    "scan_id": { "type": "string", "minLength": 1, "maxLength": 4096 },
+    "outcome": { "enum": ["pass", "warn", "fail", "incomplete"] }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[A-Fa-f0-9]{64}$" }
+  }
+}

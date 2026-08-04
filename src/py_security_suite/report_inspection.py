@@ -19,11 +19,15 @@ _INSPECTION_SCHEMA_ID = "urn:project-py-security-suite:schema:report-inspection:
 _INSPECTION_VERIFICATION_SCHEMA_ID = (
     "urn:project-py-security-suite:schema:report-inspection-verification:1.0"
 )
+_REPORT_VERIFICATION_SCHEMA_ID = (
+    "urn:project-py-security-suite:schema:report-verification:1.0"
+)
 BUNDLED_SCHEMA_RESOURCES = {
     "report-inspection-1.0": "report-inspection.schema.json",
     "report-inspection-verification-1.0": (
         "report-inspection-verification.schema.json"
     ),
+    "report-verification-1.0": "report-verification.schema.json",
 }
 _SEVERITY_ORDER = {
     "critical": 0,
@@ -50,6 +54,19 @@ def read_bundled_schema(name: str) -> str:
         raise ValueError(f"unknown schema {name!r}; choose one of: {choices}") from exc
     resource = files("py_security_suite").joinpath("schemas", resource_name)
     return resource.read_text(encoding="utf-8").rstrip("\r\n")
+
+
+def report_verification_receipt(verification: dict[str, Any]) -> dict[str, Any]:
+    """Add the stable contract identity to a verified report result."""
+    return {
+        "schema_version": "1.0",
+        "schema_id": _REPORT_VERIFICATION_SCHEMA_ID,
+        "verified": verification["verified"],
+        "file_count": verification["file_count"],
+        "checksums_sha256": verification["checksums_sha256"],
+        "scan_id": verification["scan_id"],
+        "outcome": verification["outcome"],
+    }
 
 
 def inspect_report(report: Path, *, limit: int = 5) -> dict[str, Any]:

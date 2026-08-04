@@ -24,6 +24,7 @@ from py_security_suite.report_inspection import (
     _safe_web_uri,
     inspect_report,
     read_bundled_schema,
+    report_verification_receipt,
     render_inspection,
     verify_inspection,
 )
@@ -41,6 +42,11 @@ _INSPECTION_VERIFICATION_SCHEMA = json.loads(
     .joinpath("schemas", "report-inspection-verification.schema.json")
     .read_text(encoding="utf-8")
 )
+_REPORT_VERIFICATION_SCHEMA = json.loads(
+    files("py_security_suite")
+    .joinpath("schemas", "report-verification.schema.json")
+    .read_text(encoding="utf-8")
+)
 
 
 class ReportInspectionTests(unittest.TestCase):
@@ -49,11 +55,33 @@ class ReportInspectionTests(unittest.TestCase):
         verification_schema = json.loads(
             read_bundled_schema("report-inspection-verification-1.0")
         )
-        for schema in (inspection_schema, verification_schema):
+        report_verification_schema = json.loads(
+            read_bundled_schema("report-verification-1.0")
+        )
+        for schema in (
+            inspection_schema,
+            verification_schema,
+            report_verification_schema,
+        ):
             Draft202012Validator.check_schema(schema)
             self.assertTrue(str(schema["$id"]).endswith(":1.0"))
         with self.assertRaisesRegex(ValueError, "unknown schema"):
             read_bundled_schema("report-inspection-latest")
+
+    def test_report_verification_receipt_conforms_to_its_schema(self) -> None:
+        receipt = report_verification_receipt(
+            {
+                "verified": True,
+                "file_count": 88,
+                "checksums_sha256": "a" * 64,
+                "scan_id": "scan-fixture",
+                "outcome": "pass",
+            }
+        )
+        Draft202012Validator.check_schema(_REPORT_VERIFICATION_SCHEMA)
+        Draft202012Validator(_REPORT_VERIFICATION_SCHEMA).validate(receipt)
+        self.assertEqual(receipt["schema_version"], "1.0")
+        self.assertEqual(receipt["schema_id"], _REPORT_VERIFICATION_SCHEMA["$id"])
 
     def test_exported_inspection_is_bound_to_its_verified_report(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
