@@ -91,7 +91,7 @@ The native `doctor` preflight reports 35 ready and 27 not-applicable tools with
 zero disabled or unavailable prerequisites before scanner execution.
 
 The checked report is in
-`.artifacts/final-self-scan-v99`. It includes:
+`.artifacts/final-self-scan-v103`. It includes:
 
 - the GitHub-ready Markdown, HTML, SARIF, SonarQube external-issue, and
   normalized JSON reports;
@@ -102,7 +102,8 @@ The checked report is in
 - Pylint, Radon, coverage, and JUnit derived assurance summaries;
 - scanner entry-point approval and post-execution integrity summaries;
 - risk-ordered scanner trust remediation with provenance-gated, copy-ready
-  digest candidates and machine-actionable inspection JSON;
+  digest candidates and artifact-aware, schema-1.1 machine-actionable
+  inspection JSON;
 - target-bound finding lifecycle, live digest-pinned KEV/EPSS evidence,
   effectiveness metrics, SSDF claims, and a Security Passport;
 - a checksum manifest that was independently verified after generation.
