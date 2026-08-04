@@ -5,6 +5,11 @@ for published releases.
 
 ## Unreleased
 
+- Version inspection and inspection-verification contracts at 1.2 while
+  retaining the frozen 1.0 and 1.1 schemas; prioritized findings now expose
+  priority, blocking decision, confidence, area, description, and impact in
+  strict machine-readable output, and terminal triage displays the same
+  priority.
 - Add ownership-coverage metrics and priority-bucketed owner work queues to the
   action plan; consolidate risk, lifecycle, scanner attribution,
   classifications, and the first authoritative reference into a compact triage

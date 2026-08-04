@@ -258,7 +258,7 @@ pysec inspect REPORT [--limit 0-100] [--format text|json]
   [--output FILE] [--overwrite]
 pysec verify-inspection INSPECTION --report REPORT [--limit 0-100]
   [--format text|json] [--output FILE] [--overwrite]
-pysec schema {report-inspection-1.0|report-inspection-1.1|report-inspection-verification-1.0|report-inspection-verification-1.1|report-verification-1.0}
+pysec schema {report-inspection-1.0|report-inspection-1.1|report-inspection-1.2|report-inspection-verification-1.0|report-inspection-verification-1.1|report-inspection-verification-1.2|report-verification-1.0}
   [--output FILE] [--overwrite]
 pysec verify-report REPORT [--format text|json] [--output FILE] [--overwrite]
 pysec attest REPORT --output PASSPORT (--signing-key KEY | --unsigned)
@@ -307,7 +307,7 @@ approval; those remain Security Passport responsibilities.
 `--output FILE` requires `--format json` and atomically publishes a receipt
 outside the sealed report; replacement requires explicit `--overwrite`. The
 receipt is governed by the bundled
-[verification schema](../src/py_security_suite/schemas/report-inspection-verification-1.1.schema.json).
+[verification schema](../src/py_security_suite/schemas/report-inspection-verification-1.2.schema.json).
 
 `schema` retrieves an exact contract from the installed distribution without
 network access or source-checkout knowledge. It always emits the schema on
@@ -321,8 +321,10 @@ avoid implicit upgrades:
 |---|---|
 | `report-inspection-1.0` | `urn:project-py-security-suite:schema:report-inspection:1.0` |
 | `report-inspection-1.1` | `urn:project-py-security-suite:schema:report-inspection:1.1` |
+| `report-inspection-1.2` | `urn:project-py-security-suite:schema:report-inspection:1.2` |
 | `report-inspection-verification-1.0` | `urn:project-py-security-suite:schema:report-inspection-verification:1.0` |
 | `report-inspection-verification-1.1` | `urn:project-py-security-suite:schema:report-inspection-verification:1.1` |
+| `report-inspection-verification-1.2` | `urn:project-py-security-suite:schema:report-inspection-verification:1.2` |
 | `report-verification-1.0` | `urn:project-py-security-suite:schema:report-verification:1.0` |
 
 `verify-report` validates the complete `checksums.sha256` chain, the scan
@@ -374,15 +376,17 @@ The remediation codes are `quarantine_changed_toolchain`,
 order and must not interpret `approval_candidate: true` as approval.
 
 The complete inspection document is governed by the bundled
-[Draft 2020-12 schema](../src/py_security_suite/schemas/report-inspection-1.1.schema.json).
+[Draft 2020-12 schema](../src/py_security_suite/schemas/report-inspection-1.2.schema.json).
 Output sets
-`schema_id` to `urn:project-py-security-suite:schema:report-inspection:1.1` so an
+`schema_id` to `urn:project-py-security-suite:schema:report-inspection:1.2` so an
 isolated consumer can select its locally approved schema without dereferencing
 a network URL. Version `1.1` adds the required-but-nullable
 `top_actions[].artifact_identity` object. When a finding addresses a governed
 artifact, that object carries its safe relative path, SHA-256, and byte size;
 terminal inspection includes the digest and size in its evidence line. Version
-`1.0` remains frozen and exportable for compatibility. Future additive changes
+`1.2` adds required priority, blocking, confidence, area, description, and impact
+fields to every top action, aligning automation with the human action plan.
+Versions `1.0` and `1.1` remain frozen and exportable for compatibility. Future additive changes
 require a minor version and incompatible changes require a major version, with
 a matching URN and schema artifact.
 

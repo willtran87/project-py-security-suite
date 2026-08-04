@@ -9,8 +9,8 @@ Markdown files in this directory are the canonical project documentation.
 | [Design](design.md) | Architecture, trust boundaries, data flow, policy model, report contract, and roadmap |
 | [Operations](operations.md) | Native no-Docker preparation, isolated installation, scanning, GitHub publication, and troubleshooting |
 | [Configuration](configuration.md) | TOML schema, profiles, policy layering, CLI flags, and exit codes |
-| [Inspection JSON Schema](../src/py_security_suite/schemas/report-inspection-1.1.schema.json) | Current installable strict Draft 2020-12 contract for verified machine-readable report inspection |
-| [Inspection Verification Schema](../src/py_security_suite/schemas/report-inspection-verification-1.1.schema.json) | Current strict portable receipt binding an inspection digest to a sealed report and action limit |
+| [Inspection JSON Schema](../src/py_security_suite/schemas/report-inspection-1.2.schema.json) | Current installable strict Draft 2020-12 contract for verified machine-readable report inspection |
+| [Inspection Verification Schema](../src/py_security_suite/schemas/report-inspection-verification-1.2.schema.json) | Current strict portable receipt binding an inspection digest to a sealed report and action limit |
 | [Report Verification Schema](../src/py_security_suite/schemas/report-verification.schema.json) | Strict portable receipt for complete report integrity and semantic verification |
 | [Compatibility and coverage matrix](compatibility-matrix.md) | Tool roles, overlap, applicability, platform support, limitations, and acquisition |
 | [Tool selection](tool-selection.md) | Admission criteria, added tools, rejected candidates, and review cadence |
@@ -23,11 +23,11 @@ Markdown files in this directory are the canonical project documentation.
 | [Changelog](../CHANGELOG.md) | Release-facing record of notable behavior and security changes |
 
 Installed consumers can retrieve current report contracts without source-tree
-or network access via `pysec schema report-inspection-1.1`,
-`pysec schema report-inspection-verification-1.1`, and
+or network access via `pysec schema report-inspection-1.2`,
+`pysec schema report-inspection-verification-1.2`, and
 `pysec schema report-verification-1.0`; add `--output FILE` for an atomic
-disconnected export. Frozen inspection 1.0 contracts remain available by their
-version-explicit names.
+disconnected export. Frozen inspection 1.0 and 1.1 contracts remain available
+by their version-explicit names.
 
 ## Documentation rules
 
@@ -91,7 +91,7 @@ The native `doctor` preflight reports 35 ready and 27 not-applicable tools with
 zero disabled or unavailable prerequisites before scanner execution.
 
 The checked report is in
-`.artifacts/final-self-scan-v107`. It includes:
+`.artifacts/final-self-scan-v108`. It includes:
 
 - the GitHub-ready Markdown, HTML, SARIF, SonarQube external-issue, and
   normalized JSON reports;
@@ -102,7 +102,7 @@ The checked report is in
 - Pylint, Radon, coverage, and JUnit derived assurance summaries;
 - scanner entry-point approval and post-execution integrity summaries;
 - risk-ordered scanner trust remediation with provenance-gated, copy-ready
-  digest candidates and artifact-aware, schema-1.1 machine-actionable
+  digest candidates and artifact-aware, schema-1.2 machine-actionable
   inspection JSON;
 - target-bound finding lifecycle, live digest-pinned KEV/EPSS evidence,
   effectiveness metrics, SSDF claims, and a Security Passport;
@@ -115,7 +115,7 @@ traversal rejection during distribution expansion, hardened XML evidence
 ingestion, archive-link rejection, governed risk acceptance, database
 freshness, detection validation, repository-health additions, trusted-lane
 evidence validation, and the SonarQube export. Combined line-and-branch
-coverage is 93.09%, and branch coverage is 86.79%, so both measures pass the
+coverage is 93.10%, and branch coverage is 86.83%, so both measures pass the
 80% policy threshold. No production source file remains below the per-file
 coverage reporting threshold.
 

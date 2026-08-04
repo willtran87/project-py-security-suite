@@ -15,6 +15,7 @@ from jsonschema import (  # pylint: disable=import-error
 )
 
 from py_security_suite.report_inspection import (
+    _action_priority,
     _artifact_identity,
     _entrypoint_integrity,
     _bounded_names,
@@ -35,12 +36,12 @@ from tests.report_fixtures import write_embedded_statement
 
 _INSPECTION_SCHEMA = json.loads(
     files("py_security_suite")
-    .joinpath("schemas", "report-inspection-1.1.schema.json")
+    .joinpath("schemas", "report-inspection-1.2.schema.json")
     .read_text(encoding="utf-8")
 )
 _INSPECTION_VERIFICATION_SCHEMA = json.loads(
     files("py_security_suite")
-    .joinpath("schemas", "report-inspection-verification-1.1.schema.json")
+    .joinpath("schemas", "report-inspection-verification-1.2.schema.json")
     .read_text(encoding="utf-8")
 )
 _REPORT_VERIFICATION_SCHEMA = json.loads(
@@ -54,11 +55,15 @@ class ReportInspectionTests(unittest.TestCase):
     def test_bundled_schema_catalog_is_version_explicit_and_valid(self) -> None:
         inspection_schema = json.loads(read_bundled_schema("report-inspection-1.0"))
         inspection_schema_1_1 = json.loads(read_bundled_schema("report-inspection-1.1"))
+        inspection_schema_1_2 = json.loads(read_bundled_schema("report-inspection-1.2"))
         verification_schema = json.loads(
             read_bundled_schema("report-inspection-verification-1.0")
         )
         verification_schema_1_1 = json.loads(
             read_bundled_schema("report-inspection-verification-1.1")
+        )
+        verification_schema_1_2 = json.loads(
+            read_bundled_schema("report-inspection-verification-1.2")
         )
         report_verification_schema = json.loads(
             read_bundled_schema("report-verification-1.0")
@@ -66,13 +71,16 @@ class ReportInspectionTests(unittest.TestCase):
         for schema in (
             inspection_schema,
             inspection_schema_1_1,
+            inspection_schema_1_2,
             verification_schema,
             verification_schema_1_1,
+            verification_schema_1_2,
             report_verification_schema,
         ):
             Draft202012Validator.check_schema(schema)
         self.assertTrue(str(inspection_schema["$id"]).endswith(":1.0"))
         self.assertTrue(str(inspection_schema_1_1["$id"]).endswith(":1.1"))
+        self.assertTrue(str(inspection_schema_1_2["$id"]).endswith(":1.2"))
         with self.assertRaisesRegex(ValueError, "unknown schema"):
             read_bundled_schema("report-inspection-latest")
 
@@ -159,7 +167,7 @@ class ReportInspectionTests(unittest.TestCase):
 
         validator = Draft202012Validator(_INSPECTION_SCHEMA)
         validator.validate(document)
-        self.assertEqual(document["schema_version"], "1.1")
+        self.assertEqual(document["schema_version"], "1.2")
         self.assertEqual(document["schema_id"], _INSPECTION_SCHEMA["$id"])
         invalid = json.loads(json.dumps(document))
         invalid["entrypoint_integrity"]["actions"][0]["required_actions"] = [
@@ -230,6 +238,16 @@ class ReportInspectionTests(unittest.TestCase):
         )
         self.assertEqual(document["scan_policy"]["disposition"], "block")
         self.assertEqual(document["top_actions"][0]["finding_id"], "PYSEC-HIGH")
+        self.assertEqual(document["top_actions"][0]["priority"], "P1")
+        self.assertTrue(document["top_actions"][0]["blocking"])
+        self.assertEqual(document["top_actions"][0]["confidence"], "high")
+        self.assertEqual(document["top_actions"][0]["area"], "injection")
+        self.assertEqual(
+            document["top_actions"][0]["description"], "Fixture description."
+        )
+        self.assertEqual(
+            document["top_actions"][0]["impact"], "Fixture security impact."
+        )
         self.assertEqual(document["top_actions"][0]["source_rules"], ["bandit/B602"])
         self.assertEqual(document["top_actions"][0]["classifications"], ["CWE-78"])
         self.assertEqual(
@@ -260,9 +278,16 @@ class ReportInspectionTests(unittest.TestCase):
         self.assertEqual(complete_document["top_actions"][1]["citations"], [])
         self.assertEqual(complete_document["top_actions"][1]["owners"], [])
         self.assertIsNone(complete_document["top_actions"][1]["artifact_identity"])
+        self.assertEqual(complete_document["top_actions"][1]["priority"], "P3")
+        self.assertFalse(complete_document["top_actions"][1]["blocking"])
+        self.assertEqual(complete_document["top_actions"][1]["confidence"], "unknown")
+        self.assertEqual(complete_document["top_actions"][1]["area"], "unknown")
+        self.assertEqual(complete_document["top_actions"][1]["description"], "")
+        self.assertEqual(complete_document["top_actions"][1]["impact"], "")
         rendered = render_inspection(document)
         complete_rendered = render_inspection(complete_document)
         self.assertIn("FAIL: fixture", rendered)
+        self.assertIn("[P1 HIGH/NEW] High fixture", rendered)
         self.assertIn("Decision: BLOCK; report integrity: VERIFIED", rendered)
         self.assertIn("1 blocking", rendered)
         self.assertIn(
@@ -299,6 +324,20 @@ class ReportInspectionTests(unittest.TestCase):
         self.assertNotIn(str(root.resolve()), json.dumps(document))
 
     def test_terminal_text_and_citation_uris_are_safely_bounded(self) -> None:
+        self.assertEqual(
+            _action_priority(
+                {
+                    "severity": "low",
+                    "evidence": {"risk_intelligence": {"known_exploited": ["CVE"]}},
+                }
+            ),
+            "P0",
+        )
+        self.assertEqual(
+            _action_priority({"severity": "medium", "classifications": ["EPSS-HIGH"]}),
+            "P1",
+        )
+        self.assertEqual(_action_priority({"severity": "unexpected"}), "P4")
         self.assertEqual(
             _bounded_names(["one", "two", "three"], limit=2),
             "one, two (+1 more)",
@@ -532,9 +571,13 @@ def _finding(
         "finding_id": finding_id,
         "title": f"{severity.title()} fixture",
         "severity": severity,
+        "confidence": "high",
         "blocking": blocking,
         "status": status,
         "domain": "security",
+        "area": "injection",
+        "description": "Fixture description.",
+        "impact": "Fixture security impact.",
         "locations": [{"path": "app.py", "start_line": line}],
         "sources": [{"tool": "bandit", "rule_id": "B602"}],
         "classifications": ["CWE-78"],
@@ -565,6 +608,10 @@ def _finding(
         finding.pop("classifications")
         finding.pop("citations")
         finding.pop("evidence")
+        finding.pop("confidence")
+        finding.pop("area")
+        finding.pop("description")
+        finding.pop("impact")
         finding["remediation"] = ""
     return finding
 

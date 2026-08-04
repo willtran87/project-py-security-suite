@@ -16,9 +16,9 @@ from .path_safety import resolve_unlinked_path
 
 
 _MAX_JSON_BYTES = 128 * 1024 * 1024
-_INSPECTION_SCHEMA_ID = "urn:project-py-security-suite:schema:report-inspection:1.1"
+_INSPECTION_SCHEMA_ID = "urn:project-py-security-suite:schema:report-inspection:1.2"
 _INSPECTION_VERIFICATION_SCHEMA_ID = (
-    "urn:project-py-security-suite:schema:report-inspection-verification:1.1"
+    "urn:project-py-security-suite:schema:report-inspection-verification:1.2"
 )
 _REPORT_VERIFICATION_SCHEMA_ID = (
     "urn:project-py-security-suite:schema:report-verification:1.0"
@@ -26,11 +26,15 @@ _REPORT_VERIFICATION_SCHEMA_ID = (
 BUNDLED_SCHEMA_RESOURCES = {
     "report-inspection-1.0": "report-inspection.schema.json",
     "report-inspection-1.1": "report-inspection-1.1.schema.json",
+    "report-inspection-1.2": "report-inspection-1.2.schema.json",
     "report-inspection-verification-1.0": (
         "report-inspection-verification.schema.json"
     ),
     "report-inspection-verification-1.1": (
         "report-inspection-verification-1.1.schema.json"
+    ),
+    "report-inspection-verification-1.2": (
+        "report-inspection-verification-1.2.schema.json"
     ),
     "report-verification-1.0": "report-verification.schema.json",
 }
@@ -88,7 +92,7 @@ def inspect_report(report: Path, *, limit: int = 5) -> dict[str, Any]:
     policy_reasons = [_safe_text(reason) for reason in policy_reasons]
     sorted_findings = sorted(findings, key=_finding_key)
     return {
-        "schema_version": "1.1",
+        "schema_version": "1.2",
         "schema_id": _INSPECTION_SCHEMA_ID,
         "verified": True,
         "scan": _scan_summary(manifest, outcome),
@@ -127,7 +131,7 @@ def verify_inspection(
     if document != expected:
         raise ValueError("inspection document does not match the verified report")
     return {
-        "schema_version": "1.1",
+        "schema_version": "1.2",
         "schema_id": _INSPECTION_VERIFICATION_SCHEMA_ID,
         "verified": True,
         "inspection_schema_id": str(expected["schema_id"]),
@@ -276,9 +280,12 @@ def render_inspection(
 def _render_action(
     item: dict[str, Any], *, report_root: Path | None = None
 ) -> list[str]:
+    risk_label = (
+        f"{item['priority']} {str(item['severity']).upper()}/"
+        f"{str(item['status']).upper()}"
+    )
     lines = [
-        f"- [{str(item['severity']).upper()}/{str(item['status']).upper()}] "
-        f"{item['title']} | {_action_location(item)}",
+        f"- [{risk_label}] {item['title']} | {_action_location(item)}",
         "  Evidence: " + "; ".join(_action_evidence(item)),
     ]
     lines.extend(
@@ -372,9 +379,15 @@ def _action(item: dict[str, Any]) -> dict[str, Any]:
     return {
         "finding_id": finding_id,
         "title": _safe_text(item.get("title")),
+        "priority": _action_priority(item),
         "severity": _safe_text(item.get("severity")),
+        "confidence": _safe_text(item.get("confidence") or "unknown"),
+        "blocking": item.get("blocking") is True,
         "status": _safe_text(item.get("status")),
         "domain": _safe_text(item.get("domain")),
+        "area": _safe_text(item.get("area") or "unknown"),
+        "description": _safe_text(item.get("description") or ""),
+        "impact": _safe_text(item.get("impact") or ""),
         "path": _safe_text(location.get("path", "<repository>")),
         "line": _line_number(location.get("start_line")),
         "tools": sorted({_safe_text(source["tool"]) for source in sources}),
@@ -386,6 +399,30 @@ def _action(item: dict[str, Any]) -> dict[str, Any]:
         "remediation": _safe_text(item.get("remediation") or ""),
         "details": f"index.html#{quote(finding_id, safe='')}",
     }
+
+
+def _action_priority(item: dict[str, Any]) -> str:
+    evidence = item.get("evidence")
+    if isinstance(evidence, dict):
+        intelligence = evidence.get("risk_intelligence")
+        if isinstance(intelligence, dict) and intelligence.get("known_exploited"):
+            return "P0"
+    severity = str(item.get("severity") or "unknown")
+    classifications = item.get("classifications")
+    if (
+        isinstance(classifications, list)
+        and "EPSS-HIGH" in classifications
+        and severity in {"critical", "high", "medium"}
+    ):
+        return "P1"
+    return {
+        "critical": "P0",
+        "high": "P1",
+        "medium": "P2",
+        "low": "P3",
+        "informational": "P4",
+        "unknown": "P4",
+    }.get(severity, "P4")
 
 
 def _primary_location(value: object) -> dict[str, Any]:

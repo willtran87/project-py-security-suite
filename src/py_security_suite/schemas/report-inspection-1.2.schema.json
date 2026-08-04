@@ -1,0 +1,551 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:report-inspection:1.2",
+  "title": "Python Security Suite report inspection",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "schema_id",
+    "verified",
+    "scan",
+    "findings",
+    "tool_health",
+    "entrypoint_integrity",
+    "scan_policy",
+    "policy_reasons",
+    "top_actions",
+    "integrity",
+    "entrypoints"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1.2"
+    },
+    "schema_id": {
+      "const": "urn:project-py-security-suite:schema:report-inspection:1.2"
+    },
+    "verified": {
+      "type": "boolean"
+    },
+    "scan": {
+      "type": "object",
+      "required": [
+        "id",
+        "target",
+        "profile",
+        "outcome",
+        "duration_seconds",
+        "finished_at"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/boundedString"
+        },
+        "target": {
+          "$ref": "#/$defs/boundedString"
+        },
+        "profile": {
+          "$ref": "#/$defs/boundedString"
+        },
+        "outcome": {
+          "enum": [
+            "pass",
+            "warn",
+            "fail",
+            "incomplete"
+          ]
+        },
+        "duration_seconds": {
+          "type": "number",
+          "minimum": 0
+        },
+        "finished_at": {
+          "type": "string",
+          "maxLength": 200
+        }
+      }
+    },
+    "findings": {
+      "type": "object",
+      "required": [
+        "total",
+        "blocking",
+        "by_severity",
+        "by_domain",
+        "by_lifecycle"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "total": {
+          "$ref": "#/$defs/count"
+        },
+        "blocking": {
+          "$ref": "#/$defs/count"
+        },
+        "by_severity": {
+          "$ref": "#/$defs/countMap"
+        },
+        "by_domain": {
+          "$ref": "#/$defs/countMap"
+        },
+        "by_lifecycle": {
+          "$ref": "#/$defs/countMap"
+        }
+      }
+    },
+    "tool_health": {
+      "type": "object",
+      "required": [
+        "selected",
+        "applicable",
+        "completed",
+        "not_applicable",
+        "execution_gaps",
+        "coverage_complete",
+        "by_status"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "selected": {
+          "$ref": "#/$defs/count"
+        },
+        "applicable": {
+          "$ref": "#/$defs/count"
+        },
+        "completed": {
+          "$ref": "#/$defs/count"
+        },
+        "not_applicable": {
+          "$ref": "#/$defs/count"
+        },
+        "execution_gaps": {
+          "$ref": "#/$defs/count"
+        },
+        "coverage_complete": {
+          "type": "boolean"
+        },
+        "by_status": {
+          "$ref": "#/$defs/countMap"
+        }
+      }
+    },
+    "entrypoint_integrity": {
+      "type": "object",
+      "required": [
+        "observed",
+        "approved_and_unchanged",
+        "unchanged_after_execution",
+        "postcheck_gaps",
+        "fully_approved",
+        "approval_gap_entrypoints",
+        "postcheck_gap_entrypoints",
+        "approval_candidate_entrypoints",
+        "approval_candidate_unique_digests",
+        "actions"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "observed": {
+          "$ref": "#/$defs/count"
+        },
+        "approved_and_unchanged": {
+          "$ref": "#/$defs/count"
+        },
+        "unchanged_after_execution": {
+          "$ref": "#/$defs/count"
+        },
+        "postcheck_gaps": {
+          "$ref": "#/$defs/count"
+        },
+        "fully_approved": {
+          "type": "boolean"
+        },
+        "approval_gap_entrypoints": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "postcheck_gap_entrypoints": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "approval_candidate_entrypoints": {
+          "$ref": "#/$defs/count"
+        },
+        "approval_candidate_unique_digests": {
+          "$ref": "#/$defs/count"
+        },
+        "actions": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "$ref": "#/$defs/trustAction"
+          }
+        }
+      }
+    },
+    "scan_policy": {
+      "type": "object",
+      "required": [
+        "disposition",
+        "reasons"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "disposition": {
+          "enum": [
+            "allow",
+            "review",
+            "block",
+            "incomplete"
+          ]
+        },
+        "reasons": {
+          "$ref": "#/$defs/stringArray"
+        }
+      }
+    },
+    "policy_reasons": {
+      "$ref": "#/$defs/stringArray"
+    },
+    "top_actions": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "$ref": "#/$defs/findingAction"
+      }
+    },
+    "integrity": {
+      "type": "object",
+      "required": [
+        "status",
+        "files_verified",
+        "checksums_sha256"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "const": "verified"
+        },
+        "files_verified": {
+          "$ref": "#/$defs/count"
+        },
+        "checksums_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "entrypoints": {
+      "type": "object",
+      "required": [
+        "html",
+        "summary",
+        "action_plan"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "html": {
+          "$ref": "#/$defs/boundedString"
+        },
+        "summary": {
+          "$ref": "#/$defs/boundedString"
+        },
+        "action_plan": {
+          "$ref": "#/$defs/boundedString"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "boundedString": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "optionalString": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 4096
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[A-Fa-f0-9]{64}$"
+    },
+    "stringArray": {
+      "type": "array",
+      "maxItems": 1000,
+      "items": {
+        "type": "string",
+        "maxLength": 4096
+      }
+    },
+    "countMap": {
+      "type": "object",
+      "maxProperties": 256,
+      "additionalProperties": {
+        "$ref": "#/$defs/count"
+      }
+    },
+    "trustAction": {
+      "type": "object",
+      "required": [
+        "entrypoint",
+        "tool",
+        "role",
+        "sha256",
+        "priority",
+        "approval_status",
+        "postcheck_status",
+        "approval_candidate",
+        "configuration_key",
+        "required_actions"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "entrypoint": {
+          "$ref": "#/$defs/boundedString"
+        },
+        "tool": {
+          "$ref": "#/$defs/boundedString"
+        },
+        "role": {
+          "enum": [
+            "primary",
+            "helper"
+          ]
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "priority": {
+          "enum": [
+            "P0",
+            "P1",
+            "P2"
+          ]
+        },
+        "approval_status": {
+          "enum": [
+            "approved",
+            "not_approved"
+          ]
+        },
+        "postcheck_status": {
+          "enum": [
+            "unchanged",
+            "changed",
+            "unavailable"
+          ]
+        },
+        "approval_candidate": {
+          "type": "boolean"
+        },
+        "configuration_key": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^tools\\.[A-Za-z0-9_-]+\\.(auxiliary_)?executable_sha256$",
+          "maxLength": 300
+        },
+        "required_actions": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "quarantine_changed_toolchain",
+              "restore_post_execution_verification",
+              "verify_provenance_before_approval",
+              "approve_exact_digest"
+            ]
+          }
+        }
+      }
+    },
+    "findingAction": {
+      "type": "object",
+      "required": [
+        "finding_id",
+        "title",
+        "priority",
+        "severity",
+        "confidence",
+        "blocking",
+        "status",
+        "domain",
+        "area",
+        "description",
+        "impact",
+        "path",
+        "line",
+        "tools",
+        "source_rules",
+        "classifications",
+        "citations",
+        "owners",
+        "artifact_identity",
+        "remediation",
+        "details"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "finding_id": {
+          "$ref": "#/$defs/boundedString"
+        },
+        "title": {
+          "$ref": "#/$defs/boundedString"
+        },
+        "severity": {
+          "enum": [
+            "critical",
+            "high",
+            "medium",
+            "low",
+            "informational",
+            "unknown"
+          ]
+        },
+        "status": {
+          "enum": [
+            "new",
+            "existing",
+            "regression",
+            "resolved",
+            "suppressed"
+          ]
+        },
+        "domain": {
+          "$ref": "#/$defs/boundedString"
+        },
+        "path": {
+          "$ref": "#/$defs/boundedString"
+        },
+        "line": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "tools": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "source_rules": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "classifications": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "citations": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "$ref": "#/$defs/citation"
+          }
+        },
+        "owners": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "remediation": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "details": {
+          "$ref": "#/$defs/boundedString"
+        },
+        "artifact_identity": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/artifactIdentity"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "priority": {
+          "enum": [
+            "P0",
+            "P1",
+            "P2",
+            "P3",
+            "P4"
+          ]
+        },
+        "confidence": {
+          "enum": [
+            "high",
+            "medium",
+            "low",
+            "unknown"
+          ]
+        },
+        "blocking": {
+          "type": "boolean"
+        },
+        "area": {
+          "$ref": "#/$defs/boundedString"
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "impact": {
+          "type": "string",
+          "maxLength": 4096
+        }
+      }
+    },
+    "citation": {
+      "type": "object",
+      "required": [
+        "identifier",
+        "title",
+        "uri"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "identifier": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "uri": {
+          "type": "string",
+          "maxLength": 4096
+        }
+      }
+    },
+    "artifactIdentity": {
+      "type": "object",
+      "required": [
+        "path",
+        "sha256",
+        "size_bytes"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/boundedString"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "size_bytes": {
+          "$ref": "#/$defs/count"
+        }
+      }
+    }
+  }
+}
+

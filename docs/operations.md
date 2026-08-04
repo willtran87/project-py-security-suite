@@ -599,9 +599,9 @@ pysec verify-inspection .artifacts\release-scan-inspection.json `
   --report .artifacts\release-scan `
   --format json `
   --output .artifacts\release-scan-inspection-verification.json
-pysec schema report-inspection-1.1 `
+pysec schema report-inspection-1.2 `
   --output .artifacts\contracts\report-inspection.schema.json
-pysec schema report-inspection-verification-1.1 `
+pysec schema report-inspection-verification-1.2 `
   --output .artifacts\contracts\report-inspection-verification.schema.json
 pysec schema report-verification-1.0 `
   --output .artifacts\contracts\report-verification.schema.json
@@ -632,12 +632,14 @@ and first authoritative reference together with lifecycle and classification
 context. The ownership summary and priority-bucketed queues expose unassigned
 work without changing finding counts. Treat all observed candidates as
 unapproved until provenance, version, and custody are independently verified.
-For dashboards and policy automation, `inspect --format json` emits the same
-work as P0/P1/P2 `entrypoint_integrity.actions`, including stable remediation
+For dashboards and policy automation, `inspect --format json` emits findings
+with explicit priority, blocking decision, confidence, area, description, and
+impact. It also emits the same trust work as P0/P1/P2
+`entrypoint_integrity.actions`, including stable remediation
 codes and configuration keys. Candidate-binding and unique-digest counts expose
 where multiple logical controls share one executable payload.
 Validate that document against the locally staged
-`py_security_suite/schemas/report-inspection-1.1.schema.json`; its `schema_id` URN
+`py_security_suite/schemas/report-inspection-1.2.schema.json`; its `schema_id` URN
 must match the schema `$id`. Schema selection is deterministic inside an isolated
 boundary and never requires URL retrieval.
 The `schema` commands above work from an installed wheel, stage the exact
