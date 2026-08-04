@@ -44,11 +44,13 @@ flowchart LR
         Suite["Python Security Suite"]
         Scanners["62 governed adapters<br/>security | quality | testing | policy | architecture | supply chain | artifact | governance"]
         Reports["Markdown | HTML | SARIF | SonarQube | JSON<br/>SBOM + delta + intelligence + Security Passport"]
+        Contracts["Version-explicit JSON Schemas<br/>installed package resources"]
         Install --> Suite
         Project --> Suite
         Suite --> Scanners
         Scanners --> Suite
         Suite --> Reports
+        Suite --> Contracts
     end
 
     GitHub["GitHub artifact,<br/>workflow summary, and SARIF"]
@@ -56,6 +58,7 @@ flowchart LR
     Bundle --> Transfer --> Install
     ScorecardCollect --> Transfer
     Reports --> GitHub
+    Contracts --> GitHub
 ```
 
 The scan lane emits an unsigned in-toto Statement using the SLSA Verification
@@ -90,7 +93,10 @@ Offline sidecar verification recomputes this normalized view from the sealed
 report and requires exact semantic equality, binding the sidecar digest to the
 report checksum digest without confusing consistency with signer authenticity.
 A separate strict receipt schema makes that successful comparison portable and
-archivable without adding derived content to the sealed report.
+archivable without adding derived content to the sealed report. The `schema`
+command retrieves either contract from installed package resources and can
+atomically stage it for a disconnected consumer. Explicit `1.0` names and URNs
+prevent a policy engine from silently selecting a newer contract.
 
 ```mermaid
 flowchart LR
@@ -391,6 +397,19 @@ report/
     `-- osv-scanner.json
 ```
 
+Inspection sidecars, verification receipts, and exported schemas remain beside
+this directory rather than inside it. This preserves the sealed report's exact
+file set. The CLI exports schemas from package resources with this flow:
+
+```mermaid
+flowchart LR
+    CLI["pysec schema NAME"] --> Registry["Version-explicit local registry"]
+    Registry --> Resource["Installed Draft 2020-12 resource"]
+    Resource --> Stdout["Standard output"]
+    Resource --> Atomic["Validated temporary file"]
+    Atomic --> Export["Atomic disconnected contract export"]
+```
+
 - `summary.md` is optimized for GitHub workflow summaries and rapid triage; it
   leads with the scan-policy disposition and separates applicable execution
   gaps from conditional controls that did not match the repository.
@@ -545,9 +564,9 @@ The native Windows self-scan process verifies:
   errors; 27 conditional scanners were correctly not applicable;
 - Pylint, Radon, Ruff formatting, coverage, and JUnit adapters executed through
   approved entry-point bindings and emitted normalized derived evidence;
-- the separately generated branch-coverage evidence records 92.93% combined
-  line-and-branch coverage and 86.44% branch coverage, satisfying both 80%
-  repository gates with no per-file hotspots; JUnit records 291 passing tests,
+- the separately generated branch-coverage evidence records 92.95% combined
+  line-and-branch coverage and 86.47% branch coverage, satisfying both 80%
+  repository gates with no per-file hotspots; JUnit records 294 passing tests,
   one platform-limited symlink skip, and no failures or errors;
 - CycloneDX completed from `uv.lock` through a frozen offline export with a
   hash-verified helper; zizmor, actionlint, Pysa, GuardDog, Flawfinder, and

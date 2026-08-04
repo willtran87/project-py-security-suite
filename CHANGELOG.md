@@ -5,6 +5,10 @@ for published releases.
 
 ## Unreleased
 
+- Add version-explicit `pysec schema` discovery and atomic export for both
+  report-inspection contracts, allowing disconnected CI and policy engines to
+  retrieve the exact installed Draft 2020-12 schemas without source-tree or
+  network access and without silently replacing an existing contract.
 - Promote scanner entry-point approval and post-execution integrity to
   first-class Markdown, HTML, terminal, and inspection-JSON summary metrics,
   with named and bounded trust-remediation actions, risk-ordered action-plan

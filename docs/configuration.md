@@ -258,6 +258,8 @@ pysec inspect REPORT [--limit 0-100] [--format text|json]
   [--output FILE] [--overwrite]
 pysec verify-inspection INSPECTION --report REPORT [--limit 0-100]
   [--format text|json] [--output FILE] [--overwrite]
+pysec schema {report-inspection-1.0|report-inspection-verification-1.0}
+  [--output FILE] [--overwrite]
 pysec verify-report REPORT
 pysec attest REPORT --output PASSPORT (--signing-key KEY | --unsigned)
 pysec verify PASSPORT [--report REPORT] [verification options]
@@ -306,6 +308,19 @@ approval; those remain Security Passport responsibilities.
 outside the sealed report; replacement requires explicit `--overwrite`. The
 receipt is governed by the bundled
 [verification schema](../src/py_security_suite/schemas/report-inspection-verification.schema.json).
+
+`schema` retrieves an exact contract from the installed distribution without
+network access or source-checkout knowledge. It always emits the schema on
+standard output and optionally publishes the same bytes plus one trailing
+newline atomically to `--output`. The destination must be a regular, unlinked
+path; existing content is retained unless `--overwrite` is explicit, and
+`--overwrite` without `--output` is rejected. Versioned names intentionally
+avoid implicit upgrades:
+
+| CLI name | Required `$id` |
+|---|---|
+| `report-inspection-1.0` | `urn:project-py-security-suite:schema:report-inspection:1.0` |
+| `report-inspection-verification-1.0` | `urn:project-py-security-suite:schema:report-inspection-verification:1.0` |
 
 `verify-report` validates the complete `checksums.sha256` chain, the scan
 manifest, every canonical report artifact, and their exact manifest bindings.

@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections import Counter
+from importlib.resources import files
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote, urlsplit
@@ -18,6 +19,12 @@ _INSPECTION_SCHEMA_ID = "urn:project-py-security-suite:schema:report-inspection:
 _INSPECTION_VERIFICATION_SCHEMA_ID = (
     "urn:project-py-security-suite:schema:report-inspection-verification:1.0"
 )
+BUNDLED_SCHEMA_RESOURCES = {
+    "report-inspection-1.0": "report-inspection.schema.json",
+    "report-inspection-verification-1.0": (
+        "report-inspection-verification.schema.json"
+    ),
+}
 _SEVERITY_ORDER = {
     "critical": 0,
     "high": 1,
@@ -32,6 +39,17 @@ _POLICY_DISPOSITIONS = {
     Outcome.FAIL: "block",
     Outcome.INCOMPLETE: "block",
 }
+
+
+def read_bundled_schema(name: str) -> str:
+    """Return an installed, version-explicit JSON Schema without network access."""
+    try:
+        resource_name = BUNDLED_SCHEMA_RESOURCES[name]
+    except KeyError as exc:
+        choices = ", ".join(sorted(BUNDLED_SCHEMA_RESOURCES))
+        raise ValueError(f"unknown schema {name!r}; choose one of: {choices}") from exc
+    resource = files("py_security_suite").joinpath("schemas", resource_name)
+    return resource.read_text(encoding="utf-8").rstrip("\r\n")
 
 
 def inspect_report(report: Path, *, limit: int = 5) -> dict[str, Any]:

@@ -21,6 +21,11 @@ Markdown files in this directory are the canonical project documentation.
 | [Contributing](../CONTRIBUTING.md) | Trust-model constraints, validation, and pull-request expectations |
 | [Changelog](../CHANGELOG.md) | Release-facing record of notable behavior and security changes |
 
+Installed consumers can retrieve both report contracts without source-tree or
+network access via `pysec schema report-inspection-1.0` and
+`pysec schema report-inspection-verification-1.0`; add `--output FILE` for an
+atomic disconnected export.
+
 ## Documentation rules
 
 - Update the `Last reviewed` date when behavior or pinned tool versions change.
@@ -70,7 +75,7 @@ The current native baseline is Windows x86-64 with Python 3.11:
 - Pyright 1.1.411 on Node.js 20.20.2
 - Cosign 3.1.2
 
-The current `comprehensive` profile selects all 62 adapters. The 2026-08-03
+The current `comprehensive` profile selects all 62 adapters. The 2026-08-04
 dogfood baseline completed all 35 applicable adapters; 27 conditional adapters
 were correctly not applicable, with zero unavailable, failed, timed-out, or
 parse-error tools. The externally isolated run correctly produced `FAIL`: two
@@ -83,7 +88,7 @@ The native `doctor` preflight reports 35 ready and 27 not-applicable tools with
 zero disabled or unavailable prerequisites before scanner execution.
 
 The checked report is in
-`.artifacts/final-self-scan-v92`. It includes:
+`.artifacts/final-self-scan-v93`. It includes:
 
 - the GitHub-ready Markdown, HTML, SARIF, SonarQube external-issue, and
   normalized JSON reports;
@@ -99,14 +104,14 @@ The checked report is in
   effectiveness metrics, SSDF claims, and a Security Passport;
 - a checksum manifest that was independently verified after generation.
 
-The source test suite currently records 291 passing tests and one platform-
+The source test suite currently records 294 passing tests and one platform-
 limited symlink test skip. It includes property-test replay and fixtures for all
 adapters, private scanner-home isolation, artifact digest binding, path-
 traversal rejection during distribution expansion, hardened XML evidence
 ingestion, archive-link rejection, governed risk acceptance, database
 freshness, detection validation, repository-health additions, trusted-lane
 evidence validation, and the SonarQube export. Combined line-and-branch
-coverage is 92.93%, and branch coverage is 86.44%, so both measures pass the
+coverage is 92.95%, and branch coverage is 86.47%, so both measures pass the
 80% policy threshold. No production source file remains below the per-file
 coverage reporting threshold.
 

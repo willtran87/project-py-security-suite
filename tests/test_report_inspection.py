@@ -23,6 +23,7 @@ from py_security_suite.report_inspection import (
     _safe_text,
     _safe_web_uri,
     inspect_report,
+    read_bundled_schema,
     render_inspection,
     verify_inspection,
 )
@@ -43,6 +44,17 @@ _INSPECTION_VERIFICATION_SCHEMA = json.loads(
 
 
 class ReportInspectionTests(unittest.TestCase):
+    def test_bundled_schema_catalog_is_version_explicit_and_valid(self) -> None:
+        inspection_schema = json.loads(read_bundled_schema("report-inspection-1.0"))
+        verification_schema = json.loads(
+            read_bundled_schema("report-inspection-verification-1.0")
+        )
+        for schema in (inspection_schema, verification_schema):
+            Draft202012Validator.check_schema(schema)
+            self.assertTrue(str(schema["$id"]).endswith(":1.0"))
+        with self.assertRaisesRegex(ValueError, "unknown schema"):
+            read_bundled_schema("report-inspection-latest")
+
     def test_exported_inspection_is_bound_to_its_verified_report(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

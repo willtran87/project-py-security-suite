@@ -101,6 +101,85 @@ class CliSafetyTests(unittest.TestCase):
         self.assertEqual(inspect.command, "inspect")
         self.assertEqual(inspect.output, Path("inspection.json"))
         self.assertTrue(inspect.overwrite)
+        schema = parser.parse_args(
+            [
+                "schema",
+                "report-inspection-verification-1.0",
+                "--output",
+                "schema.json",
+                "--overwrite",
+            ]
+        )
+        self.assertEqual(schema.command, "schema")
+        self.assertEqual(schema.output, Path("schema.json"))
+        self.assertTrue(schema.overwrite)
+
+    def test_schema_prints_and_atomically_exports_an_installed_contract(self) -> None:
+        schema_name = "report-inspection-1.0"
+        with patch("builtins.print") as output:
+            self.assertEqual(main(["schema", schema_name]), 0)
+        printed = output.call_args.args[0]
+        self.assertEqual(
+            json.loads(printed)["$id"],
+            "urn:project-py-security-suite:schema:report-inspection:1.0",
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / "contracts" / "inspection.schema.json"
+            with patch("builtins.print") as exported:
+                self.assertEqual(
+                    main(
+                        [
+                            "schema",
+                            schema_name,
+                            "--output",
+                            str(destination),
+                        ]
+                    ),
+                    0,
+                )
+            self.assertEqual(destination.read_text(encoding="utf-8"), printed + "\n")
+            self.assertEqual(exported.call_args.args[0], printed)
+            self.assertEqual(list(destination.parent.glob("*.tmp")), [])
+
+            original = destination.read_text(encoding="utf-8")
+            with patch("builtins.print") as error_output:
+                self.assertEqual(
+                    main(
+                        [
+                            "schema",
+                            "report-inspection-verification-1.0",
+                            "--output",
+                            str(destination),
+                        ]
+                    ),
+                    3,
+                )
+            self.assertEqual(destination.read_text(encoding="utf-8"), original)
+            self.assertIn("already exists", error_output.call_args.args[0])
+
+            self.assertEqual(
+                main(
+                    [
+                        "schema",
+                        "report-inspection-verification-1.0",
+                        "--output",
+                        str(destination),
+                        "--overwrite",
+                    ]
+                ),
+                0,
+            )
+            self.assertIn(
+                "report-inspection-verification:1.0",
+                destination.read_text(encoding="utf-8"),
+            )
+
+    def test_schema_overwrite_requires_an_output(self) -> None:
+        with patch("builtins.print") as error_output:
+            code = main(["schema", "report-inspection-1.0", "--overwrite"])
+        self.assertEqual(code, 3)
+        self.assertIn("--overwrite requires --output", error_output.call_args.args[0])
 
     def test_doctor_uses_readiness_exit_code_and_output_format(self) -> None:
         readiness = {

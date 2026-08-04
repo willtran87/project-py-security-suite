@@ -95,6 +95,10 @@ pysec inspect PATH_TO_REPORT --format json \
 pysec verify-inspection PATH_TO_REPORT-inspection.json \
   --report PATH_TO_REPORT --format json \
   --output PATH_TO_REPORT-inspection-verification.json
+pysec schema report-inspection-1.0 \
+  --output contracts/report-inspection.schema.json
+pysec schema report-inspection-verification-1.0 \
+  --output contracts/report-inspection-verification.schema.json
 ```
 
 `inspect` verifies the report checksum chain before showing the `ALLOW`,
@@ -126,6 +130,10 @@ consistency, not signer authenticity; use the Security Passport for approval.
 The verification receipt has its own installable strict
 [Draft 2020-12 JSON Schema](src/py_security_suite/schemas/report-inspection-verification.schema.json)
 and is atomically published outside the sealed report for audit retention.
+`schema` reads these exact contracts from the installed package and prints them
+or atomically exports them for disconnected validators. Names are deliberately
+version-explicit; there is no network lookup and no ambiguous `latest` alias.
+Existing exports are preserved unless `--overwrite` is supplied.
 
 Commands with `--format json` return failures on standard error using one stable
 envelope with `status`, `command`, and a coded `error`; `attest` uses the same

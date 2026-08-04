@@ -586,6 +586,10 @@ pysec verify-inspection .artifacts\release-scan-inspection.json `
   --report .artifacts\release-scan `
   --format json `
   --output .artifacts\release-scan-inspection-verification.json
+pysec schema report-inspection-1.0 `
+  --output .artifacts\contracts\report-inspection.schema.json
+pysec schema report-inspection-verification-1.0 `
+  --output .artifacts\contracts\report-inspection-verification.schema.json
 ```
 
 The output is created atomically and is never permitted inside the report's
@@ -614,6 +618,10 @@ Validate that document against the locally staged
 `py_security_suite/schemas/report-inspection.schema.json`; its `schema_id` URN
 must match the schema `$id`. Schema selection is deterministic inside an isolated
 boundary and never requires URL retrieval.
+The `schema` commands above work from an installed wheel, stage the exact
+versioned contracts without PyPI or JSON Schema URL access, and fail safely if
+a destination already exists. Transfer those contracts with the sidecars when
+the downstream policy engine cannot import Python package resources.
 
 Inspection treats report content as untrusted even after checksum validation.
 Terminal-facing values are length-bounded, non-printing and bidirectional

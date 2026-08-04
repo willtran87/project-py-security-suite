@@ -15,7 +15,13 @@ from .orchestrator import scan_project
 from .policy import exit_code
 from .passport import create_attestation, verify_attestation, verify_report
 from .path_safety import resolve_regular_directory, resolve_unlinked_path
-from .report_inspection import inspect_report, render_inspection, verify_inspection
+from .report_inspection import (
+    BUNDLED_SCHEMA_RESOURCES,
+    inspect_report,
+    read_bundled_schema,
+    render_inspection,
+    verify_inspection,
+)
 from .reports import is_complete_report
 
 
@@ -220,6 +226,27 @@ def build_parser() -> argparse.ArgumentParser:
         help="number of prioritized actions to show (0-100)",
     )
 
+    schema = subparsers.add_parser(
+        "schema",
+        help="print or export an installed versioned report schema",
+    )
+    schema.add_argument(
+        "name",
+        choices=sorted(BUNDLED_SCHEMA_RESOURCES),
+        help="version-explicit bundled schema contract",
+    )
+    schema.add_argument(
+        "--output",
+        type=Path,
+        metavar="FILE",
+        help="atomically export the schema for disconnected consumers",
+    )
+    schema.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="replace an existing schema export",
+    )
+
     list_tools = subparsers.add_parser(
         "list-tools", help="show scanners selected by each profile"
     )
@@ -232,18 +259,10 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     if args.command == "list-tools":
-        profiles = (
-            {args.profile: PROFILE_TOOLS[args.profile]}
-            if args.profile
-            else PROFILE_TOOLS
-        )
-        if args.format == "json":
-            print(json.dumps(profiles, indent=2, sort_keys=True))
-        else:
-            for profile, tools in profiles.items():
-                print(f"{profile}: {', '.join(tools)}")
-        return 0
+        return _list_tools_command(args)
     try:
+        if args.command == "schema":
+            return _schema_command(args)
         if args.command == "doctor":
             config = load_config(
                 organization_policy=args.policy,
@@ -384,6 +403,35 @@ def main(argv: list[str] | None = None) -> int:
         return 3
 
 
+def _schema_command(args: argparse.Namespace) -> int:
+    """Render or safely publish one version-explicit installed schema."""
+    if args.overwrite and not args.output:
+        raise ValueError("schema --overwrite requires --output")
+    rendered_schema = read_bundled_schema(str(args.name))
+    if args.output:
+        _write_atomic_output(
+            output=args.output,
+            content=rendered_schema,
+            overwrite=bool(args.overwrite),
+            label="schema output",
+        )
+    print(rendered_schema)
+    return 0
+
+
+def _list_tools_command(args: argparse.Namespace) -> int:
+    """Render the configured profile-to-tool inventory."""
+    profiles = (
+        {args.profile: PROFILE_TOOLS[args.profile]} if args.profile else PROFILE_TOOLS
+    )
+    if args.format == "json":
+        print(json.dumps(profiles, indent=2, sort_keys=True))
+    else:
+        for profile, tools in profiles.items():
+            print(f"{profile}: {', '.join(tools)}")
+    return 0
+
+
 def _emit_cli_error(
     args: argparse.Namespace, exc: ConfigurationError | OSError | ValueError
 ) -> None:
@@ -471,26 +519,48 @@ def _write_inspection_output(
     *, report: Path, output: Path, content: str, overwrite: bool
 ) -> Path:
     """Publish a derived inspection without modifying its sealed source report."""
+    return _write_atomic_output(
+        output=output,
+        content=content,
+        overwrite=overwrite,
+        label="inspection output",
+        forbidden_root=report,
+    )
+
+
+def _write_atomic_output(
+    *,
+    output: Path,
+    content: str,
+    overwrite: bool,
+    label: str,
+    forbidden_root: Path | None = None,
+) -> Path:
+    """Publish text atomically after link and replacement safety checks."""
     requested = output.expanduser().absolute()
     anchor = Path(requested.anchor)
     destination = resolve_unlinked_path(
         requested,
-        "inspection output",
+        label,
         boundary=anchor,
     )
-    report_root = report.expanduser().absolute().resolve()
-    if destination == report_root or destination.is_relative_to(report_root):
+    protected_root = (
+        forbidden_root.expanduser().absolute().resolve()
+        if forbidden_root is not None
+        else None
+    )
+    if protected_root is not None and (
+        destination == protected_root or destination.is_relative_to(protected_root)
+    ):
         raise ValueError(
             "inspection output must be outside the sealed report directory"
         )
     if destination.exists():
         if not destination.is_file():
-            raise ValueError(
-                f"inspection output exists and is not a file: {destination}"
-            )
+            raise ValueError(f"{label} exists and is not a file: {destination}")
         if not overwrite:
             raise ValueError(
-                "inspection output already exists; choose a new path or use "
+                f"{label} already exists; choose a new path or use "
                 f"--overwrite: {destination}"
             )
     destination.parent.mkdir(parents=True, exist_ok=True)
