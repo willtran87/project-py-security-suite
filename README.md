@@ -125,6 +125,10 @@ byte size. Version 1.2 gives every prioritized finding an explicit priority,
 blocking decision, confidence, area, description, and impact so machines and
 people receive the same triage context. The frozen 1.0 and 1.1 contracts remain
 available for existing consumers.
+Finding order uses the derived P0-P4 priority rather than native severity alone:
+known-exploited findings are P0 and qualifying high-EPSS findings are P1. Within
+a priority, blocking and new or regressed work appears first. Terminal actions
+show the same decision context, summary, and impact before cited evidence.
 The optional output is published atomically, refuses accidental replacement
 unless `--overwrite` is explicit, and must remain outside the report's exact
 checksum boundary. Exported entry points and finding-detail links are artifact-

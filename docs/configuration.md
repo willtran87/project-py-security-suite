@@ -386,9 +386,15 @@ artifact, that object carries its safe relative path, SHA-256, and byte size;
 terminal inspection includes the digest and size in its evidence line. Version
 `1.2` adds required priority, blocking, confidence, area, description, and impact
 fields to every top action, aligning automation with the human action plan.
-Versions `1.0` and `1.1` remain frozen and exportable for compatibility. Future additive changes
-require a minor version and incompatible changes require a major version, with
-a matching URN and schema artifact.
+Versions `1.0` and `1.1` remain frozen and exportable for compatibility. Future
+additive changes require a minor version and incompatible changes require a
+major version, with a matching URN and schema artifact.
+
+All finding views share one deterministic order: derived P0-P4 priority,
+blocking state, active lifecycle (`new` or `regression`), native severity, then
+finding ID. Known-exploited evidence promotes a finding to P0, while
+`EPSS-HIGH` promotes critical, high, or medium findings to P1. This prevents a
+lower native severity with stronger exploitation evidence from being buried.
 
 The Markdown action plan orders changed entry points before missing post-checks
 and approval-only gaps. It also emits a collapsed TOML candidate block for

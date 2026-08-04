@@ -27,6 +27,8 @@ from py_security_suite.models import (
 from py_security_suite.orchestrator import resolve_asset_paths, scan_project
 from py_security_suite.passport import verify_report
 from py_security_suite.reports import (
+    _finding_priority,
+    _finding_sort_key,
     _render_entrypoint_trust_actions,
     _register_report_artifacts,
     _safe_http_reference,
@@ -127,6 +129,55 @@ class MutatingSecrets(FakeSecrets):
 
 
 class OrchestratorTests(unittest.TestCase):
+    def test_report_order_uses_derived_priority(self) -> None:
+        def finding(
+            finding_id: str,
+            severity: Severity,
+            *,
+            classifications: list[str] | None = None,
+            evidence: dict[str, object] | None = None,
+        ) -> Finding:
+            return Finding(
+                finding_id=finding_id,
+                fingerprint=f"sha256:{finding_id}",
+                title=finding_id,
+                description="Fixture",
+                impact="Fixture impact",
+                remediation="Fixture remediation",
+                severity=severity,
+                confidence=Confidence.HIGH,
+                area="fixture",
+                classifications=classifications or [],
+                evidence=evidence or {},
+                blocking=True,
+            )
+
+        findings = [
+            finding("HIGH", Severity.HIGH),
+            finding(
+                "KEV-LOW",
+                Severity.LOW,
+                evidence={"risk_intelligence": {"known_exploited": ["CVE"]}},
+            ),
+            finding(
+                "EPSS-MEDIUM",
+                Severity.MEDIUM,
+                classifications=["EPSS-HIGH"],
+            ),
+            finding("MEDIUM", Severity.MEDIUM),
+        ]
+
+        ordered = sorted(findings, key=_finding_sort_key)
+        self.assertEqual(
+            [(item.finding_id, _finding_priority(item)) for item in ordered],
+            [
+                ("KEV-LOW", "P0"),
+                ("HIGH", "P1"),
+                ("EPSS-MEDIUM", "P1"),
+                ("MEDIUM", "P2"),
+            ],
+        )
+
     def test_assurance_case_actions_follow_attached_evidence_and_findings(
         self,
     ) -> None:

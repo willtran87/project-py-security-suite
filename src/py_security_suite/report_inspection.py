@@ -13,6 +13,7 @@ from .execution import sanitize_terminal_text
 from .models import Outcome
 from .passport import verify_report
 from .path_safety import resolve_unlinked_path
+from .prioritization import finding_order_key, finding_priority
 
 
 _MAX_JSON_BYTES = 128 * 1024 * 1024
@@ -37,14 +38,6 @@ BUNDLED_SCHEMA_RESOURCES = {
         "report-inspection-verification-1.2.schema.json"
     ),
     "report-verification-1.0": "report-verification.schema.json",
-}
-_SEVERITY_ORDER = {
-    "critical": 0,
-    "high": 1,
-    "medium": 2,
-    "low": 3,
-    "informational": 4,
-    "unknown": 5,
 }
 _POLICY_DISPOSITIONS = {
     Outcome.PASS: "allow",
@@ -286,8 +279,13 @@ def _render_action(
     )
     lines = [
         f"- [{risk_label}] {item['title']} | {_action_location(item)}",
-        "  Evidence: " + "; ".join(_action_evidence(item)),
+        "  Context: " + _action_context(item),
     ]
+    if item["description"]:
+        lines.append(f"  Summary: {item['description']}")
+    if item["impact"]:
+        lines.append(f"  Impact: {item['impact']}")
+    lines.append("  Evidence: " + "; ".join(_action_evidence(item)))
     lines.extend(
         f"  Reference: {_reference_text(citation)}" for citation in item["citations"]
     )
@@ -295,6 +293,13 @@ def _render_action(
         lines.append(f"  Action: {item['remediation']}")
     lines.append("  Review: " + _local_artifact_reference(item["details"], report_root))
     return lines
+
+
+def _action_context(item: dict[str, Any]) -> str:
+    decision = "blocking" if item["blocking"] else "non-blocking"
+    return (
+        f"{decision}; area {item['area']}; confidence {str(item['confidence']).lower()}"
+    )
 
 
 def _local_artifact_reference(value: object, report_root: Path | None) -> str:
@@ -362,13 +367,14 @@ def _unique_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return value
 
 
-def _finding_key(item: dict[str, Any]) -> tuple[int, int, int, str]:
-    status = str(item.get("status") or "unknown")
-    return (
-        0 if item.get("blocking") else 1,
-        0 if status in {"new", "regression"} else 1,
-        _SEVERITY_ORDER.get(str(item.get("severity") or "unknown"), 5),
-        str(item.get("finding_id") or ""),
+def _finding_key(item: dict[str, Any]) -> tuple[int, int, int, int, str]:
+    return finding_order_key(
+        finding_id=item.get("finding_id"),
+        severity=item.get("severity"),
+        classifications=item.get("classifications"),
+        evidence=item.get("evidence"),
+        blocking=item.get("blocking"),
+        status=item.get("status"),
     )
 
 
@@ -402,27 +408,11 @@ def _action(item: dict[str, Any]) -> dict[str, Any]:
 
 
 def _action_priority(item: dict[str, Any]) -> str:
-    evidence = item.get("evidence")
-    if isinstance(evidence, dict):
-        intelligence = evidence.get("risk_intelligence")
-        if isinstance(intelligence, dict) and intelligence.get("known_exploited"):
-            return "P0"
-    severity = str(item.get("severity") or "unknown")
-    classifications = item.get("classifications")
-    if (
-        isinstance(classifications, list)
-        and "EPSS-HIGH" in classifications
-        and severity in {"critical", "high", "medium"}
-    ):
-        return "P1"
-    return {
-        "critical": "P0",
-        "high": "P1",
-        "medium": "P2",
-        "low": "P3",
-        "informational": "P4",
-        "unknown": "P4",
-    }.get(severity, "P4")
+    return finding_priority(
+        severity=item.get("severity"),
+        classifications=item.get("classifications"),
+        evidence=item.get("evidence"),
+    )
 
 
 def _primary_location(value: object) -> dict[str, Any]:

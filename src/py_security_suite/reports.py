@@ -23,26 +23,19 @@ from .models import (
     ToolRun,
     json_ready,
 )
-from .source_context import source_language
 from .passport import (
     REQUIRED_REPORT_ARTIFACTS,
     build_security_passport_statement,
     verify_report,
 )
+from .prioritization import finding_order_key, finding_priority
+from .source_context import source_language
 
 
 REPORT_FILES = tuple(REQUIRED_REPORT_ARTIFACTS.values())
 _MAX_REFERENCE_URI = 2048
 _UNSAFE_MARKDOWN_URI_CHARACTERS = frozenset("()<>\\")
 
-_SEVERITY_ORDER = {
-    Severity.CRITICAL: 0,
-    Severity.HIGH: 1,
-    Severity.MEDIUM: 2,
-    Severity.LOW: 3,
-    Severity.INFORMATIONAL: 4,
-    Severity.UNKNOWN: 5,
-}
 _TOOL_REFERENCES = {
     "bandit": "https://bandit.readthedocs.io/",
     "semgrep": "https://semgrep.dev/docs/",
@@ -2352,8 +2345,15 @@ def _integrity_label(
     return f"observed, post-check unavailable ({short_digest}...)"
 
 
-def _finding_sort_key(finding: Finding) -> tuple[int, str]:
-    return (_SEVERITY_ORDER[finding.severity], finding.finding_id)
+def _finding_sort_key(finding: Finding) -> tuple[int, int, int, int, str]:
+    return finding_order_key(
+        finding_id=finding.finding_id,
+        severity=finding.severity,
+        classifications=finding.classifications,
+        evidence=finding.evidence,
+        blocking=finding.blocking,
+        status=finding.status,
+    )
 
 
 def _next_action(outcome: Outcome) -> str:
@@ -2386,23 +2386,11 @@ def _policy_decision_value(outcome: Outcome) -> str:
 
 
 def _finding_priority(finding: Finding) -> str:
-    intelligence = finding.evidence.get("risk_intelligence", {})
-    if isinstance(intelligence, dict) and intelligence.get("known_exploited"):
-        return "P0"
-    if "EPSS-HIGH" in finding.classifications and finding.severity in {
-        Severity.CRITICAL,
-        Severity.HIGH,
-        Severity.MEDIUM,
-    }:
-        return "P1"
-    return {
-        Severity.CRITICAL: "P0",
-        Severity.HIGH: "P1",
-        Severity.MEDIUM: "P2",
-        Severity.LOW: "P3",
-        Severity.INFORMATIONAL: "P4",
-        Severity.UNKNOWN: "P4",
-    }[finding.severity]
+    return finding_priority(
+        severity=finding.severity,
+        classifications=finding.classifications,
+        evidence=finding.evidence,
+    )
 
 
 def _owner_values(finding: Finding) -> list[str]:

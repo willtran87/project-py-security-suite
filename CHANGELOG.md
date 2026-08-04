@@ -5,6 +5,10 @@ for published releases.
 
 ## Unreleased
 
+- Make P0-P4 the authoritative finding order across Markdown, HTML, action
+  queues, terminal inspection, and inspection JSON, ensuring KEV and high-EPSS
+  escalation cannot be displayed below lower-priority native severities; add
+  concise decision context, summary, and impact to terminal actions.
 - Version inspection and inspection-verification contracts at 1.2 while
   retaining the frozen 1.0 and 1.1 schemas; prioritized findings now expose
   priority, blocking decision, confidence, area, description, and impact in

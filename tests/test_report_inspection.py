@@ -18,6 +18,7 @@ from py_security_suite.report_inspection import (
     _action_priority,
     _artifact_identity,
     _entrypoint_integrity,
+    _finding_key,
     _bounded_names,
     _line_number,
     _local_artifact_reference,
@@ -288,6 +289,9 @@ class ReportInspectionTests(unittest.TestCase):
         complete_rendered = render_inspection(complete_document)
         self.assertIn("FAIL: fixture", rendered)
         self.assertIn("[P1 HIGH/NEW] High fixture", rendered)
+        self.assertIn("Context: blocking; area injection; confidence high", rendered)
+        self.assertIn("Summary: Fixture description.", rendered)
+        self.assertIn("Impact: Fixture security impact.", rendered)
         self.assertIn("Decision: BLOCK; report integrity: VERIFIED", rendered)
         self.assertIn("1 blocking", rendered)
         self.assertIn(
@@ -322,6 +326,41 @@ class ReportInspectionTests(unittest.TestCase):
         self.assertIn(str(root.resolve() / "index.html"), local_rendered)
         self.assertIn(str(root.resolve() / "action-plan.md"), local_rendered)
         self.assertNotIn(str(root.resolve()), json.dumps(document))
+
+    def test_finding_order_uses_derived_priority_before_native_severity(self) -> None:
+        findings = [
+            {
+                "finding_id": "HIGH",
+                "severity": "high",
+                "blocking": True,
+                "status": "new",
+            },
+            {
+                "finding_id": "KEV-LOW",
+                "severity": "low",
+                "blocking": True,
+                "status": "new",
+                "evidence": {"risk_intelligence": {"known_exploited": ["CVE"]}},
+            },
+            {
+                "finding_id": "EPSS-MEDIUM",
+                "severity": "medium",
+                "blocking": True,
+                "status": "new",
+                "classifications": ["EPSS-HIGH"],
+            },
+            {
+                "finding_id": "MEDIUM",
+                "severity": "medium",
+                "blocking": True,
+                "status": "new",
+            },
+        ]
+        ordered = sorted(findings, key=_finding_key)
+        self.assertEqual(
+            [item["finding_id"] for item in ordered],
+            ["KEV-LOW", "HIGH", "EPSS-MEDIUM", "MEDIUM"],
+        )
 
     def test_terminal_text_and_citation_uris_are_safely_bounded(self) -> None:
         self.assertEqual(
