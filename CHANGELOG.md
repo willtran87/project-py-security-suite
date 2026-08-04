@@ -5,6 +5,10 @@ for published releases.
 
 ## Unreleased
 
+- Version inspection and inspection-verification contracts at 1.1 while retaining
+  the frozen 1.0 schemas for offline compatibility; prioritized machine-readable
+  actions now carry validated artifact path, SHA-256, and byte-size identity and
+  terminal inspection cites the same digest evidence.
 - Bind Cosign findings directly to the affected distribution SHA-256 and byte
   size, render copy-ready artifact identity evidence in Markdown and HTML, and
   replace source-line guidance that was misleading for binary or repository-

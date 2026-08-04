@@ -15,6 +15,7 @@ from jsonschema import (  # pylint: disable=import-error
 )
 
 from py_security_suite.report_inspection import (
+    _artifact_identity,
     _entrypoint_integrity,
     _bounded_names,
     _line_number,
@@ -34,12 +35,12 @@ from tests.report_fixtures import write_embedded_statement
 
 _INSPECTION_SCHEMA = json.loads(
     files("py_security_suite")
-    .joinpath("schemas", "report-inspection.schema.json")
+    .joinpath("schemas", "report-inspection-1.1.schema.json")
     .read_text(encoding="utf-8")
 )
 _INSPECTION_VERIFICATION_SCHEMA = json.loads(
     files("py_security_suite")
-    .joinpath("schemas", "report-inspection-verification.schema.json")
+    .joinpath("schemas", "report-inspection-verification-1.1.schema.json")
     .read_text(encoding="utf-8")
 )
 _REPORT_VERIFICATION_SCHEMA = json.loads(
@@ -52,19 +53,26 @@ _REPORT_VERIFICATION_SCHEMA = json.loads(
 class ReportInspectionTests(unittest.TestCase):
     def test_bundled_schema_catalog_is_version_explicit_and_valid(self) -> None:
         inspection_schema = json.loads(read_bundled_schema("report-inspection-1.0"))
+        inspection_schema_1_1 = json.loads(read_bundled_schema("report-inspection-1.1"))
         verification_schema = json.loads(
             read_bundled_schema("report-inspection-verification-1.0")
+        )
+        verification_schema_1_1 = json.loads(
+            read_bundled_schema("report-inspection-verification-1.1")
         )
         report_verification_schema = json.loads(
             read_bundled_schema("report-verification-1.0")
         )
         for schema in (
             inspection_schema,
+            inspection_schema_1_1,
             verification_schema,
+            verification_schema_1_1,
             report_verification_schema,
         ):
             Draft202012Validator.check_schema(schema)
-            self.assertTrue(str(schema["$id"]).endswith(":1.0"))
+        self.assertTrue(str(inspection_schema["$id"]).endswith(":1.0"))
+        self.assertTrue(str(inspection_schema_1_1["$id"]).endswith(":1.1"))
         with self.assertRaisesRegex(ValueError, "unknown schema"):
             read_bundled_schema("report-inspection-latest")
 
@@ -151,7 +159,7 @@ class ReportInspectionTests(unittest.TestCase):
 
         validator = Draft202012Validator(_INSPECTION_SCHEMA)
         validator.validate(document)
-        self.assertEqual(document["schema_version"], "1.0")
+        self.assertEqual(document["schema_version"], "1.1")
         self.assertEqual(document["schema_id"], _INSPECTION_SCHEMA["$id"])
         invalid = json.loads(json.dumps(document))
         invalid["entrypoint_integrity"]["actions"][0]["required_actions"] = [
@@ -229,6 +237,14 @@ class ReportInspectionTests(unittest.TestCase):
         )
         self.assertEqual(document["top_actions"][0]["citations"][2]["uri"], "")
         self.assertEqual(document["top_actions"][0]["owners"], ["@security"])
+        self.assertEqual(
+            document["top_actions"][0]["artifact_identity"],
+            {
+                "path": "dist/fixture.whl",
+                "sha256": "d" * 64,
+                "size_bytes": 2048,
+            },
+        )
         self.assertEqual(document["top_actions"][0]["details"], "index.html#PYSEC-HIGH")
         self.assertEqual(
             document["entrypoints"],
@@ -243,6 +259,7 @@ class ReportInspectionTests(unittest.TestCase):
         self.assertEqual(complete_document["top_actions"][1]["classifications"], [])
         self.assertEqual(complete_document["top_actions"][1]["citations"], [])
         self.assertEqual(complete_document["top_actions"][1]["owners"], [])
+        self.assertIsNone(complete_document["top_actions"][1]["artifact_identity"])
         rendered = render_inspection(document)
         complete_rendered = render_inspection(complete_document)
         self.assertIn("FAIL: fixture", rendered)
@@ -266,6 +283,7 @@ class ReportInspectionTests(unittest.TestCase):
             "finding PYSEC-HIGH; bandit/B602; classification CWE-78; owner @security",
             rendered,
         )
+        self.assertIn(f"artifact sha256:{'d' * 64} (2048 bytes)", rendered)
         self.assertIn(
             "Reference: CWE command injection - https://cwe.example/78", rendered
         )
@@ -338,6 +356,24 @@ class ReportInspectionTests(unittest.TestCase):
         self.assertEqual(_line_number(7), 7)
         self.assertIsNone(_line_number("7\x1b[31m"))
         self.assertIsNone(_line_number(True))
+        self.assertIsNone(
+            _artifact_identity(
+                {
+                    "artifact_path": "../outside.whl",
+                    "artifact_sha256": "a" * 64,
+                    "artifact_size_bytes": 1,
+                }
+            )
+        )
+        self.assertIsNone(
+            _artifact_identity(
+                {
+                    "artifact_path": "dist/example.whl",
+                    "artifact_sha256": "not-a-digest",
+                    "artifact_size_bytes": 1,
+                }
+            )
+        )
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self.assertEqual(
@@ -515,7 +551,12 @@ def _finding(
                 "uri": "javascript:alert(1)",
             },
         ],
-        "evidence": {"owners": ["@security"]},
+        "evidence": {
+            "owners": ["@security"],
+            "artifact_path": "dist/fixture.whl",
+            "artifact_sha256": "d" * 64,
+            "artifact_size_bytes": 2048,
+        },
         "remediation": "Remediate the fixture.",
     }
     if sparse:

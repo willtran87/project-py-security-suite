@@ -9,8 +9,8 @@ Markdown files in this directory are the canonical project documentation.
 | [Design](design.md) | Architecture, trust boundaries, data flow, policy model, report contract, and roadmap |
 | [Operations](operations.md) | Native no-Docker preparation, isolated installation, scanning, GitHub publication, and troubleshooting |
 | [Configuration](configuration.md) | TOML schema, profiles, policy layering, CLI flags, and exit codes |
-| [Inspection JSON Schema](../src/py_security_suite/schemas/report-inspection.schema.json) | Installable strict Draft 2020-12 contract for verified machine-readable report inspection |
-| [Inspection Verification Schema](../src/py_security_suite/schemas/report-inspection-verification.schema.json) | Strict portable receipt binding an inspection digest to a sealed report and action limit |
+| [Inspection JSON Schema](../src/py_security_suite/schemas/report-inspection-1.1.schema.json) | Current installable strict Draft 2020-12 contract for verified machine-readable report inspection |
+| [Inspection Verification Schema](../src/py_security_suite/schemas/report-inspection-verification-1.1.schema.json) | Current strict portable receipt binding an inspection digest to a sealed report and action limit |
 | [Report Verification Schema](../src/py_security_suite/schemas/report-verification.schema.json) | Strict portable receipt for complete report integrity and semantic verification |
 | [Compatibility and coverage matrix](compatibility-matrix.md) | Tool roles, overlap, applicability, platform support, limitations, and acquisition |
 | [Tool selection](tool-selection.md) | Admission criteria, added tools, rejected candidates, and review cadence |
@@ -22,11 +22,12 @@ Markdown files in this directory are the canonical project documentation.
 | [Contributing](../CONTRIBUTING.md) | Trust-model constraints, validation, and pull-request expectations |
 | [Changelog](../CHANGELOG.md) | Release-facing record of notable behavior and security changes |
 
-Installed consumers can retrieve all three report contracts without source-tree or
-network access via `pysec schema report-inspection-1.0` and
-`pysec schema report-inspection-verification-1.0`, or
+Installed consumers can retrieve current report contracts without source-tree
+or network access via `pysec schema report-inspection-1.1`,
+`pysec schema report-inspection-verification-1.1`, and
 `pysec schema report-verification-1.0`; add `--output FILE` for an atomic
-disconnected export.
+disconnected export. Frozen inspection 1.0 contracts remain available by their
+version-explicit names.
 
 ## Documentation rules
 
@@ -113,7 +114,7 @@ traversal rejection during distribution expansion, hardened XML evidence
 ingestion, archive-link rejection, governed risk acceptance, database
 freshness, detection validation, repository-health additions, trusted-lane
 evidence validation, and the SonarQube export. Combined line-and-branch
-coverage is 93.05%, and branch coverage is 86.69%, so both measures pass the
+coverage is 93.03%, and branch coverage is 86.67%, so both measures pass the
 80% policy threshold. No production source file remains below the per-file
 coverage reporting threshold.
 

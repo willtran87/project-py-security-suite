@@ -116,7 +116,7 @@ class CliSafetyTests(unittest.TestCase):
         schema = parser.parse_args(
             [
                 "schema",
-                "report-inspection-verification-1.0",
+                "report-inspection-verification-1.1",
                 "--output",
                 "schema.json",
                 "--overwrite",
@@ -127,13 +127,13 @@ class CliSafetyTests(unittest.TestCase):
         self.assertTrue(schema.overwrite)
 
     def test_schema_prints_and_atomically_exports_an_installed_contract(self) -> None:
-        schema_name = "report-inspection-1.0"
+        schema_name = "report-inspection-1.1"
         with patch("builtins.print") as output:
             self.assertEqual(main(["schema", schema_name]), 0)
         printed = output.call_args.args[0]
         self.assertEqual(
             json.loads(printed)["$id"],
-            "urn:project-py-security-suite:schema:report-inspection:1.0",
+            "urn:project-py-security-suite:schema:report-inspection:1.1",
         )
 
         with tempfile.TemporaryDirectory() as directory:

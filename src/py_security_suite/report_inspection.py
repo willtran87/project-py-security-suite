@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from collections import Counter
 from importlib.resources import files
 from pathlib import Path
@@ -15,17 +16,21 @@ from .path_safety import resolve_unlinked_path
 
 
 _MAX_JSON_BYTES = 128 * 1024 * 1024
-_INSPECTION_SCHEMA_ID = "urn:project-py-security-suite:schema:report-inspection:1.0"
+_INSPECTION_SCHEMA_ID = "urn:project-py-security-suite:schema:report-inspection:1.1"
 _INSPECTION_VERIFICATION_SCHEMA_ID = (
-    "urn:project-py-security-suite:schema:report-inspection-verification:1.0"
+    "urn:project-py-security-suite:schema:report-inspection-verification:1.1"
 )
 _REPORT_VERIFICATION_SCHEMA_ID = (
     "urn:project-py-security-suite:schema:report-verification:1.0"
 )
 BUNDLED_SCHEMA_RESOURCES = {
     "report-inspection-1.0": "report-inspection.schema.json",
+    "report-inspection-1.1": "report-inspection-1.1.schema.json",
     "report-inspection-verification-1.0": (
         "report-inspection-verification.schema.json"
+    ),
+    "report-inspection-verification-1.1": (
+        "report-inspection-verification-1.1.schema.json"
     ),
     "report-verification-1.0": "report-verification.schema.json",
 }
@@ -83,7 +88,7 @@ def inspect_report(report: Path, *, limit: int = 5) -> dict[str, Any]:
     policy_reasons = [_safe_text(reason) for reason in policy_reasons]
     sorted_findings = sorted(findings, key=_finding_key)
     return {
-        "schema_version": "1.0",
+        "schema_version": "1.1",
         "schema_id": _INSPECTION_SCHEMA_ID,
         "verified": True,
         "scan": _scan_summary(manifest, outcome),
@@ -122,7 +127,7 @@ def verify_inspection(
     if document != expected:
         raise ValueError("inspection document does not match the verified report")
     return {
-        "schema_version": "1.0",
+        "schema_version": "1.1",
         "schema_id": _INSPECTION_VERIFICATION_SCHEMA_ID,
         "verified": True,
         "inspection_schema_id": str(expected["schema_id"]),
@@ -311,6 +316,11 @@ def _action_evidence(item: dict[str, Any]) -> list[str]:
         evidence.append("classification " + ", ".join(item["classifications"]))
     if item["owners"]:
         evidence.append("owner " + ", ".join(item["owners"]))
+    artifact = item["artifact_identity"]
+    if artifact is not None:
+        evidence.append(
+            f"artifact sha256:{artifact['sha256']} ({artifact['size_bytes']} bytes)"
+        )
     return evidence
 
 
@@ -372,6 +382,7 @@ def _action(item: dict[str, Any]) -> dict[str, Any]:
         "classifications": _strings(item.get("classifications")),
         "citations": _citations(item.get("citations")),
         "owners": _owners(item.get("evidence")),
+        "artifact_identity": _artifact_identity(item.get("evidence")),
         "remediation": _safe_text(item.get("remediation") or ""),
         "details": f"index.html#{quote(finding_id, safe='')}",
     }
@@ -407,6 +418,28 @@ def _owners(value: object) -> list[str]:
     if not isinstance(value, dict) or not isinstance(value.get("owners"), list):
         return []
     return [_safe_text(owner) for owner in value["owners"]]
+
+
+def _artifact_identity(value: object) -> dict[str, object] | None:
+    if not isinstance(value, dict):
+        return None
+    path = value.get("artifact_path")
+    digest = value.get("artifact_sha256")
+    size = value.get("artifact_size_bytes")
+    if not isinstance(path, str) or not path or path == "<outside-target>":
+        return None
+    candidate = Path(path)
+    if candidate.is_absolute() or ".." in candidate.parts:
+        return None
+    if not isinstance(digest, str) or re.fullmatch(r"[0-9A-Fa-f]{64}", digest) is None:
+        return None
+    if not isinstance(size, int) or isinstance(size, bool) or size < 0:
+        return None
+    return {
+        "path": _safe_text(path),
+        "sha256": digest.casefold(),
+        "size_bytes": size,
+    }
 
 
 def _strings(value: object) -> list[str]:
