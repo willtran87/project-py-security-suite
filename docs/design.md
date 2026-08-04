@@ -74,6 +74,7 @@ flowchart LR
     Delta --> Statement["Security Passport statement"]
     Statement --> Approval["Separate approval signer"]
     Approval --> Signed["Cosign 2 detached signature<br/>or Cosign 3 bundle"]
+    Artifacts["Presented wheel and sdist"] --> Verify
     Signed --> Verify["Offline deployment verification"]
 ```
 
@@ -517,9 +518,9 @@ The native Windows self-scan process verifies:
   errors; 27 conditional scanners were correctly not applicable;
 - Pylint, Radon, Ruff formatting, coverage, and JUnit adapters executed through
   approved entry-point bindings and emitted normalized derived evidence;
-- the separately generated branch-coverage evidence records 92.32% combined
-  line-and-branch coverage and 85.25% branch coverage, satisfying both 80%
-  repository gates with no per-file hotspots; JUnit records 280 passing tests,
+- the separately generated branch-coverage evidence records 92.51% combined
+  line-and-branch coverage and 85.63% branch coverage, satisfying both 80%
+  repository gates with no per-file hotspots; JUnit records 282 passing tests,
   one platform-limited symlink skip, and no failures or errors;
 - CycloneDX completed from `uv.lock` through a frozen offline export with a
   hash-verified helper; zizmor, actionlint, Pysa, GuardDog, Flawfinder, and

@@ -5,6 +5,8 @@ for published releases.
 
 ## Unreleased
 
+- Require deployment-time hashing of every declared release-artifact subject
+  before a signed Security Passport can approve promotion.
 - Bind the embedded Security Passport's exact, duplicate-free source and
   distribution subject set to the validated artifact manifest.
 - Verify the embedded in-toto/SLSA Security Passport during report verification,

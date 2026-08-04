@@ -48,9 +48,18 @@ class CliSafetyTests(unittest.TestCase):
         )
         self.assertTrue(connected_attest.allow_signing_network)
         verify = parser.parse_args(
-            ["verify", "passport", "--allow-unsigned", "--format", "text"]
+            [
+                "verify",
+                "passport",
+                "--allow-unsigned",
+                "--artifact-root",
+                "payload",
+                "--format",
+                "text",
+            ]
         )
         self.assertEqual(verify.command, "verify")
+        self.assertEqual(verify.artifact_root, Path("payload"))
         self.assertEqual(verify.format, "text")
         doctor = parser.parse_args(["doctor", ".", "--format", "json"])
         self.assertEqual(doctor.command, "doctor")
@@ -116,8 +125,12 @@ class CliSafetyTests(unittest.TestCase):
             "outcome": "fail",
             "policy_verification_result": "FAILED",
             "release_decision": "not_approved",
+            "release_artifacts_required": True,
+            "release_artifacts_verified": False,
+            "release_artifacts_verified_count": 0,
             "release_blockers": [
                 "signer_authenticity_not_verified",
+                "release_artifacts_not_verified",
                 "scan_policy_not_satisfied",
             ],
         }
@@ -125,18 +138,29 @@ class CliSafetyTests(unittest.TestCase):
         self.assertIn("VERIFIED (integrity only)", rendered)
         self.assertIn("Policy: FAIL (FAILED)", rendered)
         self.assertIn("release decision: NOT APPROVED", rendered)
+        self.assertIn("release artifacts not supplied", rendered)
         self.assertIn("signer authenticity not verified", rendered)
 
         with (
             patch(
                 "py_security_suite.cli.verify_attestation",
                 return_value=verification,
-            ),
+            ) as verifier,
             patch("builtins.print") as output,
         ):
-            code = main(["verify", "passport", "--format", "text"])
+            code = main(
+                [
+                    "verify",
+                    "passport",
+                    "--artifact-root",
+                    "payload",
+                    "--format",
+                    "text",
+                ]
+            )
         self.assertEqual(code, 1)
         self.assertEqual(output.call_args.args[0], rendered)
+        self.assertEqual(verifier.call_args.kwargs["artifact_root"], Path("payload"))
 
         approved = {
             **verification,

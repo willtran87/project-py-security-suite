@@ -18,6 +18,7 @@ from .path_safety import resolve_regular_file as _regular_file
 from .path_safety import resolve_unlinked_path as _resolve_evidence_root
 
 _MAX_FILE_BYTES = 128 * 1024 * 1024
+_MAX_RELEASE_ARTIFACT_BYTES = 512 * 1024 * 1024
 _MAX_CHECKSUM_ENTRIES = 10_000
 _MAX_TREE_ENTRIES = 20_000
 _STATEMENT_NAME = "security-passport.json"
@@ -339,6 +340,7 @@ def verify_attestation(
     passport: Path,
     report: Path | None,
     public_key: Path | None,
+    artifact_root: Path | None = None,
     cosign_executable: str = "cosign",
     cosign_sha256: str = "",
     allow_unsigned: bool = False,
@@ -348,62 +350,27 @@ def verify_attestation(
     material = _read_json(passport / "verification-material.json")
     statement = _read_json(passport / _STATEMENT_NAME)
     _validate_statement(statement)
-    signed = material.get("signed") is True
-    authentic = False
-    if signed:
-        if public_key is None:
-            raise ValueError("a public key is required to verify the signed passport")
-        key = _regular_file(public_key, "public key")
-        signature_name = str(material.get("signature") or _SIGNATURE_NAME)
-        signature = passport / signature_name
-        if signature.parent != passport or not signature.is_file():
-            raise ValueError("passport signature material is missing or invalid")
-        executable = resolve_executable(cosign_executable)
-        if executable is None:
-            raise ValueError(f"Cosign executable is unavailable: {cosign_executable}")
-        executable_path = Path(executable).resolve()
-        before = sha256_file(executable_path)
-        if cosign_sha256 and before != cosign_sha256.lower():
-            raise ValueError("Cosign executable does not match the approved SHA-256")
-        command = [str(executable_path), "verify-blob", "--key", str(key)]
-        if material.get("signature_format") == "sigstore-bundle-v0.3":
-            command.extend(["--bundle", str(signature)])
-        else:
-            command.extend(["--signature", str(signature)])
-        command.append(str(passport / _STATEMENT_NAME))
-        result = run_command(
-            command,
-            cwd=passport,
-            timeout_seconds=120,
-            max_output_bytes=1024 * 1024,
-        )
-        if result.timed_out or result.exit_code != 0:
-            raise ValueError("Security Passport signature verification failed")
-        if sha256_file(executable_path) != before:
-            raise ValueError("Cosign executable changed while verifying")
-        authentic = True
-    elif not allow_unsigned:
-        raise ValueError(
-            "passport is unsigned; pass --allow-unsigned for integrity-only verification"
-        )
-
-    report_verification: dict[str, Any] | None = None
-    if report is not None:
-        report_root = _resolve_evidence_root(report, "report")
-        report_verification = verify_report(report_root)
-        expected = str(material.get("report_checksums_sha256") or "")
-        if report_verification["checksums_sha256"] != expected:
-            raise ValueError("report checksum manifest does not match the passport")
-        _verify_statement_inputs(statement, report_root)
+    artifact_subjects = _release_artifact_subjects(statement)
+    authentic = _verify_passport_authenticity(
+        passport=passport,
+        material=material,
+        public_key=public_key,
+        cosign_executable=cosign_executable,
+        cosign_sha256=cosign_sha256,
+        allow_unsigned=allow_unsigned,
+    )
+    report_verification = _verify_bound_report(report, material, statement)
+    release_artifacts_verified, release_artifacts_verified_count = (
+        _verify_presented_release_artifacts(artifact_root, artifact_subjects)
+    )
     policy_verification_result = str(statement["predicate"]["verificationResult"])
     policy_passed = policy_verification_result == "PASSED"
-    release_blockers: list[str] = []
-    if not authentic:
-        release_blockers.append("signer_authenticity_not_verified")
-    if report_verification is None:
-        release_blockers.append("source_report_not_verified")
-    if not policy_passed:
-        release_blockers.append("scan_policy_not_satisfied")
+    release_blockers = _release_blockers(
+        authentic=authentic,
+        report_verified=report_verification is not None,
+        artifacts_verified=release_artifacts_verified,
+        policy_passed=policy_passed,
+    )
     return {
         "schema_version": "1.0",
         "verified": True,
@@ -420,6 +387,9 @@ def verify_attestation(
         "integrity_only": not authentic,
         "passport_files_verified": verified_files,
         "report": report_verification,
+        "release_artifacts_required": bool(artifact_subjects),
+        "release_artifacts_verified": release_artifacts_verified,
+        "release_artifacts_verified_count": release_artifacts_verified_count,
         # Retain the original name for API compatibility. This is the SLSA
         # policy result, not the outcome of checksum or signature verification.
         "verification_result": policy_verification_result,
@@ -429,6 +399,140 @@ def verify_attestation(
         "release_decision": "approved" if not release_blockers else "not_approved",
         "release_blockers": release_blockers,
     }
+
+
+def _verify_passport_authenticity(
+    *,
+    passport: Path,
+    material: dict[str, Any],
+    public_key: Path | None,
+    cosign_executable: str,
+    cosign_sha256: str,
+    allow_unsigned: bool,
+) -> bool:
+    if material.get("signed") is not True:
+        if not allow_unsigned:
+            raise ValueError(
+                "passport is unsigned; pass --allow-unsigned for integrity-only "
+                "verification"
+            )
+        return False
+    if public_key is None:
+        raise ValueError("a public key is required to verify the signed passport")
+    key = _regular_file(public_key, "public key")
+    signature_name = str(material.get("signature") or _SIGNATURE_NAME)
+    signature = passport / signature_name
+    if signature.parent != passport or not signature.is_file():
+        raise ValueError("passport signature material is missing or invalid")
+    executable = resolve_executable(cosign_executable)
+    if executable is None:
+        raise ValueError(f"Cosign executable is unavailable: {cosign_executable}")
+    executable_path = Path(executable).resolve()
+    before = sha256_file(executable_path)
+    if cosign_sha256 and before != cosign_sha256.lower():
+        raise ValueError("Cosign executable does not match the approved SHA-256")
+    command = [str(executable_path), "verify-blob", "--key", str(key)]
+    option = (
+        "--bundle"
+        if material.get("signature_format") == "sigstore-bundle-v0.3"
+        else "--signature"
+    )
+    command.extend([option, str(signature), str(passport / _STATEMENT_NAME)])
+    result = run_command(
+        command,
+        cwd=passport,
+        timeout_seconds=120,
+        max_output_bytes=1024 * 1024,
+    )
+    if result.timed_out or result.exit_code != 0:
+        raise ValueError("Security Passport signature verification failed")
+    if sha256_file(executable_path) != before:
+        raise ValueError("Cosign executable changed while verifying")
+    return True
+
+
+def _verify_bound_report(
+    report: Path | None,
+    material: dict[str, Any],
+    statement: dict[str, Any],
+) -> dict[str, Any] | None:
+    if report is None:
+        return None
+    report_root = _resolve_evidence_root(report, "report")
+    verification = verify_report(report_root)
+    expected = str(material.get("report_checksums_sha256") or "")
+    if verification["checksums_sha256"] != expected:
+        raise ValueError("report checksum manifest does not match the passport")
+    _verify_statement_inputs(statement, report_root)
+    return verification
+
+
+def _verify_presented_release_artifacts(
+    artifact_root: Path | None, artifact_subjects: dict[str, str]
+) -> tuple[bool | None, int]:
+    if not artifact_subjects:
+        if artifact_root is not None:
+            raise ValueError("passport does not declare release artifact subjects")
+        return None, 0
+    if artifact_root is None:
+        return False, 0
+    return True, _verify_release_artifacts(artifact_root, artifact_subjects)
+
+
+def _release_blockers(
+    *,
+    authentic: bool,
+    report_verified: bool,
+    artifacts_verified: bool | None,
+    policy_passed: bool,
+) -> list[str]:
+    candidates = (
+        (not authentic, "signer_authenticity_not_verified"),
+        (not report_verified, "source_report_not_verified"),
+        (artifacts_verified is False, "release_artifacts_not_verified"),
+        (not policy_passed, "scan_policy_not_satisfied"),
+    )
+    return [blocker for blocked, blocker in candidates if blocked]
+
+
+def _release_artifact_subjects(statement: dict[str, Any]) -> dict[str, str]:
+    subjects = statement.get("subject")
+    if not isinstance(subjects, list):
+        raise ValueError("Security Passport subject set is invalid")
+    digests = _subject_digest_map(subjects)
+    source_names = [
+        name for name in digests if name.startswith("source:") and name != "source:"
+    ]
+    if len(source_names) != 1:
+        raise ValueError("Security Passport requires exactly one source subject")
+    artifacts = {
+        name: digest for name, digest in digests.items() if name not in source_names
+    }
+    for name in artifacts:
+        _safe_relative(name)
+    return artifacts
+
+
+def _verify_release_artifacts(
+    artifact_root: Path, artifact_subjects: dict[str, str]
+) -> int:
+    root = _resolve_evidence_root(artifact_root, "release artifact root")
+    if not root.is_dir() or root.is_symlink():
+        raise ValueError(f"release artifact root is not a regular directory: {root}")
+    for name, expected in artifact_subjects.items():
+        relative = _safe_relative(name)
+        path = _resolve_evidence_root(
+            root / relative,
+            f"release artifact {name}",
+            boundary=root,
+        )
+        if not path.is_file() or path.is_symlink():
+            raise ValueError(f"release artifact is unavailable: {name}")
+        if path.stat().st_size > _MAX_RELEASE_ARTIFACT_BYTES:
+            raise ValueError(f"release artifact is too large: {name}")
+        if sha256_file(path) != expected:
+            raise ValueError(f"release artifact digest mismatch: {name}")
+    return len(artifact_subjects)
 
 
 def _cosign_major_version(executable: Path, cwd: Path) -> int:

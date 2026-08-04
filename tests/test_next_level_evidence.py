@@ -24,12 +24,15 @@ from py_security_suite.passport import (
     _cosign_major_version,
     _prepare_directory,
     _read_json,
+    _release_artifact_subjects,
     _read_signing_password,
     _regular_file,
     _safe_relative,
     _statement_subjects,
     _validate_statement,
     _verify_checksums,
+    _verify_bound_report,
+    _verify_passport_authenticity,
     _verify_statement_manifest_binding,
     _verify_statement_subjects,
     _verify_statement_inputs,
@@ -834,6 +837,127 @@ class PassportTests(unittest.TestCase):
             )
             self.assertIsNone(unbound["report_integrity_verified"])
             self.assertIn("source_report_not_verified", unbound["release_blockers"])
+            with self.assertRaisesRegex(ValueError, "does not declare release"):
+                verify_attestation(
+                    passport=passport,
+                    report=report,
+                    public_key=None,
+                    artifact_root=root,
+                    allow_unsigned=True,
+                )
+
+    def test_passport_verifies_presented_release_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            artifact_root = root / "payload"
+            artifact = artifact_root / "dist" / "example-1.0-py3-none-any.whl"
+            artifact.parent.mkdir(parents=True)
+            artifact.write_bytes(b"approved release artifact")
+            report = _fixture_report(root)
+            (report / "artifact-manifest.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": "1.0",
+                        "algorithm": "sha256",
+                        "artifacts": [
+                            {
+                                "path": "dist/example-1.0-py3-none-any.whl",
+                                "sha256": _digest(artifact),
+                                "size_bytes": artifact.stat().st_size,
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            manifest = json.loads(
+                (report / "scan-manifest.json").read_text(encoding="utf-8")
+            )
+            write_embedded_statement(report, manifest)
+            _write_checksums(report)
+            passport = root / "passport"
+            create_attestation(report=report, output=passport, signing_key=None)
+
+            missing = verify_attestation(
+                passport=passport,
+                report=report,
+                public_key=None,
+                allow_unsigned=True,
+            )
+            self.assertTrue(missing["release_artifacts_required"])
+            self.assertFalse(missing["release_artifacts_verified"])
+            self.assertEqual(missing["release_artifacts_verified_count"], 0)
+            self.assertIn("release_artifacts_not_verified", missing["release_blockers"])
+
+            verified = verify_attestation(
+                passport=passport,
+                report=report,
+                public_key=None,
+                artifact_root=artifact_root,
+                allow_unsigned=True,
+            )
+            self.assertTrue(verified["release_artifacts_verified"])
+            self.assertEqual(verified["release_artifacts_verified_count"], 1)
+            self.assertNotIn(
+                "release_artifacts_not_verified", verified["release_blockers"]
+            )
+            with (
+                patch("py_security_suite.passport._MAX_RELEASE_ARTIFACT_BYTES", 1),
+                self.assertRaisesRegex(ValueError, "artifact is too large"),
+            ):
+                verify_attestation(
+                    passport=passport,
+                    report=report,
+                    public_key=None,
+                    artifact_root=artifact_root,
+                    allow_unsigned=True,
+                )
+            invalid_root = root / "payload-file"
+            invalid_root.write_text("not a directory", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "not a regular directory"):
+                verify_attestation(
+                    passport=passport,
+                    report=report,
+                    public_key=None,
+                    artifact_root=invalid_root,
+                    allow_unsigned=True,
+                )
+
+            artifact.write_bytes(b"tampered")
+            with self.assertRaisesRegex(ValueError, "artifact digest mismatch"):
+                verify_attestation(
+                    passport=passport,
+                    report=report,
+                    public_key=None,
+                    artifact_root=artifact_root,
+                    allow_unsigned=True,
+                )
+            artifact.unlink()
+            with self.assertRaisesRegex(ValueError, "artifact is unavailable"):
+                verify_attestation(
+                    passport=passport,
+                    report=report,
+                    public_key=None,
+                    artifact_root=artifact_root,
+                    allow_unsigned=True,
+                )
+
+            digest = {"sha256": "a" * 64}
+            with self.assertRaisesRegex(ValueError, "subject set is invalid"):
+                _release_artifact_subjects({"subject": {}})
+            with self.assertRaisesRegex(ValueError, "exactly one source"):
+                _release_artifact_subjects(
+                    {"subject": [{"name": "dist/example.whl", "digest": digest}]}
+                )
+            with self.assertRaisesRegex(ValueError, "unsafe evidence path"):
+                _release_artifact_subjects(
+                    {
+                        "subject": [
+                            {"name": "source:fixture", "digest": digest},
+                            {"name": "../example.whl", "digest": digest},
+                        ]
+                    }
+                )
 
     def test_unsigned_passport_verifies_report_and_detects_tampering(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -941,6 +1065,101 @@ class PassportTests(unittest.TestCase):
             self.assertTrue(verified["policy_passed"])
             self.assertEqual(verified["release_decision"], "approved")
             self.assertEqual(verified["release_blockers"], [])
+
+    def test_passport_authenticity_and_report_binding_fail_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            passport = root / "passport"
+            passport.mkdir()
+            statement = passport / "security-passport.json"
+            statement.write_text("{}", encoding="utf-8")
+            signature = passport / "security-passport.sig"
+            signature.write_text("signature", encoding="utf-8")
+            key = root / "cosign.pub"
+            key.write_text("public key", encoding="utf-8")
+            cosign = root / "cosign.exe"
+            cosign.write_bytes(b"approved verifier")
+            material = {"signed": True, "signature": signature.name}
+
+            def verify_authenticity(
+                public_key: Path | None = key, cosign_sha256: str = ""
+            ) -> bool:
+                return _verify_passport_authenticity(
+                    passport=passport,
+                    material=material,
+                    public_key=public_key,
+                    cosign_executable=str(cosign),
+                    cosign_sha256=cosign_sha256,
+                    allow_unsigned=False,
+                )
+
+            with self.assertRaisesRegex(ValueError, "public key is required"):
+                verify_authenticity(public_key=None)
+            signature.unlink()
+            with self.assertRaisesRegex(ValueError, "signature material"):
+                verify_authenticity()
+            signature.write_text("signature", encoding="utf-8")
+            with (
+                patch(
+                    "py_security_suite.passport.resolve_executable", return_value=None
+                ),
+                self.assertRaisesRegex(ValueError, "executable is unavailable"),
+            ):
+                verify_authenticity()
+            with (
+                patch(
+                    "py_security_suite.passport.resolve_executable",
+                    return_value=str(cosign),
+                ),
+                self.assertRaisesRegex(ValueError, "approved SHA-256"),
+            ):
+                verify_authenticity(cosign_sha256="0" * 64)
+            for execution in (
+                RawExecution([str(cosign)], 1, "", "failed", 0.01),
+                RawExecution([str(cosign)], None, "", "", 0.01, timed_out=True),
+            ):
+                with (
+                    self.subTest(execution=execution),
+                    patch(
+                        "py_security_suite.passport.resolve_executable",
+                        return_value=str(cosign),
+                    ),
+                    patch(
+                        "py_security_suite.passport.run_command",
+                        return_value=execution,
+                    ),
+                    self.assertRaisesRegex(ValueError, "signature verification failed"),
+                ):
+                    verify_authenticity()
+            with (
+                patch(
+                    "py_security_suite.passport.resolve_executable",
+                    return_value=str(cosign),
+                ),
+                patch(
+                    "py_security_suite.passport.run_command",
+                    return_value=RawExecution(
+                        [str(cosign)], 0, "Verified OK", "", 0.01
+                    ),
+                ),
+                patch(
+                    "py_security_suite.passport.sha256_file",
+                    side_effect=["a" * 64, "b" * 64],
+                ),
+                self.assertRaisesRegex(ValueError, "changed while verifying"),
+            ):
+                verify_authenticity()
+
+            report = _fixture_report(root)
+            report_statement = json.loads(
+                (report / "security-passport.json").read_text(encoding="utf-8")
+            )
+            with self.assertRaisesRegex(ValueError, "does not match the passport"):
+                _verify_bound_report(
+                    report,
+                    {"report_checksums_sha256": "0" * 64},
+                    report_statement,
+                )
 
     def test_verified_failed_policy_is_not_mislabeled_as_integrity_failure(
         self,

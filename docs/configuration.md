@@ -292,7 +292,9 @@ Its exact source and distribution subject set must also agree with the validated
 `artifact-manifest.json`; missing, duplicate, invented, or altered subjects are
 rejected.
 `verify` accepts a detached passport **directory** created by `attest`, not the
-embedded `security-passport.json` statement file.
+embedded `security-passport.json` statement file. When the Passport declares
+distribution subjects, `verify --artifact-root ROOT` must resolve and hash each
+subject path beneath `ROOT`; omission blocks approval.
 
 `inspect` performs the same integrity verification, then presents a bounded
 operational summary of outcome, scanner health, severity, domains, lifecycle,

@@ -601,8 +601,11 @@ severity. VEX state is displayed but never suppresses a finding by itself.
 After the isolated scan, move the complete report into an approval lane. Keep
 the release private key and optional password file outside the checkout and
 report. Run `pysec attest`, then move the signed passport, report, approved
-public key, and approved Cosign executable into the deployment boundary. Run
-`pysec verify` before promotion. Verification failure rejects the release.
+public key, approved Cosign executable, and release payload tree into the
+deployment boundary. Run `pysec verify PASSPORT --report REPORT --artifact-root
+PAYLOAD_ROOT` before promotion. Each artifact subject path must exist beneath
+that root as a regular, unlinked file with the signed digest. Verification
+failure rejects the release.
 
 At the first handoff, validate the report itself with
 `pysec verify-report REPORT`. This checks every checksum entry, requires the
@@ -612,9 +615,10 @@ linked declared evidence is rejected. The embedded in-toto/SLSA statement must
 bind every report input and agree with the manifest's source, policy, outcome,
 finding counts, and tool statuses. Its exact source and release-artifact subject
 set must agree with the source inventory and `artifact-manifest.json`.
-`pysec verify PASSPORT --report REPORT` is
-the stronger detached passport operation and expects `PASSPORT` to be a
-directory created by `pysec attest`.
+`pysec verify PASSPORT --report REPORT --artifact-root PAYLOAD_ROOT` is the
+stronger detached passport operation and expects `PASSPORT` to be a directory
+created by `pysec attest`. If the statement has artifact subjects, omitting the
+payload root returns the stable `release_artifacts_not_verified` blocker.
 
 For environments where the approval signer is a separate service, use
 `pysec attest REPORT --output PASSPORT --unsigned`, sign

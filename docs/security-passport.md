@@ -146,10 +146,17 @@ Verify it with the original report:
 
 ```text
 pysec verify PASSPORT --report REPORT \
+  --artifact-root PAYLOAD_ROOT \
   --public-key APPROVED_PUBLIC_KEY \
   --cosign-executable APPROVED_COSIGN \
   --cosign-sha256 APPROVED_COSIGN_SHA256
 ```
+
+`PAYLOAD_ROOT` reproduces the repository-relative paths recorded as artifact
+subjects. Verification resolves every path beneath that boundary, rejects links
+and files larger than the governed limit, and recomputes each SHA-256. A signed
+Passport with artifact subjects cannot approve release until these presented
+files verify.
 
 Add `--format text` for a concise operator decision. JSON remains the default
 for integrations. Verification output deliberately separates five concepts:
@@ -159,6 +166,7 @@ for integrations. Verification output deliberately separates five concepts:
 | `verification_status` | Passport checksum and structure verification completed |
 | `verification_scope` | `integrity-only` or `authenticity-and-integrity` |
 | `report_integrity_verified` | The supplied source report and every bound input digest verified |
+| `release_artifacts_verified` | Every declared wheel/sdist subject was found and hashed beneath `--artifact-root` |
 | `policy_verification_result` | The SLSA policy result: `PASSED` or `FAILED` |
 | `release_decision` | `approved` only when authenticity, source-report verification, and policy all pass |
 
@@ -170,7 +178,7 @@ machine-readable identifiers.
 For example, a valid unsigned passport bound to a failing report produces:
 
 ```text
-VERIFIED (integrity only): 2 passport files; 88 report files
+VERIFIED (integrity only): 2 passport files; 88 report files; 2 release artifacts
 Policy: FAIL (FAILED); release decision: NOT APPROVED
 Blockers: signer authenticity not verified; scan policy not satisfied
 ```

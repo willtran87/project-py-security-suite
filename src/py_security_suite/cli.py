@@ -136,6 +136,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="portable passport directory created by 'pysec attest'",
     )
     verify.add_argument("--report", type=Path, metavar="REPORT_DIRECTORY")
+    verify.add_argument(
+        "--artifact-root",
+        type=Path,
+        metavar="DIRECTORY",
+        help="root containing release files at their Passport subject paths",
+    )
     verify.add_argument("--public-key", type=Path)
     verify.add_argument("--cosign-executable", default="cosign")
     verify.add_argument("--cosign-sha256", default="")
@@ -223,6 +229,7 @@ def main(argv: list[str] | None = None) -> int:
                 passport=args.passport,
                 report=args.report,
                 public_key=args.public_key,
+                artifact_root=args.artifact_root,
                 cosign_executable=args.cosign_executable,
                 cosign_sha256=args.cosign_sha256,
                 allow_unsigned=args.allow_unsigned,
@@ -351,6 +358,14 @@ def _render_attestation_verification(verification: dict[str, object]) -> str:
     report_detail = "source report not supplied"
     if isinstance(report, dict):
         report_detail = f"{int(report.get('file_count') or 0)} report files"
+    artifact_count = int(str(verification.get("release_artifacts_verified_count") or 0))
+    artifact_detail = "release artifacts not declared"
+    if verification.get("release_artifacts_required") is True:
+        artifact_detail = (
+            f"{artifact_count} release artifacts"
+            if verification.get("release_artifacts_verified") is True
+            else "release artifacts not supplied"
+        )
     outcome = str(verification.get("outcome") or "unknown").upper()
     policy = str(
         verification.get("policy_verification_result")
@@ -361,7 +376,8 @@ def _render_attestation_verification(verification: dict[str, object]) -> str:
         "_", " "
     )
     lines = [
-        f"VERIFIED ({scope}): {passport_files} passport files; {report_detail}",
+        f"VERIFIED ({scope}): {passport_files} passport files; "
+        f"{report_detail}; {artifact_detail}",
         f"Policy: {outcome} ({policy}); release decision: {decision.upper()}",
     ]
     blockers = verification.get("release_blockers")

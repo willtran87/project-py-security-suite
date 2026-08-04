@@ -316,21 +316,30 @@ manifest, every passport input digest, policy digest, and artifact subjects:
 ```powershell
 pysec verify .artifacts\release-passport `
   --report .artifacts\release-scan `
+  --artifact-root C:\release\payload-root `
   --public-key C:\trust\release.pub `
   --cosign-executable C:\approved\cosign.exe `
   --cosign-sha256 APPROVED_COSIGN_SHA256 `
   --format text
 ```
 
+`--artifact-root` is the directory beneath which each repository-relative
+Passport subject path exists. Verification rejects missing, linked, oversized,
+or digest-mismatched release files. When artifact subjects are declared,
+omitting this root produces `release_artifacts_not_verified` and cannot approve
+promotion.
+
 `--unsigned` and `--allow-unsigned` support a clearly labeled integrity-only
 handoff; they never claim signer authenticity. See the
 [Security Passport and risk intelligence guide](docs/security-passport.md).
 The verification response separates transport integrity, signer authenticity,
-source-report verification, policy outcome, and release approval so a valid
-passport for a blocked scan is never mislabeled as an integrity failure.
+source-report verification, presented-release-artifact verification, policy
+outcome, and release approval so a valid passport for a blocked scan is never
+mislabeled as an integrity failure.
 The command exits `0` only for `release_decision: approved`; a verified passport
-that is unsigned, lacks its source report, or carries a failing scan policy exits
-`1` so a CI promotion gate cannot mistake transport integrity for approval.
+that is unsigned, lacks its source report or required release artifacts, or
+carries a failing scan policy exits `1` so a CI promotion gate cannot mistake
+transport integrity for approval.
 `action-plan.md` separates
 finding remediation from scanner-coverage restoration and policy evidence.
 `assurance-case.md` distinguishes evidence demonstrated by the scan from
