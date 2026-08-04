@@ -182,6 +182,17 @@ def build_parser() -> argparse.ArgumentParser:
         default=5,
         help="expected prioritized-action limit used during export (0-100)",
     )
+    verify_inspection_parser.add_argument(
+        "--output",
+        type=Path,
+        metavar="FILE",
+        help="atomically write the portable JSON verification receipt",
+    )
+    verify_inspection_parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="replace an existing verification receipt",
+    )
 
     inspect = subparsers.add_parser(
         "inspect", help="verify and summarize an existing report"
@@ -289,15 +300,19 @@ def main(argv: list[str] | None = None) -> int:
                 )
             return 0
         if args.command == "verify-inspection":
+            if args.overwrite and not args.output:
+                raise ValueError("verify-inspection --overwrite requires --output")
+            if args.output and args.format != "json":
+                raise ValueError("verify-inspection --output requires --format json")
             verification = verify_inspection(
                 args.inspection,
                 report=args.report,
                 limit=args.limit,
             )
-            if args.format == "json":
-                print(json.dumps(verification, indent=2, sort_keys=True))
-            else:
-                print(
+            rendered = (
+                json.dumps(verification, indent=2, sort_keys=True)
+                if args.format == "json"
+                else (
                     "VERIFIED: inspection for scan "
                     f"{verification['scan_id']}; "
                     f"{verification['top_actions_verified']} prioritized actions "
@@ -305,6 +320,15 @@ def main(argv: list[str] | None = None) -> int:
                     "report checksum "
                     f"{verification['report_checksums_sha256']}"
                 )
+            )
+            if args.output:
+                _write_inspection_output(
+                    report=args.report,
+                    output=args.output,
+                    content=rendered,
+                    overwrite=args.overwrite,
+                )
+            print(rendered)
             return 0
         if args.command == "inspect":
             if args.overwrite and not args.output:

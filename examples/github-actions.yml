@@ -53,7 +53,10 @@ jobs:
             > /dev/null
           python -m py_security_suite verify-inspection \
             python-security-report-inspection.json \
-            --report python-security-report
+            --report python-security-report \
+            --format json \
+            --output python-security-report-inspection-verification.json \
+            > /dev/null
 
       - name: Upload the complete sanitized report and inspection
         if: always()
@@ -63,6 +66,7 @@ jobs:
           path: |
             python-security-report/
             python-security-report-inspection.json
+            python-security-report-inspection-verification.json
           if-no-files-found: error
 
       - name: Publish SARIF when code scanning is enabled

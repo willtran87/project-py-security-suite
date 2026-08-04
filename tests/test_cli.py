@@ -75,11 +75,16 @@ class CliSafetyTests(unittest.TestCase):
                 "report",
                 "--format",
                 "json",
+                "--output",
+                "verification.json",
+                "--overwrite",
             ]
         )
         self.assertEqual(verify_inspection.command, "verify-inspection")
         self.assertEqual(verify_inspection.inspection, Path("inspection.json"))
         self.assertEqual(verify_inspection.report, Path("report"))
+        self.assertEqual(verify_inspection.output, Path("verification.json"))
+        self.assertTrue(verify_inspection.overwrite)
         inspect = parser.parse_args(
             [
                 "inspect",
@@ -148,7 +153,8 @@ class CliSafetyTests(unittest.TestCase):
         verification = {
             "schema_version": "1.0",
             "verified": True,
-            "schema_id": "urn:inspection",
+            "schema_id": "urn:inspection-verification",
+            "inspection_schema_id": "urn:inspection",
             "scan_id": "scan-fixture",
             "inspection_sha256": "a" * 64,
             "report_checksums_sha256": "b" * 64,
@@ -185,6 +191,7 @@ class CliSafetyTests(unittest.TestCase):
                 "py_security_suite.cli.verify_inspection",
                 return_value=verification,
             ),
+            patch("py_security_suite.cli._write_inspection_output") as writer,
             patch("builtins.print") as output,
         ):
             code = main(
@@ -195,10 +202,40 @@ class CliSafetyTests(unittest.TestCase):
                     "report",
                     "--format",
                     "json",
+                    "--output",
+                    "verification.json",
                 ]
             )
         self.assertEqual(code, 0)
         self.assertEqual(json.loads(output.call_args.args[0]), verification)
+        writer.assert_called_once_with(
+            report=Path("report"),
+            output=Path("verification.json"),
+            content=json.dumps(verification, indent=2, sort_keys=True),
+            overwrite=False,
+        )
+
+        for options, expected in (
+            (["--overwrite"], "--overwrite requires --output"),
+            (["--output", "verification.json"], "--output requires --format json"),
+        ):
+            with (
+                self.subTest(options=options),
+                patch("py_security_suite.cli.verify_inspection") as verifier,
+                patch("builtins.print") as error_output,
+            ):
+                code = main(
+                    [
+                        "verify-inspection",
+                        "inspection.json",
+                        "--report",
+                        "report",
+                        *options,
+                    ]
+                )
+            self.assertEqual(code, 3)
+            verifier.assert_not_called()
+            self.assertIn(expected, error_output.call_args.args[0])
 
     def test_passport_verification_text_separates_integrity_policy_and_approval(
         self,

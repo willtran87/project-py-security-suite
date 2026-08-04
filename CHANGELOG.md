@@ -14,7 +14,8 @@ for published releases.
   sidecar export that cannot alter the sealed source report; the GitHub Actions
   reference publishes that sidecar with the complete report, using portable
   artifact-relative links without runner workspace disclosure; offline
-  verification recomputes and binds its exact semantics to the sealed report.
+  verification recomputes and binds its exact semantics to the sealed report,
+  then emits a separately schema-governed portable verification receipt.
 - Emit stable, structured JSON errors for machine-readable CLI commands and
   redact, bound, and neutralize operator-facing error text.
 - Reject undeclared wheel, sdist, or zip files beside governed release subjects

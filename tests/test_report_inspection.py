@@ -35,6 +35,11 @@ _INSPECTION_SCHEMA = json.loads(
     .joinpath("schemas", "report-inspection.schema.json")
     .read_text(encoding="utf-8")
 )
+_INSPECTION_VERIFICATION_SCHEMA = json.loads(
+    files("py_security_suite")
+    .joinpath("schemas", "report-inspection-verification.schema.json")
+    .read_text(encoding="utf-8")
+)
 
 
 class ReportInspectionTests(unittest.TestCase):
@@ -56,7 +61,17 @@ class ReportInspectionTests(unittest.TestCase):
             report = relocated_report
 
             verification = verify_inspection(inspection, report=report, limit=1)
+            Draft202012Validator.check_schema(_INSPECTION_VERIFICATION_SCHEMA)
+            Draft202012Validator(_INSPECTION_VERIFICATION_SCHEMA).validate(verification)
             self.assertTrue(verification["verified"])
+            self.assertEqual(
+                verification["schema_id"],
+                _INSPECTION_VERIFICATION_SCHEMA["$id"],
+            )
+            self.assertEqual(
+                verification["inspection_schema_id"],
+                _INSPECTION_SCHEMA["$id"],
+            )
             self.assertEqual(verification["scan_id"], "scan-fixture")
             self.assertEqual(verification["top_actions_verified"], 1)
             self.assertEqual(verification["action_limit"], 1)

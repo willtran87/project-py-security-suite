@@ -345,8 +345,9 @@ commit SHA and replace the isolation placeholder with an organization-owned
 boundary check.
 
 The workflow preserves the suite exit code, publishes the Markdown summary,
-exports the verified inspection beside the sealed report, uploads both as one
-artifact, publishes SARIF, and only then applies the policy result. The bundled
+exports the inspection and its verification receipt beside the sealed report,
+uploads all three as one artifact, publishes SARIF, and only then applies the
+policy result. The bundled
 Actionlint policy recognizes the template's `pysec-isolated` self-hosted runner
 label so the distributed example validates without weakening runner isolation.
 
@@ -363,7 +364,7 @@ sequenceDiagram
     Job->>Scan: Run scan and save exit code
     Scan-->>Job: Report directory
     Job->>Scan: Export sidecar and verify exact report semantics
-    Job->>Artifact: Upload report and inspection
+    Job->>Artifact: Upload report, inspection, and receipt
     Job->>SARIF: Upload results.sarif
     Job->>Job: Exit with saved policy code
 ```
@@ -582,7 +583,9 @@ pysec inspect .artifacts\release-scan `
   --format json `
   --output .artifacts\release-scan-inspection.json
 pysec verify-inspection .artifacts\release-scan-inspection.json `
-  --report .artifacts\release-scan
+  --report .artifacts\release-scan `
+  --format json `
+  --output .artifacts\release-scan-inspection-verification.json
 ```
 
 The output is created atomically and is never permitted inside the report's
@@ -590,7 +593,9 @@ exact-file checksum boundary. A pre-existing sidecar is retained unless the
 operator explicitly supplies `--overwrite`. JSON links remain relative to the
 report directory and therefore work after the report and sidecar are downloaded
 or relocated together; terminal output resolves those links on the current
-machine. The quick view reports how many
+machine. The schema-governed verification receipt is also kept outside the
+sealed report and should travel with the report and inspection sidecar. The
+quick view reports how many
 scanner and helper entry points were cryptographically approved and unchanged,
 how many were observed unchanged after execution, and any missing post-checks.
 Treat “observed unchanged” as useful tamper evidence, not organizational

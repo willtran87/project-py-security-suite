@@ -89,6 +89,8 @@ terminal rendering performs local resolution only at the presentation edge.
 Offline sidecar verification recomputes this normalized view from the sealed
 report and requires exact semantic equality, binding the sidecar digest to the
 report checksum digest without confusing consistency with signer authenticity.
+A separate strict receipt schema makes that successful comparison portable and
+archivable without adding derived content to the sealed report.
 
 ```mermaid
 flowchart LR
@@ -543,8 +545,8 @@ The native Windows self-scan process verifies:
   errors; 27 conditional scanners were correctly not applicable;
 - Pylint, Radon, Ruff formatting, coverage, and JUnit adapters executed through
   approved entry-point bindings and emitted normalized derived evidence;
-- the separately generated branch-coverage evidence records 92.92% combined
-  line-and-branch coverage and 86.41% branch coverage, satisfying both 80%
+- the separately generated branch-coverage evidence records 92.93% combined
+  line-and-branch coverage and 86.44% branch coverage, satisfying both 80%
   repository gates with no per-file hotspots; JUnit records 291 passing tests,
   one platform-limited symlink skip, and no failures or errors;
 - CycloneDX completed from `uv.lock` through a frozen offline export with a

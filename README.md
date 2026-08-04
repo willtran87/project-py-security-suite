@@ -93,7 +93,8 @@ changing the sealed report:
 pysec inspect PATH_TO_REPORT --format json \
   --output PATH_TO_REPORT-inspection.json
 pysec verify-inspection PATH_TO_REPORT-inspection.json \
-  --report PATH_TO_REPORT
+  --report PATH_TO_REPORT --format json \
+  --output PATH_TO_REPORT-inspection-verification.json
 ```
 
 `inspect` verifies the report checksum chain before showing the `ALLOW`,
@@ -122,6 +123,9 @@ report-checksum binding. Use the same explicit `--limit` on export and
 verification when overriding the default, so the sidecar cannot suppress
 actions and choose its own comparison depth. This proves
 consistency, not signer authenticity; use the Security Passport for approval.
+The verification receipt has its own installable strict
+[Draft 2020-12 JSON Schema](src/py_security_suite/schemas/report-inspection-verification.schema.json)
+and is atomically published outside the sealed report for audit retention.
 
 Commands with `--format json` return failures on standard error using one stable
 envelope with `status`, `command`, and a coded `error`; `attest` uses the same
@@ -257,9 +261,10 @@ boundary check. The bundled Actionlint policy recognizes the template's
 
 1. runs the suite and records its policy exit code;
 2. appends `summary.md` to the GitHub workflow summary;
-3. verifies and exports the schema-governed inspection beside the sealed report;
-4. uploads the report, inspection sidecar, and SARIF even on `FAIL` or
-   `INCOMPLETE`; and
+3. exports the inspection and its schema-governed verification receipt beside
+   the sealed report;
+4. uploads the report, inspection, verification receipt, and SARIF even on
+   `FAIL` or `INCOMPLETE`; and
 5. applies the saved policy exit code only after publishing the evidence.
 
 ## Report artifact

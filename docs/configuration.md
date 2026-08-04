@@ -257,7 +257,7 @@ pysec doctor TARGET [--config PATH] [--policy PATH] [--profile NAME]
 pysec inspect REPORT [--limit 0-100] [--format text|json]
   [--output FILE] [--overwrite]
 pysec verify-inspection INSPECTION --report REPORT [--limit 0-100]
-  [--format text|json]
+  [--format text|json] [--output FILE] [--overwrite]
 pysec verify-report REPORT
 pysec attest REPORT --output PASSPORT (--signing-key KEY | --unsigned)
 pysec verify PASSPORT [--report REPORT] [verification options]
@@ -302,6 +302,10 @@ depth. The success record binds
 the inspection SHA-256, report checksum-manifest SHA-256, scan ID, schema ID,
 and verified action count. It does not establish publisher identity or release
 approval; those remain Security Passport responsibilities.
+`--output FILE` requires `--format json` and atomically publishes a receipt
+outside the sealed report; replacement requires explicit `--overwrite`. The
+receipt is governed by the bundled
+[verification schema](../src/py_security_suite/schemas/report-inspection-verification.schema.json).
 
 `verify-report` validates the complete `checksums.sha256` chain, the scan
 manifest, every canonical report artifact, and their exact manifest bindings.

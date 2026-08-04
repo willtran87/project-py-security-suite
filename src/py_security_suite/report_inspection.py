@@ -15,6 +15,9 @@ from .path_safety import resolve_unlinked_path
 
 _MAX_JSON_BYTES = 128 * 1024 * 1024
 _INSPECTION_SCHEMA_ID = "urn:project-py-security-suite:schema:report-inspection:1.0"
+_INSPECTION_VERIFICATION_SCHEMA_ID = (
+    "urn:project-py-security-suite:schema:report-inspection-verification:1.0"
+)
 _SEVERITY_ORDER = {
     "critical": 0,
     "high": 1,
@@ -85,8 +88,9 @@ def verify_inspection(
         raise ValueError("inspection document does not match the verified report")
     return {
         "schema_version": "1.0",
+        "schema_id": _INSPECTION_VERIFICATION_SCHEMA_ID,
         "verified": True,
-        "schema_id": str(expected["schema_id"]),
+        "inspection_schema_id": str(expected["schema_id"]),
         "scan_id": str(expected["scan"]["id"]),
         "inspection_sha256": hashlib.sha256(payload).hexdigest(),
         "report_checksums_sha256": str(expected["integrity"]["checksums_sha256"]),
