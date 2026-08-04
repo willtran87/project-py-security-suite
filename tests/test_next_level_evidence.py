@@ -27,9 +27,11 @@ from py_security_suite.passport import (
     _read_signing_password,
     _regular_file,
     _safe_relative,
+    _statement_subjects,
     _validate_statement,
     _verify_checksums,
     _verify_statement_manifest_binding,
+    _verify_statement_subjects,
     _verify_statement_inputs,
     create_attestation,
     verify_attestation,
@@ -513,6 +515,151 @@ class PassportTests(unittest.TestCase):
             invalid_structure["tools"] = {}
             with self.assertRaisesRegex(ValueError, "manifest binding is invalid"):
                 _verify_statement_manifest_binding(original, invalid_structure)
+
+    def test_report_validation_binds_exact_artifact_subjects(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            report = _fixture_report(root)
+            artifact_manifest = report / "artifact-manifest.json"
+            artifact_manifest.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "1.0",
+                        "algorithm": "sha256",
+                        "artifacts": [
+                            {
+                                "path": "dist/example-1.0-py3-none-any.whl",
+                                "sha256": "c" * 64,
+                                "size_bytes": 1024,
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            manifest = json.loads(
+                (report / "scan-manifest.json").read_text(encoding="utf-8")
+            )
+            write_embedded_statement(report, manifest)
+            _write_checksums(report)
+            self.assertTrue(verify_report(report)["verified"])
+
+            statement_path = report / "security-passport.json"
+            original = json.loads(statement_path.read_text(encoding="utf-8"))
+            invalid_subjects = (
+                (original["subject"][:1], "subjects do not match report"),
+                (
+                    [
+                        original["subject"][0],
+                        {
+                            "name": "dist/example-1.0-py3-none-any.whl",
+                            "digest": {"sha256": "d" * 64},
+                        },
+                    ],
+                    "subjects do not match report",
+                ),
+                (
+                    original["subject"]
+                    + [{"name": "invented.whl", "digest": {"sha256": "e" * 64}}],
+                    "subjects do not match report",
+                ),
+                (
+                    original["subject"] + [original["subject"][1]],
+                    "subject is duplicated",
+                ),
+                (
+                    [
+                        original["subject"][0],
+                        {**original["subject"][1], "unexpected": True},
+                    ],
+                    "subject is malformed",
+                ),
+                (
+                    [
+                        original["subject"][0],
+                        {
+                            "name": "dist/example-1.0-py3-none-any.whl",
+                            "digest": {"sha256": "invalid"},
+                        },
+                    ],
+                    "subject is malformed",
+                ),
+            )
+            for subjects, message in invalid_subjects:
+                with self.subTest(message=message, subjects=subjects):
+                    changed = json.loads(json.dumps(original))
+                    changed["subject"] = subjects
+                    statement_path.write_text(json.dumps(changed), encoding="utf-8")
+                    _write_checksums(report)
+                    with self.assertRaisesRegex(ValueError, message):
+                        verify_report(report)
+            with self.assertRaisesRegex(ValueError, "subject binding is invalid"):
+                _verify_statement_subjects(original, report, {})
+
+    def test_artifact_subject_manifest_is_strictly_validated(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            report = Path(directory)
+            manifest_path = report / "artifact-manifest.json"
+            with self.assertRaisesRegex(ValueError, "source subject is invalid"):
+                _statement_subjects(report, target="", source_sha256="a" * 64)
+            valid_record = {
+                "path": "dist/example.whl",
+                "sha256": "c" * 64,
+                "size_bytes": 7,
+            }
+            documents: tuple[tuple[dict[str, object], str], ...] = (
+                (
+                    {"schema_version": "2.0", "algorithm": "sha256", "artifacts": []},
+                    "subject manifest is invalid",
+                ),
+                (
+                    {
+                        "schema_version": "1.0",
+                        "algorithm": "sha256",
+                        "artifacts": {},
+                    },
+                    "subject manifest is invalid",
+                ),
+                (
+                    {
+                        "schema_version": "1.0",
+                        "algorithm": "sha256",
+                        "artifacts": [1],
+                    },
+                    "subject is malformed",
+                ),
+                (
+                    {
+                        "schema_version": "1.0",
+                        "algorithm": "sha256",
+                        "artifacts": [{**valid_record, "sha256": "invalid"}],
+                    },
+                    "subject is malformed",
+                ),
+                (
+                    {
+                        "schema_version": "1.0",
+                        "algorithm": "sha256",
+                        "artifacts": [{**valid_record, "size_bytes": True}],
+                    },
+                    "subject is malformed",
+                ),
+                (
+                    {
+                        "schema_version": "1.0",
+                        "algorithm": "sha256",
+                        "artifacts": [valid_record, valid_record],
+                    },
+                    "subject is duplicated",
+                ),
+            )
+            for document, message in documents:
+                with self.subTest(message=message, document=document):
+                    manifest_path.write_text(json.dumps(document), encoding="utf-8")
+                    with self.assertRaisesRegex(ValueError, message):
+                        _statement_subjects(
+                            report, target="fixture", source_sha256="a" * 64
+                        )
 
     def test_passport_path_and_statement_validation_rejects_ambiguous_evidence(
         self,

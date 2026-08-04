@@ -288,6 +288,9 @@ artifact must also resolve to one unique, present file or explicitly marked
 directory inside the report. The embedded Security Passport must be a valid
 in-toto/SLSA statement, cover the exact report input set, and agree with the
 manifest's scan identity, source, policy, result, findings, and scanner health.
+Its exact source and distribution subject set must also agree with the validated
+`artifact-manifest.json`; missing, duplicate, invented, or altered subjects are
+rejected.
 `verify` accepts a detached passport **directory** created by `attest`, not the
 embedded `security-passport.json` statement file.
 

@@ -14,7 +14,8 @@ def write_embedded_statement(report: Path, manifest: dict[str, Any]) -> None:
         }
         for path in sorted(report.rglob("*"))
         if path.is_file()
-        and path.name not in {"checksums.sha256", "security-passport.json"}
+        and path.relative_to(report).as_posix()
+        not in {"checksums.sha256", "security-passport.json"}
     ]
     outcome = str(manifest["outcome"])
     profile = str(manifest["profile"])
@@ -22,14 +23,30 @@ def write_embedded_statement(report: Path, manifest: dict[str, Any]) -> None:
     inventory = manifest["inventory"]
     if not isinstance(tools, list) or not isinstance(inventory, dict):
         raise TypeError("fixture manifest tools and inventory must be structured")
+    subjects = [
+        {
+            "name": f"source:{manifest['target']}",
+            "digest": {"sha256": inventory["source_sha256"]},
+        }
+    ]
+    artifact_manifest = report / "artifact-manifest.json"
+    if artifact_manifest.is_file():
+        document = json.loads(artifact_manifest.read_text(encoding="utf-8"))
+        artifacts = document.get("artifacts")
+        if not isinstance(artifacts, list):
+            raise TypeError("fixture artifact manifest must contain a list")
+        for value in artifacts:
+            if not isinstance(value, dict):
+                raise TypeError("fixture artifact record must be an object")
+            subjects.append(
+                {
+                    "name": value["path"],
+                    "digest": {"sha256": value["sha256"]},
+                }
+            )
     statement = {
         "_type": "https://in-toto.io/Statement/v1",
-        "subject": [
-            {
-                "name": f"source:{manifest['target']}",
-                "digest": {"sha256": inventory["source_sha256"]},
-            }
-        ],
+        "subject": subjects,
         "predicateType": "https://slsa.dev/verification_summary/v1",
         "predicate": {
             "verifier": {

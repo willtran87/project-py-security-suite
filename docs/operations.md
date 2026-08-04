@@ -610,7 +610,9 @@ complete canonical report set, and validates its scan-manifest artifact bindings
 without requiring a signing key. Missing, duplicate, ambiguous, unsafe, or
 linked declared evidence is rejected. The embedded in-toto/SLSA statement must
 bind every report input and agree with the manifest's source, policy, outcome,
-finding counts, and tool statuses. `pysec verify PASSPORT --report REPORT` is
+finding counts, and tool statuses. Its exact source and release-artifact subject
+set must agree with the source inventory and `artifact-manifest.json`.
+`pysec verify PASSPORT --report REPORT` is
 the stronger detached passport operation and expects `PASSPORT` to be a
 directory created by `pysec attest`.
 

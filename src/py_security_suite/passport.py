@@ -4,6 +4,7 @@ import json
 import re
 import shutil
 import tempfile
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
@@ -54,24 +55,11 @@ def build_security_passport_statement(
     report: Path, manifest: ScanManifest
 ) -> dict[str, Any]:
     inputs = _report_inputs(report, exclude={_STATEMENT_NAME, "checksums.sha256"})
-    subjects = [
-        {
-            "name": f"source:{manifest.target}",
-            "digest": {"sha256": manifest.inventory.source_sha256},
-        }
-    ]
-    artifact_manifest = report / "artifact-manifest.json"
-    if artifact_manifest.is_file() and not artifact_manifest.is_symlink():
-        document = _read_json(artifact_manifest)
-        artifacts = document.get("artifacts", []) if isinstance(document, dict) else []
-        if isinstance(artifacts, list):
-            for value in artifacts[:1000]:
-                if not isinstance(value, dict):
-                    continue
-                digest = str(value.get("sha256") or "")
-                name = str(value.get("path") or "")
-                if _is_digest(digest) and name:
-                    subjects.append({"name": name, "digest": {"sha256": digest}})
+    subjects = _statement_subjects(
+        report,
+        target=manifest.target,
+        source_sha256=manifest.inventory.source_sha256,
+    )
     verification_result = "PASSED" if manifest.outcome.value == "pass" else "FAILED"
     return {
         "_type": "https://in-toto.io/Statement/v1",
@@ -494,6 +482,7 @@ def _verify_embedded_statement(report: Path, manifest: dict[str, Any]) -> None:
     if bound_inputs != expected_inputs:
         raise ValueError("embedded Security Passport input set is incomplete")
     _verify_statement_manifest_binding(statement, manifest)
+    _verify_statement_subjects(statement, report, manifest)
 
 
 def _verify_statement_manifest_binding(
@@ -543,17 +532,108 @@ def _verify_statement_manifest_binding(
             "baseline": manifest.get("baseline", {}),
         },
     }
-    expected_subject = {
-        "name": f"source:{manifest['target']}",
-        "digest": {"sha256": inventory["source_sha256"]},
-    }
-    subjects = statement.get("subject")
-    if (
-        not isinstance(subjects, list)
-        or expected_subject not in subjects
-        or any(predicate.get(key) != value for key, value in expected_claims.items())
-    ):
+    if any(predicate.get(key) != value for key, value in expected_claims.items()):
         raise ValueError("embedded Security Passport does not match scan manifest")
+
+
+def _verify_statement_subjects(
+    statement: dict[str, Any], report: Path, manifest: dict[str, Any]
+) -> None:
+    inventory = manifest.get("inventory")
+    if not isinstance(inventory, dict):
+        raise ValueError("embedded Security Passport subject binding is invalid")
+    expected = _subject_digest_map(
+        _statement_subjects(
+            report,
+            target=str(manifest.get("target") or ""),
+            source_sha256=str(inventory.get("source_sha256") or ""),
+        )
+    )
+    subjects = statement.get("subject")
+    if not isinstance(subjects, list) or _subject_digest_map(subjects) != expected:
+        raise ValueError("embedded Security Passport subjects do not match report")
+
+
+def _statement_subjects(
+    report: Path, *, target: str, source_sha256: str
+) -> list[dict[str, Any]]:
+    if not target or not _is_digest(source_sha256):
+        raise ValueError("embedded Security Passport source subject is invalid")
+    subjects: list[dict[str, Any]] = [
+        {"name": f"source:{target}", "digest": {"sha256": source_sha256}}
+    ]
+    artifact_manifest = report / "artifact-manifest.json"
+    if not artifact_manifest.exists():
+        return subjects
+    document = _read_json(artifact_manifest)
+    artifacts = document.get("artifacts")
+    if (
+        document.get("schema_version") != "1.0"
+        or document.get("algorithm") != "sha256"
+        or not isinstance(artifacts, list)
+        or len(artifacts) > 1000
+    ):
+        raise ValueError("report artifact subject manifest is invalid")
+    seen: set[str] = set()
+    for value in artifacts:
+        subject = _artifact_subject(value)
+        name = str(subject["name"])
+        if name in seen:
+            raise ValueError(f"report artifact subject is duplicated: {name}")
+        seen.add(name)
+        subjects.append(subject)
+    return subjects
+
+
+def _artifact_subject(value: object) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise ValueError("report artifact subject is malformed")
+    name = value.get("path")
+    digest = value.get("sha256")
+    size = value.get("size_bytes")
+    if (
+        not isinstance(name, str)
+        or not name
+        or len(name) > 4096
+        or _safe_relative(name).as_posix() != name
+        or not isinstance(digest, str)
+        or not _is_digest(digest)
+        or type(size) is not int
+        or size < 0
+    ):
+        raise ValueError("report artifact subject is malformed")
+    return {"name": name, "digest": {"sha256": digest}}
+
+
+def _subject_digest_map(subjects: Sequence[object]) -> dict[str, str]:
+    values: dict[str, str] = {}
+    for subject in subjects:
+        name, digest = _statement_subject(subject)
+        if name in values:
+            raise ValueError(
+                f"embedded Security Passport subject is duplicated: {name}"
+            )
+        values[name] = digest
+    return values
+
+
+def _statement_subject(subject: object) -> tuple[str, str]:
+    if not isinstance(subject, dict) or set(subject) != {"name", "digest"}:
+        raise ValueError("embedded Security Passport subject is malformed")
+    name = subject.get("name")
+    digest_value = subject.get("digest")
+    digest = (
+        str(digest_value.get("sha256") or "") if isinstance(digest_value, dict) else ""
+    )
+    if (
+        not isinstance(name, str)
+        or not name
+        or not isinstance(digest_value, dict)
+        or set(digest_value) != {"sha256"}
+        or not _is_digest(digest)
+    ):
+        raise ValueError("embedded Security Passport subject is malformed")
+    return name, digest
 
 
 def _validate_statement_manifest_evidence(

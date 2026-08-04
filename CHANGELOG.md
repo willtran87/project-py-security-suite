@@ -5,6 +5,8 @@ for published releases.
 
 ## Unreleased
 
+- Bind the embedded Security Passport's exact, duplicate-free source and
+  distribution subject set to the validated artifact manifest.
 - Verify the embedded in-toto/SLSA Security Passport during report verification,
   require exact input coverage, and bind its source, policy, outcome, profile,
   scanner health, finding counts, and lifecycle evidence to the scan manifest.
