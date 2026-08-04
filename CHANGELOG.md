@@ -5,6 +5,10 @@ for published releases.
 
 ## Unreleased
 
+- Close the Cosign missing-bundle integrity gap by rechecking the approved
+  executable after its version probe even when no `verify-blob` command can run;
+  an entry-point mutation now fails the scanner while retaining the provenance
+  findings already collected.
 - Make assurance-case status and next actions evidence-aware across clean,
   finding-bearing, incomplete, not-applicable, VCS, and externally generated
   dynamic-control states; include Cosign in artifact assurance and remove

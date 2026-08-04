@@ -165,6 +165,29 @@ class CosignAdapter(ScannerAdapter):
                     )
                 )
 
+        # A missing bundle is a finding, not a reason to skip scanner integrity
+        # verification. The version probe above still executed the approved
+        # entry point, and its digest must be rechecked even when no verify-blob
+        # command could be issued.
+        changed_error = self._executable_changed_error()
+        if changed_error:
+            run = ToolRun(
+                tool=self.name,
+                status=ToolStatus.FAILED,
+                command=last_command,
+                duration_seconds=round(time.monotonic() - started, 3),
+                version=version,
+                exit_code=(last_execution.exit_code if last_execution else None),
+                finding_count=len(findings),
+                error=changed_error,
+                **self._integrity_fields(),
+            )
+            return AdapterResult(
+                findings,
+                run,
+                {**self._diagnostic(run, last_execution), "verifications": diagnostics},
+            )
+
         run = ToolRun(
             tool=self.name,
             status=ToolStatus.COMPLETED,

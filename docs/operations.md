@@ -543,6 +543,12 @@ These checks detect content or entry-point substitution during the scan. They
 complement, but do not replace, an enterprise read-only checkout, signed
 artifact transport, and publisher/provenance verification.
 
+The post-execution check also applies when a verifier reports missing input
+evidence before its main verification command. Cosign still rehashes the
+executable used for its version probe when every staged artifact lacks a
+signature bundle. A mutation is an execution failure in addition to the
+retained missing-bundle findings.
+
 For finding triage, open `index.html` first. Its prioritized table leads to a
 finding card containing the exact file/range, highlighted source context,
 scanner and rule, classification links, impact, and recommended action.

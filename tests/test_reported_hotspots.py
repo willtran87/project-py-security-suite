@@ -401,6 +401,29 @@ class CosignRuntimeTests(unittest.TestCase):
         self.assertIn("--key", command)
         self.assertEqual(_bundle_for(self.dist, self.artifact), bundle.resolve())
 
+    def test_cosign_rechecks_integrity_when_all_bundles_are_missing(self) -> None:
+        self.artifact.write_bytes(b"wheel")
+        executable = self.root / "cosign.exe"
+        executable.write_bytes(b"approved executable")
+        adapter = self._adapter()
+        adapter.config.executable = str(executable)
+
+        def mutate_after_version(*_args: object) -> str:
+            executable.write_bytes(b"changed executable")
+            return "cosign 3"
+
+        with patch.object(adapter, "_detect_version", side_effect=mutate_after_version):
+            result = adapter.run(self.root)
+
+        self.assertEqual(result.tool_run.status, ToolStatus.FAILED)
+        self.assertEqual(result.tool_run.finding_count, 1)
+        self.assertEqual(result.tool_run.executable_unchanged, False)
+        self.assertIn("changed during execution", result.tool_run.error or "")
+        self.assertEqual(
+            result.findings[0].sources[0].rule_id,
+            "COSIGN-BUNDLE-MISSING",
+        )
+
     def test_cosign_keyless_failure_timeout_and_integrity_change_are_explicit(
         self,
     ) -> None:

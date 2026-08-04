@@ -500,6 +500,9 @@ See [configuration.md](configuration.md) for the complete supported schema.
   configuration; production and release profiles require these approved
   bindings, including a separate CodeQL CLI digest.
 - Scanner and helper entry points are rehashed after execution.
+- Multi-artifact verifiers preserve that invariant when prerequisite evidence is
+  absent: Cosign rehashes its entry point after the version probe even when
+  every artifact is missing a bundle and no `verify-blob` command can be issued.
 - The target is content-hashed before and after the scanner portfolio; a
   changed source or distribution artifact makes the result `INCOMPLETE`.
 - Native package installation uses `pip --no-index`.
@@ -571,9 +574,9 @@ The native Windows self-scan process verifies:
   errors; 27 conditional scanners were correctly not applicable;
 - Pylint, Radon, Ruff formatting, coverage, and JUnit adapters executed through
   approved entry-point bindings and emitted normalized derived evidence;
-- the separately generated branch-coverage evidence records 92.99% combined
-  line-and-branch coverage and 86.55% branch coverage, satisfying both 80%
-  repository gates with no per-file hotspots; JUnit records 296 passing tests,
+- the separately generated branch-coverage evidence records 93.00% combined
+  line-and-branch coverage and 86.57% branch coverage, satisfying both 80%
+  repository gates with no per-file hotspots; JUnit records 297 passing tests,
   one platform-limited symlink skip, and no failures or errors;
 - CycloneDX completed from `uv.lock` through a frozen offline export with a
   hash-verified helper; zizmor, actionlint, Pysa, GuardDog, Flawfinder, and
@@ -584,7 +587,10 @@ The native Windows self-scan process verifies:
 - Syft and Grype inspected safely expanded wheel and source distributions;
 - the artifact manifest bound both distributions by SHA-256;
 - all generated report checksums verified and target content remained
-  unchanged; and
+  unchanged;
+- all 37 observed scanner and helper entry points were confirmed unchanged
+  after execution; 12 were also bound to approved digests, while the remaining
+  25 are explicitly reported as provenance-approval work;
 - the isolated comprehensive outcome was `FAIL` with exactly two blocking
   Cosign findings for intentionally absent wheel and source-distribution
   signatures and no testing-coverage findings; and
