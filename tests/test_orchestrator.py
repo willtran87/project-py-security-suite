@@ -219,6 +219,7 @@ class OrchestratorTests(unittest.TestCase):
         )
         artifact_summary = render_summary(manifest, [artifact_finding])
         artifact_html = render_html(manifest, [artifact_finding])
+        artifact_action_plan = render_action_plan(manifest, [artifact_finding])
         self.assertIn(
             "**Artifact identity evidence - `dist/fixture.whl`:**",
             artifact_summary,
@@ -227,9 +228,15 @@ class OrchestratorTests(unittest.TestCase):
         self.assertIn("size: 1234 bytes", artifact_summary)
         self.assertIn("Artifact identity evidence", artifact_html)
         self.assertIn("aria-label='Artifact identity'", artifact_html)
+        self.assertIn("### Release artifact bindings", artifact_action_plan)
+        self.assertIn("Use these immutable identities", artifact_action_plan)
+        self.assertIn(f"`sha256:{'c' * 64}`", artifact_action_plan)
+        self.assertIn("1234 bytes", artifact_action_plan)
         artifact_finding.evidence["artifact_path"] = "../outside.whl"
         rejected_identity = render_summary(manifest, [artifact_finding])
+        rejected_action_plan = render_action_plan(manifest, [artifact_finding])
         self.assertNotIn("Artifact identity evidence", rejected_identity)
+        self.assertNotIn("### Release artifact bindings", rejected_action_plan)
         self.assertIn("No source excerpt applies", rejected_identity)
         artifact_finding.evidence["artifact_path"] = "dist/fixture.whl"
         actionable = render_assurance_case(manifest, [artifact_finding])
@@ -347,6 +354,13 @@ class OrchestratorTests(unittest.TestCase):
             rendered.index("changed-tool"), rendered.index("candidate-tool")
         )
         self.assertIn("2 copy-ready digest approval candidates", rendered)
+        self.assertIn("### Provenance review batches", rendered)
+        self.assertIn(
+            "2 candidate policy bindings map to 2 unique executable digests",
+            rendered,
+        )
+        self.assertIn(f"| `sha256:{'c' * 64}` | `candidate-tool (primary)` |", rendered)
+        self.assertIn("### Copy-ready policy bindings", rendered)
         self.assertEqual(rendered.count("[tools.candidate-tool]"), 1)
         self.assertIn(f'executable_sha256 = "{"c" * 64}"', rendered)
         self.assertIn(f'auxiliary_executable_sha256 = "{"d" * 64}"', rendered)
@@ -354,6 +368,27 @@ class OrchestratorTests(unittest.TestCase):
         parsed = tomllib.loads(candidate_toml)
         self.assertEqual(
             parsed["tools"]["candidate-tool"]["executable_sha256"], "c" * 64
+        )
+        shared_candidate = ToolRun(
+            tool="shared-candidate",
+            status=ToolStatus.COMPLETED,
+            command=["shared-candidate"],
+            duration_seconds=0.01,
+            executable_sha256="c" * 64,
+            executable_integrity_verified=None,
+            executable_unchanged=True,
+        )
+        grouped = "\n".join(
+            _render_entrypoint_trust_actions([candidate, shared_candidate])
+        )
+        self.assertIn(
+            "3 candidate policy bindings map to 2 unique executable digests",
+            grouped,
+        )
+        self.assertIn(
+            f"| `sha256:{'c' * 64}` | `candidate-tool (primary)`, "
+            "`shared-candidate (primary)` |",
+            grouped,
         )
 
     def test_governed_asset_paths_are_resolved_without_losing_identity(self) -> None:
@@ -527,6 +562,7 @@ class OrchestratorTests(unittest.TestCase):
             self.assertIn("](index.html#PYSEC-", action_plan)
             self.assertIn("## Policy and release-evidence actions", action_plan)
             self.assertIn("## Scanner entry-point trust actions", action_plan)
+            self.assertIn("### Provenance review batches", action_plan)
             self.assertIn("Independently verify provenance", action_plan)
             self.assertIn("1 approval gap; 1 post-execution gap", action_plan)
             self.assertIn(

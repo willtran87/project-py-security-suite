@@ -419,7 +419,10 @@ flowchart LR
   gaps from conditional controls that did not match the repository.
 - `action-plan.md` separates prioritized finding remediation from scanner
   coverage-restoration work and collapses informational not-applicable rows
-  without removing their reasons, re-enable conditions, or references.
+  without removing their reasons, re-enable conditions, or references. It binds
+  artifact findings to complete immutable identities and groups scanner approval
+  candidates into unique-digest provenance review batches before presenting the
+  copy-ready policy bindings.
 - `assurance-case.md` states what the static scan demonstrated and identifies
   required artifact, provenance, dynamic-test, and threat-review evidence. Its
   next actions are evidence-aware: completed clean controls retain evidence,
@@ -577,8 +580,8 @@ The native Windows self-scan process verifies:
   errors; 27 conditional scanners were correctly not applicable;
 - Pylint, Radon, Ruff formatting, coverage, and JUnit adapters executed through
   approved entry-point bindings and emitted normalized derived evidence;
-- the separately generated branch-coverage evidence records 93.03% combined
-  line-and-branch coverage and 86.67% branch coverage, satisfying both 80%
+- the separately generated branch-coverage evidence records 93.07% combined
+  line-and-branch coverage and 86.75% branch coverage, satisfying both 80%
   repository gates with no per-file hotspots; JUnit records 297 passing tests,
   one platform-limited symlink skip, and no failures or errors;
 - CycloneDX completed from `uv.lock` through a frozen offline export with a

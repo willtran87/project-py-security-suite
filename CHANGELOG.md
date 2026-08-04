@@ -5,6 +5,10 @@ for published releases.
 
 ## Unreleased
 
+- Make the action plan bind artifact findings to full SHA-256 and byte-size
+  identities, and group scanner approval candidates by executable digest so
+  reviewers can perform one provenance decision before recording every affected
+  policy binding.
 - Version inspection and inspection-verification contracts at 1.1 while retaining
   the frozen 1.0 schemas for offline compatibility; prioritized machine-readable
   actions now carry validated artifact path, SHA-256, and byte-size identity and

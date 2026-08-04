@@ -619,14 +619,16 @@ They should travel with the report and inspection sidecar. The
 quick view reports how many
 scanner and helper entry points were cryptographically approved and unchanged,
 how many were observed unchanged after execution, and any missing post-checks.
-Treat “observed unchanged” as useful tamper evidence, not organizational
+Treat "observed unchanged" as useful tamper evidence, not organizational
 approval; production and release gates require configured approved digests.
 Terminal output previews at most five names per trust-action class and reports
 the omitted count. Use `--format json` for the complete named gap arrays, or
-open `action-plan.md` for risk-ordered entry-point state and remediation. Its
-collapsed TOML block contains complete copy-ready digest candidates only for
-entry points observed unchanged; treat them as unapproved until provenance,
-version, and custody are independently verified.
+open `action-plan.md` for risk-ordered entry-point state and remediation. The
+plan binds affected distributions to full SHA-256 and byte-size identities,
+groups scanner candidates by unique executable digest for provenance review,
+and retains a collapsed TOML block with every copy-ready policy binding. Treat
+all observed candidates as unapproved until provenance, version, and custody
+are independently verified.
 For dashboards and policy automation, `inspect --format json` emits the same
 work as P0/P1/P2 `entrypoint_integrity.actions`, including stable remediation
 codes and configuration keys. Candidate-binding and unique-digest counts expose

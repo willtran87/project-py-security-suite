@@ -685,6 +685,7 @@ def render_action_plan(manifest: ScanManifest, findings: list[Finding]) -> str:
     if not findings:
         lines.append("| - | - | - | No normalized findings | - | - | - | No action |")
 
+    lines.extend(_render_action_plan_artifact_identities(findings))
     lines.extend(_render_entrypoint_trust_actions(manifest.tools))
     lines.extend(
         [
@@ -758,6 +759,34 @@ def render_action_plan(manifest: ScanManifest, findings: list[Finding]) -> str:
         ]
     )
     return "\n".join(lines)
+
+
+def _render_action_plan_artifact_identities(findings: list[Finding]) -> list[str]:
+    identities = [
+        (finding, identity)
+        for finding in sorted(findings, key=_finding_sort_key)
+        if (identity := _artifact_identity(finding)) is not None
+    ]
+    if not identities:
+        return []
+    lines = [
+        "",
+        "### Release artifact bindings",
+        "",
+        "Use these immutable identities when locating, signing, quarantining, or "
+        "approving an affected distribution.",
+        "",
+        "| Finding | Artifact | SHA-256 | Size |",
+        "|---|---|---|---:|",
+    ]
+    for finding, (path, digest, size) in identities:
+        rendered_size = f"{size} bytes" if size is not None else "not supplied"
+        lines.append(
+            f"| [`{_markdown_code(finding.finding_id)}`]"
+            f"(index.html#{quote(finding.finding_id, safe='')}) | "
+            f"`{_markdown_code(path)}` | `sha256:{digest}` | {rendered_size} |"
+        )
+    return lines
 
 
 def _render_entrypoint_trust_actions(tools: list[ToolRun]) -> list[str]:
@@ -841,9 +870,12 @@ def _render_entrypoint_approval_candidates(
     )
     if not candidates:
         return []
-    grouped: dict[str, list[tuple[str, str]]] = {}
+    grouped_by_tool: dict[str, list[tuple[str, str]]] = {}
+    grouped_by_digest: dict[str, list[tuple[str, str]]] = {}
     for tool, role, digest, _, _ in candidates:
-        grouped.setdefault(tool, []).append((role, digest))
+        grouped_by_tool.setdefault(tool, []).append((role, digest))
+        grouped_by_digest.setdefault(digest, []).append((tool, role))
+    digest_label = "digest" if len(grouped_by_digest) == 1 else "digests"
     provenance_warning = " ".join(
         (
             "> Do not apply these observed digests as approvals until an independent",
@@ -857,9 +889,29 @@ def _render_entrypoint_approval_candidates(
         "",
         provenance_warning,
         "",
-        "```toml",
+        "### Provenance review batches",
+        "",
+        f"{len(candidates)} candidate policy bindings map to "
+        f"{len(grouped_by_digest)} unique executable {digest_label}. Review provenance "
+        "once per digest, then record every affected binding.",
+        "",
+        "| Exact digest | Candidate policy bindings |",
+        "|---|---|",
     ]
-    for tool, entries in grouped.items():
+    for digest, bindings in sorted(grouped_by_digest.items()):
+        rendered_bindings = ", ".join(
+            f"`{_markdown_code(tool)} ({role})`" for tool, role in sorted(bindings)
+        )
+        lines.append(f"| `sha256:{digest}` | {rendered_bindings} |")
+    lines.extend(
+        [
+            "",
+            "### Copy-ready policy bindings",
+            "",
+            "```toml",
+        ]
+    )
+    for tool, entries in grouped_by_tool.items():
         lines.append(f"[tools.{tool}]")
         for role, digest in entries:
             field = (

@@ -408,8 +408,11 @@ The command exits `0` only for `release_decision: approved`; a verified passport
 that is unsigned, lacks its source report or required release artifacts, or
 carries a failing scan policy exits `1` so a CI promotion gate cannot mistake
 transport integrity for approval.
-`action-plan.md` separates
-finding remediation from scanner-coverage restoration and policy evidence.
+`action-plan.md` separates finding remediation from scanner-coverage
+restoration and policy evidence. Artifact actions include exact digest and size
+bindings, while scanner approvals are grouped by unique executable digest so a
+reviewer can make one provenance decision and then record every affected policy
+binding.
 `assurance-case.md` distinguishes evidence demonstrated by the scan from
 dynamic testing, artifact identity, provenance, and threat-review evidence that
 must be supplied by companion release gates. Each control's status and next
