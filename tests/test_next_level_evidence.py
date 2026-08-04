@@ -30,6 +30,7 @@ from py_security_suite.passport import (
     _safe_relative,
     _statement_subjects,
     _validate_statement,
+    _validate_verification_material,
     _verify_checksums,
     _verify_bound_report,
     _verify_passport_authenticity,
@@ -361,6 +362,9 @@ class PassportTests(unittest.TestCase):
                 json.dumps(
                     {
                         "schema_version": "1.0",
+                        "suite_version": "0.1.0",
+                        "created_at": "2026-08-04T00:00:00Z",
+                        "report": "fixture",
                         "signed": False,
                         "report_checksums_sha256": "a" * 64,
                     }
@@ -836,6 +840,7 @@ class PassportTests(unittest.TestCase):
                 allow_unsigned=True,
             )
             self.assertIsNone(unbound["report_integrity_verified"])
+            self.assertIsNone(unbound["report_statement_verified"])
             self.assertIn("source_report_not_verified", unbound["release_blockers"])
             with self.assertRaisesRegex(ValueError, "does not declare release"):
                 verify_attestation(
@@ -983,6 +988,7 @@ class PassportTests(unittest.TestCase):
             self.assertEqual(verified["verification_scope"], "integrity-only")
             self.assertTrue(verified["passport_integrity_verified"])
             self.assertTrue(verified["report_integrity_verified"])
+            self.assertTrue(verified["report_statement_verified"])
             self.assertEqual(verified["authenticity_status"], "not_verified")
             self.assertTrue(verified["policy_passed"])
             self.assertEqual(verified["policy_verification_result"], "PASSED")
@@ -997,6 +1003,57 @@ class PassportTests(unittest.TestCase):
                     report=report,
                     public_key=None,
                     allow_unsigned=True,
+                )
+
+    def test_detached_passport_statement_must_match_report(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            report = _fixture_report(root)
+            passport = root / "passport"
+            create_attestation(report=report, output=passport, signing_key=None)
+
+            statement_path = report / "security-passport.json"
+            embedded = json.loads(statement_path.read_text(encoding="utf-8"))
+            embedded["untrusted_transport_claim"] = True
+            statement_path.write_text(json.dumps(embedded), encoding="utf-8")
+            _write_checksums(report)
+            self.assertTrue(verify_report(report)["verified"])
+
+            material_path = passport / "verification-material.json"
+            material = json.loads(material_path.read_text(encoding="utf-8"))
+            material["report_checksums_sha256"] = _digest(report / "checksums.sha256")
+            material_path.write_text(json.dumps(material), encoding="utf-8")
+            _write_checksums(passport)
+            with self.assertRaisesRegex(ValueError, "does not match report statement"):
+                verify_attestation(
+                    passport=passport,
+                    report=report,
+                    public_key=None,
+                    allow_unsigned=True,
+                )
+
+            material["schema_version"] = "2.0"
+            material_path.write_text(json.dumps(material), encoding="utf-8")
+            _write_checksums(passport)
+            with self.assertRaisesRegex(ValueError, "verification material is invalid"):
+                verify_attestation(
+                    passport=passport,
+                    report=report,
+                    public_key=None,
+                    allow_unsigned=True,
+                )
+            with self.assertRaisesRegex(
+                ValueError, "signed Passport verification material is invalid"
+            ):
+                _validate_verification_material(
+                    {
+                        "schema_version": "1.0",
+                        "suite_version": "0.1.0",
+                        "created_at": "2026-08-04T00:00:00Z",
+                        "report": "fixture",
+                        "report_checksums_sha256": "a" * 64,
+                        "signed": True,
+                    }
                 )
 
     def test_signed_passport_binds_and_rechecks_cosign_executable(self) -> None:

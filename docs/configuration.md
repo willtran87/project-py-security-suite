@@ -295,6 +295,9 @@ rejected.
 embedded `security-passport.json` statement file. When the Passport declares
 distribution subjects, `verify --artifact-root ROOT` must resolve and hash each
 subject path beneath `ROOT`; omission blocks approval.
+When `--report` is supplied, its embedded statement must be exactly the same
+JSON statement as the detached Passport; transport metadata cannot redirect a
+valid signature to a report carrying different claims.
 
 `inspect` performs the same integrity verification, then presents a bounded
 operational summary of outcome, scanner health, severity, domains, lifecycle,

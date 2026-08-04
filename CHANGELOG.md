@@ -5,6 +5,8 @@ for published releases.
 
 ## Unreleased
 
+- Require the detached Passport statement to exactly match the verified report's
+  embedded statement and validate portable verification-material identity.
 - Require deployment-time hashing of every declared release-artifact subject
   before a signed Security Passport can approve promotion.
 - Bind the embedded Security Passport's exact, duplicate-free source and

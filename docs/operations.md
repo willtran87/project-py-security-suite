@@ -619,6 +619,9 @@ set must agree with the source inventory and `artifact-manifest.json`.
 stronger detached passport operation and expects `PASSPORT` to be a directory
 created by `pysec attest`. If the statement has artifact subjects, omitting the
 payload root returns the stable `release_artifacts_not_verified` blocker.
+Verification also requires the detached statement to exactly match
+`REPORT/security-passport.json`; a checksum-consistent report with different
+embedded claims is rejected before a release decision is produced.
 
 For environments where the approval signer is a separate service, use
 `pysec attest REPORT --output PASSPORT --unsigned`, sign

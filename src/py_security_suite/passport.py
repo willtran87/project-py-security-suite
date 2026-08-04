@@ -348,6 +348,7 @@ def verify_attestation(
     passport = _resolve_evidence_root(passport, "passport")
     verified_files = _verify_checksums(passport)
     material = _read_json(passport / "verification-material.json")
+    _validate_verification_material(material)
     statement = _read_json(passport / _STATEMENT_NAME)
     _validate_statement(statement)
     artifact_subjects = _release_artifact_subjects(statement)
@@ -382,6 +383,7 @@ def verify_attestation(
         "report_integrity_verified": (
             None if report_verification is None else report_verification["verified"]
         ),
+        "report_statement_verified": (None if report_verification is None else True),
         "authentic": authentic,
         "authenticity_status": "verified" if authentic else "not_verified",
         "integrity_only": not authentic,
@@ -463,8 +465,45 @@ def _verify_bound_report(
     expected = str(material.get("report_checksums_sha256") or "")
     if verification["checksums_sha256"] != expected:
         raise ValueError("report checksum manifest does not match the passport")
+    embedded_statement = _read_json(report_root / _STATEMENT_NAME)
+    if statement != embedded_statement:
+        raise ValueError("detached Passport statement does not match report statement")
     _verify_statement_inputs(statement, report_root)
     return verification
+
+
+def _validate_verification_material(material: dict[str, Any]) -> None:
+    identity = (
+        material.get("suite_version"),
+        material.get("created_at"),
+        material.get("report"),
+    )
+    if (
+        material.get("schema_version") != "1.0"
+        or not isinstance(material.get("signed"), bool)
+        or not _is_digest(str(material.get("report_checksums_sha256") or ""))
+        or not all(isinstance(value, str) and value for value in identity)
+    ):
+        raise ValueError("Passport verification material is invalid")
+    if material["signed"] is True:
+        _validate_signed_verification_material(material)
+
+
+def _validate_signed_verification_material(material: dict[str, Any]) -> None:
+    signature_format = material.get("signature_format")
+    expected_signature = {
+        "cosign-detached": _SIGNATURE_NAME,
+        "sigstore-bundle-v0.3": _BUNDLE_NAME,
+    }.get(str(signature_format))
+    if (
+        material.get("algorithm") != "sigstore-cosign-blob"
+        or expected_signature is None
+        or material.get("signature") != expected_signature
+        or type(material.get("cosign_major_version")) is not int
+        or int(material["cosign_major_version"]) < 1
+        or not _is_digest(str(material.get("cosign_sha256") or ""))
+    ):
+        raise ValueError("signed Passport verification material is invalid")
 
 
 def _verify_presented_release_artifacts(
@@ -965,23 +1004,14 @@ def _prepare_directory(path: Path, overwrite: bool) -> None:
         try:
             _verify_checksums(path)
             material = _read_json(marker)
+            _validate_verification_material(material)
             statement = _read_json(path / _STATEMENT_NAME)
             _validate_statement(statement)
-            valid_material = (
-                material.get("schema_version") == "1.0"
-                and isinstance(material.get("signed"), bool)
-                and _is_digest(str(material.get("report_checksums_sha256") or ""))
-            )
         except (OSError, TypeError, ValueError) as exc:
             raise ValueError(
                 "refusing to overwrite a directory that is not a valid "
                 "Security Passport"
             ) from exc
-        if not valid_material:
-            raise ValueError(
-                "refusing to overwrite a directory that is not a valid "
-                "Security Passport"
-            )
 
 
 def _write_json(path: Path, value: Any) -> None:

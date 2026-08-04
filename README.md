@@ -311,7 +311,8 @@ services. Cosign 2 retains the disconnected detached-signature path. The scan
 lane itself does not sign or require external access.
 
 The deployment lane verifies the signature, passport checksums, report checksum
-manifest, every passport input digest, policy digest, and artifact subjects:
+manifest, exact detached-to-embedded statement identity, every Passport input
+digest, policy digest, and artifact subjects:
 
 ```powershell
 pysec verify .artifacts\release-passport `

@@ -62,8 +62,8 @@ The scan lane emits an unsigned in-toto Statement using the SLSA Verification
 Summary Attestation predicate. A separate approval lane verifies the report and
 signs that exact statement with an external Cosign key. Deployment consumers
 verify the signature material, statement subject, applied-policy digest, report
-checksum manifest, and every referenced evidence digest without running a
-scanner.
+checksum manifest, exact embedded-statement identity, and every referenced
+evidence digest without running a scanner.
 
 ```mermaid
 flowchart LR
@@ -518,9 +518,9 @@ The native Windows self-scan process verifies:
   errors; 27 conditional scanners were correctly not applicable;
 - Pylint, Radon, Ruff formatting, coverage, and JUnit adapters executed through
   approved entry-point bindings and emitted normalized derived evidence;
-- the separately generated branch-coverage evidence records 92.51% combined
-  line-and-branch coverage and 85.63% branch coverage, satisfying both 80%
-  repository gates with no per-file hotspots; JUnit records 282 passing tests,
+- the separately generated branch-coverage evidence records 92.55% combined
+  line-and-branch coverage and 85.71% branch coverage, satisfying both 80%
+  repository gates with no per-file hotspots; JUnit records 283 passing tests,
   one platform-limited symlink skip, and no failures or errors;
 - CycloneDX completed from `uv.lock` through a frozen offline export with a
   hash-verified helper; zizmor, actionlint, Pysa, GuardDog, Flawfinder, and

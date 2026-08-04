@@ -158,6 +158,13 @@ and files larger than the governed limit, and recomputes each SHA-256. A signed
 Passport with artifact subjects cannot approve release until these presented
 files verify.
 
+The detached `PASSPORT/security-passport.json` must exactly match the embedded
+`REPORT/security-passport.json` document. The verifier validates the portable
+`verification-material.json` identity fields, checks the report checksum
+binding, and then compares the two statements before accepting input digests.
+Recomputing unsigned transport checksums cannot redirect an authentic statement
+to a report carrying different claims.
+
 Add `--format text` for a concise operator decision. JSON remains the default
 for integrations. Verification output deliberately separates five concepts:
 
@@ -166,6 +173,7 @@ for integrations. Verification output deliberately separates five concepts:
 | `verification_status` | Passport checksum and structure verification completed |
 | `verification_scope` | `integrity-only` or `authenticity-and-integrity` |
 | `report_integrity_verified` | The supplied source report and every bound input digest verified |
+| `report_statement_verified` | The detached statement exactly matched the report's embedded statement |
 | `release_artifacts_verified` | Every declared wheel/sdist subject was found and hashed beneath `--artifact-root` |
 | `policy_verification_result` | The SLSA policy result: `PASSED` or `FAILED` |
 | `release_decision` | `approved` only when authenticity, source-report verification, and policy all pass |
