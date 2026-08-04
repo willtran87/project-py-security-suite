@@ -286,7 +286,9 @@ published to a regular file and still emitted on standard output. The file must
 be outside `REPORT`, because adding any undeclared file to that sealed directory
 correctly invalidates its exact checksum set. Existing output is preserved
 unless `--overwrite` is explicit, and symbolic-link or junction components are
-rejected before publication.
+rejected before publication. JSON `entrypoints` and `top_actions[].details`
+references are relative to the report directory for portable artifact use;
+interactive text rendering resolves them against the locally supplied report.
 
 `verify-report` validates the complete `checksums.sha256` chain, the scan
 manifest, every canonical report artifact, and their exact manifest bindings.

@@ -56,13 +56,13 @@ def inspect_report(report: Path, *, limit: int = 5) -> dict[str, Any]:
         },
         # Retain the original field for consumers of the 1.0 inspection shape.
         "policy_reasons": policy_reasons,
-        "top_actions": [_action(item, root) for item in sorted_findings[:limit]],
+        "top_actions": [_action(item) for item in sorted_findings[:limit]],
         "integrity": {
             "status": "verified",
             "files_verified": verification["file_count"],
             "checksums_sha256": verification["checksums_sha256"],
         },
-        "entrypoints": _entrypoints(root),
+        "entrypoints": _entrypoints(),
     }
 
 
@@ -114,15 +114,17 @@ def _findings_summary(findings: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def _entrypoints(root: Path) -> dict[str, str]:
+def _entrypoints() -> dict[str, str]:
     return {
-        "html": _safe_text(root / "index.html"),
-        "summary": _safe_text(root / "summary.md"),
-        "action_plan": _safe_text(root / "action-plan.md"),
+        "html": "index.html",
+        "summary": "summary.md",
+        "action_plan": "action-plan.md",
     }
 
 
-def render_inspection(document: dict[str, Any]) -> str:
+def render_inspection(
+    document: dict[str, Any], *, report_root: Path | None = None
+) -> str:
     """Render a compact summary suited to terminals and release logs."""
     scan = document["scan"]
     findings = document["findings"]
@@ -184,17 +186,23 @@ def render_inspection(document: dict[str, Any]) -> str:
     if actions:
         lines.append("Top actions:")
         for item in actions:
-            lines.extend(_render_action(item))
+            lines.extend(_render_action(item, report_root=report_root))
     lines.extend(
         [
-            f"Open: {document['entrypoints']['html']}",
-            f"Actions: {document['entrypoints']['action_plan']}",
+            "Open: "
+            + _local_artifact_reference(document["entrypoints"]["html"], report_root),
+            "Actions: "
+            + _local_artifact_reference(
+                document["entrypoints"]["action_plan"], report_root
+            ),
         ]
     )
     return "\n".join(lines)
 
 
-def _render_action(item: dict[str, Any]) -> list[str]:
+def _render_action(
+    item: dict[str, Any], *, report_root: Path | None = None
+) -> list[str]:
     lines = [
         f"- [{str(item['severity']).upper()}/{str(item['status']).upper()}] "
         f"{item['title']} | {_action_location(item)}",
@@ -205,8 +213,23 @@ def _render_action(item: dict[str, Any]) -> list[str]:
     )
     if item["remediation"]:
         lines.append(f"  Action: {item['remediation']}")
-    lines.append(f"  Review: {item['details']}")
+    lines.append("  Review: " + _local_artifact_reference(item["details"], report_root))
     return lines
+
+
+def _local_artifact_reference(value: object, report_root: Path | None) -> str:
+    reference = _safe_text(value)
+    if report_root is None:
+        return reference
+    path_text, separator, fragment = reference.partition("#")
+    relative = Path(path_text)
+    if relative.is_absolute() or ".." in relative.parts:
+        return reference
+    root = report_root.expanduser().absolute().resolve()
+    resolved = (root / relative).resolve()
+    if not resolved.is_relative_to(root):
+        return reference
+    return f"{resolved}{separator}{fragment}"
 
 
 def _action_location(item: dict[str, Any]) -> str:
@@ -247,7 +270,7 @@ def _finding_key(item: dict[str, Any]) -> tuple[int, int, int, str]:
     )
 
 
-def _action(item: dict[str, Any], root: Path) -> dict[str, Any]:
+def _action(item: dict[str, Any]) -> dict[str, Any]:
     location = _primary_location(item.get("locations"))
     sources = _sources(item.get("sources"))
     finding_id = _safe_text(item.get("finding_id") or "")
@@ -265,7 +288,7 @@ def _action(item: dict[str, Any], root: Path) -> dict[str, Any]:
         "citations": _citations(item.get("citations")),
         "owners": _owners(item.get("evidence")),
         "remediation": _safe_text(item.get("remediation") or ""),
-        "details": f"{_safe_text(root / 'index.html')}#{quote(finding_id, safe='')}",
+        "details": f"index.html#{quote(finding_id, safe='')}",
     }
 
 

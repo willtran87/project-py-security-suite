@@ -83,7 +83,9 @@ schema and self-identifying offline URN make this output a versioned integration
 contract rather than an informal JSON shape. A derived inspection sidecar is
 atomically published outside the sealed report, preserving the report's exact
 checksum set while giving CI and GitHub artifact consumers a stable standalone
-document.
+document. Its report entry points and finding anchors are artifact-relative,
+preventing runner-path disclosure and preserving links after relocation;
+terminal rendering performs local resolution only at the presentation edge.
 
 ```mermaid
 flowchart LR
@@ -538,8 +540,8 @@ The native Windows self-scan process verifies:
   errors; 27 conditional scanners were correctly not applicable;
 - Pylint, Radon, Ruff formatting, coverage, and JUnit adapters executed through
   approved entry-point bindings and emitted normalized derived evidence;
-- the separately generated branch-coverage evidence records 92.87% combined
-  line-and-branch coverage and 86.31% branch coverage, satisfying both 80%
+- the separately generated branch-coverage evidence records 92.88% combined
+  line-and-branch coverage and 86.34% branch coverage, satisfying both 80%
   repository gates with no per-file hotspots; JUnit records 288 passing tests,
   one platform-limited symlink skip, and no failures or errors;
 - CycloneDX completed from `uv.lock` through a frozen offline export with a

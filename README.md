@@ -110,7 +110,9 @@ policy bindings from unique executable digests. The complete output contract is
 published as an installable [Draft 2020-12 JSON Schema](src/py_security_suite/schemas/report-inspection.schema.json).
 The optional output is published atomically, refuses accidental replacement
 unless `--overwrite` is explicit, and must remain outside the report's exact
-checksum boundary.
+checksum boundary. Exported entry points and finding-detail links are artifact-
+relative, so they survive GitHub download or relocation without disclosing the
+runner workspace; terminal rendering resolves the same links locally.
 
 Commands with `--format json` return failures on standard error using one stable
 envelope with `status`, `command`, and a coded `error`; `attest` uses the same

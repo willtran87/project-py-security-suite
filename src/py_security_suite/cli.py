@@ -275,7 +275,7 @@ def main(argv: list[str] | None = None) -> int:
             rendered = (
                 json.dumps(inspection, indent=2, sort_keys=True)
                 if args.format == "json"
-                else render_inspection(inspection)
+                else render_inspection(inspection, report_root=args.report)
             )
             if args.output:
                 _write_inspection_output(

@@ -585,7 +585,10 @@ pysec inspect .artifacts\release-scan `
 
 The output is created atomically and is never permitted inside the report's
 exact-file checksum boundary. A pre-existing sidecar is retained unless the
-operator explicitly supplies `--overwrite`. The quick view reports how many
+operator explicitly supplies `--overwrite`. JSON links remain relative to the
+report directory and therefore work after the report and sidecar are downloaded
+or relocated together; terminal output resolves those links on the current
+machine. The quick view reports how many
 scanner and helper entry points were cryptographically approved and unchanged,
 how many were observed unchanged after execution, and any missing post-checks.
 Treat “observed unchanged” as useful tamper evidence, not organizational

@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from importlib.resources import files
 from pathlib import Path
+from unittest.mock import patch
 
 # The isolated Pylint lane intentionally omits locked test-only dependencies.
 from jsonschema import (  # pylint: disable=import-error
@@ -17,6 +18,7 @@ from py_security_suite.report_inspection import (
     _entrypoint_integrity,
     _bounded_names,
     _line_number,
+    _local_artifact_reference,
     _safe_text,
     _safe_web_uri,
     inspect_report,
@@ -58,6 +60,7 @@ class ReportInspectionTests(unittest.TestCase):
             _write_report(root)
             document = inspect_report(root, limit=1)
             complete_document = inspect_report(root, limit=2)
+            local_rendered = render_inspection(document, report_root=root)
 
         self.assertTrue(document["verified"])
         self.assertEqual(document["findings"]["total"], 2)
@@ -120,8 +123,14 @@ class ReportInspectionTests(unittest.TestCase):
         )
         self.assertEqual(document["top_actions"][0]["citations"][2]["uri"], "")
         self.assertEqual(document["top_actions"][0]["owners"], ["@security"])
-        self.assertTrue(
-            document["top_actions"][0]["details"].endswith("index.html#PYSEC-HIGH")
+        self.assertEqual(document["top_actions"][0]["details"], "index.html#PYSEC-HIGH")
+        self.assertEqual(
+            document["entrypoints"],
+            {
+                "html": "index.html",
+                "summary": "summary.md",
+                "action_plan": "action-plan.md",
+            },
         )
         self.assertEqual(complete_document["top_actions"][1]["path"], "<repository>")
         self.assertEqual(complete_document["top_actions"][1]["source_rules"], [])
@@ -161,6 +170,9 @@ class ReportInspectionTests(unittest.TestCase):
         self.assertNotIn("javascript:", rendered)
         self.assertIn("app.py:7", rendered)
         self.assertIn("Low fixture | <repository>", complete_rendered)
+        self.assertIn(str(root.resolve() / "index.html"), local_rendered)
+        self.assertIn(str(root.resolve() / "action-plan.md"), local_rendered)
+        self.assertNotIn(str(root.resolve()), json.dumps(document))
 
     def test_terminal_text_and_citation_uris_are_safely_bounded(self) -> None:
         self.assertEqual(
@@ -220,6 +232,30 @@ class ReportInspectionTests(unittest.TestCase):
         self.assertEqual(_line_number(7), 7)
         self.assertIsNone(_line_number("7\x1b[31m"))
         self.assertIsNone(_line_number(True))
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.assertEqual(
+                _local_artifact_reference("index.html#finding", root),
+                f"{root.resolve() / 'index.html'}#finding",
+            )
+            self.assertEqual(
+                _local_artifact_reference("../outside.html", root),
+                "../outside.html",
+            )
+            original_resolve = Path.resolve
+            linked = root / "linked.html"
+            outside = root.parent / "outside.html"
+
+            def resolve_link(path: Path, strict: bool = False) -> Path:
+                if path == linked:
+                    return outside
+                return original_resolve(path, strict=strict)
+
+            with patch.object(Path, "resolve", resolve_link):
+                self.assertEqual(
+                    _local_artifact_reference("linked.html", root),
+                    "linked.html",
+                )
 
     def test_limit_is_bounded(self) -> None:
         with self.assertRaisesRegex(ValueError, "between 0 and 100"):

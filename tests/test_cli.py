@@ -253,11 +253,14 @@ class CliSafetyTests(unittest.TestCase):
         }
         with (
             patch("py_security_suite.cli.inspect_report", return_value=inspection),
-            patch("py_security_suite.cli.render_inspection", return_value="PASS"),
+            patch(
+                "py_security_suite.cli.render_inspection", return_value="PASS"
+            ) as renderer,
             patch("builtins.print") as output,
         ):
             self.assertEqual(main(["inspect", "report", "--limit", "3"]), 0)
         self.assertEqual(output.call_args.args[0], "PASS")
+        renderer.assert_called_once_with(inspection, report_root=Path("report"))
 
     def test_inspect_can_atomically_publish_a_json_sidecar(self) -> None:
         inspection = {"schema_version": "1.0", "verified": True}

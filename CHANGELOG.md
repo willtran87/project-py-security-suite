@@ -12,7 +12,8 @@ for published releases.
   machine-actionable trust records with unique-digest review workload, governed
   by a strict self-identifying Draft 2020-12 JSON Schema and a safe atomic
   sidecar export that cannot alter the sealed source report; the GitHub Actions
-  reference publishes that sidecar with the complete report.
+  reference publishes that sidecar with the complete report, using portable
+  artifact-relative links without runner workspace disclosure.
 - Emit stable, structured JSON errors for machine-readable CLI commands and
   redact, bound, and neutralize operator-facing error text.
 - Reject undeclared wheel, sdist, or zip files beside governed release subjects
