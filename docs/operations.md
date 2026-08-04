@@ -572,7 +572,11 @@ and the highest-priority actions with finding ID, scanner rule, owner,
 location, classification, authoritative references, remediation, and a direct
 link to the full HTML evidence card. Action-plan finding IDs use the same deep
 links when viewed from a GitHub artifact. Use `--limit 0` for summary-only
-output or `--format json` for dashboards.
+output or `--format json` for dashboards. The quick view reports how many
+scanner and helper entry points were cryptographically approved and unchanged,
+how many were observed unchanged after execution, and any missing post-checks.
+Treat “observed unchanged” as useful tamper evidence, not organizational
+approval; production and release gates require configured approved digests.
 
 Inspection treats report content as untrusted even after checksum validation.
 Terminal-facing values are length-bounded, non-printing and bidirectional

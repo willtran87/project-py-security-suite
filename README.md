@@ -89,8 +89,10 @@ pysec inspect PATH_TO_REPORT --limit 5
 `inspect` verifies the report checksum chain before showing the `ALLOW`,
 `REVIEW`, or `BLOCK` scan-policy disposition, policy reasons, applicability-
 aware scanner health, finding severity, domains, lifecycle, ownership, native
-scanner rules, and prioritized remediation. Applicable disabled or skipped
-tools are reported as execution gaps, never as not applicable.
+scanner rules, scanner entry-point approval and post-execution integrity, and
+prioritized remediation. Applicable disabled or skipped tools are reported as
+execution gaps, never as not applicable. An entry point observed unchanged is
+not mislabeled as organization-approved.
 
 Commands with `--format json` return failures on standard error using one stable
 envelope with `status`, `command`, and a coded `error`; `attest` uses the same

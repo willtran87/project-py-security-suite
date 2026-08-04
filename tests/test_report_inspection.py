@@ -7,6 +7,7 @@ import unittest
 from pathlib import Path
 
 from py_security_suite.report_inspection import (
+    _entrypoint_integrity,
     _line_number,
     _safe_text,
     _safe_web_uri,
@@ -33,6 +34,13 @@ class ReportInspectionTests(unittest.TestCase):
         self.assertEqual(document["tool_health"]["not_applicable"], 1)
         self.assertEqual(document["tool_health"]["execution_gaps"], 1)
         self.assertFalse(document["tool_health"]["coverage_complete"])
+        self.assertEqual(document["entrypoint_integrity"]["observed"], 2)
+        self.assertEqual(document["entrypoint_integrity"]["approved_and_unchanged"], 1)
+        self.assertEqual(
+            document["entrypoint_integrity"]["unchanged_after_execution"], 2
+        )
+        self.assertEqual(document["entrypoint_integrity"]["postcheck_gaps"], 0)
+        self.assertFalse(document["entrypoint_integrity"]["fully_approved"])
         self.assertEqual(document["scan_policy"]["disposition"], "block")
         self.assertEqual(document["top_actions"][0]["finding_id"], "PYSEC-HIGH")
         self.assertEqual(document["top_actions"][0]["source_rules"], ["bandit/B602"])
@@ -58,6 +66,10 @@ class ReportInspectionTests(unittest.TestCase):
         self.assertIn(
             "1/2 applicable completed; 1 not applicable; 1 execution gaps", rendered
         )
+        self.assertIn(
+            "Entrypoints: 1/2 approved and unchanged; 2/2 unchanged after execution",
+            rendered,
+        )
         self.assertIn("Policy reasons:", rendered)
         self.assertIn(
             "finding PYSEC-HIGH; bandit/B602; classification CWE-78; owner @security",
@@ -75,6 +87,19 @@ class ReportInspectionTests(unittest.TestCase):
         self.assertIn("Low fixture | <repository>", complete_rendered)
 
     def test_terminal_text_and_citation_uris_are_safely_bounded(self) -> None:
+        self.assertEqual(_entrypoint_integrity([])["observed"], 0)
+        self.assertFalse(_entrypoint_integrity([])["fully_approved"])
+        self.assertTrue(
+            _entrypoint_integrity(
+                [
+                    {
+                        "executable_sha256": "a" * 64,
+                        "executable_integrity_verified": True,
+                        "executable_unchanged": True,
+                    }
+                ]
+            )["fully_approved"]
+        )
         sanitized = _safe_text("trusted\x1b[31m\u202espoof")
         self.assertEqual(sanitized, "trusted�[31m�spoof")
         self.assertNotIn("\x1b", sanitized)
@@ -145,7 +170,16 @@ def _write_report(
         ),
         "artifacts": REQUIRED_REPORT_ARTIFACTS,
         "tools": [
-            {"tool": "bandit", "status": "completed"},
+            {
+                "tool": "bandit",
+                "status": "completed",
+                "executable_sha256": "a" * 64,
+                "executable_integrity_verified": True,
+                "executable_unchanged": True,
+                "auxiliary_executable_sha256": "b" * 64,
+                "auxiliary_executable_integrity_verified": None,
+                "auxiliary_executable_unchanged": True,
+            },
             {"tool": "osv-scanner", "status": "skipped", "applicable": False},
             {"tool": "semgrep", "status": "skipped", "applicable": True},
         ],

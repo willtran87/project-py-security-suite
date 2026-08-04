@@ -328,6 +328,9 @@ def _render_summary_header(
     governed_count: int,
     coverage_gap_count: int,
 ) -> list[str]:
+    entrypoints, approved_entrypoints, unchanged_entrypoints = (
+        _entrypoint_integrity_counts(manifest.tools)
+    )
     counts = {
         severity.value: sum(finding.severity is severity for finding in active_findings)
         for severity in Severity
@@ -356,6 +359,9 @@ def _render_summary_header(
         f"(`sha256:{_markdown_code(manifest.inventory.source_sha256)}`; "
         f"{manifest.inventory.hashed_files} files, "
         f"{manifest.inventory.hashed_bytes} bytes)",
+        f"- **Scanner entry-point trust:** {approved_entrypoints}/{entrypoints} "
+        f"approved and unchanged; {unchanged_entrypoints}/{entrypoints} observed "
+        "unchanged after execution",
         f"- **Immediate next step:** {_next_action(manifest.outcome)}",
     ]
 
@@ -728,23 +734,9 @@ def render_action_plan(manifest: ScanManifest, findings: list[Finding]) -> str:
 
 
 def render_assurance_case(manifest: ScanManifest) -> str:
-    executed = [run for run in manifest.tools if run.executable_sha256 is not None]
-    verified = [
-        run
-        for run in executed
-        if run.executable_integrity_verified and run.executable_unchanged
-    ]
-    auxiliary = [
-        run for run in manifest.tools if run.auxiliary_executable_sha256 is not None
-    ]
-    auxiliary_verified = [
-        run
-        for run in auxiliary
-        if run.auxiliary_executable_integrity_verified
-        and run.auxiliary_executable_unchanged
-    ]
-    entrypoint_count = len(executed) + len(auxiliary)
-    verified_entrypoint_count = len(verified) + len(auxiliary_verified)
+    entrypoint_count, verified_entrypoint_count, _ = _entrypoint_integrity_counts(
+        manifest.tools
+    )
     rows = [
         _assurance_row(
             manifest,
@@ -1083,6 +1075,9 @@ def render_html(manifest: ScanManifest, findings: list[Finding]) -> str:
     tools = _html_tool_rows(manifest.tools)
     area_rows = _html_area_rows(active_findings)
     counts = _severity_counts(active_findings)
+    entrypoints, approved_entrypoints, unchanged_entrypoints = (
+        _entrypoint_integrity_counts(manifest.tools)
+    )
     outcome = html.escape(manifest.outcome.value)
     decision = _policy_decision_value(manifest.outcome)
     completed = _completed_tools(manifest.tools)
@@ -1217,6 +1212,10 @@ target <code>{html.escape(manifest.target)}</code></p>
 <span>Execution gaps</span></div>
 <div class="stat"><strong>{len(not_applicable)}</strong>
 <span>Not applicable</span></div>
+<div class="stat"><strong>{approved_entrypoints}/{entrypoints}</strong>
+<span>Entrypoints approved</span></div>
+<div class="stat"><strong>{unchanged_entrypoints}/{entrypoints}</strong>
+<span>Entrypoints unchanged</span></div>
 <div class="stat"><strong>{
         "yes" if manifest.inventory.source_integrity_verified else "no"
     }</strong><span>Target unchanged</span></div>
@@ -1830,6 +1829,33 @@ def _applicable_scanner_gaps(tools: list[ToolRun]) -> list[ToolRun]:
 
 def _not_applicable_scanners(tools: list[ToolRun]) -> list[ToolRun]:
     return [tool for tool in tools if not tool.applicable]
+
+
+def _entrypoint_integrity_counts(tools: list[ToolRun]) -> tuple[int, int, int]:
+    states = [
+        state
+        for tool in tools
+        for state in (
+            (
+                tool.executable_sha256,
+                tool.executable_integrity_verified,
+                tool.executable_unchanged,
+            ),
+            (
+                tool.auxiliary_executable_sha256,
+                tool.auxiliary_executable_integrity_verified,
+                tool.auxiliary_executable_unchanged,
+            ),
+        )
+        if state[0] is not None
+    ]
+    return (
+        len(states),
+        sum(
+            approved is True and unchanged is True for _, approved, unchanged in states
+        ),
+        sum(unchanged is True for _, _, unchanged in states),
+    )
 
 
 def _executable_integrity_label(run: ToolRun) -> str:

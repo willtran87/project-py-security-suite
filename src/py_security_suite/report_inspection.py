@@ -47,6 +47,7 @@ def inspect_report(report: Path, *, limit: int = 5) -> dict[str, Any]:
         "scan": _scan_summary(manifest, outcome),
         "findings": _findings_summary(findings),
         "tool_health": _tool_health(tools),
+        "entrypoint_integrity": _entrypoint_integrity(tools),
         "scan_policy": {
             "disposition": _POLICY_DISPOSITIONS[Outcome(outcome)],
             "reasons": policy_reasons,
@@ -124,6 +125,7 @@ def render_inspection(document: dict[str, Any]) -> str:
     scan = document["scan"]
     findings = document["findings"]
     health = document["tool_health"]
+    entrypoints = document["entrypoint_integrity"]
     integrity = document["integrity"]
     policy = document["scan_policy"]
     lines = [
@@ -143,6 +145,12 @@ def render_inspection(document: dict[str, Any]) -> str:
             f"Tools: {health['completed']}/{health['applicable']} applicable completed; "
             f"{health['not_applicable']} not applicable; "
             f"{health['execution_gaps']} execution gaps"
+        ),
+        (
+            f"Entrypoints: {entrypoints['approved_and_unchanged']}/"
+            f"{entrypoints['observed']} approved and unchanged; "
+            f"{entrypoints['unchanged_after_execution']}/"
+            f"{entrypoints['observed']} unchanged after execution"
         ),
         f"Domains: {_counts(findings['by_domain'])}",
         f"Lifecycle: {_counts(findings['by_lifecycle'])}",
@@ -312,6 +320,38 @@ def _tool_health(tools: list[dict[str, Any]]) -> dict[str, Any]:
         "execution_gaps": len(applicable) - completed,
         "coverage_complete": completed == len(applicable),
         "by_status": dict(sorted(by_status.items())),
+    }
+
+
+def _entrypoint_integrity(tools: list[dict[str, Any]]) -> dict[str, Any]:
+    states = [
+        state
+        for tool in tools
+        for state in (
+            (
+                tool.get("executable_sha256"),
+                tool.get("executable_integrity_verified"),
+                tool.get("executable_unchanged"),
+            ),
+            (
+                tool.get("auxiliary_executable_sha256"),
+                tool.get("auxiliary_executable_integrity_verified"),
+                tool.get("auxiliary_executable_unchanged"),
+            ),
+        )
+        if isinstance(state[0], str) and state[0]
+    ]
+    observed = len(states)
+    approved = sum(
+        approval is True and unchanged is True for _, approval, unchanged in states
+    )
+    unchanged = sum(value is True for _, _, value in states)
+    return {
+        "observed": observed,
+        "approved_and_unchanged": approved,
+        "unchanged_after_execution": unchanged,
+        "postcheck_gaps": observed - unchanged,
+        "fully_approved": observed > 0 and approved == observed,
     }
 
 

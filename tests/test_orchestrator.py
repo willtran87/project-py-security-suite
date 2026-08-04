@@ -279,6 +279,7 @@ class OrchestratorTests(unittest.TestCase):
             self.assertIn("**Priority:** `P1`", markdown)
             self.assertIn("## Coverage gaps and actions", markdown)
             self.assertIn("**Target content integrity:** verified unchanged", markdown)
+            self.assertIn("**Scanner entry-point trust:**", markdown)
             self.assertIn("Entry-point integrity", markdown)
             self.assertIn("# Security action plan", action_plan)
             self.assertIn("bandit/B602", action_plan)
@@ -296,6 +297,8 @@ class OrchestratorTests(unittest.TestCase):
                 report_html,
             )
             self.assertIn("Open the production assurance case", report_html)
+            self.assertIn("Entrypoints approved", report_html)
+            self.assertIn("Entrypoints unchanged", report_html)
             self.assertIn("What was detected", report_html)
             self.assertIn("Prioritized findings", report_html)
             self.assertIn("Source evidence", report_html)

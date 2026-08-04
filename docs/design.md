@@ -69,6 +69,9 @@ sdists, and zip archives are rejected. The verifier caps directory entries and
 samples mismatch details to preserve bounded work and bounded diagnostics.
 Machine-facing CLI paths also preserve a stable JSON error envelope, while all
 operator-facing errors share bounded control-safe redaction.
+Markdown, HTML, and terminal/JSON inspection surface entry-point trust as a
+top-level metric, keeping cryptographic approval distinct from a successful
+before/after observation.
 
 ```mermaid
 flowchart LR
@@ -523,7 +526,7 @@ The native Windows self-scan process verifies:
   errors; 27 conditional scanners were correctly not applicable;
 - Pylint, Radon, Ruff formatting, coverage, and JUnit adapters executed through
   approved entry-point bindings and emitted normalized derived evidence;
-- the separately generated branch-coverage evidence records 92.63% combined
+- the separately generated branch-coverage evidence records 92.64% combined
   line-and-branch coverage and 85.90% branch coverage, satisfying both 80%
   repository gates with no per-file hotspots; JUnit records 283 passing tests,
   one platform-limited symlink skip, and no failures or errors;
