@@ -51,6 +51,9 @@ jobs:
             --format json \
             --output python-security-report-inspection.json \
             > /dev/null
+          python -m py_security_suite verify-inspection \
+            python-security-report-inspection.json \
+            --report python-security-report
 
       - name: Upload the complete sanitized report and inspection
         if: always()

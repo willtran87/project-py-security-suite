@@ -256,6 +256,8 @@ pysec scan TARGET --output REPORT [options]
 pysec doctor TARGET [--config PATH] [--policy PATH] [--profile NAME]
 pysec inspect REPORT [--limit 0-100] [--format text|json]
   [--output FILE] [--overwrite]
+pysec verify-inspection INSPECTION --report REPORT [--limit 0-100]
+  [--format text|json]
 pysec verify-report REPORT
 pysec attest REPORT --output PASSPORT (--signing-key KEY | --unsigned)
 pysec verify PASSPORT [--report REPORT] [verification options]
@@ -289,6 +291,17 @@ unless `--overwrite` is explicit, and symbolic-link or junction components are
 rejected before publication. JSON `entrypoints` and `top_actions[].details`
 references are relative to the report directory for portable artifact use;
 interactive text rendering resolves them against the locally supplied report.
+
+`verify-inspection` treats the sidecar as untrusted bounded input, rejects
+duplicate JSON keys, verifies the
+report checksum chain, recomputes the inspection using the caller's expected
+action limit, and requires exact parsed-document equality. The default is five;
+use the same explicit `--limit` for export and verification. This prevents an
+untrusted sidecar from suppressing actions and choosing its own comparison
+depth. The success record binds
+the inspection SHA-256, report checksum-manifest SHA-256, scan ID, schema ID,
+and verified action count. It does not establish publisher identity or release
+approval; those remain Security Passport responsibilities.
 
 `verify-report` validates the complete `checksums.sha256` chain, the scan
 manifest, every canonical report artifact, and their exact manifest bindings.

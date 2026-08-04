@@ -19,10 +19,12 @@ from py_security_suite.report_inspection import (
     _bounded_names,
     _line_number,
     _local_artifact_reference,
+    _read_object_payload,
     _safe_text,
     _safe_web_uri,
     inspect_report,
     render_inspection,
+    verify_inspection,
 )
 from py_security_suite.passport import REQUIRED_REPORT_ARTIFACTS
 from tests.report_fixtures import write_embedded_statement
@@ -36,6 +38,55 @@ _INSPECTION_SCHEMA = json.loads(
 
 
 class ReportInspectionTests(unittest.TestCase):
+    def test_exported_inspection_is_bound_to_its_verified_report(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            report = root / "report"
+            report.mkdir()
+            _write_report(report)
+            inspection = root / "inspection.json"
+            payload = json.dumps(
+                inspect_report(report, limit=1),
+                indent=2,
+                sort_keys=True,
+            ).encode()
+            inspection.write_bytes(payload)
+            relocated_report = root / "downloaded-report"
+            report.rename(relocated_report)
+            report = relocated_report
+
+            verification = verify_inspection(inspection, report=report, limit=1)
+            self.assertTrue(verification["verified"])
+            self.assertEqual(verification["scan_id"], "scan-fixture")
+            self.assertEqual(verification["top_actions_verified"], 1)
+            self.assertEqual(verification["action_limit"], 1)
+            self.assertEqual(
+                verification["inspection_sha256"], hashlib.sha256(payload).hexdigest()
+            )
+
+            tampered = json.loads(payload)
+            tampered["scan_policy"]["disposition"] = "allow"
+            inspection.write_text(json.dumps(tampered), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "does not match"):
+                verify_inspection(inspection, report=report, limit=1)
+
+            omitted = json.loads(payload)
+            omitted["top_actions"] = []
+            inspection.write_text(json.dumps(omitted), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "does not match"):
+                verify_inspection(inspection, report=report, limit=1)
+
+            inspection.write_text('{"top_actions":"invalid"}', encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "must be a list of objects"):
+                verify_inspection(inspection, report=report, limit=1)
+
+            inspection.write_text(
+                '{"top_actions":[],"top_actions":[]}',
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "duplicate object key"):
+                verify_inspection(inspection, report=report, limit=1)
+
     def test_inspection_output_conforms_to_the_versioned_json_schema(self) -> None:
         Draft202012Validator.check_schema(_INSPECTION_SCHEMA)
         with tempfile.TemporaryDirectory() as directory:
@@ -277,6 +328,17 @@ class ReportInspectionTests(unittest.TestCase):
             _write_report(invalid_findings, findings_value=["bad shape"])
             with self.assertRaisesRegex(ValueError, "findings must be a list"):
                 inspect_report(invalid_findings)
+
+    def test_json_growth_after_metadata_check_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "inspection.json"
+            source.write_bytes(b"{}")
+            with (
+                patch("py_security_suite.report_inspection._MAX_JSON_BYTES", 2),
+                patch.object(Path, "read_bytes", return_value=b"{} "),
+                self.assertRaisesRegex(ValueError, "bounded regular file"),
+            ):
+                _read_object_payload(source)
 
 
 def _write_report(

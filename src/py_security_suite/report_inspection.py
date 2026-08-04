@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from collections import Counter
 from pathlib import Path
@@ -9,6 +10,7 @@ from urllib.parse import quote, urlsplit
 from .execution import sanitize_terminal_text
 from .models import Outcome
 from .passport import verify_report
+from .path_safety import resolve_unlinked_path
 
 
 _MAX_JSON_BYTES = 128 * 1024 * 1024
@@ -63,6 +65,33 @@ def inspect_report(report: Path, *, limit: int = 5) -> dict[str, Any]:
             "checksums_sha256": verification["checksums_sha256"],
         },
         "entrypoints": _entrypoints(),
+    }
+
+
+def verify_inspection(
+    inspection: Path, *, report: Path, limit: int = 5
+) -> dict[str, Any]:
+    """Verify that an exported inspection exactly describes a sealed report."""
+    requested = inspection.expanduser().absolute()
+    source = resolve_unlinked_path(
+        requested,
+        "inspection document",
+        boundary=Path(requested.anchor),
+    )
+    document, payload = _read_object_payload(source)
+    actions = _object_list(document.get("top_actions"), "inspection top_actions")
+    expected = inspect_report(report, limit=limit)
+    if document != expected:
+        raise ValueError("inspection document does not match the verified report")
+    return {
+        "schema_version": "1.0",
+        "verified": True,
+        "schema_id": str(expected["schema_id"]),
+        "scan_id": str(expected["scan"]["id"]),
+        "inspection_sha256": hashlib.sha256(payload).hexdigest(),
+        "report_checksums_sha256": str(expected["integrity"]["checksums_sha256"]),
+        "action_limit": limit,
+        "top_actions_verified": len(actions),
     }
 
 
@@ -252,11 +281,28 @@ def _reference_text(citation: dict[str, str]) -> str:
 
 
 def _read_object(path: Path) -> dict[str, Any]:
+    value, _ = _read_object_payload(path)
+    return value
+
+
+def _read_object_payload(path: Path) -> tuple[dict[str, Any], bytes]:
     if not path.is_file() or path.is_symlink() or path.stat().st_size > _MAX_JSON_BYTES:
         raise ValueError(f"report JSON is not a bounded regular file: {path}")
-    value = json.loads(path.read_text(encoding="utf-8"))
+    payload = path.read_bytes()
+    if len(payload) > _MAX_JSON_BYTES:
+        raise ValueError(f"report JSON is not a bounded regular file: {path}")
+    value = json.loads(payload, object_pairs_hook=_unique_json_object)
     if not isinstance(value, dict):
         raise ValueError(f"report JSON root must be an object: {path}")
+    return value, payload
+
+
+def _unique_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    value: dict[str, Any] = {}
+    for key, item in pairs:
+        if key in value:
+            raise ValueError("report JSON contains a duplicate object key")
+        value[key] = item
     return value
 
 

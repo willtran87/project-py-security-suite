@@ -92,6 +92,8 @@ changing the sealed report:
 ```text
 pysec inspect PATH_TO_REPORT --format json \
   --output PATH_TO_REPORT-inspection.json
+pysec verify-inspection PATH_TO_REPORT-inspection.json \
+  --report PATH_TO_REPORT
 ```
 
 `inspect` verifies the report checksum chain before showing the `ALLOW`,
@@ -113,6 +115,13 @@ unless `--overwrite` is explicit, and must remain outside the report's exact
 checksum boundary. Exported entry points and finding-detail links are artifact-
 relative, so they survive GitHub download or relocation without disclosing the
 runner workspace; terminal rendering resolves the same links locally.
+`verify-inspection` rereads the sealed report, recomputes the normalized
+inspection with the caller's expected action limit (five by default), and
+requires exact semantic equality before returning its sidecar SHA-256 and
+report-checksum binding. Use the same explicit `--limit` on export and
+verification when overriding the default, so the sidecar cannot suppress
+actions and choose its own comparison depth. This proves
+consistency, not signer authenticity; use the Security Passport for approval.
 
 Commands with `--format json` return failures on standard error using one stable
 envelope with `status`, `command`, and a coded `error`; `attest` uses the same

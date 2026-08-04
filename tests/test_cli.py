@@ -67,6 +67,19 @@ class CliSafetyTests(unittest.TestCase):
         self.assertEqual(doctor.command, "doctor")
         verify_report = parser.parse_args(["verify-report", "report"])
         self.assertEqual(verify_report.command, "verify-report")
+        verify_inspection = parser.parse_args(
+            [
+                "verify-inspection",
+                "inspection.json",
+                "--report",
+                "report",
+                "--format",
+                "json",
+            ]
+        )
+        self.assertEqual(verify_inspection.command, "verify-inspection")
+        self.assertEqual(verify_inspection.inspection, Path("inspection.json"))
+        self.assertEqual(verify_inspection.report, Path("report"))
         inspect = parser.parse_args(
             [
                 "inspect",
@@ -130,6 +143,62 @@ class CliSafetyTests(unittest.TestCase):
         ):
             self.assertEqual(main(["verify-report", "report", "--format", "json"]), 0)
         self.assertTrue(json.loads(output.call_args.args[0])["verified"])
+
+    def test_verify_inspection_has_text_and_json_output(self) -> None:
+        verification = {
+            "schema_version": "1.0",
+            "verified": True,
+            "schema_id": "urn:inspection",
+            "scan_id": "scan-fixture",
+            "inspection_sha256": "a" * 64,
+            "report_checksums_sha256": "b" * 64,
+            "action_limit": 5,
+            "top_actions_verified": 2,
+        }
+        with (
+            patch(
+                "py_security_suite.cli.verify_inspection",
+                return_value=verification,
+            ) as verifier,
+            patch("builtins.print") as output,
+        ):
+            code = main(
+                [
+                    "verify-inspection",
+                    "inspection.json",
+                    "--report",
+                    "report",
+                ]
+            )
+        self.assertEqual(code, 0)
+        self.assertIn(
+            "VERIFIED: inspection for scan scan-fixture", output.call_args.args[0]
+        )
+        verifier.assert_called_once_with(
+            Path("inspection.json"),
+            report=Path("report"),
+            limit=5,
+        )
+
+        with (
+            patch(
+                "py_security_suite.cli.verify_inspection",
+                return_value=verification,
+            ),
+            patch("builtins.print") as output,
+        ):
+            code = main(
+                [
+                    "verify-inspection",
+                    "inspection.json",
+                    "--report",
+                    "report",
+                    "--format",
+                    "json",
+                ]
+            )
+        self.assertEqual(code, 0)
+        self.assertEqual(json.loads(output.call_args.args[0]), verification)
 
     def test_passport_verification_text_separates_integrity_policy_and_approval(
         self,

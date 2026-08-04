@@ -362,7 +362,7 @@ sequenceDiagram
     Guard-->>Job: Success or stop
     Job->>Scan: Run scan and save exit code
     Scan-->>Job: Report directory
-    Job->>Scan: Verify report and export inspection sidecar
+    Job->>Scan: Export sidecar and verify exact report semantics
     Job->>Artifact: Upload report and inspection
     Job->>SARIF: Upload results.sarif
     Job->>Job: Exit with saved policy code
@@ -581,6 +581,8 @@ output or publish a machine-readable sidecar beside the sealed report:
 pysec inspect .artifacts\release-scan `
   --format json `
   --output .artifacts\release-scan-inspection.json
+pysec verify-inspection .artifacts\release-scan-inspection.json `
+  --report .artifacts\release-scan
 ```
 
 The output is created atomically and is never permitted inside the report's

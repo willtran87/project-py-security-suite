@@ -15,7 +15,7 @@ from .orchestrator import scan_project
 from .policy import exit_code
 from .passport import create_attestation, verify_attestation, verify_report
 from .path_safety import resolve_regular_directory, resolve_unlinked_path
-from .report_inspection import inspect_report, render_inspection
+from .report_inspection import inspect_report, render_inspection, verify_inspection
 from .reports import is_complete_report
 
 
@@ -163,6 +163,26 @@ def build_parser() -> argparse.ArgumentParser:
         "--format", choices=("text", "json"), default="text"
     )
 
+    verify_inspection_parser = subparsers.add_parser(
+        "verify-inspection",
+        help="verify an inspection sidecar against its sealed report",
+    )
+    verify_inspection_parser.add_argument(
+        "inspection", type=Path, metavar="INSPECTION_FILE"
+    )
+    verify_inspection_parser.add_argument(
+        "--report", type=Path, required=True, metavar="REPORT_DIRECTORY"
+    )
+    verify_inspection_parser.add_argument(
+        "--format", choices=("text", "json"), default="text"
+    )
+    verify_inspection_parser.add_argument(
+        "--limit",
+        type=int,
+        default=5,
+        help="expected prioritized-action limit used during export (0-100)",
+    )
+
     inspect = subparsers.add_parser(
         "inspect", help="verify and summarize an existing report"
     )
@@ -266,6 +286,24 @@ def main(argv: list[str] | None = None) -> int:
                     f"{verification['file_count']} files; "
                     f"outcome {str(verification['outcome']).upper()}; "
                     f"scan {verification['scan_id']}"
+                )
+            return 0
+        if args.command == "verify-inspection":
+            verification = verify_inspection(
+                args.inspection,
+                report=args.report,
+                limit=args.limit,
+            )
+            if args.format == "json":
+                print(json.dumps(verification, indent=2, sort_keys=True))
+            else:
+                print(
+                    "VERIFIED: inspection for scan "
+                    f"{verification['scan_id']}; "
+                    f"{verification['top_actions_verified']} prioritized actions "
+                    f"(limit {verification['action_limit']}); "
+                    "report checksum "
+                    f"{verification['report_checksums_sha256']}"
                 )
             return 0
         if args.command == "inspect":
