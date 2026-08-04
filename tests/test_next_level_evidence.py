@@ -403,13 +403,68 @@ class PassportTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "binding is invalid: summary"):
                 verify_report(report)
 
+    def test_report_validation_requires_every_declared_artifact(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            report = _fixture_report(root)
+            manifest_path = report / "scan-manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+            evidence = report / "evidence"
+            evidence.mkdir()
+            (evidence / "scanner.json").write_text("{}", encoding="utf-8")
+            manifest["artifacts"]["evidence"] = "evidence/"
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            _write_checksums(report)
+            self.assertTrue(verify_report(report)["verified"])
+
+            valid_artifacts = dict(manifest["artifacts"])
+            invalid_maps: tuple[tuple[dict[str, object], str], ...] = (
+                ({}, "binding count is invalid"),
+                (
+                    {**valid_artifacts, "malformed": 7},
+                    "binding is malformed",
+                ),
+            )
+            for artifact_map, message in invalid_maps:
+                with self.subTest(message=message):
+                    manifest["artifacts"] = artifact_map
+                    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+                    _write_checksums(report)
+                    with self.assertRaisesRegex(ValueError, message):
+                        verify_report(report)
+            manifest["artifacts"] = valid_artifacts
+
+            invalid = (
+                ("missing", "missing.json", "artifact is unavailable"),
+                ("duplicate", "summary.md", "binding is duplicated"),
+                ("unsafe", "../outside.json", "unsafe evidence path"),
+            )
+            for key, binding, message in invalid:
+                with self.subTest(binding=binding):
+                    manifest["artifacts"][key] = binding
+                    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+                    _write_checksums(report)
+                    with self.assertRaisesRegex(ValueError, message):
+                        verify_report(report)
+                    manifest["artifacts"].pop(key)
+
     def test_passport_path_and_statement_validation_rejects_ambiguous_evidence(
         self,
     ) -> None:
         self.assertEqual(
             _safe_relative("nested/evidence.json"), Path("nested/evidence.json")
         )
-        for value in ("", "/absolute", "../escape", "nested\\windows"):
+        for value in (
+            "",
+            ".",
+            "/absolute",
+            "../escape",
+            "./nested",
+            "nested//ambiguous",
+            "nested\\windows",
+            "C:/windows-drive",
+        ):
             with (
                 self.subTest(value=value),
                 self.assertRaisesRegex(ValueError, "unsafe"),
@@ -1014,7 +1069,7 @@ def _record(finding: Finding) -> dict[str, object]:
 def _write_checksums(root: Path) -> None:
     lines = [
         f"{_digest(path)}  {path.relative_to(root).as_posix()}"
-        for path in sorted(root.iterdir())
+        for path in sorted(root.rglob("*"))
         if path.is_file() and path.name != "checksums.sha256"
     ]
     (root / "checksums.sha256").write_text("\n".join(lines) + "\n", encoding="utf-8")

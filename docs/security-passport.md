@@ -102,7 +102,8 @@ pysec verify-report REPORT
 ```
 
 This validates the report checksum chain, complete canonical artifact set, and
-exact scan-manifest artifact bindings. The embedded
+exact scan-manifest artifact bindings. Every additional manifest binding must
+name unique, present evidence inside the report. The embedded
 `REPORT/security-passport.json` is the unsigned in-toto/SLSA statement; it is
 not itself the detached passport directory accepted by `pysec verify`.
 

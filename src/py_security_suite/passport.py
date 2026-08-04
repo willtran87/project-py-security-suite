@@ -482,12 +482,39 @@ def _verify_report_artifact_contract(report: Path, manifest: dict[str, Any]) -> 
     artifacts = manifest.get("artifacts")
     if not isinstance(artifacts, dict):
         raise ValueError("report artifact manifest is missing or invalid")
-    for key, relative in REQUIRED_REPORT_ARTIFACTS.items():
-        if artifacts.get(key) != relative:
+    if not artifacts or len(artifacts) > _MAX_CHECKSUM_ENTRIES:
+        raise ValueError("report artifact binding count is invalid")
+    for key, required_relative in REQUIRED_REPORT_ARTIFACTS.items():
+        if artifacts.get(key) != required_relative:
             raise ValueError(f"report artifact binding is invalid: {key}")
-        path = report / relative
+        path = report / required_relative
         if not path.is_file() or path.is_symlink():
-            raise ValueError(f"required report artifact is missing: {relative}")
+            raise ValueError(
+                f"required report artifact is missing: {required_relative}"
+            )
+    seen: set[str] = set()
+    for key, raw_binding in artifacts.items():
+        if (
+            not isinstance(key, str)
+            or not key
+            or len(key) > 256
+            or not isinstance(raw_binding, str)
+            or len(raw_binding) > 4096
+        ):
+            raise ValueError("report artifact binding is malformed")
+        directory_binding = raw_binding.endswith("/")
+        raw_relative = raw_binding[:-1] if directory_binding else raw_binding
+        artifact_relative = _safe_relative(raw_relative)
+        normalized = artifact_relative.as_posix()
+        if normalized in seen:
+            raise ValueError(f"report artifact binding is duplicated: {raw_binding}")
+        seen.add(normalized)
+        path = report / artifact_relative
+        available = (
+            path.is_dir() if directory_binding else path.is_file()
+        ) and not _is_link_like(path)
+        if not available:
+            raise ValueError(f"declared report artifact is unavailable: {raw_binding}")
 
 
 def _report_inputs(report: Path, *, exclude: set[str]) -> list[dict[str, Any]]:
@@ -599,7 +626,15 @@ def _verify_checksums(root: Path) -> int:
 
 def _safe_relative(value: str) -> Path:
     pure = PurePosixPath(value)
-    if not value or pure.is_absolute() or ".." in pure.parts or "\\" in value:
+    if (
+        not value
+        or not pure.parts
+        or value != pure.as_posix()
+        or pure.is_absolute()
+        or ".." in pure.parts
+        or "\\" in value
+        or ":" in pure.parts[0]
+    ):
         raise ValueError(f"unsafe evidence path: {value!r}")
     return Path(*pure.parts)
 

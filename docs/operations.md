@@ -607,7 +607,8 @@ public key, and approved Cosign executable into the deployment boundary. Run
 At the first handoff, validate the report itself with
 `pysec verify-report REPORT`. This checks every checksum entry, requires the
 complete canonical report set, and validates its scan-manifest artifact bindings
-without requiring a signing key. `pysec verify PASSPORT --report REPORT` is the stronger detached
+without requiring a signing key. Missing, duplicate, ambiguous, unsafe, or
+linked declared evidence is rejected. `pysec verify PASSPORT --report REPORT` is the stronger detached
 passport operation and expects `PASSPORT` to be a directory created by
 `pysec attest`.
 

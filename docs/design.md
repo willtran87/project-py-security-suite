@@ -380,7 +380,9 @@ report/
   reasons, timestamps, profile, and isolation attestation.
 - `checksums.sha256` protects report integrity after generation. Verification
   also requires every canonical artifact and its exact scan-manifest binding,
-  so a self-consistent but partial report cannot be presented as complete.
+  plus every declared derived file or directory. Missing, duplicated, linked,
+  ambiguous, or boundary-crossing bindings are rejected, so a self-consistent
+  but partial report cannot be presented as complete.
 - `sbom.cdx.json` and `scancode-inventory.json` are governed derived evidence.
 - `evidence/*.json` contains sanitized diagnostics and output hashes, not
   secret values or raw scanner output.
@@ -510,8 +512,8 @@ The native Windows self-scan process verifies:
   errors; 27 conditional scanners were correctly not applicable;
 - Pylint, Radon, Ruff formatting, coverage, and JUnit adapters executed through
   approved entry-point bindings and emitted normalized derived evidence;
-- the separately generated branch-coverage evidence records 92.01% combined
-  line-and-branch coverage and 84.56% branch coverage, satisfying both 80%
+- the separately generated branch-coverage evidence records 92.03% combined
+  line-and-branch coverage and 84.63% branch coverage, satisfying both 80%
   repository gates with no per-file hotspots; JUnit records 275 passing tests,
   one platform-limited symlink skip, and no failures or errors;
 - CycloneDX completed from `uv.lock` through a frozen offline export with a

@@ -5,6 +5,8 @@ for published releases.
 
 ## Unreleased
 
+- Validate every declared report artifact as a unique, present, normalized,
+  in-report file or directory and reject ambiguous portable evidence paths.
 - Require every canonical report artifact and exact scan-manifest binding during
   verification, and prevent derived evidence from shadowing reserved bindings.
 - Serialize final report publication with an atomic sibling lock so concurrent
