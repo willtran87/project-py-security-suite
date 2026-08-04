@@ -579,8 +579,10 @@ Treat “observed unchanged” as useful tamper evidence, not organizational
 approval; production and release gates require configured approved digests.
 Terminal output previews at most five names per trust-action class and reports
 the omitted count. Use `--format json` for the complete named gap arrays, or
-open `action-plan.md` for each entry point's role, full copy-ready digest, state,
-and remediation.
+open `action-plan.md` for risk-ordered entry-point state and remediation. Its
+collapsed TOML block contains complete copy-ready digest candidates only for
+entry points observed unchanged; treat them as unapproved until provenance,
+version, and custody are independently verified.
 
 Inspection treats report content as untrusted even after checksum validation.
 Terminal-facing values are length-bounded, non-printing and bidirectional

@@ -625,6 +625,11 @@ def render_action_plan(manifest: ScanManifest, findings: list[Finding]) -> str:
     entrypoints, approved_entrypoints, unchanged_entrypoints = (
         _entrypoint_integrity_counts(manifest.tools)
     )
+    trust_gaps, approval_gaps, postcheck_gaps = _entrypoint_integrity_gap_counts(
+        manifest.tools
+    )
+    approval_gap_label = "gap" if approval_gaps == 1 else "gaps"
+    postcheck_gap_label = "gap" if postcheck_gaps == 1 else "gaps"
     lines = [
         "# Security action plan",
         "",
@@ -639,6 +644,9 @@ def render_action_plan(manifest: ScanManifest, findings: list[Finding]) -> str:
         f"{approved_entrypoints}/{entrypoints}",
         f"- **Scanner entry points unchanged after execution:** "
         f"{unchanged_entrypoints}/{entrypoints}",
+        f"- **Scanner trust actions:** {trust_gaps} affected entry points "
+        f"({approval_gaps} approval {approval_gap_label}; "
+        f"{postcheck_gaps} post-execution {postcheck_gap_label})",
         f"- **Immediate next step:** {_next_action(manifest.outcome)}",
         "",
         "## Finding actions",
@@ -743,25 +751,41 @@ def render_action_plan(manifest: ScanManifest, findings: list[Finding]) -> str:
 
 def _render_entrypoint_trust_actions(tools: list[ToolRun]) -> list[str]:
     states = _entrypoint_integrity_states(tools)
-    gaps = [state for state in states if state[3] is not True or state[4] is not True]
+    gaps = sorted(
+        (state for state in states if state[3] is not True or state[4] is not True),
+        key=_entrypoint_trust_sort_key,
+    )
+    trust_guidance = " ".join(
+        (
+            "Address changed or unverifiable entry points before approval gaps.",
+            "Digest approval candidates below are observations, not provenance decisions.",
+        )
+    )
     lines = [
         "",
         "## Scanner entry-point trust actions",
         "",
-        "| Tool | Role | Digest | Approval | Post-execution | Required action |",
-        "|---|---|---|---|---|---|",
+        trust_guidance,
+        "",
+        "| Priority | Entry point | Digest | Trust state | Required action |",
+        "|---|---|---|---|---|",
     ]
     for tool, role, digest, approved, unchanged in gaps:
+        priority = (
+            "P0" if unchanged is False else "P1" if unchanged is not True else "P2"
+        )
         actions: list[str] = []
-        if approved is not True:
-            actions.append(
-                "Independently verify provenance, then pin this SHA-256 in "
-                "organization policy."
-            )
         if unchanged is False:
             actions.append("Quarantine the changed toolchain and reinstall it.")
         elif unchanged is not True:
             actions.append("Restore post-execution digest verification.")
+        if approved is not True:
+            actions.append(
+                "After integrity is restored, independently verify provenance and "
+                "approve the exact digest."
+                if unchanged is not True
+                else "Independently verify provenance and approve the exact digest."
+            )
         postcheck = (
             "unchanged"
             if unchanged is True
@@ -770,20 +794,71 @@ def _render_entrypoint_trust_actions(tools: list[ToolRun]) -> list[str]:
             else "unavailable"
         )
         lines.append(
-            f"| {_markdown_table(tool)} | {role} | "
-            f"`sha256:{_markdown_code(digest)}` | "
-            f"{'approved' if approved is True else 'not approved'} | "
-            f"{postcheck} | {_markdown_table(' '.join(actions))} |"
+            f"| {priority} | {_markdown_table(tool)} ({role}) | "
+            f"`sha256:{_markdown_code(digest[:12])}...` | "
+            f"{'approved' if approved is True else 'not approved'}; "
+            f"post-check {postcheck} | {_markdown_table(' '.join(actions))} |"
         )
     if not states:
         lines.append(
-            "| No observed entry points | - | - | unavailable | unavailable | "
-            "Configure scanner entry points and approved digests, then rerun. |"
+            "| P0 | No observed entry points | - | unavailable | Configure scanner "
+            "entry points and approved digests, then rerun. |"
         )
     elif not gaps:
         lines.append(
-            "| All observed entry points | - | - | approved | unchanged | No action |"
+            "| - | All observed entry points | - | approved; post-check unchanged | "
+            "No action |"
         )
+    lines.extend(_render_entrypoint_approval_candidates(gaps))
+    return lines
+
+
+def _entrypoint_trust_sort_key(
+    state: tuple[str, str, str, bool | None, bool | None],
+) -> tuple[int, str, str]:
+    tool, role, _, _, unchanged = state
+    priority = 0 if unchanged is False else 1 if unchanged is not True else 2
+    return priority, tool, role
+
+
+def _render_entrypoint_approval_candidates(
+    gaps: list[tuple[str, str, str, bool | None, bool | None]],
+) -> list[str]:
+    candidates = sorted(
+        (state for state in gaps if state[3] is not True and state[4] is True),
+        key=lambda state: (state[0], state[1]),
+    )
+    if not candidates:
+        return []
+    grouped: dict[str, list[tuple[str, str]]] = {}
+    for tool, role, digest, _, _ in candidates:
+        grouped.setdefault(tool, []).append((role, digest))
+    provenance_warning = " ".join(
+        (
+            "> Do not apply these observed digests as approvals until an independent",
+            "provenance review confirms each executable's source, version, and custody.",
+        )
+    )
+    lines = [
+        "",
+        f"<details><summary>{len(candidates)} copy-ready digest approval "
+        "candidates (provenance review required)</summary>",
+        "",
+        provenance_warning,
+        "",
+        "```toml",
+    ]
+    for tool, entries in grouped.items():
+        lines.append(f"[tools.{tool}]")
+        for role, digest in entries:
+            field = (
+                "auxiliary_executable_sha256"
+                if role == "helper"
+                else "executable_sha256"
+            )
+            lines.append(f'{field} = "{digest}"')
+        lines.append("")
+    lines.extend(["```", "", "</details>"])
     return lines
 
 
@@ -1894,6 +1969,18 @@ def _entrypoint_integrity_counts(tools: list[ToolRun]) -> tuple[int, int, int]:
             for _, _, _, approved, unchanged in states
         ),
         sum(unchanged is True for _, _, _, _, unchanged in states),
+    )
+
+
+def _entrypoint_integrity_gap_counts(tools: list[ToolRun]) -> tuple[int, int, int]:
+    states = _entrypoint_integrity_states(tools)
+    return (
+        sum(
+            approved is not True or unchanged is not True
+            for _, _, _, approved, unchanged in states
+        ),
+        sum(approved is not True for _, _, _, approved, _ in states),
+        sum(unchanged is not True for _, _, _, _, unchanged in states),
     )
 
 

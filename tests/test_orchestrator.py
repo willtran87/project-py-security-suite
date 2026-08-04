@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import tempfile
+import tomllib
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -153,10 +154,36 @@ class OrchestratorTests(unittest.TestCase):
             auxiliary_executable_integrity_verified=True,
             auxiliary_executable_unchanged=False,
         )
-        rendered = "\n".join(_render_entrypoint_trust_actions([changed_helper]))
-        self.assertIn("| changed-tool | helper |", rendered)
-        self.assertIn(f"`sha256:{'b' * 64}`", rendered)
+        candidate = ToolRun(
+            tool="candidate-tool",
+            status=ToolStatus.COMPLETED,
+            command=["candidate-tool"],
+            duration_seconds=0.01,
+            executable_sha256="c" * 64,
+            executable_integrity_verified=None,
+            executable_unchanged=True,
+            auxiliary_executable_sha256="d" * 64,
+            auxiliary_executable_integrity_verified=None,
+            auxiliary_executable_unchanged=True,
+        )
+        rendered = "\n".join(
+            _render_entrypoint_trust_actions([candidate, changed_helper])
+        )
+        self.assertIn("| P0 | changed-tool (helper) |", rendered)
+        self.assertIn(f"`sha256:{'b' * 12}...`", rendered)
         self.assertIn("Quarantine the changed toolchain", rendered)
+        self.assertLess(
+            rendered.index("changed-tool"), rendered.index("candidate-tool")
+        )
+        self.assertIn("2 copy-ready digest approval candidates", rendered)
+        self.assertEqual(rendered.count("[tools.candidate-tool]"), 1)
+        self.assertIn(f'executable_sha256 = "{"c" * 64}"', rendered)
+        self.assertIn(f'auxiliary_executable_sha256 = "{"d" * 64}"', rendered)
+        candidate_toml = rendered.split("```toml\n", 1)[1].split("```", 1)[0]
+        parsed = tomllib.loads(candidate_toml)
+        self.assertEqual(
+            parsed["tools"]["candidate-tool"]["executable_sha256"], "c" * 64
+        )
 
     def test_governed_asset_paths_are_resolved_without_losing_identity(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -330,6 +357,7 @@ class OrchestratorTests(unittest.TestCase):
             self.assertIn("## Policy and release-evidence actions", action_plan)
             self.assertIn("## Scanner entry-point trust actions", action_plan)
             self.assertIn("Independently verify provenance", action_plan)
+            self.assertIn("1 approval gap; 1 post-execution gap", action_plan)
             self.assertIn("**Scan-policy disposition:** `BLOCK`", action_plan)
             self.assertIn("# Production security assurance case", assurance_case)
             self.assertIn("Built artifact integrity and provenance", assurance_case)
@@ -423,7 +451,9 @@ class OrchestratorTests(unittest.TestCase):
             self.assertIn("Applicable scanner execution gaps:** 1", prioritized_summary)
             self.assertIn("Conditional controls not applicable: 1", prioritized_summary)
             self.assertIn("<summary>1 not-applicable controls", prioritized_summary)
-            actionable, informational = prioritized_plan.split("<details>", 1)
+            actionable, informational = prioritized_plan.split(
+                "<details><summary>1 not-applicable controls", 1
+            )
             self.assertIn("required-offline", actionable)
             self.assertNotIn("conditional-offline", actionable)
             self.assertIn("conditional-offline", informational)

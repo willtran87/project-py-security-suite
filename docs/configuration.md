@@ -312,6 +312,12 @@ unchanged entry points, unchanged post-checks, and post-check gaps. Its
 `approval_gap_entrypoints` and `postcheck_gap_entrypoints` arrays retain the
 complete primary/helper names for automation.
 
+The Markdown action plan orders changed entry points before missing post-checks
+and approval-only gaps. It also emits a collapsed TOML candidate block for
+entry points that were observed unchanged but lack an approved digest. The
+block is deliberately not an approval record: independently verify provenance,
+version, and custody before copying any candidate into organization policy.
+
 Machine-readable commands use this failure shape on standard error and exit
 with code `3` for configuration, I/O, or validation failures:
 

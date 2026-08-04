@@ -94,8 +94,9 @@ prioritized remediation. Applicable disabled or skipped tools are reported as
 execution gaps, never as not applicable. An entry point observed unchanged is
 not mislabeled as organization-approved. Terminal inspection names a bounded
 set of approval and post-check gaps, inspection JSON retains the complete lists,
-and `action-plan.md` provides the role, full copy-ready digest, state, and
-required remediation.
+and `action-plan.md` provides a risk-ordered compact trust view plus complete,
+copy-ready TOML digest candidates. Those candidates remain observations until
+an independent provenance review approves them.
 
 Commands with `--format json` return failures on standard error using one stable
 envelope with `status`, `command`, and a coded `error`; `attest` uses the same
