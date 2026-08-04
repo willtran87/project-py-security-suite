@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import sys
+import tempfile
 from pathlib import Path
 
 from . import __version__
@@ -168,6 +169,20 @@ def build_parser() -> argparse.ArgumentParser:
     inspect.add_argument("report", type=Path, metavar="REPORT_DIRECTORY")
     inspect.add_argument("--format", choices=("text", "json"), default="text")
     inspect.add_argument(
+        "--output",
+        type=Path,
+        metavar="FILE",
+        help=(
+            "atomically write the derived inspection beside, never inside, "
+            "the sealed report"
+        ),
+    )
+    inspect.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="replace an existing inspection output file",
+    )
+    inspect.add_argument(
         "--limit",
         type=int,
         default=5,
@@ -254,12 +269,22 @@ def main(argv: list[str] | None = None) -> int:
                 )
             return 0
         if args.command == "inspect":
+            if args.overwrite and not args.output:
+                raise ValueError("inspect --overwrite requires --output")
             inspection = inspect_report(args.report, limit=args.limit)
-            print(
+            rendered = (
                 json.dumps(inspection, indent=2, sort_keys=True)
                 if args.format == "json"
                 else render_inspection(inspection)
             )
+            if args.output:
+                _write_inspection_output(
+                    report=args.report,
+                    output=args.output,
+                    content=rendered,
+                    overwrite=args.overwrite,
+                )
+            print(rendered)
             return 0
         if args.network_isolated and args.diagnostic_without_isolation:
             raise ValueError(
@@ -378,6 +403,55 @@ def _append_github_summary(summary: Path) -> None:
     with Path(destination).open("a", encoding="utf-8", newline="\n") as handle:
         handle.write(summary.read_text(encoding="utf-8"))
         handle.write("\n")
+
+
+def _write_inspection_output(
+    *, report: Path, output: Path, content: str, overwrite: bool
+) -> Path:
+    """Publish a derived inspection without modifying its sealed source report."""
+    requested = output.expanduser().absolute()
+    anchor = Path(requested.anchor)
+    destination = resolve_unlinked_path(
+        requested,
+        "inspection output",
+        boundary=anchor,
+    )
+    report_root = report.expanduser().absolute().resolve()
+    if destination == report_root or destination.is_relative_to(report_root):
+        raise ValueError(
+            "inspection output must be outside the sealed report directory"
+        )
+    if destination.exists():
+        if not destination.is_file():
+            raise ValueError(
+                f"inspection output exists and is not a file: {destination}"
+            )
+        if not overwrite:
+            raise ValueError(
+                "inspection output already exists; choose a new path or use "
+                f"--overwrite: {destination}"
+            )
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(
+        dir=destination.parent,
+        prefix=f".{destination.name}.",
+        suffix=".tmp",
+    )
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(content)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        if overwrite:
+            os.replace(temporary, destination)
+        else:
+            os.link(temporary, destination)
+            temporary.unlink()
+    finally:
+        temporary.unlink(missing_ok=True)
+    return destination
 
 
 def _render_attestation_verification(verification: dict[str, object]) -> str:

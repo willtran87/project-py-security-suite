@@ -43,12 +43,23 @@ jobs:
           echo "exit_code=$scan_exit" >> "$GITHUB_OUTPUT"
           exit 0
 
-      - name: Upload the complete sanitized report
+      - name: Export the verified machine-readable inspection
+        if: always()
+        shell: bash
+        run: |
+          python -m py_security_suite inspect python-security-report \
+            --format json \
+            --output python-security-report-inspection.json \
+            > /dev/null
+
+      - name: Upload the complete sanitized report and inspection
         if: always()
         uses: actions/upload-artifact@<approved-commit-sha>
         with:
           name: python-security-report
-          path: python-security-report/
+          path: |
+            python-security-report/
+            python-security-report-inspection.json
           if-no-files-found: error
 
       - name: Publish SARIF when code scanning is enabled
@@ -62,4 +73,3 @@ jobs:
         if: always()
         shell: bash
         run: exit "${{ steps.security_scan.outputs.exit_code }}"
-

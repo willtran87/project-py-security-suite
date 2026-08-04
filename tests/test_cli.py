@@ -14,6 +14,7 @@ from py_security_suite.cli import (
     _is_suite_report,
     _prepare_output,
     _render_attestation_verification,
+    _write_inspection_output,
     build_parser,
     main,
 )
@@ -66,8 +67,22 @@ class CliSafetyTests(unittest.TestCase):
         self.assertEqual(doctor.command, "doctor")
         verify_report = parser.parse_args(["verify-report", "report"])
         self.assertEqual(verify_report.command, "verify-report")
-        inspect = parser.parse_args(["inspect", "report", "--limit", "3"])
+        inspect = parser.parse_args(
+            [
+                "inspect",
+                "report",
+                "--limit",
+                "3",
+                "--format",
+                "json",
+                "--output",
+                "inspection.json",
+                "--overwrite",
+            ]
+        )
         self.assertEqual(inspect.command, "inspect")
+        self.assertEqual(inspect.output, Path("inspection.json"))
+        self.assertTrue(inspect.overwrite)
 
     def test_doctor_uses_readiness_exit_code_and_output_format(self) -> None:
         readiness = {
@@ -243,6 +258,115 @@ class CliSafetyTests(unittest.TestCase):
         ):
             self.assertEqual(main(["inspect", "report", "--limit", "3"]), 0)
         self.assertEqual(output.call_args.args[0], "PASS")
+
+    def test_inspect_can_atomically_publish_a_json_sidecar(self) -> None:
+        inspection = {"schema_version": "1.0", "verified": True}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            report = root / "sealed-report"
+            report.mkdir()
+            output_path = root / "publication" / "inspection.json"
+            with (
+                patch(
+                    "py_security_suite.cli.inspect_report",
+                    return_value=inspection,
+                ),
+                patch("builtins.print") as output,
+            ):
+                code = main(
+                    [
+                        "inspect",
+                        str(report),
+                        "--format",
+                        "json",
+                        "--output",
+                        str(output_path),
+                    ]
+                )
+            self.assertEqual(code, 0)
+            self.assertEqual(json.loads(output_path.read_text()), inspection)
+            self.assertEqual(json.loads(output.call_args.args[0]), inspection)
+            self.assertEqual(list(output_path.parent.glob("*.tmp")), [])
+
+            with (
+                patch(
+                    "py_security_suite.cli.inspect_report",
+                    return_value={"verified": False},
+                ),
+                patch("builtins.print") as error_output,
+            ):
+                code = main(
+                    [
+                        "inspect",
+                        str(report),
+                        "--format",
+                        "json",
+                        "--output",
+                        str(output_path),
+                    ]
+                )
+            self.assertEqual(code, 3)
+            self.assertEqual(json.loads(output_path.read_text()), inspection)
+            error = json.loads(error_output.call_args.args[0])
+            self.assertEqual(error["error"]["code"], "validation_error")
+
+            with (
+                patch(
+                    "py_security_suite.cli.inspect_report",
+                    return_value={"verified": False},
+                ),
+                patch("builtins.print"),
+            ):
+                code = main(
+                    [
+                        "inspect",
+                        str(report),
+                        "--format",
+                        "json",
+                        "--output",
+                        str(output_path),
+                        "--overwrite",
+                    ]
+                )
+            self.assertEqual(code, 0)
+            self.assertEqual(json.loads(output_path.read_text()), {"verified": False})
+
+    def test_inspection_output_cannot_modify_the_sealed_report(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            report = Path(directory) / "sealed-report"
+            report.mkdir()
+            output = report / "inspection.json"
+            with self.assertRaisesRegex(ValueError, "outside the sealed report"):
+                _write_inspection_output(
+                    report=report,
+                    output=output,
+                    content="{}",
+                    overwrite=False,
+                )
+            self.assertFalse(output.exists())
+
+            existing_directory = Path(directory) / "inspection-output"
+            existing_directory.mkdir()
+            with self.assertRaisesRegex(ValueError, "is not a file"):
+                _write_inspection_output(
+                    report=report,
+                    output=existing_directory,
+                    content="{}",
+                    overwrite=True,
+                )
+
+    def test_inspection_overwrite_requires_an_output(self) -> None:
+        with (
+            patch("py_security_suite.cli.inspect_report") as inspect,
+            patch("builtins.print") as error_output,
+        ):
+            code = main(["inspect", "report", "--overwrite"])
+        self.assertEqual(code, 3)
+        inspect.assert_not_called()
+        self.assertIn(
+            "--overwrite requires --output",
+            error_output.call_args.args[0],
+        )
 
     def test_conflicting_isolation_flags_are_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -345,8 +345,10 @@ commit SHA and replace the isolation placeholder with an organization-owned
 boundary check.
 
 The workflow preserves the suite exit code, publishes the Markdown summary,
-uploads the complete artifact, publishes SARIF, and only then applies the
-policy result.
+exports the verified inspection beside the sealed report, uploads both as one
+artifact, publishes SARIF, and only then applies the policy result. The bundled
+Actionlint policy recognizes the template's `pysec-isolated` self-hosted runner
+label so the distributed example validates without weakening runner isolation.
 
 ```mermaid
 sequenceDiagram
@@ -360,7 +362,8 @@ sequenceDiagram
     Guard-->>Job: Success or stop
     Job->>Scan: Run scan and save exit code
     Scan-->>Job: Report directory
-    Job->>Artifact: Upload complete report
+    Job->>Scan: Verify report and export inspection sidecar
+    Job->>Artifact: Upload report and inspection
     Job->>SARIF: Upload results.sarif
     Job->>Job: Exit with saved policy code
 ```
@@ -572,7 +575,17 @@ and the highest-priority actions with finding ID, scanner rule, owner,
 location, classification, authoritative references, remediation, and a direct
 link to the full HTML evidence card. Action-plan finding IDs use the same deep
 links when viewed from a GitHub artifact. Use `--limit 0` for summary-only
-output or `--format json` for dashboards. The quick view reports how many
+output or publish a machine-readable sidecar beside the sealed report:
+
+```powershell
+pysec inspect .artifacts\release-scan `
+  --format json `
+  --output .artifacts\release-scan-inspection.json
+```
+
+The output is created atomically and is never permitted inside the report's
+exact-file checksum boundary. A pre-existing sidecar is retained unless the
+operator explicitly supplies `--overwrite`. The quick view reports how many
 scanner and helper entry points were cryptographically approved and unchanged,
 how many were observed unchanged after execution, and any missing post-checks.
 Treat “observed unchanged” as useful tamper evidence, not organizational

@@ -255,6 +255,7 @@ Required applicable scanners cannot be disabled.
 pysec scan TARGET --output REPORT [options]
 pysec doctor TARGET [--config PATH] [--policy PATH] [--profile NAME]
 pysec inspect REPORT [--limit 0-100] [--format text|json]
+  [--output FILE] [--overwrite]
 pysec verify-report REPORT
 pysec attest REPORT --output PASSPORT (--signing-key KEY | --unsigned)
 pysec verify PASSPORT [--report REPORT] [verification options]
@@ -280,6 +281,12 @@ Its JSON form retains `policy_reasons` for compatibility and adds structured
 `top_actions`. A skipped scanner only counts as not applicable when its
 manifest record explicitly has `applicable: false`; otherwise it is an
 execution gap.
+When `--output FILE` is present, the same rendered document is atomically
+published to a regular file and still emitted on standard output. The file must
+be outside `REPORT`, because adding any undeclared file to that sealed directory
+correctly invalidates its exact checksum set. Existing output is preserved
+unless `--overwrite` is explicit, and symbolic-link or junction components are
+rejected before publication.
 
 `verify-report` validates the complete `checksums.sha256` chain, the scan
 manifest, every canonical report artifact, and their exact manifest bindings.

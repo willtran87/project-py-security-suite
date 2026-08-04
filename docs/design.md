@@ -80,7 +80,10 @@ affected entry point as a priority-ordered structured action. Candidate-binding
 and unique-digest counts make shared executable review work explicit without
 collapsing the individual policy bindings. A strict bundled Draft 2020-12
 schema and self-identifying offline URN make this output a versioned integration
-contract rather than an informal JSON shape.
+contract rather than an informal JSON shape. A derived inspection sidecar is
+atomically published outside the sealed report, preserving the report's exact
+checksum set while giving CI and GitHub artifact consumers a stable standalone
+document.
 
 ```mermaid
 flowchart LR
@@ -535,9 +538,9 @@ The native Windows self-scan process verifies:
   errors; 27 conditional scanners were correctly not applicable;
 - Pylint, Radon, Ruff formatting, coverage, and JUnit adapters executed through
   approved entry-point bindings and emitted normalized derived evidence;
-- the separately generated branch-coverage evidence records 92.83% combined
-  line-and-branch coverage and 86.22% branch coverage, satisfying both 80%
-  repository gates with no per-file hotspots; JUnit records 285 passing tests,
+- the separately generated branch-coverage evidence records 92.87% combined
+  line-and-branch coverage and 86.31% branch coverage, satisfying both 80%
+  repository gates with no per-file hotspots; JUnit records 288 passing tests,
   one platform-limited symlink skip, and no failures or errors;
 - CycloneDX completed from `uv.lock` through a frozen offline export with a
   hash-verified helper; zizmor, actionlint, Pysa, GuardDog, Flawfinder, and

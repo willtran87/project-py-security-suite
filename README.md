@@ -86,6 +86,14 @@ After a scan, verify and understand the result from one concise command:
 pysec inspect PATH_TO_REPORT --limit 5
 ```
 
+Publish a schema-governed JSON sidecar for CI or a GitHub artifact without
+changing the sealed report:
+
+```text
+pysec inspect PATH_TO_REPORT --format json \
+  --output PATH_TO_REPORT-inspection.json
+```
+
 `inspect` verifies the report checksum chain before showing the `ALLOW`,
 `REVIEW`, or `BLOCK` scan-policy disposition, policy reasons, applicability-
 aware scanner health, finding severity, domains, lifecycle, ownership, native
@@ -100,6 +108,9 @@ an independent provenance review approves them. Inspection JSON exposes the
 same work as priority-ordered structured actions and distinguishes candidate
 policy bindings from unique executable digests. The complete output contract is
 published as an installable [Draft 2020-12 JSON Schema](src/py_security_suite/schemas/report-inspection.schema.json).
+The optional output is published atomically, refuses accidental replacement
+unless `--overwrite` is explicit, and must remain outside the report's exact
+checksum boundary.
 
 Commands with `--format json` return failures on standard error using one stable
 envelope with `status`, `command`, and a coded `error`; `attest` uses the same
@@ -230,13 +241,15 @@ roots; use `extended` for routine feedback and reserve `supply-chain` or
 `examples/github-actions.yml` is an intentionally non-runnable enterprise
 template. Replace the action placeholders with organization-approved commit
 SHAs and replace the isolation verification command with the runner's enforced
-boundary check. The workflow:
+boundary check. The bundled Actionlint policy recognizes the template's
+`pysec-isolated` self-hosted runner label. The workflow:
 
 1. runs the suite and records its policy exit code;
 2. appends `summary.md` to the GitHub workflow summary;
-3. uploads the complete report directory and SARIF even on `FAIL` or
+3. verifies and exports the schema-governed inspection beside the sealed report;
+4. uploads the report, inspection sidecar, and SARIF even on `FAIL` or
    `INCOMPLETE`; and
-4. applies the saved policy exit code only after publishing the evidence.
+5. applies the saved policy exit code only after publishing the evidence.
 
 ## Report artifact
 
