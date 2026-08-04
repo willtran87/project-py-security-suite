@@ -326,9 +326,11 @@ pysec verify .artifacts\release-passport `
 
 `--artifact-root` is the directory beneath which each repository-relative
 Passport subject path exists. Verification rejects missing, linked, oversized,
-or digest-mismatched release files. When artifact subjects are declared,
-omitting this root produces `release_artifacts_not_verified` and cannot approve
-promotion.
+or digest-mismatched release files. Each subject-containing directory must also
+contain exactly the declared `.whl`, `.tar.gz`, and `.zip` files; an unbound
+distribution blocks promotion, while non-distribution sidecars remain allowed.
+When artifact subjects are declared, omitting this root produces
+`release_artifacts_not_verified` and cannot approve promotion.
 
 `--unsigned` and `--allow-unsigned` support a clearly labeled integrity-only
 handoff; they never claim signer authenticity. See the

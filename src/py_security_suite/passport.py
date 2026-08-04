@@ -361,9 +361,11 @@ def verify_attestation(
         allow_unsigned=allow_unsigned,
     )
     report_verification = _verify_bound_report(report, material, statement)
-    release_artifacts_verified, release_artifacts_verified_count = (
-        _verify_presented_release_artifacts(artifact_root, artifact_subjects)
-    )
+    (
+        release_artifacts_verified,
+        release_artifacts_verified_count,
+        release_artifact_directories_verified_count,
+    ) = _verify_presented_release_artifacts(artifact_root, artifact_subjects)
     policy_verification_result = str(statement["predicate"]["verificationResult"])
     policy_passed = policy_verification_result == "PASSED"
     release_blockers = _release_blockers(
@@ -392,6 +394,9 @@ def verify_attestation(
         "release_artifacts_required": bool(artifact_subjects),
         "release_artifacts_verified": release_artifacts_verified,
         "release_artifacts_verified_count": release_artifacts_verified_count,
+        "release_artifact_directories_verified_count": (
+            release_artifact_directories_verified_count
+        ),
         # Retain the original name for API compatibility. This is the SLSA
         # policy result, not the outcome of checksum or signature verification.
         "verification_result": policy_verification_result,
@@ -508,14 +513,17 @@ def _validate_signed_verification_material(material: dict[str, Any]) -> None:
 
 def _verify_presented_release_artifacts(
     artifact_root: Path | None, artifact_subjects: dict[str, str]
-) -> tuple[bool | None, int]:
+) -> tuple[bool | None, int, int]:
     if not artifact_subjects:
         if artifact_root is not None:
             raise ValueError("passport does not declare release artifact subjects")
-        return None, 0
+        return None, 0, 0
     if artifact_root is None:
-        return False, 0
-    return True, _verify_release_artifacts(artifact_root, artifact_subjects)
+        return False, 0, 0
+    artifact_count, directory_count = _verify_release_artifacts(
+        artifact_root, artifact_subjects
+    )
+    return True, artifact_count, directory_count
 
 
 def _release_blockers(
@@ -549,12 +557,14 @@ def _release_artifact_subjects(statement: dict[str, Any]) -> dict[str, str]:
     }
     for name in artifacts:
         _safe_relative(name)
+        if not _is_distribution_name(name):
+            raise ValueError(f"unsupported release artifact subject: {name}")
     return artifacts
 
 
 def _verify_release_artifacts(
     artifact_root: Path, artifact_subjects: dict[str, str]
-) -> int:
+) -> tuple[int, int]:
     root = _resolve_evidence_root(artifact_root, "release artifact root")
     if not root.is_dir() or root.is_symlink():
         raise ValueError(f"release artifact root is not a regular directory: {root}")
@@ -571,7 +581,58 @@ def _verify_release_artifacts(
             raise ValueError(f"release artifact is too large: {name}")
         if sha256_file(path) != expected:
             raise ValueError(f"release artifact digest mismatch: {name}")
-    return len(artifact_subjects)
+    directory_count = _verify_release_artifact_sets(root, artifact_subjects)
+    return len(artifact_subjects), directory_count
+
+
+def _verify_release_artifact_sets(root: Path, artifact_subjects: dict[str, str]) -> int:
+    expected_by_directory: dict[Path, set[str]] = {}
+    for name in artifact_subjects:
+        relative = _safe_relative(name)
+        expected_by_directory.setdefault(relative.parent, set()).add(relative.name)
+    for relative, expected in expected_by_directory.items():
+        directory = _resolve_evidence_root(
+            root / relative,
+            f"release artifact directory {relative.as_posix()}",
+            boundary=root,
+        )
+        if not directory.is_dir() or directory.is_symlink():
+            raise ValueError(
+                f"release artifact directory is unavailable: {relative.as_posix()}"
+            )
+        actual = _release_distribution_names(directory)
+        if actual != expected:
+            unbound = sorted(actual - expected)
+            missing = sorted(expected - actual)
+            detail = ", ".join(
+                [
+                    *(f"unbound:{name}" for name in unbound),
+                    *(f"missing:{name}" for name in missing),
+                ]
+            )
+            raise ValueError(
+                "release artifact directory does not match Passport subjects: "
+                f"{relative.as_posix()} ({detail})"
+            )
+    return len(expected_by_directory)
+
+
+def _release_distribution_names(directory: Path) -> set[str]:
+    names: set[str] = set()
+    for path in directory.iterdir():
+        if not _is_distribution_name(path.name):
+            continue
+        if not path.is_file() or _is_link_like(path):
+            raise ValueError(
+                f"release payload distribution is not a regular file: {path.name}"
+            )
+        names.add(path.name)
+    return names
+
+
+def _is_distribution_name(name: str) -> bool:
+    lowered = name.casefold()
+    return lowered.endswith((".whl", ".tar.gz", ".zip"))
 
 
 def _cosign_major_version(executable: Path, cwd: Path) -> int:

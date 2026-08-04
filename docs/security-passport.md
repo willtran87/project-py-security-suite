@@ -156,7 +156,10 @@ pysec verify PASSPORT --report REPORT \
 subjects. Verification resolves every path beneath that boundary, rejects links
 and files larger than the governed limit, and recomputes each SHA-256. A signed
 Passport with artifact subjects cannot approve release until these presented
-files verify.
+files verify. Each directory containing a subject is also checked as an exact
+Python-distribution set: undeclared `.whl`, `.tar.gz`, or `.zip` siblings are
+rejected, while non-distribution signature and documentation sidecars are
+permitted.
 
 The detached `PASSPORT/security-passport.json` must exactly match the embedded
 `REPORT/security-passport.json` document. The verifier validates the portable
@@ -175,6 +178,7 @@ for integrations. Verification output deliberately separates five concepts:
 | `report_integrity_verified` | The supplied source report and every bound input digest verified |
 | `report_statement_verified` | The detached statement exactly matched the report's embedded statement |
 | `release_artifacts_verified` | Every declared wheel/sdist subject was found and hashed beneath `--artifact-root` |
+| `release_artifact_directories_verified_count` | Number of subject directories whose distribution set exactly matched the Passport |
 | `policy_verification_result` | The SLSA policy result: `PASSED` or `FAILED` |
 | `release_decision` | `approved` only when authenticity, source-report verification, and policy all pass |
 

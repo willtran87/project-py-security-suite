@@ -34,6 +34,7 @@ from py_security_suite.passport import (
     _verify_checksums,
     _verify_bound_report,
     _verify_passport_authenticity,
+    _verify_release_artifact_sets,
     _verify_statement_manifest_binding,
     _verify_statement_subjects,
     _verify_statement_inputs,
@@ -892,6 +893,7 @@ class PassportTests(unittest.TestCase):
             self.assertTrue(missing["release_artifacts_required"])
             self.assertFalse(missing["release_artifacts_verified"])
             self.assertEqual(missing["release_artifacts_verified_count"], 0)
+            self.assertEqual(missing["release_artifact_directories_verified_count"], 0)
             self.assertIn("release_artifacts_not_verified", missing["release_blockers"])
 
             verified = verify_attestation(
@@ -903,9 +905,43 @@ class PassportTests(unittest.TestCase):
             )
             self.assertTrue(verified["release_artifacts_verified"])
             self.assertEqual(verified["release_artifacts_verified_count"], 1)
+            self.assertEqual(verified["release_artifact_directories_verified_count"], 1)
             self.assertNotIn(
                 "release_artifacts_not_verified", verified["release_blockers"]
             )
+            sidecar = artifact.parent / "release-notes.txt"
+            sidecar.write_text("allowed non-distribution sidecar", encoding="utf-8")
+            self.assertTrue(
+                verify_attestation(
+                    passport=passport,
+                    report=report,
+                    public_key=None,
+                    artifact_root=artifact_root,
+                    allow_unsigned=True,
+                )["release_artifacts_verified"]
+            )
+            extra = artifact.parent / "unbound-1.0-py3-none-any.whl"
+            extra.write_bytes(b"unbound release payload")
+            with self.assertRaisesRegex(ValueError, "does not match Passport subjects"):
+                verify_attestation(
+                    passport=passport,
+                    report=report,
+                    public_key=None,
+                    artifact_root=artifact_root,
+                    allow_unsigned=True,
+                )
+            extra.unlink()
+            disguised = artifact.parent / "disguised.whl"
+            disguised.mkdir()
+            with self.assertRaisesRegex(ValueError, "not a regular file"):
+                verify_attestation(
+                    passport=passport,
+                    report=report,
+                    public_key=None,
+                    artifact_root=artifact_root,
+                    allow_unsigned=True,
+                )
+            disguised.rmdir()
             with (
                 patch("py_security_suite.passport._MAX_RELEASE_ARTIFACT_BYTES", 1),
                 self.assertRaisesRegex(ValueError, "artifact is too large"),
@@ -962,6 +998,19 @@ class PassportTests(unittest.TestCase):
                             {"name": "../example.whl", "digest": digest},
                         ]
                     }
+                )
+            with self.assertRaisesRegex(ValueError, "unsupported release artifact"):
+                _release_artifact_subjects(
+                    {
+                        "subject": [
+                            {"name": "source:fixture", "digest": digest},
+                            {"name": "dist/release-notes.txt", "digest": digest},
+                        ]
+                    }
+                )
+            with self.assertRaisesRegex(ValueError, "directory is unavailable"):
+                _verify_release_artifact_sets(
+                    artifact_root, {"missing/example.whl": "a" * 64}
                 )
 
     def test_unsigned_passport_verifies_report_and_detects_tampering(self) -> None:

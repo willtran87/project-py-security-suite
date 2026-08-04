@@ -63,7 +63,9 @@ Summary Attestation predicate. A separate approval lane verifies the report and
 signs that exact statement with an external Cosign key. Deployment consumers
 verify the signature material, statement subject, applied-policy digest, report
 checksum manifest, exact embedded-statement identity, and every referenced
-evidence digest without running a scanner.
+evidence digest without running a scanner. Subject-containing payload
+directories are closed sets for Python distributions: undeclared wheels,
+sdists, and zip archives are rejected.
 
 ```mermaid
 flowchart LR
@@ -518,8 +520,8 @@ The native Windows self-scan process verifies:
   errors; 27 conditional scanners were correctly not applicable;
 - Pylint, Radon, Ruff formatting, coverage, and JUnit adapters executed through
   approved entry-point bindings and emitted normalized derived evidence;
-- the separately generated branch-coverage evidence records 92.55% combined
-  line-and-branch coverage and 85.71% branch coverage, satisfying both 80%
+- the separately generated branch-coverage evidence records 92.59% combined
+  line-and-branch coverage and 85.82% branch coverage, satisfying both 80%
   repository gates with no per-file hotspots; JUnit records 283 passing tests,
   one platform-limited symlink skip, and no failures or errors;
 - CycloneDX completed from `uv.lock` through a frozen offline export with a

@@ -294,7 +294,9 @@ rejected.
 `verify` accepts a detached passport **directory** created by `attest`, not the
 embedded `security-passport.json` statement file. When the Passport declares
 distribution subjects, `verify --artifact-root ROOT` must resolve and hash each
-subject path beneath `ROOT`; omission blocks approval.
+subject path beneath `ROOT`; omission blocks approval. Direct distribution files
+in every governed subject directory must exactly match the Passport set, so an
+undeclared wheel, sdist, or zip cannot ride with an approved payload.
 When `--report` is supplied, its embedded statement must be exactly the same
 JSON statement as the detached Passport; transport metadata cannot redirect a
 valid signature to a report carrying different claims.

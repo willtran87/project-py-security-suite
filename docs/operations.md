@@ -604,8 +604,10 @@ report. Run `pysec attest`, then move the signed passport, report, approved
 public key, approved Cosign executable, and release payload tree into the
 deployment boundary. Run `pysec verify PASSPORT --report REPORT --artifact-root
 PAYLOAD_ROOT` before promotion. Each artifact subject path must exist beneath
-that root as a regular, unlinked file with the signed digest. Verification
-failure rejects the release.
+that root as a regular, unlinked file with the signed digest. Every direct
+`.whl`, `.tar.gz`, or `.zip` in a governed subject directory must be declared;
+additional documentation or signature sidecars are allowed. Verification failure
+rejects the release.
 
 At the first handoff, validate the report itself with
 `pysec verify-report REPORT`. This checks every checksum entry, requires the
