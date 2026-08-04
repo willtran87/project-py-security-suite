@@ -920,6 +920,17 @@ class PassportTests(unittest.TestCase):
                     allow_unsigned=True,
                 )["release_artifacts_verified"]
             )
+            with (
+                patch("py_security_suite.passport._MAX_RELEASE_DIRECTORY_ENTRIES", 1),
+                self.assertRaisesRegex(ValueError, "bounded entry count"),
+            ):
+                verify_attestation(
+                    passport=passport,
+                    report=report,
+                    public_key=None,
+                    artifact_root=artifact_root,
+                    allow_unsigned=True,
+                )
             extra = artifact.parent / "unbound-1.0-py3-none-any.whl"
             extra.write_bytes(b"unbound release payload")
             with self.assertRaisesRegex(ValueError, "does not match Passport subjects"):
@@ -930,6 +941,20 @@ class PassportTests(unittest.TestCase):
                     artifact_root=artifact_root,
                     allow_unsigned=True,
                 )
+            second_extra = artifact.parent / "unbound-2.0-py3-none-any.whl"
+            second_extra.write_bytes(b"second unbound release payload")
+            with (
+                patch("py_security_suite.passport._MAX_RELEASE_MISMATCH_DETAILS", 1),
+                self.assertRaisesRegex(ValueError, r"\.\.\. 1 more"),
+            ):
+                verify_attestation(
+                    passport=passport,
+                    report=report,
+                    public_key=None,
+                    artifact_root=artifact_root,
+                    allow_unsigned=True,
+                )
+            second_extra.unlink()
             extra.unlink()
             disguised = artifact.parent / "disguised.whl"
             disguised.mkdir()

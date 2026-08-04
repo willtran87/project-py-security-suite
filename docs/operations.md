@@ -1,6 +1,6 @@
 # Python Security Suite operations
 
-Last reviewed: 2026-08-01
+Last reviewed: 2026-08-04
 
 ## Operating model
 
@@ -606,8 +606,8 @@ deployment boundary. Run `pysec verify PASSPORT --report REPORT --artifact-root
 PAYLOAD_ROOT` before promotion. Each artifact subject path must exist beneath
 that root as a regular, unlinked file with the signed digest. Every direct
 `.whl`, `.tar.gz`, or `.zip` in a governed subject directory must be declared;
-additional documentation or signature sidecars are allowed. Verification failure
-rejects the release.
+additional documentation or signature sidecars are allowed. Direct entry walks
+and mismatch diagnostics are bounded. Verification failure rejects the release.
 
 At the first handoff, validate the report itself with
 `pysec verify-report REPORT`. This checks every checksum entry, requires the

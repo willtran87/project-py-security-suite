@@ -329,6 +329,8 @@ Passport subject path exists. Verification rejects missing, linked, oversized,
 or digest-mismatched release files. Each subject-containing directory must also
 contain exactly the declared `.whl`, `.tar.gz`, and `.zip` files; an unbound
 distribution blocks promotion, while non-distribution sidecars remain allowed.
+Directory enumeration and mismatch details are bounded so an untrusted payload
+cannot create unlimited verifier work or terminal output.
 When artifact subjects are declared, omitting this root produces
 `release_artifacts_not_verified` and cannot approve promotion.
 

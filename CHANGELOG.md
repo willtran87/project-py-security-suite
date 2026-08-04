@@ -6,7 +6,8 @@ for published releases.
 ## Unreleased
 
 - Reject undeclared wheel, sdist, or zip files beside governed release subjects
-  during deployment-time Passport verification.
+  during deployment-time Passport verification, cap hostile directory walks,
+  and bound mismatch diagnostics.
 - Require the detached Passport statement to exactly match the verified report's
   embedded statement and validate portable verification-material identity.
 - Require deployment-time hashing of every declared release-artifact subject

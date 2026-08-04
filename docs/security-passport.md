@@ -1,6 +1,6 @@
 # Security Passport, intelligence, and lifecycle evidence
 
-Last reviewed: 2026-08-02
+Last reviewed: 2026-08-04
 
 ## Objective
 
@@ -159,7 +159,8 @@ Passport with artifact subjects cannot approve release until these presented
 files verify. Each directory containing a subject is also checked as an exact
 Python-distribution set: undeclared `.whl`, `.tar.gz`, or `.zip` siblings are
 rejected, while non-distribution signature and documentation sidecars are
-permitted.
+permitted. Direct directory enumeration has a fixed entry limit, and mismatch
+messages include a bounded sample plus the number of omitted entries.
 
 The detached `PASSPORT/security-passport.json` must exactly match the embedded
 `REPORT/security-passport.json` document. The verifier validates the portable

@@ -19,6 +19,8 @@ from .path_safety import resolve_unlinked_path as _resolve_evidence_root
 
 _MAX_FILE_BYTES = 128 * 1024 * 1024
 _MAX_RELEASE_ARTIFACT_BYTES = 512 * 1024 * 1024
+_MAX_RELEASE_DIRECTORY_ENTRIES = 10_000
+_MAX_RELEASE_MISMATCH_DETAILS = 20
 _MAX_CHECKSUM_ENTRIES = 10_000
 _MAX_TREE_ENTRIES = 20_000
 _STATEMENT_NAME = "security-passport.json"
@@ -604,12 +606,15 @@ def _verify_release_artifact_sets(root: Path, artifact_subjects: dict[str, str])
         if actual != expected:
             unbound = sorted(actual - expected)
             missing = sorted(expected - actual)
-            detail = ", ".join(
-                [
-                    *(f"unbound:{name}" for name in unbound),
-                    *(f"missing:{name}" for name in missing),
-                ]
-            )
+            mismatches = [
+                *(f"unbound:{name}" for name in unbound),
+                *(f"missing:{name}" for name in missing),
+            ]
+            shown = mismatches[:_MAX_RELEASE_MISMATCH_DETAILS]
+            detail = ", ".join(shown)
+            omitted = len(mismatches) - len(shown)
+            if omitted:
+                detail = f"{detail}, ... {omitted} more"
             raise ValueError(
                 "release artifact directory does not match Passport subjects: "
                 f"{relative.as_posix()} ({detail})"
@@ -619,7 +624,12 @@ def _verify_release_artifact_sets(root: Path, artifact_subjects: dict[str, str])
 
 def _release_distribution_names(directory: Path) -> set[str]:
     names: set[str] = set()
-    for path in directory.iterdir():
+    for entry_count, path in enumerate(directory.iterdir(), start=1):
+        if entry_count > _MAX_RELEASE_DIRECTORY_ENTRIES:
+            raise ValueError(
+                "release artifact directory exceeds the bounded entry count: "
+                f"{directory}"
+            )
         if not _is_distribution_name(path.name):
             continue
         if not path.is_file() or _is_link_like(path):

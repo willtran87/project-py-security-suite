@@ -1,6 +1,6 @@
 # Python Security Suite configuration
 
-Last reviewed: 2026-08-01
+Last reviewed: 2026-08-04
 
 ## Loading and protection
 
@@ -296,7 +296,9 @@ embedded `security-passport.json` statement file. When the Passport declares
 distribution subjects, `verify --artifact-root ROOT` must resolve and hash each
 subject path beneath `ROOT`; omission blocks approval. Direct distribution files
 in every governed subject directory must exactly match the Passport set, so an
-undeclared wheel, sdist, or zip cannot ride with an approved payload.
+undeclared wheel, sdist, or zip cannot ride with an approved payload. Direct
+directory entries and mismatch details are capped during this untrusted-input
+check.
 When `--report` is supplied, its embedded statement must be exactly the same
 JSON statement as the detached Passport; transport metadata cannot redirect a
 valid signature to a report carrying different claims.
