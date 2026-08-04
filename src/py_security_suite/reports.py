@@ -769,12 +769,17 @@ def _render_action_plan_artifact_identities(findings: list[Finding]) -> list[str
     ]
     if not identities:
         return []
+    identity_guidance = " ".join(
+        (
+            "Use these immutable identities when locating, signing, quarantining,",
+            "or approving an affected distribution.",
+        )
+    )
     lines = [
         "",
         "### Release artifact bindings",
         "",
-        "Use these immutable identities when locating, signing, quarantining, or "
-        "approving an affected distribution.",
+        identity_guidance,
         "",
         "| Finding | Artifact | SHA-256 | Size |",
         "|---|---|---|---:|",
