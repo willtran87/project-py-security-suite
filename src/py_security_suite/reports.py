@@ -1843,9 +1843,20 @@ def _finding_tools(finding: Finding) -> str:
 def _markdown_source_excerpt(finding: Finding) -> list[str]:
     location = _primary_snippet_location(finding)
     if location is None or location.snippet is None:
+        artifact = _artifact_identity(finding)
+        if artifact is not None:
+            path, digest, size = artifact
+            size_line = f"size: {size} bytes\n" if size is not None else ""
+            return [
+                f"**Artifact identity evidence - `{_markdown_code(path)}`:**",
+                "",
+                "```text",
+                f"sha256:{digest}\n{size_line}".rstrip(),
+                "```",
+                "",
+            ]
         return [
-            "**Source evidence:** No safe local source excerpt was available; "
-            + "use the cited file and line above.",
+            f"**Source evidence:** {_missing_source_evidence_text(finding)}",
             "",
         ]
     start = location.snippet_start_line or location.start_line or 1
@@ -1880,10 +1891,20 @@ def _markdown_source_excerpt(finding: Finding) -> list[str]:
 def _html_source_excerpt(finding: Finding) -> str:
     location = _primary_snippet_location(finding)
     if location is None or location.snippet is None:
+        artifact = _artifact_identity(finding)
+        if artifact is not None:
+            path, digest, size = artifact
+            size_line = f"\nsize: {size} bytes" if size is not None else ""
+            return (
+                "<section class='source-context'><h4>Artifact identity evidence "
+                "&mdash; "
+                f"<code>{html.escape(path)}</code></h4>"
+                "<pre aria-label='Artifact identity'><code>"
+                f"sha256:{html.escape(digest)}{size_line}</code></pre></section>"
+            )
         return (
             "<section class='source-context'><h4>Source evidence</h4>"
-            "<p>No safe local source excerpt was available; use the cited file "
-            "and line.</p></section>"
+            f"<p>{html.escape(_missing_source_evidence_text(finding))}</p></section>"
         )
     start = location.snippet_start_line or location.start_line or 1
     lines = location.snippet.splitlines() or [""]
@@ -1911,6 +1932,42 @@ def _primary_snippet_location(finding: Finding) -> Location | None:
     return next(
         (location for location in finding.locations if location.snippet is not None),
         None,
+    )
+
+
+def _artifact_identity(finding: Finding) -> tuple[str, str, int | None] | None:
+    path = finding.evidence.get("artifact_path")
+    digest = finding.evidence.get("artifact_sha256")
+    size = finding.evidence.get("artifact_size_bytes")
+    if not isinstance(path, str) or not path or path == "<outside-target>":
+        return None
+    candidate = Path(path)
+    if candidate.is_absolute() or ".." in candidate.parts:
+        return None
+    if not isinstance(digest, str) or re.fullmatch(r"[0-9a-f]{64}", digest) is None:
+        return None
+    normalized_size = (
+        size
+        if isinstance(size, int) and not isinstance(size, bool) and size >= 0
+        else None
+    )
+    return path, digest, normalized_size
+
+
+def _missing_source_evidence_text(finding: Finding) -> str:
+    location = next((item for item in finding.locations if item.path), None)
+    if location is not None and location.start_line is not None:
+        return (
+            "No safe local source excerpt was available; inspect the cited file and "
+            "line in the protected checkout."
+        )
+    if location is not None:
+        return (
+            "No source excerpt applies; inspect the cited repository object and "
+            "normalized scanner evidence."
+        )
+    return (
+        "No local source location was supplied; review the normalized scanner evidence."
     )
 
 

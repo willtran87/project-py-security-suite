@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import IO
 
 from ..config import ToolConfig
+from ..models import normalize_repo_path
 from ..path_safety import is_link_like, resolve_unlinked_path
 
 _MAX_ARCHIVE_MEMBERS = 100_000
@@ -58,21 +59,31 @@ def wheel_files(target: Path, config: ToolConfig) -> list[Path]:
 def artifact_manifest(target: Path, config: ToolConfig) -> dict[str, object]:
     artifacts: list[dict[str, object]] = []
     for path in distribution_files(target, config):
-        digest = hashlib.sha256()
-        with path.open("rb") as handle:
-            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                digest.update(chunk)
+        identity = artifact_identity_evidence(target, path)
         artifacts.append(
             {
-                "path": path.relative_to(target).as_posix(),
-                "sha256": digest.hexdigest(),
-                "size_bytes": path.stat().st_size,
+                "path": identity["artifact_path"],
+                "sha256": identity["artifact_sha256"],
+                "size_bytes": identity["artifact_size_bytes"],
             }
         )
     return {
         "schema_version": "1.0",
         "algorithm": "sha256",
         "artifacts": artifacts,
+    }
+
+
+def artifact_identity_evidence(target: Path, path: Path) -> dict[str, object]:
+    """Return the stable identity fields shared by artifact findings and manifests."""
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return {
+        "artifact_path": normalize_repo_path(target, path),
+        "artifact_sha256": digest.hexdigest(),
+        "artifact_size_bytes": path.stat().st_size,
     }
 
 

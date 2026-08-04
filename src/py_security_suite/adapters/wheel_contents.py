@@ -16,7 +16,7 @@ from ..models import (
     finding_identity,
     normalize_repo_path,
 )
-from .artifacts import wheel_files
+from .artifacts import artifact_identity_evidence, wheel_files
 from .base import ScannerAdapter
 
 
@@ -41,6 +41,12 @@ class CheckWheelContentsAdapter(ScannerAdapter):
 
     def parse(self, payload: str, target: Path) -> list[Finding]:
         findings: list[Finding] = []
+        identities = {
+            normalize_repo_path(target, wheel): artifact_identity_evidence(
+                target, wheel
+            )
+            for wheel in wheel_files(target, self.config)
+        }
         for line in payload.splitlines():
             match = _ISSUE.match(line.strip())
             if match is None:
@@ -92,6 +98,7 @@ class CheckWheelContentsAdapter(ScannerAdapter):
                             ),
                         )
                     ],
+                    evidence=identities.get(path, {}),
                 )
             )
         findings.extend(self._source_parity_findings(target))
@@ -187,6 +194,7 @@ class CheckWheelContentsAdapter(ScannerAdapter):
                             )
                         ],
                         evidence={
+                            **artifact_identity_evidence(target, wheel),
                             "wheel": normalize_repo_path(target, wheel),
                             "member": member,
                             "issue": issue,

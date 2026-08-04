@@ -299,6 +299,14 @@ class SpecializedAdapterRuntimeTests(unittest.TestCase):
             self.assertEqual(result.tool_run.finding_count, 1)
             self.assertEqual(result.findings[0].severity.value, "high")
             self.assertTrue(result.findings[0].citations)
+            self.assertEqual(
+                result.findings[0].evidence["artifact_path"],
+                "dist/fixture-1.0-py3-none-any.whl",
+            )
+            self.assertEqual(result.findings[0].evidence["artifact_size_bytes"], 5)
+            self.assertEqual(
+                len(str(result.findings[0].evidence["artifact_sha256"])), 64
+            )
 
         self.assertIsNone(_provenance_file(dist, artifact))
         self.assertIsNone(_bundle_for(dist, artifact))

@@ -428,6 +428,9 @@ flowchart LR
 - `index.html` is a self-contained complete human report with an explicit
   decision badge, a balanced scanner-health summary, actionable coverage gaps,
   and expandable not-applicable control evidence.
+- Source findings show highlighted, line-numbered context. Binary artifact
+  findings instead show the exact normalized path, SHA-256, and byte size; they
+  never imply that a source line exists for a wheel or archive.
 - `results.sarif` supports GitHub code-scanning ingestion.
 - `findings.json` is the stable machine-readable finding collection.
 - `scan-manifest.json` records tool health, versions, inventory, policy
@@ -574,8 +577,8 @@ The native Windows self-scan process verifies:
   errors; 27 conditional scanners were correctly not applicable;
 - Pylint, Radon, Ruff formatting, coverage, and JUnit adapters executed through
   approved entry-point bindings and emitted normalized derived evidence;
-- the separately generated branch-coverage evidence records 93.00% combined
-  line-and-branch coverage and 86.57% branch coverage, satisfying both 80%
+- the separately generated branch-coverage evidence records 93.05% combined
+  line-and-branch coverage and 86.69% branch coverage, satisfying both 80%
   repository gates with no per-file hotspots; JUnit records 297 passing tests,
   one platform-limited symlink skip, and no failures or errors;
 - CycloneDX completed from `uv.lock` through a frozen offline export with a

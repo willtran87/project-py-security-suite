@@ -13,7 +13,7 @@ from ..models import (
     finding_identity,
     normalize_repo_path,
 )
-from .artifacts import distribution_files
+from .artifacts import artifact_identity_evidence, distribution_files
 from .base import ScannerAdapter
 
 
@@ -46,6 +46,12 @@ class TwineAdapter(ScannerAdapter):
 
     def parse(self, payload: str, target: Path) -> list[Finding]:
         findings: list[Finding] = []
+        identities = {
+            normalize_repo_path(target, artifact): artifact_identity_evidence(
+                target, artifact
+            )
+            for artifact in distribution_files(target, self.config)
+        }
         current_path = "<distribution>"
         for line in payload.splitlines():
             stripped = line.strip()
@@ -101,6 +107,7 @@ class TwineAdapter(ScannerAdapter):
                             uri="https://twine.readthedocs.io/en/stable/#twine-check",
                         )
                     ],
+                    evidence=identities.get(path, {}),
                 )
             )
         return findings

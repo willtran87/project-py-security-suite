@@ -90,7 +90,7 @@ The native `doctor` preflight reports 35 ready and 27 not-applicable tools with
 zero disabled or unavailable prerequisites before scanner execution.
 
 The checked report is in
-`.artifacts/final-self-scan-v97`. It includes:
+`.artifacts/final-self-scan-v99`. It includes:
 
 - the GitHub-ready Markdown, HTML, SARIF, SonarQube external-issue, and
   normalized JSON reports;
@@ -113,7 +113,7 @@ traversal rejection during distribution expansion, hardened XML evidence
 ingestion, archive-link rejection, governed risk acceptance, database
 freshness, detection validation, repository-health additions, trusted-lane
 evidence validation, and the SonarQube export. Combined line-and-branch
-coverage is 93.00%, and branch coverage is 86.57%, so both measures pass the
+coverage is 93.05%, and branch coverage is 86.69%, so both measures pass the
 80% policy threshold. No production source file remains below the per-file
 coverage reporting threshold.
 

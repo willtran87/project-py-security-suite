@@ -176,6 +176,13 @@ class ArtifactAdapterTests(unittest.TestCase):
         )[0]
         self.assertEqual(finding.area, "artifact-integrity")
         self.assertEqual(finding.classifications, ["W001"])
+        self.assertEqual(
+            finding.evidence["artifact_path"],
+            "dist/example-1.0-py3-none-any.whl",
+        )
+        self.assertEqual(
+            finding.evidence["artifact_size_bytes"], self.wheel.stat().st_size
+        )
 
     def test_wheel_missing_maintained_module_fails_source_parity(self) -> None:
         package = self.target / "src" / "example"
@@ -189,6 +196,10 @@ class ArtifactAdapterTests(unittest.TestCase):
         self.assertEqual(findings[0].classifications, ["WHEEL-SOURCE-PARITY"])
         self.assertEqual(findings[0].domain, "supply-chain")
         self.assertIn("example/security.py", findings[0].title)
+        self.assertEqual(
+            findings[0].evidence["artifact_path"],
+            "dist/example-1.0-py3-none-any.whl",
+        )
 
     def test_wheel_changed_module_fails_source_parity(self) -> None:
         package = self.target / "src" / "example"
@@ -213,6 +224,10 @@ class ArtifactAdapterTests(unittest.TestCase):
         finding = TwineAdapter(ToolConfig(), 4096).parse(payload, self.target)[0]
         self.assertEqual(finding.area, "artifact-metadata")
         self.assertEqual(finding.severity, Severity.MEDIUM)
+        self.assertEqual(
+            finding.evidence["artifact_path"],
+            "dist/example-1.0-py3-none-any.whl",
+        )
 
     def test_trufflehog_discards_secret_material(self) -> None:
         excludes = self.target / "trufflehog-excludes.txt"

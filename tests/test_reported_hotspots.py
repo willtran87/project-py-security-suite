@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import runpy
 import tempfile
 import unittest
@@ -419,6 +420,11 @@ class CosignRuntimeTests(unittest.TestCase):
         self.assertEqual(result.tool_run.finding_count, 1)
         self.assertEqual(result.tool_run.executable_unchanged, False)
         self.assertIn("changed during execution", result.tool_run.error or "")
+        self.assertEqual(
+            result.findings[0].evidence["artifact_sha256"],
+            hashlib.sha256(b"wheel").hexdigest(),
+        )
+        self.assertEqual(result.findings[0].evidence["artifact_size_bytes"], 5)
         self.assertEqual(
             result.findings[0].sources[0].rule_id,
             "COSIGN-BUNDLE-MISSING",

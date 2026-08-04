@@ -210,7 +210,28 @@ class OrchestratorTests(unittest.TestCase):
                     message="bundle missing",
                 )
             ],
+            locations=[Location(path="dist/fixture.whl")],
+            evidence={
+                "artifact_path": "dist/fixture.whl",
+                "artifact_sha256": "c" * 64,
+                "artifact_size_bytes": 1234,
+            },
         )
+        artifact_summary = render_summary(manifest, [artifact_finding])
+        artifact_html = render_html(manifest, [artifact_finding])
+        self.assertIn(
+            "**Artifact identity evidence - `dist/fixture.whl`:**",
+            artifact_summary,
+        )
+        self.assertIn(f"sha256:{'c' * 64}", artifact_summary)
+        self.assertIn("size: 1234 bytes", artifact_summary)
+        self.assertIn("Artifact identity evidence", artifact_html)
+        self.assertIn("aria-label='Artifact identity'", artifact_html)
+        artifact_finding.evidence["artifact_path"] = "../outside.whl"
+        rejected_identity = render_summary(manifest, [artifact_finding])
+        self.assertNotIn("Artifact identity evidence", rejected_identity)
+        self.assertIn("No source excerpt applies", rejected_identity)
+        artifact_finding.evidence["artifact_path"] = "dist/fixture.whl"
         actionable = render_assurance_case(manifest, [artifact_finding])
         self.assertIn(
             "Built artifact integrity and provenance | findings require action",

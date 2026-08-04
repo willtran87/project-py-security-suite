@@ -6,7 +6,7 @@ from pathlib import Path
 from ..execution import run_command, sanitize_diagnostic
 from ..models import Citation, Confidence, Finding, Location, Severity, Source
 from ..models import ToolRun, ToolStatus, finding_identity, normalize_repo_path
-from .artifacts import configured_path, distribution_files
+from .artifacts import artifact_identity_evidence, configured_path, distribution_files
 from .base import AdapterResult, ScannerAdapter
 
 
@@ -255,5 +255,9 @@ def _finding(
                 uri="https://github.com/sigstore/cosign/blob/main/doc/cosign_verify-blob.md",
             )
         ],
-        evidence={"artifact": artifact.name, "raw_material_retained": False},
+        evidence={
+            **artifact_identity_evidence(target, artifact),
+            "artifact": artifact.name,
+            "raw_material_retained": False,
+        },
     )

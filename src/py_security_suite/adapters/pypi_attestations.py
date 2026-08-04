@@ -21,7 +21,7 @@ from ..models import (
     finding_identity,
     normalize_repo_path,
 )
-from .artifacts import configured_path, distribution_files
+from .artifacts import artifact_identity_evidence, configured_path, distribution_files
 from .base import AdapterResult, ScannerAdapter
 
 
@@ -297,5 +297,9 @@ def _attestation_finding(
                 uri="https://docs.pypi.org/attestations/",
             )
         ],
-        evidence={"artifact": distribution.name, "raw_material_retained": False},
+        evidence={
+            **artifact_identity_evidence(target, distribution),
+            "artifact": distribution.name,
+            "raw_material_retained": False,
+        },
     )

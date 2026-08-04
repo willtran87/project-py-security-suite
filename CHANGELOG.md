@@ -5,6 +5,10 @@ for published releases.
 
 ## Unreleased
 
+- Bind Cosign findings directly to the affected distribution SHA-256 and byte
+  size, render copy-ready artifact identity evidence in Markdown and HTML, and
+  replace source-line guidance that was misleading for binary or repository-
+  level findings.
 - Close the Cosign missing-bundle integrity gap by rechecking the approved
   executable after its version probe even when no `verify-blob` command can run;
   an entry-point mutation now fails the scanner while retaining the provenance

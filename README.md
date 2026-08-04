@@ -416,6 +416,9 @@ controls point to the action plan, and incomplete controls request restoration
 instead of repeating work that already passed. The GitHub summary
 presents the first 20 findings in actionable detail; the self-contained HTML,
 JSON, and SARIF artifacts retain the complete result set.
+Binary artifact findings carry the exact SHA-256 and byte size in normalized
+JSON and render a copy-ready identity block in Markdown and HTML, so signing,
+rejection, and rebuild actions can target the precise wheel or source archive.
 
 ## Current boundaries
 
