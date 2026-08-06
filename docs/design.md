@@ -600,12 +600,15 @@ The native Windows self-scan process verifies:
 - all 37 observed scanner and helper entry points were confirmed unchanged
   after execution; 12 were also bound to approved digests, while the remaining
   25 are explicitly reported as provenance-approval work;
-- the isolated comprehensive outcome was `FAIL` with exactly two blocking
-  Cosign findings for intentionally absent wheel and source-distribution
-  signatures and no testing-coverage findings; and
+- the 2026-08-06 isolated comprehensive outcome was `INCOMPLETE` because the
+  digest-pinned KEV and EPSS snapshots were 4.37 days old against a 3-day
+  maximum; the suite failed closed despite complete scanner execution;
+- exactly two high-severity Cosign observations remain for intentionally absent
+  wheel and source-distribution bundles, with no testing-coverage findings; and
 - code security, secrets, dependency-vulnerability, architecture, and quality
-  perspectives had no findings. Release remains blocked until an approved
-  signing lane supplies bundles for both exact artifact digests.
+  perspectives had no findings. Release remains blocked until approved
+  intelligence is refreshed and an approved signing lane supplies bundles for
+  both exact artifact digests.
 
 ## Expanded implementation state
 

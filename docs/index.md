@@ -77,6 +77,7 @@ platform support, and acquisition requirements.
 | Applicable and completed | 35 / 35 |
 | Correctly not applicable | 27 |
 | Unavailable, failed, timed out, or parse errors | 0 |
+| Policy outcome | `INCOMPLETE` — offline KEV and EPSS snapshots exceed the 3-day policy by 1.37 days |
 | Normalized findings | 2 expected Cosign bundle findings |
 | Tests | 299 passed, 1 platform-limited skip |
 | Combined line and branch coverage | 93.17% |
@@ -84,11 +85,15 @@ platform support, and acquisition requirements.
 | Per-file coverage threshold | 80%; no production hotspot below threshold |
 
 The 2026-08-06 self-scan is in `.artifacts/final-self-scan-v111`. It correctly
-returns `FAIL` because the staged wheel and source distribution are unsigned.
-Code security, secrets, dependency vulnerabilities, architecture, and quality
-were clean. All 37 observed scanner entry points were unchanged after execution;
-25 bindings across 22 unique digests remain candidates for organization
-provenance approval.
+fails closed as `INCOMPLETE`: the digest-pinned KEV and EPSS snapshots are 4.37
+days old, exceeding the comprehensive policy maximum of 3 days. All applicable
+scanners still completed, and the only normalized findings are the two expected
+missing Cosign bundles for the wheel and source distribution. Code security,
+secrets, dependency vulnerabilities, architecture, and quality were clean. All
+37 observed scanner entry points were unchanged after execution; 25 bindings
+across 22 unique digests remain candidates for organization provenance approval.
+Refresh and approve the intelligence snapshots, rerun, then sign both exact
+artifacts before release.
 
 The report contains:
 
