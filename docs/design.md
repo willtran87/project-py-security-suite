@@ -1,7 +1,7 @@
 # Python Security Suite design
 
 Status: alpha foundation  
-Last reviewed: 2026-08-04
+Last reviewed: 2026-08-06
 
 ## Purpose
 
@@ -585,7 +585,7 @@ The native Windows self-scan process verifies:
   approved entry-point bindings and emitted normalized derived evidence;
 - the separately generated branch-coverage evidence records 93.17% combined
   line-and-branch coverage and 86.97% branch coverage, satisfying both 80%
-  repository gates with no per-file hotspots; JUnit records 297 passing tests,
+  repository gates with no per-file hotspots; JUnit records 299 passing tests,
   one platform-limited symlink skip, and no failures or errors;
 - CycloneDX completed from `uv.lock` through a frozen offline export with a
   hash-verified helper; zizmor, actionlint, Pysa, GuardDog, Flawfinder, and

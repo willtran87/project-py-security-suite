@@ -1,6 +1,6 @@
 # Tool selection and portfolio governance
 
-Last reviewed: 2026-08-01
+Last reviewed: 2026-08-06
 
 The suite favors tools that are mature, produce structured output, have a
 documented non-interactive CLI, can consume only local inputs, and add a

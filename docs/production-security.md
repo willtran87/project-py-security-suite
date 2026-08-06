@@ -1,6 +1,6 @@
 # Production security gate
 
-Last reviewed: 2026-08-04
+Last reviewed: 2026-08-06
 
 ## Purpose
 

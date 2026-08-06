@@ -1,126 +1,149 @@
 # Python Security Suite documentation
 
-Last reviewed: 2026-08-04
+Last reviewed: 2026-08-06
 
-Markdown files in this directory are the canonical project documentation.
+This directory is the canonical documentation set. The suite is offline-first:
+tool and data acquisition happens in a connected preparation lane; scanning and
+verification happen inside an enterprise-controlled isolated boundary.
 
-| Document | Purpose |
+## Start here
+
+| Goal | Read |
 |---|---|
-| [Design](design.md) | Architecture, trust boundaries, data flow, policy model, report contract, and roadmap |
-| [Operations](operations.md) | Native no-Docker preparation, isolated installation, scanning, GitHub publication, and troubleshooting |
-| [Configuration](configuration.md) | TOML schema, profiles, policy layering, CLI flags, and exit codes |
-| [Inspection JSON Schema](../src/py_security_suite/schemas/report-inspection-1.3.schema.json) | Current installable strict Draft 2020-12 contract for verified machine-readable report inspection |
-| [Inspection Verification Schema](../src/py_security_suite/schemas/report-inspection-verification-1.3.schema.json) | Current strict portable receipt binding an inspection digest to a sealed report and action limit |
-| [Report Verification Schema](../src/py_security_suite/schemas/report-verification.schema.json) | Strict portable receipt for complete report integrity and semantic verification |
-| [Compatibility and coverage matrix](compatibility-matrix.md) | Tool roles, overlap, applicability, platform support, limitations, and acquisition |
-| [Tool selection](tool-selection.md) | Admission criteria, added tools, rejected candidates, and review cadence |
-| [Production security gate](production-security.md) | Strict release profile, residual risk, and companion dynamic and artifact controls |
-| [Offline companion assurance](companion-assurance.md) | Property tests, fuzzing, API/DAST, threat modeling, reproducibility, provenance, and malware evidence |
-| [Security Passport and risk intelligence](security-passport.md) | Signed release evidence, offline verification, KEV/EPSS/VEX enrichment, lifecycle baselines, and effectiveness metrics |
-| [Project README](../README.md) | Concise introduction and quick-start paths |
-| [Security policy](../SECURITY.md) | Private vulnerability reporting and supported-code policy |
-| [Contributing](../CONTRIBUTING.md) | Trust-model constraints, validation, and pull-request expectations |
-| [Changelog](../CHANGELOG.md) | Release-facing record of notable behavior and security changes |
+| Understand architecture and trust boundaries | [Design](design.md) |
+| Install and operate without Docker or internet access | [Operations](operations.md) |
+| Configure profiles, policy, ownership, and exit behavior | [Configuration](configuration.md) |
+| Compare scanner coverage and platform support | [Compatibility matrix](compatibility-matrix.md) |
+| Enforce a production release gate | [Production security](production-security.md) |
+| Verify provenance, risk intelligence, and passports | [Security Passport](security-passport.md) |
+| Add dynamic, fuzzing, malware, or reproducibility evidence | [Companion assurance](companion-assurance.md) |
+| Review tool admission and rejection criteria | [Tool selection](tool-selection.md) |
 
-Installed consumers can retrieve current report contracts without source-tree
-or network access via `pysec schema report-inspection-1.3`,
-`pysec schema report-inspection-verification-1.3`, and
-`pysec schema report-verification-1.0`; add `--output FILE` for an atomic
-disconnected export. Frozen inspection 1.0 through 1.2 contracts remain available
-by their version-explicit names.
+Project policies and history:
 
-## Documentation rules
+- [Security policy](../SECURITY.md)
+- [Contributing guide](../CONTRIBUTING.md)
+- [Changelog](../CHANGELOG.md)
+- [Project README](../README.md)
 
-- Update the `Last reviewed` date when behavior or pinned tool versions change.
-- Treat source code and generated manifests as the final authority when a
-  document and implementation disagree.
-- Keep commands copyable and identify whether they run in a connected
-  preparation lane or an isolated execution lane.
-- Never describe `--network-isolated` as creating a sandbox. It records an
-  operator attestation that an external boundary is already active.
-- Keep scanner acquisition separate from scanning. Only the connected
-  preparation lane may download packages or advisory data.
-- Add a compatibility-matrix entry before making a scanner required.
+## System at a glance
+
+```mermaid
+flowchart LR
+    subgraph Connected["Connected preparation lane"]
+        Sources["Approved package and data sources"] --> Bundle["Pinned native bundle"]
+        Bundle --> Manifest["Hashes, package inventory, and offline databases"]
+    end
+    Manifest --> Transfer["Enterprise transfer and inspection"]
+    subgraph Isolated["Externally enforced isolated boundary"]
+        Transfer --> Doctor["pysec doctor"]
+        Repo["Python repository"] --> Doctor
+        Doctor --> Scan["62-adapter applicability-aware scan"]
+        Scan --> Normalize["Normalize, correlate, classify, and own"]
+        Normalize --> Gate["Policy decision"]
+        Gate --> Seal["Checksum-sealed report"]
+    end
+    Seal --> Inspect["verify-report and inspect"]
+    Inspect --> Passport["Security Passport"]
+    Inspect --> GitHub["Markdown, HTML, SARIF, SonarQube, and JSON"]
+```
+
+`--network-isolated` records an operator assertion; it does not create a
+sandbox. The VM, container, runner, or network policy must enforce isolation.
+
+## Coverage map
+
+| Layer | Primary perspectives | Representative tools |
+|---|---|---|
+| Python source security | AST patterns, structural rules, data flow, native extensions | Bandit, Semgrep, CodeQL, Pysa, Ruff, DevSkim, Flawfinder |
+| Secrets | Working tree, history, detector diversity | detect-secrets, Gitleaks, TruffleHog |
+| Dependencies and components | Vulnerabilities, malicious packages, SBOMs, licenses | OSV-Scanner, Grype, GuardDog, CycloneDX, Syft, Trivy, ScanCode |
+| Architecture and quality | Boundaries, cycles, types, correctness, complexity, dead code, changed-line coverage | Tach, mypy, Pyright, Pylint, deptry, Radon, Vulture, diff-cover |
+| Delivery configuration | GitHub Actions, containers, IaC, shell and PowerShell | zizmor, actionlint, Hadolint, Checkov, ShellCheck, PSScriptAnalyzer |
+| Distribution assurance | Wheel/sdist structure, metadata, attestations, signing | check-wheel-contents, Twine, PyPI attestations, Cosign, in-toto evidence |
+| Governance | KEV/EPSS/VEX, ownership, lifecycle, accepted risk, release evidence | CISA KEV, FIRST EPSS, CycloneDX VEX, CODEOWNERS, Security Passport |
+
+Overlap is deliberate. Correlation retains scanner attribution without counting
+the same observation as multiple independent risk votes. See the
+[compatibility matrix](compatibility-matrix.md) for all adapters, applicability,
+platform support, and acquisition requirements.
 
 ## Current verified baseline
 
-The current native baseline is Windows x86-64 with Python 3.11:
+| Measure | Verified result |
+|---|---:|
+| Profile | `comprehensive` |
+| Selected adapters | 62 |
+| Applicable and completed | 35 / 35 |
+| Correctly not applicable | 27 |
+| Unavailable, failed, timed out, or parse errors | 0 |
+| Normalized findings | 2 expected Cosign bundle findings |
+| Tests | 299 passed, 1 platform-limited skip |
+| Combined line and branch coverage | 93.17% |
+| Branch coverage | 86.97% |
+| Per-file coverage threshold | 80%; no production hotspot below threshold |
 
-- Bandit 1.9.4
-- Semgrep 1.170.0
-- detect-secrets 1.5.0
-- OSV-Scanner 2.3.8
-- Ruff 0.15.22
-- mypy 2.1.0
-- Vulture 2.16
-- Tach 0.35.0
-- Flawfinder 2.0.20
-- actionlint 1.7.12
-- Hadolint 2.14.0
-- Microsoft DevSkim CLI 1.0.70
-- CycloneDX Python 7.3.0
-- zizmor 1.28.0
-- ScanCode Toolkit 32.5.0
-- Trivy 0.69.3
-- Gitleaks 8.30.1
-- TruffleHog 3.95.9
-- Syft 1.49.0
-- Grype 0.116.0
-- check-wheel-contents 0.6.3
-- Twine 6.2.0
-- PyPI attestations 0.0.29
-- `run-codeql` 1.6.0
-- deptry 0.24.0
-- diff-cover 10.2.0
-- Checkov 3.2.494
-- PSScriptAnalyzer 1.25.0
-- ShellCheck 0.11.0
-- Pyright 1.1.411 on Node.js 20.20.2
-- Cosign 3.1.2
+The 2026-08-06 self-scan is in `.artifacts/final-self-scan-v111`. It correctly
+returns `FAIL` because the staged wheel and source distribution are unsigned.
+Code security, secrets, dependency vulnerabilities, architecture, and quality
+were clean. All 37 observed scanner entry points were unchanged after execution;
+25 bindings across 22 unique digests remain candidates for organization
+provenance approval.
 
-The current `comprehensive` profile selects all 62 adapters. The 2026-08-04
-dogfood baseline completed all 35 applicable adapters; 27 conditional adapters
-were correctly not applicable, with zero unavailable, failed, timed-out, or
-parse-error tools. The externally isolated run correctly produced `FAIL`: two
-high-severity Cosign findings block the intentionally unsigned wheel and source
-distribution. No production source file remains below the 80% per-file coverage
-threshold, and the repository-wide coverage gate passes with useful headroom.
-Code security, secrets, dependency-vulnerability, architecture, and quality
-perspectives were clean. No public signing service was contacted for this run.
-The native `doctor` preflight reports 35 ready and 27 not-applicable tools with
-zero disabled or unavailable prerequisites before scanner execution.
+The report contains:
 
-The checked report is in
-`.artifacts/final-self-scan-v110`. It includes:
+- decision-first `summary.md`, `action-plan.md`, and `assurance-case.md`;
+- a self-contained HTML dashboard with cited finding cards and source context;
+- SARIF 2.1.0 and SonarQube generic external issues;
+- normalized findings, scanner evidence, applicability, and integrity records;
+- source and artifact CycloneDX SBOMs plus artifact SHA-256 identities;
+- risk-intelligence, lifecycle, effectiveness, and SSDF claim evidence; and
+- an exact checksum manifest and Security Passport statement.
 
-- the GitHub-ready Markdown, HTML, SARIF, SonarQube external-issue, and
-  normalized JSON reports;
-- a sanitized evidence record for each selected scanner;
-- source and artifact CycloneDX SBOMs, including a frozen, offline, integrity-
-  verified `uv.lock` export for source dependencies;
-- `artifact-manifest.json` with SHA-256 bindings for both distributions;
-- Pylint, Radon, coverage, and JUnit derived assurance summaries;
-- scanner entry-point approval and post-execution integrity summaries;
-- risk-ordered scanner trust remediation with provenance-gated, copy-ready
-  digest candidates and artifact-aware, schema-1.3 machine-actionable
-  inspection JSON;
-- target-bound finding lifecycle, live digest-pinned KEV/EPSS evidence,
-  effectiveness metrics, SSDF claims, and a Security Passport;
-- a checksum manifest that was independently verified after generation.
+The companion proof at `.artifacts/detection-validation-v7` records six expected
+Bandit, Semgrep, and detect-secrets findings, 100% expected-perspective recall,
+and zero findings on the safe negative control.
 
-The source test suite currently records 297 passing tests and one platform-
-limited symlink test skip. It includes property-test replay and fixtures for all
-adapters, private scanner-home isolation, artifact digest binding, path-
-traversal rejection during distribution expansion, hardened XML evidence
-ingestion, archive-link rejection, governed risk acceptance, database
-freshness, detection validation, repository-health additions, trusted-lane
-evidence validation, and the SonarQube export. Combined line-and-branch
-coverage is 93.17%, and branch coverage is 86.97%, so both measures pass the
-80% policy threshold. No production source file remains below the per-file
-coverage reporting threshold.
+<details>
+<summary>Verified native tool versions</summary>
 
-The companion detection proof is in
-`.artifacts/detection-validation-v7`; its summary confirms six normalized
-findings across Bandit, Semgrep, and detect-secrets, with required attribution,
-classification, location, citations, impact, and remediation, 100% expected-
-perspective recall, and zero findings on the safe negative control.
+| Group | Versions |
+|---|---|
+| Core security | Bandit 1.9.4; Semgrep 1.170.0; detect-secrets package 1.5.0; OSV-Scanner 2.3.8 |
+| Python quality | Ruff 0.15.22; Pylint 4.0.6; mypy 2.1.0; Pyright 1.1.411; Vulture 2.16; Radon 6.0.1; Tach 0.35.0 |
+| Dependency and test evidence | deptry 0.24.0; diff-cover 10.2.0; CycloneDX Python 7.3.0 |
+| Delivery | actionlint 1.7.12; Hadolint 2.14.0; Checkov 3.2.494; PSScriptAnalyzer 1.25.0 |
+| Repository and supply chain | DevSkim 1.0.70; ScanCode 32.5.0; Trivy 0.69.3; Gitleaks 8.30.1; TruffleHog 3.95.9; Syft 1.49.0; Grype 0.116.0 |
+| Packaging | check-wheel-contents 0.6.3; Twine 6.2.0; PyPI attestations 0.0.29; Cosign 3.1.2 |
+| Semantic analysis | `run-codeql` 1.6.0 with CodeQL CLI 2.25.5 |
+
+</details>
+
+## Offline report contracts
+
+| Contract | Current schema | Purpose |
+|---|---|---|
+| Inspection | [1.3](../src/py_security_suite/schemas/report-inspection-1.3.schema.json) | Verified machine-readable decision, health, action completeness, and prioritized findings |
+| Inspection verification | [1.3](../src/py_security_suite/schemas/report-inspection-verification-1.3.schema.json) | Binds the inspection digest, report checksum, action limit, and omission summary |
+| Report verification | [1.0](../src/py_security_suite/schemas/report-verification.schema.json) | Portable receipt for report integrity and semantic verification |
+
+Export exact schemas from the installed wheel without network access:
+
+```text
+pysec schema report-inspection-1.3 --output contracts/report-inspection.schema.json
+pysec schema report-inspection-verification-1.3 --output contracts/report-inspection-verification.schema.json
+pysec schema report-verification-1.0 --output contracts/report-verification.schema.json
+```
+
+Inspection versions 1.0 through 1.2 remain frozen under their explicit names.
+There is no ambiguous `latest` alias or remote schema lookup.
+
+## Documentation maintenance
+
+- Update `Last reviewed` when behavior, evidence, or pinned tools change.
+- Keep connected acquisition commands separate from isolated execution commands.
+- Treat implementation and generated manifests as authoritative when they
+  disagree with prose.
+- Never claim that an unsigned passport proves publisher identity or release
+  approval.
+- Add compatibility and selection entries before making a scanner required.

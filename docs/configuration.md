@@ -1,6 +1,6 @@
 # Python Security Suite configuration
 
-Last reviewed: 2026-08-04
+Last reviewed: 2026-08-06
 
 ## Loading and protection
 

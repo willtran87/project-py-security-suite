@@ -5,32 +5,25 @@ security scanners. It runs locally installed, enterprise-approved tools; turns
 their native JSON into one stable finding model; applies an explicit policy; and
 creates a GitHub-friendly report artifact.
 
-The current alpha implementation provides:
+| Area | Capability |
+|---|---|
+| Portfolio | 62 governed adapters across source security, secrets, dependencies, architecture, quality, delivery, artifacts, and assurance evidence |
+| Decisions | Explicit `PASS`, `WARN`, `FAIL`, and `INCOMPLETE` outcomes |
+| Reports | Markdown, self-contained HTML, SARIF 2.1.0, SonarQube external issues, normalized JSON, and SHA-256 manifests |
+| Risk context | Digest-pinned CISA KEV, FIRST EPSS, CycloneDX VEX, finding lifecycle, CODEOWNERS, and governed acceptances |
+| Supply chain | Source and artifact SBOMs, package checks, provenance findings, and a locally verifiable Security Passport |
+| Runtime | Python 3.11+; scanners are installed separately from approved offline bundles |
 
-- 62 governed adapters spanning Python security, correctness, formatting,
-  typing, dead code, complexity, architectural boundaries, test evidence,
-  secrets, dependency vulnerabilities, SBOMs, workflows, containers, native
-  extensions, data flow, IaC, package behavior, licenses, Git history, and
-  semantic analysis, organization policy, repository health, packaging schema,
-  Kubernetes, documentation quality, symbolic execution, fuzzing, mutation
-  testing, malware, and artifact attestations
-- strict `PASS`, `WARN`, `FAIL`, and `INCOMPLETE` outcomes
-- Markdown, self-contained HTML, SARIF 2.1.0, SonarQube generic external
-  issues, normalized JSON, a scan manifest, sanitized tool diagnostics, and
-  SHA-256 checksums
-- a SLSA Verification Summary Attestation-shaped Security Passport that binds
-  the source, policy, scanner health, findings, SBOMs, and report evidence;
-  Cosign 2 detached signing, explicit Cosign 3 bundle signing, and local
-  verification are built into the CLI
-- digest-pinned offline CISA KEV, FIRST EPSS, and CycloneDX VEX enrichment,
-  plus prior-report lifecycle analysis and CODEOWNERS routing
-- no package installation, dependency resolution, project imports, or target
-  code execution
-- frozen, offline `uv.lock` SBOM export with before/after executable integrity
-  checks; bounded advisory-database age; and exact, expiring, owner-attributed
-  risk acceptances
-- Python 3.11+ plus the small `defusedxml` parser-hardening dependency; scanner
-  dependencies remain separately installed and governed
+Key trust properties:
+
+- no package installation, dependency resolution, project import, or target-code
+  execution during scanning;
+- scanner entry points are hashed before and after execution and can require
+  organization-approved digests;
+- advisory databases, rules, policies, baselines, and acceptances are bounded
+  and digest-pinned; and
+- reports are sealed with an exact checksum manifest before inspection or
+  attestation.
 
 The suite does not itself create a network sandbox. Run it inside an
 egress-denied container, VM, or enterprise runner, then pass
@@ -55,13 +48,20 @@ Markdown is the canonical documentation format:
 
 ```mermaid
 flowchart LR
-    Project["Python project"] --> Suite["Python Security Suite"]
-    Suite --> Tools["62 governed adapters"]
-    Tools --> Applicability["Applicable | Not applicable | Unavailable"]
-    Applicability --> Findings["Normalized and correlated findings"]
-    Findings --> Policy["PASS | WARN | FAIL | INCOMPLETE"]
-    Policy --> Reports["Markdown | HTML | SARIF | SonarQube | JSON"]
-    Reports --> GitHub["GitHub summary and artifact"]
+    subgraph Prep["Connected preparation lane"]
+        Acquire["Acquire tools and offline data"] --> Bundle["Verify and seal native bundle"]
+    end
+    Bundle --> Transfer["Approved transfer"]
+    subgraph Boundary["Externally isolated execution boundary"]
+        Project["Python project"] --> Doctor["Preflight applicability and trust"]
+        Doctor --> Scan["Run applicable adapters"]
+        Scan --> Findings["Normalize and correlate"]
+        Findings --> Policy["PASS | WARN | FAIL | INCOMPLETE"]
+        Policy --> Reports["Seal reports and evidence"]
+    end
+    Transfer --> Doctor
+    Reports --> Verify["Verify | inspect | attest"]
+    Verify --> Publish["GitHub summary, SARIF, and artifact"]
 ```
 
 ## Development run

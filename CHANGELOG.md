@@ -5,6 +5,10 @@ for published releases.
 
 ## Unreleased
 
+- Restructure the documentation index around operator goals, add trust-boundary
+  and coverage-flow Mermaid diagrams, condense the README capability summary,
+  and refresh verified scanner, test, coverage, and self-scan evidence through
+  2026-08-06.
 - Version inspection and inspection-verification contracts at 1.3 with an
   exact action summary covering the requested limit, available actions,
   returned actions, omissions, and truncation; terminal inspection now makes

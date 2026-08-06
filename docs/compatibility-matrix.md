@@ -1,9 +1,30 @@
 # Python Security Suite compatibility and coverage matrix
 
-Last reviewed: 2026-08-02
+Last reviewed: 2026-08-06
 
 See the [documentation index](index.md), [solution design](design.md), and
 [operations guide](operations.md) for the surrounding architecture.
+
+## Coverage model
+
+```mermaid
+flowchart LR
+    Source["Python source"] --> Static["Patterns, data flow, types, and quality"]
+    Repo["Repository configuration"] --> Delivery["Workflows, IaC, containers, and architecture"]
+    Dependencies["Locks and manifests"] --> Components["Vulnerabilities, SBOMs, licenses, and package behavior"]
+    Artifacts["Wheel, sdist, and images"] --> Supply["Structure, metadata, malware, provenance, and signatures"]
+    Evidence["Trusted companion lanes"] --> Dynamic["Tests, DAST, fuzzing, threat models, and reproducibility"]
+    Static --> Model["Normalized finding and evidence model"]
+    Delivery --> Model
+    Components --> Model
+    Supply --> Model
+    Dynamic --> Model
+    Model --> Decision["Correlated policy decision and cited reports"]
+```
+
+The portfolio combines built-in scanner execution with bounded evidence
+ingestion. Conditional controls remain visible as `not applicable`; relevant
+controls that cannot run are reported as execution gaps.
 
 ## Meaning of support
 
