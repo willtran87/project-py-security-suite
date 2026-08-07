@@ -23,8 +23,23 @@ depends_on = []
 layer = "core"
 
 [[modules]]
+path = "py_security_suite.path_safety"
+depends_on = []
+layer = "core"
+
+[[modules]]
+path = "py_security_suite.reachability"
+depends_on = ["py_security_suite.path_safety"]
+layer = "core"
+
+[[modules]]
+path = "py_security_suite.prioritization"
+depends_on = []
+layer = "core"
+
+[[modules]]
 path = "py_security_suite.config"
-depends_on = ["py_security_suite.models"]
+depends_on = ["py_security_suite.models", "py_security_suite.path_safety"]
 layer = "services"
 
 [[modules]]
@@ -43,13 +58,67 @@ depends_on = ["py_security_suite.models"]
 layer = "services"
 
 [[modules]]
+path = "py_security_suite.effectiveness"
+depends_on = ["py_security_suite.models"]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.finding_delta"
+depends_on = ["py_security_suite.models", "py_security_suite.path_safety"]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.risk_acceptance"
+depends_on = ["py_security_suite.models", "py_security_suite.path_safety"]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.risk_intelligence"
+depends_on = [
+    "py_security_suite.config",
+    "py_security_suite.models",
+    "py_security_suite.path_safety",
+]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.passport"
+depends_on = [
+    "py_security_suite",
+    "py_security_suite.execution",
+    "py_security_suite.models",
+    "py_security_suite.path_safety",
+]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.report_inspection"
+depends_on = [
+    "py_security_suite.execution",
+    "py_security_suite.models",
+    "py_security_suite.passport",
+    "py_security_suite.path_safety",
+    "py_security_suite.prioritization",
+]
+layer = "services"
+
+[[modules]]
 path = "py_security_suite.policy"
-depends_on = ["py_security_suite.config", "py_security_suite.models"]
+depends_on = [
+    "py_security_suite.config",
+    "py_security_suite.models",
+    "py_security_suite.risk_acceptance",
+]
 layer = "services"
 
 [[modules]]
 path = "py_security_suite.reports"
-depends_on = ["py_security_suite.models", "py_security_suite.source_context"]
+depends_on = [
+    "py_security_suite.models",
+    "py_security_suite.passport",
+    "py_security_suite.prioritization",
+    "py_security_suite.source_context",
+]
 layer = "services"
 
 [[modules]]
@@ -58,6 +127,7 @@ depends_on = [
     "py_security_suite.config",
     "py_security_suite.execution",
     "py_security_suite.models",
+    "py_security_suite.path_safety",
 ]
 layer = "integrations"
 
@@ -68,11 +138,28 @@ depends_on = [
     "py_security_suite.adapters",
     "py_security_suite.config",
     "py_security_suite.correlation",
+    "py_security_suite.effectiveness",
+    "py_security_suite.finding_delta",
     "py_security_suite.inventory",
     "py_security_suite.models",
     "py_security_suite.policy",
+    "py_security_suite.path_safety",
     "py_security_suite.reports",
+    "py_security_suite.risk_intelligence",
     "py_security_suite.source_context",
+]
+layer = "application"
+
+[[modules]]
+path = "py_security_suite.doctor"
+depends_on = [
+    "py_security_suite.adapters",
+    "py_security_suite.config",
+    "py_security_suite.finding_delta",
+    "py_security_suite.orchestrator",
+    "py_security_suite.path_safety",
+    "py_security_suite.risk_acceptance",
+    "py_security_suite.risk_intelligence",
 ]
 layer = "application"
 
@@ -81,8 +168,15 @@ path = "py_security_suite.cli"
 depends_on = [
     "py_security_suite",
     "py_security_suite.config",
+    "py_security_suite.doctor",
+    "py_security_suite.execution",
     "py_security_suite.orchestrator",
+    "py_security_suite.passport",
+    "py_security_suite.path_safety",
     "py_security_suite.policy",
+    "py_security_suite.reachability",
+    "py_security_suite.report_inspection",
+    "py_security_suite.reports",
 ]
 layer = "entrypoints"
 

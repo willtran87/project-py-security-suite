@@ -311,6 +311,10 @@ for _profile in ("comprehensive", "release"):
     PROFILE_TOOLS[_profile] = tuple(
         dict.fromkeys(PROFILE_TOOLS[_profile] + _RELEASE_ASSURANCE_EVIDENCE_TOOLS)
     )
+for _profile in ("quality", "repo", "comprehensive", "production", "release"):
+    PROFILE_TOOLS[_profile] = tuple(
+        dict.fromkeys(PROFILE_TOOLS[_profile] + ("reachability",))
+    )
 
 SUPPORTED_TOOLS = frozenset(
     tool for profile_tools in PROFILE_TOOLS.values() for tool in profile_tools
@@ -381,6 +385,11 @@ class ToolConfig:
     public_key_path: Path | None = None
     certificate_identity: str = ""
     certificate_oidc_issuer: str = ""
+    minimum_island_loc: int = 100
+    entry_points: tuple[str, ...] = ()
+    source_roots: tuple[str, ...] = ()
+    discover_framework_roots: bool = True
+    coverage_path: Path | None = None
 
 
 @dataclass(slots=True)
@@ -547,6 +556,16 @@ def _default_mapping() -> dict[str, Any]:
                 "enabled": True,
                 "executable": "tach",
                 "timeout_seconds": 300,
+            },
+            "reachability": {
+                "enabled": True,
+                "executable": "pysec",
+                "timeout_seconds": 600,
+                "minimum_island_loc": 100,
+                "entry_points": [],
+                "source_roots": [],
+                "discover_framework_roots": True,
+                "coverage_path": None,
             },
             "coverage": {
                 "enabled": True,
@@ -932,6 +951,11 @@ def _ensure_known(mapping: Mapping[str, Any]) -> None:
         "public_key_path",
         "certificate_identity",
         "certificate_oidc_issuer",
+        "minimum_island_loc",
+        "entry_points",
+        "source_roots",
+        "discover_framework_roots",
+        "coverage_path",
     }
     for name, value in tools.items():
         if name not in SUPPORTED_TOOLS:
@@ -1070,6 +1094,59 @@ def _reject_weaker_tool_settings(organization: object, repository: object) -> No
                         "repository configuration cannot lower the organization "
                         "minimum coverage percent"
                     )
+            if name == "reachability":
+                _reject_weaker_reachability(org_tool, repo_tool)
+
+
+def _reject_weaker_reachability(
+    organization: Mapping[str, Any], repository: Mapping[str, Any]
+) -> None:
+    if "minimum_island_loc" in repository:
+        try:
+            organization_threshold = int(organization.get("minimum_island_loc", 100))
+            repository_threshold = int(repository["minimum_island_loc"])
+        except (TypeError, ValueError) as exc:
+            raise ConfigurationError(
+                "reachability minimum_island_loc must be an integer"
+            ) from exc
+        if repository_threshold > organization_threshold:
+            raise ConfigurationError(
+                "repository configuration cannot raise the organization "
+                "reachability minimum_island_loc"
+            )
+    organization_roots = set(organization.get("entry_points", []))
+    if "entry_points" in repository and not organization_roots.issubset(
+        set(repository["entry_points"])
+    ):
+        raise ConfigurationError(
+            "repository reachability entry_points must include every "
+            "organization-required root"
+        )
+    organization_sources = set(organization.get("source_roots", []))
+    if "source_roots" in repository and not organization_sources.issubset(
+        set(repository["source_roots"])
+    ):
+        raise ConfigurationError(
+            "repository reachability source_roots must include every "
+            "organization-required source root"
+        )
+    if (
+        organization.get("discover_framework_roots") is True
+        and repository.get("discover_framework_roots", True) is not True
+    ):
+        raise ConfigurationError(
+            "repository configuration cannot disable framework root discovery"
+        )
+    organization_coverage = organization.get("coverage_path")
+    if (
+        organization_coverage
+        and "coverage_path" in repository
+        and repository.get("coverage_path") != organization_coverage
+    ):
+        raise ConfigurationError(
+            "repository configuration cannot replace the organization reachability "
+            "coverage_path"
+        )
 
 
 def _reject_weaker_evidence_settings(
@@ -1244,10 +1321,22 @@ def _tool_config(name: str, data: Mapping[str, Any]) -> ToolConfig:
     artifacts = data.get("artifacts_path")
     provenance = data.get("provenance_path")
     public_key = data.get("public_key_path")
+    coverage_path = data.get("coverage_path")
+    entry_points = data.get("entry_points", [])
+    source_roots = data.get("source_roots", [])
+    if not isinstance(entry_points, (list, tuple)) or not isinstance(
+        source_roots, (list, tuple)
+    ):
+        raise ConfigurationError(f"{name} entry_points and source_roots must be arrays")
+    if not isinstance(data.get("discover_framework_roots", True), bool):
+        raise ConfigurationError(
+            f"{name} discover_framework_roots must be true or false"
+        )
     try:
         timeout = int(data["timeout_seconds"])
         coverage_minimum = float(data.get("minimum_coverage_percent", 80.0))
         database_maximum_age = float(data.get("maximum_database_age_days", 10.0))
+        minimum_island_loc = int(data.get("minimum_island_loc", 100))
     except (TypeError, ValueError) as exc:
         raise ConfigurationError(f"{name} numeric settings are invalid") from exc
     config = ToolConfig(
@@ -1270,6 +1359,11 @@ def _tool_config(name: str, data: Mapping[str, Any]) -> ToolConfig:
         public_key_path=Path(public_key).expanduser() if public_key else None,
         certificate_identity=str(data.get("certificate_identity") or ""),
         certificate_oidc_issuer=str(data.get("certificate_oidc_issuer") or ""),
+        minimum_island_loc=minimum_island_loc,
+        entry_points=tuple(str(value) for value in entry_points),
+        source_roots=tuple(str(value) for value in source_roots),
+        discover_framework_roots=bool(data.get("discover_framework_roots", True)),
+        coverage_path=Path(coverage_path).expanduser() if coverage_path else None,
     )
     _validate_tool_config(name, config)
     return config
@@ -1288,6 +1382,18 @@ def _validate_tool_config(name: str, config: ToolConfig) -> None:
         raise ConfigurationError(
             f"{name} minimum_coverage_percent must be between 0 and 100"
         )
+    if not 1 <= config.minimum_island_loc <= 1_000_000:
+        raise ConfigurationError(
+            f"{name} minimum_island_loc must be between 1 and 1000000"
+        )
+    for setting, values in (
+        ("entry_points", config.entry_points),
+        ("source_roots", config.source_roots),
+    ):
+        if len(values) > 256 or any(
+            not value.strip() or len(value) > 500 for value in values
+        ):
+            raise ConfigurationError(f"{name} {setting} contains invalid values")
     if not 0.1 <= config.maximum_database_age_days <= 3650.0:
         raise ConfigurationError(
             f"{name} maximum_database_age_days must be between 0.1 and 3650"

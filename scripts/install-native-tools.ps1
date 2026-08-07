@@ -460,6 +460,7 @@ $tach = & $toTomlPath (Join-Path $toolDirectory "Scripts\tach.exe")
 $pylint = & $toTomlPath (Join-Path $toolDirectory "Scripts\pylint.exe")
 $radon = & $toTomlPath (Join-Path $toolDirectory "Scripts\radon.exe")
 $reuse = & $toTomlPath (Join-Path $toolDirectory "Scripts\reuse.exe")
+$pysec = & $toTomlPath (Join-Path $toolDirectory "Scripts\pysec.exe")
 $pysecEvidence = & $toTomlPath (
     Join-Path $toolDirectory "Scripts\pysec-evidence.exe"
 )
@@ -516,6 +517,7 @@ $tachSha256 = & $toSha256 $tach
 $pylintSha256 = & $toSha256 $pylint
 $radonSha256 = & $toSha256 $radon
 $reuseSha256 = & $toSha256 $reuse
+$pysecSha256 = & $toSha256 $pysec
 $pysecEvidenceSha256 = & $toSha256 $pysecEvidence
 $flawfinderSha256 = & $toSha256 $flawfinder
 $cycloneDxSha256 = & $toSha256 $cycloneDx
@@ -677,6 +679,14 @@ enabled = true
 executable = "$tach"
 executable_sha256 = "$tachSha256"
 timeout_seconds = 300
+
+[tools.reachability]
+enabled = true
+executable = "$pysec"
+executable_sha256 = "$pysecSha256"
+timeout_seconds = 600
+minimum_island_loc = 100
+discover_framework_roots = true
 
 [tools.coverage]
 enabled = true

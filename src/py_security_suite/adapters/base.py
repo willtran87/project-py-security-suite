@@ -74,6 +74,10 @@ class ScannerAdapter(ABC):
     def derived_artifacts(self, payload: str, target: Path) -> dict[str, Any]:
         return {}
 
+    def result_payload(self, execution: RawExecution) -> str:
+        """Return the scanner stream that contains its machine-readable result."""
+        return execution.stdout
+
     def run(self, target: Path) -> AdapterResult:
         readiness = self.preflight(target)
         if readiness.status == "not_applicable":
@@ -155,8 +159,9 @@ class ScannerAdapter(ABC):
                 diagnostic=self._diagnostic(tool_run, execution),
             )
         try:
-            findings = self.parse(execution.stdout, target)
-            artifacts = self.derived_artifacts(execution.stdout, target)
+            payload = self.result_payload(execution)
+            findings = self.parse(payload, target)
+            artifacts = self.derived_artifacts(payload, target)
         except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
             tool_run = self._tool_run(
                 execution,

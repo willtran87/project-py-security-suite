@@ -42,7 +42,7 @@ flowchart LR
         Install["install-native-tools.ps1<br/>hash verification + pip --no-index"]
         Project["Python project<br/>read-only by policy"]
         Suite["Python Security Suite"]
-        Scanners["62 governed adapters<br/>security | quality | testing | policy | architecture | supply chain | artifact | governance"]
+        Scanners["63 governed adapters<br/>security | quality | testing | policy | architecture | supply chain | artifact | governance"]
         Reports["Markdown | HTML | SARIF | SonarQube | JSON<br/>SBOM + delta + intelligence + Security Passport"]
         Contracts["Version-explicit JSON Schemas<br/>installed package resources"]
         Install --> Suite
@@ -134,7 +134,7 @@ flowchart TD
 
     subgraph Adapters["Scanner adapter boundary"]
         Fast["Fast Python security<br/>Bandit | Semgrep | Ruff S"]
-        Quality["Code quality and architecture<br/>Ruff | Pylint | mypy | Pyright | deptry | Vulture | Radon | Tach"]
+        Quality["Code quality and architecture<br/>Ruff | Pylint | mypy | Pyright | deptry | Vulture | Radon | Tach | Reachability"]
         Tests["Passive test evidence<br/>coverage.py | diff-cover | JUnit XML"]
         Secrets["Secrets<br/>detect-secrets | Gitleaks | TruffleHog"]
         Supply["Supply chain<br/>OSV | CycloneDX | GuardDog"]
@@ -207,6 +207,16 @@ classification, file and line, bounded source excerpt, impact, remediation,
 and an official rule citation. A boundary change therefore appears as an
 actionable report item rather than an opaque scanner failure.
 
+The bundled [reachability analyzer](reachability.md) adds a second structural
+view. It follows bounded, typed AST edges from declared or discovered application
+roots and separates executable, load-only, and disconnected code. Direct calls,
+bounded polymorphic dispatch, callback references, and recognized framework hooks
+are distinct from imports and definitions; every node and edge explains its
+confidence and predecessor. Optional coverage.py JSON adds observed,
+not-observed, or not-measured corroboration. The sealed `reachability.json`
+records representative execution sequences and ranked islands without importing
+or executing target code.
+
 ## Scan sequence
 
 ```mermaid
@@ -262,7 +272,7 @@ additional perspectives:
 | Deep | Pysa, CodeQL through `run-codeql` | Interprocedural and semantic data-flow analysis |
 | Supply chain | Trivy, GuardDog, ScanCode, Gitleaks, TruffleHog | IaC, licenses, malicious packages, origin inventory, diverse secret detectors |
 | Artifact | Syft, Grype, check-wheel-contents, Twine, PyPI attestations, Cosign | Final-distribution SBOM, vulnerabilities, source parity, contents, metadata, signatures, identity, and provenance |
-| Quality, structure, and test evidence | Ruff quality/format, Pylint, mypy, Pyright, deptry, Vulture, Radon, Tach, coverage, diff-cover, JUnit, PSScriptAnalyzer, ShellCheck, actionlint, Hadolint, REUSE | Correctness, formatting, type contracts, dependency declarations, dead code, complexity, dependency boundaries, test adequacy/outcomes, scripts, workflows, containers, and SPDX metadata |
+| Quality, structure, and test evidence | Ruff quality/format, Pylint, mypy, Pyright, deptry, Vulture, Radon, Tach, reachability, coverage, diff-cover, JUnit, PSScriptAnalyzer, ShellCheck, actionlint, Hadolint, REUSE | Correctness, formatting, type contracts, dependency declarations, dead code, entry-point sequences, disconnected islands, complexity, dependency boundaries, test adequacy/outcomes, scripts, workflows, containers, and SPDX metadata |
 | Deep IaC | Checkov plus Trivy, Hadolint, actionlint, and zizmor | Graph-aware cloud/IaC policies plus independent deployment and pipeline perspectives |
 | Governance evidence | OpenSSF Scorecard evidence ingestion | Repository-host controls generated in a separately authorized connected lane |
 | Repository insight | Conftest, KICS, pipdeptree, git-sizer, validate-pyproject, Vale, KubeLinter | Organization policy, IaC diversity, environment health, Git scale, packaging metadata, prose, and Kubernetes readiness |
@@ -388,6 +398,7 @@ report/
 |-- scancode-inventory.json        # when ScanCode is applicable
 |-- pylint-summary.json            # Pylint counts/statistics
 |-- radon-complexity.json           # complete rank C+ complexity evidence
+|-- reachability.json               # three-state topology, explanations, coverage, and islands
 |-- coverage-summary.json           # validated pre-generated coverage
 |-- junit-summary.json              # validated test result metadata
 |-- reuse-compliance.json           # when REUSE opt-in is present
@@ -578,14 +589,14 @@ See [configuration.md](configuration.md) for the complete supported schema.
 
 The native Windows self-scan process verifies:
 
-- the `comprehensive` profile selects all 62 adapters;
-- all 35 applicable scanners completed without failures, timeouts, or parse
+- the `comprehensive` profile selects all 63 adapters;
+- all 36 applicable scanners completed without failures, timeouts, or parse
   errors; 27 conditional scanners were correctly not applicable;
 - Pylint, Radon, Ruff formatting, coverage, and JUnit adapters executed through
   approved entry-point bindings and emitted normalized derived evidence;
-- the separately generated branch-coverage evidence records 93.17% combined
-  line-and-branch coverage and 86.97% branch coverage, satisfying both 80%
-  repository gates with no per-file hotspots; JUnit records 299 passing tests,
+- the separately generated branch-coverage evidence records 92.55% combined
+  line-and-branch coverage and 85.96% branch coverage, satisfying both 80%
+  repository gates with no per-file hotspots; JUnit records 319 passing tests,
   one platform-limited symlink skip, and no failures or errors;
 - CycloneDX completed from `uv.lock` through a frozen offline export with a
   hash-verified helper; zizmor, actionlint, Pysa, GuardDog, Flawfinder, and
@@ -597,14 +608,20 @@ The native Windows self-scan process verifies:
 - the artifact manifest bound both distributions by SHA-256;
 - all generated report checksums verified and target content remained
   unchanged;
-- all 37 observed scanner and helper entry points were confirmed unchanged
-  after execution; 12 were also bound to approved digests, while the remaining
+- all 38 observed scanner and helper entry points were confirmed unchanged
+  after execution; 13 were also bound to approved digests, while the remaining
   25 are explicitly reported as provenance-approval work;
 - the 2026-08-06 isolated comprehensive outcome was `INCOMPLETE` because the
-  digest-pinned KEV and EPSS snapshots were 4.37 days old against a 3-day
+  digest-pinned KEV and EPSS snapshots were 5.00 days old against a 3-day
   maximum; the suite failed closed despite complete scanner execution;
 - exactly two high-severity Cosign observations remain for intentionally absent
   wheel and source-distribution bundles, with no testing-coverage findings; and
+- the bundled reachability analyzer completed its schema-1.1 three-state model
+  at medium confidence because bounded polymorphic dispatch was used: four roots,
+  73 modules, 964 nodes, 6,983 explained edges, 871 executable nodes, 93 load-only
+  nodes, no disconnected nodes, and no reportable islands; coverage corroborated
+  every executable node and 92 load-only nodes exercised directly or indirectly
+  by tests; and
 - code security, secrets, dependency-vulnerability, architecture, and quality
   perspectives had no findings. Release remains blocked until approved
   intelligence is refreshed and an approved signing lane supplies bundles for
@@ -613,7 +630,7 @@ The native Windows self-scan process verifies:
 ## Expanded implementation state
 
 Adapters, parser fixtures, applicability handling, profiles, attribution, and
-offline command construction are implemented for all 62 portfolio tools,
+offline command construction are implemented for all 63 portfolio tools,
 including CodeQL through `run-codeql`, final-distribution controls, seven
 repository-health scanners, and trusted-lane evidence adapters including final
 OCI-image assurance.

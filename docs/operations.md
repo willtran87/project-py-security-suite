@@ -42,7 +42,8 @@ Run only in an approved connected update lane:
 The default output is `.artifacts/native-bundle`. It contains:
 
 - pinned top-level Bandit, Semgrep, detect-secrets, Ruff, Pylint, mypy,
-  Vulture, Radon, Tach, REUSE, Flawfinder, CycloneDX Python, zizmor, ScanCode,
+  Vulture, Radon, Tach, the bundled reachability analyzer, REUSE, Flawfinder,
+  CycloneDX Python, zizmor, ScanCode,
   `run-codeql`, PyPI attestations,
   check-wheel-contents, Twine, and suite wheels, plus their resolved
   transitive wheel set;

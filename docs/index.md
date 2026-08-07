@@ -13,6 +13,7 @@ verification happen inside an enterprise-controlled isolated boundary.
 | Understand architecture and trust boundaries | [Design](design.md) |
 | Install and operate without Docker or internet access | [Operations](operations.md) |
 | Configure profiles, policy, ownership, and exit behavior | [Configuration](configuration.md) |
+| Trace entry points and investigate disconnected code | [Python reachability](reachability.md) |
 | Compare scanner coverage and platform support | [Compatibility matrix](compatibility-matrix.md) |
 | Enforce a production release gate | [Production security](production-security.md) |
 | Verify provenance, risk intelligence, and passports | [Security Passport](security-passport.md) |
@@ -38,7 +39,7 @@ flowchart LR
     subgraph Isolated["Externally enforced isolated boundary"]
         Transfer --> Doctor["pysec doctor"]
         Repo["Python repository"] --> Doctor
-        Doctor --> Scan["62-adapter applicability-aware scan"]
+        Doctor --> Scan["63-adapter applicability-aware scan"]
         Scan --> Normalize["Normalize, correlate, classify, and own"]
         Normalize --> Gate["Policy decision"]
         Gate --> Seal["Checksum-sealed report"]
@@ -58,7 +59,7 @@ sandbox. The VM, container, runner, or network policy must enforce isolation.
 | Python source security | AST patterns, structural rules, data flow, native extensions | Bandit, Semgrep, CodeQL, Pysa, Ruff, DevSkim, Flawfinder |
 | Secrets | Working tree, history, detector diversity | detect-secrets, Gitleaks, TruffleHog |
 | Dependencies and components | Vulnerabilities, malicious packages, SBOMs, licenses | OSV-Scanner, Grype, GuardDog, CycloneDX, Syft, Trivy, ScanCode |
-| Architecture and quality | Boundaries, cycles, types, correctness, complexity, dead code, changed-line coverage | Tach, mypy, Pyright, Pylint, deptry, Radon, Vulture, diff-cover |
+| Architecture and quality | Boundaries, cycles, types, correctness, complexity, three-state reachability, explained entry-point paths, disconnected islands, runtime corroboration, changed-line coverage | Tach, reachability, mypy, Pyright, Pylint, deptry, Radon, Vulture, coverage, diff-cover |
 | Delivery configuration | GitHub Actions, containers, IaC, shell and PowerShell | zizmor, actionlint, Hadolint, Checkov, ShellCheck, PSScriptAnalyzer |
 | Distribution assurance | Wheel/sdist structure, metadata, attestations, signing | check-wheel-contents, Twine, PyPI attestations, Cosign, in-toto evidence |
 | Governance | KEV/EPSS/VEX, ownership, lifecycle, accepted risk, release evidence | CISA KEV, FIRST EPSS, CycloneDX VEX, CODEOWNERS, Security Passport |
@@ -73,24 +74,27 @@ platform support, and acquisition requirements.
 | Measure | Verified result |
 |---|---:|
 | Profile | `comprehensive` |
-| Selected adapters | 62 |
-| Applicable and completed | 35 / 35 |
+| Selected adapters | 63 |
+| Applicable and completed | 36 / 36 |
 | Correctly not applicable | 27 |
 | Unavailable, failed, timed out, or parse errors | 0 |
-| Policy outcome | `INCOMPLETE` — offline KEV and EPSS snapshots exceed the 3-day policy by 1.37 days |
+| Policy outcome | `INCOMPLETE` — offline KEV and EPSS snapshots exceed the 3-day policy by 1.91 days |
 | Normalized findings | 2 expected Cosign bundle findings |
-| Tests | 299 passed, 1 platform-limited skip |
-| Combined line and branch coverage | 93.17% |
-| Branch coverage | 86.97% |
+| Reachability graph | Schema 1.1; 4 roots; 964 nodes; 6,983 explained edges |
+| Reachability states | 871 executable; 93 load-only; 0 disconnected; 0 reportable islands |
+| Runtime corroboration | 871/871 executable nodes observed; 92/93 load-only nodes observed by tests |
+| Tests | 319 passed, 1 platform-limited skip |
+| Combined line and branch coverage | 92.55% |
+| Branch coverage | 85.96% |
 | Per-file coverage threshold | 80%; no production hotspot below threshold |
 
-The 2026-08-06 self-scan is in `.artifacts/final-self-scan-v111`. It correctly
-fails closed as `INCOMPLETE`: the digest-pinned KEV and EPSS snapshots are 4.37
+The 2026-08-06 self-scan is in `.artifacts/reachability-selfscan-v8`. It correctly
+fails closed as `INCOMPLETE`: the digest-pinned KEV and EPSS snapshots are 5.00
 days old, exceeding the comprehensive policy maximum of 3 days. All applicable
 scanners still completed, and the only normalized findings are the two expected
 missing Cosign bundles for the wheel and source distribution. Code security,
 secrets, dependency vulnerabilities, architecture, and quality were clean. All
-37 observed scanner entry points were unchanged after execution; 25 bindings
+38 observed scanner entry points were unchanged after execution; 25 bindings
 across 22 unique digests remain candidates for organization provenance approval.
 Refresh and approve the intelligence snapshots, rerun, then sign both exact
 artifacts before release.
@@ -102,6 +106,7 @@ The report contains:
 - SARIF 2.1.0 and SonarQube generic external issues;
 - normalized findings, scanner evidence, applicability, and integrity records;
 - source and artifact CycloneDX SBOMs plus artifact SHA-256 identities;
+- reachability topology and representative entry-point sequences;
 - risk-intelligence, lifecycle, effectiveness, and SSDF claim evidence; and
 - an exact checksum manifest and Security Passport statement.
 

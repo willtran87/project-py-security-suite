@@ -5,6 +5,15 @@ for published releases.
 
 ## Unreleased
 
+- Add bounded offline Python reachability analysis with packaging, main,
+  framework, and configured roots; three-state executable/load-only/disconnected
+  classification; confidence-bearing direct, framework, callback, and polymorphic
+  dispatch paths; optional bounded coverage.py corroboration; ranked module and
+  symbol islands; state-appropriate normalized findings; and a sealed schema-1.1
+  `reachability.json` graph artifact.
+- Parse Tach 0.35 violations from its native stderr stream and expand the
+  dogfood architecture contract so every production module and dependency is
+  explicit instead of silently treating an exit-code-1 run as clean.
 - Restructure the documentation index around operator goals, add trust-boundary
   and coverage-flow Mermaid diagrams, condense the README capability summary,
   and refresh verified scanner, test, coverage, and self-scan evidence through

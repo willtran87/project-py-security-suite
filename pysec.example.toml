@@ -133,6 +133,20 @@ enabled = true
 executable = "radon"
 timeout_seconds = 300
 
+[tools.reachability]
+enabled = true
+# This is the suite's own AST-only analyzer; it never imports target modules.
+executable = "pysec"
+timeout_seconds = 600
+minimum_island_loc = 100
+discover_framework_roots = true
+# Optional roots for plugin, reflection, dependency-injection, or library APIs.
+# entry_points = ["package.plugin:activate", "package.public:Client"]
+# Optional target-relative roots override package-layout discovery.
+# source_roots = ["src"]
+# Optional coverage.py JSON corroborates static states without executing target code.
+# coverage_path = ".artifacts/test-evidence/coverage.json"
+
 [tools.coverage]
 enabled = true
 executable = "pysec-evidence"

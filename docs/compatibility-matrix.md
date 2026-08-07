@@ -90,6 +90,7 @@ performed.
 | Vulture | High-confidence unreachable and unused Python code | Reports only 100% confidence; generated roots excluded | quality, repo, comprehensive, release | Yes |
 | Radon | Cyclomatic-complexity measurement | Local source; C+ retained as evidence and E/F normalized as findings | quality, repo, comprehensive, production, release | Yes |
 | Tach | Declared Python module boundaries, dependency direction, cycles, and public interfaces | Reads local source and repository-owned `tach.toml`; no target imports or execution | quality, repo, comprehensive, production, release | Yes |
+| Reachability | Three-state executable/load-only/disconnected topology, entry-point sequences, runtime corroboration, and ranked Python islands | Bundled bounded AST analysis; typed confidence-bearing edges; framework and polymorphic dispatch; optional bounded coverage.py JSON; explicit dynamic roots; no target imports or execution | quality, repo, comprehensive, production, release | Yes |
 | Coverage evidence | Branch and statement test adequacy | Validates pre-generated coverage.py JSON; never runs tests | quality, repo, comprehensive, production, release | Yes |
 | JUnit evidence | Automated test outcomes | Validates bounded XML metadata; drops output and failure bodies | quality, repo, comprehensive, production, release | Yes |
 | Hypothesis evidence | Property-based security invariants and minimized edge cases | Executes only in a disposable test lane; bounded producer-attributed JUnit ingestion | repo, comprehensive, production, release | Yes |
@@ -184,6 +185,17 @@ confirmed vulnerability:
 | File-level license metadata | - | - | - | - | - | - | - | - | - | P | - | - |
 | Multi-language security patterns | - | - | - | - | - | - | - | - | - | - | P | - |
 | Native extension security | - | - | - | - | - | - | - | - | - | - | S | P |
+
+Reachability is kept separate from this already-wide comparison because its
+output is graph evidence rather than another per-line linter:
+
+| Capability | Reachability contribution | Complementary evidence |
+|---|---|---|
+| Entry-point discovery | Packaging scripts, Python mains, configured roots, and recognized framework decorators | Deployment review confirms externally or dynamically registered roots |
+| Execution sequences | Representative direct-call, callback, framework, and bounded polymorphic-dispatch paths with edge confidence | Coverage and traces show paths observed in a disposable runtime lane |
+| Dead/unreachable code | Executable, load-only, and disconnected states plus connected islands ranked by LOC | Vulture supplies high-confidence individual unused symbols |
+| Architecture | Actual static path topology and disconnected components | Tach enforces intended boundaries, layers, cycles, and public interfaces |
+| Dynamic behavior | Detects dynamic loading, explains bounded dispatch inference, and correlates optional runtime coverage | Explicit roots and runtime tests cover reflection, injection, plugins, and generated code |
 
 | Capability | Syft | Grype | Wheel contents | Twine | PyPI attestations |
 |---|:---:|:---:|:---:|:---:|:---:|

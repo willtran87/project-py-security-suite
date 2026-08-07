@@ -49,6 +49,7 @@ from .ruff import RuffAdapter
 from .ruff_quality import RuffQualityAdapter
 from .ruff_format import RuffFormatAdapter
 from .radon import RadonAdapter
+from .reachability import ReachabilityAdapter
 from .reuse import ReuseAdapter
 from .scancode import ScanCodeAdapter
 from .semgrep import SemgrepAdapter
@@ -82,6 +83,7 @@ ADAPTER_TYPES = {
     "mypy": MypyAdapter,
     "vulture": VultureAdapter,
     "radon": RadonAdapter,
+    "reachability": ReachabilityAdapter,
     "zizmor": ZizmorAdapter,
     "actionlint": ActionlintAdapter,
     "hadolint": HadolintAdapter,
@@ -177,6 +179,7 @@ __all__ = [
     "PyrightAdapter",
     "PysaAdapter",
     "RadonAdapter",
+    "ReachabilityAdapter",
     "ReproducibleBuildAdapter",
     "ReuseAdapter",
     "RuffAdapter",

@@ -125,6 +125,36 @@ class CliSafetyTests(unittest.TestCase):
         self.assertEqual(schema.command, "schema")
         self.assertEqual(schema.output, Path("schema.json"))
         self.assertTrue(schema.overwrite)
+        reachability = parser.parse_args(
+            [
+                "reachability",
+                ".",
+                "--source-root",
+                "src",
+                "--entry-point",
+                "package.cli:main",
+                "--minimum-island-loc",
+                "250",
+                "--no-framework-roots",
+            ]
+        )
+        self.assertEqual(reachability.command, "reachability")
+        self.assertEqual(reachability.source_root, ["src"])
+        self.assertEqual(reachability.entry_point, ["package.cli:main"])
+        self.assertEqual(reachability.minimum_island_loc, 250)
+        self.assertTrue(reachability.no_framework_roots)
+
+    def test_reachability_command_emits_machine_readable_graph(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            with patch("builtins.print") as output:
+                self.assertEqual(
+                    main(["reachability", directory, "--pretty"]),
+                    0,
+                )
+        document = json.loads(output.call_args.args[0])
+        self.assertEqual(document["schema_version"], "1.1")
+        self.assertFalse(document["analysis"]["target_code_executed"])
+        self.assertEqual(document["summary"]["entry_points"], 0)
 
     def test_schema_prints_and_atomically_exports_an_installed_contract(self) -> None:
         schema_name = "report-inspection-1.3"

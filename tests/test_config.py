@@ -30,7 +30,7 @@ class ConfigTests(unittest.TestCase):
 
     def test_comprehensive_profile_selects_every_implemented_tool(self) -> None:
         config = load_config(profile_override="comprehensive")
-        self.assertEqual(len(config.selected_tools), 62)
+        self.assertEqual(len(config.selected_tools), 63)
         self.assertEqual(config.required_tools, config.selected_tools)
         self.assertIn("cyclonedx-py", config.selected_tools)
         self.assertIn("codeql", config.selected_tools)
@@ -60,11 +60,12 @@ class ConfigTests(unittest.TestCase):
         self.assertIn("in-toto", config.selected_tools)
         self.assertIn("reproducible-build", config.selected_tools)
         self.assertIn("yara", config.selected_tools)
+        self.assertIn("reachability", config.selected_tools)
 
     def test_production_profile_blocks_medium_and_selects_full_suite(self) -> None:
         config = load_config(profile_override="production")
         self.assertEqual(config.required_tools, config.selected_tools)
-        self.assertEqual(len(config.selected_tools), 49)
+        self.assertEqual(len(config.selected_tools), 50)
         self.assertIn(
             "medium", {severity.value for severity in config.policy.block_severities}
         )
@@ -73,7 +74,7 @@ class ConfigTests(unittest.TestCase):
 
     def test_release_profile_adds_artifact_assurance(self) -> None:
         config = load_config(profile_override="release")
-        self.assertEqual(len(config.selected_tools), 62)
+        self.assertEqual(len(config.selected_tools), 63)
         self.assertIn("grype", config.required_tools)
         self.assertIn("check-wheel-contents", config.required_tools)
         self.assertIn("cosign", config.required_tools)
@@ -81,14 +82,15 @@ class ConfigTests(unittest.TestCase):
     def test_quality_and_repo_profiles_expose_distinct_coverage(self) -> None:
         quality = load_config(profile_override="quality")
         repo = load_config(profile_override="repo")
-        self.assertEqual(len(quality.selected_tools), 24)
-        self.assertEqual(len(repo.selected_tools), 52)
+        self.assertEqual(len(quality.selected_tools), 25)
+        self.assertEqual(len(repo.selected_tools), 53)
         self.assertIn("ruff-quality", quality.selected_tools)
         self.assertIn("mypy", repo.selected_tools)
         self.assertIn("tach", quality.selected_tools)
         self.assertIn("ruff-format", quality.selected_tools)
         self.assertIn("junit", quality.selected_tools)
         self.assertIn("diff-cover", quality.selected_tools)
+        self.assertIn("reachability", quality.selected_tools)
         self.assertIn("psscriptanalyzer", quality.selected_tools)
         self.assertNotIn("syft", repo.selected_tools)
 
@@ -217,6 +219,131 @@ class ConfigTests(unittest.TestCase):
                     organization_policy=policy_path,
                     repository_config=config_path,
                 )
+
+    def test_reachability_scope_and_threshold_are_governed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            policy_path = root / "policy.toml"
+            config_path = root / "pysec.toml"
+            policy_path.write_text(
+                "[tools.reachability]\n"
+                "minimum_island_loc = 100\n"
+                'entry_points = ["acme.plugins:load"]\n'
+                'source_roots = ["src"]\n'
+                'coverage_path = ".artifacts/coverage.json"\n'
+                "discover_framework_roots = true\n",
+                encoding="utf-8",
+            )
+            config_path.write_text(
+                "[tools.reachability]\n"
+                "minimum_island_loc = 200\n"
+                "entry_points = []\n"
+                "source_roots = []\n"
+                "discover_framework_roots = false\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                ConfigurationError, "cannot raise.*minimum_island_loc"
+            ):
+                load_config(
+                    organization_policy=policy_path,
+                    repository_config=config_path,
+                )
+
+            config_path.write_text(
+                "[tools.reachability]\n"
+                "minimum_island_loc = 50\n"
+                'entry_points = ["acme.plugins:load", "acme.cli:main"]\n'
+                'source_roots = ["src"]\n'
+                "discover_framework_roots = true\n",
+                encoding="utf-8",
+            )
+            config = load_config(
+                organization_policy=policy_path,
+                repository_config=config_path,
+            )
+            reachability = config.tools["reachability"]
+            self.assertEqual(reachability.minimum_island_loc, 50)
+            self.assertEqual(
+                reachability.entry_points,
+                ("acme.plugins:load", "acme.cli:main"),
+            )
+            self.assertEqual(reachability.source_roots, ("src",))
+            self.assertEqual(
+                reachability.coverage_path, Path(".artifacts/coverage.json")
+            )
+
+    def test_reachability_rejects_weaker_scope_and_invalid_values(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            policy_path = root / "policy.toml"
+            config_path = root / "pysec.toml"
+            policy_path.write_text(
+                "[tools.reachability]\n"
+                "minimum_island_loc = 100\n"
+                'entry_points = ["acme.plugins:load"]\n'
+                'source_roots = ["src"]\n'
+                'coverage_path = "approved-coverage.json"\n'
+                "discover_framework_roots = true\n",
+                encoding="utf-8",
+            )
+            cases = (
+                (
+                    "minimum_island_loc = 'large'\n",
+                    "minimum_island_loc must be an integer",
+                ),
+                (
+                    "minimum_island_loc = 50\nentry_points = []\n",
+                    "must include every organization-required root",
+                ),
+                (
+                    "minimum_island_loc = 50\n"
+                    'entry_points = ["acme.plugins:load"]\n'
+                    "source_roots = []\n",
+                    "must include every organization-required source root",
+                ),
+                (
+                    "minimum_island_loc = 50\n"
+                    'entry_points = ["acme.plugins:load"]\n'
+                    'source_roots = ["src"]\n'
+                    "discover_framework_roots = false\n",
+                    "cannot disable framework root discovery",
+                ),
+                (
+                    "minimum_island_loc = 50\n"
+                    'entry_points = ["acme.plugins:load"]\n'
+                    'source_roots = ["src"]\n'
+                    'coverage_path = "replacement.json"\n'
+                    "discover_framework_roots = true\n",
+                    "cannot replace.*coverage_path",
+                ),
+            )
+            for settings, message in cases:
+                with self.subTest(message=message):
+                    config_path.write_text(
+                        "[tools.reachability]\n" + settings,
+                        encoding="utf-8",
+                    )
+                    with self.assertRaisesRegex(ConfigurationError, message):
+                        load_config(
+                            organization_policy=policy_path,
+                            repository_config=config_path,
+                        )
+
+            invalid_repository_values = (
+                ("entry_points = 'not-an-array'\n", "must be arrays"),
+                ("discover_framework_roots = 'yes'\n", "must be true or false"),
+                ("minimum_island_loc = 0\n", "must be between"),
+                ('entry_points = [""]\n', "contains invalid values"),
+            )
+            for settings, message in invalid_repository_values:
+                with self.subTest(message=message):
+                    config_path.write_text(
+                        "[tools.reachability]\n" + settings,
+                        encoding="utf-8",
+                    )
+                    with self.assertRaisesRegex(ConfigurationError, message):
+                        load_config(organization_policy=config_path)
 
 
 if __name__ == "__main__":

@@ -89,6 +89,7 @@ require release evidence.
 | `vulture` | `vulture` | `rules_path` |
 | `radon` | `radon` | Rank C+ complexity evidence; rank E/F findings |
 | `tach` | `tach` | Repository-root `tach.toml`; conditional when absent |
+| `reachability` | `pysec` | Built-in AST-only graph; optional `entry_points`, `source_roots`, and island threshold |
 | `coverage` | `pysec-evidence` | Pre-generated coverage.py JSON at `artifacts_path` |
 | `junit` | `pysec-evidence` | Pre-generated JUnit XML file or directory at `artifacts_path` |
 | `diff-cover` | `diff-cover` | Cobertura `coverage.xml`, Git history, `compare_branch`, and threshold |
@@ -147,11 +148,22 @@ compare_branch = "origin/main"
 public_key_path = "optional/local/cosign-public-key"
 certificate_identity = "optional-expected-signing-identity"
 certificate_oidc_issuer = "optional-expected-oidc-issuer"
+minimum_island_loc = 100
+entry_points = ["optional.module:callable"]
+source_roots = ["src"]
+discover_framework_roots = true
+coverage_path = "optional/coverage.json"
 ```
 
 Only use keys meaningful to that adapter. Relative asset paths are resolved
 against the scan target. See [`pysec.example.toml`](../pysec.example.toml) for
 a complete configuration containing all implemented tools.
+
+The final five settings belong to `reachability`. `coverage_path` is optional,
+bounded coverage.py JSON generated in a separate test lane; organization policy
+can bind its location. See
+[Python reachability and code islands](reachability.md) for root discovery,
+policy-strength rules, output interpretation, and dynamic-language limits.
 
 `executable_sha256` binds the exact resolved executable or console-script
 entry point. It does not by itself authenticate the publisher or hash every

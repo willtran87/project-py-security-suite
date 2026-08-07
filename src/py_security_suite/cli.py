@@ -24,6 +24,7 @@ from .report_inspection import (
     verify_inspection,
 )
 from .reports import is_complete_report
+from .reachability import analyze_project
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -264,6 +265,45 @@ def build_parser() -> argparse.ArgumentParser:
     )
     list_tools.add_argument("--profile", choices=sorted(PROFILE_TOOLS))
     list_tools.add_argument("--format", choices=("text", "json"), default="text")
+
+    reachability = subparsers.add_parser(
+        "reachability",
+        help="build an offline Python entry-point and reachability graph",
+    )
+    reachability.add_argument("target", type=Path)
+    reachability.add_argument(
+        "--entry-point",
+        action="append",
+        default=[],
+        help="additional module:function root; repeat for multiple roots",
+    )
+    reachability.add_argument(
+        "--source-root",
+        action="append",
+        default=[],
+        help="target-relative Python source root; repeat for multiple roots",
+    )
+    reachability.add_argument(
+        "--minimum-island-loc",
+        type=int,
+        default=100,
+        help="minimum disconnected island size retained as a finding candidate",
+    )
+    reachability.add_argument(
+        "--no-framework-roots",
+        action="store_true",
+        help="disable conservative decorator-based framework root discovery",
+    )
+    reachability.add_argument(
+        "--coverage",
+        type=Path,
+        help="optional bounded coverage.py JSON evidence used for runtime corroboration",
+    )
+    reachability.add_argument(
+        "--pretty",
+        action="store_true",
+        help="indent JSON for direct operator inspection",
+    )
     return parser
 
 
@@ -275,6 +315,25 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "schema":
             return _schema_command(args)
+        if args.command == "reachability":
+            target = resolve_regular_directory(args.target, "reachability target")
+            document = analyze_project(
+                target,
+                configured_entry_points=tuple(args.entry_point),
+                configured_source_roots=tuple(args.source_root),
+                minimum_island_loc=args.minimum_island_loc,
+                discover_framework_roots=not args.no_framework_roots,
+                coverage_path=args.coverage,
+            )
+            print(
+                json.dumps(
+                    document,
+                    indent=2 if args.pretty else None,
+                    sort_keys=True,
+                    separators=None if args.pretty else (",", ":"),
+                )
+            )
+            return 0
         if args.command == "doctor":
             config = load_config(
                 organization_policy=args.policy,

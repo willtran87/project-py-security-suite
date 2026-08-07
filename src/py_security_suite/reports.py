@@ -50,6 +50,10 @@ _TOOL_REFERENCES = {
     "vulture": "https://github.com/jendrikseipp/vulture",
     "radon": "https://radon.readthedocs.io/",
     "tach": "https://docs.gauge.sh/",
+    "reachability": (
+        "https://github.com/willtran87/project-py-security-suite/"
+        "blob/main/docs/reachability.md"
+    ),
     "coverage": "https://coverage.readthedocs.io/",
     "junit": "https://github.com/testmoapp/junitxml",
     "hypothesis": "https://hypothesis.readthedocs.io/",
@@ -1033,9 +1037,10 @@ def render_assurance_case(
                 "vulture",
                 "radon",
                 "tach",
+                "reachability",
             ),
             "Restore incomplete correctness, formatting, typing, dead-code, "
-            "complexity, and architecture controls, then rerun.",
+            "complexity, architecture, and reachability controls, then rerun.",
             "Applicable quality and architecture controls completed without "
             "active findings; retain their evidence with the review.",
             "https://docs.gauge.sh/",
