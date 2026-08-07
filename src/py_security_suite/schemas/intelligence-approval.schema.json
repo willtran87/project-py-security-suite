@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:intelligence-approval:1.0",
+  "title": "Approved offline intelligence validation receipt",
+  "oneOf": [
+    {"$ref": "#/$defs/validated"},
+    {"$ref": "#/$defs/unvalidated"}
+  ],
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "sha256"],
+      "properties": {
+        "kind": {"type": "string", "minLength": 1, "maxLength": 500},
+        "sha256": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "validated": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "status", "manifest_id", "revision", "approved_by", "valid_until", "signature_verified", "verifier", "trust_root_sha256", "snapshots", "configured", "validated", "organization_approved", "evidence_sha256"],
+      "properties": {
+        "schema_version": {"const": "1.0"},
+        "status": {"const": "approved"},
+        "manifest_id": {"type": "string", "minLength": 1, "maxLength": 500},
+        "revision": {"type": "string", "minLength": 1, "maxLength": 500},
+        "approved_by": {"type": "string", "minLength": 1, "maxLength": 500},
+        "valid_until": {"type": "string", "format": "date-time"},
+        "signature_verified": {"const": true},
+        "verifier": {"type": "string", "minLength": 1, "maxLength": 500},
+        "trust_root_sha256": {"$ref": "#/$defs/digest"},
+        "snapshots": {"type": "array", "maxItems": 20, "items": {"$ref": "#/$defs/snapshot"}},
+        "configured": {"const": true},
+        "validated": {"const": true},
+        "organization_approved": {"type": "boolean"},
+        "evidence_sha256": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "unvalidated": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "configured", "validated", "required", "organization_approved"],
+      "properties": {
+        "schema_version": {"const": "1.0"},
+        "configured": {"type": "boolean"},
+        "validated": {"const": false},
+        "required": {"type": "boolean"},
+        "organization_approved": {"type": "boolean"},
+        "snapshot_count": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}

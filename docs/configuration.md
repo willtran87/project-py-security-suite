@@ -1,6 +1,6 @@
 # Python Security Suite configuration
 
-Last reviewed: 2026-08-06
+Last reviewed: 2026-08-07
 
 ## Loading and protection
 
@@ -203,7 +203,10 @@ profile = "standard"
 [isolation]
 network = "deny"
 require_attestation = true
+require_evidence = false
 execute_target_code = false
+# evidence_path = "security-data/isolation-attestation.json"
+# evidence_sha256 = "<organization-approved-sha256>"
 
 [execution]
 max_workers = 4
@@ -230,6 +233,9 @@ include_sanitized_evidence = true
 # epss_sha256 = "<approved-sha256>"
 # vex_path = "security-data/intelligence/product-vex.cdx.json"
 # vex_sha256 = "<approved-sha256>"
+# approval_path = "security-data/intelligence/approval.json"
+# approval_sha256 = "<organization-approved-sha256>"
+require_approval = false
 maximum_age_days = 3
 epss_high_probability = 0.10
 epss_high_percentile = 0.90
@@ -247,6 +253,20 @@ and native schema before enrichment. Invalid configured evidence makes the scan
 `INCOMPLETE`. VEX never suppresses a finding automatically; a not-affected
 decision still requires the governed risk-acceptance workflow.
 
+`production` and `release` force `isolation.require_evidence = true`. The
+evidence is accepted only when its path and digest originate in the separate
+organization policy; a repository-local binding is recorded but is not treated
+as enterprise authorization. It must assert egress denial, match the immutable
+source digest and target, cover scan start with its validity window, and record
+the external signature verifier and trust-root digest.
+
+When production or release consumes KEV, EPSS, or VEX, it likewise requires a
+digest-bound approval manifest from the organization policy. The manifest must
+list exactly the snapshot kinds and SHA-256 values consumed by the scan. These
+decisions are sealed in `isolation-attestation.json` and
+`intelligence-approval.json`; neither boolean substitutes for enforcement or
+signature verification by the enterprise control plane.
+
 ## Constraints
 
 | Setting | Constraint |
@@ -255,6 +275,8 @@ decision still requires the governed risk-acceptance workflow.
 | `profile` | One of the fourteen documented profiles |
 | `isolation.network` | Must be `"deny"` |
 | `isolation.execute_target_code` | Must be `false` |
+| `isolation.evidence_path` / `evidence_sha256` | Paired; organization-policy binding required for production/release |
+| `intelligence.approval_path` / `approval_sha256` | Paired; required for consumed production/release snapshots |
 | `execution.max_workers` | 1 through 16 |
 | `execution.max_output_bytes` | At least 1024 |
 | `policy.block_severities` | Valid normalized severity values |
@@ -292,7 +314,10 @@ pysec inspect REPORT [--limit 0-100] [--format text|json]
   [--output FILE] [--overwrite]
 pysec verify-inspection INSPECTION --report REPORT [--limit 0-100]
   [--format text|json] [--output FILE] [--overwrite]
-pysec schema {report-inspection-1.0|report-inspection-1.1|report-inspection-1.2|report-inspection-1.3|report-inspection-verification-1.0|report-inspection-verification-1.1|report-inspection-verification-1.2|report-inspection-verification-1.3|report-verification-1.0}
+pysec release-check REPORT [--format text|json] [--output FILE]
+pysec reachability-diff BASELINE CURRENT --baseline-sha256 SHA256
+  --current-sha256 SHA256 [--format text|json] [--output FILE]
+pysec schema NAME [--output FILE] [--overwrite]
   [--output FILE] [--overwrite]
 pysec verify-report REPORT [--format text|json] [--output FILE] [--overwrite]
 pysec attest REPORT --output PASSPORT (--signing-key KEY | --unsigned)

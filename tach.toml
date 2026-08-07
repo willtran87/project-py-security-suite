@@ -86,6 +86,32 @@ depends_on = [
 layer = "services"
 
 [[modules]]
+path = "py_security_suite.governance"
+depends_on = [
+    "py_security_suite.config",
+    "py_security_suite.execution",
+    "py_security_suite.path_safety",
+]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.release_readiness"
+depends_on = [
+    "py_security_suite.execution",
+    "py_security_suite.passport",
+    "py_security_suite.path_safety",
+]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.reachability_delta"
+depends_on = [
+    "py_security_suite.execution",
+    "py_security_suite.path_safety",
+]
+layer = "services"
+
+[[modules]]
 path = "py_security_suite.finding_delta"
 depends_on = ["py_security_suite.models", "py_security_suite.path_safety"]
 layer = "services"
@@ -164,6 +190,7 @@ depends_on = [
     "py_security_suite.correlation",
     "py_security_suite.effectiveness",
     "py_security_suite.finding_delta",
+    "py_security_suite.governance",
     "py_security_suite.inventory",
     "py_security_suite.models",
     "py_security_suite.policy",
@@ -203,7 +230,9 @@ depends_on = [
     "py_security_suite.path_safety",
     "py_security_suite.policy",
     "py_security_suite.reachability",
+    "py_security_suite.reachability_delta",
     "py_security_suite.report_inspection",
+    "py_security_suite.release_readiness",
     "py_security_suite.reports",
 ]
 layer = "entrypoints"

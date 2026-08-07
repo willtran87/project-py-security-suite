@@ -6,7 +6,12 @@ profile = "standard"
 [isolation]
 network = "deny"
 require_attestation = true
+require_evidence = false
 execute_target_code = false
+# Production and release force require_evidence = true. Put these bindings in
+# the organization policy—not repository config—to establish authorization.
+# evidence_path = "security-data/isolation-attestation.json"
+# evidence_sha256 = "<organization-approved-attestation-sha256>"
 
 [execution]
 max_workers = 4
@@ -37,6 +42,11 @@ include_sanitized_evidence = true
 # epss_sha256 = "<organization-approved-epss-sha256>"
 # vex_path = "security-data/intelligence/product-vex.cdx.json"
 # vex_sha256 = "<organization-approved-vex-sha256>"
+# Production and release require an organization-policy-bound approval manifest
+# whenever any snapshot above is consumed.
+# approval_path = "security-data/intelligence/approval.json"
+# approval_sha256 = "<organization-approved-approval-sha256>"
+require_approval = false
 maximum_age_days = 3
 epss_high_probability = 0.10
 epss_high_percentile = 0.90

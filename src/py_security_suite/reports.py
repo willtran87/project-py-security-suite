@@ -338,6 +338,8 @@ def _render_summary_header(
         severity.value: sum(finding.severity is severity for finding in active_findings)
         for severity in Severity
     }
+    health = portfolio_health_artifact(active_findings, manifest.tools)["overall"]
+    release_status = _report_release_status(manifest.outcome)
     return [
         f"# Security result: {manifest.outcome.value.upper()}",
         "",
@@ -353,6 +355,11 @@ def _render_summary_header(
         f"- **Not applicable:** "
         f"{len(manifest.tools) - _applicable_tools(manifest.tools)} selected tool(s)",
         f"- **Applicable scanner execution gaps:** {coverage_gap_count}",
+        f"- **Operational coverage:** Grade {health['grade']}; "
+        f"{health['completed_control_slots']}/{health['applicable_control_slots']} "
+        "applicable control slots completed",
+        f"- **Release readiness from this report:** `{release_status}`; "
+        "run `pysec release-check` for the governed aggregate decision",
         f"- **Network isolation attested:** "
         f"{'yes' if manifest.network_isolation_attested else 'no'}",
         f"- **Unisolated diagnostic execution:** "
@@ -365,7 +372,7 @@ def _render_summary_header(
         f"- **Scanner entry-point trust:** {approved_entrypoints}/{entrypoints} "
         f"approved and unchanged; {unchanged_entrypoints}/{entrypoints} observed "
         "unchanged after execution",
-        f"- **Immediate next step:** {_next_action(manifest.outcome)}",
+        f"- **Immediate next step:** {_next_action_for_manifest(manifest)}",
     ]
 
 
@@ -1482,6 +1489,8 @@ def render_html(manifest: ScanManifest, findings: list[Finding]) -> str:
     decision = _policy_decision_value(manifest.outcome)
     completed = _completed_tools(manifest.tools)
     applicable = _applicable_tools(manifest.tools)
+    health = portfolio_health_artifact(active_findings, manifest.tools)["overall"]
+    release_status = _report_release_status(manifest.outcome)
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -1616,6 +1625,10 @@ target <code>{html.escape(manifest.target)}</code></p>
 <span>Entrypoints approved</span></div>
 <div class="stat"><strong>{unchanged_entrypoints}/{entrypoints}</strong>
 <span>Entrypoints unchanged</span></div>
+<div class="stat"><strong>{health["grade"]}</strong>
+<span>Operational coverage</span></div>
+<div class="stat"><strong>{html.escape(release_status)}</strong>
+<span>Release readiness</span></div>
 <div class="stat"><strong>{
         "yes" if manifest.inventory.source_integrity_verified else "no"
     }</strong><span>Target unchanged</span></div>
@@ -1623,7 +1636,9 @@ target <code>{html.escape(manifest.target)}</code></p>
 <section class="decision">
 <h2>Decision: <span class="decision-badge {decision.lower()}">{decision}</span></h2>
 <ul>{reasons}</ul>
-<p><strong>Next action:</strong> {html.escape(_next_action(manifest.outcome))}</p>
+<p><strong>Next action:</strong> {html.escape(_next_action_for_manifest(manifest))}</p>
+<p><strong>Promotion:</strong> Run <code>pysec release-check</code> with the
+required governed sidecars; this report alone does not authorize release.</p>
 <p><a href="action-plan.md">Open the prioritized action plan</a></p>
 <p><a href="assurance-case.md">Open the production assurance case</a></p>
 </section>
@@ -2405,6 +2420,16 @@ def _next_action(outcome: Outcome) -> str:
             "do not interpret this result as clean."
         ),
     }[outcome]
+
+
+def _next_action_for_manifest(manifest: ScanManifest) -> str:
+    if manifest.outcome is Outcome.INCOMPLETE and manifest.policy_reasons:
+        return f"Resolve the first blocking evidence gap: {manifest.policy_reasons[0]}"
+    return _next_action(manifest.outcome)
+
+
+def _report_release_status(outcome: Outcome) -> str:
+    return "PENDING EXTERNAL CONTROLS" if outcome is Outcome.PASS else "NOT APPROVED"
 
 
 def _policy_disposition(outcome: Outcome) -> str:

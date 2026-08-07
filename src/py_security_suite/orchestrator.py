@@ -15,6 +15,10 @@ from .adapters.base import AdapterResult, ScannerAdapter
 from .config import SuiteConfig
 from .correlation import correlate_findings
 from .finding_delta import apply_finding_delta
+from .governance import (
+    validate_intelligence_approval,
+    validate_isolation_evidence,
+)
 from .effectiveness import assurance_claims_artifact, effectiveness_artifact
 from .inventory import inventory_target, source_snapshot
 from .models import (
@@ -66,6 +70,17 @@ def scan_project(
     trust = apply_trust_catalog(config)
     context_errors.extend(trust.errors)
     derived_artifacts["scanner-trust.json"] = trust.artifact
+    isolation = validate_isolation_evidence(
+        config.isolation,
+        target_name=target.name,
+        source_sha256=inventory.source_sha256,
+        observed_at=started_at,
+    )
+    if network_isolation_attested:
+        context_errors.extend(isolation.errors)
+    elif config.isolation.require_evidence and not diagnostic_without_isolation:
+        context_errors.append("approved external isolation evidence was not applied")
+    derived_artifacts["isolation-attestation.json"] = isolation.artifact
 
     if (
         config.isolation.require_attestation
@@ -105,6 +120,13 @@ def scan_project(
         context_errors.extend(intelligence.errors)
         intelligence_artifact = intelligence.artifact
         derived_artifacts["risk-intelligence.json"] = intelligence.artifact
+        intelligence_approval = validate_intelligence_approval(
+            config.intelligence,
+            intelligence.artifact,
+            observed_at=started_at,
+        )
+        context_errors.extend(intelligence_approval.errors)
+        derived_artifacts["intelligence-approval.json"] = intelligence_approval.artifact
         delta = apply_finding_delta(
             findings,
             target=target,
@@ -255,6 +277,22 @@ def resolve_asset_paths(config: SuiteConfig, target: Path) -> None:
                     boundary=target,
                 ),
             )
+    approval = config.intelligence.approval_path
+    if approval is not None:
+        candidate = approval if approval.is_absolute() else target / approval
+        config.intelligence.approval_path = resolve_unlinked_path(
+            candidate,
+            "intelligence approval",
+            boundary=target,
+        )
+    isolation = config.isolation.evidence_path
+    if isolation is not None:
+        candidate = isolation if isolation.is_absolute() else target / isolation
+        config.isolation.evidence_path = resolve_unlinked_path(
+            candidate,
+            "isolation evidence",
+            boundary=target,
+        )
     trust_catalog = config.trust.catalog_path
     if trust_catalog is not None:
         candidate = (

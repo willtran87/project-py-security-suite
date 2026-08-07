@@ -1,6 +1,6 @@
 # Detection effectiveness and operational coverage
 
-Last reviewed: 2026-08-06
+Last reviewed: 2026-08-07
 
 The suite separates three questions that are often incorrectly collapsed into
 one score:
@@ -81,3 +81,7 @@ An `A` domain grade means at least 90% of applicable control slots completed.
 `N/A` means no selected control applied. Neither state proves the code is safe.
 A release decision still depends on findings, policy, fresh governed context,
 source integrity, isolation attestation, and provenance verification.
+
+`pysec release-check --minimum-effectiveness-labels N` can require this
+evaluation, its exact SHA-256, a passing verdict, a binding to the same report
+seal, and a non-trivial minimum corpus size before promotion.

@@ -1,5 +1,7 @@
 # Copy to .github/workflows/python-security.yml after replacing every
-# <approved-commit-sha> and the isolation verification command.
+# <approved-commit-sha>, the isolation verification command, and the
+# organization-owned policy path. That policy must digest-bind the isolation,
+# intelligence, and scanner-trust evidence used for release readiness.
 name: Python security
 
 on:
@@ -17,6 +19,7 @@ jobs:
     runs-on: [self-hosted, pysec-isolated]
     env:
       PYTHONPATH: ${{ github.workspace }}/src
+      PYSEC_ORGANIZATION_POLICY: ${{ vars.PYSEC_ORGANIZATION_POLICY }}
 
     steps:
       - name: Check out the exact revision
@@ -36,6 +39,7 @@ jobs:
           set +e
           python -m py_security_suite scan . \
             --config pysec.toml \
+            --policy "${PYSEC_ORGANIZATION_POLICY:?set organization policy path}" \
             --output python-security-report \
             --network-isolated \
             --github-summary
@@ -62,6 +66,20 @@ jobs:
             --output python-security-report-inspection-verification.json \
             > /dev/null
 
+      - name: Produce the fail-closed release-readiness decision
+        if: always()
+        id: release_readiness
+        shell: bash
+        run: |
+          set +e
+          python -m py_security_suite release-check python-security-report \
+            --format json \
+            --output python-security-release-readiness.json \
+            > /dev/null
+          release_exit=$?
+          echo "exit_code=$release_exit" >> "$GITHUB_OUTPUT"
+          exit 0
+
       - name: Upload the complete sanitized report and inspection
         if: always()
         uses: actions/upload-artifact@<approved-commit-sha>
@@ -72,6 +90,7 @@ jobs:
             python-security-report-verification.json
             python-security-report-inspection.json
             python-security-report-inspection-verification.json
+            python-security-release-readiness.json
           if-no-files-found: error
 
       - name: Publish SARIF when code scanning is enabled
@@ -84,4 +103,6 @@ jobs:
       - name: Apply the suite policy result after publishing reports
         if: always()
         shell: bash
-        run: exit "${{ steps.security_scan.outputs.exit_code }}"
+        run: |
+          test "${{ steps.security_scan.outputs.exit_code }}" -eq 0
+          test "${{ steps.release_readiness.outputs.exit_code }}" -eq 0

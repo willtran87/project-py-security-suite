@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:reachability-delta:1.0",
+  "title": "Digest-bound reachability graph delta",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "verdict", "scope", "baseline", "current", "counts", "changes", "omitted"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "verdict": {"enum": ["pass", "regression"]},
+    "scope": {"type": "string", "minLength": 1},
+    "baseline": {"$ref": "#/$defs/identity"},
+    "current": {"$ref": "#/$defs/identity"},
+    "counts": {"$ref": "#/$defs/counts"},
+    "changes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state_regressions", "state_improvements", "new_disconnected_nodes", "lost_runtime_observations", "new_reportable_island_ids"],
+      "properties": {
+        "state_regressions": {"$ref": "#/$defs/transitions"},
+        "state_improvements": {"$ref": "#/$defs/transitions"},
+        "new_disconnected_nodes": {
+          "type": "array",
+          "maxItems": 200,
+          "items": {"$ref": "#/$defs/node"}
+        },
+        "lost_runtime_observations": {"$ref": "#/$defs/transitions"},
+        "new_reportable_island_ids": {
+          "type": "array",
+          "maxItems": 200,
+          "items": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "omitted": {"$ref": "#/$defs/omittedCounts"}
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "graph_sha256", "nodes"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"$ref": "#/$defs/digest"},
+        "graph_sha256": {"type": "string"},
+        "nodes": {"type": "integer", "minimum": 0}
+      }
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["added_nodes", "removed_nodes", "state_regressions", "state_improvements", "new_disconnected_nodes", "lost_runtime_observations", "new_reportable_islands"],
+      "properties": {
+        "added_nodes": {"type": "integer", "minimum": 0},
+        "removed_nodes": {"type": "integer", "minimum": 0},
+        "state_regressions": {"type": "integer", "minimum": 0},
+        "state_improvements": {"type": "integer", "minimum": 0},
+        "new_disconnected_nodes": {"type": "integer", "minimum": 0},
+        "lost_runtime_observations": {"type": "integer", "minimum": 0},
+        "new_reportable_islands": {"type": "integer", "minimum": 0}
+      }
+    },
+    "omittedCounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state_regressions", "state_improvements", "new_disconnected_nodes", "lost_runtime_observations", "new_reportable_islands"],
+      "properties": {
+        "state_regressions": {"type": "integer", "minimum": 0},
+        "state_improvements": {"type": "integer", "minimum": 0},
+        "new_disconnected_nodes": {"type": "integer", "minimum": 0},
+        "lost_runtime_observations": {"type": "integer", "minimum": 0},
+        "new_reportable_islands": {"type": "integer", "minimum": 0}
+      }
+    },
+    "transition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "path", "before", "after"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "path": {"type": "string"},
+        "before": {"enum": ["executable", "load-only", "disconnected"]},
+        "after": {"enum": ["executable", "load-only", "disconnected"]}
+      }
+    },
+    "transitions": {
+      "type": "array",
+      "maxItems": 200,
+      "items": {"$ref": "#/$defs/transition"}
+    },
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "path", "state"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "path": {"type": "string"},
+        "state": {"enum": ["executable", "load-only", "disconnected"]}
+      }
+    }
+  }
+}

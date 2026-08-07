@@ -1,6 +1,6 @@
 # Security Passport, intelligence, and lifecycle evidence
 
-Last reviewed: 2026-08-06
+Last reviewed: 2026-08-07
 
 ## Objective
 
@@ -175,7 +175,9 @@ Recomputing unsigned transport checksums cannot redirect an authentic statement
 to a report carrying different claims.
 
 Add `--format text` for a concise operator decision. JSON remains the default
-for integrations. Verification output deliberately separates five concepts:
+for integrations. Add `--output FILE` to atomically retain the JSON receipt
+outside the sealed report; this receipt can be digest-bound into
+`pysec release-check`. Verification output deliberately separates five concepts:
 
 | Field | Meaning |
 |---|---|

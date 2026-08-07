@@ -1,6 +1,6 @@
 # Python Security Suite compatibility and coverage matrix
 
-Last reviewed: 2026-08-06
+Last reviewed: 2026-08-07
 
 See the [documentation index](index.md), [solution design](design.md), and
 [operations guide](operations.md) for the surrounding architecture.
@@ -70,6 +70,10 @@ closed instead of hiding findings.
 | Operational domain scorecard | Yes | Applicable tool status and normalized findings | Honest A-F execution coverage across 12 domains; N/A stays distinct from failure |
 | Scanner trust catalog | Yes | Organization-approved catalog bound by SHA-256, platform, role, version, source, approver, and expiry | Reusable executable approval with per-entry audit evidence and explicit-pin precedence |
 | SSDF claims | Yes | Current manifest and generated evidence | Machine-readable claim-to-evidence status |
+| External isolation receipt | Yes | Digest-bound, time-bounded evidence authorized in organization policy and tied to target/source digest | Separates structural validation, organization authorization, and the operator isolation assertion |
+| Intelligence approval receipt | Yes | Organization-policy-bound approval listing the exact KEV/EPSS/VEX digests consumed | Prevents an unapproved snapshot refresh from inheriting an earlier approval |
+| Reachability regression gate | Yes | Two schema-1.1/1.2 graphs, each bound to an explicit SHA-256 | New disconnected code, new reportable islands, state regressions, and lost observations |
+| Unified release readiness | Yes | Verified report plus optional digest-bound effectiveness and Passport verification receipts | Strict control-by-control `approved` or `not_approved` CI decision |
 
 This is distinct from `unavailable`, which means relevant analysis could not be
 performed.

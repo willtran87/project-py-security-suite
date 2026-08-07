@@ -1,6 +1,6 @@
 # Python reachability and code islands
 
-Last reviewed: 2026-08-06
+Last reviewed: 2026-08-07
 
 The `reachability` scanner maps production Python modules and symbols from
 application entry points without importing or executing target code. It complements
@@ -107,6 +107,22 @@ To add runtime corroboration from a separately generated test lane:
 ```powershell
 pysec reachability . --coverage .artifacts/test-evidence/coverage.json --pretty
 ```
+
+To prevent a change from silently creating a large unused island or making
+previously executable code unreachable, compare two approved graph artifacts:
+
+```powershell
+pysec reachability-diff baseline-reachability.json current-reachability.json `
+  --baseline-sha256 BASELINE_SHA256 `
+  --current-sha256 CURRENT_SHA256 `
+  --format json --output reachability-delta.json
+```
+
+The command exits `1` for a state regression, newly added disconnected node, or
+new reportable island. Lost runtime observations are reported separately;
+they remain diagnostic because test coverage can legitimately vary. Inputs are
+regular-file checked, bounded, and independently digest bound. Export the strict
+contract with `pysec schema reachability-delta-1.0`.
 
 Both commands write schema `1.2` JSON to standard output and perform no network
 operations. The analyzer reads coverage evidence but never runs tests itself.

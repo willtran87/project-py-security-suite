@@ -325,7 +325,11 @@ SUPPORTED_TOOLS = frozenset(
 class IsolationConfig:
     network: str = "deny"
     require_attestation: bool = True
+    require_evidence: bool = False
     execute_target_code: bool = False
+    evidence_path: Path | None = None
+    evidence_sha256: str = ""
+    evidence_organization_approved: bool = False
 
 
 @dataclass(slots=True)
@@ -361,6 +365,10 @@ class IntelligenceConfig:
     epss_sha256: str = ""
     vex_path: Path | None = None
     vex_sha256: str = ""
+    approval_path: Path | None = None
+    approval_sha256: str = ""
+    require_approval: bool = False
+    approval_organization_approved: bool = False
     maximum_age_days: float = 3.0
     epss_high_probability: float = 0.1
     epss_high_percentile: float = 0.9
@@ -452,7 +460,10 @@ def _default_mapping() -> dict[str, Any]:
         "isolation": {
             "network": "deny",
             "require_attestation": True,
+            "require_evidence": False,
             "execute_target_code": False,
+            "evidence_path": None,
+            "evidence_sha256": "",
         },
         "execution": {
             "max_workers": 4,
@@ -477,6 +488,9 @@ def _default_mapping() -> dict[str, Any]:
             "epss_sha256": "",
             "vex_path": None,
             "vex_sha256": "",
+            "approval_path": None,
+            "approval_sha256": "",
+            "require_approval": False,
             "maximum_age_days": 3.0,
             "epss_high_probability": 0.1,
             "epss_high_percentile": 0.9,
@@ -904,7 +918,14 @@ def _ensure_known(mapping: Mapping[str, Any]) -> None:
         "tools",
     }
     sections = {
-        "isolation": {"network", "require_attestation", "execute_target_code"},
+        "isolation": {
+            "network",
+            "require_attestation",
+            "require_evidence",
+            "execute_target_code",
+            "evidence_path",
+            "evidence_sha256",
+        },
         "execution": {"max_workers", "max_output_bytes"},
         "policy": {
             "required_scanners",
@@ -925,6 +946,9 @@ def _ensure_known(mapping: Mapping[str, Any]) -> None:
             "epss_sha256",
             "vex_path",
             "vex_sha256",
+            "approval_path",
+            "approval_sha256",
+            "require_approval",
             "maximum_age_days",
             "epss_high_probability",
             "epss_high_percentile",
@@ -995,7 +1019,18 @@ def _reject_weaker_repository_policy(
         organization.get("intelligence", {}),
         repository.get("intelligence", {}),
         section="intelligence",
-        digests=("kev_sha256", "epss_sha256", "vex_sha256"),
+        digests=(
+            "kev_sha256",
+            "epss_sha256",
+            "vex_sha256",
+            "approval_sha256",
+        ),
+    )
+    _reject_weaker_evidence_settings(
+        organization.get("isolation", {}),
+        repository.get("isolation", {}),
+        section="isolation",
+        digests=("evidence_sha256",),
     )
     _reject_weaker_evidence_settings(
         organization.get("reports", {}),
@@ -1009,6 +1044,13 @@ def _reject_weaker_repository_policy(
         section="trust",
         digests=("catalog_sha256",),
     )
+    if (
+        organization.get("intelligence", {}).get("require_approval") is True
+        and repository.get("intelligence", {}).get("require_approval", True) is not True
+    ):
+        raise ConfigurationError(
+            "repository configuration cannot disable intelligence approval"
+        )
     _reject_weaker_tool_settings(
         organization.get("tools", {}), repository.get("tools", {})
     )
@@ -1037,6 +1079,13 @@ def _reject_weaker_isolation(
     ):
         raise ConfigurationError(
             "repository configuration cannot disable isolation attestation"
+        )
+    if (
+        organization.get("require_evidence") is True
+        and repository.get("require_evidence", True) is not True
+    ):
+        raise ConfigurationError(
+            "repository configuration cannot disable isolation evidence"
         )
 
 
@@ -1196,11 +1245,11 @@ def _to_config(mapping: Mapping[str, Any]) -> SuiteConfig:
     if str(mapping["schema_version"]) != "1":
         raise ConfigurationError("only configuration schema_version '1' is supported")
 
-    isolation = _isolation_config(mapping["isolation"])
+    isolation = _isolation_config(mapping["isolation"], profile)
     execution = _execution_config(mapping["execution"])
     policy = _policy_config(mapping["policy"], profile)
     reports = _reports_config(mapping["reports"])
-    intelligence = _intelligence_config(mapping["intelligence"])
+    intelligence = _intelligence_config(mapping["intelligence"], profile)
     trust = _trust_config(mapping["trust"])
     tool_configs = _tool_configs(mapping["tools"])
     _validate_required_tools(
@@ -1220,11 +1269,24 @@ def _to_config(mapping: Mapping[str, Any]) -> SuiteConfig:
     )
 
 
-def _isolation_config(data: Mapping[str, Any]) -> IsolationConfig:
+def _isolation_config(data: Mapping[str, Any], profile: str) -> IsolationConfig:
+    evidence = data.get("evidence_path")
+    evidence_sha256 = str(data.get("evidence_sha256") or "").lower()
+    _validate_digest("isolation", "evidence_sha256", evidence_sha256)
+    if bool(evidence) != bool(evidence_sha256):
+        raise ConfigurationError(
+            "isolation.evidence_path and isolation.evidence_sha256 must be "
+            "configured together"
+        )
     config = IsolationConfig(
         network=str(data["network"]),
         require_attestation=bool(data["require_attestation"]),
+        require_evidence=(
+            bool(data["require_evidence"]) or profile in {"production", "release"}
+        ),
         execute_target_code=bool(data["execute_target_code"]),
+        evidence_path=Path(str(evidence)).expanduser() if evidence else None,
+        evidence_sha256=evidence_sha256,
     )
     if config.network != "deny":
         raise ConfigurationError("the current release only supports network = 'deny'")
@@ -1286,14 +1348,19 @@ def _reports_config(data: Mapping[str, Any]) -> ReportsConfig:
     )
 
 
-def _intelligence_config(data: Mapping[str, Any]) -> IntelligenceConfig:
+def _intelligence_config(data: Mapping[str, Any], profile: str) -> IntelligenceConfig:
     paths = {
         name: Path(str(data[name])).expanduser() if data.get(name) else None
-        for name in ("kev_path", "epss_path", "vex_path")
+        for name in ("kev_path", "epss_path", "vex_path", "approval_path")
     }
     digests = {
         name: str(data.get(name) or "").lower()
-        for name in ("kev_sha256", "epss_sha256", "vex_sha256")
+        for name in (
+            "kev_sha256",
+            "epss_sha256",
+            "vex_sha256",
+            "approval_sha256",
+        )
     }
     for setting, value in digests.items():
         _validate_digest("intelligence", setting, value)
@@ -1303,6 +1370,11 @@ def _intelligence_config(data: Mapping[str, Any]) -> IntelligenceConfig:
                 f"intelligence.{prefix}_path and intelligence.{prefix}_sha256 "
                 "must be configured together"
             )
+    if bool(paths["approval_path"]) != bool(digests["approval_sha256"]):
+        raise ConfigurationError(
+            "intelligence.approval_path and intelligence.approval_sha256 "
+            "must be configured together"
+        )
     try:
         config = IntelligenceConfig(
             kev_path=paths["kev_path"],
@@ -1311,6 +1383,11 @@ def _intelligence_config(data: Mapping[str, Any]) -> IntelligenceConfig:
             epss_sha256=digests["epss_sha256"],
             vex_path=paths["vex_path"],
             vex_sha256=digests["vex_sha256"],
+            approval_path=paths["approval_path"],
+            approval_sha256=digests["approval_sha256"],
+            require_approval=(
+                bool(data["require_approval"]) or profile in {"production", "release"}
+            ),
             maximum_age_days=float(data["maximum_age_days"]),
             epss_high_probability=float(data["epss_high_probability"]),
             epss_high_percentile=float(data["epss_high_percentile"]),
@@ -1472,4 +1549,17 @@ def load_config(
         merged["profile"] = profile_override
         if not merged["policy"]["required_scanners"]:
             merged["policy"]["required_scanners"] = []
-    return _to_config(merged)
+    config = _to_config(merged)
+    organization_isolation = organization.get("isolation", {})
+    organization_intelligence = organization.get("intelligence", {})
+    if isinstance(organization_isolation, Mapping):
+        config.isolation.evidence_organization_approved = bool(
+            organization_isolation.get("evidence_path")
+            and organization_isolation.get("evidence_sha256")
+        )
+    if isinstance(organization_intelligence, Mapping):
+        config.intelligence.approval_organization_approved = bool(
+            organization_intelligence.get("approval_path")
+            and organization_intelligence.get("approval_sha256")
+        )
+    return config

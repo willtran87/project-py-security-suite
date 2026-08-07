@@ -1,6 +1,6 @@
 # Offline companion assurance lanes
 
-Last reviewed: 2026-08-06
+Last reviewed: 2026-08-07
 
 The scanner process never imports or executes target application code. Tools
 that run tests, symbolic execution, fuzzers, a local service, build steps, or

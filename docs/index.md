@@ -1,6 +1,6 @@
 # Python Security Suite documentation
 
-Last reviewed: 2026-08-06
+Last reviewed: 2026-08-07
 
 This directory is the canonical documentation set. The suite is offline-first:
 tool and data acquisition happens in a connected preparation lane; scanning and
@@ -15,6 +15,7 @@ verification happen inside an enterprise-controlled isolated boundary.
 | Configure profiles, policy, ownership, and exit behavior | [Configuration](configuration.md) |
 | Trace entry points and investigate disconnected code | [Python reachability](reachability.md) |
 | Measure scanner execution and labeled detection effectiveness | [Effectiveness](effectiveness.md) |
+| Make one fail-closed promotion decision | [Governed release readiness](release-readiness.md) |
 | Compare scanner coverage and platform support | [Compatibility matrix](compatibility-matrix.md) |
 | Enforce a production release gate | [Production security](production-security.md) |
 | Verify provenance, risk intelligence, and passports | [Security Passport](security-passport.md) |
@@ -46,7 +47,8 @@ flowchart LR
         Gate --> Seal["Checksum-sealed report"]
     end
     Seal --> Inspect["verify-report and inspect"]
-    Inspect --> Passport["Security Passport"]
+    Inspect --> Passport["Security Passport verification"]
+    Passport --> Release["release-check<br/>one governed decision"]
     Inspect --> GitHub["Markdown, HTML, SARIF, SonarQube, and JSON"]
 ```
 
@@ -82,27 +84,29 @@ platform support, and acquisition requirements.
 | Policy outcome | `INCOMPLETE` — external network-isolation attestation was not provided |
 | Normalized findings | 2 expected Cosign bundle findings |
 | Reachability graph | Schema 1.2; per-island confidence and explained edges |
-| Reachability states | 933 executable; 88 load-only; 0 disconnected; 0 reportable islands |
-| Runtime corroboration | 933/933 executable nodes observed; 87/88 load-only nodes observed by tests |
-| Tests | 355 passed, 1 platform-limited skip |
-| Combined line and branch coverage | 91.74% |
-| Branch coverage | 84.75% |
+| Reachability states | 967 executable; 91 load-only; 0 disconnected; 0 reportable islands |
+| Runtime corroboration | 967/967 executable nodes observed; 90/91 load-only nodes observed by tests |
+| Tests | 370 passed, 1 platform-limited skip; 159 subtests passed |
+| Combined line and branch coverage | 91.31% |
+| Branch coverage | 83.90% |
 | Changed-line coverage | 89%; every changed production file meets the 80% threshold |
 | Operational portfolio | Grade A; 36/36 applicable control slots completed across 12 domains |
 | Labeled self-scan benchmark | PASS; 1 TP, 1 TN, 0 FP, 0 FN |
 
-The 2026-08-06 self-scan is in `.artifacts/maturity-selfscan-v7`. Its 92-file
+The 2026-08-07 self-scan is in `.artifacts/maturity-selfscan-v13`. Its 94-file
 checksum seal and semantic contracts verify. All applicable scanners completed,
 and the only normalized findings are the two expected missing Cosign bundles for
 the wheel and source distribution. Code security, secrets, dependency
 vulnerabilities, architecture, and quality were clean. The digest-pinned KEV and
-EPSS inputs were fresh, locally validated snapshots whose approval status remains
-`pending-review`. All 38 observed scanner entry points were unchanged after
+EPSS inputs were fresh, locally validated snapshots; the approval receipt
+correctly records absent organization authorization. All 38 scanner entry points were unchanged after
 execution; 25 bindings across 22 unique digests remain candidates for
 organization provenance approval. The result correctly remains `INCOMPLETE`
 because the host run did not provide an external network-isolation attestation.
-Approve the governed intelligence and scanner catalog, rerun inside the enforced
-isolated boundary, then sign both exact release artifacts.
+Approve the governed intelligence and scanner catalog, supply organization-
+policy-bound isolation evidence, rerun inside the enforced boundary, then sign
+both exact release artifacts. The release-readiness sidecar names all six
+remaining promotion blockers and the reachability delta reports no regressions.
 
 The report contains:
 

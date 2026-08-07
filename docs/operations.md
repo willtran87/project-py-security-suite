@@ -1,6 +1,6 @@
 # Python Security Suite operations
 
-Last reviewed: 2026-08-06
+Last reviewed: 2026-08-07
 
 ## Operating model
 
@@ -668,6 +668,12 @@ control or Markdown-delimiter characters. Rejected destinations remain visible
 as plain citation labels rather than active links.
 
 ## Intelligence, baseline, and Security Passport lanes
+
+Production/release evidence paths and SHA-256 values for external isolation and
+snapshot approval belong in organization policy. The scan emits receipts that
+distinguish structural validity from organization authority. Run
+`pysec release-check` after report and Passport verification; see
+[Governed release readiness](release-readiness.md).
 
 The connected preparation lane downloads the authoritative CISA KEV JSON and
 FIRST EPSS CSV, receives the product-specific CycloneDX VEX from its approved

@@ -1,6 +1,6 @@
 # Production security gate
 
-Last reviewed: 2026-08-06
+Last reviewed: 2026-08-07
 
 ## Purpose
 
@@ -63,6 +63,29 @@ Publisher repository URL.
 Promotion requires `PASS`, not merely zero findings. An `INCOMPLETE` result
 means a required scanner, full history, dependency lock, data-flow
 configuration, or isolation assertion was missing.
+
+## Governed promotion decision
+
+After Passport verification, retain its JSON receipt outside the sealed report
+and aggregate every release control:
+
+```powershell
+pysec verify release-passport --report release-scan `
+  --artifact-root C:\release\payload --public-key C:\trust\release.pub `
+  --cosign-executable C:\approved\cosign.exe `
+  --cosign-sha256 APPROVED_COSIGN_SHA256 --format json `
+  --output passport-verification.json
+
+pysec release-check release-scan --format json `
+  --passport-verification passport-verification.json `
+  --passport-verification-sha256 PASSPORT_RECEIPT_SHA256 `
+  --require-passport --output release-readiness.json
+```
+
+`release-check` verifies the report seal, then fails closed on policy, blocking
+findings, assurance claims, operational gaps, external isolation, scanner
+entry-point trust, intelligence approval, and any required effectiveness or
+Passport evidence. See [Governed release readiness](release-readiness.md).
 
 ## Coverage and residual risk
 

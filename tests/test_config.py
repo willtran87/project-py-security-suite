@@ -71,6 +71,8 @@ class ConfigTests(unittest.TestCase):
         )
         self.assertIn("hadolint", config.selected_tools)
         self.assertIn("devskim", config.selected_tools)
+        self.assertTrue(config.isolation.require_evidence)
+        self.assertTrue(config.intelligence.require_approval)
 
     def test_release_profile_adds_artifact_assurance(self) -> None:
         config = load_config(profile_override="release")
@@ -121,6 +123,20 @@ class ConfigTests(unittest.TestCase):
             config_path = root / "pysec.toml"
             config_path.write_text(
                 '[intelligence]\nkev_path = "security/kev.json"\n',
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ConfigurationError, "configured together"):
+                load_config(repository_config=config_path)
+
+            config_path.write_text(
+                '[isolation]\nevidence_path = "security/isolation.json"\n',
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ConfigurationError, "configured together"):
+                load_config(repository_config=config_path)
+
+            config_path.write_text(
+                '[intelligence]\napproval_path = "security/approval.json"\n',
                 encoding="utf-8",
             )
             with self.assertRaisesRegex(ConfigurationError, "configured together"):
@@ -179,6 +195,28 @@ class ConfigTests(unittest.TestCase):
                     organization_policy=policy_path,
                     repository_config=config_path,
                 )
+
+    def test_governance_authority_requires_organization_policy_origin(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            repository = root / "repository.toml"
+            organization = root / "organization.toml"
+            settings = (
+                f'[isolation]\nevidence_path = "isolation.json"\n'
+                f'evidence_sha256 = "{"a" * 64}"\n'
+                f'[intelligence]\napproval_path = "approval.json"\n'
+                f'approval_sha256 = "{"b" * 64}"\n'
+            )
+            repository.write_text(settings, encoding="utf-8")
+            organization.write_text(settings, encoding="utf-8")
+
+            repository_only = load_config(repository_config=repository)
+            governed = load_config(organization_policy=organization)
+
+        self.assertFalse(repository_only.isolation.evidence_organization_approved)
+        self.assertFalse(repository_only.intelligence.approval_organization_approved)
+        self.assertTrue(governed.isolation.evidence_organization_approved)
+        self.assertTrue(governed.intelligence.approval_organization_approved)
 
     def test_executable_digest_must_be_sha256(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

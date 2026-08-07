@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:isolation-attestation:1.0",
+  "title": "Externally enforced network-isolation validation receipt",
+  "oneOf": [
+    {"$ref": "#/$defs/validated"},
+    {"$ref": "#/$defs/unvalidated"}
+  ],
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "validated": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "status", "network_policy", "target", "source_sha256", "issuer", "runner_id", "policy_id", "policy_sha256", "approved_by", "valid_from", "valid_until", "signature_verified", "verifier", "trust_root_sha256", "configured", "validated", "organization_approved", "evidence_sha256"],
+      "properties": {
+        "schema_version": {"const": "1.0"},
+        "status": {"const": "enforced"},
+        "network_policy": {"const": "deny"},
+        "target": {"type": "string", "minLength": 1, "maxLength": 500},
+        "source_sha256": {"$ref": "#/$defs/digest"},
+        "issuer": {"type": "string", "minLength": 1, "maxLength": 500},
+        "runner_id": {"type": "string", "minLength": 1, "maxLength": 500},
+        "policy_id": {"type": "string", "minLength": 1, "maxLength": 500},
+        "policy_sha256": {"$ref": "#/$defs/digest"},
+        "approved_by": {"type": "string", "minLength": 1, "maxLength": 500},
+        "valid_from": {"type": "string", "format": "date-time"},
+        "valid_until": {"type": "string", "format": "date-time"},
+        "signature_verified": {"const": true},
+        "verifier": {"type": "string", "minLength": 1, "maxLength": 500},
+        "trust_root_sha256": {"$ref": "#/$defs/digest"},
+        "configured": {"const": true},
+        "validated": {"const": true},
+        "organization_approved": {"type": "boolean"},
+        "evidence_sha256": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "unvalidated": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "configured", "validated", "required", "organization_approved"],
+      "properties": {
+        "schema_version": {"const": "1.0"},
+        "configured": {"type": "boolean"},
+        "validated": {"const": false},
+        "required": {"type": "boolean"},
+        "organization_approved": {"type": "boolean"}
+      }
+    }
+  }
+}

@@ -1,7 +1,7 @@
 # Python Security Suite design
 
 Status: alpha foundation  
-Last reviewed: 2026-08-06
+Last reviewed: 2026-08-07
 
 ## Purpose
 
@@ -119,6 +119,28 @@ x86-64 and Python 3.11.
 
 `--network-isolated` does not enforce network denial. It attests that the
 enterprise runner, VM, firewall, or equivalent external control already does.
+
+Production and release add a second statement: bounded evidence whose SHA-256
+is pinned by organization policy, whose target and source digest match this
+scan, and whose validity window covers scan start. Repository configuration
+cannot promote its own evidence to `organization_approved`. Intelligence
+approval uses the same authority split and binds the exact KEV, EPSS, and VEX
+snapshot set.
+
+```mermaid
+flowchart LR
+    Org["Organization policy<br/>approved evidence digests"] --> Validate["Bounded evidence validation"]
+    Runner["External controller<br/>egress denial + signature verification"] --> Evidence["Isolation attestation"]
+    Repo["Immutable repository digest"] --> Evidence
+    Evidence --> Validate
+    Snapshots["Exact KEV | EPSS | VEX digests"] --> Approval["Intelligence approval"]
+    Approval --> Validate
+    Report["Verified report"] --> Gate["release-check"]
+    Validate --> Gate
+    Effectiveness["Labeled benchmark"] --> Gate
+    Passport["Passport verification"] --> Gate
+    Gate --> Decision{"APPROVED?"}
+```
 
 ## Runtime architecture
 

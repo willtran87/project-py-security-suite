@@ -1,0 +1,381 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any
+
+from .execution import sha256_file
+from .passport import verify_report
+from .path_safety import resolve_regular_file
+
+_MAX_JSON_BYTES = 128 * 1024 * 1024
+
+
+def assess_release_readiness(
+    report: Path,
+    *,
+    effectiveness_evaluation: Path | None = None,
+    effectiveness_sha256: str = "",
+    minimum_effectiveness_labels: int = 0,
+    passport_verification: Path | None = None,
+    passport_verification_sha256: str = "",
+    require_passport: bool = False,
+) -> dict[str, Any]:
+    """Build one fail-closed release decision from verified evidence."""
+    if minimum_effectiveness_labels < 0 or minimum_effectiveness_labels > 10_000:
+        raise ValueError("minimum effectiveness labels must be between 0 and 10000")
+    _paired(
+        effectiveness_evaluation,
+        effectiveness_sha256,
+        "effectiveness evaluation",
+    )
+    _paired(
+        passport_verification,
+        passport_verification_sha256,
+        "passport verification",
+    )
+    verification = verify_report(report)
+    root = report.expanduser().resolve()
+    manifest = _read_object(root / "scan-manifest.json")
+    findings_document = _read_object(root / "findings.json")
+    claims = _read_object(root / "assurance-claims.json")
+    portfolio = _read_object(root / "portfolio-health.json")
+    isolation = _optional_object(root / "isolation-attestation.json")
+    intelligence = _optional_object(root / "risk-intelligence.json")
+    intelligence_approval = _optional_object(root / "intelligence-approval.json")
+    trust = _entrypoint_trust(manifest)
+
+    findings = findings_document.get("findings")
+    if not isinstance(findings, list):
+        raise TypeError("verified report findings must be an array")
+    blocking_findings = sum(
+        isinstance(finding, dict)
+        and finding.get("blocking") is True
+        and finding.get("status") != "suppressed"
+        for finding in findings
+    )
+    claim_values = claims.get("claims")
+    if not isinstance(claim_values, list):
+        raise TypeError("verified assurance claims must be an array")
+    unsatisfied_claims = [
+        str(claim.get("control") or "unknown")
+        for claim in claim_values
+        if isinstance(claim, dict) and claim.get("result") != "satisfied"
+    ]
+    overall = portfolio.get("overall")
+    execution_gaps = (
+        int(overall.get("domains_with_execution_gaps") or 0)
+        if isinstance(overall, dict)
+        else 1
+    )
+    controls = _report_controls(
+        manifest=manifest,
+        blocking_findings=blocking_findings,
+        unsatisfied_claims=unsatisfied_claims,
+        execution_gaps=execution_gaps,
+        isolation=isolation,
+        trust=trust,
+    )
+    controls.append(_intelligence_control(intelligence, intelligence_approval))
+    evaluation_control = _effectiveness_control(
+        effectiveness_evaluation,
+        effectiveness_sha256,
+        minimum_effectiveness_labels,
+        verification,
+    )
+    if evaluation_control is not None:
+        controls.append(evaluation_control)
+    passport_control = _passport_control(
+        passport_verification,
+        passport_verification_sha256,
+        require_passport or manifest.get("profile") == "release",
+        verification,
+    )
+    if passport_control is not None:
+        controls.append(passport_control)
+
+    return _decision(
+        controls=controls,
+        verification=verification,
+        blocking_findings=blocking_findings,
+        trust=trust,
+    )
+
+
+def _report_controls(
+    *,
+    manifest: dict[str, Any],
+    blocking_findings: int,
+    unsatisfied_claims: list[str],
+    execution_gaps: int,
+    isolation: dict[str, Any],
+    trust: dict[str, Any],
+) -> list[dict[str, Any]]:
+    return [
+        _control(
+            "report-integrity",
+            True,
+            "The checksum seal and semantic report contract verified.",
+            ["checksums.sha256", "scan-manifest.json"],
+        ),
+        _control(
+            "scan-policy",
+            manifest.get("outcome") == "pass",
+            f"Scan outcome is {manifest.get('outcome', 'unknown')}.",
+            ["scan-manifest.json#outcome"],
+        ),
+        _control(
+            "blocking-findings",
+            blocking_findings == 0,
+            f"{blocking_findings} active blocking finding(s).",
+            ["findings.json"],
+        ),
+        _control(
+            "assurance-claims",
+            not unsatisfied_claims,
+            (
+                "All assurance claims are satisfied."
+                if not unsatisfied_claims
+                else "Unsatisfied claims: " + ", ".join(unsatisfied_claims)
+            ),
+            ["assurance-claims.json"],
+        ),
+        _control(
+            "operational-coverage",
+            execution_gaps == 0,
+            f"{execution_gaps} operational domain(s) have execution gaps.",
+            ["portfolio-health.json"],
+        ),
+        _control(
+            "external-isolation",
+            (
+                manifest.get("network_isolation_attested") is True
+                and isolation.get("validated") is True
+                and isolation.get("organization_approved") is True
+            ),
+            (
+                "Externally enforced isolation evidence is present and validated."
+                if isolation.get("validated") is True
+                and isolation.get("organization_approved") is True
+                else "Validated external isolation evidence is absent."
+            ),
+            [
+                "scan-manifest.json#network_isolation_attested",
+                "isolation-attestation.json",
+            ],
+        ),
+        _control(
+            "scanner-trust",
+            not trust["gaps"],
+            (
+                f"All {trust['entrypoints']} scanner entry points are approved and unchanged."
+                if not trust["gaps"]
+                else f"{len(trust['gaps'])} scanner entry-point trust gap(s) remain."
+            ),
+            ["scan-manifest.json#tools", "scanner-trust.json"],
+        ),
+    ]
+
+
+def _intelligence_control(
+    intelligence: dict[str, Any], approval: dict[str, Any]
+) -> dict[str, Any]:
+    configured = intelligence.get("configured") is True
+    approved = (
+        approval.get("validated") is True
+        and approval.get("organization_approved") is True
+    )
+    detail = (
+        "Consumed intelligence snapshots have governed approval."
+        if configured and approved
+        else "No intelligence snapshots were consumed."
+        if not configured
+        else "Governed approval for consumed intelligence is absent."
+    )
+    return _control(
+        "intelligence-approval",
+        not configured or approved,
+        detail,
+        ["risk-intelligence.json", "intelligence-approval.json"],
+    )
+
+
+def _decision(
+    *,
+    controls: list[dict[str, Any]],
+    verification: dict[str, Any],
+    blocking_findings: int,
+    trust: dict[str, Any],
+) -> dict[str, Any]:
+    blockers = [control["id"] for control in controls if control["status"] == "fail"]
+    return {
+        "schema_version": "1.0",
+        "decision": "approved" if not blockers else "not_approved",
+        "scope": (
+            "Fail-closed aggregation of verified release evidence; approval does "
+            "not replace organization authorization or deployment admission policy."
+        ),
+        "report": {
+            "scan_id": verification["scan_id"],
+            "checksums_sha256": verification["checksums_sha256"],
+            "files_verified": verification["file_count"],
+        },
+        "summary": {
+            "controls": len(controls),
+            "passed": len(controls) - len(blockers),
+            "failed": len(blockers),
+            "blocking_findings": blocking_findings,
+            "scanner_entrypoints": trust["entrypoints"],
+            "scanner_trust_gaps": len(trust["gaps"]),
+        },
+        "blockers": blockers,
+        "controls": controls,
+    }
+
+
+def _effectiveness_control(
+    path: Path | None,
+    expected_digest: str,
+    minimum_labels: int,
+    report_verification: dict[str, Any],
+) -> dict[str, Any] | None:
+    required = minimum_labels > 0
+    if path is None:
+        return (
+            _control(
+                "detection-effectiveness",
+                False,
+                "A digest-bound effectiveness evaluation is required.",
+                ["effectiveness-evaluation.json"],
+            )
+            if required
+            else None
+        )
+    evaluation = _digest_bound_object(path, expected_digest, "effectiveness evaluation")
+    report = evaluation.get("report")
+    corpus = evaluation.get("corpus")
+    labels = int(corpus.get("labels") or 0) if isinstance(corpus, dict) else 0
+    passed = (
+        evaluation.get("schema_version") == "1.0"
+        and evaluation.get("verdict") == "pass"
+        and isinstance(report, dict)
+        and report.get("checksums_sha256") == report_verification["checksums_sha256"]
+        and labels >= minimum_labels
+    )
+    return _control(
+        "detection-effectiveness",
+        passed,
+        f"Effectiveness verdict is {evaluation.get('verdict', 'unknown')} across {labels} labels; minimum {minimum_labels}.",
+        [str(path)],
+    )
+
+
+def _passport_control(
+    path: Path | None,
+    expected_digest: str,
+    required: bool,
+    report_verification: dict[str, Any],
+) -> dict[str, Any] | None:
+    if path is None:
+        return (
+            _control(
+                "signed-release-passport",
+                False,
+                "An authentic approved passport verification is required.",
+                ["passport-verification.json"],
+            )
+            if required
+            else None
+        )
+    verification = _digest_bound_object(path, expected_digest, "passport verification")
+    report = verification.get("report")
+    bound = (
+        isinstance(report, dict)
+        and report.get("checksums_sha256") == report_verification["checksums_sha256"]
+    )
+    passed = (
+        verification.get("release_decision") == "approved"
+        and verification.get("authentic") is True
+        and bound
+    )
+    return _control(
+        "signed-release-passport",
+        passed,
+        (
+            "Passport authenticity, report binding, artifacts, and release policy are approved."
+            if passed
+            else "Passport verification is not authentic, approved, and bound to this report."
+        ),
+        [str(path)],
+    )
+
+
+def _entrypoint_trust(manifest: dict[str, Any]) -> dict[str, Any]:
+    tools = manifest.get("tools")
+    if not isinstance(tools, list):
+        raise TypeError("verified scan manifest tools must be an array")
+    gaps: list[str] = []
+    entrypoints = 0
+    for run in tools:
+        if not isinstance(run, dict) or run.get("applicable") is False:
+            continue
+        tool = str(run.get("tool") or "unknown")
+        entrypoints += 1
+        if not (
+            run.get("executable_sha256")
+            and run.get("executable_integrity_verified") is True
+            and run.get("executable_unchanged") is True
+        ):
+            gaps.append(f"{tool}:primary")
+
+        auxiliary_required = tool == "codeql" or bool(
+            run.get("auxiliary_executable_sha256")
+        )
+        if auxiliary_required:
+            entrypoints += 1
+            if not (
+                run.get("auxiliary_executable_sha256")
+                and run.get("auxiliary_executable_integrity_verified") is True
+                and run.get("auxiliary_executable_unchanged") is True
+            ):
+                gaps.append(f"{tool}:auxiliary")
+    return {"entrypoints": entrypoints, "gaps": gaps}
+
+
+def _control(
+    identifier: str, passed: bool, detail: str, evidence: list[str]
+) -> dict[str, Any]:
+    return {
+        "id": identifier,
+        "status": "pass" if passed else "fail",
+        "detail": detail,
+        "evidence": evidence,
+    }
+
+
+def _paired(path: Path | None, digest: str, label: str) -> None:
+    if bool(path) != bool(digest):
+        raise ValueError(f"{label} path and SHA-256 must be supplied together")
+
+
+def _digest_bound_object(
+    path: Path, expected_digest: str, label: str
+) -> dict[str, Any]:
+    source = resolve_regular_file(path, label)
+    if sha256_file(source) != expected_digest.casefold():
+        raise ValueError(f"{label} does not match the approved SHA-256")
+    return _read_object(source)
+
+
+def _optional_object(path: Path) -> dict[str, Any]:
+    return _read_object(path) if path.is_file() else {}
+
+
+def _read_object(path: Path) -> dict[str, Any]:
+    source = resolve_regular_file(path, "JSON evidence")
+    if source.stat().st_size > _MAX_JSON_BYTES:
+        raise ValueError(f"JSON evidence exceeds {_MAX_JSON_BYTES} bytes")
+    document = json.loads(source.read_bytes())
+    if not isinstance(document, dict):
+        raise TypeError("JSON evidence root must be an object")
+    return document

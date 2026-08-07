@@ -40,6 +40,7 @@ Markdown is the canonical documentation format:
 - [Configuration reference](docs/configuration.md)
 - [Python reachability and code-island analysis](docs/reachability.md)
 - [Detection effectiveness and operational coverage](docs/effectiveness.md)
+- [Governed release readiness](docs/release-readiness.md)
 - [Compatibility and coverage matrix](docs/compatibility-matrix.md)
 - [Tool-selection and portfolio governance](docs/tool-selection.md)
 - [Production security gate](docs/production-security.md)
@@ -170,6 +171,23 @@ pysec benchmark REPORT --corpus CORPUS.json \
 
 The strict contracts are exported offline with `pysec schema
 effectiveness-corpus-1.0` and `effectiveness-evaluation-1.0`.
+
+Turn the sealed scan, organization-authorized isolation and intelligence
+receipts, scanner trust, optional effectiveness benchmark, and signed Passport
+verification into one fail-closed promotion decision:
+
+```text
+pysec release-check REPORT --format json \
+  --effectiveness-evaluation effectiveness-evaluation.json \
+  --effectiveness-sha256 APPROVED_SHA256 \
+  --minimum-effectiveness-labels 25 \
+  --passport-verification passport-verification.json \
+  --passport-verification-sha256 APPROVED_SHA256 \
+  --require-passport --output release-readiness.json
+```
+
+A report `PASS` is necessary but does not itself authorize promotion. See
+[Governed release readiness](docs/release-readiness.md).
 
 Commands with `--format json` return failures on standard error using one stable
 envelope with `status`, `command`, and a coded `error`; `attest` uses the same
@@ -328,6 +346,8 @@ python-security-report/
 |-- security-passport.json         # in-toto Statement / SLSA VSA predicate
 |-- checksums.sha256
 |-- risk-intelligence.json         # bounded offline snapshot provenance/results
+|-- isolation-attestation.json     # isolation validation and policy authority
+|-- intelligence-approval.json     # snapshot approval validation and authority
 |-- finding-delta.json             # new/existing/regressed/resolved lifecycle
 |-- effectiveness.json             # observed attribution/actionability/tool yield
 |-- assurance-claims.json          # NIST SSDF claim-to-evidence mapping

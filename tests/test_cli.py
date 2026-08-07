@@ -340,6 +340,101 @@ class CliSafetyTests(unittest.TestCase):
             verifier.assert_not_called()
             self.assertIn(expected, error_output.call_args.args[0])
 
+    def test_release_check_and_reachability_diff_publish_decisions(self) -> None:
+        readiness = {
+            "decision": "not_approved",
+            "summary": {"passed": 6, "controls": 8},
+            "blockers": ["external-isolation", "scanner-trust"],
+        }
+        delta = {
+            "verdict": "regression",
+            "counts": {
+                "state_regressions": 1,
+                "new_disconnected_nodes": 2,
+                "new_reportable_islands": 1,
+            },
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            readiness_output = root / "release-readiness.json"
+            delta_output = root / "reachability-delta.json"
+            with (
+                patch(
+                    "py_security_suite.cli.assess_release_readiness",
+                    return_value=readiness,
+                ) as assessor,
+                patch("builtins.print") as output,
+            ):
+                code = main(
+                    [
+                        "release-check",
+                        "report",
+                        "--format",
+                        "json",
+                        "--output",
+                        str(readiness_output),
+                    ]
+                )
+            self.assertEqual(code, 1)
+            self.assertEqual(json.loads(readiness_output.read_text()), readiness)
+            self.assertEqual(json.loads(output.call_args.args[0]), readiness)
+            assessor.assert_called_once()
+
+            with (
+                patch(
+                    "py_security_suite.cli.compare_reachability", return_value=delta
+                ) as comparator,
+                patch("builtins.print") as output,
+            ):
+                code = main(
+                    [
+                        "reachability-diff",
+                        "before.json",
+                        "after.json",
+                        "--baseline-sha256",
+                        "a" * 64,
+                        "--current-sha256",
+                        "b" * 64,
+                        "--format",
+                        "json",
+                        "--output",
+                        str(delta_output),
+                    ]
+                )
+            self.assertEqual(code, 1)
+            self.assertEqual(json.loads(delta_output.read_text()), delta)
+            self.assertEqual(json.loads(output.call_args.args[0]), delta)
+            comparator.assert_called_once()
+
+    def test_verify_can_atomically_publish_passport_receipt(self) -> None:
+        verification = {
+            "release_decision": "approved",
+            "authentic": True,
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / "passport-verification.json"
+            with (
+                patch(
+                    "py_security_suite.cli.verify_attestation",
+                    return_value=verification,
+                ),
+                patch("builtins.print") as output,
+            ):
+                code = main(
+                    [
+                        "verify",
+                        "passport",
+                        "--format",
+                        "json",
+                        "--output",
+                        str(destination),
+                    ]
+                )
+            self.assertEqual(json.loads(destination.read_text()), verification)
+
+        self.assertEqual(code, 0)
+        self.assertEqual(json.loads(output.call_args.args[0]), verification)
+
     def test_verify_inspection_has_text_and_json_output(self) -> None:
         verification = {
             "schema_version": "1.0",

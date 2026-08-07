@@ -31,6 +31,8 @@ from .report_inspection import (
 )
 from .reports import is_complete_report
 from .reachability import analyze_project
+from .reachability_delta import compare_reachability
+from .release_readiness import assess_release_readiness
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -182,6 +184,13 @@ def build_parser() -> argparse.ArgumentParser:
         default="json",
         help="machine-readable JSON or concise operator text",
     )
+    verify.add_argument(
+        "--output",
+        type=Path,
+        metavar="FILE",
+        help="atomically write the JSON verification receipt",
+    )
+    verify.add_argument("--overwrite", action="store_true")
 
     verify_report_parser = subparsers.add_parser(
         "verify-report", help="verify a generated report checksum chain"
@@ -302,6 +311,21 @@ def build_parser() -> argparse.ArgumentParser:
     )
     benchmark.add_argument("--overwrite", action="store_true")
 
+    release_check = subparsers.add_parser(
+        "release-check",
+        help="aggregate verified report, trust, isolation, effectiveness, and passport evidence",
+    )
+    release_check.add_argument("report", type=Path, metavar="REPORT_DIRECTORY")
+    release_check.add_argument("--effectiveness-evaluation", type=Path)
+    release_check.add_argument("--effectiveness-sha256", default="")
+    release_check.add_argument("--minimum-effectiveness-labels", type=int, default=0)
+    release_check.add_argument("--passport-verification", type=Path)
+    release_check.add_argument("--passport-verification-sha256", default="")
+    release_check.add_argument("--require-passport", action="store_true")
+    release_check.add_argument("--format", choices=("text", "json"), default="text")
+    release_check.add_argument("--output", type=Path, metavar="FILE")
+    release_check.add_argument("--overwrite", action="store_true")
+
     reachability = subparsers.add_parser(
         "reachability",
         help="build an offline Python entry-point and reachability graph",
@@ -340,6 +364,18 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="indent JSON for direct operator inspection",
     )
+
+    reachability_diff = subparsers.add_parser(
+        "reachability-diff",
+        help="compare two digest-bound reachability graphs",
+    )
+    reachability_diff.add_argument("baseline", type=Path)
+    reachability_diff.add_argument("current", type=Path)
+    reachability_diff.add_argument("--baseline-sha256", required=True)
+    reachability_diff.add_argument("--current-sha256", required=True)
+    reachability_diff.add_argument("--format", choices=("text", "json"), default="text")
+    reachability_diff.add_argument("--output", type=Path, metavar="FILE")
+    reachability_diff.add_argument("--overwrite", action="store_true")
     return parser
 
 
@@ -359,8 +395,10 @@ def _dispatch_command(args: argparse.Namespace) -> int:
     handlers = {
         "schema": _schema_command,
         "benchmark": _benchmark_command,
+        "release-check": _release_check_command,
         "sign-artifacts": _sign_artifacts_command,
         "reachability": _reachability_command,
+        "reachability-diff": _reachability_diff_command,
         "doctor": _doctor_command,
         "attest": _attest_command,
         "verify": _verify_attestation_command,
@@ -409,6 +447,36 @@ def _reachability_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def _reachability_diff_command(args: argparse.Namespace) -> int:
+    if args.overwrite and not args.output:
+        raise ValueError("reachability-diff --overwrite requires --output")
+    result = compare_reachability(
+        args.baseline,
+        args.current,
+        baseline_sha256=args.baseline_sha256,
+        current_sha256=args.current_sha256,
+    )
+    rendered_json = json.dumps(result, indent=2, sort_keys=True)
+    if args.output:
+        _write_atomic_output(
+            output=args.output,
+            content=rendered_json,
+            overwrite=args.overwrite,
+            label="reachability delta output",
+        )
+    if args.format == "json":
+        print(rendered_json)
+    else:
+        counts = result["counts"]
+        print(
+            f"{str(result['verdict']).upper()}: "
+            f"{counts['state_regressions']} state regression(s), "
+            f"{counts['new_disconnected_nodes']} new disconnected node(s), "
+            f"{counts['new_reportable_islands']} new reportable island(s)"
+        )
+    return 0 if result["verdict"] == "pass" else 1
+
+
 def _doctor_command(args: argparse.Namespace) -> int:
     config = load_config(
         organization_policy=args.policy,
@@ -441,6 +509,10 @@ def _attest_command(args: argparse.Namespace) -> int:
 
 
 def _verify_attestation_command(args: argparse.Namespace) -> int:
+    if args.overwrite and not args.output:
+        raise ValueError("verify --overwrite requires --output")
+    if args.output and args.format != "json":
+        raise ValueError("verify --output requires --format json")
     verification = verify_attestation(
         passport=args.passport,
         report=args.report,
@@ -450,11 +522,20 @@ def _verify_attestation_command(args: argparse.Namespace) -> int:
         cosign_sha256=args.cosign_sha256,
         allow_unsigned=args.allow_unsigned,
     )
-    print(
+    rendered = (
         _render_attestation_verification(verification)
         if args.format == "text"
-        else json.dumps(verification, sort_keys=True)
+        else json.dumps(verification, indent=2, sort_keys=True)
     )
+    if args.output:
+        _write_atomic_output(
+            output=args.output,
+            content=rendered,
+            overwrite=args.overwrite,
+            label="passport verification output",
+            forbidden_root=args.report,
+        )
+    print(rendered)
     return 0 if verification.get("release_decision") == "approved" else 1
 
 
@@ -506,8 +587,14 @@ def _inspect_command(args: argparse.Namespace) -> int:
             content=rendered,
             overwrite=args.overwrite,
         )
-    print(rendered)
+    _print_portable(rendered)
     return 0
+
+
+def _print_portable(value: str) -> None:
+    """Render untrusted report text on consoles with limited code pages."""
+    encoding = sys.stdout.encoding or "utf-8"
+    print(value.encode(encoding, errors="replace").decode(encoding))
 
 
 def _scan_command(args: argparse.Namespace) -> int:
@@ -589,6 +676,39 @@ def _benchmark_command(args: argparse.Namespace) -> int:
             f"FN {matrix['false_negative']}, TN {matrix['true_negative']}"
         )
     return 0 if result["verdict"] == "pass" else 1
+
+
+def _release_check_command(args: argparse.Namespace) -> int:
+    if args.overwrite and not args.output:
+        raise ValueError("release-check --overwrite requires --output")
+    result = assess_release_readiness(
+        args.report,
+        effectiveness_evaluation=args.effectiveness_evaluation,
+        effectiveness_sha256=args.effectiveness_sha256,
+        minimum_effectiveness_labels=args.minimum_effectiveness_labels,
+        passport_verification=args.passport_verification,
+        passport_verification_sha256=args.passport_verification_sha256,
+        require_passport=args.require_passport,
+    )
+    rendered_json = json.dumps(result, indent=2, sort_keys=True)
+    if args.output:
+        _write_atomic_output(
+            output=args.output,
+            content=rendered_json,
+            overwrite=args.overwrite,
+            label="release readiness output",
+            forbidden_root=args.report,
+        )
+    if args.format == "json":
+        print(rendered_json)
+    else:
+        summary = result["summary"]
+        print(
+            f"{str(result['decision']).upper()}: "
+            f"{summary['passed']}/{summary['controls']} controls passed; "
+            f"blockers {', '.join(result['blockers']) or 'none'}"
+        )
+    return 0 if result["decision"] == "approved" else 1
 
 
 def _metric_text(value: object) -> str:

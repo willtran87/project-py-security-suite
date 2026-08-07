@@ -5,6 +5,18 @@ for published releases.
 
 ## Unreleased
 
+- Add organization-authorized, digest-bound isolation and offline-intelligence
+  receipts; production and release fail closed when required authority is absent.
+- Add `release-check`, a unified decision over report integrity, policy,
+  findings, claims, operational coverage, isolation, scanner trust,
+  intelligence approval, effectiveness, and Passport verification.
+- Add digest-bound `reachability-diff` gating for new disconnected code, state
+  regressions, new reportable islands, and lost runtime observations.
+- Add atomic JSON receipt output to `pysec verify` and strict offline schemas for
+  all new governed sidecars.
+- Make Markdown and HTML summaries distinguish operational coverage, scan policy,
+  and release readiness, with the first evidence gap as the next action.
+
 - Add process-tree termination on timeout and interruption so scanner children
   do not survive aborted scans.
 - Add digest-bound, expiring organization scanner-trust catalogs and retain all
