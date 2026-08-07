@@ -563,6 +563,8 @@ class OrchestratorTests(unittest.TestCase):
                 "finding-delta.json",
                 "effectiveness.json",
                 "assurance-claims.json",
+                "portfolio-health.json",
+                "scanner-trust.json",
             ):
                 self.assertTrue((output / name).is_file(), name)
             findings = json.loads((output / "findings.json").read_text("utf-8"))

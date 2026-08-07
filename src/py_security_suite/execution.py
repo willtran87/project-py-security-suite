@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import re
+import signal
 import shutil
 import subprocess  # nosec B404 - scanner execution is this module's purpose
 import tempfile
@@ -28,6 +29,7 @@ class RawExecution:
     timed_out: bool = False
     stdout_truncated: bool = False
     stderr_truncated: bool = False
+    process_tree_terminated: bool = False
 
 
 @dataclass(slots=True)
@@ -96,63 +98,116 @@ def run_command(
     started = time.monotonic()
     creation_flags = 0
     if os.name == "nt":
-        creation_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-    try:
-        with tempfile.TemporaryDirectory(
-            prefix="pysec-process-home-", ignore_cleanup_errors=True
-        ) as private_home:
-            private_root = Path(private_home)
-            process_environment = isolated_environment(
-                environment.extra if environment else None
-            )
-            private_locations = {
-                "HOME": private_root,
-                "USERPROFILE": private_root,
-                "APPDATA": private_root / "AppData" / "Roaming",
-                "LOCALAPPDATA": private_root / "AppData" / "Local",
-                "XDG_CACHE_HOME": private_root / "cache",
-            }
-            for name, path in private_locations.items():
-                path.mkdir(parents=True, exist_ok=True)
-                process_environment.setdefault(name, str(path))
-            # Executables are resolved by adapters, arguments are passed as a
-            # vector, shell execution is disabled, and the environment is reduced.
-            completed = subprocess.run(  # noqa: S603  # nosec B603
-                command,
-                cwd=cwd,
-                env=process_environment,
-                stdin=subprocess.DEVNULL,
-                capture_output=True,
-                timeout=timeout_seconds,
-                check=False,
-                creationflags=creation_flags,
-            )
-        stdout, stdout_truncated = _decode_and_cap(completed.stdout, max_output_bytes)
-        stderr, stderr_truncated = _decode_and_cap(completed.stderr, max_output_bytes)
-        return RawExecution(
-            command=command,
-            exit_code=completed.returncode,
-            stdout=stdout,
-            stderr=stderr,
-            duration_seconds=time.monotonic() - started,
-            stdout_truncated=stdout_truncated,
-            stderr_truncated=stderr_truncated,
+        creation_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) | getattr(
+            subprocess, "CREATE_NEW_PROCESS_GROUP", 0
         )
-    except subprocess.TimeoutExpired as exc:
-        stdout_bytes = exc.stdout or b""
-        stderr_bytes = exc.stderr or b""
+    with tempfile.TemporaryDirectory(
+        prefix="pysec-process-home-", ignore_cleanup_errors=True
+    ) as private_home:
+        private_root = Path(private_home)
+        process_environment = isolated_environment(
+            environment.extra if environment else None
+        )
+        private_locations = {
+            "HOME": private_root,
+            "USERPROFILE": private_root,
+            "APPDATA": private_root / "AppData" / "Roaming",
+            "LOCALAPPDATA": private_root / "AppData" / "Local",
+            "XDG_CACHE_HOME": private_root / "cache",
+        }
+        for name, path in private_locations.items():
+            path.mkdir(parents=True, exist_ok=True)
+            process_environment.setdefault(name, str(path))
+        # Executables are resolved by adapters, arguments are passed as a
+        # vector, shell execution is disabled, and the environment is reduced.
+        # The lifecycle is explicitly managed below so timeout and interruption
+        # can terminate the complete process tree before pipes are closed.
+        process = subprocess.Popen(  # noqa: S603  # nosec B603  # pylint: disable=consider-using-with
+            command,
+            cwd=cwd,
+            env=process_environment,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            creationflags=creation_flags,
+            start_new_session=os.name != "nt",
+        )
+        try:
+            stdout_bytes, stderr_bytes = process.communicate(timeout=timeout_seconds)
+        except subprocess.TimeoutExpired:
+            terminated = _terminate_process_tree(process)
+            stdout_bytes, stderr_bytes = process.communicate()
+            stdout, stdout_truncated = _decode_and_cap(stdout_bytes, max_output_bytes)
+            stderr, stderr_truncated = _decode_and_cap(stderr_bytes, max_output_bytes)
+            return RawExecution(
+                command=command,
+                exit_code=None,
+                stdout=stdout,
+                stderr=stderr,
+                duration_seconds=time.monotonic() - started,
+                timed_out=True,
+                stdout_truncated=stdout_truncated,
+                stderr_truncated=stderr_truncated,
+                process_tree_terminated=terminated,
+            )
+        except BaseException:
+            _terminate_process_tree(process)
+            process.communicate()
+            raise
         stdout, stdout_truncated = _decode_and_cap(stdout_bytes, max_output_bytes)
         stderr, stderr_truncated = _decode_and_cap(stderr_bytes, max_output_bytes)
         return RawExecution(
             command=command,
-            exit_code=None,
+            exit_code=process.returncode,
             stdout=stdout,
             stderr=stderr,
             duration_seconds=time.monotonic() - started,
-            timed_out=True,
             stdout_truncated=stdout_truncated,
             stderr_truncated=stderr_truncated,
         )
+
+
+def _terminate_process_tree(process: subprocess.Popen[bytes]) -> bool:
+    """Terminate the exact scanner process group and wait for cleanup."""
+    if process.poll() is not None:
+        return True
+    try:
+        if os.name == "nt":
+            taskkill = resolve_executable("taskkill")
+            if taskkill is None:
+                process.kill()
+                process.wait(timeout=10)
+                return process.poll() is not None
+            completed = subprocess.run(  # noqa: S603  # nosec B603
+                [taskkill, "/PID", str(process.pid), "/T", "/F"],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+                timeout=10,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+            if completed.returncode != 0 and process.poll() is None:
+                process.kill()
+        else:
+            kill_process_group = os.__dict__.get("killpg")
+            hard_kill = signal.__dict__.get("SIGKILL")
+            if not callable(kill_process_group) or hard_kill is None:
+                raise OSError("process-group termination is unavailable")
+            kill_process_group(process.pid, signal.SIGTERM)
+            try:
+                process.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                kill_process_group(process.pid, hard_kill)
+    except (OSError, ProcessLookupError, subprocess.SubprocessError):
+        if process.poll() is None:
+            process.kill()
+    try:
+        process.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=10)
+    return process.poll() is not None
 
 
 def sanitize_diagnostic(value: str, *, maximum: int = 4096) -> str:

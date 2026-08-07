@@ -61,12 +61,35 @@ def effectiveness_artifact(
 
 
 def assurance_claims_artifact(
-    findings: list[Finding], tool_runs: list[ToolRun], *, source_integrity: bool
+    findings: list[Finding],
+    tool_runs: list[ToolRun],
+    *,
+    source_integrity: bool,
+    context_errors: list[str] | None = None,
+    network_isolation_attested: bool = False,
 ) -> dict[str, Any]:
     statuses = {run.tool: run.status.value for run in tool_runs}
     active_domains = Counter(finding.domain for finding in findings)
+    errors = list(context_errors or [])
+    intelligence_errors = [
+        error
+        for error in errors
+        if any(
+            label in error.casefold()
+            for label in ("kev", "epss", "vex", "intelligence")
+        )
+    ]
+    provenance_findings = [
+        finding
+        for finding in findings
+        if finding.area in {"artifact-provenance", "build-provenance"}
+        or (finding.domain == "supply-chain" and "provenance" in finding.area)
+    ]
+    security_findings = active_domains.get("security", 0) + active_domains.get(
+        "supply-chain", 0
+    )
     return {
-        "schema_version": "1.0",
+        "schema_version": "1.1",
         "framework": {
             "name": "NIST Secure Software Development Framework",
             "version": "1.1",
@@ -78,31 +101,99 @@ def assurance_claims_artifact(
                 "Protect code from tampering",
                 source_integrity,
                 ["scan-manifest.json#inventory.source_integrity_verified"],
+                []
+                if source_integrity
+                else ["target content integrity was not verified"],
             ),
             _claim(
                 "PW.7",
                 "Review and analyze human-readable code",
                 _completed(statuses, "bandit", "semgrep", "codeql"),
                 ["scan-manifest.json#tools", "results.sarif"],
+                (
+                    []
+                    if _completed(statuses, "bandit", "semgrep", "codeql")
+                    else ["no required human-readable code analysis completed"]
+                ),
             ),
             _claim(
                 "PW.4",
                 "Reuse well-secured software components",
-                _completed(statuses, "osv-scanner", "cyclonedx-py"),
+                _completed(statuses, "osv-scanner", "cyclonedx-py")
+                and not intelligence_errors,
                 ["sbom.cdx.json", "risk-intelligence.json"],
+                intelligence_errors
+                or (
+                    []
+                    if _completed(statuses, "osv-scanner", "cyclonedx-py")
+                    else [
+                        "component inventory or vulnerability analysis did not complete"
+                    ]
+                ),
             ),
             _claim(
                 "PS.3",
                 "Archive and protect release provenance",
-                source_integrity and _completed(statuses, "cosign"),
+                source_integrity
+                and _completed(statuses, "cosign")
+                and not provenance_findings,
                 ["security-passport.json", "checksums.sha256"],
+                [
+                    *(
+                        []
+                        if source_integrity
+                        else ["source integrity was not verified"]
+                    ),
+                    *(
+                        []
+                        if _completed(statuses, "cosign")
+                        else ["artifact provenance verification did not complete"]
+                    ),
+                    *[
+                        f"active provenance finding: {finding.finding_id}"
+                        for finding in provenance_findings
+                    ],
+                ],
             ),
             _claim(
                 "RV.1",
                 "Identify and confirm vulnerabilities continuously",
-                not active_domains.get("security")
-                and not active_domains.get("supply-chain"),
+                _completed(statuses, "bandit", "semgrep", "codeql")
+                and _completed(statuses, "osv-scanner", "grype", "trivy")
+                and not security_findings
+                and not errors,
                 ["findings.json", "finding-delta.json"],
+                [
+                    *errors,
+                    *(
+                        []
+                        if security_findings == 0
+                        else [
+                            f"{security_findings} active security or supply-chain finding(s)"
+                        ]
+                    ),
+                    *(
+                        []
+                        if _completed(statuses, "bandit", "semgrep", "codeql")
+                        else ["static vulnerability identification did not complete"]
+                    ),
+                    *(
+                        []
+                        if _completed(statuses, "osv-scanner", "grype", "trivy")
+                        else ["component vulnerability confirmation did not complete"]
+                    ),
+                ],
+            ),
+            _claim(
+                "PO.5",
+                "Implement and maintain secure environments for software development",
+                network_isolation_attested,
+                ["scan-manifest.json#network_isolation_attested"],
+                (
+                    []
+                    if network_isolation_attested
+                    else ["an external network-isolation boundary was not attested"]
+                ),
             ),
         ],
     }
@@ -124,13 +215,18 @@ def _completed(statuses: dict[str, str], *tools: str) -> bool:
 
 
 def _claim(
-    identifier: str, title: str, satisfied: bool, evidence: list[str]
+    identifier: str,
+    title: str,
+    satisfied: bool,
+    evidence: list[str],
+    blocking_reasons: list[str],
 ) -> dict[str, Any]:
     return {
         "control": identifier,
         "claim": title,
         "result": "satisfied" if satisfied else "not_satisfied",
         "evidence": evidence,
+        "blocking_reasons": blocking_reasons,
     }
 
 

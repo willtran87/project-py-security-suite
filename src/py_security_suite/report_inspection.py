@@ -25,6 +25,10 @@ _REPORT_VERIFICATION_SCHEMA_ID = (
     "urn:project-py-security-suite:schema:report-verification:1.0"
 )
 BUNDLED_SCHEMA_RESOURCES = {
+    "effectiveness-corpus-1.0": "effectiveness-corpus.schema.json",
+    "effectiveness-evaluation-1.0": "effectiveness-evaluation.schema.json",
+    "scanner-trust-catalog-1.0": "scanner-trust-catalog.schema.json",
+    "portfolio-health-1.0": "portfolio-health.schema.json",
     "report-inspection-1.0": "report-inspection.schema.json",
     "report-inspection-1.1": "report-inspection-1.1.schema.json",
     "report-inspection-1.2": "report-inspection-1.2.schema.json",

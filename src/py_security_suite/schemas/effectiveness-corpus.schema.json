@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:effectiveness-corpus:1.0",
+  "title": "Labeled scanner effectiveness corpus",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "corpus_id", "revision", "labels"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "corpus_id": {"type": "string", "minLength": 1, "maxLength": 200},
+    "revision": {"type": "string", "minLength": 1, "maxLength": 200},
+    "labels": {
+      "type": "array", "minItems": 1, "maxItems": 10000,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["id", "expected", "match"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1, "maxLength": 200},
+          "expected": {"enum": ["finding", "clean"]},
+          "match": {
+            "type": "object", "additionalProperties": false, "minProperties": 1,
+            "properties": {
+              "tool": {"type": "string", "maxLength": 500},
+              "rule_id": {"type": "string", "maxLength": 500},
+              "path": {"type": "string", "maxLength": 500},
+              "classification": {"type": "string", "maxLength": 500}
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -28,10 +28,12 @@ from .models import (
     json_ready,
 )
 from .policy import evaluate_policy
+from .portfolio_health import portfolio_health_artifact
 from .path_safety import resolve_regular_directory, resolve_unlinked_path
 from .reports import write_reports
 from .risk_intelligence import enrich_findings
 from .source_context import attach_source_context
+from .trust_catalog import apply_trust_catalog
 
 
 def scan_project(
@@ -61,6 +63,9 @@ def scan_project(
     context_errors: list[str] = []
     intelligence_artifact: dict[str, Any] = {}
     baseline_artifact: dict[str, Any] = {}
+    trust = apply_trust_catalog(config)
+    context_errors.extend(trust.errors)
+    derived_artifacts["scanner-trust.json"] = trust.artifact
 
     if (
         config.isolation.require_attestation
@@ -88,12 +93,13 @@ def scan_project(
             for run in tool_runs
         }
     else:
-        findings, tool_runs, diagnostics, derived_artifacts = _run_adapters(
+        findings, tool_runs, diagnostics, adapter_artifacts = _run_adapters(
             target=target,
             config=config,
             selected=selected,
             adapter_types=adapter_types or ADAPTER_TYPES,
         )
+        derived_artifacts.update(adapter_artifacts)
         findings = correlate_findings(findings)
         intelligence = enrich_findings(findings, config.intelligence)
         context_errors.extend(intelligence.errors)
@@ -136,6 +142,11 @@ def scan_project(
         findings,
         tool_runs,
         source_integrity=inventory.source_integrity_verified,
+        context_errors=context_errors,
+        network_isolation_attested=network_isolation_attested,
+    )
+    derived_artifacts["portfolio-health.json"] = portfolio_health_artifact(
+        findings, tool_runs
     )
     finished_at = utc_now()
     duration = round(time.monotonic() - started_clock, 3)
@@ -244,6 +255,16 @@ def resolve_asset_paths(config: SuiteConfig, target: Path) -> None:
                     boundary=target,
                 ),
             )
+    trust_catalog = config.trust.catalog_path
+    if trust_catalog is not None:
+        candidate = (
+            trust_catalog if trust_catalog.is_absolute() else target / trust_catalog
+        )
+        config.trust.catalog_path = resolve_unlinked_path(
+            candidate,
+            "scanner trust catalog",
+            boundary=target,
+        )
 
 
 def _configuration_digest(config: SuiteConfig) -> str:

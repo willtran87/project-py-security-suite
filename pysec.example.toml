@@ -41,6 +41,13 @@ maximum_age_days = 3
 epss_high_probability = 0.10
 epss_high_percentile = 0.90
 
+[trust]
+# Optional organization-approved scanner catalog. Both values are required.
+# The catalog binds tool/role digests to version, provenance source, approver,
+# platform, and expiry. Repository config cannot replace the approved digest.
+# catalog_path = "security-data/scanner-trust.json"
+# catalog_sha256 = "<organization-approved-catalog-sha256>"
+
 [tools.bandit]
 enabled = true
 executable = "bandit"

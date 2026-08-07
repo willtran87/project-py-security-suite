@@ -83,9 +83,6 @@ def evaluate_policy(
         reasons.extend(_production_context_reasons(config, by_tool, inventory))
         reasons.extend(_required_evidence_reasons(config.profile, by_tool))
 
-    if reasons:
-        return PolicyDecision(Outcome.INCOMPLETE, reasons)
-
     active_findings = [
         finding
         for finding in findings
@@ -97,11 +94,20 @@ def evaluate_policy(
         known_exploited = bool(
             isinstance(intelligence, dict) and intelligence.get("known_exploited")
         )
+        release_provenance = config.profile == "release" and finding.area in {
+            "artifact-provenance",
+            "build-provenance",
+        }
         finding.blocking = (
-            finding.severity in config.policy.block_severities or known_exploited
+            finding.severity in config.policy.block_severities
+            or known_exploited
+            or release_provenance
         )
         if finding.blocking:
             blocked += 1
+
+    if reasons:
+        return PolicyDecision(Outcome.INCOMPLETE, reasons)
     if blocked:
         severities = ", ".join(
             severity.value for severity in config.policy.block_severities

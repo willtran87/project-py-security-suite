@@ -57,7 +57,7 @@ where = ["src"]
 
         self.assertTrue(document["analysis"]["complete"])
         self.assertFalse(document["analysis"]["target_code_executed"])
-        self.assertEqual(document["schema_version"], "1.1")
+        self.assertEqual(document["schema_version"], "1.2")
         self.assertEqual(
             document["analysis"]["reachability_model"],
             "executable-load-only-disconnected",
@@ -70,6 +70,8 @@ where = ["src"]
         )
         self.assertEqual(island["modules"], ["example.orphan", "example.unused"])
         self.assertTrue(island["reportable"])
+        self.assertIn(island["confidence"], {"low", "medium", "high"})
+        self.assertTrue(island["confidence_factors"])
         sequences = document["representative_sequences"][0]["representative_paths"]
         rendered = "\n".join(" -> ".join(item["sequence"]) for item in sequences)
         self.assertIn("example.cli:main", rendered)
@@ -654,6 +656,75 @@ class ReachabilityAdapterTests(unittest.TestCase):
         self.assertEqual(finding.locations[0].start_line, 41)
         self.assertEqual(finding.locations[0].end_line, 55)
         self.assertEqual(finding.evidence["state"], "load-only")
+
+    def test_island_confidence_overrides_global_confidence(self) -> None:
+        document = {
+            "schema_version": "1.2",
+            "analysis": {"confidence": "low"},
+            "summary": {"entry_points": 1},
+            "entry_points": [],
+            "representative_sequences": [],
+            "islands": [
+                {
+                    "id": "corroborated-island",
+                    "kind": "module-island",
+                    "state": "disconnected",
+                    "confidence": "high",
+                    "confidence_factors": ["runtime coverage observed this candidate"],
+                    "primary_module": "example.legacy",
+                    "primary_path": "src/example/legacy.py",
+                    "primary_start_line": 1,
+                    "primary_end_line": 2,
+                    "modules": ["example.legacy"],
+                    "module_count": 1,
+                    "symbol_count": 1,
+                    "lines_of_code": 2,
+                    "paths": ["src/example/legacy.py"],
+                    "reportable": True,
+                }
+            ],
+            "nodes": [],
+            "edges": [],
+            "dynamic_features": [],
+            "warnings": [],
+            "errors": [],
+        }
+
+        finding = ReachabilityAdapter(ToolConfig(), 1024).parse(
+            json.dumps(document), Path(".")
+        )[0]
+
+        self.assertEqual(finding.confidence, Confidence.HIGH)
+        self.assertEqual(
+            finding.evidence["confidence_factors"],
+            ["runtime coverage observed this candidate"],
+        )
+
+    def test_reachability_document_rejects_escaping_paths(self) -> None:
+        document = {
+            "schema_version": "1.2",
+            "analysis": {"confidence": "high"},
+            "summary": {"entry_points": 1},
+            "entry_points": [],
+            "representative_sequences": [],
+            "islands": [
+                {
+                    "state": "disconnected",
+                    "primary_path": "../outside.py",
+                    "paths": [],
+                    "reportable": False,
+                }
+            ],
+            "nodes": [],
+            "edges": [],
+            "dynamic_features": [],
+            "warnings": [],
+            "errors": [],
+        }
+        with self.assertRaisesRegex(ValueError, "stay within"):
+            ReachabilityAdapter(ToolConfig(), 1024).parse(
+                json.dumps(document), Path(".")
+            )
 
     def test_runtime_observed_candidate_reports_model_gap_not_dead_code(self) -> None:
         document = {

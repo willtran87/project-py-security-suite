@@ -13,7 +13,7 @@ from typing import Any
 from .path_safety import resolve_regular_file
 
 
-SCHEMA_VERSION = "1.1"
+SCHEMA_VERSION = "1.2"
 _EXCLUDED_PARTS = frozenset(
     {
         ".artifacts",
@@ -191,7 +191,12 @@ def analyze_project(
     )
     confidence = _analysis_confidence(entry_points, errors, dynamic_features)
     warnings = _warnings(entry_points, dynamic_features, errors)
-    _add_island_triage(topology.islands, dynamic_features, coverage_metadata)
+    _add_island_triage(
+        topology.islands,
+        dynamic_features,
+        coverage_metadata,
+        analysis_confidence=confidence,
+    )
     if len(entry_points) > _MAX_TRACED_ENTRY_POINTS:
         warnings.append(
             f"Representative sequences are limited to the first "
@@ -341,7 +346,7 @@ def _graph_topology(
         _load_only_symbol_islands(
             nodes,
             edges,
-            reachability.load_only,
+            reachability,
             loaded_modules,
             minimum_island_loc,
             runtime_observations,
@@ -1766,7 +1771,7 @@ def _unreachable_islands(
 def _load_only_symbol_islands(
     nodes: dict[str, GraphNode],
     edges: set[GraphEdge],
-    load_only: set[str],
+    reachability: ReachabilityResult,
     loaded_modules: set[str],
     minimum_loc: int,
     runtime_observations: dict[str, str],
@@ -1776,7 +1781,7 @@ def _load_only_symbol_islands(
         for identifier, node in nodes.items()
         if node.kind != "module"
         and node.module in loaded_modules
-        and identifier in load_only
+        and identifier in reachability.load_only
     }
     neighbors: dict[str, set[str]] = {identifier: set() for identifier in candidates}
     for edge in edges:
@@ -1806,6 +1811,10 @@ def _load_only_symbol_islands(
             key=lambda node: (node.lines_of_code, node.module, node.name),
         )
         material = "\n".join(sorted(component)).encode("utf-8")
+        static_confidence = _lowest_confidence(
+            str(reachability.explanations.get(identifier, {}).get("confidence", "low"))
+            for identifier in component
+        )
         islands.append(
             {
                 "id": f"symbol-island-{hashlib.sha256(material).hexdigest()[:12]}",
@@ -1830,6 +1839,7 @@ def _load_only_symbol_islands(
                     "the definitions are loaded or referenced, but no direct executable "
                     "call path from a discovered entry point was established"
                 ),
+                "static_confidence": static_confidence,
             }
         )
     return islands
@@ -1839,6 +1849,8 @@ def _add_island_triage(
     islands: list[dict[str, Any]],
     dynamic_features: set[str],
     coverage_metadata: dict[str, Any],
+    *,
+    analysis_confidence: str,
 ) -> None:
     uncertain_features = sorted(_uncertain_dynamic_features(dynamic_features))
     coverage_valid = bool(coverage_metadata.get("valid"))
@@ -1905,6 +1917,25 @@ def _add_island_triage(
             actions.append(
                 "Resolve or configure the reported dynamic roots before deleting code."
             )
+        static_confidence = str(island.get("static_confidence") or analysis_confidence)
+        confidence_factors = [f"static graph: {static_confidence}"]
+        island_confidence = static_confidence
+        if observation == "observed":
+            island_confidence = "high"
+            confidence_factors.append("runtime coverage observed this candidate")
+        elif coverage_valid and observation == "not-observed":
+            confidence_factors.append(
+                "configured runtime coverage did not observe this candidate"
+            )
+        else:
+            confidence_factors.append("representative runtime coverage is unavailable")
+        if uncertain_features:
+            island_confidence = _lowest_confidence((island_confidence, "medium"))
+            confidence_factors.append(
+                "unresolved dynamic behavior caps candidate confidence at medium"
+            )
+        island["confidence"] = island_confidence
+        island["confidence_factors"] = confidence_factors
         actions.append(
             "Add a missing entry point when intentional; otherwise remove in a focused change with regression tests."
         )
@@ -1915,6 +1946,12 @@ def _add_island_triage(
             "blocking_factors": blockers,
             "recommended_actions": actions,
         }
+
+
+def _lowest_confidence(values: Any) -> str:
+    ranks = {"low": 0, "medium": 1, "high": 2}
+    normalized = [value if value in ranks else "low" for value in values]
+    return min(normalized, key=ranks.__getitem__, default="low")
 
 
 def _covered_lines(nodes: list[GraphNode]) -> int:

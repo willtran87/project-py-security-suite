@@ -5,11 +5,25 @@ for published releases.
 
 ## Unreleased
 
+- Add process-tree termination on timeout and interruption so scanner children
+  do not survive aborted scans.
+- Add digest-bound, expiring organization scanner-trust catalogs and retain all
+  application decisions as sealed evidence.
+- Add release distribution signing with per-artifact Sigstore bundles and a
+  checksummed provenance manifest.
+- Make SSDF assurance claims fail closed on provenance findings, stale governed
+  context, security findings, and missing isolation attestations.
+- Add verified, digest-bound labeled-corpus benchmarking with confusion-matrix,
+  precision, recall, specificity, and F1 output.
+- Add a 12-domain operational coverage scorecard to Markdown and JSON reports.
+- Add per-island reachability confidence factors and stricter graph-output path
+  validation; generated reachability documents now use schema 1.2.
+
 - Add bounded offline Python reachability analysis with packaging, main,
   framework, and configured roots; three-state executable/load-only/disconnected
   classification; confidence-bearing direct, framework, callback, and polymorphic
   dispatch paths; optional bounded coverage.py corroboration; ranked module and
-  symbol islands; state-appropriate normalized findings; and a sealed schema-1.1
+  symbol islands; state-appropriate normalized findings; and a sealed schema-1.2
   `reachability.json` graph artifact.
 - Improve reachability precision with constructor lifecycle edges, concrete
   imported/local/chained receiver resolution, literal internal dynamic-import

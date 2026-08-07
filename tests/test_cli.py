@@ -152,7 +152,7 @@ class CliSafetyTests(unittest.TestCase):
                     0,
                 )
         document = json.loads(output.call_args.args[0])
-        self.assertEqual(document["schema_version"], "1.1")
+        self.assertEqual(document["schema_version"], "1.2")
         self.assertFalse(document["analysis"]["target_code_executed"])
         self.assertEqual(document["summary"]["entry_points"], 0)
 

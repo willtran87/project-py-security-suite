@@ -11,15 +11,20 @@ from .orchestrator import resolve_asset_paths
 from .path_safety import resolve_regular_directory
 from .risk_acceptance import validate_risk_acceptances
 from .risk_intelligence import enrich_findings
+from .trust_catalog import apply_trust_catalog
 
 
 def assess_readiness(*, target: Path, config: SuiteConfig) -> dict[str, Any]:
     """Assess a configured scan without executing target code or scanners."""
     target = resolve_regular_directory(target, "scan target")
     resolve_asset_paths(config, target)
+    trust = apply_trust_catalog(config)
     tools = _assess_tools(target, config)
     context_errors = _assess_context(target, config)
-    return _readiness_document(target, config, tools, context_errors)
+    context_errors.extend(trust.errors)
+    document = _readiness_document(target, config, tools, context_errors)
+    document["scanner_trust"] = trust.artifact
+    return document
 
 
 def _assess_tools(target: Path, config: SuiteConfig) -> list[dict[str, Any]]:
@@ -88,6 +93,17 @@ def _readiness_document(
     blocking_tools, optional_attention_tools = _attention_tool_names(tools)
     ready = not blocking_tools and not context_errors
     blocking_reasons = _blocking_reasons(tools, blocking_tools, context_errors)
+    conditional_actions = [
+        {
+            "tool": item["tool"],
+            "category": item["category"],
+            "reason": item["reason"],
+            "required_action": item["required_action"],
+        }
+        for item in tools
+        if item["category"]
+        in {"missing_configuration", "missing_evidence", "platform_constraint"}
+    ]
     return {
         "schema_version": "1.0",
         "target": target.name,
@@ -107,6 +123,7 @@ def _readiness_document(
         "summary": summary,
         "blocking_tools": blocking_tools,
         "optional_attention_tools": optional_attention_tools,
+        "conditional_actions": conditional_actions,
         "context_errors": context_errors,
         "tools": tools,
     }
@@ -163,6 +180,16 @@ def render_readiness(document: dict[str, Any]) -> str:
         ),
     ]
     lines.extend(_render_attention(document))
+    conditional = document.get("conditional_actions", [])
+    if conditional:
+        counts = Counter(item["category"] for item in conditional)
+        lines.append(
+            "Conditional evidence: "
+            + ", ".join(
+                f"{count} {category.replace('_', ' ')}"
+                for category, count in sorted(counts.items())
+            )
+        )
     lines.append(f"Scope: {document['scope']}")
     return "\n".join(lines)
 
@@ -191,6 +218,7 @@ def _summarize_tools(tools: list[dict[str, Any]]) -> dict[str, int]:
     counts = Counter(item["status"] for item in tools)
     applicable = [item for item in tools if item["status"] != "not_applicable"]
     required_applicable = [item for item in applicable if item["required"]]
+    categories = Counter(str(item["category"]) for item in tools)
     return {
         "selected": len(tools),
         "applicable": len(applicable),
@@ -203,15 +231,64 @@ def _summarize_tools(tools: list[dict[str, Any]]) -> dict[str, int]:
         "required_ready": sum(
             item["status"] == "ready" for item in required_applicable
         ),
+        "content_absent": categories["content_absent"],
+        "missing_evidence": categories["missing_evidence"],
+        "missing_configuration": categories["missing_configuration"],
+        "platform_constraints": categories["platform_constraint"],
     }
 
 
 def _tool_result(
     tool: str, status: str, reason: str | None, required: bool
 ) -> dict[str, Any]:
+    category, action = _readiness_guidance(status, reason)
     return {
         "tool": tool,
         "status": status,
         "required": required,
         "reason": reason,
+        "category": category,
+        "required_action": action,
     }
+
+
+def _readiness_guidance(status: str, reason: str | None) -> tuple[str, str]:
+    message = (reason or "").casefold()
+    if status == "ready":
+        return "ready", "No action; execute in the approved isolated scan lane."
+    if status == "disabled":
+        return (
+            "disabled",
+            "Enable the scanner or document an organization-approved exception.",
+        )
+    if status == "unavailable":
+        return (
+            "unavailable",
+            "Install or restore the approved executable and required offline assets.",
+        )
+    if status != "not_applicable":
+        return "attention", "Review the scanner prerequisite state."
+    if any(
+        value in message for value in ("pre-generated", "target python environment")
+    ):
+        return (
+            "missing_evidence",
+            "Generate the named evidence in its trusted companion lane, bind its digest, and rerun.",
+        )
+    if any(
+        value in message
+        for value in ("no approved local", "not configured", "no repository pysa")
+    ):
+        return (
+            "missing_configuration",
+            "Configure an approved local policy, environment, or evidence path and rerun preflight.",
+        )
+    if any(value in message for value in ("does not support", "run this profile on")):
+        return (
+            "platform_constraint",
+            "Run this control on a supported companion platform and import its digest-bound evidence.",
+        )
+    return (
+        "content_absent",
+        "No current action; the control becomes applicable when supported repository content appears.",
+    )

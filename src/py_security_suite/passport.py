@@ -14,6 +14,7 @@ from . import __version__
 from .execution import CommandEnvironment, resolve_executable, run_command, sha256_file
 from .models import ScanManifest, json_ready
 from .path_safety import is_link_like as _is_link_like
+from .path_safety import resolve_regular_directory
 from .path_safety import resolve_regular_file as _regular_file
 from .path_safety import resolve_unlinked_path as _resolve_evidence_root
 
@@ -27,6 +28,7 @@ _STATEMENT_NAME = "security-passport.json"
 _SIGNATURE_NAME = "security-passport.sig"
 _BUNDLE_NAME = "security-passport.sigstore.json"
 _COSIGN_VERSION = re.compile(r"(?:gitVersion[^v]*|\bcosign version\s+)?v?(\d+)\.")
+_RELEASE_SIGNING_MANIFEST = "release-signing-manifest.json"
 
 REQUIRED_REPORT_ARTIFACTS = {
     "summary": "summary.md",
@@ -171,6 +173,179 @@ def create_attestation(
         shutil.rmtree(staging, ignore_errors=True)
         raise
     return material
+
+
+def sign_release_artifacts(
+    *,
+    artifacts: Path,
+    output: Path,
+    signing_key: Path,
+    signing_password_file: Path | None = None,
+    cosign_executable: str = "cosign",
+    cosign_sha256: str = "",
+    allow_signing_network: bool = False,
+    signing_config: Path | None = None,
+    overwrite: bool = False,
+) -> dict[str, Any]:
+    """Create one digest-bound Sigstore bundle per release distribution."""
+    source = resolve_regular_directory(artifacts, "release artifact directory")
+    destination = _resolve_evidence_root(output, "release provenance output")
+    if destination == source or source.is_relative_to(destination):
+        raise ValueError(
+            "release provenance output cannot replace or contain artifacts"
+        )
+    distributions = _release_distributions(source)
+    if not distributions:
+        raise ValueError("release artifact directory contains no wheel, sdist, or zip")
+    signing = _preflight_signing(
+        signing_key=signing_key,
+        signing_password_file=signing_password_file,
+        cosign_executable=cosign_executable,
+        cosign_sha256=cosign_sha256,
+        allow_signing_network=allow_signing_network,
+        signing_config=signing_config,
+        cwd=source,
+    )
+    if signing is None:
+        raise ValueError("release artifact signing requires a signing key")
+    if signing.major_version < 3:
+        raise ValueError("release artifact signing requires Cosign 3 bundle support")
+    _prepare_provenance_directory(destination, overwrite)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(
+        tempfile.mkdtemp(prefix=f".{destination.name}.staging-", dir=destination.parent)
+    )
+    try:
+        records = [
+            _sign_release_blob(signing, artifact, staging) for artifact in distributions
+        ]
+        manifest = {
+            "schema_version": "1.0",
+            "created_at": datetime.now(UTC)
+            .isoformat(timespec="seconds")
+            .replace("+00:00", "Z"),
+            "suite_version": __version__,
+            "artifact_directory": str(source),
+            "artifact_count": len(records),
+            "cosign": {
+                "major_version": signing.major_version,
+                "sha256": signing.executable_sha256,
+                "integrity_verified": signing.integrity_verified,
+                "unchanged": True,
+                "signing_network_approved": True,
+                "signing_config_sha256": signing.config_sha256,
+            },
+            "artifacts": records,
+        }
+        _write_json(staging / _RELEASE_SIGNING_MANIFEST, manifest)
+        _write_checksums(staging)
+        _verify_checksums(staging)
+        _publish_provenance_staging(staging, destination, overwrite=overwrite)
+    except Exception:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
+    return manifest
+
+
+def _release_distributions(directory: Path) -> list[Path]:
+    distributions: list[Path] = []
+    for index, path in enumerate(directory.iterdir(), start=1):
+        if index > _MAX_RELEASE_DIRECTORY_ENTRIES:
+            raise ValueError(
+                "release artifact directory exceeds the bounded entry count"
+            )
+        if not _is_distribution_name(path.name):
+            continue
+        if not path.is_file() or _is_link_like(path):
+            raise ValueError(f"release distribution is not a regular file: {path.name}")
+        if path.stat().st_size > _MAX_RELEASE_ARTIFACT_BYTES:
+            raise ValueError(
+                f"release distribution exceeds the size limit: {path.name}"
+            )
+        distributions.append(path.resolve())
+    return sorted(distributions, key=lambda path: path.name)
+
+
+def _sign_release_blob(
+    signing: _SigningContext, artifact: Path, output: Path
+) -> dict[str, Any]:
+    if sha256_file(signing.executable) != signing.executable_sha256:
+        raise ValueError("Cosign executable changed after signing preflight")
+    bundle = output / f"{artifact.name}.sigstore.json"
+    command = [
+        str(signing.executable),
+        "sign-blob",
+        "--key",
+        str(signing.key),
+        "--bundle",
+        str(bundle),
+        "--yes",
+    ]
+    if signing.config is not None:
+        if sha256_file(signing.config) != signing.config_sha256:
+            raise ValueError("Cosign signing configuration changed after preflight")
+        command.extend(["--signing-config", str(signing.config)])
+    command.append(str(artifact))
+    environment = (
+        CommandEnvironment(extra={"COSIGN_PASSWORD": signing.password})
+        if signing.password
+        else None
+    )
+    result = run_command(
+        command,
+        cwd=artifact.parent,
+        timeout_seconds=120,
+        max_output_bytes=1024 * 1024,
+        environment=environment,
+    )
+    if result.timed_out or result.exit_code != 0:
+        raise ValueError(f"Cosign could not sign release artifact: {artifact.name}")
+    if sha256_file(signing.executable) != signing.executable_sha256:
+        raise ValueError("Cosign executable changed while signing release artifacts")
+    if not bundle.is_file() or _is_link_like(bundle) or bundle.stat().st_size == 0:
+        raise ValueError(f"Cosign did not create a regular bundle for {artifact.name}")
+    return {
+        "name": artifact.name,
+        "sha256": sha256_file(artifact),
+        "size_bytes": artifact.stat().st_size,
+        "bundle": bundle.name,
+        "bundle_sha256": sha256_file(bundle),
+        "bundle_size_bytes": bundle.stat().st_size,
+    }
+
+
+def _prepare_provenance_directory(output: Path, overwrite: bool) -> None:
+    if not output.exists() and not _is_link_like(output):
+        return
+    if not output.is_dir() or _is_link_like(output):
+        raise ValueError(
+            "release provenance output exists and is not a regular directory"
+        )
+    if not overwrite:
+        raise ValueError("release provenance output already exists; use --overwrite")
+    manifest = _read_json(output / _RELEASE_SIGNING_MANIFEST)
+    if manifest.get("schema_version") != "1.0":
+        raise ValueError("refusing to overwrite an unrecognized provenance directory")
+    _verify_checksums(output)
+
+
+def _publish_provenance_staging(
+    staging: Path, output: Path, *, overwrite: bool
+) -> None:
+    if not output.exists() and not _is_link_like(output):
+        staging.replace(output)
+        return
+    _prepare_provenance_directory(output, overwrite)
+    backup = Path(tempfile.mkdtemp(prefix=f".{output.name}.backup-", dir=output.parent))
+    backup.rmdir()
+    output.replace(backup)
+    try:
+        staging.replace(output)
+    except Exception:
+        if backup.exists() and not output.exists():
+            backup.replace(output)
+        raise
+    shutil.rmtree(backup)
 
 
 def _preflight_signing(

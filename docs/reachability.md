@@ -25,6 +25,9 @@ Tach's declared module boundaries.
 - Assigns every node one of three explicit states: `executable`, `load-only`, or
   `disconnected`; every assignment records its predecessor, edge kind, reason,
   and confidence.
+- Assigns confidence per island, with explicit factors for static-path strength,
+  runtime corroboration, and unresolved dynamic behavior; a global confidence
+  value never silently overstates an individual candidate.
 - Traces representative direct-call and bounded dispatch sequences from each
   entry point.
 - Groups disconnected modules and connected load-only symbol subgraphs into code
@@ -105,7 +108,7 @@ To add runtime corroboration from a separately generated test lane:
 pysec reachability . --coverage .artifacts/test-evidence/coverage.json --pretty
 ```
 
-Both commands write schema `1.1` JSON to standard output and perform no network
+Both commands write schema `1.2` JSON to standard output and perform no network
 operations. The analyzer reads coverage evidence but never runs tests itself.
 
 ## Reachability states
@@ -132,7 +135,7 @@ promoting every imported symbol to executable.
 | `summary` | Executable, load-only, disconnected, runtime-observed, entry-point, edge, and island counts |
 | `entry_points` | Every root, its discovery source, declaration, file, and line |
 | `representative_sequences` | Bounded paths showing how roots reach internal behavior |
-| `islands` | All disconnected components, including candidates below the finding threshold |
+| `islands` | All disconnected components, including candidates below the finding threshold, with candidate-specific confidence and its factors |
 | `nodes` / `edges` | Machine-readable graph with node state, runtime observation, predecessor explanation, typed edge, confidence, reason, and source location |
 | `dynamic_features` | Observed wildcard imports, dynamic imports, `eval`, `exec`, or bounded polymorphic dispatch |
 | `precision_features` | Applied precision controls such as constructor lifecycle, typed receivers, static-branch pruning, literal import resolution, and framework configuration/registration tracing |

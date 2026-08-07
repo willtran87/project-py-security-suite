@@ -679,6 +679,29 @@ or digest-mismatched snapshot. KEV matches become `P0` and block policy even if
 the originating scanner assigned a lower severity. EPSS affects priority, not
 severity. VEX state is displayed but never suppresses a finding by itself.
 
+Scanner executable approvals follow the same connected-preparation pattern.
+Validate publisher provenance and custody outside the scan, create an approved
+catalog conforming to `scanner-trust-catalog-1.0`, calculate its SHA-256, and
+bind both path and digest in organization policy. The isolated scan never
+self-approves an observed executable.
+
+Before release promotion, sign every distribution into a separate provenance
+directory:
+
+```text
+pysec sign-artifacts dist --output release-provenance \
+  --signing-key RELEASE_KEY \
+  --signing-password-file PASSWORD_FILE \
+  --cosign-executable APPROVED_COSIGN \
+  --cosign-sha256 APPROVED_COSIGN_SHA256
+```
+
+This creates one Sigstore bundle per wheel, sdist, or zip plus a checksummed
+`release-signing-manifest.json`. Cosign 3 network use remains blocked unless
+`--allow-signing-network` is explicitly supplied in the controlled signing
+lane. Configure the release-profile Cosign adapter to consume the transferred
+bundles; missing or invalid provenance is a blocking release finding.
+
 After the isolated scan, move the complete report into an approval lane. Keep
 the release private key and optional password file outside the checkout and
 report. Run `pysec attest`, then move the signed passport, report, approved

@@ -63,6 +63,29 @@ depends_on = ["py_security_suite.models"]
 layer = "services"
 
 [[modules]]
+path = "py_security_suite.effectiveness_corpus"
+depends_on = [
+    "py_security_suite.execution",
+    "py_security_suite.passport",
+    "py_security_suite.path_safety",
+]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.portfolio_health"
+depends_on = ["py_security_suite.models"]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.trust_catalog"
+depends_on = [
+    "py_security_suite.config",
+    "py_security_suite.execution",
+    "py_security_suite.path_safety",
+]
+layer = "services"
+
+[[modules]]
 path = "py_security_suite.finding_delta"
 depends_on = ["py_security_suite.models", "py_security_suite.path_safety"]
 layer = "services"
@@ -117,6 +140,7 @@ depends_on = [
     "py_security_suite.models",
     "py_security_suite.passport",
     "py_security_suite.prioritization",
+    "py_security_suite.portfolio_health",
     "py_security_suite.source_context",
 ]
 layer = "services"
@@ -143,10 +167,12 @@ depends_on = [
     "py_security_suite.inventory",
     "py_security_suite.models",
     "py_security_suite.policy",
+    "py_security_suite.portfolio_health",
     "py_security_suite.path_safety",
     "py_security_suite.reports",
     "py_security_suite.risk_intelligence",
     "py_security_suite.source_context",
+    "py_security_suite.trust_catalog",
 ]
 layer = "application"
 
@@ -160,6 +186,7 @@ depends_on = [
     "py_security_suite.path_safety",
     "py_security_suite.risk_acceptance",
     "py_security_suite.risk_intelligence",
+    "py_security_suite.trust_catalog",
 ]
 layer = "application"
 
@@ -170,6 +197,7 @@ depends_on = [
     "py_security_suite.config",
     "py_security_suite.doctor",
     "py_security_suite.execution",
+    "py_security_suite.effectiveness_corpus",
     "py_security_suite.orchestrator",
     "py_security_suite.passport",
     "py_security_suite.path_safety",

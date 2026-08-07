@@ -151,6 +151,47 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual(statuses["semgrep"], "disabled")
         self.assertEqual(statuses["detect-secrets"], "not_applicable")
         self.assertEqual(document["summary"]["not_applicable"], 1)
+        not_applicable = next(
+            item for item in document["tools"] if item["tool"] == "detect-secrets"
+        )
+        self.assertEqual(not_applicable["category"], "content_absent")
+        self.assertIn("becomes applicable", not_applicable["required_action"])
+
+    def test_conditional_evidence_is_grouped_by_actionable_reason(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory)
+            config = load_config(profile_override="comprehensive")
+
+            class _EvidenceAdapter(_NotApplicableAdapter):
+                def not_applicable_reason(self, target: Path) -> str:
+                    del target
+                    return "no pre-generated atheris evidence was found"
+
+                def preflight(self, target: Path) -> ScannerReadiness:
+                    return ScannerReadiness(
+                        tool="evidence",
+                        status="not_applicable",
+                        reason=self.not_applicable_reason(target),
+                    )
+
+            with (
+                patch.dict(
+                    "py_security_suite.doctor.ADAPTER_TYPES",
+                    {name: _EvidenceAdapter for name in config.selected_tools},
+                    clear=True,
+                ),
+                patch("py_security_suite.doctor.enrich_findings") as intelligence,
+                patch("py_security_suite.doctor.apply_finding_delta") as baseline,
+            ):
+                intelligence.return_value.errors = []
+                baseline.return_value.errors = []
+                document = assess_readiness(target=target, config=config)
+
+        self.assertTrue(document["conditional_actions"])
+        self.assertEqual(
+            document["summary"]["missing_evidence"], len(document["tools"])
+        )
+        self.assertIn("Conditional evidence", render_readiness(document))
 
 
 if __name__ == "__main__":

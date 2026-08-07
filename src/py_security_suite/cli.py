@@ -10,10 +10,16 @@ from pathlib import Path
 from . import __version__
 from .config import ConfigurationError, PROFILE_TOOLS, load_config
 from .doctor import assess_readiness, render_readiness
+from .effectiveness_corpus import evaluate_report_corpus
 from .execution import sanitize_terminal_text
 from .orchestrator import scan_project
 from .policy import exit_code
-from .passport import create_attestation, verify_attestation, verify_report
+from .passport import (
+    create_attestation,
+    sign_release_artifacts,
+    verify_attestation,
+    verify_report,
+)
 from .path_safety import resolve_regular_directory, resolve_unlinked_path
 from .report_inspection import (
     BUNDLED_SCHEMA_RESOURCES,
@@ -135,6 +141,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="reviewed Cosign v3 signing configuration (public or private service)",
     )
     attest.add_argument("--overwrite", action="store_true")
+
+    sign_artifacts = subparsers.add_parser(
+        "sign-artifacts",
+        help="create digest-bound Sigstore bundles for release distributions",
+    )
+    sign_artifacts.add_argument("artifacts", type=Path, metavar="ARTIFACT_DIRECTORY")
+    sign_artifacts.add_argument("--output", type=Path, required=True)
+    sign_artifacts.add_argument("--signing-key", type=Path, required=True)
+    sign_artifacts.add_argument("--signing-password-file", type=Path)
+    sign_artifacts.add_argument("--cosign-executable", default="cosign")
+    sign_artifacts.add_argument("--cosign-sha256", required=True)
+    sign_artifacts.add_argument("--allow-signing-network", action="store_true")
+    sign_artifacts.add_argument("--signing-config", type=Path)
+    sign_artifacts.add_argument("--overwrite", action="store_true")
 
     verify = subparsers.add_parser(
         "verify", help="verify a Security Passport and optional source report"
@@ -266,6 +286,22 @@ def build_parser() -> argparse.ArgumentParser:
     list_tools.add_argument("--profile", choices=sorted(PROFILE_TOOLS))
     list_tools.add_argument("--format", choices=("text", "json"), default="text")
 
+    benchmark = subparsers.add_parser(
+        "benchmark",
+        help="measure a verified report against a digest-bound labeled corpus",
+    )
+    benchmark.add_argument("report", type=Path, metavar="REPORT_DIRECTORY")
+    benchmark.add_argument("--corpus", type=Path, required=True)
+    benchmark.add_argument("--corpus-sha256", required=True)
+    benchmark.add_argument("--format", choices=("text", "json"), default="text")
+    benchmark.add_argument(
+        "--output",
+        type=Path,
+        metavar="FILE",
+        help="atomically publish the effectiveness evaluation outside the sealed report",
+    )
+    benchmark.add_argument("--overwrite", action="store_true")
+
     reachability = subparsers.add_parser(
         "reachability",
         help="build an offline Python entry-point and reachability graph",
@@ -313,155 +349,198 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "list-tools":
         return _list_tools_command(args)
     try:
-        if args.command == "schema":
-            return _schema_command(args)
-        if args.command == "reachability":
-            target = resolve_regular_directory(args.target, "reachability target")
-            document = analyze_project(
-                target,
-                configured_entry_points=tuple(args.entry_point),
-                configured_source_roots=tuple(args.source_root),
-                minimum_island_loc=args.minimum_island_loc,
-                discover_framework_roots=not args.no_framework_roots,
-                coverage_path=args.coverage,
-            )
-            print(
-                json.dumps(
-                    document,
-                    indent=2 if args.pretty else None,
-                    sort_keys=True,
-                    separators=None if args.pretty else (",", ":"),
-                )
-            )
-            return 0
-        if args.command == "doctor":
-            config = load_config(
-                organization_policy=args.policy,
-                repository_config=args.config,
-                profile_override=args.profile,
-            )
-            readiness = assess_readiness(target=args.target, config=config)
-            print(
-                json.dumps(readiness, indent=2, sort_keys=True)
-                if args.format == "json"
-                else render_readiness(readiness)
-            )
-            return 0 if readiness["ready"] else 2
-        if args.command == "attest":
-            material = create_attestation(
-                report=args.report,
-                output=args.output,
-                signing_key=args.signing_key,
-                signing_password_file=args.signing_password_file,
-                cosign_executable=args.cosign_executable,
-                cosign_sha256=args.cosign_sha256,
-                allow_signing_network=args.allow_signing_network,
-                signing_config=args.signing_config,
-                overwrite=args.overwrite,
-            )
-            print(json.dumps(material, sort_keys=True))
-            return 0
-        if args.command == "verify":
-            verification = verify_attestation(
-                passport=args.passport,
-                report=args.report,
-                public_key=args.public_key,
-                artifact_root=args.artifact_root,
-                cosign_executable=args.cosign_executable,
-                cosign_sha256=args.cosign_sha256,
-                allow_unsigned=args.allow_unsigned,
-            )
-            print(
-                _render_attestation_verification(verification)
-                if args.format == "text"
-                else json.dumps(verification, sort_keys=True)
-            )
-            return 0 if verification.get("release_decision") == "approved" else 1
-        if args.command == "verify-report":
-            return _verify_report_command(args)
-        if args.command == "verify-inspection":
-            if args.overwrite and not args.output:
-                raise ValueError("verify-inspection --overwrite requires --output")
-            if args.output and args.format != "json":
-                raise ValueError("verify-inspection --output requires --format json")
-            verification = verify_inspection(
-                args.inspection,
-                report=args.report,
-                limit=args.limit,
-            )
-            rendered = (
-                json.dumps(verification, indent=2, sort_keys=True)
-                if args.format == "json"
-                else (
-                    "VERIFIED: inspection for scan "
-                    f"{verification['scan_id']}; "
-                    f"{verification['top_actions_verified']} prioritized actions "
-                    f"(limit {verification['action_limit']}); "
-                    "report checksum "
-                    f"{verification['report_checksums_sha256']}"
-                )
-            )
-            if args.output:
-                _write_inspection_output(
-                    report=args.report,
-                    output=args.output,
-                    content=rendered,
-                    overwrite=args.overwrite,
-                )
-            print(rendered)
-            return 0
-        if args.command == "inspect":
-            if args.overwrite and not args.output:
-                raise ValueError("inspect --overwrite requires --output")
-            inspection = inspect_report(args.report, limit=args.limit)
-            rendered = (
-                json.dumps(inspection, indent=2, sort_keys=True)
-                if args.format == "json"
-                else render_inspection(inspection, report_root=args.report)
-            )
-            if args.output:
-                _write_inspection_output(
-                    report=args.report,
-                    output=args.output,
-                    content=rendered,
-                    overwrite=args.overwrite,
-                )
-            print(rendered)
-            return 0
-        if args.network_isolated and args.diagnostic_without_isolation:
-            raise ValueError(
-                "--network-isolated and --diagnostic-without-isolation "
-                "cannot be used together"
-            )
-        target = resolve_regular_directory(args.target, "scan target")
-        output = _prepare_output(
-            target=target,
-            output=args.output,
-            overwrite=args.overwrite,
-        )
-        config = load_config(
-            organization_policy=args.policy,
-            repository_config=args.config,
-            profile_override=args.profile,
-        )
-        result = scan_project(
-            target=target,
-            output=output,
-            config=config,
-            network_isolation_attested=args.network_isolated,
-            diagnostic_without_isolation=args.diagnostic_without_isolation,
-            replace_existing=args.overwrite,
-        )
-        if args.github_summary:
-            _append_github_summary(output / "summary.md")
-        print(
-            f"{result.outcome.value.upper()}: {len(result.findings)} finding(s); "
-            f"report: {output}"
-        )
-        return exit_code(result.outcome)
-    except (ConfigurationError, OSError, ValueError) as exc:
+        return _dispatch_command(args)
+    except (ConfigurationError, OSError, TypeError, ValueError) as exc:
         _emit_cli_error(args, exc)
         return 3
+
+
+def _dispatch_command(args: argparse.Namespace) -> int:
+    handlers = {
+        "schema": _schema_command,
+        "benchmark": _benchmark_command,
+        "sign-artifacts": _sign_artifacts_command,
+        "reachability": _reachability_command,
+        "doctor": _doctor_command,
+        "attest": _attest_command,
+        "verify": _verify_attestation_command,
+        "verify-report": _verify_report_command,
+        "verify-inspection": _verify_inspection_command,
+        "inspect": _inspect_command,
+        "scan": _scan_command,
+    }
+    return handlers[args.command](args)
+
+
+def _sign_artifacts_command(args: argparse.Namespace) -> int:
+    material = sign_release_artifacts(
+        artifacts=args.artifacts,
+        output=args.output,
+        signing_key=args.signing_key,
+        signing_password_file=args.signing_password_file,
+        cosign_executable=args.cosign_executable,
+        cosign_sha256=args.cosign_sha256,
+        allow_signing_network=args.allow_signing_network,
+        signing_config=args.signing_config,
+        overwrite=args.overwrite,
+    )
+    print(json.dumps(material, sort_keys=True))
+    return 0
+
+
+def _reachability_command(args: argparse.Namespace) -> int:
+    target = resolve_regular_directory(args.target, "reachability target")
+    document = analyze_project(
+        target,
+        configured_entry_points=tuple(args.entry_point),
+        configured_source_roots=tuple(args.source_root),
+        minimum_island_loc=args.minimum_island_loc,
+        discover_framework_roots=not args.no_framework_roots,
+        coverage_path=args.coverage,
+    )
+    print(
+        json.dumps(
+            document,
+            indent=2 if args.pretty else None,
+            sort_keys=True,
+            separators=None if args.pretty else (",", ":"),
+        )
+    )
+    return 0
+
+
+def _doctor_command(args: argparse.Namespace) -> int:
+    config = load_config(
+        organization_policy=args.policy,
+        repository_config=args.config,
+        profile_override=args.profile,
+    )
+    readiness = assess_readiness(target=args.target, config=config)
+    print(
+        json.dumps(readiness, indent=2, sort_keys=True)
+        if args.format == "json"
+        else render_readiness(readiness)
+    )
+    return 0 if readiness["ready"] else 2
+
+
+def _attest_command(args: argparse.Namespace) -> int:
+    material = create_attestation(
+        report=args.report,
+        output=args.output,
+        signing_key=args.signing_key,
+        signing_password_file=args.signing_password_file,
+        cosign_executable=args.cosign_executable,
+        cosign_sha256=args.cosign_sha256,
+        allow_signing_network=args.allow_signing_network,
+        signing_config=args.signing_config,
+        overwrite=args.overwrite,
+    )
+    print(json.dumps(material, sort_keys=True))
+    return 0
+
+
+def _verify_attestation_command(args: argparse.Namespace) -> int:
+    verification = verify_attestation(
+        passport=args.passport,
+        report=args.report,
+        public_key=args.public_key,
+        artifact_root=args.artifact_root,
+        cosign_executable=args.cosign_executable,
+        cosign_sha256=args.cosign_sha256,
+        allow_unsigned=args.allow_unsigned,
+    )
+    print(
+        _render_attestation_verification(verification)
+        if args.format == "text"
+        else json.dumps(verification, sort_keys=True)
+    )
+    return 0 if verification.get("release_decision") == "approved" else 1
+
+
+def _verify_inspection_command(args: argparse.Namespace) -> int:
+    if args.overwrite and not args.output:
+        raise ValueError("verify-inspection --overwrite requires --output")
+    if args.output and args.format != "json":
+        raise ValueError("verify-inspection --output requires --format json")
+    verification = verify_inspection(
+        args.inspection,
+        report=args.report,
+        limit=args.limit,
+    )
+    rendered = (
+        json.dumps(verification, indent=2, sort_keys=True)
+        if args.format == "json"
+        else (
+            "VERIFIED: inspection for scan "
+            f"{verification['scan_id']}; "
+            f"{verification['top_actions_verified']} prioritized actions "
+            f"(limit {verification['action_limit']}); report checksum "
+            f"{verification['report_checksums_sha256']}"
+        )
+    )
+    if args.output:
+        _write_inspection_output(
+            report=args.report,
+            output=args.output,
+            content=rendered,
+            overwrite=args.overwrite,
+        )
+    print(rendered)
+    return 0
+
+
+def _inspect_command(args: argparse.Namespace) -> int:
+    if args.overwrite and not args.output:
+        raise ValueError("inspect --overwrite requires --output")
+    inspection = inspect_report(args.report, limit=args.limit)
+    rendered = (
+        json.dumps(inspection, indent=2, sort_keys=True)
+        if args.format == "json"
+        else render_inspection(inspection, report_root=args.report)
+    )
+    if args.output:
+        _write_inspection_output(
+            report=args.report,
+            output=args.output,
+            content=rendered,
+            overwrite=args.overwrite,
+        )
+    print(rendered)
+    return 0
+
+
+def _scan_command(args: argparse.Namespace) -> int:
+    if args.network_isolated and args.diagnostic_without_isolation:
+        raise ValueError(
+            "--network-isolated and --diagnostic-without-isolation cannot be used together"
+        )
+    target = resolve_regular_directory(args.target, "scan target")
+    output = _prepare_output(
+        target=target,
+        output=args.output,
+        overwrite=args.overwrite,
+    )
+    config = load_config(
+        organization_policy=args.policy,
+        repository_config=args.config,
+        profile_override=args.profile,
+    )
+    result = scan_project(
+        target=target,
+        output=output,
+        config=config,
+        network_isolation_attested=args.network_isolated,
+        diagnostic_without_isolation=args.diagnostic_without_isolation,
+        replace_existing=args.overwrite,
+    )
+    if args.github_summary:
+        _append_github_summary(output / "summary.md")
+    print(
+        f"{result.outcome.value.upper()}: {len(result.findings)} finding(s); "
+        f"report: {output}"
+    )
+    return exit_code(result.outcome)
 
 
 def _schema_command(args: argparse.Namespace) -> int:
@@ -478,6 +557,42 @@ def _schema_command(args: argparse.Namespace) -> int:
         )
     print(rendered_schema)
     return 0
+
+
+def _benchmark_command(args: argparse.Namespace) -> int:
+    if args.overwrite and not args.output:
+        raise ValueError("benchmark --overwrite requires --output")
+    result = evaluate_report_corpus(
+        args.report,
+        args.corpus,
+        corpus_sha256=args.corpus_sha256,
+    )
+    rendered_json = json.dumps(result, indent=2, sort_keys=True)
+    if args.output:
+        _write_atomic_output(
+            output=args.output,
+            content=rendered_json,
+            overwrite=args.overwrite,
+            label="effectiveness benchmark output",
+            forbidden_root=args.report,
+        )
+    if args.format == "json":
+        print(rendered_json)
+    else:
+        metrics = result["metrics"]
+        matrix = result["confusion_matrix"]
+        print(
+            f"{str(result['verdict']).upper()}: "
+            f"precision {_metric_text(metrics['precision'])}; "
+            f"recall {_metric_text(metrics['recall'])}; "
+            f"TP {matrix['true_positive']}, FP {matrix['false_positive']}, "
+            f"FN {matrix['false_negative']}, TN {matrix['true_negative']}"
+        )
+    return 0 if result["verdict"] == "pass" else 1
+
+
+def _metric_text(value: object) -> str:
+    return "not measured" if value is None else f"{float(str(value)) * 100:.2f}%"
 
 
 def _verify_report_command(args: argparse.Namespace) -> int:
@@ -522,7 +637,8 @@ def _list_tools_command(args: argparse.Namespace) -> int:
 
 
 def _emit_cli_error(
-    args: argparse.Namespace, exc: ConfigurationError | OSError | ValueError
+    args: argparse.Namespace,
+    exc: ConfigurationError | OSError | TypeError | ValueError,
 ) -> None:
     message = sanitize_terminal_text(str(exc))
     code = (

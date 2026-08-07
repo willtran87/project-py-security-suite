@@ -14,6 +14,7 @@ verification happen inside an enterprise-controlled isolated boundary.
 | Install and operate without Docker or internet access | [Operations](operations.md) |
 | Configure profiles, policy, ownership, and exit behavior | [Configuration](configuration.md) |
 | Trace entry points and investigate disconnected code | [Python reachability](reachability.md) |
+| Measure scanner execution and labeled detection effectiveness | [Effectiveness](effectiveness.md) |
 | Compare scanner coverage and platform support | [Compatibility matrix](compatibility-matrix.md) |
 | Enforce a production release gate | [Production security](production-security.md) |
 | Verify provenance, risk intelligence, and passports | [Security Passport](security-passport.md) |
@@ -78,26 +79,30 @@ platform support, and acquisition requirements.
 | Applicable and completed | 36 / 36 |
 | Correctly not applicable | 27 |
 | Unavailable, failed, timed out, or parse errors | 0 |
-| Policy outcome | `INCOMPLETE` — offline KEV and EPSS snapshots exceed the 3-day policy by 1.91 days |
+| Policy outcome | `INCOMPLETE` — external network-isolation attestation was not provided |
 | Normalized findings | 2 expected Cosign bundle findings |
-| Reachability graph | Schema 1.1; 4 roots; 964 nodes; 6,983 explained edges |
-| Reachability states | 871 executable; 93 load-only; 0 disconnected; 0 reportable islands |
-| Runtime corroboration | 871/871 executable nodes observed; 92/93 load-only nodes observed by tests |
-| Tests | 319 passed, 1 platform-limited skip |
-| Combined line and branch coverage | 92.55% |
-| Branch coverage | 85.96% |
-| Per-file coverage threshold | 80%; no production hotspot below threshold |
+| Reachability graph | Schema 1.2; per-island confidence and explained edges |
+| Reachability states | 933 executable; 88 load-only; 0 disconnected; 0 reportable islands |
+| Runtime corroboration | 933/933 executable nodes observed; 87/88 load-only nodes observed by tests |
+| Tests | 355 passed, 1 platform-limited skip |
+| Combined line and branch coverage | 91.74% |
+| Branch coverage | 84.75% |
+| Changed-line coverage | 89%; every changed production file meets the 80% threshold |
+| Operational portfolio | Grade A; 36/36 applicable control slots completed across 12 domains |
+| Labeled self-scan benchmark | PASS; 1 TP, 1 TN, 0 FP, 0 FN |
 
-The 2026-08-06 self-scan is in `.artifacts/reachability-selfscan-v8`. It correctly
-fails closed as `INCOMPLETE`: the digest-pinned KEV and EPSS snapshots are 5.00
-days old, exceeding the comprehensive policy maximum of 3 days. All applicable
-scanners still completed, and the only normalized findings are the two expected
-missing Cosign bundles for the wheel and source distribution. Code security,
-secrets, dependency vulnerabilities, architecture, and quality were clean. All
-38 observed scanner entry points were unchanged after execution; 25 bindings
-across 22 unique digests remain candidates for organization provenance approval.
-Refresh and approve the intelligence snapshots, rerun, then sign both exact
-artifacts before release.
+The 2026-08-06 self-scan is in `.artifacts/maturity-selfscan-v7`. Its 92-file
+checksum seal and semantic contracts verify. All applicable scanners completed,
+and the only normalized findings are the two expected missing Cosign bundles for
+the wheel and source distribution. Code security, secrets, dependency
+vulnerabilities, architecture, and quality were clean. The digest-pinned KEV and
+EPSS inputs were fresh, locally validated snapshots whose approval status remains
+`pending-review`. All 38 observed scanner entry points were unchanged after
+execution; 25 bindings across 22 unique digests remain candidates for
+organization provenance approval. The result correctly remains `INCOMPLETE`
+because the host run did not provide an external network-isolation attestation.
+Approve the governed intelligence and scanner catalog, rerun inside the enforced
+isolated boundary, then sign both exact release artifacts.
 
 The report contains:
 
@@ -107,7 +112,8 @@ The report contains:
 - normalized findings, scanner evidence, applicability, and integrity records;
 - source and artifact CycloneDX SBOMs plus artifact SHA-256 identities;
 - reachability topology and representative entry-point sequences;
-- risk-intelligence, lifecycle, effectiveness, and SSDF claim evidence; and
+- risk-intelligence, lifecycle, effectiveness, and SSDF claim evidence;
+- operational domain coverage and scanner-trust application evidence; and
 - an exact checksum manifest and Security Passport statement.
 
 The companion proof at `.artifacts/detection-validation-v7` records six expected

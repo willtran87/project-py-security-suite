@@ -129,6 +129,7 @@ flowchart TD
     Guard["Policy weakening guard"]
     Inventory["Target inventory + initial content digest<br/>tool/cache directories excluded"]
     Orchestrator["Orchestrator<br/>bounded parallel execution"]
+    TrustCatalog["Organization trust catalog<br/>digest-bound + approved + expiring"]
     ToolTrust["Entry-point trust gate<br/>resolve + SHA-256 + approved digest"]
     FinalSnapshot["Final target content digest"]
 
@@ -150,6 +151,7 @@ flowchart TD
     Report["Report writers"]
 
     CLI --> Config --> Guard --> Inventory --> Orchestrator --> ToolTrust
+    TrustCatalog --> ToolTrust
     ToolTrust --> Fast
     ToolTrust --> Quality
     ToolTrust --> Tests
@@ -180,8 +182,10 @@ closed.
 
 Subprocesses receive a reduced environment and a disposable private home,
 app-data, and cache root. Ambient proxy variables and user site packages are
-not forwarded. Raw scanner output is not retained in the report; evidence
-contains sanitized tool health and output digests.
+not forwarded. A timeout or interruption terminates the scanner's complete
+process tree and waits for cleanup, preventing orphaned child analyzers. Raw
+scanner output is not retained in the report; evidence contains sanitized tool
+health and output digests.
 
 ### Enforced suite architecture
 
@@ -619,7 +623,7 @@ The native Windows self-scan process verifies:
   maximum; the suite failed closed despite complete scanner execution;
 - exactly two high-severity Cosign observations remain for intentionally absent
   wheel and source-distribution bundles, with no testing-coverage findings; and
-- the bundled reachability analyzer completed its schema-1.1 three-state model
+- the bundled reachability analyzer completed its schema-1.2 three-state model
   at medium confidence because bounded polymorphic dispatch was used: four roots,
   73 modules, 964 nodes, 6,983 explained edges, 871 executable nodes, 93 load-only
   nodes, no disconnected nodes, and no reportable islands; coverage corroborated

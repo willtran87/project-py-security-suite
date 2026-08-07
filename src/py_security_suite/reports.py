@@ -29,6 +29,7 @@ from .passport import (
     verify_report,
 )
 from .prioritization import finding_order_key, finding_priority
+from .portfolio_health import portfolio_health_artifact
 from .source_context import source_language
 
 
@@ -314,6 +315,7 @@ def render_summary(manifest: ScanManifest, findings: list[Finding]) -> str:
     lines.extend(f"- {reason}" for reason in manifest.policy_reasons)
     lines.extend(_render_finding_lifecycle(manifest, active_findings))
     lines.extend(_render_finding_rollups(active_findings))
+    lines.extend(_render_portfolio_health(active_findings, manifest.tools))
     lines.extend(_render_markdown_findings(active_findings, tool_versions))
     lines.extend(_render_tool_coverage(manifest.tools, coverage_gaps, not_applicable))
     lines.extend(_render_coverage_actions(manifest, coverage_gaps, not_applicable))
@@ -421,6 +423,36 @@ def _render_finding_rollups(active_findings: list[Finding]) -> list[str]:
         )
     if not active_findings:
         lines.append("| No findings | 0 | 0 | 0 | 0 | 0 | 0 |")
+    return lines
+
+
+def _render_portfolio_health(
+    findings: list[Finding], tools: list[ToolRun]
+) -> list[str]:
+    health = portfolio_health_artifact(findings, tools)
+    overall = health["overall"]
+    lines = [
+        "",
+        "## Operational coverage by domain",
+        "",
+        (
+            f"**Grade {overall['grade']}** — {overall['completed_control_slots']}/"
+            f"{overall['applicable_control_slots']} applicable control slots completed. "
+            "This measures execution coverage, not vulnerability absence or certification."
+        ),
+        "",
+        "| Domain | Grade | Status | Completed / applicable | Findings | Blocking | Gaps |",
+        "|---|:---:|---|---:|---:|---:|---|",
+    ]
+    for row in health["domains"]:
+        gaps = ", ".join(row["execution_gaps"]) or "-"
+        lines.append(
+            f"| {_markdown_table(row['domain'])} | {row['grade']} | "
+            f"{_markdown_table(row['status'].replace('_', ' '))} | "
+            f"{row['completed_tools']}/{row['applicable_tools']} | "
+            f"{row['active_findings']} | {row['blocking_findings']} | "
+            f"{_markdown_table(gaps)} |"
+        )
     return lines
 
 

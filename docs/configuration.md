@@ -21,6 +21,28 @@ flowchart LR
 Unknown sections, keys, tools, profiles, and invalid values are rejected.
 Repository settings cannot weaken isolation or organization-required policy.
 
+## Scanner trust catalog
+
+An organization may replace repetitive per-tool digest declarations with one
+reviewed, digest-bound catalog:
+
+```toml
+[trust]
+catalog_path = "security-data/scanner-trust.json"
+catalog_sha256 = "<organization-approved-catalog-sha256>"
+```
+
+The catalog records the exact primary or auxiliary executable SHA-256, tool
+version, provenance source, approver, expiry, and applicable platforms. Its
+`status` must be `approved`; drafts are rejected. Expired, malformed,
+digest-mismatched, or duplicate entries fail closed. An explicit per-tool
+digest always takes precedence, and repository configuration cannot replace an
+organization-approved catalog digest.
+
+Export the strict contract with `pysec schema scanner-trust-catalog-1.0`.
+Every scan retains applied, ignored, and invalid catalog decisions in
+`scanner-trust.json`.
+
 ## Profiles
 
 The original `quick` and `standard` contracts remain unchanged. New profiles

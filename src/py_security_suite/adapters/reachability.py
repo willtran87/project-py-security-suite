@@ -80,7 +80,9 @@ class ReachabilityAdapter(ScannerAdapter):
                 _island_finding(
                     island,
                     entry_point_count=entry_point_count,
-                    confidence=confidence,
+                    confidence=_confidence(island.get("confidence"))
+                    if island.get("confidence") is not None
+                    else confidence,
                     dynamic_features=dynamic_features,
                     precision_features=precision_features,
                 )
@@ -95,7 +97,7 @@ def _document(payload: str) -> dict[str, Any]:
     document = json.loads(payload)
     if not isinstance(document, dict):
         raise TypeError("reachability output must be an object")
-    if document.get("schema_version") != "1.1":
+    if document.get("schema_version") not in {"1.1", "1.2"}:
         raise ValueError("unsupported reachability schema version")
     for key, expected in (
         ("analysis", dict),
@@ -115,7 +117,48 @@ def _document(payload: str) -> dict[str, Any]:
         document["precision_features"], list
     ):
         raise TypeError("reachability output precision_features must be list")
+    _validate_document_values(document)
     return document
+
+
+def _validate_document_values(document: dict[str, Any]) -> None:
+    confidence = document["analysis"].get("confidence")
+    if not isinstance(confidence, str):
+        raise TypeError("reachability analysis confidence must be a string")
+    count = document["summary"].get("entry_points")
+    if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+        raise TypeError(
+            "reachability summary entry_points must be a non-negative integer"
+        )
+    for name in ("dynamic_features", "precision_features", "warnings", "errors"):
+        values = document.get(name, [])
+        if any(not isinstance(value, str) for value in values):
+            raise TypeError(f"reachability output {name} must contain only strings")
+    for index, island in enumerate(document["islands"]):
+        if not isinstance(island, dict):
+            raise TypeError(f"reachability island {index} must be an object")
+        state = island.get("state", "disconnected")
+        if state not in {"executable", "load-only", "disconnected"}:
+            raise ValueError(f"reachability island {index} has invalid state")
+        candidate_confidence = island.get("confidence")
+        if candidate_confidence is not None and candidate_confidence not in {
+            "low",
+            "medium",
+            "high",
+        }:
+            raise ValueError(f"reachability island {index} has invalid confidence")
+        for key in ("primary_path",):
+            raw_path = island.get(key)
+            if raw_path is not None:
+                _validate_relative_path(str(raw_path), f"island {index} {key}")
+        for raw_path in island.get("paths", []):
+            _validate_relative_path(str(raw_path), f"island {index} path")
+
+
+def _validate_relative_path(value: str, label: str) -> None:
+    path = Path(value.replace("\\", "/"))
+    if path.is_absolute() or ".." in path.parts:
+        raise ValueError(f"reachability {label} must stay within the scan target")
 
 
 def _island_finding(
@@ -227,6 +270,7 @@ def _island_finding(
             "symbols": _strings(island.get("symbols")),
             "dynamic_features": dynamic_features,
             "precision_features": precision_features,
+            "confidence_factors": _strings(island.get("confidence_factors")),
             "reason": str(island.get("reason") or "no static path"),
             "triage": triage,
         },

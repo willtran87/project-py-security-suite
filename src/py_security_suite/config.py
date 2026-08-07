@@ -367,6 +367,12 @@ class IntelligenceConfig:
 
 
 @dataclass(slots=True)
+class TrustConfig:
+    catalog_path: Path | None = None
+    catalog_sha256: str = ""
+
+
+@dataclass(slots=True)
 class ToolConfig:
     enabled: bool = True
     executable: str = ""
@@ -401,6 +407,7 @@ class SuiteConfig:
     policy: PolicyConfig = field(default_factory=PolicyConfig)
     reports: ReportsConfig = field(default_factory=ReportsConfig)
     intelligence: IntelligenceConfig = field(default_factory=IntelligenceConfig)
+    trust: TrustConfig = field(default_factory=TrustConfig)
     tools: dict[str, ToolConfig] = field(default_factory=dict)
 
     @property
@@ -473,6 +480,10 @@ def _default_mapping() -> dict[str, Any]:
             "maximum_age_days": 3.0,
             "epss_high_probability": 0.1,
             "epss_high_percentile": 0.9,
+        },
+        "trust": {
+            "catalog_path": None,
+            "catalog_sha256": "",
         },
         "tools": {
             "bandit": {
@@ -889,6 +900,7 @@ def _ensure_known(mapping: Mapping[str, Any]) -> None:
         "policy",
         "reports",
         "intelligence",
+        "trust",
         "tools",
     }
     sections = {
@@ -917,6 +929,7 @@ def _ensure_known(mapping: Mapping[str, Any]) -> None:
             "epss_high_probability",
             "epss_high_percentile",
         },
+        "trust": {"catalog_path", "catalog_sha256"},
     }
     unknown = set(mapping) - top
     if unknown:
@@ -989,6 +1002,12 @@ def _reject_weaker_repository_policy(
         repository.get("reports", {}),
         section="reports",
         digests=("baseline_sha256",),
+    )
+    _reject_weaker_evidence_settings(
+        organization.get("trust", {}),
+        repository.get("trust", {}),
+        section="trust",
+        digests=("catalog_sha256",),
     )
     _reject_weaker_tool_settings(
         organization.get("tools", {}), repository.get("tools", {})
@@ -1182,6 +1201,7 @@ def _to_config(mapping: Mapping[str, Any]) -> SuiteConfig:
     policy = _policy_config(mapping["policy"], profile)
     reports = _reports_config(mapping["reports"])
     intelligence = _intelligence_config(mapping["intelligence"])
+    trust = _trust_config(mapping["trust"])
     tool_configs = _tool_configs(mapping["tools"])
     _validate_required_tools(
         policy.required_scanners or PROFILE_TOOLS[profile], tool_configs
@@ -1195,6 +1215,7 @@ def _to_config(mapping: Mapping[str, Any]) -> SuiteConfig:
         policy=policy,
         reports=reports,
         intelligence=intelligence,
+        trust=trust,
         tools=tool_configs,
     )
 
@@ -1309,6 +1330,20 @@ def _intelligence_config(data: Mapping[str, Any]) -> IntelligenceConfig:
                 f"intelligence.{threshold_name} must be between 0 and 1"
             )
     return config
+
+
+def _trust_config(data: Mapping[str, Any]) -> TrustConfig:
+    path = data.get("catalog_path")
+    digest = str(data.get("catalog_sha256") or "").lower()
+    _validate_digest("trust", "catalog_sha256", digest)
+    if bool(path) != bool(digest):
+        raise ConfigurationError(
+            "trust.catalog_path and trust.catalog_sha256 must be configured together"
+        )
+    return TrustConfig(
+        catalog_path=Path(str(path)).expanduser() if path else None,
+        catalog_sha256=digest,
+    )
 
 
 def _tool_configs(data: Mapping[str, Any]) -> dict[str, ToolConfig]:

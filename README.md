@@ -39,6 +39,7 @@ Markdown is the canonical documentation format:
 - [Native and GitHub operations](docs/operations.md)
 - [Configuration reference](docs/configuration.md)
 - [Python reachability and code-island analysis](docs/reachability.md)
+- [Detection effectiveness and operational coverage](docs/effectiveness.md)
 - [Compatibility and coverage matrix](docs/compatibility-matrix.md)
 - [Tool-selection and portfolio governance](docs/tool-selection.md)
 - [Production security gate](docs/production-security.md)
@@ -155,6 +156,20 @@ exact contracts from the installed package and prints them
 or atomically exports them for disconnected validators. Names are deliberately
 version-explicit; there is no network lookup and no ambiguous `latest` alias.
 Existing exports are preserved unless `--overwrite` is supplied.
+
+Every report also includes `portfolio-health.json`, a 12-domain operational
+coverage scorecard, and `effectiveness.json`, which measures attribution and
+actionability without pretending to measure detection accuracy. Measure actual
+precision and recall with a separately reviewed labeled corpus:
+
+```text
+pysec benchmark REPORT --corpus CORPUS.json \
+  --corpus-sha256 APPROVED_SHA256 --format json \
+  --output effectiveness-evaluation.json
+```
+
+The strict contracts are exported offline with `pysec schema
+effectiveness-corpus-1.0` and `effectiveness-evaluation-1.0`.
 
 Commands with `--format json` return failures on standard error using one stable
 envelope with `status`, `command`, and a coded `error`; `attest` uses the same

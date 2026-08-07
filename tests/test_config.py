@@ -125,6 +125,33 @@ class ConfigTests(unittest.TestCase):
             )
             with self.assertRaisesRegex(ConfigurationError, "configured together"):
                 load_config(repository_config=config_path)
+
+    def test_trust_catalog_requires_digest_and_cannot_be_replaced(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            policy_path = root / "policy.toml"
+            config_path = root / "pysec.toml"
+            policy_path.write_text(
+                f'[trust]\ncatalog_path = "trust.json"\ncatalog_sha256 = "{"a" * 64}"\n',
+                encoding="utf-8",
+            )
+            config_path.write_text(
+                f'[trust]\ncatalog_path = "trust.json"\ncatalog_sha256 = "{"b" * 64}"\n',
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                ConfigurationError, "cannot change.*trust.catalog_sha256"
+            ):
+                load_config(
+                    organization_policy=policy_path,
+                    repository_config=config_path,
+                )
+
+            config_path.write_text(
+                '[trust]\ncatalog_path = "trust.json"\n', encoding="utf-8"
+            )
+            with self.assertRaisesRegex(ConfigurationError, "configured together"):
+                load_config(repository_config=config_path)
             config_path.write_text(
                 '[reports]\nbaseline_path = "previous/findings.json"\n',
                 encoding="utf-8",

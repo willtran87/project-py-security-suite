@@ -72,13 +72,33 @@ class PolicyTests(unittest.TestCase):
         ]
 
     def test_missing_attestation_is_incomplete(self) -> None:
+        item = finding(Severity.HIGH)
         decision = evaluate_policy(
             config=self.config,
-            findings=[],
+            findings=[item],
             tool_runs=self.completed,
             network_isolation_attested=False,
         )
         self.assertEqual(decision.outcome, Outcome.INCOMPLETE)
+        self.assertTrue(item.blocking)
+
+    def test_release_provenance_is_blocking_even_when_severity_policy_is_weak(
+        self,
+    ) -> None:
+        item = finding(Severity.LOW)
+        item.area = "artifact-provenance"
+        self.config.profile = "release"
+        self.config.policy.block_severities = (Severity.CRITICAL,)
+
+        decision = evaluate_policy(
+            config=self.config,
+            findings=[item],
+            tool_runs=self.completed,
+            network_isolation_attested=False,
+        )
+
+        self.assertEqual(decision.outcome, Outcome.INCOMPLETE)
+        self.assertTrue(item.blocking)
 
     def test_required_tool_failure_is_incomplete_not_clean(self) -> None:
         self.completed[0].status = ToolStatus.PARSE_ERROR
