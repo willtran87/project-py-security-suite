@@ -210,12 +210,15 @@ actionable report item rather than an opaque scanner failure.
 The bundled [reachability analyzer](reachability.md) adds a second structural
 view. It follows bounded, typed AST edges from declared or discovered application
 roots and separates executable, load-only, and disconnected code. Direct calls,
-bounded polymorphic dispatch, callback references, and recognized framework hooks
-are distinct from imports and definitions; every node and edge explains its
-confidence and predecessor. Optional coverage.py JSON adds observed,
-not-observed, or not-measured corroboration. The sealed `reachability.json`
-records representative execution sequences and ranked islands without importing
-or executing target code.
+constructor lifecycle, concrete imported/local receivers, bounded polymorphic
+dispatch, callback references, literal internal dynamic imports, and recognized
+framework configuration or registration are distinct from imports and
+definitions. Statically false and `TYPE_CHECKING` branches are pruned. Every node
+and edge explains its confidence and predecessor. Optional coverage.py JSON adds
+observed, not-observed, or not-measured corroboration. The sealed
+`reachability.json` records representative execution sequences, applied precision
+features, and ranked islands with removal readiness, blockers, and ordered actions
+without importing or executing target code.
 
 ## Scan sequence
 

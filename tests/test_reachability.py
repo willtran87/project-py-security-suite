@@ -180,6 +180,144 @@ where = ["src"]
         self.assertEqual(hook["reachability"]["edge_kind"], "framework-dispatch")
         self.assertEqual(hook["reachability"]["confidence"], "high")
 
+    def test_constructor_lifecycle_and_typed_receivers_are_executable(self) -> None:
+        package = self.root / "src" / "example"
+        (package / "workers.py").write_text(
+            "class Worker:\n"
+            "    def __init__(self):\n"
+            "        self.ready = True\n\n"
+            "    def run(self):\n"
+            "        return self.ready\n",
+            encoding="utf-8",
+        )
+        (package / "cli.py").write_text(
+            "from .workers import Worker\n\n"
+            "def main():\n"
+            "    worker = Worker()\n"
+            "    worker.run()\n"
+            "    return Worker().run()\n",
+            encoding="utf-8",
+        )
+
+        document = analyze_project(self.root, minimum_island_loc=1)
+        nodes = {item["id"]: item for item in document["nodes"]}
+
+        self.assertEqual(
+            nodes["symbol:example.workers:Worker.__init__"]["state"], "executable"
+        )
+        self.assertEqual(
+            nodes["symbol:example.workers:Worker.run"]["state"], "executable"
+        )
+        self.assertIn("constructor-lifecycle", document["precision_features"])
+        self.assertIn("typed-receiver-resolution", document["precision_features"])
+        self.assertTrue(
+            any(
+                edge["kind"] == "constructor-dispatch"
+                and edge["target"].endswith("Worker.__init__")
+                for edge in document["edges"]
+            )
+        )
+
+    def test_literal_dynamic_import_resolves_internal_module_without_uncertainty(
+        self,
+    ) -> None:
+        package = self.root / "src" / "example"
+        (package / "plugin.py").write_text(
+            "INITIALIZED = True\n",
+            encoding="utf-8",
+        )
+        (package / "service.py").write_text(
+            "import importlib\n\n"
+            "def run():\n"
+            "    return importlib.import_module('example.plugin')\n",
+            encoding="utf-8",
+        )
+
+        document = analyze_project(self.root, minimum_island_loc=1)
+        plugin = next(
+            item for item in document["nodes"] if item["id"] == "module:example.plugin"
+        )
+
+        self.assertEqual(document["analysis"]["confidence"], "high")
+        self.assertEqual(plugin["state"], "load-only")
+        self.assertIn(
+            "resolved-literal-dynamic-import:example.plugin",
+            document["dynamic_features"],
+        )
+        self.assertIn(
+            "literal-dynamic-import-resolution", document["precision_features"]
+        )
+
+    def test_type_checking_imports_do_not_create_runtime_reachability(self) -> None:
+        package = self.root / "src" / "example"
+        (package / "typing_only.py").write_text(
+            "class DevelopmentType:\n    pass\n",
+            encoding="utf-8",
+        )
+        (package / "cli.py").write_text(
+            "from typing import TYPE_CHECKING\n"
+            "from .service import run\n\n"
+            "if TYPE_CHECKING:\n"
+            "    from .typing_only import DevelopmentType\n\n"
+            "def main():\n"
+            "    return run()\n",
+            encoding="utf-8",
+        )
+
+        document = analyze_project(self.root, minimum_island_loc=1)
+        nodes = {item["id"]: item for item in document["nodes"]}
+
+        self.assertEqual(nodes["module:example.typing_only"]["state"], "disconnected")
+        self.assertIn("static-branch-pruning", document["precision_features"])
+
+    def test_django_runtime_configuration_and_url_registration_are_traced(
+        self,
+    ) -> None:
+        package = self.root / "src" / "example"
+        (package / "wsgi.py").write_text(
+            "import os\n\n"
+            "os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'example.settings')\n"
+            "application = object()\n",
+            encoding="utf-8",
+        )
+        (package / "settings.py").write_text(
+            "ROOT_URLCONF = 'example.urls'\n",
+            encoding="utf-8",
+        )
+        (package / "urls.py").write_text(
+            "from django.urls import path\n"
+            "from .views import home\n\n"
+            "urlpatterns = [path('/', home)]\n",
+            encoding="utf-8",
+        )
+        (package / "views.py").write_text(
+            "def home(request):\n    return 'ok'\n",
+            encoding="utf-8",
+        )
+
+        document = analyze_project(self.root, minimum_island_loc=1)
+        nodes = {item["id"]: item for item in document["nodes"]}
+        entry_kinds = {item["kind"] for item in document["entry_points"]}
+
+        self.assertIn("framework-runtime-module", entry_kinds)
+        self.assertEqual(nodes["symbol:example.views:home"]["state"], "executable")
+        self.assertIn(
+            "framework-configuration-resolution", document["precision_features"]
+        )
+        self.assertIn(
+            "framework-registration-resolution", document["precision_features"]
+        )
+        self.assertTrue(
+            any(edge["kind"] == "framework-config" for edge in document["edges"])
+        )
+        self.assertTrue(
+            any(
+                edge["kind"] == "registration-dispatch"
+                and edge["target"].endswith(":home")
+                for edge in document["edges"]
+            )
+        )
+
     def test_coverage_evidence_corroborates_static_states_without_reclassifying(
         self,
     ) -> None:
@@ -288,6 +426,19 @@ where = ["src"]
         self.assertTrue(
             any("Dynamic loading" in warning for warning in document["warnings"])
         )
+
+    def test_islands_include_removal_readiness_and_ordered_actions(self) -> None:
+        document = analyze_project(self.root, minimum_island_loc=1)
+        island = next(
+            item for item in document["islands"] if item["state"] == "disconnected"
+        )
+
+        self.assertEqual(island["triage"]["evidence_strength"], "static-only")
+        self.assertEqual(
+            island["triage"]["removal_readiness"], "manual-validation-required"
+        )
+        self.assertTrue(island["triage"]["blocking_factors"])
+        self.assertGreaterEqual(len(island["triage"]["recommended_actions"]), 2)
 
     def test_missing_and_invalid_roots_make_conclusions_incomplete(self) -> None:
         (self.root / "pyproject.toml").write_text(
@@ -405,11 +556,19 @@ class ReachabilityAdapterTests(unittest.TestCase):
                     "paths": ["src/example/legacy.py"],
                     "reportable": True,
                     "reason": "no static path",
+                    "triage": {
+                        "priority": "high",
+                        "evidence_strength": "static-only",
+                        "removal_readiness": "manual-validation-required",
+                        "blocking_factors": ["coverage is missing"],
+                        "recommended_actions": ["Collect representative coverage."],
+                    },
                 }
             ],
             "nodes": [],
             "edges": [],
             "dynamic_features": ["importlib.import_module"],
+            "precision_features": ["constructor-lifecycle"],
             "warnings": [],
             "errors": [],
         }
@@ -434,6 +593,13 @@ class ReachabilityAdapterTests(unittest.TestCase):
         self.assertEqual(finding.area, "code-reachability")
         self.assertIn("CWE-561", finding.classifications)
         self.assertEqual(finding.locations[0].path, "src/example/legacy.py")
+        self.assertIn(
+            "Next action: Collect representative coverage.", finding.remediation
+        )
+        self.assertEqual(finding.evidence["triage"]["priority"], "high")
+        self.assertEqual(
+            finding.evidence["precision_features"], ["constructor-lifecycle"]
+        )
         self.assertEqual(
             adapter.derived_artifacts(payload, Path("."))["reachability.json"],
             document,

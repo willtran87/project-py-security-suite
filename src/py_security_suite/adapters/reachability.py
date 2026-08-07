@@ -72,6 +72,7 @@ class ReachabilityAdapter(ScannerAdapter):
             return findings
         confidence = _confidence(document["analysis"].get("confidence"))
         dynamic_features = [str(value) for value in document["dynamic_features"]]
+        precision_features = _strings(document.get("precision_features"))
         for island in document["islands"]:
             if not isinstance(island, dict) or not island.get("reportable"):
                 continue
@@ -81,6 +82,7 @@ class ReachabilityAdapter(ScannerAdapter):
                     entry_point_count=entry_point_count,
                     confidence=confidence,
                     dynamic_features=dynamic_features,
+                    precision_features=precision_features,
                 )
             )
         return findings
@@ -109,6 +111,10 @@ def _document(payload: str) -> dict[str, Any]:
     ):
         if not isinstance(document.get(key), expected):
             raise TypeError(f"reachability output {key} must be {expected.__name__}")
+    if "precision_features" in document and not isinstance(
+        document["precision_features"], list
+    ):
+        raise TypeError("reachability output precision_features must be list")
     return document
 
 
@@ -118,6 +124,7 @@ def _island_finding(
     entry_point_count: int,
     confidence: Confidence,
     dynamic_features: list[str],
+    precision_features: list[str],
 ) -> Finding:
     island_id = str(island.get("id") or "unknown-island")
     island_kind = str(island.get("kind") or "module-island")
@@ -145,11 +152,19 @@ def _island_finding(
     )
     subject = f"{primary}:{primary_symbol}" if primary_symbol else primary
     module_suffix = f" (+{module_count - 1} modules)" if module_count > 1 else ""
+    uncertain_dynamic_features = [
+        feature
+        for feature in dynamic_features
+        if not feature.startswith("resolved-literal-dynamic-import:")
+    ]
     dynamic_note = (
         " Dynamic mechanisms were detected, so confirm configured roots before removal."
-        if dynamic_features
+        if uncertain_dynamic_features
         else ""
     )
+    raw_triage = island.get("triage")
+    triage: dict[str, Any] = dict(raw_triage) if isinstance(raw_triage, dict) else {}
+    recommended_actions = _strings(triage.get("recommended_actions"))
     presentation = _island_presentation(
         state=state,
         runtime_observation=runtime_observation,
@@ -173,7 +188,11 @@ def _island_finding(
         ),
         description=presentation.description,
         impact=presentation.impact,
-        remediation=presentation.remediation,
+        remediation=(
+            f"{presentation.remediation} Next action: {recommended_actions[0]}"
+            if recommended_actions
+            else presentation.remediation
+        ),
         severity=presentation.severity,
         confidence=confidence,
         area="code-reachability",
@@ -207,7 +226,9 @@ def _island_finding(
             "paths": paths,
             "symbols": _strings(island.get("symbols")),
             "dynamic_features": dynamic_features,
+            "precision_features": precision_features,
             "reason": str(island.get("reason") or "no static path"),
+            "triage": triage,
         },
     )
 

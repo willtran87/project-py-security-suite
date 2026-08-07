@@ -193,7 +193,7 @@ output is graph evidence rather than another per-line linter:
 |---|---|---|
 | Entry-point discovery | Packaging scripts, Python mains, configured roots, and recognized framework decorators | Deployment review confirms externally or dynamically registered roots |
 | Execution sequences | Representative direct-call, callback, framework, and bounded polymorphic-dispatch paths with edge confidence | Coverage and traces show paths observed in a disposable runtime lane |
-| Dead/unreachable code | Executable, load-only, and disconnected states plus connected islands ranked by LOC | Vulture supplies high-confidence individual unused symbols |
+| Dead/unreachable code | Executable, load-only, and disconnected states; constructor and concrete-receiver paths; framework configuration/registration; runtime corroboration; connected islands ranked by LOC with removal-readiness blockers and actions | Vulture supplies high-confidence individual unused symbols |
 | Architecture | Actual static path topology and disconnected components | Tach enforces intended boundaries, layers, cycles, and public interfaces |
 | Dynamic behavior | Detects dynamic loading, explains bounded dispatch inference, and correlates optional runtime coverage | Explicit roots and runtime tests cover reflection, injection, plugins, and generated code |
 

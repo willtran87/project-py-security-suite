@@ -54,6 +54,21 @@ _FRAMEWORK_DECORATORS = frozenset(
         "websocket",
     }
 )
+_FRAMEWORK_REGISTRATION_CALLS = frozenset(
+    {
+        "add_listener",
+        "add_url_rule",
+        "connect",
+        "path",
+        "register",
+        "re_path",
+        "subscribe",
+    }
+)
+_FRAMEWORK_MODULE_SETTINGS = frozenset(
+    {"ASGI_APPLICATION", "ROOT_URLCONF", "WSGI_APPLICATION"}
+)
+_CONSTRUCTOR_METHODS = frozenset({"__init__", "__new__"})
 _MAX_FILES = 20_000
 _MAX_FILE_BYTES = 5 * 1024 * 1024
 _MAX_SOURCE_BYTES = 250 * 1024 * 1024
@@ -149,7 +164,7 @@ def analyze_project(
 
     source_roots, discovery_notes = _source_roots(root, configured_source_roots)
     modules, errors = _load_modules(root, source_roots)
-    nodes, edges, dynamic_features = _build_graph(modules, errors)
+    nodes, edges, dynamic_features, precision_features = _build_graph(modules, errors)
     entry_points, entry_errors = _discover_entry_points(
         root,
         modules,
@@ -176,6 +191,7 @@ def analyze_project(
     )
     confidence = _analysis_confidence(entry_points, errors, dynamic_features)
     warnings = _warnings(entry_points, dynamic_features, errors)
+    _add_island_triage(topology.islands, dynamic_features, coverage_metadata)
     if len(entry_points) > _MAX_TRACED_ENTRY_POINTS:
         warnings.append(
             f"Representative sequences are limited to the first "
@@ -194,6 +210,7 @@ def analyze_project(
         runtime_observations=runtime_observations,
         coverage_metadata=coverage_metadata,
         dynamic_features=dynamic_features,
+        precision_features=precision_features,
         errors=errors,
         warnings=warnings,
         confidence=confidence,
@@ -204,7 +221,7 @@ def analyze_project(
 
 def _build_graph(
     modules: dict[str, ModuleRecord], errors: list[str]
-) -> tuple[dict[str, GraphNode], set[GraphEdge], set[str]]:
+) -> tuple[dict[str, GraphNode], set[GraphEdge], set[str], set[str]]:
     nodes, nodes_truncated = _definition_nodes(modules)
     if nodes_truncated:
         errors.append(
@@ -212,16 +229,20 @@ def _build_graph(
         )
     edges: set[GraphEdge] = set()
     dynamic_features: set[str] = set()
+    precision_features: set[str] = set()
     for record in modules.values():
         visitor = _GraphVisitor(record, modules, nodes)
         visitor.visit(record.tree)
         edges.update(visitor.edges)
         dynamic_features.update(visitor.dynamic_features)
+        precision_features.update(visitor.precision_features)
         if len(edges) > _MAX_GRAPH_EDGES:
             break
     edges.update(_structural_edges(modules, nodes))
     edges.update(_definition_edges(nodes))
-    return nodes, _limit_edges(edges, errors), dynamic_features
+    if any(edge.kind == "constructor-dispatch" for edge in edges):
+        precision_features.add("constructor-lifecycle")
+    return nodes, _limit_edges(edges, errors), dynamic_features, precision_features
 
 
 def _structural_edges(
@@ -243,11 +264,13 @@ def _structural_edges(
         class_id = _symbol_id(member.module, member.name.rpartition(".")[0])
         if class_id not in nodes:
             continue
-        kind = (
-            "framework-dispatch"
-            if member.name in modules[member.module].dispatch_members
-            else "member"
-        )
+        leaf_name = member.name.rpartition(".")[2]
+        if leaf_name in _CONSTRUCTOR_METHODS:
+            kind = "constructor-dispatch"
+        elif member.name in modules[member.module].dispatch_members:
+            kind = "framework-dispatch"
+        else:
+            kind = "member"
         edges.add(
             _graph_edge(
                 source=class_id,
@@ -349,6 +372,7 @@ def _reachability_document(
     runtime_observations: dict[str, str],
     coverage_metadata: dict[str, Any],
     dynamic_features: set[str],
+    precision_features: set[str],
     errors: list[str],
     warnings: list[str],
     confidence: str,
@@ -387,6 +411,7 @@ def _reachability_document(
         "nodes": _node_documents(nodes, topology, runtime_observations, confidence),
         "edges": [asdict(edge) for edge in sorted(edges, key=_edge_key)],
         "dynamic_features": sorted(dynamic_features),
+        "precision_features": sorted(precision_features),
         "warnings": warnings,
         "errors": errors,
     }
@@ -778,6 +803,7 @@ class _GraphVisitor(ast.NodeVisitor):
         self.nodes = nodes
         self.edges: set[GraphEdge] = set()
         self.dynamic_features: set[str] = set()
+        self.precision_features: set[str] = set()
         self._scope = [_module_id(record.name)]
         self._qualnames: list[str] = []
         self._aliases: list[dict[str, tuple[str, str]]] = [{}]
@@ -831,6 +857,12 @@ class _GraphVisitor(ast.NodeVisitor):
             self.visit(decorator)
         for base in getattr(node, "bases", []):
             self.visit(base)
+        for keyword in getattr(node, "keywords", []):
+            self.visit(keyword.value)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            for default in [*node.args.defaults, *node.args.kw_defaults]:
+                if default is not None:
+                    self.visit(default)
         if identifier not in self.nodes:
             for statement in node.body:
                 self.visit(statement)
@@ -847,27 +879,56 @@ class _GraphVisitor(ast.NodeVisitor):
         self._scope.pop()
 
     def visit_Assign(self, node: ast.Assign) -> None:
-        target_class = self._called_local_class(node.value)
+        self._record_framework_module_setting(node.targets, node.value, node.lineno)
+        target_class = self._called_class(node.value)
         if target_class:
             for target in node.targets:
-                if isinstance(target, ast.Name):
-                    self._instances[-1][target.id] = target_class
+                name = _assignment_name(target)
+                if name:
+                    self._instances[-1][name] = target_class
+                    self.precision_features.add("typed-receiver-resolution")
         self.generic_visit(node)
 
     def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
-        if node.value is not None and isinstance(node.target, ast.Name):
-            target_class = self._called_local_class(node.value)
+        if node.value is not None:
+            self._record_framework_module_setting(
+                [node.target], node.value, node.lineno
+            )
+            target_class = self._called_class(node.value)
+            name = _assignment_name(node.target)
             if target_class:
-                self._instances[-1][node.target.id] = target_class
+                if name:
+                    self._instances[-1][name] = target_class
+                    self.precision_features.add("typed-receiver-resolution")
         self.generic_visit(node)
+
+    def visit_If(self, node: ast.If) -> None:
+        condition = _static_boolean(node.test)
+        if condition is None:
+            self.generic_visit(node)
+            return
+        self.precision_features.add("static-branch-pruning")
+        for statement in node.body if condition else node.orelse:
+            self.visit(statement)
 
     def visit_Call(self, node: ast.Call) -> None:
         dotted = _dotted_name(node.func)
-        if dotted in {"eval", "exec", "__import__", "importlib.import_module"}:
+        self._add_framework_environment_edge(node, dotted)
+        dynamic_module = self._literal_dynamic_module(node, dotted)
+        if dynamic_module:
+            self.dynamic_features.add(
+                f"resolved-literal-dynamic-import:{dynamic_module}"
+            )
+            self.precision_features.add("literal-dynamic-import-resolution")
+            self._add_edge(
+                _module_id(dynamic_module), "dynamic-import-literal", node.lineno
+            )
+        elif dotted in {"eval", "exec", "__import__", "importlib.import_module"}:
             self.dynamic_features.add(dotted)
         target = self._resolve_call(node.func)
         if target:
             self._add_edge(target, "call", node.lineno)
+        self._add_framework_registration_edges(node, dotted)
         dispatch_targets = self._dispatch_targets(node.func, target)
         if dispatch_targets:
             self.dynamic_features.add("polymorphic-dispatch")
@@ -890,14 +951,73 @@ class _GraphVisitor(ast.NodeVisitor):
             self._add_edge(target, "reference", node.lineno)
         self.generic_visit(node)
 
-    def _called_local_class(self, value: ast.expr) -> str | None:
-        if not isinstance(value, ast.Call) or not isinstance(value.func, ast.Name):
+    def _called_class(self, value: ast.expr) -> str | None:
+        if not isinstance(value, ast.Call):
             return None
-        identifier = self.record.definitions.get(value.func.id)
+        identifier = self._resolve_call(value.func)
         definition = self.nodes.get(identifier) if identifier else None
-        if definition and definition.kind == "class":
-            return value.func.id
-        return None
+        return identifier if definition and definition.kind == "class" else None
+
+    def _literal_dynamic_module(self, node: ast.Call, dotted: str) -> str | None:
+        if dotted not in {"__import__", "importlib.import_module"} or not node.args:
+            return None
+        value = node.args[0]
+        if not isinstance(value, ast.Constant) or not isinstance(value.value, str):
+            return None
+        module = value.value.strip()
+        if module.startswith("."):
+            return None
+        return module if module in self.modules else None
+
+    def _record_framework_module_setting(
+        self, targets: list[ast.expr], value: ast.expr, line: int
+    ) -> None:
+        if not isinstance(value, ast.Constant) or not isinstance(value.value, str):
+            return
+        setting = next(
+            (
+                target.id
+                for target in targets
+                if isinstance(target, ast.Name)
+                and target.id in _FRAMEWORK_MODULE_SETTINGS
+            ),
+            None,
+        )
+        if setting is None:
+            return
+        module = (
+            value.value
+            if setting == "ROOT_URLCONF"
+            else value.value.rpartition(".")[0] or value.value
+        )
+        if module in self.modules:
+            self._add_edge(_module_id(module), "framework-config", line)
+            self.precision_features.add("framework-configuration-resolution")
+
+    def _add_framework_registration_edges(self, node: ast.Call, dotted: str) -> None:
+        if dotted.rpartition(".")[2] not in _FRAMEWORK_REGISTRATION_CALLS:
+            return
+        for argument in [*node.args, *(keyword.value for keyword in node.keywords)]:
+            target = self._resolve_call(argument)
+            definition = self.nodes.get(target) if target else None
+            if definition and definition.kind in {"function", "method", "class"}:
+                self._add_edge(target, "registration-dispatch", node.lineno)
+                self.precision_features.add("framework-registration-resolution")
+
+    def _add_framework_environment_edge(self, node: ast.Call, dotted: str) -> None:
+        if dotted.rpartition(".")[2] != "setdefault" or len(node.args) < 2:
+            return
+        key, value = node.args[:2]
+        if not (
+            isinstance(key, ast.Constant)
+            and key.value == "DJANGO_SETTINGS_MODULE"
+            and isinstance(value, ast.Constant)
+            and isinstance(value.value, str)
+            and value.value in self.modules
+        ):
+            return
+        self._add_edge(_module_id(value.value), "framework-config", node.lineno)
+        self.precision_features.add("framework-configuration-resolution")
 
     def _dispatch_targets(
         self, expression: ast.expr, direct_target: str | None
@@ -934,16 +1054,19 @@ class _GraphVisitor(ast.NodeVisitor):
             return None
         parts = _attribute_parts(expression)
         if not parts:
+            if isinstance(expression.value, ast.Call):
+                class_id = self._called_class(expression.value)
+                if class_id:
+                    return self._method_on_class(class_id, expression.attr)
             return None
+        receiver = ".".join(parts[:-1])
+        instance_class = self._lookup_instance(receiver)
+        if instance_class:
+            return self._method_on_class(instance_class, parts[-1])
         if parts[0] in {"self", "cls"} and self._qualnames:
             class_name = self._qualnames[0]
             return _find_symbol(
                 self.nodes, self.record.name, f"{class_name}.{parts[-1]}"
-            )
-        instance_class = self._lookup_instance(parts[0])
-        if instance_class:
-            return _find_symbol(
-                self.nodes, self.record.name, f"{instance_class}.{parts[-1]}"
             )
         alias = self._lookup_alias(parts[0])
         if alias and alias[0] == "module":
@@ -956,6 +1079,14 @@ class _GraphVisitor(ast.NodeVisitor):
         if local_class:
             return _find_symbol(self.nodes, self.record.name, ".".join(parts))
         return None
+
+    def _method_on_class(self, class_id: str, method: str) -> str | None:
+        definition = self.nodes.get(class_id)
+        if definition is None or definition.kind != "class":
+            return None
+        return _find_symbol(
+            self.nodes, definition.module, f"{definition.name}.{method}"
+        )
 
     def _local_definition(self, name: str) -> str | None:
         if self._qualnames:
@@ -1138,6 +1269,21 @@ def _implicit_entry_points(
                     )
                 )
         if framework_roots:
+            framework_line = _framework_runtime_module_line(record)
+            if framework_line is not None:
+                key = ("framework-runtime-module", module_id)
+                if key not in seen:
+                    seen.add(key)
+                    entries.append(
+                        EntryPoint(
+                            id=f"entry:framework-runtime:{record.name}",
+                            kind="framework-runtime-module",
+                            target=module_id,
+                            declared_as=f"{record.path.name}:application",
+                            path=record.relative_path,
+                            line=framework_line,
+                        )
+                    )
             for qualname, line, decorator in record.framework_roots:
                 symbol = _symbol_id(record.name, qualname)
                 key = ("framework-decorator", symbol)
@@ -1154,6 +1300,23 @@ def _implicit_entry_points(
                         )
                     )
     return entries
+
+
+def _framework_runtime_module_line(record: ModuleRecord) -> int | None:
+    if record.path.name not in {"asgi.py", "wsgi.py"}:
+        return None
+    for statement in record.tree.body:
+        targets: list[ast.expr] = []
+        if isinstance(statement, ast.Assign):
+            targets = statement.targets
+        elif isinstance(statement, ast.AnnAssign):
+            targets = [statement.target]
+        if any(
+            isinstance(target, ast.Name) and target.id == "application"
+            for target in targets
+        ):
+            return statement.lineno
+    return None
 
 
 def _resolve_declaration(
@@ -1227,6 +1390,28 @@ def _dotted_name(node: ast.expr) -> str:
 def _attribute_parts(node: ast.Attribute) -> list[str]:
     dotted = _dotted_name(node)
     return dotted.split(".") if dotted else []
+
+
+def _assignment_name(node: ast.expr) -> str | None:
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        dotted = _dotted_name(node)
+        return dotted or None
+    return None
+
+
+def _static_boolean(node: ast.expr) -> bool | None:
+    if isinstance(node, ast.Constant) and isinstance(node.value, bool):
+        return node.value
+    if isinstance(node, ast.Name) and node.id == "TYPE_CHECKING":
+        return False
+    if isinstance(node, ast.Attribute) and _dotted_name(node) == "typing.TYPE_CHECKING":
+        return False
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
+        value = _static_boolean(node.operand)
+        return None if value is None else not value
+    return None
 
 
 def _edge_adjacency(edges: set[GraphEdge]) -> dict[str, list[GraphEdge]]:
@@ -1317,7 +1502,14 @@ def _reachability_states(
             if source not in executable:
                 continue
             for edge in adjacency.get(source, []):
-                if edge.kind in {"call", "dispatch", "framework-dispatch", "owner"}:
+                if edge.kind in {
+                    "call",
+                    "constructor-dispatch",
+                    "dispatch",
+                    "framework-dispatch",
+                    "owner",
+                    "registration-dispatch",
+                }:
                     mark_executable(
                         edge.target,
                         reason=edge.reason,
@@ -1357,11 +1549,16 @@ def _reachability_states(
         if source_node is None or source_node.kind not in {"module", "class"}:
             continue
         for edge in adjacency.get(source, []):
-            if edge.kind == "call":
+            if edge.kind in {"call", "registration-dispatch"}:
+                activity = (
+                    "registration occurs"
+                    if edge.kind == "registration-dispatch"
+                    else "call occurs"
+                )
                 mark_executable(
                     edge.target,
                     reason=(
-                        f"{edge.reason}; the call occurs while a "
+                        f"{edge.reason}; the {activity} while a "
                         f"{source_node.kind} body is loaded"
                     ),
                     predecessor=source,
@@ -1638,6 +1835,88 @@ def _load_only_symbol_islands(
     return islands
 
 
+def _add_island_triage(
+    islands: list[dict[str, Any]],
+    dynamic_features: set[str],
+    coverage_metadata: dict[str, Any],
+) -> None:
+    uncertain_features = sorted(_uncertain_dynamic_features(dynamic_features))
+    coverage_valid = bool(coverage_metadata.get("valid"))
+    coverage_configured = bool(coverage_metadata.get("configured"))
+    for island in islands:
+        state = str(island.get("state") or "disconnected")
+        observation = str(island.get("runtime_observation") or "not-measured")
+        lines_of_code = int(island.get("lines_of_code") or 0)
+        blockers: list[str] = []
+        actions: list[str] = []
+
+        if observation == "observed":
+            evidence_strength = "static-runtime-conflict"
+            removal_readiness = "blocked-runtime-observed"
+            priority = "review-first"
+            blockers.append("runtime coverage executed code in this candidate")
+            actions.append(
+                "Identify the observed test or runtime lane and model its production entry point."
+            )
+        elif coverage_valid and observation == "not-observed":
+            evidence_strength = "static-plus-not-observed-coverage"
+            removal_readiness = "candidate-after-validation"
+            priority = (
+                "high"
+                if state == "disconnected" and lines_of_code >= 1000
+                else "normal"
+            )
+            actions.append(
+                "Confirm the supplied coverage includes every production-relevant execution lane."
+            )
+        else:
+            evidence_strength = "static-only"
+            removal_readiness = "manual-validation-required"
+            priority = (
+                "high"
+                if state == "disconnected" and lines_of_code >= 1000
+                else "normal"
+            )
+            blockers.append(
+                "no valid runtime coverage corroborates the static classification"
+            )
+            if coverage_configured:
+                actions.append(
+                    "Repair the configured coverage evidence and rerun the scan."
+                )
+            else:
+                actions.append(
+                    "Attach coverage.py JSON from representative production-like tests."
+                )
+
+        if state == "load-only":
+            blockers.append("the code is loaded or referenced by a reachable scope")
+            if removal_readiness == "candidate-after-validation":
+                removal_readiness = "manual-validation-required"
+            actions.append(
+                "Inspect callback, registry, plugin, dependency-injection, and reflection usage."
+            )
+        if uncertain_features:
+            blockers.append(
+                "unresolved dynamic behavior exists in the analyzed project"
+            )
+            if removal_readiness == "candidate-after-validation":
+                removal_readiness = "manual-validation-required"
+            actions.append(
+                "Resolve or configure the reported dynamic roots before deleting code."
+            )
+        actions.append(
+            "Add a missing entry point when intentional; otherwise remove in a focused change with regression tests."
+        )
+        island["triage"] = {
+            "priority": priority,
+            "evidence_strength": evidence_strength,
+            "removal_readiness": removal_readiness,
+            "blocking_factors": blockers,
+            "recommended_actions": actions,
+        }
+
+
 def _covered_lines(nodes: list[GraphNode]) -> int:
     covered: dict[str, set[int]] = defaultdict(set)
     for node in nodes:
@@ -1653,7 +1932,14 @@ def _representative_sequences(
     execution_edges = {
         edge
         for edge in edges
-        if edge.kind in {"call", "dispatch", "framework-dispatch"}
+        if edge.kind
+        in {
+            "call",
+            "constructor-dispatch",
+            "dispatch",
+            "framework-dispatch",
+            "registration-dispatch",
+        }
     }
     edge_adjacency = _edge_adjacency(execution_edges)
     adjacency = {
@@ -1740,7 +2026,7 @@ def _analysis_confidence(
 ) -> str:
     if not entries or errors:
         return "low"
-    if dynamic_features:
+    if _uncertain_dynamic_features(dynamic_features):
         return "medium"
     return "high"
 
@@ -1753,7 +2039,7 @@ def _warnings(
         warnings.append(
             "No resolvable entry points were discovered; unreachable-code conclusions are disabled."
         )
-    if dynamic_features:
+    if _uncertain_dynamic_features(dynamic_features):
         warnings.append(
             "Dynamic loading or execution was detected; configure every legitimate dynamic root before removing candidates."
         )
@@ -1767,6 +2053,14 @@ def _warnings(
     return warnings
 
 
+def _uncertain_dynamic_features(dynamic_features: set[str]) -> set[str]:
+    return {
+        feature
+        for feature in dynamic_features
+        if not feature.startswith("resolved-literal-dynamic-import:")
+    }
+
+
 def _graph_edge(*, source: str, target: str, kind: str, line: int) -> GraphEdge:
     confidence, reason = {
         "call": ("high", "direct AST-resolved call"),
@@ -1777,6 +2071,22 @@ def _graph_edge(*, source: str, target: str, kind: str, line: int) -> GraphEdge:
         "framework-dispatch": (
             "high",
             "a recognized framework convention dispatches to this hook",
+        ),
+        "constructor-dispatch": (
+            "high",
+            "constructing the class invokes this lifecycle method",
+        ),
+        "registration-dispatch": (
+            "medium",
+            "a recognized registration API may dispatch to this callable",
+        ),
+        "dynamic-import-literal": (
+            "high",
+            "a literal dynamic import loads this internal module",
+        ),
+        "framework-config": (
+            "high",
+            "a recognized framework setting loads this internal module",
         ),
         "import": ("high", "static internal import loads the target module"),
         "package-init": (

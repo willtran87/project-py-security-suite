@@ -11,6 +11,11 @@ for published releases.
   dispatch paths; optional bounded coverage.py corroboration; ranked module and
   symbol islands; state-appropriate normalized findings; and a sealed schema-1.1
   `reachability.json` graph artifact.
+- Improve reachability precision with constructor lifecycle edges, concrete
+  imported/local/chained receiver resolution, literal internal dynamic-import
+  loading, statically false and `TYPE_CHECKING` branch pruning, WSGI/ASGI runtime
+  roots, Django configuration and registration paths, and per-island evidence
+  strength, removal readiness, blockers, and ordered actions.
 - Parse Tach 0.35 violations from its native stderr stream and expand the
   dogfood architecture contract so every production module and dependency is
   explicit instead of silently treating an exit-code-1 run as clean.

@@ -11,10 +11,17 @@ Tach's declared module boundaries.
 
 - Discovers roots from `[project.scripts]`, `[project.gui-scripts]`, arbitrary
   `[project.entry-points.*]` groups, Poetry scripts, `__main__.py`, guarded Python
-  mains, configured roots, and common decorated framework handlers.
+  mains, configured roots, common decorated framework handlers, and WSGI/ASGI
+  `application` modules.
 - Parses target source with Python's AST and builds bounded import, definition,
-  reference, direct-call, class-member, framework-dispatch, polymorphic-dispatch,
-  ownership, and package-initialization edges.
+  reference, direct-call, constructor-lifecycle, class-member,
+  framework-configuration, registration-dispatch, polymorphic-dispatch,
+  ownership, literal-dynamic-import, and package-initialization edges.
+- Resolves concrete local and imported instances, including chained constructor
+  calls, so `Worker().run()` and `worker.run()` reach the correct implementation.
+- Prunes statically false and `TYPE_CHECKING` branches from the runtime graph.
+- Follows literal internal dynamic imports without treating them as unresolved
+  reflection. Non-literal imports remain an explicit confidence qualification.
 - Assigns every node one of three explicit states: `executable`, `load-only`, or
   `disconnected`; every assignment records its predecessor, edge kind, reason,
   and confidence.
@@ -23,6 +30,8 @@ Tach's declared module boundaries.
 - Groups disconnected modules and connected load-only symbol subgraphs into code
   islands without claiming that load-only code is dead.
 - Ranks islands by physical source lines, module count, and symbol count.
+- Gives every island a triage priority, evidence strength, removal-readiness
+  state, blocking factors, and ordered next actions.
 - Optionally correlates bounded coverage.py JSON so reviewers can distinguish
   statically reachable code that was observed, not observed, or not measured.
 - Emits normalized, cited findings only when an island meets the configured size
@@ -32,7 +41,7 @@ Tach's declared module boundaries.
 flowchart LR
     Sources["Python source and pyproject.toml"] --> Parse["Bounded AST parsing"]
     Parse --> Graph["Typed edges with confidence and reasons"]
-    Roots["Scripts, mains, handlers, configured roots"] --> Walk["Reachability traversal"]
+    Roots["Scripts, mains, WSGI/ASGI, handlers, configured roots"] --> Walk["Reachability traversal"]
     Graph --> Walk
     Walk --> Execute["Executable<br/>direct call or explicit dispatch"]
     Walk --> Load["Load-only<br/>imported, defined, or referenced"]
@@ -45,7 +54,8 @@ flowchart LR
     Observe --> Load
     Observe --> Disconnected
     Islands --> Rank["Rank by LOC, modules, and symbols"]
-    Rank --> Findings["State-appropriate findings with file, source, classification, and action"]
+    Rank --> Triage["Evidence strength, blockers, removal readiness, ordered actions"]
+    Triage --> Findings["State-appropriate findings with file, source, classification, and action"]
     Graph --> Artifact["reachability.json"]
     Paths --> Artifact
     Islands --> Artifact
@@ -55,8 +65,13 @@ flowchart LR
 
 Automatic discovery is conservative. Framework handlers are recognized through
 common decorators such as `route`, `get`, `post`, `command`, `task`, `receiver`,
-and `subscribe`. Applications using reflection, dependency injection, generated
-registries, custom decorators, or plugin loading must declare those roots:
+and `subscribe`. WSGI and ASGI modules that assign `application` are roots.
+Recognized Django configuration follows `DJANGO_SETTINGS_MODULE`,
+`ROOT_URLCONF`, `WSGI_APPLICATION`, and `ASGI_APPLICATION`; common registration
+calls such as `path`, `re_path`, `register`, and `connect` create explicit
+medium-confidence dispatch edges. Applications using reflection, dependency
+injection, generated registries, custom decorators, or data-driven plugin loading
+must declare those roots:
 
 ```toml
 [tools.reachability]
@@ -97,7 +112,7 @@ operations. The analyzer reads coverage evidence but never runs tests itself.
 
 | State | Evidence required | Interpretation | Default action |
 |---|---|---|---|
-| `executable` | Entry point, direct call, bounded callback reference, recognized framework hook, or bounded polymorphic dispatch | A static execution path exists; medium-confidence dispatch edges remain clearly labeled | Review the representative sequence and edge explanations |
+| `executable` | Entry point, direct call, constructor lifecycle, bounded callback reference, recognized framework hook or registration, or bounded polymorphic dispatch | A static execution path exists; medium-confidence dispatch edges remain clearly labeled | Review the representative sequence and edge explanations |
 | `load-only` | Import, definition, member creation, or reference, with no executable path | The code is available at runtime but invocation is unproven | Confirm callbacks/plugins and coverage before removal |
 | `disconnected` | No load or executable path from any discovered root | Strongest unused-island candidate, subject to dynamic-language caveats | Validate missing roots, then test and remove or explicitly retain |
 
@@ -120,7 +135,17 @@ promoting every imported symbol to executable.
 | `islands` | All disconnected components, including candidates below the finding threshold |
 | `nodes` / `edges` | Machine-readable graph with node state, runtime observation, predecessor explanation, typed edge, confidence, reason, and source location |
 | `dynamic_features` | Observed wildcard imports, dynamic imports, `eval`, `exec`, or bounded polymorphic dispatch |
+| `precision_features` | Applied precision controls such as constructor lifecycle, typed receivers, static-branch pruning, literal import resolution, and framework configuration/registration tracing |
 | `warnings` / `errors` | Confidence qualifications and incomplete-analysis conditions |
+
+Each island's `triage` object provides:
+
+- `priority`: which model gaps or large disconnected candidates to inspect first;
+- `evidence_strength`: static-only, static plus non-observation, or a
+  static/runtime conflict;
+- `removal_readiness`: whether removal is blocked, needs manual validation, or is
+  a candidate after validation;
+- `blocking_factors` and `recommended_actions`: ordered, report-ready review work.
 
 Large islands become standard findings with the `PYREACH` classification family.
 Only disconnected candidates cite
@@ -138,12 +163,18 @@ plugins, and data-driven dispatch can create runtime paths that are not visible 
 an AST. The analyzer therefore:
 
 - never labels a candidate as proven runtime-dead;
+- treats `__new__` and `__init__` as executable when their class is constructed;
+- resolves methods on locally constructed, imported, assigned, and directly
+  chained instances when the concrete class is statically known;
+- prunes `TYPE_CHECKING`, `if False`, and the unreachable arm of `if True`;
+- resolves literal internal `importlib.import_module()` and `__import__()` targets
+  as high-confidence load edges while retaining non-literal calls as caveats;
 - uses medium-confidence, bounded method-name dispatch only when multiple internal
   implementations make an unresolved receiver plausibly polymorphic;
 - recognizes `ast.NodeVisitor` hooks as framework dispatch and exposes the exact
   convention on the edge;
-- lowers confidence when dynamic loading, execution, or polymorphic dispatch is
-  observed;
+- lowers confidence when unresolved dynamic loading, execution, wildcard import,
+  or polymorphic dispatch is observed;
 - disables island conclusions when no root resolves;
 - turns parse, scope, duplicate-module, and resource-limit gaps into actionable
   medium-severity findings;
