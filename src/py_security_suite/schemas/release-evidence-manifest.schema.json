@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:release-evidence-manifest:1.0",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "status", "authoritative", "closed_set", "scope", "manifest_id", "report", "evidence", "required_authorities"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "status": {"const": "candidate"},
+    "authoritative": {"const": false},
+    "closed_set": {"const": true},
+    "scope": {"type": "string", "minLength": 1},
+    "manifest_id": {"$ref": "#/$defs/digest"},
+    "report": {"type": "object"},
+    "evidence": {
+      "type": "array", "minItems": 1, "maxItems": 100, "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["name", "path", "sha256", "schema_version"],
+        "properties": {
+          "name": {"type": "string", "minLength": 1},
+          "path": {"type": "string", "minLength": 1},
+          "sha256": {"$ref": "#/$defs/digest"},
+          "schema_version": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "required_authorities": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"enum": ["controlled-signing", "organization-security", "release-approver"]}}
+  },
+  "$defs": {"digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}
+}

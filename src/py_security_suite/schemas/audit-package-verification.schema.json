@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:audit-package-verification:1.0",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "verified", "authoritative", "package", "report", "evidence_names", "admission"],
+  "properties": {
+    "schema_version": {"const": "1.0"}, "verified": {"const": true}, "authoritative": {"const": false},
+    "package": {"type": "object"}, "report": {"type": "object"},
+    "evidence_names": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+    "admission": {"const": "requires_external_approval"}
+  }
+}

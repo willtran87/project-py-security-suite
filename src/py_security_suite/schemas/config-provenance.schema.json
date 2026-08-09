@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:config-provenance:1.0",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "authoritative", "scope", "sources", "effective", "summary", "facts"],
+  "properties": {
+    "schema_version": {"const": "1.0"}, "authoritative": {"const": false}, "scope": {"type": "string"},
+    "sources": {"type": "object"}, "effective": {"type": "object"}, "summary": {"type": "object"},
+    "facts": {"type": "array", "items": {"type": "object", "required": ["key", "origin", "security_sensitive"]}}
+  }
+}

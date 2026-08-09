@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:coverage-merge:1.0",
+  "type": "object", "additionalProperties": false,
+  "required": ["meta", "files", "pysec_merge"],
+  "properties": {
+    "meta": {"type": "object"}, "files": {"type": "object", "maxProperties": 20000},
+    "pysec_merge": {"type": "object", "required": ["schema_version", "target_code_executed", "scenario_count", "scenarios", "files", "executed_lines", "merged_sha256"]}
+  }
+}

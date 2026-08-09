@@ -39,23 +39,34 @@ def production_runs(suite: SuiteConfig) -> list[ToolRun]:
     runs: list[ToolRun] = []
     for name in suite.required_tools:
         suite.tools[name].executable_sha256 = "a" * 64
+        suite.tools[name].executable_organization_approved = True
         runs.append(
             ToolRun(
                 tool=name,
                 status=ToolStatus.COMPLETED,
                 command=[name],
                 duration_seconds=0.1,
+                version="1.0.0",
                 executable_sha256="a" * 64,
                 executable_integrity_verified=True,
+                executable_organization_approved=True,
                 executable_unchanged=True,
             )
         )
     suite.tools["codeql"].auxiliary_executable_sha256 = "b" * 64
+    suite.tools["codeql"].auxiliary_executable_organization_approved = True
     codeql = next(run for run in runs if run.tool == "codeql")
     codeql.auxiliary_executable_sha256 = "b" * 64
     codeql.auxiliary_executable_integrity_verified = True
+    codeql.auxiliary_executable_organization_approved = True
     codeql.auxiliary_executable_unchanged = True
     return runs
+
+
+def _unknown_version_run(runs: list[ToolRun]) -> ToolRun:
+    run = runs[0]
+    run.version = "unknown"
+    return run
 
 
 class PolicyTests(unittest.TestCase):
@@ -81,6 +92,31 @@ class PolicyTests(unittest.TestCase):
         )
         self.assertEqual(decision.outcome, Outcome.INCOMPLETE)
         self.assertTrue(item.blocking)
+
+    def test_production_gate_requires_known_scanner_versions(self) -> None:
+        config = load_config(profile_override="production")
+        runs = production_runs(config)
+        unknown = _unknown_version_run(runs)
+        decision = evaluate_policy(
+            config=config,
+            findings=[],
+            tool_runs=runs,
+            network_isolation_attested=True,
+            inventory=Inventory(
+                python_files=1,
+                dependency_files=[],
+                total_files=1,
+                skipped_symlinks=0,
+                vcs_history_available=True,
+            ),
+        )
+        self.assertEqual(decision.outcome, Outcome.INCOMPLETE)
+        self.assertTrue(
+            any(
+                unknown.tool in reason and "version" in reason
+                for reason in decision.reasons
+            )
+        )
 
     def test_release_provenance_is_blocking_even_when_severity_policy_is_weak(
         self,
@@ -269,6 +305,33 @@ class PolicyTests(unittest.TestCase):
         self.assertIn("Pysa was not applicable", reasons)
         self.assertIn("cyclonedx-py", reasons)
         self.assertIn("guarddog", reasons)
+
+    def test_production_gate_rejects_repository_only_scanner_pin(self) -> None:
+        config = load_config(profile_override="production")
+        runs = production_runs(config)
+        config.tools["bandit"].executable_organization_approved = False
+        bandit = next(run for run in runs if run.tool == "bandit")
+        bandit.executable_organization_approved = False
+
+        decision = evaluate_policy(
+            config=config,
+            findings=[],
+            tool_runs=runs,
+            network_isolation_attested=True,
+            inventory=Inventory(
+                python_files=1,
+                dependency_files=[],
+                total_files=1,
+                skipped_symlinks=0,
+                vcs_history_available=True,
+            ),
+        )
+
+        self.assertEqual(decision.outcome, Outcome.INCOMPLETE)
+        self.assertIn(
+            "organization-approved executable_sha256 for bandit",
+            " ".join(decision.reasons),
+        )
 
     def test_production_gate_requires_dynamic_and_governance_evidence(self) -> None:
         config = load_config(profile_override="production")

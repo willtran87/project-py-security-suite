@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:github-annotations:1.0",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "verified", "authoritative", "report", "plan_sha256", "summary", "annotations"],
+  "properties": {
+    "schema_version": {"const": "1.0"}, "verified": {"const": true}, "authoritative": {"const": false},
+    "report": {"type": "object"}, "plan_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "summary": {"type": "object"},
+    "annotations": {"type": "array", "maxItems": 10000, "items": {"type": "object"}}
+  }
+}

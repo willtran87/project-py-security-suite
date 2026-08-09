@@ -7,6 +7,7 @@ from typing import Any
 from .adapters import ADAPTER_TYPES
 from .config import SuiteConfig
 from .finding_delta import apply_finding_delta
+from .inventory import inventory_target
 from .orchestrator import resolve_asset_paths
 from .path_safety import resolve_regular_directory
 from .risk_acceptance import validate_risk_acceptances
@@ -55,16 +56,48 @@ def _assess_tool(
             required,
         )
     readiness = adapter.preflight(target)
+    authority_error = _production_authority_error(config, name)
+    if readiness.status == "ready" and authority_error:
+        return {
+            **_tool_result(name, "unavailable", authority_error, required),
+            "executable": readiness.executable,
+            "executable_sha256": readiness.executable_sha256,
+            "executable_integrity_verified": readiness.executable_integrity_verified,
+            "executable_organization_approved": False,
+        }
     return {
         **_tool_result(name, readiness.status, readiness.reason, required),
         "executable": readiness.executable,
         "executable_sha256": readiness.executable_sha256,
         "executable_integrity_verified": readiness.executable_integrity_verified,
+        "executable_organization_approved": (
+            tool_config.executable_organization_approved
+        ),
     }
+
+
+def _production_authority_error(config: SuiteConfig, name: str) -> str:
+    if config.profile not in {"production", "release"}:
+        return ""
+    tool = config.tools[name]
+    missing: list[str] = []
+    if not tool.executable_organization_approved:
+        missing.append("primary")
+    if (
+        tool.auxiliary_executable
+        and not tool.auxiliary_executable_organization_approved
+    ):
+        missing.append("auxiliary")
+    return (
+        f"organization approval is missing for {name} " + " and ".join(missing)
+        if missing
+        else ""
+    )
 
 
 def _assess_context(target: Path, config: SuiteConfig) -> list[str]:
     context_errors: list[str] = []
+    inventory = inventory_target(target)
     context_errors.extend(enrich_findings([], config.intelligence).errors)
     context_errors.extend(
         apply_finding_delta(
@@ -72,6 +105,9 @@ def _assess_context(target: Path, config: SuiteConfig) -> list[str]:
             target=target,
             baseline_path=config.reports.baseline_path,
             baseline_sha256=config.reports.baseline_sha256,
+            current_profile=config.profile,
+            current_tools=tuple(config.selected_tools),
+            current_vcs_revision=inventory.vcs_revision,
         ).errors
     )
     context_errors.extend(

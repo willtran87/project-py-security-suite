@@ -7,7 +7,11 @@ from unittest.mock import patch
 
 from py_security_suite.adapters.base import ScannerReadiness
 from py_security_suite.config import load_config
-from py_security_suite.doctor import assess_readiness, render_readiness
+from py_security_suite.doctor import (
+    _production_authority_error,
+    assess_readiness,
+    render_readiness,
+)
 
 
 class _ReadyAdapter:
@@ -46,6 +50,16 @@ class _NotApplicableAdapter(_ReadyAdapter):
 
 
 class DoctorTests(unittest.TestCase):
+    def test_production_preflight_requires_organization_digest_authority(self) -> None:
+        config = load_config(profile_override="production")
+        config.tools["bandit"].executable_sha256 = "a" * 64
+        self.assertIn(
+            "organization approval is missing",
+            _production_authority_error(config, "bandit"),
+        )
+        config.tools["bandit"].executable_organization_approved = True
+        self.assertEqual(_production_authority_error(config, "bandit"), "")
+
     def test_ready_profile_is_concise_and_machine_readable(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             target = Path(directory)

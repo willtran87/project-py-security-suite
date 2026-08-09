@@ -1,6 +1,6 @@
 # Python Security Suite documentation
 
-Last reviewed: 2026-08-07
+Last reviewed: 2026-08-09
 
 This directory is the canonical documentation set. The suite is offline-first:
 tool and data acquisition happens in a connected preparation lane; scanning and
@@ -13,9 +13,13 @@ verification happen inside an enterprise-controlled isolated boundary.
 | Understand architecture and trust boundaries | [Design](design.md) |
 | Install and operate without Docker or internet access | [Operations](operations.md) |
 | Configure profiles, policy, ownership, and exit behavior | [Configuration](configuration.md) |
+| Understand threats, trust boundaries, and abuse cases | [Suite threat model](threat-model.md) |
+| Govern scanner upgrades and retirement | [Scanner bundle lifecycle](tool-lifecycle.md) |
 | Trace entry points and investigate disconnected code | [Python reachability](reachability.md) |
 | Measure scanner execution and labeled detection effectiveness | [Effectiveness](effectiveness.md) |
 | Make one fail-closed promotion decision | [Governed release readiness](release-readiness.md) |
+| Track every enhancement and its authority boundary | [Product enhancement matrix](product-enhancement-matrix.md) |
+| Review closure of the latest findings backlog | [Findings-driven closure register](findings-closure.md) |
 | Compare scanner coverage and platform support | [Compatibility matrix](compatibility-matrix.md) |
 | Enforce a production release gate | [Production security](production-security.md) |
 | Verify provenance, risk intelligence, and passports | [Security Passport](security-passport.md) |
@@ -49,6 +53,9 @@ flowchart LR
     Seal --> Inspect["verify-report and inspect"]
     Inspect --> Passport["Security Passport verification"]
     Passport --> Release["release-check<br/>one governed decision"]
+    Release --> Plan["promotion-plan<br/>audience views + ordered actions"]
+    Plan --> Audit["portable audit package<br/>closed + independently verified"]
+    Plan --> Request["exact-set signing request"]
     Inspect --> GitHub["Markdown, HTML, SARIF, SonarQube, and JSON"]
 ```
 
@@ -81,32 +88,40 @@ platform support, and acquisition requirements.
 | Applicable and completed | 36 / 36 |
 | Correctly not applicable | 27 |
 | Unavailable, failed, timed out, or parse errors | 0 |
-| Policy outcome | `INCOMPLETE` — external network-isolation attestation was not provided |
+| Policy outcome | `INCOMPLETE` — unsigned artifacts, external isolation, and comparable-baseline evidence remain open |
 | Normalized findings | 2 expected Cosign bundle findings |
 | Reachability graph | Schema 1.2; per-island confidence and explained edges |
-| Reachability states | 967 executable; 91 load-only; 0 disconnected; 0 reportable islands |
-| Runtime corroboration | 967/967 executable nodes observed; 90/91 load-only nodes observed by tests |
-| Tests | 370 passed, 1 platform-limited skip; 159 subtests passed |
-| Combined line and branch coverage | 91.31% |
-| Branch coverage | 83.90% |
-| Changed-line coverage | 89%; every changed production file meets the 80% threshold |
+| Reachability states | 1,148 executable; 106 load-only; 0 disconnected; 0 reportable islands |
+| Runtime corroboration | Refreshed branch-aware coverage from every unit/property test; static states are not reclassified by runtime evidence |
+| Tests | 431 collected: 430 passed and 1 platform-limited skip; 4 property tests also passed independently |
+| Combined line and branch coverage | 90.24% across 11,738 statements and 3,990 branches; 93.11% statement and 81.80% branch coverage |
+| Changed-line coverage | Recomputed on every scan; uncovered changed executable lines remain explicit in `diff-coverage.json` |
 | Operational portfolio | Grade A; 36/36 applicable control slots completed across 12 domains |
 | Labeled self-scan benchmark | PASS; 1 TP, 1 TN, 0 FP, 0 FN |
 
-The 2026-08-07 self-scan is in `.artifacts/maturity-selfscan-v13`. Its 94-file
-checksum seal and semantic contracts verify. All applicable scanners completed,
+The 2026-08-09 closure self-scan is published as
+`.artifacts/maturity-selfscan-v35`. Its 94-file checksum chain and semantic
+contracts verify. All applicable scanners completed,
 and the only normalized findings are the two expected missing Cosign bundles for
 the wheel and source distribution. Code security, secrets, dependency
 vulnerabilities, architecture, and quality were clean. The digest-pinned KEV and
 EPSS inputs were fresh, locally validated snapshots; the approval receipt
 correctly records absent organization authorization. All 38 scanner entry points were unchanged after
-execution; 25 bindings across 22 unique digests remain candidates for
-organization provenance approval. The result correctly remains `INCOMPLETE`
-because the host run did not provide an external network-isolation attestation.
+execution; all 38 bindings across 34 unique digests remain candidates for
+organization provenance approval. The result correctly remains `INCOMPLETE`:
+the host did not provide external network-isolation evidence, the historical
+quick-profile baseline is not comparable to this comprehensive scanner set, and
+the exact distributions are unsigned.
 Approve the governed intelligence and scanner catalog, supply organization-
 policy-bound isolation evidence, rerun inside the enforced boundary, then sign
-both exact release artifacts. The release-readiness sidecar names all six
-remaining promotion blockers and the reachability delta reports no regressions.
+both exact release artifacts. The release-readiness, promotion, finding-register,
+configuration-provenance, audience, annotation, trend, portfolio, release-
+manifest, and audit-package sidecars are consolidated in the 135-file
+`.artifacts/maturity-evidence-pack-v35` closed set. The approved self-scan
+effectiveness evaluation is a required member of both its release manifest and
+audit archive. Its audit-package verifier rechecks 105 archive members and the
+embedded report after transfer;
+none of these local controls can grant organization approval or release access.
 
 The report contains:
 
@@ -120,7 +135,7 @@ The report contains:
 - operational domain coverage and scanner-trust application evidence; and
 - an exact checksum manifest and Security Passport statement.
 
-The companion proof at `.artifacts/detection-validation-v7` records six expected
+The companion proof under `.artifacts/detection-validation-v*` records six expected
 Bandit, Semgrep, and detect-secrets findings, 100% expected-perspective recall,
 and zero findings on the safe negative control.
 
@@ -146,6 +161,24 @@ and zero findings on the safe negative control.
 | Inspection | [1.3](../src/py_security_suite/schemas/report-inspection-1.3.schema.json) | Verified machine-readable decision, health, action completeness, and prioritized findings |
 | Inspection verification | [1.3](../src/py_security_suite/schemas/report-inspection-verification-1.3.schema.json) | Binds the inspection digest, report checksum, action limit, and omission summary |
 | Report verification | [1.0](../src/py_security_suite/schemas/report-verification.schema.json) | Portable receipt for report integrity and semantic verification |
+| Release readiness | [1.2](../src/py_security_suite/schemas/release-readiness-1.2.schema.json) | Causal root/derived blockers, owners, authority, and remediation |
+| Promotion plan | [1.1](../src/py_security_suite/schemas/promotion-plan-1.1.schema.json) | Lifecycle, freshness, configuration provenance, SLA, annotations, and audience views |
+| Baseline candidate | [1.0](../src/py_security_suite/schemas/baseline-candidate.schema.json) | Revision-bound baseline approval handoff |
+| Operational trend | [1.1](../src/py_security_suite/schemas/operational-trend-1.1.schema.json) | Findings churn, scanner reliability, versions, applicability, and performance anomalies |
+| Release evidence verification | [1.0](../src/py_security_suite/schemas/release-evidence-manifest-verification.schema.json) | Independent report/evidence/manifest integrity receipt |
+| Policy simulation | [1.0](../src/py_security_suite/schemas/policy-simulation.schema.json) | Non-authoritative severity, confidence, and required-tool what-if gate |
+| Release evidence manifest | [1.0](../src/py_security_suite/schemas/release-evidence-manifest.schema.json) | Closed, digest-bound evidence index |
+| Signing request | [1.0](../src/py_security_suite/schemas/signing-request.schema.json) | Exact-set controlled-signing handoff |
+| Signing-request verification | [1.0](../src/py_security_suite/schemas/signing-request-verification.schema.json) | Payload and request integrity receipt |
+| Finding register | [1.0](../src/py_security_suite/schemas/finding-register.schema.json) | Stable lifecycle, ownership, resolution, reopen, and severity SLA state |
+| GitHub annotations | [1.0](../src/py_security_suite/schemas/github-annotations.schema.json) | Digest-bound workflow annotation receipt |
+| Audience report | [1.0](../src/py_security_suite/schemas/audience-report.schema.json) | Verified role-specific promotion view |
+| Configuration provenance | [1.0](../src/py_security_suite/schemas/config-provenance.schema.json) | Value-redacted origin map for effective configuration |
+| Coverage merge | [1.0](../src/py_security_suite/schemas/coverage-merge.schema.json) | Digest-bound union of runtime scenarios |
+| Repository portfolio | [1.0](../src/py_security_suite/schemas/portfolio-dashboard.schema.json) | Cross-repository aggregation of distinct sealed reports |
+| Audit-package verification | [1.0](../src/py_security_suite/schemas/audit-package-verification.schema.json) | Portable package integrity and embedded-report receipt |
+| Evidence pack | [1.0](../src/py_security_suite/schemas/evidence-pack.schema.json) | Closed atomic directory manifest for every decision-support artifact |
+| Evidence-pack verification | [1.0](../src/py_security_suite/schemas/evidence-pack-verification.schema.json) | Directory, completion marker, audit archive, and optional source-report receipt |
 
 Export exact schemas from the installed wheel without network access:
 
@@ -153,6 +186,14 @@ Export exact schemas from the installed wheel without network access:
 pysec schema report-inspection-1.3 --output contracts/report-inspection.schema.json
 pysec schema report-inspection-verification-1.3 --output contracts/report-inspection-verification.schema.json
 pysec schema report-verification-1.0 --output contracts/report-verification.schema.json
+pysec schema release-readiness-1.2 --output contracts/release-readiness.schema.json
+pysec schema promotion-plan-1.1 --output contracts/promotion-plan.schema.json
+pysec schema baseline-candidate-1.0 --output contracts/baseline-candidate.schema.json
+pysec schema operational-trend-1.1 --output contracts/operational-trend.schema.json
+pysec schema evidence-pack-1.0 --output contracts/evidence-pack.schema.json
+pysec schema evidence-pack-verification-1.0 --output contracts/evidence-pack-verification.schema.json
+pysec schema release-evidence-manifest-1.0 --output contracts/release-evidence-manifest.schema.json
+pysec schema signing-request-1.0 --output contracts/signing-request.schema.json
 ```
 
 Inspection versions 1.0 through 1.2 remain frozen under their explicit names.

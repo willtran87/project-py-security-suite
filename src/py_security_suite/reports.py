@@ -270,6 +270,9 @@ def _write_primary_report_files(
             "target": manifest.target,
             "profile": manifest.profile,
             "source_sha256": manifest.inventory.source_sha256,
+            "vcs_revision": manifest.inventory.vcs_revision,
+            "vcs_revision_verified": manifest.inventory.vcs_revision_verified,
+            "selected_tools": sorted(run.tool for run in manifest.tools),
             "findings": findings,
         },
     )
@@ -2347,7 +2350,10 @@ def _entrypoint_integrity_states(
                     tool.tool,
                     "primary",
                     tool.executable_sha256,
-                    tool.executable_integrity_verified,
+                    (
+                        tool.executable_integrity_verified is True
+                        and tool.executable_organization_approved
+                    ),
                     tool.executable_unchanged,
                 )
             )
@@ -2357,7 +2363,10 @@ def _entrypoint_integrity_states(
                     tool.tool,
                     "helper",
                     tool.auxiliary_executable_sha256,
-                    tool.auxiliary_executable_integrity_verified,
+                    (
+                        tool.auxiliary_executable_integrity_verified is True
+                        and tool.auxiliary_executable_organization_approved
+                    ),
                     tool.auxiliary_executable_unchanged,
                 )
             )
@@ -2367,14 +2376,20 @@ def _entrypoint_integrity_states(
 def _executable_integrity_label(run: ToolRun) -> str:
     primary = _integrity_label(
         run.executable_sha256,
-        run.executable_integrity_verified,
+        (
+            run.executable_integrity_verified is True
+            and run.executable_organization_approved
+        ),
         run.executable_unchanged,
     )
     if run.auxiliary_executable_sha256 is None:
         return primary
     auxiliary = _integrity_label(
         run.auxiliary_executable_sha256,
-        run.auxiliary_executable_integrity_verified,
+        (
+            run.auxiliary_executable_integrity_verified is True
+            and run.auxiliary_executable_organization_approved
+        ),
         run.auxiliary_executable_unchanged,
     )
     return f"{primary}; helper: {auxiliary}"

@@ -1,6 +1,6 @@
 # Python Security Suite operations
 
-Last reviewed: 2026-08-07
+Last reviewed: 2026-08-09
 
 ## Operating model
 
@@ -18,6 +18,25 @@ flowchart LR
 
 The native workflow does not require Docker. Docker remains an optional Linux
 execution mode.
+
+## Evidence publication flow
+
+```mermaid
+flowchart LR
+    Config["Validated layered configuration"] --> Provenance["Value-redacted origin map"]
+    Scan["Sealed repository scan"] --> Register["Finding lifecycle + SLA register"]
+    Scan --> Plan["Promotion plan"]
+    Plan --> Views["Audience views + GitHub annotations"]
+    Plan --> Package["Deterministic audit package"]
+    Scan --> Package
+    Package --> Verify["Independent digest and report verification"]
+    Verify --> Authority["Enterprise archive and admission authority"]
+```
+
+All sidecars are written outside the sealed report. Inputs that can affect a
+decision are SHA-256-bound, and every derived view remains non-authoritative.
+For the complete command sequence, use
+[`examples/github-actions.yml`](../examples/github-actions.yml).
 
 ## Prerequisites
 
@@ -235,6 +254,18 @@ imports the target, invokes a test runner, retains captured process output, or
 expands XML entities. Missing
 evidence is visibly `not applicable` outside organization policies that make
 the companion test lane mandatory.
+
+When separate API, worker, CLI, or scheduled-job lanes produce coverage, merge
+their exact artifacts before reachability analysis:
+
+```powershell
+pysec merge-coverage `
+  --scenario api=.artifacts/api-coverage.json@APPROVED_SHA256 `
+  --scenario worker=.artifacts/worker-coverage.json@APPROVED_SHA256 `
+  --output .artifacts/merged-coverage.json
+```
+
+The merge is a line union, not an average, and records every source digest.
 
 ### Ingest trusted-lane assurance evidence
 
@@ -690,6 +721,121 @@ Validate publisher provenance and custody outside the scan, create an approved
 catalog conforming to `scanner-trust-catalog-1.0`, calculate its SHA-256, and
 bind both path and digest in organization policy. The isolated scan never
 self-approves an observed executable.
+
+Create a bounded review package directly from the verified report:
+
+```text
+pysec evidence-draft REPORT --format json \
+  --output governance-evidence-draft.json
+```
+
+This removes transcription work without collapsing the trust boundary. The
+output is a candidate, never an approval: security tooling reviews provenance,
+platform security issues isolation evidence, vulnerability management approves
+the snapshot set, and release engineering signs the exact artifact digests.
+
+### Publish the complete evidence pack
+
+Use the consolidated workflow for routine CI and operator handoff:
+
+```text
+pysec evidence-pack REPORT --output security-evidence
+pysec verify-evidence-pack security-evidence --report REPORT \
+  --pack-sha256 PACK_MANIFEST_SHA256 \
+  --output security-evidence-verification.json
+```
+
+`evidence-pack` performs report and inspection verification, release readiness,
+governance handoff, promotion rendering, finding lifecycle, GitHub annotations,
+all five audience views, baseline candidacy, policy simulation, portfolio
+summary, release-evidence closure, and deterministic audit packaging. It builds
+in a sibling staging directory, verifies the result, and publishes it with one
+rename. An interrupted or failed build leaves no destination. Existing packs
+are preserved unless `--overwrite` is explicit; replacement is accepted only
+after the existing closed set verifies against the report.
+The sealed report is retained under `report/` for direct browsing, so
+`report/summary.md`, `report/index.html`, and `report/action-plan.md` preserve
+the original cited finding cards and stable anchors without extracting the ZIP.
+
+```mermaid
+flowchart LR
+    Report["Sealed scan report"] --> Stage["Private staging directory"]
+    Stage --> Views["Decision + role views"]
+    Stage --> Lifecycle["Findings + SLA + policy"]
+    Stage --> Closure["Closed release manifest"]
+    Closure --> Audit["Deterministic audit ZIP"]
+    Audit --> Verify["Verify files + report + archive"]
+    Verify --> Publish["Atomic directory publication"]
+    Publish --> External["Independent approval and admission"]
+```
+
+The pack SHA-256 printed by the command is the digest of
+`pack-manifest.json`. Retain that digest through an independently controlled
+channel. `checksums.sha256` covers every payload plus the manifest; `COMPLETE`
+binds the manifest digest. The pack uses relative internal paths and verifies
+after relocation. It cannot sign, approve, or admit itself.
+
+Optional inputs keep adjacent workflows inside the same integrity boundary:
+
+- `--previous-report` adds longitudinal scanner/performance evidence,
+  reachability changes, and an automatically chained finding register;
+- `--effectiveness-evaluation` and `--passport-verification`, each paired with
+  its approved SHA-256, flow into release readiness and are retained as required
+  release-manifest and audit-package evidence;
+- effectiveness minimums and `--require-passport` make those governed inputs
+  fail-closed rather than informational;
+- `--performance-regression-percent`, `--maximum-total-seconds`, and repeatable
+  `--tool-budget TOOL=SECONDS` govern the retained trend when history is present;
+- `--artifacts` inventories and re-verifies the exact wheel, sdist, and zip set
+  for controlled signing; and
+- `--config`, `--policy`, and `--profile` add value-redacted configuration
+  origins after requiring the effective profile to match the sealed report.
+
+An input path without its approved digest is rejected. A digest without its
+input path is also rejected. `verify-evidence-pack` derives the required
+optional evidence names from the closed directory and re-verifies their
+membership after transfer.
+
+Consolidate lifecycle state and audience-specific actions without granting
+approval:
+
+```text
+pysec promotion-plan REPORT --release-readiness release-readiness.json \
+  --release-readiness-sha256 READINESS_SHA256 --format json \
+  --output promotion-plan.json
+
+pysec promotion-plan REPORT --format markdown --output promotion-plan.md
+pysec promotion-plan REPORT --format html --output promotion-plan.html
+pysec baseline-candidate REPORT --format json --output baseline-candidate.json
+pysec trend PREVIOUS_REPORT REPORT --format json --output operational-trend.json
+```
+
+Before transferring distributions to the controlled signing lane, bind the
+closed subject set to the verified scan and verify it again at receipt:
+
+```text
+pysec prepare-signing REPORT dist --output signing-request.json
+pysec verify-signing-request signing-request.json dist \
+  --request-sha256 REQUEST_SHA256 --format json \
+  --output signing-request-verification.json
+```
+
+Any added, missing, or changed distribution invalidates the handoff. Retain the
+request, verification receipt, signer output, release decision, promotion plan,
+and Passport according to the classes in `promotion-plan.json`.
+
+After every input is independently issued, create one closed evidence index:
+
+```text
+pysec release-manifest REPORT \
+  --evidence release-readiness=release-readiness.json@READINESS_SHA256 \
+  --evidence promotion-plan=promotion-plan.json@PLAN_SHA256 \
+  --evidence passport-verification=passport-verification.json@PASSPORT_SHA256 \
+  --output release-evidence-manifest.json
+```
+
+Every JSON input must bind the same report checksum seal. The manifest is still
+non-authoritative; the admission controller verifies and approves it.
 
 Before release promotion, sign every distribution into a separate provenance
 directory:

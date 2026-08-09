@@ -410,6 +410,29 @@ class ConfigTests(unittest.TestCase):
                     with self.assertRaisesRegex(ConfigurationError, message):
                         load_config(organization_policy=config_path)
 
+    def test_executable_authority_origin_is_preserved(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            organization = root / "organization.toml"
+            repository = root / "pysec.toml"
+            organization.write_text(
+                "[tools.bandit]\nexecutable_sha256 = '" + "a" * 64 + "'\n",
+                encoding="utf-8",
+            )
+            repository.write_text(
+                "[tools.semgrep]\nexecutable_sha256 = '" + "b" * 64 + "'\n",
+                encoding="utf-8",
+            )
+
+            config = load_config(
+                organization_policy=organization,
+                repository_config=repository,
+                profile_override="quick",
+            )
+
+        self.assertTrue(config.tools["bandit"].executable_organization_approved)
+        self.assertFalse(config.tools["semgrep"].executable_organization_approved)
+
 
 if __name__ == "__main__":
     unittest.main()

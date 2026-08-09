@@ -1,0 +1,21 @@
+{
+  "schema_version": "1.0",
+  "corpus_id": "enterprise-python-security-template",
+  "revision": "2026.08.08",
+  "labels": [
+    {"id": "bandit-shell-positive", "expected": "finding", "match": {"tool": "bandit", "rule_id": "B602"}},
+    {"id": "bandit-eval-positive", "expected": "finding", "match": {"tool": "bandit", "rule_id": "B307"}},
+    {"id": "semgrep-injection-positive", "expected": "finding", "match": {"tool": "semgrep", "path": "cases/command_injection.py"}},
+    {"id": "detect-secrets-positive", "expected": "finding", "match": {"tool": "detect-secrets", "path": "cases/test_secret.py"}},
+    {"id": "dependency-vulnerability-positive", "expected": "finding", "match": {"classification": "CWE-1035"}},
+    {"id": "iac-policy-positive", "expected": "finding", "match": {"tool": "checkov", "path": "cases/insecure.tf"}},
+    {"id": "workflow-security-positive", "expected": "finding", "match": {"tool": "zizmor", "path": ".github/workflows/insecure.yml"}},
+    {"id": "architecture-positive", "expected": "finding", "match": {"tool": "tach", "path": "cases/architecture_violation.py"}},
+    {"id": "dead-code-positive", "expected": "finding", "match": {"tool": "vulture", "path": "cases/unused.py"}},
+    {"id": "clean-python-negative", "expected": "clean", "match": {"path": "clean/safe.py"}},
+    {"id": "clean-subprocess-negative", "expected": "clean", "match": {"path": "clean/safe_subprocess.py"}},
+    {"id": "clean-secret-negative", "expected": "clean", "match": {"path": "clean/placeholder_token.py"}},
+    {"id": "clean-iac-negative", "expected": "clean", "match": {"path": "clean/secure.tf"}},
+    {"id": "clean-workflow-negative", "expected": "clean", "match": {"path": "clean/secure-workflow.yml"}}
+  ]
+}

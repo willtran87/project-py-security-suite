@@ -6,6 +6,7 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
+from .execution import resolve_executable, run_command
 from .models import Inventory
 
 
@@ -75,6 +76,7 @@ def inventory_target(
             "pylock."
         ):
             lock_files.append(relative)
+    vcs_revision, vcs_revision_verified = _vcs_revision(target)
     return Inventory(
         python_files=python_files,
         dependency_files=sorted(dependency_files),
@@ -83,11 +85,42 @@ def inventory_target(
         declared_dependencies=_declares_dependencies(target),
         lock_files=sorted(lock_files),
         vcs_history_available=(target / ".git").exists(),
+        vcs_revision=vcs_revision,
+        vcs_revision_verified=vcs_revision_verified,
         distribution_files=sorted(distribution_files),
         source_sha256=source_sha256,
         hashed_files=len(integrity_files),
         hashed_bytes=hashed_bytes,
     )
+
+
+def _vcs_revision(target: Path) -> tuple[str, bool]:
+    if not (target / ".git").exists():
+        return "", False
+    executable = resolve_executable("git")
+    if executable is None:
+        return "", False
+    result = run_command(
+        [
+            executable,
+            "-c",
+            f"safe.directory={target.resolve()}",
+            "rev-parse",
+            "--verify",
+            "HEAD",
+        ],
+        cwd=target,
+        timeout_seconds=10,
+        max_output_bytes=4096,
+    )
+    revision = result.stdout.strip().casefold()
+    verified = (
+        not result.timed_out
+        and result.exit_code == 0
+        and len(revision) == 40
+        and all(character in "0123456789abcdef" for character in revision)
+    )
+    return (revision if verified else ""), verified
 
 
 def source_snapshot(

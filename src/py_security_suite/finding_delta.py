@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from .execution import resolve_executable, run_command
 from .models import Finding, FindingStatus
 from .path_safety import resolve_regular_file
 
@@ -28,12 +29,12 @@ def apply_finding_delta(
     target: Path,
     baseline_path: Path | None,
     baseline_sha256: str,
+    current_profile: str = "",
+    current_tools: tuple[str, ...] = (),
+    current_source_sha256: str = "",
+    current_vcs_revision: str = "",
 ) -> DeltaResult:
-    ownership = _load_codeowners(target)
-    for finding in findings:
-        owners = _owners_for_finding(finding, ownership)
-        if owners:
-            finding.evidence = {**finding.evidence, "owners": owners}
+    ownership = _apply_ownership(findings, target)
 
     if baseline_path is None:
         return DeltaResult(
@@ -64,6 +65,129 @@ def apply_finding_delta(
             },
         )
 
+    comparable, reasons, comparison = _comparison_context(
+        target=target,
+        metadata=metadata,
+        current_profile=current_profile,
+        current_tools=current_tools,
+        current_source_sha256=current_source_sha256,
+        current_vcs_revision=current_vcs_revision,
+    )
+    if not comparable:
+        return _incomparable_result(
+            findings,
+            reasons=reasons,
+            comparison=comparison,
+            metadata=metadata,
+            ownership_rules=len(ownership),
+        )
+    return _classify_comparable_findings(
+        findings,
+        previous=previous,
+        comparison=comparison,
+        metadata=metadata,
+        ownership_rules=len(ownership),
+    )
+
+
+def _apply_ownership(
+    findings: list[Finding], target: Path
+) -> list[tuple[str, list[str]]]:
+    ownership = _load_codeowners(target)
+    for finding in findings:
+        owners = _owners_for_finding(finding, ownership)
+        if owners:
+            finding.evidence = {**finding.evidence, "owners": owners}
+    return ownership
+
+
+def _comparison_context(
+    *,
+    target: Path,
+    metadata: dict[str, Any],
+    current_profile: str,
+    current_tools: tuple[str, ...],
+    current_source_sha256: str,
+    current_vcs_revision: str,
+) -> tuple[bool, list[str], dict[str, Any]]:
+    comparable, reasons = _baseline_compatibility(
+        metadata, current_profile=current_profile, current_tools=current_tools
+    )
+    ancestry_verified = False
+    if current_profile in {"production", "release"} or current_vcs_revision:
+        ancestry_verified, reason = _verify_local_ancestry(
+            target,
+            baseline_revision=str(metadata.get("vcs_revision") or ""),
+            current_revision=current_vcs_revision,
+        )
+        if reason:
+            reasons.append(reason)
+            comparable = False
+    comparison = {
+        "comparable": comparable,
+        "reasons": reasons,
+        "profile": {"baseline": metadata["profile"], "current": current_profile},
+        "selected_tools": {
+            "baseline": metadata["selected_tools"],
+            "current": sorted(current_tools),
+        },
+        "source": {
+            "baseline_sha256": metadata["source_sha256"],
+            "current_sha256": current_source_sha256,
+            "same_snapshot": bool(current_source_sha256)
+            and metadata["source_sha256"] == current_source_sha256,
+            "baseline_revision": metadata["vcs_revision"],
+            "current_revision": current_vcs_revision,
+            "ancestry_verified": ancestry_verified,
+            "ancestry_authority": "local-git" if ancestry_verified else "unverified",
+        },
+    }
+    return comparable, reasons, comparison
+
+
+def _incomparable_result(
+    findings: list[Finding],
+    *,
+    reasons: list[str],
+    comparison: dict[str, Any],
+    metadata: dict[str, Any],
+    ownership_rules: int,
+) -> DeltaResult:
+    for finding in findings:
+        finding.status = FindingStatus.UNCLASSIFIED
+        finding.evidence = {
+            **finding.evidence,
+            "baseline": {"comparable": False, "reasons": reasons},
+        }
+    return DeltaResult(
+        errors=[f"finding baseline is not comparable: {'; '.join(reasons)}"],
+        artifact={
+            "schema_version": "1.1",
+            "configured": True,
+            "comparison": comparison,
+            "baseline": metadata,
+            "counts": {
+                "unclassified": len(findings),
+                "new": 0,
+                "existing": 0,
+                "regression": 0,
+                "resolved": 0,
+            },
+            "match_strategies": {"exact": 0, "semantic": 0},
+            "resolved": [],
+            "ownership_rules": ownership_rules,
+        },
+    )
+
+
+def _classify_comparable_findings(
+    findings: list[Finding],
+    *,
+    previous: list[dict[str, Any]],
+    comparison: dict[str, Any],
+    metadata: dict[str, Any],
+    ownership_rules: int,
+) -> DeltaResult:
     exact = {
         str(value.get("fingerprint")): value
         for value in previous
@@ -73,42 +197,11 @@ def apply_finding_delta(
     for value in previous:
         fuzzy.setdefault(_record_key(value), []).append(value)
     matched: set[str] = set()
-    strategies: dict[str, int] = {"exact": 0, "semantic": 0}
+    strategies = {"exact": 0, "semantic": 0}
     for finding in findings:
-        prior = exact.get(finding.fingerprint)
-        strategy = "exact"
-        if prior is None:
-            candidates = fuzzy.get(_finding_key(finding), [])
-            unmatched = [
-                value
-                for value in candidates
-                if str(value.get("fingerprint") or "") not in matched
-            ]
-            if len(unmatched) == 1:
-                prior = unmatched[0]
-                strategy = "semantic"
-        if prior is None:
-            finding.status = FindingStatus.NEW
-            continue
-        prior_fingerprint = str(prior.get("fingerprint") or "")
-        matched.add(prior_fingerprint)
-        previous_status = str(prior.get("status") or "new")
-        finding.status = (
-            FindingStatus.REGRESSION
-            if previous_status == FindingStatus.RESOLVED.value
-            else FindingStatus.EXISTING
+        _classify_finding(
+            finding, exact=exact, fuzzy=fuzzy, matched=matched, strategies=strategies
         )
-        finding.evidence = {
-            **finding.evidence,
-            "baseline": {
-                "match_strategy": strategy,
-                "previous_finding_id": str(prior.get("finding_id") or ""),
-                "previous_fingerprint": prior_fingerprint,
-                "previous_status": previous_status,
-            },
-        }
-        strategies[strategy] += 1
-
     resolved = [
         _resolved_record(value)
         for value in previous
@@ -126,15 +219,57 @@ def apply_finding_delta(
     counts[FindingStatus.RESOLVED.value] = len(resolved)
     return DeltaResult(
         artifact={
-            "schema_version": "1.0",
+            "schema_version": "1.1",
             "configured": True,
+            "comparison": comparison,
             "baseline": metadata,
             "counts": counts,
             "match_strategies": strategies,
             "resolved": resolved,
-            "ownership_rules": len(ownership),
+            "ownership_rules": ownership_rules,
         }
     )
+
+
+def _classify_finding(
+    finding: Finding,
+    *,
+    exact: dict[str, dict[str, Any]],
+    fuzzy: dict[tuple[str, str, str, str], list[dict[str, Any]]],
+    matched: set[str],
+    strategies: dict[str, int],
+) -> None:
+    prior = exact.get(finding.fingerprint)
+    strategy = "exact"
+    if prior is None:
+        unmatched = [
+            value
+            for value in fuzzy.get(_finding_key(finding), [])
+            if str(value.get("fingerprint") or "") not in matched
+        ]
+        if len(unmatched) == 1:
+            prior, strategy = unmatched[0], "semantic"
+    if prior is None:
+        finding.status = FindingStatus.NEW
+        return
+    prior_fingerprint = str(prior.get("fingerprint") or "")
+    matched.add(prior_fingerprint)
+    previous_status = str(prior.get("status") or "new")
+    finding.status = (
+        FindingStatus.REGRESSION
+        if previous_status == FindingStatus.RESOLVED.value
+        else FindingStatus.EXISTING
+    )
+    finding.evidence = {
+        **finding.evidence,
+        "baseline": {
+            "match_strategy": strategy,
+            "previous_finding_id": str(prior.get("finding_id") or ""),
+            "previous_fingerprint": prior_fingerprint,
+            "previous_status": previous_status,
+        },
+    }
+    strategies[strategy] += 1
 
 
 def _load_baseline(
@@ -174,8 +309,69 @@ def _load_baseline(
         "target": baseline_target,
         "profile": str(document.get("profile") or ""),
         "source_sha256": str(document.get("source_sha256") or ""),
+        "vcs_revision": str(document.get("vcs_revision") or ""),
+        "selected_tools": sorted(
+            str(value)
+            for value in document.get("selected_tools", [])
+            if isinstance(value, str) and value
+        )
+        if isinstance(document.get("selected_tools"), list)
+        else [],
         "finding_count": len(values),
     }
+
+
+def _verify_local_ancestry(
+    target: Path, *, baseline_revision: str, current_revision: str
+) -> tuple[bool, str]:
+    """Verify that the baseline commit is an ancestor using only local history."""
+    if not current_revision:
+        return False, "current VCS revision is unavailable"
+    if not baseline_revision:
+        return False, "baseline does not bind a VCS revision"
+    executable = resolve_executable("git")
+    if executable is None:
+        return False, "git is unavailable for local baseline ancestry verification"
+    result = run_command(
+        [
+            executable,
+            "-c",
+            f"safe.directory={target.resolve()}",
+            "merge-base",
+            "--is-ancestor",
+            baseline_revision,
+            current_revision,
+        ],
+        cwd=target,
+        timeout_seconds=10,
+        max_output_bytes=4096,
+    )
+    if not result.timed_out and result.exit_code == 0:
+        return True, ""
+    if not result.timed_out and result.exit_code == 1:
+        return False, "baseline VCS revision is not an ancestor of the current revision"
+    return False, "local baseline ancestry could not be verified"
+
+
+def _baseline_compatibility(
+    metadata: dict[str, Any],
+    *,
+    current_profile: str,
+    current_tools: tuple[str, ...],
+) -> tuple[bool, list[str]]:
+    reasons: list[str] = []
+    baseline_profile = str(metadata.get("profile") or "")
+    baseline_tools = metadata.get("selected_tools")
+    if current_profile and baseline_profile != current_profile:
+        reasons.append(
+            f"profile {baseline_profile or 'unknown'} does not match {current_profile}"
+        )
+    if current_tools:
+        if not isinstance(baseline_tools, list) or not baseline_tools:
+            reasons.append("baseline does not declare its selected tool set")
+        elif set(str(value) for value in baseline_tools) != set(current_tools):
+            reasons.append("baseline selected tool set does not match the current scan")
+    return not reasons, reasons
 
 
 def _finding_key(finding: Finding) -> tuple[str, str, str, str]:

@@ -26,6 +26,7 @@ class Confidence(StrEnum):
 
 
 class FindingStatus(StrEnum):
+    UNCLASSIFIED = "unclassified"
     NEW = "new"
     EXISTING = "existing"
     RESOLVED = "resolved"
@@ -115,9 +116,11 @@ class ToolRun:
     applicable: bool = True
     executable_sha256: str | None = None
     executable_integrity_verified: bool | None = None
+    executable_organization_approved: bool = False
     executable_unchanged: bool | None = None
     auxiliary_executable_sha256: str | None = None
     auxiliary_executable_integrity_verified: bool | None = None
+    auxiliary_executable_organization_approved: bool = False
     auxiliary_executable_unchanged: bool | None = None
 
 
@@ -130,6 +133,8 @@ class Inventory:
     declared_dependencies: bool = False
     lock_files: list[str] = field(default_factory=list)
     vcs_history_available: bool = False
+    vcs_revision: str = ""
+    vcs_revision_verified: bool = False
     distribution_files: list[str] = field(default_factory=list)
     source_sha256: str = ""
     source_sha256_after: str = ""

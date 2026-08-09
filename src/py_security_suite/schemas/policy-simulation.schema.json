@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:policy-simulation:1.0",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "authoritative", "scope", "report", "policy", "result", "metrics"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "authoritative": {"const": false},
+    "scope": {"type": "string", "minLength": 1},
+    "report": {
+      "type": "object", "additionalProperties": false,
+      "required": ["scan_id", "checksums_sha256", "actual_outcome"],
+      "properties": {
+        "scan_id": {"type": "string", "minLength": 1},
+        "checksums_sha256": {"$ref": "#/$defs/digest"},
+        "actual_outcome": {"enum": ["pass", "warn", "fail", "incomplete"]}
+      }
+    },
+    "policy": {"type": "object"},
+    "result": {
+      "type": "object", "additionalProperties": false,
+      "required": ["disposition", "reasons", "differs_from_actual"],
+      "properties": {
+        "disposition": {"enum": ["allow", "block"]},
+        "reasons": {"type": "array", "items": {"type": "object"}},
+        "differs_from_actual": {"type": "boolean"}
+      }
+    },
+    "metrics": {"type": "object"}
+  },
+  "$defs": {"digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}
+}

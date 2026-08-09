@@ -24,11 +24,13 @@ class TrustCatalogTests(unittest.TestCase):
             config = load_config(profile_override="quick")
             config.trust.catalog_path = path
             config.trust.catalog_sha256 = _sha256(path)
+            config.trust.catalog_organization_approved = True
 
             result = apply_trust_catalog(config)
 
         self.assertEqual(result.errors, [])
         self.assertEqual(config.tools["bandit"].executable_sha256, "a" * 64)
+        self.assertTrue(config.tools["bandit"].executable_organization_approved)
         self.assertEqual(result.artifact["applied"][0]["approved_by"], "security-team")
 
     def test_catalog_digest_mismatch_fails_closed(self) -> None:

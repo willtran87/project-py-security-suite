@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import re
 import time
 from pathlib import Path
 
@@ -12,6 +14,33 @@ from .base import AdapterResult, ScannerAdapter
 
 class CosignAdapter(ScannerAdapter):
     name = "cosign"
+
+    def _detect_version(self, executable: str, target: Path) -> str:
+        result = run_command(
+            [executable, "version", "--json"],
+            cwd=target,
+            timeout_seconds=min(30, self.config.timeout_seconds),
+            max_output_bytes=64 * 1024,
+            environment=self.environment(),
+        )
+        if result.timed_out or result.exit_code != 0:
+            return "unknown"
+        try:
+            document = json.loads(result.stdout)
+        except json.JSONDecodeError:
+            document = {}
+        if isinstance(document, dict):
+            version = str(
+                document.get("gitVersion") or document.get("git_version") or ""
+            ).strip()
+            if version:
+                return f"cosign {sanitize_diagnostic(version, maximum=100)}"
+        match = re.search(r"(?i)gitversion\s*[:=]\s*['\"]?([^\s,'\"}]+)", result.stdout)
+        return (
+            f"cosign {sanitize_diagnostic(match.group(1), maximum=100)}"
+            if match
+            else "unknown"
+        )
 
     def not_applicable_reason(self, target: Path) -> str | None:
         return (

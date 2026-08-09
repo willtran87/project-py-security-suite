@@ -1,6 +1,6 @@
 # Production security gate
 
-Last reviewed: 2026-08-07
+Last reviewed: 2026-08-08
 
 ## Purpose
 
@@ -50,6 +50,10 @@ Before promotion, verify that the generated manifest records:
 - approved and unchanged scanner entry points; and
 - both an approved `run-codeql` entry point and CodeQL CLI helper when CodeQL
   is applicable.
+
+“Approved” means the exact digest originated in separate organization policy
+or its digest-bound trust catalog. A matching repository-configured hash is
+valuable integrity evidence, but cannot authorize its own scanner.
 
 The suite fails closed when these integrity claims are absent in production or
 release profiles. The enterprise runner should still mount the checkout

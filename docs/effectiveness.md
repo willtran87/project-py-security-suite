@@ -54,6 +54,13 @@ Minimal corpus:
 }
 ```
 
+Use [the enterprise corpus template](../examples/effectiveness-corpus.enterprise.json)
+to plan positive and negative cases across SAST, secrets, dependencies, IaC,
+workflow security, architecture, and unused code. Replace every template match
+with a reviewed fixture that is actually present in the scanned corpus. Require
+per-tool minimums in `release-check`; never count a label for a scanner that was
+unavailable or not applicable.
+
 Every label needs a stable ID, an expected `finding` or `clean` result, and at
 least one exact discriminator: tool, native rule, repository-relative path, or
 classification. Corpus ownership, change review, representative vulnerable and

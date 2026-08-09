@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:release-readiness:1.2",
+  "title": "Unified release-readiness decision with causal blocker hierarchy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "decision", "scope", "report", "summary", "blockers", "root_blockers", "derived_blockers", "blocker_graph", "controls", "remediation"],
+  "properties": {
+    "schema_version": {"const": "1.2"},
+    "decision": {"enum": ["approved", "not_approved"]},
+    "scope": {"type": "string", "minLength": 1},
+    "report": {
+      "type": "object", "additionalProperties": false,
+      "required": ["scan_id", "checksums_sha256", "files_verified"],
+      "properties": {
+        "scan_id": {"type": "string", "minLength": 1},
+        "checksums_sha256": {"$ref": "#/$defs/digest"},
+        "files_verified": {"type": "integer", "minimum": 1}
+      }
+    },
+    "summary": {
+      "type": "object", "additionalProperties": false,
+      "required": ["controls", "passed", "failed", "root_failed", "derived_failed", "blocking_findings", "scanner_entrypoints", "scanner_trust_gaps", "remediation_actions", "actions_by_authority"],
+      "properties": {
+        "controls": {"type": "integer", "minimum": 1},
+        "passed": {"type": "integer", "minimum": 0},
+        "failed": {"type": "integer", "minimum": 0},
+        "root_failed": {"type": "integer", "minimum": 0},
+        "derived_failed": {"type": "integer", "minimum": 0},
+        "blocking_findings": {"type": "integer", "minimum": 0},
+        "scanner_entrypoints": {"type": "integer", "minimum": 0},
+        "scanner_trust_gaps": {"type": "integer", "minimum": 0},
+        "remediation_actions": {"type": "integer", "minimum": 0},
+        "actions_by_authority": {
+          "type": "object",
+          "additionalProperties": {"type": "integer", "minimum": 1},
+          "propertyNames": {"enum": ["repository", "controlled-signing", "organization-security", "release-approver", "cross-functional"]}
+        }
+      }
+    },
+    "blockers": {"$ref": "#/$defs/uniqueTextArray"},
+    "root_blockers": {"$ref": "#/$defs/uniqueTextArray"},
+    "derived_blockers": {"$ref": "#/$defs/uniqueTextArray"},
+    "blocker_graph": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["blocker", "derived_from"],
+        "properties": {
+          "blocker": {"type": "string", "minLength": 1},
+          "derived_from": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "controls": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/control"}},
+    "remediation": {"type": "array", "items": {"$ref": "#/$defs/remediation"}}
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "uniqueTextArray": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "textArray": {"type": "array", "maxItems": 100, "items": {"type": "string", "minLength": 1, "maxLength": 2000}},
+    "control": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "status", "detail", "evidence"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "status": {"enum": ["pass", "fail"]},
+        "detail": {"type": "string", "minLength": 1},
+        "evidence": {"$ref": "#/$defs/textArray"}
+      }
+    },
+    "remediation": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "blocker", "priority", "owner", "authority", "automatable", "action", "evidence", "commands"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "blocker": {"type": "string", "minLength": 1},
+        "priority": {"enum": ["P0", "P1", "P2", "P3", "P4"]},
+        "owner": {"type": "string", "minLength": 1},
+        "authority": {"enum": ["repository", "controlled-signing", "organization-security", "release-approver", "cross-functional"]},
+        "automatable": {"type": "boolean"},
+        "action": {"type": "string", "minLength": 1},
+        "evidence": {"$ref": "#/$defs/textArray"},
+        "commands": {"$ref": "#/$defs/textArray"}
+      }
+    }
+  }
+}

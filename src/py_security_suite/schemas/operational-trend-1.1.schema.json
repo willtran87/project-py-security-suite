@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:operational-trend:1.1",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "authoritative", "scope", "summary", "delta", "comparison", "scanner_history", "anomalies", "timeline"],
+  "properties": {
+    "schema_version": {"const": "1.1"},
+    "authoritative": {"const": false},
+    "scope": {"type": "string", "minLength": 1},
+    "summary": {"type": "object"},
+    "delta": {"type": "object", "additionalProperties": {"type": "integer"}},
+    "comparison": {"type": "object"},
+    "scanner_history": {"type": "array", "items": {"type": "object"}},
+    "anomalies": {"type": "array", "items": {"type": "object"}},
+    "timeline": {"type": "array", "minItems": 2, "maxItems": 100, "items": {"type": "object"}}
+  }
+}

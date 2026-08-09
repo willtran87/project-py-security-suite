@@ -255,6 +255,103 @@ class FindingDeltaTests(unittest.TestCase):
             )
         self.assertIn("does not match", result.errors[0])
 
+    def test_incompatible_profile_and_tool_set_are_not_labeled_as_new(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            baseline = root / "baseline.json"
+            baseline.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "1.0",
+                        "target": root.name,
+                        "profile": "quick",
+                        "source_sha256": "a" * 64,
+                        "selected_tools": ["bandit"],
+                        "findings": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            finding = _finding()
+            result = apply_finding_delta(
+                [finding],
+                target=root,
+                baseline_path=baseline,
+                baseline_sha256=_digest(baseline),
+                current_profile="comprehensive",
+                current_tools=("bandit", "semgrep"),
+                current_source_sha256="b" * 64,
+            )
+
+        self.assertEqual(finding.status, FindingStatus.UNCLASSIFIED)
+        self.assertFalse(result.artifact["comparison"]["comparable"])
+        self.assertEqual(result.artifact["counts"]["new"], 0)
+        self.assertEqual(result.artifact["counts"]["unclassified"], 1)
+        self.assertIn("profile", result.errors[0])
+
+    @patch("py_security_suite.finding_delta.resolve_executable", return_value="git")
+    @patch("py_security_suite.finding_delta.run_command")
+    def test_production_baseline_requires_and_verifies_local_ancestry(
+        self, run_mock, _resolve_mock
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            baseline = root / "baseline.json"
+            baseline.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "1.0",
+                        "target": root.name,
+                        "profile": "production",
+                        "selected_tools": ["bandit"],
+                        "source_sha256": "a" * 64,
+                        "vcs_revision": "1" * 40,
+                        "findings": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            run_mock.return_value = RawExecution(
+                command=["git"],
+                exit_code=0,
+                stdout="",
+                stderr="",
+                duration_seconds=0.1,
+            )
+            result = apply_finding_delta(
+                [_finding()],
+                target=root,
+                baseline_path=baseline,
+                baseline_sha256=_digest(baseline),
+                current_profile="production",
+                current_tools=("bandit",),
+                current_vcs_revision="2" * 40,
+            )
+            self.assertEqual(result.errors, [])
+            self.assertTrue(
+                result.artifact["comparison"]["source"]["ancestry_verified"]
+            )
+
+            run_mock.return_value = RawExecution(
+                command=["git"],
+                exit_code=1,
+                stdout="",
+                stderr="",
+                duration_seconds=0.1,
+            )
+            finding = _finding()
+            result = apply_finding_delta(
+                [finding],
+                target=root,
+                baseline_path=baseline,
+                baseline_sha256=_digest(baseline),
+                current_profile="production",
+                current_tools=("bandit",),
+                current_vcs_revision="2" * 40,
+            )
+            self.assertEqual(finding.status, FindingStatus.UNCLASSIFIED)
+            self.assertIn("not an ancestor", result.errors[0])
+
 
 class PassportTests(unittest.TestCase):
     def test_passport_input_binding_rejects_bad_shapes_paths_and_digests(self) -> None:

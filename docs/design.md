@@ -1,7 +1,7 @@
 # Python Security Suite design
 
 Status: alpha foundation  
-Last reviewed: 2026-08-07
+Last reviewed: 2026-08-08
 
 ## Purpose
 
@@ -117,6 +117,40 @@ does not need Docker, a package index, the Semgrep registry, OSV services, or
 credential verification services. The native bundle currently targets Windows
 x86-64 and Python 3.11.
 
+```mermaid
+flowchart LR
+    Source["Exact source revision"] --> Build["Reproducible build lane"]
+    Source --> Scan["Isolated comprehensive scan"]
+    Build --> Payload["Wheel + sdist identities"]
+    Scan --> Seal["Checksum-sealed report"]
+    Seal --> Decision["release-check"]
+    Decision --> Plan["promotion-plan"]
+    Seal --> Baseline["baseline-candidate<br/>revision + exact digest"]
+    Seal --> Trend["trend<br/>verified report history"]
+    Payload --> Request["prepare-signing<br/>closed artifact set"]
+    Seal --> Request
+    Request --> Signer["Independent controlled signer"]
+    Signer --> Verify["Offline bundle + subject verification"]
+    Verify --> Passport["Signed Security Passport"]
+    Passport --> Admission["Organization admission controller"]
+    Plan --> Pack["evidence-pack<br/>atomic closed directory"]
+    Pack --> Manifest["release-manifest<br/>closed evidence set"]
+    Passport --> Manifest
+    Manifest --> Admission
+```
+
+The evidence-pack application layer composes existing verified services; it
+does not create a second evidence model. Payload files are generated in private
+staging, the release manifest binds selected decision records to the report,
+the audit archive embeds the sealed report and those records, and the outer
+pack manifest closes every readable artifact. Only a fully re-verified staging
+tree is atomically renamed into place.
+
+The scan lane produces evidence and candidate requests, never organizational
+authority. Platform security attests isolation, security tooling approves exact
+scanner entry points, vulnerability management approves intelligence,
+controlled signing holds keys, and the release approver owns admission.
+
 `--network-isolated` does not enforce network denial. It attests that the
 enterprise runner, VM, firewall, or equivalent external control already does.
 
@@ -133,6 +167,9 @@ flowchart LR
     Runner["External controller<br/>egress denial + signature verification"] --> Evidence["Isolation attestation"]
     Repo["Immutable repository digest"] --> Evidence
     Evidence --> Validate
+    Report --> Draft["Non-authoritative evidence draft"]
+    Draft --> Review["Independent provenance and policy review"]
+    Review --> Org
     Snapshots["Exact KEV | EPSS | VEX digests"] --> Approval["Intelligence approval"]
     Approval --> Validate
     Report["Verified report"] --> Gate["release-check"]
@@ -141,6 +178,12 @@ flowchart LR
     Passport["Passport verification"] --> Gate
     Gate --> Decision{"APPROVED?"}
 ```
+
+Scanner identity carries two independent facts through the manifest: whether
+the observed executable matched a configured digest, and whether that digest
+originated in organization policy. The release gate requires both plus an
+unchanged post-execution digest. This prevents a repository from approving its
+own toolchain while preserving useful local tamper detection.
 
 ## Runtime architecture
 

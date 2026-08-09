@@ -376,6 +376,7 @@ class OrchestratorTests(unittest.TestCase):
             duration_seconds=0.01,
             executable_sha256="a" * 64,
             executable_integrity_verified=True,
+            executable_organization_approved=True,
             executable_unchanged=True,
         )
         self.assertIn(
@@ -651,7 +652,7 @@ class OrchestratorTests(unittest.TestCase):
             self.assertIn("## Scanner entry-point trust actions", action_plan)
             self.assertIn("### Provenance review batches", action_plan)
             self.assertIn("Independently verify provenance", action_plan)
-            self.assertIn("1 approval gap; 1 post-execution gap", action_plan)
+            self.assertIn("2 approval gaps; 1 post-execution gap", action_plan)
             self.assertIn(
                 "Approval review workload:** 1 candidate binding across 1 unique",
                 action_plan,

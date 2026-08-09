@@ -1,6 +1,6 @@
 # Python Security Suite compatibility and coverage matrix
 
-Last reviewed: 2026-08-07
+Last reviewed: 2026-08-08
 
 See the [documentation index](index.md), [solution design](design.md), and
 [operations guide](operations.md) for the surrounding architecture.
@@ -37,10 +37,12 @@ query or model bundles remain deployment responsibilities.
 Conditional tools report `not applicable` when their input does not exist.
 
 Every adapter uses the same execution-integrity contract: resolve an explicit
-entry point, hash it before execution, compare an optional approved SHA-256,
+entry point, hash it before execution, compare an optional expected SHA-256,
 and hash it again afterward. `production` and `release` require approved
 digests for every applicable scanner. CodeQL additionally binds its CLI helper.
-For Python console scripts this authenticates the entry point, while the
+Repository-local expectations detect substitution but do not establish
+organization authority; only organization policy or its bound catalog can do
+that. For Python console scripts this authenticates the entry point, while the
 approved bundle manifest and package inventory remain the evidence for the
 imported runtime.
 
@@ -305,6 +307,19 @@ prerequisites, not applicability tests. Missing approved assets make a required
 deep scan `INCOMPLETE`; `run-codeql` is never permitted to download them.
 
 ## Report behavior
+
+The orchestration layer also supplies offline, schema-versioned governance
+contracts that complement scanner coverage:
+
+| Capability | Command | Domain contribution | Authority |
+|---|---|---|---|
+| Unified release decision | `release-check` | Integrity, policy, claims, trust, isolation, intelligence, effectiveness, Passport | Decision support; admission remains external |
+| Governance review handoff | `evidence-draft` | Exact scanner, snapshot, runner, source, and artifact digests | Candidate only |
+| Promotion operating view | `promotion-plan` | Lifecycle, evidence quality, reliability, retention, audiences, actions | Non-authoritative |
+| Controlled-signing handoff | `prepare-signing` | Closed wheel/sdist/zip subject set bound to report and source | Candidate only; keys remain external |
+| Signing-request receipt | `verify-signing-request` | Detects added, missing, and changed distributions | Integrity proof, not signer identity |
+| Comparable lifecycle | scan baseline + `finding-delta.json` | New, unchanged, resolved, and unclassified findings | Requires same profile and scanner set |
+
 
 - CycloneDX produces `sbom.cdx.json`.
 - Syft safely expands wheels and source distributions into a bounded temporary

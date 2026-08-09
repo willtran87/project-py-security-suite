@@ -99,6 +99,16 @@ def apply_trust_catalog(config: SuiteConfig) -> TrustCatalogResult:
                 )
                 continue
             setattr(config.tools[tool], setting, digest)
+            authority_setting = (
+                "executable_organization_approved"
+                if role == "primary"
+                else "auxiliary_executable_organization_approved"
+            )
+            setattr(
+                config.tools[tool],
+                authority_setting,
+                config.trust.catalog_organization_approved,
+            )
             applied.append(
                 {
                     "tool": tool,

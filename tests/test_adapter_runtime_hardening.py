@@ -307,9 +307,52 @@ class SpecializedAdapterRuntimeTests(unittest.TestCase):
             self.assertEqual(
                 len(str(result.findings[0].evidence["artifact_sha256"])), 64
             )
-
         self.assertIsNone(_provenance_file(dist, artifact))
         self.assertIsNone(_bundle_for(dist, artifact))
+
+    def test_cosign_version_uses_machine_readable_output(self) -> None:
+        adapter = CosignAdapter(ToolConfig(executable="cosign"), 4096)
+        execution = RawExecution(
+            command=["cosign", "version", "--json"],
+            exit_code=0,
+            stdout=json.dumps({"gitVersion": "v3.1.2"}),
+            stderr="",
+            duration_seconds=0.01,
+            timed_out=False,
+        )
+        with patch(
+            "py_security_suite.adapters.cosign.run_command", return_value=execution
+        ):
+            self.assertEqual(
+                adapter._detect_version("cosign", self.target), "cosign v3.1.2"
+            )
+
+        cases = (
+            (
+                RawExecution(
+                    command=["cosign"],
+                    exit_code=0,
+                    stdout="GitVersion: v3.2.0",
+                    stderr="",
+                    duration_seconds=0.01,
+                    timed_out=False,
+                ),
+                "cosign v3.2.0",
+            ),
+            (_execution(["cosign"], exit_code=1), "unknown"),
+            (_execution(["cosign"], timed_out=True), "unknown"),
+            (_execution(["cosign"]), "unknown"),
+        )
+        for result, expected in cases:
+            with (
+                self.subTest(expected=expected),
+                patch(
+                    "py_security_suite.adapters.cosign.run_command", return_value=result
+                ),
+            ):
+                self.assertEqual(
+                    adapter._detect_version("cosign", self.target), expected
+                )
 
     def test_cyclonedx_selects_only_locked_inputs(self) -> None:
         requirements = self.target / "requirements.txt"

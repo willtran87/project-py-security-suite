@@ -1,6 +1,6 @@
 # Python Security Suite configuration
 
-Last reviewed: 2026-08-07
+Last reviewed: 2026-08-08
 
 ## Loading and protection
 
@@ -42,6 +42,12 @@ organization-approved catalog digest.
 Export the strict contract with `pysec schema scanner-trust-catalog-1.0`.
 Every scan retains applied, ignored, and invalid catalog decisions in
 `scanner-trust.json`.
+
+Digest origin is retained separately from digest matching. A tool pin in
+repository configuration can fail closed on an unexpected binary, but it does
+not establish organization approval. Organization policy pins and entries from
+an organization-policy-bound catalog do. `scan-manifest.json` records both
+facts for each primary and auxiliary entry point.
 
 ## Profiles
 
@@ -247,6 +253,14 @@ first; a unique tool/rule/path/title match preserves lifecycle across line
 movement. Findings absent from the new scan are retained only in
 `finding-delta.json` as resolved evidence.
 
+Baseline comparison is fail-closed on comparability. The baseline must record
+the same scan profile and selected scanner set as the current scan. A mismatch,
+or a legacy baseline that lacks the selected-tool inventory, sets
+`comparison.comparable: false`, records exact reasons, and marks current
+findings `unclassified`; it never presents them as newly introduced. Source
+digests are retained for audit context, while revision ancestry must be proven
+by the enterprise CI/VCS controller when that proof is required.
+
 Each configured intelligence path must have its corresponding SHA-256. The
 suite validates regular-file type, byte and record limits, digest, maximum age,
 and native schema before enrichment. Invalid configured evidence makes the scan
@@ -315,6 +329,7 @@ pysec inspect REPORT [--limit 0-100] [--format text|json]
 pysec verify-inspection INSPECTION --report REPORT [--limit 0-100]
   [--format text|json] [--output FILE] [--overwrite]
 pysec release-check REPORT [--format text|json] [--output FILE]
+pysec evidence-draft REPORT [--format text|json] [--output FILE]
 pysec reachability-diff BASELINE CURRENT --baseline-sha256 SHA256
   --current-sha256 SHA256 [--format text|json] [--output FILE]
 pysec schema NAME [--output FILE] [--overwrite]

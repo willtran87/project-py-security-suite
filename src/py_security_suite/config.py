@@ -378,6 +378,7 @@ class IntelligenceConfig:
 class TrustConfig:
     catalog_path: Path | None = None
     catalog_sha256: str = ""
+    catalog_organization_approved: bool = False
 
 
 @dataclass(slots=True)
@@ -393,6 +394,8 @@ class ToolConfig:
     repository_url: str = ""
     executable_sha256: str = ""
     auxiliary_executable_sha256: str = ""
+    executable_organization_approved: bool = False
+    auxiliary_executable_organization_approved: bool = False
     minimum_coverage_percent: float = 80.0
     maximum_database_age_days: float = 10.0
     compare_branch: str = ""
@@ -1552,6 +1555,8 @@ def load_config(
     config = _to_config(merged)
     organization_isolation = organization.get("isolation", {})
     organization_intelligence = organization.get("intelligence", {})
+    organization_trust = organization.get("trust", {})
+    organization_tools = organization.get("tools", {})
     if isinstance(organization_isolation, Mapping):
         config.isolation.evidence_organization_approved = bool(
             organization_isolation.get("evidence_path")
@@ -1562,4 +1567,24 @@ def load_config(
             organization_intelligence.get("approval_path")
             and organization_intelligence.get("approval_sha256")
         )
+    if isinstance(organization_trust, Mapping):
+        config.trust.catalog_organization_approved = bool(
+            organization_trust.get("catalog_path")
+            and organization_trust.get("catalog_sha256")
+        )
+    if isinstance(organization_tools, Mapping):
+        for name, tool in config.tools.items():
+            approved = organization_tools.get(name, {})
+            if not isinstance(approved, Mapping):
+                continue
+            tool.executable_organization_approved = bool(
+                approved.get("executable_sha256")
+                and str(approved["executable_sha256"]).casefold()
+                == tool.executable_sha256
+            )
+            tool.auxiliary_executable_organization_approved = bool(
+                approved.get("auxiliary_executable_sha256")
+                and str(approved["auxiliary_executable_sha256"]).casefold()
+                == tool.auxiliary_executable_sha256
+            )
     return config

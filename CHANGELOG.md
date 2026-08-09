@@ -5,6 +5,57 @@ for published releases.
 
 ## Unreleased
 
+- Consolidate semantically equivalent finding remediation into one owner-routed
+  action without losing finding or artifact evidence. Promotion Markdown and
+  HTML now surface priority, action ID, authority, target date, evidence
+  subjects, and safely encoded suggested commands.
+- Add atomic `evidence-pack` and `verify-evidence-pack` workflows that compose
+  verified decision, lifecycle, audience, annotation, policy, release-manifest,
+  and audit artifacts into one portable closed directory. Optional previous
+  reports add trend/reachability context; optional distributions add an exact
+  controlled-signing handoff; optional configuration adds value-redacted,
+  profile-matched provenance. Approved effectiveness and Passport receipts now
+  flow through release readiness and become required release-manifest/audit
+  evidence; historical performance thresholds flow into the retained trend.
+- Add durable finding lifecycle/SLA registers, verified GitHub annotations,
+  audience-specific promotion exports, value-redacted configuration provenance,
+  absolute scanner performance budgets, multi-scenario coverage union, and
+  cross-repository portfolio aggregation.
+- Add deterministic portable audit packages whose verifier rechecks every file,
+  every evidence digest, and the embedded sealed report after relocation.
+
+- Add locally verified VCS ancestry to production/release finding baselines and
+  `baseline-candidate` for exact-digest external approval handoff.
+- Version release readiness at 1.2 with causal root/derived blocker hierarchy,
+  eliminating umbrella policy failures from the actionable root count.
+- Add `trend` for longitudinal comparison of 2-100 sealed reports and
+  `release-manifest` for a closed, digest-bound release evidence index.
+- Add GitHub-ready Markdown and standalone offline HTML promotion views, plus
+  digest-grouped scanner identity review in governance evidence drafts.
+- Add exact-set, checksum-bound `prepare-signing` and
+  `verify-signing-request` handoffs so a controlled signer receives precisely
+  the distributions scanned, with no private key entering the scan lane.
+- Add `promotion-plan`, a non-authoritative consolidated view of lifecycle
+  state, assurance-claim closure, evidence quality, scanner reliability,
+  conditional domains, retention, artifact relationships, audience views, and
+  prioritized actions.
+- Reject incomparable finding baselines when profiles or selected scanner sets
+  differ; findings become `unclassified` instead of being mislabeled as new.
+- Require known versions for applicable production scanners and parse Cosign's
+  machine-readable version output.
+- Let release policy require positive and negative effectiveness labels, a
+  minimum perspective count, named scanners, and minimum labels per scanner.
+- Remove the redundant generic scan-policy action when specific failed controls
+  already explain the release block.
+- Distinguish digest matching from organization authorization for every primary
+  and auxiliary scanner entry point; repository-local pins no longer satisfy
+  the release trust gate.
+- Version release readiness at 1.1 with prioritized, owner-routed remediation
+  actions grouped by repository, signing, organization-security, approver, and
+  cross-functional authority.
+- Add `evidence-draft`, a checksum-bound but explicitly non-authoritative handoff
+  of scanner identities, intelligence snapshots, isolation bindings, and exact
+  artifacts requiring controlled signing.
 - Add organization-authorized, digest-bound isolation and offline-intelligence
   receipts; production and release fail closed when required authority is absent.
 - Add `release-check`, a unified decision over report integrity, policy,

@@ -62,9 +62,10 @@ flowchart LR
         Scan --> Findings["Normalize and correlate"]
         Findings --> Policy["PASS | WARN | FAIL | INCOMPLETE"]
         Policy --> Reports["Seal reports and evidence"]
+        Reports --> Pack["Atomic evidence pack<br/>role views + audit archive"]
     end
     Transfer --> Doctor
-    Reports --> Verify["Verify | inspect | attest"]
+    Pack --> Verify["Verify | inspect | attest"]
     Verify --> Publish["GitHub summary, SARIF, and artifact"]
 ```
 
@@ -176,18 +177,163 @@ Turn the sealed scan, organization-authorized isolation and intelligence
 receipts, scanner trust, optional effectiveness benchmark, and signed Passport
 verification into one fail-closed promotion decision:
 
+For the normal operator path, publish and verify the complete decision-support
+set with two commands. Publication is atomic: no output directory appears until
+every sidecar, relative-path manifest, completion marker, and embedded audit
+archive has verified successfully.
+
+```text
+pysec evidence-pack REPORT --output security-evidence
+pysec verify-evidence-pack security-evidence --report REPORT \
+  --pack-sha256 PACK_MANIFEST_SHA256 \
+  --output security-evidence-verification.json
+```
+
+For a governed production handoff, bind the independently reviewed inputs and
+historical runtime policy in the same atomic operation:
+
+```text
+pysec evidence-pack REPORT --output security-evidence \
+  --previous-report PREVIOUS_REPORT \
+  --effectiveness-evaluation effectiveness-evaluation.json \
+  --effectiveness-sha256 APPROVED_EVALUATION_SHA256 \
+  --minimum-effectiveness-labels 25 \
+  --minimum-effectiveness-positive-labels 10 \
+  --minimum-effectiveness-negative-labels 10 \
+  --minimum-effectiveness-tools 2 \
+  --minimum-effectiveness-labels-per-tool 2 \
+  --required-effectiveness-tool bandit \
+  --required-effectiveness-tool semgrep \
+  --passport-verification passport-verification.json \
+  --passport-verification-sha256 APPROVED_PASSPORT_SHA256 \
+  --require-passport \
+  --performance-regression-percent 25 \
+  --maximum-total-seconds 600 \
+  --tool-budget bandit=30 --tool-budget semgrep=120
+```
+
+Open `security-evidence/README.md` first. It links the promotion plan and five
+role-specific views, while the directory retains normalized lifecycle, policy
+simulation, GitHub annotations, closed release evidence, and a portable audit
+ZIP. The verified `report/` copy makes the full HTML report and Markdown finding
+cards directly browsable; every finding retains tool/rule attribution,
+classification, file and line, code or artifact evidence, reference, and next
+action. Use `--previous-register PREVIOUS.json
+--previous-register-sha256 SHA256` to carry finding lifecycle and SLA state.
+Use `--previous-report PREVIOUS_REPORT` to add report trend, reachability delta,
+and automatically derived prior lifecycle state. `--artifacts dist` adds an
+exact-set signing request and local receipt; `--config`, `--policy`, and
+`--profile` add portable, value-redacted configuration origins only when the
+effective profile matches the sealed scan.
+The commands below remain available when a workflow must issue or transfer one
+sidecar independently.
+
 ```text
 pysec release-check REPORT --format json \
   --effectiveness-evaluation effectiveness-evaluation.json \
   --effectiveness-sha256 APPROVED_SHA256 \
   --minimum-effectiveness-labels 25 \
+  --minimum-effectiveness-positive-labels 10 \
+  --minimum-effectiveness-negative-labels 10 \
+  --minimum-effectiveness-labels-per-tool 2 \
+  --required-effectiveness-tool bandit \
+  --required-effectiveness-tool semgrep \
   --passport-verification passport-verification.json \
   --passport-verification-sha256 APPROVED_SHA256 \
   --require-passport --output release-readiness.json
+
+pysec evidence-draft REPORT --format json \
+  --output governance-evidence-draft.json
+
+pysec promotion-plan REPORT --format json \
+  --release-readiness release-readiness.json \
+  --release-readiness-sha256 APPROVED_SHA256 \
+  --output promotion-plan.json
+
+pysec promotion-plan REPORT --format markdown --output promotion-plan.md
+pysec promotion-plan REPORT --format html --output promotion-plan.html
+pysec baseline-candidate REPORT --format json --output baseline-candidate.json
+pysec trend PREVIOUS_REPORT CURRENT_REPORT --format json \
+  --output operational-trend.json
+
+pysec prepare-signing REPORT dist --output signing-request.json
+pysec verify-signing-request signing-request.json dist \
+  --request-sha256 APPROVED_SHA256 \
+  --format json --output signing-request-verification.json
+
+pysec release-manifest REPORT \
+  --evidence release-readiness=release-readiness.json@APPROVED_SHA256 \
+  --evidence promotion-plan=promotion-plan.json@APPROVED_SHA256 \
+  --output release-evidence-manifest.json
+
+pysec verify-release-manifest release-evidence-manifest.json \
+  --manifest-sha256 APPROVED_MANIFEST_SHA256 \
+  --report REPORT \
+  --required-evidence promotion-plan \
+  --format json --output release-evidence-verification.json
+
+pysec policy-simulate REPORT \
+  --block-severity critical --block-severity high \
+  --minimum-confidence medium \
+  --require-tool bandit --require-tool semgrep \
+  --format json --output policy-simulation.json
+
+pysec finding-register REPORT --format json --output finding-register.json
+pysec config-provenance --config pysec.toml --policy ORGANIZATION.toml \
+  --format json --output config-provenance.json
+pysec audience-report promotion-plan.json --plan-sha256 APPROVED_SHA256 \
+  --report REPORT --audience developer --format markdown \
+  --output developer-view.md
+pysec github-annotations promotion-plan.json --plan-sha256 APPROVED_SHA256 \
+  --report REPORT --format github
+pysec audit-package REPORT \
+  --evidence promotion-plan=promotion-plan.json@APPROVED_SHA256 \
+  --output audit.zip
+pysec verify-audit-package audit.zip --package-sha256 APPROVED_SHA256 \
+  --format json --output audit-verification.json
+pysec merge-coverage \
+  --scenario api=api-coverage.json@APPROVED_SHA256 \
+  --scenario worker=worker-coverage.json@APPROVED_SHA256 \
+  --output merged-coverage.json
+pysec portfolio REPORT_ONE REPORT_TWO --format json --output portfolio.json
 ```
 
 A report `PASS` is necessary but does not itself authorize promotion. See
-[Governed release readiness](docs/release-readiness.md).
+[Governed release readiness](docs/release-readiness.md). Release-readiness 1.2
+separates causal root blockers from derived policy outcomes and includes owner-,
+authority-, and command-bearing remediation actions. The draft
+collects exact observed digests for independent review but is deliberately
+non-authoritative and cannot satisfy an approval control.
+The promotion plan joins the evidence into executive, developer, security,
+release, and auditor views without granting approval; Markdown and HTML formats
+are dependency-free GitHub artifacts. Equivalent work is consolidated without
+dropping finding or artifact references; each rendered action shows priority,
+owner, required authority, SLA target, evidence subjects, and safe suggested
+commands. `trend` compares only checksum-verified
+reports. The release manifest closes the evidence set but cannot approve it;
+`verify-release-manifest` independently rechecks the report and every evidence
+digest after transfer (`--evidence-location NAME=PATH` safely remaps relocated
+files). `policy-simulate` previews stricter policy without rewriting evidence.
+`finding-register` carries stable fingerprints, ownership, reopen/resolution
+state, and severity SLAs across digest-bound runs. `config-provenance` explains
+which layer supplied each effective key without exporting values. Audience and
+GitHub exports verify the promotion-plan digest and report seal before rendering.
+The deterministic audit ZIP verifies every embedded file and the report after
+relocation. Coverage merging unions independently hashed runtime scenarios;
+portfolio aggregation accepts only distinct, independently verified reports.
+`evidence-pack` composes these primitives without weakening their checks: its
+manifest closes the complete directory, `checksums.sha256` gives portable file
+identities, `COMPLETE` prevents partial publication from being mistaken for a
+finished result, and `verify-evidence-pack` re-verifies the audit archive and
+optional source report. Supplied effectiveness and Passport receipts require
+lowercase approved SHA-256 values, are copied byte-for-byte, and become required
+members of both the release manifest and audit archive. Performance thresholds
+flow into the retained trend when a previous report is supplied. The pack
+remains explicitly non-authoritative.
+The signing request is a
+closed-set distribution manifest for transfer to an independent controlled
+signing lane; its verifier rejects changed, missing, or added wheel, sdist, and
+zip payloads.
 
 Commands with `--format json` return failures on standard error using one stable
 envelope with `status`, `command`, and a coded `error`; `attest` uses the same

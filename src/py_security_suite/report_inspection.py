@@ -25,6 +25,9 @@ _REPORT_VERIFICATION_SCHEMA_ID = (
     "urn:project-py-security-suite:schema:report-verification:1.0"
 )
 BUNDLED_SCHEMA_RESOURCES = {
+    "evidence-pack-1.0": "evidence-pack.schema.json",
+    "evidence-pack-verification-1.0": "evidence-pack-verification.schema.json",
+    "baseline-candidate-1.0": "baseline-candidate.schema.json",
     "effectiveness-corpus-1.0": "effectiveness-corpus.schema.json",
     "effectiveness-evaluation-1.0": "effectiveness-evaluation.schema.json",
     "scanner-trust-catalog-1.0": "scanner-trust-catalog.schema.json",
@@ -32,6 +35,25 @@ BUNDLED_SCHEMA_RESOURCES = {
     "isolation-attestation-1.0": "isolation-attestation.schema.json",
     "intelligence-approval-1.0": "intelligence-approval.schema.json",
     "release-readiness-1.0": "release-readiness.schema.json",
+    "release-readiness-1.1": "release-readiness-1.1.schema.json",
+    "release-readiness-1.2": "release-readiness-1.2.schema.json",
+    "governance-evidence-draft-1.0": "governance-evidence-draft.schema.json",
+    "signing-request-1.0": "signing-request.schema.json",
+    "signing-request-verification-1.0": "signing-request-verification.schema.json",
+    "promotion-plan-1.0": "promotion-plan.schema.json",
+    "promotion-plan-1.1": "promotion-plan-1.1.schema.json",
+    "operational-trend-1.0": "operational-trend.schema.json",
+    "operational-trend-1.1": "operational-trend-1.1.schema.json",
+    "release-evidence-manifest-1.0": "release-evidence-manifest.schema.json",
+    "release-evidence-manifest-verification-1.0": "release-evidence-manifest-verification.schema.json",
+    "policy-simulation-1.0": "policy-simulation.schema.json",
+    "finding-register-1.0": "finding-register.schema.json",
+    "github-annotations-1.0": "github-annotations.schema.json",
+    "audit-package-verification-1.0": "audit-package-verification.schema.json",
+    "coverage-merge-1.0": "coverage-merge.schema.json",
+    "portfolio-dashboard-1.0": "portfolio-dashboard.schema.json",
+    "config-provenance-1.0": "config-provenance.schema.json",
+    "audience-report-1.0": "audience-report.schema.json",
     "reachability-delta-1.0": "reachability-delta.schema.json",
     "report-inspection-1.0": "report-inspection.schema.json",
     "report-inspection-1.1": "report-inspection-1.1.schema.json",
@@ -566,14 +588,20 @@ def _entrypoint_integrity(tools: list[dict[str, Any]]) -> dict[str, Any]:
                 _safe_text(tool.get("tool") or "unknown"),
                 "primary",
                 tool.get("executable_sha256"),
-                tool.get("executable_integrity_verified"),
+                (
+                    tool.get("executable_integrity_verified") is True
+                    and tool.get("executable_organization_approved") is True
+                ),
                 tool.get("executable_unchanged"),
             ),
             (
                 _safe_text(tool.get("tool") or "unknown"),
                 "helper",
                 tool.get("auxiliary_executable_sha256"),
-                tool.get("auxiliary_executable_integrity_verified"),
+                (
+                    tool.get("auxiliary_executable_integrity_verified") is True
+                    and tool.get("auxiliary_executable_organization_approved") is True
+                ),
                 tool.get("auxiliary_executable_unchanged"),
             ),
         )

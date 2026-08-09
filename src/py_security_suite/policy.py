@@ -159,9 +159,13 @@ def _production_integrity_reasons(
         run = by_tool.get(tool)
         if run is None or not run.applicable:
             continue
-        if not config.tools[tool].executable_sha256:
+        if (
+            not config.tools[tool].executable_sha256
+            or not config.tools[tool].executable_organization_approved
+        ):
             reasons.append(
-                f"production scan requires an approved executable_sha256 for {tool}"
+                "production scan requires an organization-approved "
+                f"executable_sha256 for {tool}"
             )
         elif (
             run.executable_integrity_verified is not True
@@ -170,6 +174,10 @@ def _production_integrity_reasons(
             reasons.append(
                 f"production scan could not verify the approved executable "
                 f"digest and post-execution integrity for {tool}"
+            )
+        if str(run.version or "unknown").casefold() == "unknown":
+            reasons.append(
+                f"production scan could not establish the version of required scanner {tool}"
             )
     for tool in config.required_tools:
         run = by_tool.get(tool)
@@ -181,9 +189,12 @@ def _production_integrity_reasons(
         )
         if not uses_auxiliary:
             continue
-        if not tool_config.auxiliary_executable_sha256:
+        if (
+            not tool_config.auxiliary_executable_sha256
+            or not tool_config.auxiliary_executable_organization_approved
+        ):
             reasons.append(
-                "production scan requires an approved "
+                "production scan requires an organization-approved "
                 f"auxiliary_executable_sha256 for {tool}"
             )
         elif (

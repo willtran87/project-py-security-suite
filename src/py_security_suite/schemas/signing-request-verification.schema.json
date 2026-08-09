@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:signing-request-verification:1.0",
+  "title": "Signing request payload verification",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "verified", "authoritative", "request_sha256", "payload_id", "artifact_count", "exact_artifact_set_verified", "next_required_authority"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "verified": {"const": true},
+    "authoritative": {"const": false},
+    "request_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "payload_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "artifact_count": {"type": "integer", "minimum": 1, "maximum": 1000},
+    "exact_artifact_set_verified": {"const": true},
+    "next_required_authority": {"const": "controlled-signing"}
+  }
+}

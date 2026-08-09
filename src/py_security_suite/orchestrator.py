@@ -132,11 +132,17 @@ def scan_project(
             target=target,
             baseline_path=config.reports.baseline_path,
             baseline_sha256=config.reports.baseline_sha256,
+            current_profile=config.profile,
+            current_tools=tuple(selected),
+            current_source_sha256=inventory.source_sha256,
+            current_vcs_revision=inventory.vcs_revision,
         )
         context_errors.extend(delta.errors)
         baseline_artifact = delta.artifact
         derived_artifacts["finding-delta.json"] = delta.artifact
         attach_source_context(target, findings)
+
+    _annotate_tool_authority(tool_runs, diagnostics, config)
 
     (
         inventory.source_sha256_after,
@@ -224,6 +230,28 @@ def scan_project(
         tool_runs=tool_runs,
         manifest=manifest,
     )
+
+
+def _annotate_tool_authority(
+    tool_runs: list[ToolRun],
+    diagnostics: dict[str, dict[str, Any]],
+    config: SuiteConfig,
+) -> None:
+    """Keep digest matching distinct from organization authorization."""
+    for run in tool_runs:
+        tool = config.tools[run.tool]
+        run.executable_organization_approved = tool.executable_organization_approved
+        run.auxiliary_executable_organization_approved = (
+            tool.auxiliary_executable_organization_approved
+        )
+        diagnostic = diagnostics.get(run.tool)
+        if diagnostic is not None:
+            diagnostic["executable_organization_approved"] = (
+                run.executable_organization_approved
+            )
+            diagnostic["auxiliary_executable_organization_approved"] = (
+                run.auxiliary_executable_organization_approved
+            )
 
 
 def resolve_asset_paths(config: SuiteConfig, target: Path) -> None:

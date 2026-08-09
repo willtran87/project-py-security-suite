@@ -24,6 +24,9 @@ class ReleaseReadinessTests(unittest.TestCase):
 
         self.assertEqual(result["decision"], "approved")
         self.assertEqual(result["blockers"], [])
+        self.assertEqual(result["root_blockers"], [])
+        self.assertEqual(result["derived_blockers"], [])
+        self.assertEqual(result["remediation"], [])
         _validate_schema(result)
 
     @patch("py_security_suite.release_readiness.verify_report")
@@ -58,6 +61,16 @@ class ReleaseReadinessTests(unittest.TestCase):
                 "signed-release-passport",
             },
         )
+        self.assertGreater(result["summary"]["remediation_actions"], 0)
+        self.assertNotIn("scan-policy", result["root_blockers"])
+        self.assertEqual(result["derived_blockers"], ["scan-policy"])
+        self.assertTrue(result["blocker_graph"])
+        self.assertTrue(
+            any(
+                action["authority"] == "organization-security"
+                for action in result["remediation"]
+            )
+        )
         _validate_schema(result)
 
     @patch("py_security_suite.release_readiness.verify_report")
@@ -90,6 +103,16 @@ class ReleaseReadinessTests(unittest.TestCase):
                     "verdict": "pass",
                     "report": {"checksums_sha256": "f" * 64},
                     "corpus": {"labels": 25},
+                    "label_outcomes": [
+                        {
+                            "expected": "finding",
+                            "match": {"tool": "bandit"},
+                        },
+                        {
+                            "expected": "clean",
+                            "match": {"tool": "semgrep"},
+                        },
+                    ],
                 },
             )
             passport_digest = _write_json(
@@ -106,6 +129,11 @@ class ReleaseReadinessTests(unittest.TestCase):
                 effectiveness_evaluation=evaluation,
                 effectiveness_sha256=evaluation_digest,
                 minimum_effectiveness_labels=25,
+                minimum_effectiveness_positive_labels=1,
+                minimum_effectiveness_negative_labels=1,
+                minimum_effectiveness_tools=2,
+                minimum_effectiveness_labels_per_tool=1,
+                required_effectiveness_tools=("bandit", "semgrep"),
                 passport_verification=passport,
                 passport_verification_sha256=passport_digest,
                 require_passport=True,
@@ -155,12 +183,232 @@ class ReleaseReadinessTests(unittest.TestCase):
 
         self.assertIn("scanner-trust", result["blockers"])
 
+    @patch("py_security_suite.release_readiness.verify_report")
+    def test_repository_digest_pin_is_not_organization_approval(
+        self, verify_report_mock
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            report = Path(directory)
+            _write_release_evidence(report)
+            manifest_path = report / "scan-manifest.json"
+            manifest = json.loads(manifest_path.read_text("utf-8"))
+            manifest["tools"][0]["executable_organization_approved"] = False
+            _write_json(manifest_path, manifest)
+            verify_report_mock.return_value = _verification()
+            result = assess_release_readiness(report)
+
+        self.assertIn("scanner-trust", result["blockers"])
+
     def test_optional_evidence_requires_path_and_digest_together(self) -> None:
         with self.assertRaisesRegex(ValueError, "supplied together"):
             assess_release_readiness(
                 Path("report"),
                 effectiveness_evaluation=Path("evaluation.json"),
             )
+
+    def test_effectiveness_label_bounds_are_enforced(self) -> None:
+        with self.assertRaisesRegex(ValueError, "between 0 and 10000"):
+            assess_release_readiness(
+                Path("report"), minimum_effectiveness_labels=10_001
+            )
+
+    @patch("py_security_suite.release_readiness.verify_report")
+    def test_effectiveness_requires_named_tool_perspectives(
+        self, verify_report_mock
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            report = Path(temporary)
+            _write_release_evidence(report)
+            verification = _verification()
+            verify_report_mock.return_value = verification
+            evaluation = Path(temporary) / "evaluation.json"
+            digest = _write_json(
+                evaluation,
+                {
+                    "schema_version": "1.0",
+                    "verdict": "pass",
+                    "report": {"checksums_sha256": verification["checksums_sha256"]},
+                    "corpus": {"labels": 1},
+                    "label_outcomes": [
+                        {
+                            "expected": "finding",
+                            "match": {"tool": "bandit"},
+                        }
+                    ],
+                },
+            )
+            result = assess_release_readiness(
+                report,
+                effectiveness_evaluation=evaluation,
+                effectiveness_sha256=digest,
+                minimum_effectiveness_labels_per_tool=1,
+                required_effectiveness_tools=("bandit", "semgrep"),
+            )
+        control = next(
+            item
+            for item in result["controls"]
+            if item["id"] == "detection-effectiveness"
+        )
+        self.assertEqual(control["status"], "fail")
+        self.assertIn("semgrep", control["detail"])
+
+    @patch("py_security_suite.release_readiness.verify_report")
+    def test_verified_report_requires_array_findings_and_claims(
+        self, verify_report_mock
+    ) -> None:
+        verify_report_mock.return_value = _verification()
+        for filename, key, message in (
+            ("findings.json", "findings", "findings must be an array"),
+            ("assurance-claims.json", "claims", "claims must be an array"),
+        ):
+            with (
+                self.subTest(filename=filename),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                report = Path(directory)
+                _write_release_evidence(report)
+                _write_json(report / filename, {key: {}})
+
+                with self.assertRaisesRegex(TypeError, message):
+                    assess_release_readiness(report)
+
+    @patch("py_security_suite.release_readiness.verify_report")
+    def test_blocking_findings_receive_specific_owned_remediation(
+        self, verify_report_mock
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            report = Path(directory)
+            _write_release_evidence(report)
+            _write_json(
+                report / "findings.json",
+                {
+                    "findings": [
+                        None,
+                        {"blocking": True, "status": "suppressed"},
+                        {
+                            "finding_id": "PYSEC-SIGN",
+                            "blocking": True,
+                            "status": "new",
+                            "classifications": ["COSIGN-BUNDLE-MISSING"],
+                            "remediation": "Sign the exact digest.",
+                            "evidence": {
+                                "owners": ["@release"],
+                                "artifact_path": "dist/project.whl",
+                            },
+                        },
+                    ]
+                },
+            )
+            verify_report_mock.return_value = _verification()
+
+            result = assess_release_readiness(report)
+
+        action = next(
+            item for item in result["remediation"] if item["id"] == "finding:PYSEC-SIGN"
+        )
+        self.assertEqual(action["owner"], "@release")
+        self.assertEqual(action["authority"], "controlled-signing")
+        self.assertEqual(action["evidence"][-1], "dist/project.whl")
+        self.assertTrue(action["commands"])
+
+    @patch("py_security_suite.release_readiness.verify_report")
+    def test_equivalent_finding_remediation_is_consolidated_without_losing_evidence(
+        self, verify_report_mock
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            report = Path(directory)
+            _write_release_evidence(report)
+            findings = []
+            for identifier, artifact in (
+                ("PYSEC-WHEEL", "dist/project.whl"),
+                ("PYSEC-SDIST", "dist/project.tar.gz"),
+            ):
+                findings.append(
+                    {
+                        "finding_id": identifier,
+                        "blocking": True,
+                        "status": "new",
+                        "classifications": ["COSIGN-BUNDLE-MISSING"],
+                        "remediation": "Sign every exact release artifact.",
+                        "evidence": {
+                            "owners": ["@release"],
+                            "artifact_path": artifact,
+                        },
+                    }
+                )
+            _write_json(report / "findings.json", {"findings": findings})
+            verify_report_mock.return_value = _verification()
+
+            result = assess_release_readiness(report)
+
+        signing = [
+            item
+            for item in result["remediation"]
+            if item["authority"] == "controlled-signing"
+        ]
+        self.assertEqual(len(signing), 1)
+        self.assertEqual(signing[0]["id"], "findings:PYSEC-SDIST+PYSEC-WHEEL")
+        self.assertEqual(
+            signing[0]["evidence"],
+            [
+                "PYSEC-SDIST",
+                "PYSEC-WHEEL",
+                "dist/project.tar.gz",
+                "dist/project.whl",
+            ],
+        )
+        self.assertEqual(result["summary"]["remediation_actions"], 1)
+        _validate_schema(result)
+
+    @patch("py_security_suite.release_readiness.verify_report")
+    def test_skipped_tools_are_ignored_and_codeql_helper_is_required(
+        self, verify_report_mock
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            report = Path(directory)
+            _write_release_evidence(report)
+            manifest_path = report / "scan-manifest.json"
+            manifest = json.loads(manifest_path.read_text("utf-8"))
+            manifest["tools"] = [
+                None,
+                {"tool": "skip", "applicable": False},
+                {
+                    "tool": "codeql",
+                    "applicable": True,
+                    "executable_sha256": "a" * 64,
+                    "executable_integrity_verified": True,
+                    "executable_organization_approved": True,
+                    "executable_unchanged": True,
+                },
+            ]
+            _write_json(manifest_path, manifest)
+            verify_report_mock.return_value = _verification()
+
+            result = assess_release_readiness(report)
+
+        self.assertEqual(result["summary"]["scanner_entrypoints"], 2)
+        self.assertEqual(result["summary"]["scanner_trust_gaps"], 1)
+        self.assertIn("scanner-trust", result["blockers"])
+
+    @patch("py_security_suite.release_readiness.verify_report")
+    def test_digest_bound_evidence_rejects_a_digest_mismatch(
+        self, verify_report_mock
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            report = root / "report"
+            report.mkdir()
+            _write_release_evidence(report)
+            evaluation = root / "evaluation.json"
+            _write_json(evaluation, {"schema_version": "1.0"})
+            verify_report_mock.return_value = _verification()
+
+            with self.assertRaisesRegex(ValueError, "approved SHA-256"):
+                assess_release_readiness(
+                    report,
+                    effectiveness_evaluation=evaluation,
+                    effectiveness_sha256="0" * 64,
+                )
 
 
 def _verification() -> dict[str, object]:
@@ -193,6 +441,7 @@ def _write_release_evidence(
                     "applicable": True,
                     "executable_sha256": "a" * 64,
                     "executable_integrity_verified": trusted,
+                    "executable_organization_approved": trusted,
                     "executable_unchanged": trusted,
                 }
             ],
@@ -219,7 +468,7 @@ def _write_release_evidence(
 def _validate_schema(document: dict[str, object]) -> None:
     schema = json.loads(
         files("py_security_suite")
-        .joinpath("schemas", "release-readiness.schema.json")
+        .joinpath("schemas", "release-readiness-1.2.schema.json")
         .read_text("utf-8")
     )
     Draft202012Validator.check_schema(schema)

@@ -9,6 +9,50 @@ from .passport import verify_report
 from .path_safety import resolve_regular_file
 
 _MAX_JSON_BYTES = 128 * 1024 * 1024
+_CONTROL_REMEDIATION = {
+    "scan-policy": (
+        "release-engineering",
+        "cross-functional",
+        "Resolve every underlying failed control and rerun the exact release candidate.",
+        ["pysec release-check REPORT --format json --output release-readiness.json"],
+    ),
+    "assurance-claims": (
+        "application-security",
+        "cross-functional",
+        "Satisfy every named assurance claim with checksum-bound evidence.",
+        [],
+    ),
+    "external-isolation": (
+        "platform-security",
+        "organization-security",
+        "Issue signed isolation evidence for the exact runner, source digest, and policy window.",
+        ["pysec evidence-draft REPORT --output governance-evidence-draft.json"],
+    ),
+    "scanner-trust": (
+        "security-tooling",
+        "organization-security",
+        "Verify publisher provenance and approve every exact scanner entry-point digest in organization policy.",
+        ["pysec evidence-draft REPORT --output governance-evidence-draft.json"],
+    ),
+    "intelligence-approval": (
+        "vulnerability-management",
+        "organization-security",
+        "Approve the exact consumed intelligence snapshot set and bind its digest in organization policy.",
+        ["pysec evidence-draft REPORT --output governance-evidence-draft.json"],
+    ),
+    "detection-effectiveness": (
+        "application-security",
+        "repository",
+        "Run a digest-bound labeled corpus with the required minimum sample size and resolve misses.",
+        ["pysec benchmark REPORT --corpus CORPUS --corpus-sha256 SHA256"],
+    ),
+    "signed-release-passport": (
+        "release-approver",
+        "release-approver",
+        "Verify and approve a signed Passport bound to this exact report and artifact payload.",
+        ["pysec verify PASSPORT --report REPORT --artifact-root PAYLOAD"],
+    ),
+}
 
 
 def assess_release_readiness(
@@ -17,13 +61,27 @@ def assess_release_readiness(
     effectiveness_evaluation: Path | None = None,
     effectiveness_sha256: str = "",
     minimum_effectiveness_labels: int = 0,
+    minimum_effectiveness_positive_labels: int = 0,
+    minimum_effectiveness_negative_labels: int = 0,
+    minimum_effectiveness_tools: int = 0,
+    minimum_effectiveness_labels_per_tool: int = 0,
+    required_effectiveness_tools: tuple[str, ...] = (),
     passport_verification: Path | None = None,
     passport_verification_sha256: str = "",
     require_passport: bool = False,
 ) -> dict[str, Any]:
     """Build one fail-closed release decision from verified evidence."""
-    if minimum_effectiveness_labels < 0 or minimum_effectiveness_labels > 10_000:
-        raise ValueError("minimum effectiveness labels must be between 0 and 10000")
+    for value, label in (
+        (minimum_effectiveness_labels, "labels"),
+        (minimum_effectiveness_positive_labels, "positive labels"),
+        (minimum_effectiveness_negative_labels, "negative labels"),
+        (minimum_effectiveness_tools, "tools"),
+        (minimum_effectiveness_labels_per_tool, "labels per required tool"),
+    ):
+        if value < 0 or value > 10_000:
+            raise ValueError(
+                f"minimum effectiveness {label} must be between 0 and 10000"
+            )
     _paired(
         effectiveness_evaluation,
         effectiveness_sha256,
@@ -81,6 +139,11 @@ def assess_release_readiness(
         effectiveness_evaluation,
         effectiveness_sha256,
         minimum_effectiveness_labels,
+        minimum_effectiveness_positive_labels,
+        minimum_effectiveness_negative_labels,
+        minimum_effectiveness_tools,
+        minimum_effectiveness_labels_per_tool,
+        required_effectiveness_tools,
         verification,
     )
     if evaluation_control is not None:
@@ -98,6 +161,7 @@ def assess_release_readiness(
         controls=controls,
         verification=verification,
         blocking_findings=blocking_findings,
+        findings=findings,
         trust=trust,
     )
 
@@ -205,11 +269,30 @@ def _decision(
     controls: list[dict[str, Any]],
     verification: dict[str, Any],
     blocking_findings: int,
+    findings: list[Any],
     trust: dict[str, Any],
 ) -> dict[str, Any]:
     blockers = [control["id"] for control in controls if control["status"] == "fail"]
+    root_blockers = [blocker for blocker in blockers if blocker != "scan-policy"]
+    if not root_blockers and "scan-policy" in blockers:
+        root_blockers = ["scan-policy"]
+    derived_blockers = (
+        ["scan-policy"]
+        if "scan-policy" in blockers and "scan-policy" not in root_blockers
+        else []
+    )
+    blocker_graph = [
+        {"blocker": "scan-policy", "derived_from": blocker}
+        for blocker in root_blockers
+        if derived_blockers
+    ]
+    remediation = _remediation(root_blockers, findings)
+    authority_counts: dict[str, int] = {}
+    for action in remediation:
+        authority = str(action["authority"])
+        authority_counts[authority] = authority_counts.get(authority, 0) + 1
     return {
-        "schema_version": "1.0",
+        "schema_version": "1.2",
         "decision": "approved" if not blockers else "not_approved",
         "scope": (
             "Fail-closed aggregation of verified release evidence; approval does "
@@ -224,22 +307,171 @@ def _decision(
             "controls": len(controls),
             "passed": len(controls) - len(blockers),
             "failed": len(blockers),
+            "root_failed": len(root_blockers),
+            "derived_failed": len(derived_blockers),
             "blocking_findings": blocking_findings,
             "scanner_entrypoints": trust["entrypoints"],
             "scanner_trust_gaps": len(trust["gaps"]),
+            "remediation_actions": len(remediation),
+            "actions_by_authority": dict(sorted(authority_counts.items())),
         },
         "blockers": blockers,
+        "root_blockers": root_blockers,
+        "derived_blockers": derived_blockers,
+        "blocker_graph": blocker_graph,
         "controls": controls,
+        "remediation": remediation,
     }
+
+
+def _remediation(blockers: list[str], findings: list[Any]) -> list[dict[str, Any]]:
+    actions: list[dict[str, Any]] = []
+    if "blocking-findings" in blockers:
+        for finding in findings:
+            if (
+                not isinstance(finding, dict)
+                or finding.get("blocking") is not True
+                or finding.get("status") == "suppressed"
+            ):
+                continue
+            evidence = finding.get("evidence")
+            owners = evidence.get("owners") if isinstance(evidence, dict) else []
+            owner = (
+                str(owners[0])
+                if isinstance(owners, list) and owners
+                else "repository-owner"
+            )
+            classifications = finding.get("classifications")
+            signing = isinstance(classifications, list) and any(
+                value in {"COSIGN-BUNDLE-MISSING", "SLSA-PROVENANCE"}
+                for value in classifications
+            )
+            actions.append(
+                {
+                    "id": f"finding:{finding.get('finding_id', 'unknown')}",
+                    "blocker": "blocking-findings",
+                    "priority": "P1" if signing else "P2",
+                    "owner": owner,
+                    "authority": "controlled-signing" if signing else "repository",
+                    "automatable": False,
+                    "action": str(
+                        finding.get("remediation")
+                        or "Resolve the blocking finding and regenerate the report."
+                    ),
+                    "evidence": [
+                        str(finding.get("finding_id") or "findings.json"),
+                        *(
+                            [str(evidence["artifact_path"])]
+                            if isinstance(evidence, dict)
+                            and evidence.get("artifact_path")
+                            else []
+                        ),
+                    ],
+                    "commands": (
+                        [
+                            "pysec sign-artifacts ARTIFACTS --output PROVENANCE --signing-key KEY --cosign-sha256 SHA256"
+                        ]
+                        if signing
+                        else []
+                    ),
+                }
+            )
+    for blocker in blockers:
+        if blocker == "blocking-findings" or (
+            blocker == "scan-policy" and len(blockers) > 1
+        ):
+            continue
+        owner, authority, action, commands = _CONTROL_REMEDIATION.get(
+            blocker,
+            (
+                "release-engineering",
+                "cross-functional",
+                "Resolve the failed release control and regenerate its evidence.",
+                [],
+            ),
+        )
+        actions.append(
+            {
+                "id": f"control:{blocker}",
+                "blocker": blocker,
+                "priority": "P1",
+                "owner": owner,
+                "authority": authority,
+                "automatable": authority == "repository",
+                "action": action,
+                "evidence": [blocker],
+                "commands": commands,
+            }
+        )
+    consolidated = _consolidate_finding_remediation(actions)
+    return sorted(consolidated, key=lambda item: (item["priority"], item["id"]))
+
+
+def _consolidate_finding_remediation(
+    actions: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Collapse equivalent finding work while retaining every evidence subject."""
+    controls: list[dict[str, Any]] = []
+    groups: dict[tuple[object, ...], list[dict[str, Any]]] = {}
+    for action in actions:
+        if not str(action.get("id") or "").startswith("finding:"):
+            controls.append(action)
+            continue
+        key = (
+            action.get("blocker"),
+            action.get("priority"),
+            action.get("owner"),
+            action.get("authority"),
+            action.get("automatable"),
+            action.get("action"),
+            tuple(action.get("commands") or ()),
+        )
+        groups.setdefault(key, []).append(action)
+
+    for grouped in groups.values():
+        if len(grouped) == 1:
+            controls.append(grouped[0])
+            continue
+        ordered = sorted(grouped, key=lambda value: str(value["id"]))
+        finding_ids = [str(value["id"]).removeprefix("finding:") for value in ordered]
+        value = dict(ordered[0])
+        value["id"] = "findings:" + "+".join(finding_ids)
+        value["evidence"] = sorted(
+            {
+                str(subject)
+                for item in ordered
+                for subject in item.get("evidence", [])
+                if subject
+            }
+        )
+        controls.append(value)
+    return controls
 
 
 def _effectiveness_control(
     path: Path | None,
     expected_digest: str,
     minimum_labels: int,
+    minimum_positive_labels: int,
+    minimum_negative_labels: int,
+    minimum_tools: int,
+    minimum_labels_per_tool: int,
+    required_tools: tuple[str, ...],
     report_verification: dict[str, Any],
 ) -> dict[str, Any] | None:
-    required = minimum_labels > 0
+    normalized_required_tools = tuple(
+        sorted({tool.strip() for tool in required_tools if tool.strip()})
+    )
+    required = any(
+        value > 0
+        for value in (
+            minimum_labels,
+            minimum_positive_labels,
+            minimum_negative_labels,
+            minimum_tools,
+            minimum_labels_per_tool,
+        )
+    ) or bool(normalized_required_tools)
     if path is None:
         return (
             _control(
@@ -255,17 +487,55 @@ def _effectiveness_control(
     report = evaluation.get("report")
     corpus = evaluation.get("corpus")
     labels = int(corpus.get("labels") or 0) if isinstance(corpus, dict) else 0
+    label_outcomes = evaluation.get("label_outcomes")
+    outcomes = (
+        [item for item in label_outcomes if isinstance(item, dict)]
+        if isinstance(label_outcomes, list)
+        else []
+    )
+    positive_labels = sum(item.get("expected") == "finding" for item in outcomes)
+    negative_labels = sum(item.get("expected") == "clean" for item in outcomes)
+    tool_counts: dict[str, int] = {}
+    for item in outcomes:
+        match = item.get("match")
+        if not isinstance(match, dict) or not match.get("tool"):
+            continue
+        tool = str(match["tool"])
+        tool_counts[tool] = tool_counts.get(tool, 0) + 1
+    covered_tools = {
+        tool for tool, count in tool_counts.items() if count >= minimum_labels_per_tool
+    }
+    missing_required_tools = sorted(
+        set(normalized_required_tools).difference(covered_tools)
+    )
+    all_matched_tools = {
+        str(match.get("tool"))
+        for item in outcomes
+        if isinstance((match := item.get("match")), dict) and match.get("tool")
+    }
     passed = (
         evaluation.get("schema_version") == "1.0"
         and evaluation.get("verdict") == "pass"
         and isinstance(report, dict)
         and report.get("checksums_sha256") == report_verification["checksums_sha256"]
         and labels >= minimum_labels
+        and positive_labels >= minimum_positive_labels
+        and negative_labels >= minimum_negative_labels
+        and len(covered_tools) >= minimum_tools
+        and not missing_required_tools
     )
     return _control(
         "detection-effectiveness",
         passed,
-        f"Effectiveness verdict is {evaluation.get('verdict', 'unknown')} across {labels} labels; minimum {minimum_labels}.",
+        (
+            f"Effectiveness verdict is {evaluation.get('verdict', 'unknown')} across "
+            f"{labels} labels ({positive_labels} positive, {negative_labels} negative) "
+            f"and {len(all_matched_tools)} matched tools; minimums {minimum_labels} total, "
+            f"{minimum_positive_labels} positive, {minimum_negative_labels} negative, "
+            f"{minimum_tools} tools with {minimum_labels_per_tool} labels each. "
+            f"Required tools: {list(normalized_required_tools)}; missing: "
+            f"{missing_required_tools}."
+        ),
         [str(path)],
     )
 
@@ -324,6 +594,7 @@ def _entrypoint_trust(manifest: dict[str, Any]) -> dict[str, Any]:
         if not (
             run.get("executable_sha256")
             and run.get("executable_integrity_verified") is True
+            and run.get("executable_organization_approved") is True
             and run.get("executable_unchanged") is True
         ):
             gaps.append(f"{tool}:primary")
@@ -336,6 +607,7 @@ def _entrypoint_trust(manifest: dict[str, Any]) -> dict[str, Any]:
             if not (
                 run.get("auxiliary_executable_sha256")
                 and run.get("auxiliary_executable_integrity_verified") is True
+                and run.get("auxiliary_executable_organization_approved") is True
                 and run.get("auxiliary_executable_unchanged") is True
             ):
                 gaps.append(f"{tool}:auxiliary")
