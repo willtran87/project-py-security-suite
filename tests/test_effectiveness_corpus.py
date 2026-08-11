@@ -5,6 +5,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 # The isolated Pylint lane intentionally omits locked test-only dependencies.
@@ -39,6 +40,52 @@ class EffectivenessCorpusTests(unittest.TestCase):
             ),
             encoding="utf-8",
         )
+        files = [
+            self._file_record("src/clean.py", b"clean = True\n"),
+            self._file_record("src/example.py", b"assert value\n"),
+        ]
+        aggregate = hashlib.sha256()
+        for item in files:
+            encoded = item["path"].encode("utf-8")
+            aggregate.update(len(encoded).to_bytes(8, "big"))
+            aggregate.update(encoded)
+            aggregate.update(item["size_bytes"].to_bytes(8, "big"))
+            aggregate.update(bytes.fromhex(item["sha256"]))
+        source_sha256 = aggregate.hexdigest()
+        (self.report / "source-inventory.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": "1.0",
+                    "scope": "fixture",
+                    "source_sha256": source_sha256,
+                    "total_files": len(files),
+                    "total_bytes": sum(item["size_bytes"] for item in files),
+                    "files": files,
+                }
+            ),
+            encoding="utf-8",
+        )
+        (self.report / "scan-manifest.json").write_text(
+            json.dumps(
+                {
+                    "inventory": {
+                        "source_integrity_verified": True,
+                        "source_sha256": source_sha256,
+                        "hashed_files": len(files),
+                        "hashed_bytes": sum(item["size_bytes"] for item in files),
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    @staticmethod
+    def _file_record(path: str, content: bytes) -> dict[str, Any]:
+        return {
+            "path": path,
+            "size_bytes": len(content),
+            "sha256": hashlib.sha256(content).hexdigest(),
+        }
 
     def _corpus(self, labels: list[dict[str, object]]) -> tuple[Path, str]:
         path = self.root / "corpus.json"
@@ -146,6 +193,32 @@ class EffectivenessCorpusTests(unittest.TestCase):
             self.assertRaisesRegex(ValueError, "does not match"),
         ):
             evaluate_report_corpus(self.report, corpus, corpus_sha256="0" * 64)
+
+    def test_clean_path_must_exist_in_bound_source_inventory(self) -> None:
+        corpus, digest = self._corpus(
+            [
+                {
+                    "id": "invented-clean-file",
+                    "expected": "clean",
+                    "match": {"path": "src/not-present.py"},
+                }
+            ]
+        )
+        with (
+            patch(
+                "py_security_suite.effectiveness_corpus.verify_report",
+                return_value={
+                    "scan_id": "scan-fixture",
+                    "outcome": "pass",
+                    "checksums_sha256": "a" * 64,
+                    "file_count": 10,
+                },
+            ),
+            self.assertRaisesRegex(
+                ValueError, "absent from the sealed source inventory"
+            ),
+        ):
+            evaluate_report_corpus(self.report, corpus, corpus_sha256=digest)
 
     def test_rejects_invalid_corpus_contracts(self) -> None:
         cases = (

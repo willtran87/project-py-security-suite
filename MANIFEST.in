@@ -12,6 +12,7 @@ recursive-include containers *.toml Dockerfile
 recursive-include docs *.json *.md
 recursive-include examples *.yml
 recursive-include scripts *.ps1
+recursive-include scripts *.py
 recursive-include security *.json
 recursive-include src/py_security_suite py.typed
 recursive-include src/py_security_suite/rules *.ini *.json *.psd1 *.toml *.txt *.yaml *.yml

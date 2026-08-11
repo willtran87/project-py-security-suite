@@ -433,6 +433,31 @@ class ConfigTests(unittest.TestCase):
         self.assertTrue(config.tools["bandit"].executable_organization_approved)
         self.assertFalse(config.tools["semgrep"].executable_organization_approved)
 
+    def test_portable_bundle_root_is_configurable_and_strict(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            config_path = Path(directory) / "pysec.toml"
+            config_path.write_text(
+                '[paths]\nbundle_root = "vendor/security-tools"\n'
+                '[tools.bandit]\nexecutable = "@bundle/bin/bandit"\n',
+                encoding="utf-8",
+            )
+            config = load_config(
+                repository_config=config_path,
+                profile_override="quick",
+            )
+            self.assertEqual(config.paths.bundle_root, Path("vendor/security-tools"))
+            self.assertEqual(config.tools["bandit"].executable, "@bundle/bin/bandit")
+
+            config_path.write_text('[paths]\nbundle_root = ""\n', encoding="utf-8")
+            with self.assertRaisesRegex(ConfigurationError, "cannot be empty"):
+                load_config(repository_config=config_path)
+
+            config_path.write_text(
+                '[paths]\nbundle_root = "@bundle/nested"\n', encoding="utf-8"
+            )
+            with self.assertRaisesRegex(ConfigurationError, "cannot reference"):
+                load_config(repository_config=config_path)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -38,8 +38,33 @@ depends_on = []
 layer = "core"
 
 [[modules]]
+path = "py_security_suite.project_init"
+depends_on = ["py_security_suite.config"]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.ci_workflow"
+depends_on = ["py_security_suite.config", "py_security_suite.scaffold_safety"]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.precommit_config"
+depends_on = ["py_security_suite.config", "py_security_suite.scaffold_safety"]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.scaffold_safety"
+depends_on = []
+layer = "core"
+
+[[modules]]
 path = "py_security_suite.config"
 depends_on = ["py_security_suite.models", "py_security_suite.path_safety"]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.config_advisor"
+depends_on = ["py_security_suite.config", "py_security_suite.path_safety"]
 layer = "services"
 
 [[modules]]
@@ -63,16 +88,31 @@ depends_on = ["py_security_suite.models"]
 layer = "services"
 
 [[modules]]
+path = "py_security_suite.source_inventory"
+depends_on = ["py_security_suite.path_safety"]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.readiness_guidance"
+layer = "services"
+
+[[modules]]
 path = "py_security_suite.effectiveness_corpus"
 depends_on = [
     "py_security_suite.execution",
     "py_security_suite.passport",
     "py_security_suite.path_safety",
+    "py_security_suite.source_inventory",
 ]
 layer = "services"
 
 [[modules]]
 path = "py_security_suite.portfolio_health"
+depends_on = ["py_security_suite.models", "py_security_suite.readiness_guidance"]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.admission"
 depends_on = ["py_security_suite.models"]
 layer = "services"
 
@@ -230,6 +270,7 @@ depends_on = [
     "py_security_suite.execution",
     "py_security_suite.models",
     "py_security_suite.path_safety",
+    "py_security_suite.source_inventory",
 ]
 layer = "services"
 
@@ -256,6 +297,7 @@ layer = "services"
 [[modules]]
 path = "py_security_suite.reports"
 depends_on = [
+    "py_security_suite.admission",
     "py_security_suite.models",
     "py_security_suite.passport",
     "py_security_suite.prioritization",
@@ -300,9 +342,40 @@ depends_on = [
 layer = "application"
 
 [[modules]]
+path = "py_security_suite.provisioning"
+depends_on = ["py_security_suite.config", "py_security_suite.doctor"]
+layer = "application"
+
+[[modules]]
+path = "py_security_suite.adapter_conformance"
+depends_on = ["py_security_suite.adapters", "py_security_suite.config"]
+layer = "application"
+
+[[modules]]
+path = "py_security_suite.bundle_qualification"
+depends_on = [
+    "py_security_suite.adapter_conformance",
+    "py_security_suite.config",
+    "py_security_suite.doctor",
+    "py_security_suite.execution",
+    "py_security_suite.passport",
+    "py_security_suite.path_safety",
+]
+layer = "application"
+
+[[modules]]
+path = "py_security_suite.native_bundle"
+depends_on = [
+    "py_security_suite.execution",
+    "py_security_suite.path_safety",
+]
+layer = "services"
+
+[[modules]]
 path = "py_security_suite.orchestrator"
 depends_on = [
     "py_security_suite",
+    "py_security_suite.admission",
     "py_security_suite.adapters",
     "py_security_suite.config",
     "py_security_suite.correlation",
@@ -330,6 +403,7 @@ depends_on = [
     "py_security_suite.inventory",
     "py_security_suite.orchestrator",
     "py_security_suite.path_safety",
+    "py_security_suite.readiness_guidance",
     "py_security_suite.risk_acceptance",
     "py_security_suite.risk_intelligence",
     "py_security_suite.trust_catalog",
@@ -341,9 +415,13 @@ path = "py_security_suite.cli"
 depends_on = [
     "py_security_suite",
     "py_security_suite.baseline_candidate",
+    "py_security_suite.bundle_qualification",
     "py_security_suite.audit_package",
     "py_security_suite.audience_report",
+    "py_security_suite.adapter_conformance",
+    "py_security_suite.ci_workflow",
     "py_security_suite.config",
+    "py_security_suite.config_advisor",
     "py_security_suite.config_provenance",
     "py_security_suite.doctor",
     "py_security_suite.execution",
@@ -352,13 +430,17 @@ depends_on = [
     "py_security_suite.evidence_pack",
     "py_security_suite.finding_register",
     "py_security_suite.github_annotations",
+    "py_security_suite.native_bundle",
     "py_security_suite.orchestrator",
     "py_security_suite.operational_trend",
     "py_security_suite.passport",
     "py_security_suite.path_safety",
     "py_security_suite.policy",
     "py_security_suite.policy_simulation",
+    "py_security_suite.precommit_config",
     "py_security_suite.portfolio_dashboard",
+    "py_security_suite.project_init",
+    "py_security_suite.provisioning",
     "py_security_suite.promotion",
     "py_security_suite.coverage_merge",
     "py_security_suite.reachability",

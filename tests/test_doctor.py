@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
+from importlib.resources import files
 from pathlib import Path
 from unittest.mock import patch
+
+from jsonschema import Draft202012Validator  # pylint: disable=import-error
 
 from py_security_suite.adapters.base import ScannerReadiness
 from py_security_suite.config import load_config
@@ -11,6 +15,7 @@ from py_security_suite.doctor import (
     _production_authority_error,
     assess_readiness,
     render_readiness,
+    render_readiness_markdown,
 )
 
 
@@ -85,6 +90,15 @@ class DoctorTests(unittest.TestCase):
         self.assertIn("READY: profile standard", rendered)
         self.assertIn("Decision: PROCEED TO ISOLATED SCAN (preflight only)", rendered)
         self.assertIn("release approval", rendered)
+        self.assertEqual(document["schema_version"], "1.1")
+        self.assertEqual(document["next_actions"], [])
+        schema = json.loads(
+            files("py_security_suite")
+            .joinpath("schemas", "doctor-readiness-1.1.schema.json")
+            .read_text("utf-8")
+        )
+        Draft202012Validator.check_schema(schema)
+        Draft202012Validator(schema).validate(document)
 
     def test_required_unavailable_tool_blocks_readiness(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -113,6 +127,18 @@ class DoctorTests(unittest.TestCase):
         self.assertIn("[required] semgrep", rendered)
         self.assertIn("approved rules are missing", rendered)
         self.assertIn("[required context] EPSS digest mismatch", rendered)
+        explained = render_readiness(document, explain=True)
+        self.assertIn("Resolution batches:", explained)
+        self.assertEqual(len(document["action_groups"]), 2)
+        self.assertTrue(all(group["count"] == 1 for group in document["action_groups"]))
+        self.assertIn("P0 BLOCK [missing evidence]: semgrep", explained)
+        self.assertIn("semgrep: approved rules are missing", explained)
+        self.assertIn("Selected controls:", explained)
+        markdown = render_readiness_markdown(document)
+        self.assertIn("# Scan preflight", markdown)
+        self.assertIn("| P0 | BLOCK | missing evidence | 1 (semgrep)", markdown)
+        self.assertIn("<summary>Per-control actions (2)</summary>", markdown)
+        self.assertIn("<summary>All selected controls</summary>", markdown)
 
     def test_optional_unavailable_tool_is_visible_but_does_not_block(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -205,7 +231,56 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual(
             document["summary"]["missing_evidence"], len(document["tools"])
         )
+        self.assertTrue(
+            all(not action["blocking"] for action in document["next_actions"])
+        )
+        self.assertTrue(
+            all(action["priority"] == "P2" for action in document["next_actions"])
+        )
+        self.assertEqual(len(document["action_groups"]), 1)
+        self.assertEqual(document["action_groups"][0]["count"], len(document["tools"]))
+        self.assertEqual(
+            document["action_groups"][0]["subjects"],
+            sorted(item["tool"] for item in document["tools"]),
+        )
+        self.assertIn(
+            f"+{len(document['tools']) - 6} more",
+            render_readiness_markdown(document),
+        )
         self.assertIn("Conditional evidence", render_readiness(document))
+
+    def test_guidance_distinguishes_configuration_evidence_and_approval(self) -> None:
+        from py_security_suite.doctor import _readiness_guidance
+
+        self.assertEqual(
+            _readiness_guidance(
+                "unavailable",
+                "certificate_identity and certificate_oidc_issuer required",
+            )[0],
+            "missing_configuration",
+        )
+        self.assertEqual(
+            _readiness_guidance("unavailable", "a pre-staged CodeQL CLI is required")[
+                0
+            ],
+            "missing_evidence",
+        )
+        category, action = _readiness_guidance(
+            "unavailable", "organization approval is missing for bandit primary"
+        )
+        self.assertEqual(category, "missing_approval")
+        self.assertIn("provenance review", action)
+        category, action = _readiness_guidance(
+            "not_applicable", "no approved target Python environment was configured"
+        )
+        self.assertEqual(category, "missing_configuration")
+        self.assertIn("target Python environment", action)
+        category, action = _readiness_guidance(
+            "not_applicable",
+            "no OpenAPI schema or pre-generated Schemathesis evidence was found",
+        )
+        self.assertEqual(category, "missing_evidence")
+        self.assertIn("OpenAPI schema", action)
 
 
 if __name__ == "__main__":

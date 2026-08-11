@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:github-workflow:1.0",
+  "type": "object",
+  "required": ["schema_version", "schema_id", "authoritative", "status", "target", "output", "profile", "configuration", "runner_labels", "action_pins", "safety_controls", "scope"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "schema_id": {"const": "urn:project-py-security-suite:schema:github-workflow:1.0"},
+    "authoritative": {"const": false},
+    "status": {"const": "generated"},
+    "target": {"type": "string", "minLength": 1},
+    "output": {"type": "string", "minLength": 1},
+    "profile": {"type": "string", "minLength": 1},
+    "configuration": {"type": "string", "minLength": 1},
+    "runner_labels": {"type": "array", "minItems": 1, "maxItems": 8, "items": {"type": "string"}},
+    "action_pins": {"type": "object", "required": ["actions/checkout", "actions/upload-artifact", "github/codeql-action/upload-sarif"], "additionalProperties": false, "properties": {"actions/checkout": {"type": "string", "pattern": "^[0-9a-f]{40}$"}, "actions/upload-artifact": {"type": "string", "pattern": "^[0-9a-f]{40}$"}, "github/codeql-action/upload-sarif": {"type": "string", "pattern": "^[0-9a-f]{40}$"}}},
+    "safety_controls": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+    "scope": {"type": "string", "minLength": 1}
+  }
+}

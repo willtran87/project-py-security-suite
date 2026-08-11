@@ -522,6 +522,9 @@ flowchart LR
   never imply that a source line exists for a wheel or archive.
 - `results.sarif` supports GitHub code-scanning ingestion.
 - `findings.json` is the stable machine-readable finding collection.
+- `source-inventory.json` binds each maintained source path, byte size, and
+  SHA-256 to the aggregate source digest and supports non-invented clean-corpus
+  labels without retaining source contents.
 - `scan-manifest.json` records tool health, versions, inventory, policy
   reasons, timestamps, profile, and isolation attestation.
 - `checksums.sha256` protects report integrity after generation. Verification

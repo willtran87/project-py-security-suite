@@ -1,12 +1,17 @@
 # Detection effectiveness and operational coverage
 
-Last reviewed: 2026-08-07
+Last reviewed: 2026-08-09
 
-The suite separates three questions that are often incorrectly collapsed into
+The suite separates five questions that are often incorrectly collapsed into
 one score:
 
-- **Did the applicable controls run?** `portfolio-health.json` grades scanner
-  completion across 12 domains and names every execution gap.
+- **Did the applicable controls run?** `portfolio-health.json` assigns an
+  execution grade across 12 domains and names every execution gap.
+- **What did completed controls observe?** Its independent risk grade reflects
+  the highest active normalized severity and never rewards scanner completion.
+- **Is the evidence decision-ready?** Its evidence grade accounts for incomplete
+  execution, changed entry points, policy gaps, and external scanner approval;
+  the release disposition remains a separate field.
 - **Did the report preserve useful evidence?** `effectiveness.json` measures
   attribution, citations, actionability, corroboration, and tool contribution.
 - **Did the portfolio detect known positive and negative cases?** `pysec
@@ -16,7 +21,7 @@ one score:
 ```mermaid
 flowchart LR
     Profile["Selected profile"] --> Run["Applicable scanner runs"]
-    Run --> Health["portfolio-health.json<br/>operational completion grade"]
+    Run --> Health["portfolio-health.json<br/>execution | risk | evidence | release"]
     Run --> Normalize["Normalized and cited findings"]
     Normalize --> Quality["effectiveness.json<br/>report quality and contribution"]
     Corpus["Approved labeled corpus<br/>SHA-256 bound"] --> Benchmark["pysec benchmark"]
@@ -65,6 +70,12 @@ Every label needs a stable ID, an expected `finding` or `clean` result, and at
 least one exact discriminator: tool, native rule, repository-relative path, or
 classification. Corpus ownership, change review, representative vulnerable and
 clean fixtures, and false-positive dispositions remain organization decisions.
+For a `clean` label that names a path, the evaluator now requires that path in
+the sealed `source-inventory.json` and verifies the inventory's exact aggregate
+digest, file/byte totals, and binding to an unchanged scan-manifest snapshot.
+This prevents an invented or omitted fixture from being counted as a true
+negative. Rule-wide clean labels do not require a path but still require the
+named scanner's unchanged executable identity at bundle qualification.
 
 Run the benchmark only after sealing and verifying the scan report:
 
@@ -84,10 +95,19 @@ that performance was perfect.
 
 ## Reading grades safely
 
-An `A` domain grade means at least 90% of applicable control slots completed.
-`N/A` means no selected control applied. Neither state proves the code is safe.
-A release decision still depends on findings, policy, fresh governed context,
-source integrity, isolation attestation, and provenance verification.
+| Axis | Meaning of `A` | What it does not mean |
+|---|---|---|
+| Execution | At least 90% of applicable control slots completed | No vulnerabilities exist |
+| Observed risk | No active finding above informational severity was normalized | The portfolio has complete detection coverage |
+| Evidence | The scan scope completed without recorded policy or identity gaps | The organization approved promotion |
+| Release decision | `eligible_for_external_approval` only after the scan policy passes | The suite granted admission |
+
+`N/A` means no selected control applied. It is never converted into a passing
+execution result. Conditional controls include a deterministic activation
+recipe: category, accountable owner, trigger, required action, and closure
+evidence. A release decision still depends on findings, policy, fresh governed
+context, source integrity, isolation attestation, provenance verification, and
+independent enterprise authority.
 
 `pysec release-check --minimum-effectiveness-labels N` can require this
 evaluation, its exact SHA-256, a passing verdict, a binding to the same report

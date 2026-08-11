@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:config-advice:1.0",
+  "type": "object",
+  "required": ["schema_version", "schema_id", "authoritative", "decision", "sources", "compatibility", "effective", "path_inventory", "validation_errors", "recommendations", "scope"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "schema_id": {"const": "urn:project-py-security-suite:schema:config-advice:1.0"},
+    "authoritative": {"const": false},
+    "decision": {"enum": ["valid", "valid_with_advice", "invalid"]},
+    "sources": {
+      "type": "object", "additionalProperties": false, "required": ["repository", "organization"],
+      "properties": {"repository": {"$ref": "#/$defs/source"}, "organization": {"anyOf": [{"$ref": "#/$defs/source"}, {"type": "null"}]}}
+    },
+    "compatibility": {
+      "type": "object", "additionalProperties": false,
+      "required": ["declared_schema", "current_schema", "supported_schemas", "migration_required", "automatic_migration_performed", "actions"],
+      "properties": {"declared_schema": {"type": ["string", "null"]}, "current_schema": {"const": "1"}, "supported_schemas": {"type": "array", "items": {"const": "1"}}, "migration_required": {"type": "boolean"}, "automatic_migration_performed": {"const": false}, "actions": {"type": "array", "items": {"$ref": "#/$defs/text"}}}
+    },
+    "effective": {"anyOf": [{"type": "null"}, {"type": "object", "additionalProperties": false, "required": ["schema_version", "profile", "selected_tools", "required_tools", "network", "execute_target_code", "bundle_namespace"], "properties": {"schema_version": {"const": "1"}, "profile": {"$ref": "#/$defs/text"}, "selected_tools": {"type": "array", "items": {"$ref": "#/$defs/text"}}, "required_tools": {"type": "array", "items": {"$ref": "#/$defs/text"}}, "network": {"const": "deny"}, "execute_target_code": {"const": false}, "bundle_namespace": {"const": "@bundle/"}}}]},
+    "path_inventory": {"type": "object", "additionalProperties": false, "required": ["configured", "portable_bundle", "relative", "absolute", "settings"], "properties": {"configured": {"$ref": "#/$defs/count"}, "portable_bundle": {"$ref": "#/$defs/count"}, "relative": {"$ref": "#/$defs/count"}, "absolute": {"$ref": "#/$defs/count"}, "settings": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["setting", "kind"], "properties": {"setting": {"$ref": "#/$defs/text"}, "kind": {"enum": ["bundle", "relative", "absolute"]}}}}}},
+    "validation_errors": {"type": "array", "items": {"$ref": "#/$defs/text"}},
+    "recommendations": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["priority", "category", "setting", "message"], "properties": {"priority": {"enum": ["P0", "P1", "P2", "P3", "P4"]}, "category": {"$ref": "#/$defs/text"}, "setting": {"$ref": "#/$defs/text"}, "message": {"$ref": "#/$defs/text"}}}},
+    "scope": {"$ref": "#/$defs/text"}
+  },
+  "$defs": {
+    "count": {"type": "integer", "minimum": 0},
+    "text": {"type": "string", "minLength": 1, "maxLength": 16000},
+    "source": {"type": "object", "additionalProperties": false, "required": ["name", "sha256", "size_bytes"], "properties": {"name": {"$ref": "#/$defs/text"}, "sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"}, "size_bytes": {"type": ["integer", "null"], "minimum": 0}}}
+  }
+}

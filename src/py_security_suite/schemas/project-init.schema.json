@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:project-init:1.0",
+  "title": "Python Security Suite project initialization receipt",
+  "type": "object",
+  "required": ["schema_version", "schema_id", "status", "authoritative", "target", "template", "profile", "configuration", "selected_tools", "next_steps", "scope"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "schema_id": {"const": "urn:project-py-security-suite:schema:project-init:1.0"},
+    "status": {"const": "initialized"},
+    "authoritative": {"const": false},
+    "target": {"type": "string", "minLength": 1, "maxLength": 4096},
+    "template": {"enum": ["api", "cli", "library", "monorepo", "worker"]},
+    "profile": {"type": "string", "minLength": 1, "maxLength": 128},
+    "configuration": {"type": "string", "minLength": 1, "maxLength": 4096},
+    "selected_tools": {"type": "integer", "minimum": 1},
+    "next_steps": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "required": ["order", "purpose", "argv", "authority"],
+        "additionalProperties": false,
+        "properties": {
+          "order": {"type": "integer", "minimum": 1},
+          "purpose": {"type": "string", "minLength": 1, "maxLength": 1000},
+          "argv": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1, "maxLength": 4096}},
+          "authority": {"type": "string", "minLength": 1, "maxLength": 128}
+        }
+      }
+    },
+    "scope": {"type": "string", "minLength": 1, "maxLength": 2000}
+  }
+}

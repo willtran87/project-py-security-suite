@@ -55,6 +55,14 @@ _LOCK_FILES = {
 def inventory_target(
     target: Path, *, excluded_paths: tuple[Path, ...] = ()
 ) -> Inventory:
+    inventory, _ = inventory_target_with_evidence(target, excluded_paths=excluded_paths)
+    return inventory
+
+
+def inventory_target_with_evidence(
+    target: Path, *, excluded_paths: tuple[Path, ...] = ()
+) -> tuple[Inventory, dict[str, Any]]:
+    """Inventory a target and retain the exact file identities behind its digest."""
     python_files = 0
     dependency_files: list[str] = []
     lock_files: list[str] = []
@@ -65,7 +73,9 @@ def inventory_target(
         excluded_paths,
         skip_directories=_INTEGRITY_SKIP_DIRECTORIES,
     )
-    source_sha256, hashed_bytes = _source_digest(target, integrity_files)
+    source_evidence = _source_inventory(target, integrity_files)
+    source_sha256 = str(source_evidence["source_sha256"])
+    hashed_bytes = int(source_evidence["total_bytes"])
     for path in maintained_files:
         relative = path.relative_to(target).as_posix()
         if path.suffix == ".py":
@@ -77,7 +87,7 @@ def inventory_target(
         ):
             lock_files.append(relative)
     vcs_revision, vcs_revision_verified = _vcs_revision(target)
-    return Inventory(
+    inventory = Inventory(
         python_files=python_files,
         dependency_files=sorted(dependency_files),
         total_files=len(maintained_files),
@@ -92,6 +102,7 @@ def inventory_target(
         hashed_files=len(integrity_files),
         hashed_bytes=hashed_bytes,
     )
+    return inventory, source_evidence
 
 
 def _vcs_revision(target: Path) -> tuple[str, bool]:
@@ -182,9 +193,15 @@ def _is_excluded(path: Path, excluded: tuple[Path, ...]) -> bool:
 
 
 def _source_digest(target: Path, paths: list[Path]) -> tuple[str, int]:
+    evidence = _source_inventory(target, paths)
+    return str(evidence["source_sha256"]), int(evidence["total_bytes"])
+
+
+def _source_inventory(target: Path, paths: list[Path]) -> dict[str, Any]:
     aggregate = hashlib.sha256()
     total_bytes = 0
     resolved_target = target.resolve()
+    records: list[dict[str, Any]] = []
     for path in paths:
         content = hashlib.sha256()
         size = 0
@@ -198,7 +215,24 @@ def _source_digest(target: Path, paths: list[Path]) -> tuple[str, int]:
         aggregate.update(size.to_bytes(8, "big"))
         aggregate.update(content.digest())
         total_bytes += size
-    return aggregate.hexdigest(), total_bytes
+        records.append(
+            {
+                "path": relative.decode("utf-8"),
+                "size_bytes": size,
+                "sha256": content.hexdigest(),
+            }
+        )
+    return {
+        "schema_version": "1.0",
+        "scope": (
+            "Exact regular-file identities included in the target source digest; "
+            "generated scanner and report directories are excluded."
+        ),
+        "source_sha256": aggregate.hexdigest(),
+        "total_files": len(records),
+        "total_bytes": total_bytes,
+        "files": records,
+    }
 
 
 def _declares_dependencies(target: Path) -> bool:

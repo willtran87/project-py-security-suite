@@ -382,6 +382,13 @@ class TrustConfig:
 
 
 @dataclass(slots=True)
+class PathsConfig:
+    """Portable roots used by explicit configuration path namespaces."""
+
+    bundle_root: Path = Path(".pysec-tools")
+
+
+@dataclass(slots=True)
 class ToolConfig:
     enabled: bool = True
     executable: str = ""
@@ -419,6 +426,7 @@ class SuiteConfig:
     reports: ReportsConfig = field(default_factory=ReportsConfig)
     intelligence: IntelligenceConfig = field(default_factory=IntelligenceConfig)
     trust: TrustConfig = field(default_factory=TrustConfig)
+    paths: PathsConfig = field(default_factory=PathsConfig)
     tools: dict[str, ToolConfig] = field(default_factory=dict)
 
     @property
@@ -501,6 +509,9 @@ def _default_mapping() -> dict[str, Any]:
         "trust": {
             "catalog_path": None,
             "catalog_sha256": "",
+        },
+        "paths": {
+            "bundle_root": ".pysec-tools",
         },
         "tools": {
             "bandit": {
@@ -918,6 +929,7 @@ def _ensure_known(mapping: Mapping[str, Any]) -> None:
         "reports",
         "intelligence",
         "trust",
+        "paths",
         "tools",
     }
     sections = {
@@ -957,6 +969,7 @@ def _ensure_known(mapping: Mapping[str, Any]) -> None:
             "epss_high_percentile",
         },
         "trust": {"catalog_path", "catalog_sha256"},
+        "paths": {"bundle_root"},
     }
     unknown = set(mapping) - top
     if unknown:
@@ -1254,6 +1267,7 @@ def _to_config(mapping: Mapping[str, Any]) -> SuiteConfig:
     reports = _reports_config(mapping["reports"])
     intelligence = _intelligence_config(mapping["intelligence"], profile)
     trust = _trust_config(mapping["trust"])
+    paths = _paths_config(mapping["paths"])
     tool_configs = _tool_configs(mapping["tools"])
     _validate_required_tools(
         policy.required_scanners or PROFILE_TOOLS[profile], tool_configs
@@ -1268,6 +1282,7 @@ def _to_config(mapping: Mapping[str, Any]) -> SuiteConfig:
         reports=reports,
         intelligence=intelligence,
         trust=trust,
+        paths=paths,
         tools=tool_configs,
     )
 
@@ -1424,6 +1439,15 @@ def _trust_config(data: Mapping[str, Any]) -> TrustConfig:
         catalog_path=Path(str(path)).expanduser() if path else None,
         catalog_sha256=digest,
     )
+
+
+def _paths_config(data: Mapping[str, Any]) -> PathsConfig:
+    value = str(data.get("bundle_root") or "").strip()
+    if not value:
+        raise ConfigurationError("paths.bundle_root cannot be empty")
+    if value.startswith("@bundle"):
+        raise ConfigurationError("paths.bundle_root cannot reference @bundle")
+    return PathsConfig(bundle_root=Path(value).expanduser())
 
 
 def _tool_configs(data: Mapping[str, Any]) -> dict[str, ToolConfig]:

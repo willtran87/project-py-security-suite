@@ -5,6 +5,59 @@ for published releases.
 
 ## Unreleased
 
+- Version portfolio health at 1.1 with separate execution, observed-risk,
+  evidence, and release grades. Conditional controls now carry deterministic
+  owner-routed activation recipes in JSON, Markdown, and offline HTML, backed
+  by one shared readiness classifier so preflight and reports cannot drift.
+- Validate the rolling OSV PyPI archive before bundling with bounded size,
+  path, CRC, JSON, unique-ID, affected-record, and timestamp checks; emit a
+  compact connected-lane validation receipt.
+- Seal `source-inventory.json` with every source path, size, and SHA-256;
+  path-based clean effectiveness labels must now exist in that unchanged,
+  aggregate-bound inventory instead of passing on an invented filename.
+  Independent report verification now also rejects malformed, non-canonical,
+  unsorted, duplicate, aggregate-mismatched, or manifest-unbound inventories.
+- Expand the retained behavioral qualification to 10 reviewed labels across
+  Bandit, Semgrep, and detect-secrets (7 TP, 3 TN, no FP/FN) with exact current
+  executable-digest continuity.
+- Dogfood the final candidate with all 36 applicable controls completed and no
+  unavailable/failed scanner; six newly exposed implementation findings were
+  corrected, leaving only the two expected unsigned-distribution findings.
+- Repair the pinned Actionlint Windows bundle asset name (`windows_amd64`),
+  retaining exact SHA-256 verification and fail-closed connected preparation.
+- Include hidden files in native-bundle inventory generation so PowerShell
+  Gallery metadata participates in the exact closed-set transfer contract.
+
+- Add `verify-native-bundle` with independent manifest-digest binding,
+  closed-set file verification, link and path defenses, bounded wheel/CRC
+  inspection, and optional fail-closed `pip --isolated --no-index` resolution
+  for every schema 2.0 Python environment. Native installation now rejects
+  injected files, links, size changes, and case-insensitive path collisions.
+- Upgrade `qualify-bundle` to schema 1.1 so a digest-bound labeled-corpus
+  evaluation and its verified source report can enforce minimum labels, named
+  tools, required perspectives, and exact unchanged scanner-digest continuity
+  in the same decision without claiming that qualification reran scanners or
+  granted release authority.
+
+- Add relocatable, traversal-safe `@bundle/...` configuration paths; generate
+  portable native scanner configurations; add a non-mutating, schema-governed
+  `provision-plan`; and separate source, test, dependency, artifact, and
+  governance admission decisions in JSON, Markdown, and offline HTML reports.
+- Add `adapter-check`, a strict non-executing 63-adapter SDK qualification
+  receipt, and `generate-ci`, a no-install GitHub workflow generator that
+  requires immutable action pins and an explicit enterprise isolation check.
+- Add `qualify-bundle` to join adapter contracts with target-specific readiness
+  and executable identity, `config-check` for tolerant schema/portability advice,
+  and `generate-hooks` for local non-executing pre-commit diagnostics. All three
+  emit strict, non-authoritative contracts and perform no acquisition.
+- Add `pysec init` with safe library, API, CLI, worker, and monorepo templates;
+  version doctor readiness at 1.1 with ordered actions, explain mode, and atomic
+  JSON or GitHub-ready Markdown publication. Activation-free module invocation
+  now discovers console scripts beside its interpreter before declaring them
+  unavailable, while retaining executable integrity checks. Equivalent
+  prerequisites are grouped into root-cause remediation batches without
+  dropping per-control reasons, and top-level help now leads operators through
+  initialize, preflight, scan, and inspect.
 - Consolidate semantically equivalent finding remediation into one owner-routed
   action without losing finding or artifact evidence. Promotion Markdown and
   HTML now surface priority, action ID, authority, target date, evidence

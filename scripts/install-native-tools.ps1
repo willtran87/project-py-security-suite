@@ -89,21 +89,75 @@ if (-not (Test-Path -LiteralPath $bundleManifestPath)) {
 }
 $bundleManifest = Get-Content -Raw -LiteralPath $bundleManifestPath |
     ConvertFrom-Json
-if ($bundleManifest.schema_version -ne "1") {
+if ($bundleManifest.schema_version -notin @("1", "2.0")) {
     throw "Unsupported native bundle schema."
 }
 if ($bundleManifest.platform -ne "windows-amd64") {
     throw "This installer requires a windows-amd64 native bundle."
 }
+$expectedBundleFiles = [Collections.Generic.HashSet[string]]::new(
+    [StringComparer]::OrdinalIgnoreCase
+)
+[void]$expectedBundleFiles.Add("bundle-manifest.json")
 foreach ($entry in $bundleManifest.files) {
-    $path = Join-Path $bundle ($entry.path.Replace("/", "\"))
+    $relative = [string]$entry.path
+    if (
+        -not $relative -or
+        $relative.Contains("\") -or
+        [IO.Path]::IsPathRooted($relative) -or
+        ($relative -split "/") -contains ".." -or
+        -not $expectedBundleFiles.Add($relative)
+    ) {
+        throw "Bundle manifest contains an unsafe or duplicate path: $relative"
+    }
+    $path = [IO.Path]::GetFullPath(
+        (Join-Path $bundle ($relative.Replace("/", "\")))
+    )
+    if (-not $path.StartsWith(
+        $bundle + [IO.Path]::DirectorySeparatorChar,
+        [StringComparison]::OrdinalIgnoreCase
+    )) {
+        throw "Bundle manifest path escaped the bundle: $relative"
+    }
     if (-not (Test-Path -LiteralPath $path)) {
         throw "Bundle file is missing: $($entry.path)"
+    }
+    $item = Get-Item -LiteralPath $path -Force
+    if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw "Bundle file cannot be a link or reparse point: $relative"
+    }
+    if ($item.Length -ne [long]$entry.size) {
+        throw "Bundle file size mismatch: $relative"
     }
     $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $path).Hash.ToLowerInvariant()
     if ($actual -ne $entry.sha256) {
         throw "Bundle checksum mismatch: $($entry.path)"
     }
+}
+$bundleEntries = Get-ChildItem -LiteralPath $bundle -Recurse -Force
+foreach ($item in $bundleEntries) {
+    if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw "Bundle cannot contain links or reparse points: $($item.FullName)"
+    }
+}
+$actualBundleFiles = [Collections.Generic.HashSet[string]]::new(
+    [StringComparer]::OrdinalIgnoreCase
+)
+foreach ($item in ($bundleEntries | Where-Object { -not $_.PSIsContainer })) {
+    $relative = $item.FullName.Substring($bundle.Length + 1).Replace("\", "/")
+    [void]$actualBundleFiles.Add($relative)
+}
+$unexpectedBundleFiles = @(
+    $actualBundleFiles | Where-Object { -not $expectedBundleFiles.Contains($_) }
+)
+if ($unexpectedBundleFiles.Count -gt 0) {
+    throw "Bundle contains unmanifested files: $($unexpectedBundleFiles -join ', ')"
+}
+$missingBundleFiles = @(
+    $expectedBundleFiles | Where-Object { -not $actualBundleFiles.Contains($_) }
+)
+if ($missingBundleFiles.Count -gt 0) {
+    throw "Bundle is missing manifested files: $($missingBundleFiles -join ', ')"
 }
 
 if (Test-Path -LiteralPath $toolDirectory) {
@@ -442,6 +496,16 @@ $toTomlPath = {
     param([string]$Value)
     return $Value.Replace("\", "/").Replace('"', '\"')
 }
+$toPortablePath = {
+    param([string]$Value)
+    $absolute = [IO.Path]::GetFullPath($Value.Replace("/", "\"))
+    $root = $toolDirectory.TrimEnd("\") + "\"
+    if ($absolute.StartsWith($root, [StringComparison]::OrdinalIgnoreCase)) {
+        $relative = $absolute.Substring($root.Length).Replace("\", "/")
+        return "@bundle/$relative"
+    }
+    return & $toTomlPath $absolute
+}
 $toSha256 = {
     param([Parameter(Mandatory = $true)][string]$Value)
     return (
@@ -548,20 +612,47 @@ $checkWheelContentsSha256 = & $toSha256 $checkWheelContents
 $twineSha256 = & $toSha256 $twine
 $pipdeptreeSha256 = & $toSha256 $pipdeptree
 $validatePyprojectSha256 = & $toSha256 $validatePyproject
-$database = & $toTomlPath $databaseRoot
-$trivyDatabase = & $toTomlPath $trivyCache
-$grypeDatabase = & $toTomlPath $grypeCache
-$rules = & $toTomlPath $rulesPath
-$gitleaksRules = & $toTomlPath $gitleaksRulesPath
-$truffleHogExcludes = & $toTomlPath $truffleHogExcludesPath
-$mypyRules = & $toTomlPath $mypyRulesPath
-$vultureRules = & $toTomlPath $vultureRulesPath
-$pylintRules = & $toTomlPath $pylintRulesPath
-$actionlintRules = & $toTomlPath $actionlintRulesPath
-$hadolintRules = & $toTomlPath $hadolintRulesPath
+$portableVariables = @(
+    "bandit", "semgrep", "detectSecrets", "ruff", "mypy", "deptry",
+    "diffCover", "vulture", "tach", "pylint", "radon", "reuse", "pysec",
+    "pysecEvidence", "flawfinder", "cycloneDx", "uv", "zizmor", "scanCode",
+    "osvScanner", "trivy", "gitleaks", "truffleHog", "syft", "grype",
+    "actionlint", "conftest", "gitSizer", "vale", "kubeLinter", "hadolint",
+    "devSkim", "shellCheck", "cosign", "node", "pyright", "pyrightRules",
+    "powerShell", "powerShellModules", "psscriptAnalyzerRules", "checkov",
+    "runCodeQl", "pypiAttestations", "checkWheelContents", "twine",
+    "pipdeptree", "validatePyproject"
+)
+foreach ($variableName in $portableVariables) {
+    $current = Get-Variable -Name $variableName -ValueOnly
+    Set-Variable -Name $variableName -Value (& $toPortablePath $current)
+}
+$database = & $toPortablePath $databaseRoot
+$trivyDatabase = & $toPortablePath $trivyCache
+$grypeDatabase = & $toPortablePath $grypeCache
+$rules = & $toPortablePath $rulesPath
+$gitleaksRules = & $toPortablePath $gitleaksRulesPath
+$truffleHogExcludes = & $toPortablePath $truffleHogExcludesPath
+$mypyRules = & $toPortablePath $mypyRulesPath
+$vultureRules = & $toPortablePath $vultureRulesPath
+$pylintRules = & $toPortablePath $pylintRulesPath
+$actionlintRules = & $toPortablePath $actionlintRulesPath
+$hadolintRules = & $toPortablePath $hadolintRulesPath
+$workspacePrefix = $workspace.TrimEnd("\") + "\"
+$bundleRootConfig = if ($toolDirectory.StartsWith(
+    $workspacePrefix,
+    [StringComparison]::OrdinalIgnoreCase
+)) {
+    $toolDirectory.Substring($workspacePrefix.Length).Replace("\", "/")
+} else {
+    & $toTomlPath $toolDirectory
+}
 $config = @"
 schema_version = "1"
 profile = "standard"
+
+[paths]
+bundle_root = "$bundleRootConfig"
 
 [isolation]
 network = "deny"

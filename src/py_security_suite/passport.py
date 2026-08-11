@@ -17,6 +17,7 @@ from .path_safety import is_link_like as _is_link_like
 from .path_safety import resolve_regular_directory
 from .path_safety import resolve_regular_file as _regular_file
 from .path_safety import resolve_unlinked_path as _resolve_evidence_root
+from .source_inventory import verify_source_inventory_file
 
 _MAX_FILE_BYTES = 128 * 1024 * 1024
 _MAX_RELEASE_ARTIFACT_BYTES = 512 * 1024 * 1024
@@ -845,6 +846,7 @@ def verify_report(report: Path) -> dict[str, Any]:
     ):
         raise ValueError("report scan manifest is invalid")
     _verify_report_artifact_contract(report, manifest)
+    _verify_report_source_inventory(report, manifest)
     _verify_embedded_statement(report, manifest)
     checksums = report / "checksums.sha256"
     return {
@@ -1099,6 +1101,22 @@ def _verify_report_artifact_contract(report: Path, manifest: dict[str, Any]) -> 
         ) and not _is_link_like(path)
         if not available:
             raise ValueError(f"declared report artifact is unavailable: {raw_binding}")
+
+
+def _verify_report_source_inventory(report: Path, manifest: dict[str, Any]) -> None:
+    artifacts = manifest.get("artifacts")
+    if not isinstance(artifacts, dict):
+        raise ValueError("report artifact manifest is missing or invalid")
+    binding = artifacts.get("source-inventory.json")
+    path = report / "source-inventory.json"
+    if binding is None and not path.exists():
+        return
+    if binding != "source-inventory.json":
+        raise ValueError("source inventory artifact binding is invalid")
+    inventory = manifest.get("inventory")
+    if not isinstance(inventory, dict):
+        raise TypeError("scan manifest inventory must be an object")
+    verify_source_inventory_file(path, inventory)
 
 
 def _report_inputs(report: Path, *, exclude: set[str]) -> list[dict[str, Any]]:

@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:provision-plan:1.0",
+  "title": "Python Security Suite offline provisioning plan",
+  "type": "object",
+  "required": ["schema_version", "schema_id", "plan_id", "authoritative", "target", "profile", "platform", "decision", "summary", "bundle", "workflows", "controls", "context_errors", "verification", "scope"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "schema_id": {"const": "urn:project-py-security-suite:schema:provision-plan:1.0"},
+    "plan_id": {"type": "string", "pattern": "^plan-[0-9a-f]{24}$"},
+    "authoritative": {"const": false},
+    "target": {"type": "string", "minLength": 1},
+    "profile": {"type": "string", "minLength": 1},
+    "platform": {"type": "object", "required": ["system", "machine", "python"], "additionalProperties": false, "properties": {"system": {"type": "string"}, "machine": {"type": "string"}, "python": {"type": "string"}}},
+    "decision": {"type": "object"},
+    "summary": {"type": "object"},
+    "bundle": {"type": "object", "required": ["namespace", "root_hint", "network_acquisition_performed", "filesystem_mutation_performed"], "additionalProperties": false, "properties": {"namespace": {"const": "@bundle/"}, "root_hint": {"type": "string"}, "network_acquisition_performed": {"const": false}, "filesystem_mutation_performed": {"const": false}}},
+    "workflows": {"type": "array", "items": {"type": "object", "required": ["order", "priority", "blocking", "category", "controls", "objective"], "additionalProperties": false, "properties": {"order": {"type": "integer", "minimum": 1}, "priority": {"enum": ["P0", "P1", "P2", "P3"]}, "blocking": {"type": "boolean"}, "category": {"type": "string"}, "controls": {"type": "array", "items": {"type": "string"}}, "objective": {"type": "string"}}}},
+    "controls": {"type": "array", "items": {"type": "object", "required": ["control", "required", "status", "category", "reason", "required_action"], "additionalProperties": false, "properties": {"control": {"type": "string"}, "required": {"type": "boolean"}, "status": {"type": "string"}, "category": {"type": "string"}, "reason": {"type": "string"}, "required_action": {"type": "string"}}}},
+    "context_errors": {"type": "array", "items": {"type": "string"}},
+    "verification": {"type": "object", "required": ["preflight_argv", "scan_argv"], "additionalProperties": false, "properties": {"preflight_argv": {"type": "array", "items": {"type": "string"}}, "scan_argv": {"type": "array", "items": {"type": "string"}}}},
+    "scope": {"type": "string", "minLength": 1}
+  }
+}

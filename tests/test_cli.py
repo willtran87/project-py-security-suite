@@ -28,11 +28,59 @@ from tests.report_fixtures import write_embedded_statement
 class CliSafetyTests(unittest.TestCase):
     def test_parser_and_list_tools_are_available(self) -> None:
         parser = build_parser()
+        help_text = parser.format_help()
+        self.assertIn("Start here:", help_text)
+        self.assertIn("pysec init PROJECT --template library", help_text)
+        self.assertIn("pysec inspect PROJECT/.artifacts/pysec-report", help_text)
         parsed = parser.parse_args(["list-tools"])
         self.assertEqual(parsed.command, "list-tools")
+        adapter_check = parser.parse_args(
+            ["adapter-check", "--format", "json", "--output", "adapters.json"]
+        )
+        self.assertEqual(adapter_check.command, "adapter-check")
+        self.assertEqual(adapter_check.output, Path("adapters.json"))
+        generate_ci = parser.parse_args(
+            [
+                "generate-ci",
+                ".",
+                "--checkout-sha",
+                "a" * 40,
+                "--upload-artifact-sha",
+                "b" * 40,
+                "--upload-sarif-sha",
+                "c" * 40,
+            ]
+        )
+        self.assertEqual(generate_ci.command, "generate-ci")
+        self.assertEqual(generate_ci.profile, "production")
+        generate_hooks = parser.parse_args(["generate-hooks", "."])
+        self.assertEqual(generate_hooks.command, "generate-hooks")
+        self.assertEqual(generate_hooks.profile, "quick")
+        qualification = parser.parse_args(
+            ["qualify-bundle", ".", "--profile", "production"]
+        )
+        self.assertEqual(qualification.command, "qualify-bundle")
+        bundle_verification = parser.parse_args(
+            [
+                "verify-native-bundle",
+                "bundle",
+                "--manifest-sha256",
+                "a" * 64,
+                "--require-wheelhouse-closure",
+            ]
+        )
+        self.assertEqual(bundle_verification.command, "verify-native-bundle")
+        self.assertTrue(bundle_verification.require_wheelhouse_closure)
+        config_check = parser.parse_args(["config-check", "--config", "pysec.toml"])
+        self.assertEqual(config_check.command, "config-check")
         with patch("builtins.print") as output:
             self.assertEqual(main(["list-tools"]), 0)
         self.assertTrue(output.called)
+        initialize = parser.parse_args(
+            ["init", ".", "--template", "worker", "--profile", "comprehensive"]
+        )
+        self.assertEqual(initialize.command, "init")
+        self.assertEqual(initialize.template, "worker")
         attest = parser.parse_args(
             ["attest", "report", "--output", "passport", "--unsigned"]
         )
@@ -69,6 +117,112 @@ class CliSafetyTests(unittest.TestCase):
             ]
         )
         self.assertEqual(verify_signing.command, "verify-signing-request")
+
+    def test_onboarding_generators_and_receipts_publish_atomically(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory).resolve()
+            config = target / "pysec.toml"
+            config.write_text(
+                'schema_version = "1"\nprofile = "quick"\n', encoding="utf-8"
+            )
+
+            hook_output = target / "generated-precommit.yaml"
+            with patch("builtins.print") as hook_text:
+                self.assertEqual(
+                    main(
+                        [
+                            "generate-hooks",
+                            str(target),
+                            "--config",
+                            "pysec.toml",
+                            "--output",
+                            str(hook_output),
+                        ]
+                    ),
+                    0,
+                )
+            self.assertIn("repo: local", hook_output.read_text(encoding="utf-8"))
+            self.assertIn("GENERATED:", hook_text.call_args.args[0])
+
+            workflow_output = target / ".github" / "workflows" / "security.yml"
+            with patch("builtins.print") as workflow_text:
+                self.assertEqual(
+                    main(
+                        [
+                            "generate-ci",
+                            str(target),
+                            "--output",
+                            str(workflow_output),
+                            "--checkout-sha",
+                            "a" * 40,
+                            "--upload-artifact-sha",
+                            "b" * 40,
+                            "--upload-sarif-sha",
+                            "c" * 40,
+                        ]
+                    ),
+                    0,
+                )
+            self.assertIn(
+                "actions/checkout@", workflow_output.read_text(encoding="utf-8")
+            )
+            self.assertIn("GENERATED:", workflow_text.call_args.args[0])
+
+            advice_output = target / "config-advice.json"
+            with patch("builtins.print") as advice_text:
+                self.assertEqual(
+                    main(
+                        [
+                            "config-check",
+                            "--config",
+                            str(config),
+                            "--format",
+                            "json",
+                            "--output",
+                            str(advice_output),
+                        ]
+                    ),
+                    0,
+                )
+            advice = json.loads(advice_output.read_text(encoding="utf-8"))
+            self.assertEqual(advice["decision"], "valid")
+            self.assertEqual(json.loads(advice_text.call_args.args[0]), advice)
+
+            qualification_output = target / "qualification.json"
+            qualification = {
+                "decision": {"disposition": "qualify"},
+                "schema_version": "1.0",
+            }
+            with (
+                patch(
+                    "py_security_suite.cli.qualify_bundle",
+                    return_value=qualification,
+                ),
+                patch("builtins.print") as qualification_text,
+            ):
+                self.assertEqual(
+                    main(
+                        [
+                            "qualify-bundle",
+                            str(target),
+                            "--profile",
+                            "quick",
+                            "--format",
+                            "json",
+                            "--output",
+                            str(qualification_output),
+                        ]
+                    ),
+                    0,
+                )
+            self.assertEqual(
+                json.loads(qualification_output.read_text(encoding="utf-8")),
+                qualification,
+            )
+            self.assertEqual(
+                json.loads(qualification_text.call_args.args[0]), qualification
+            )
+        parser = build_parser()
         promotion = parser.parse_args(
             [
                 "promotion-plan",
@@ -109,6 +263,24 @@ class CliSafetyTests(unittest.TestCase):
         self.assertEqual(verify.format, "text")
         doctor = parser.parse_args(["doctor", ".", "--format", "json"])
         self.assertEqual(doctor.command, "doctor")
+        doctor_markdown = parser.parse_args(
+            [
+                "doctor",
+                ".",
+                "--format",
+                "markdown",
+                "--explain",
+                "--output",
+                "preflight.md",
+            ]
+        )
+        self.assertTrue(doctor_markdown.explain)
+        self.assertEqual(doctor_markdown.output, Path("preflight.md"))
+        provision = parser.parse_args(
+            ["provision-plan", ".", "--format", "markdown", "--output", "plan.md"]
+        )
+        self.assertEqual(provision.command, "provision-plan")
+        self.assertEqual(provision.output, Path("plan.md"))
         verify_report = parser.parse_args(
             [
                 "verify-report",
@@ -291,6 +463,88 @@ class CliSafetyTests(unittest.TestCase):
             code = main(["doctor", ".", "--profile", "quick", "--format", "json"])
         self.assertEqual(code, 2)
         self.assertFalse(json.loads(output.call_args.args[0])["ready"])
+
+    def test_doctor_atomically_exports_markdown(self) -> None:
+        readiness = {
+            "schema_version": "1.1",
+            "schema_id": "urn:project-py-security-suite:schema:doctor-readiness:1.1",
+            "ready": False,
+            "profile": "quick",
+            "target": "fixture",
+            "summary": {
+                "selected": 1,
+                "ready": 0,
+                "applicable": 1,
+                "required_ready": 0,
+                "required_applicable": 1,
+                "not_applicable": 0,
+                "attention": 1,
+                "missing_approvals": 0,
+            },
+            "next_actions": [
+                {
+                    "priority": "P0",
+                    "blocking": True,
+                    "subject": "bandit",
+                    "category": "unavailable",
+                    "reason": "approved executable is missing",
+                    "required_action": "Restore the approved executable.",
+                }
+            ],
+            "tools": [
+                {
+                    "tool": "bandit",
+                    "status": "unavailable",
+                    "category": "unavailable",
+                    "required": True,
+                }
+            ],
+            "scope": "fixture",
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / "preflight.md"
+            with (
+                patch("py_security_suite.cli.load_config"),
+                patch("py_security_suite.cli.assess_readiness", return_value=readiness),
+                patch("builtins.print") as output,
+            ):
+                code = main(
+                    [
+                        "doctor",
+                        ".",
+                        "--format",
+                        "markdown",
+                        "--output",
+                        str(destination),
+                    ]
+                )
+            self.assertEqual(code, 2)
+            self.assertEqual(
+                destination.read_text(encoding="utf-8").rstrip(),
+                output.call_args.args[0],
+            )
+            self.assertIn("| P0 | BLOCK | `bandit`", output.call_args.args[0])
+            original = destination.read_text(encoding="utf-8")
+            with (
+                patch("py_security_suite.cli.load_config"),
+                patch("py_security_suite.cli.assess_readiness", return_value=readiness),
+                patch("builtins.print") as error,
+            ):
+                self.assertEqual(
+                    main(
+                        [
+                            "doctor",
+                            ".",
+                            "--format",
+                            "markdown",
+                            "--output",
+                            str(destination),
+                        ]
+                    ),
+                    3,
+                )
+            self.assertEqual(destination.read_text(encoding="utf-8"), original)
+            self.assertIn("already exists", error.call_args.args[0])
 
     def test_verify_report_has_concise_text_and_json_output(self) -> None:
         verification = {

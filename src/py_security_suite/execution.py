@@ -1,13 +1,14 @@
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 import signal
 import shutil
 import subprocess  # nosec B404 - scanner execution is this module's purpose
+import sys
 import tempfile
 import time
-import hashlib
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -48,9 +49,19 @@ def sha256_file(path: Path) -> str:
 def resolve_executable(executable: str) -> str | None:
     candidate = Path(executable)
     if candidate.parent != Path(".") or candidate.is_absolute():
-        resolved = candidate.expanduser().resolve()
-        return str(resolved) if resolved.is_file() else None
-    return shutil.which(executable)
+        resolved_path = candidate.expanduser().resolve()
+        return str(resolved_path) if resolved_path.is_file() else None
+    resolved_executable = shutil.which(executable)
+    if resolved_executable is not None:
+        return resolved_executable
+
+    # ``python -m py_security_suite`` is a supported, activation-free entry
+    # point. Console scripts installed in the same environment live beside the
+    # interpreter, but that directory is not necessarily present on PATH.
+    # Keep ordinary PATH precedence, then use the interpreter environment as a
+    # deterministic fallback so doctor and scan resolve tools consistently.
+    interpreter_bin = Path(sys.executable).resolve().parent
+    return shutil.which(executable, path=str(interpreter_bin))
 
 
 def isolated_environment(extra: dict[str, str] | None = None) -> dict[str, str]:

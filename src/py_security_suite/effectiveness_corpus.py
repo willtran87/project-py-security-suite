@@ -7,6 +7,7 @@ from typing import Any
 from .execution import sha256_file
 from .passport import verify_report
 from .path_safety import resolve_regular_file
+from .source_inventory import verify_source_inventory_file
 
 
 _MAX_CORPUS_BYTES = 16 * 1024 * 1024
@@ -44,6 +45,7 @@ def evaluate_report_corpus(
         )
     document = _read_object(corpus_path, _MAX_CORPUS_BYTES)
     labels = _labels(document)
+    _validate_clean_paths(labels, report_root)
     outcomes = [_evaluate_label(label, findings) for label in labels]
     counts = {
         name: sum(outcome["outcome"] == name for outcome in outcomes)
@@ -146,6 +148,35 @@ def _labels(document: dict[str, Any]) -> list[dict[str, Any]]:
         identifiers.add(identifier)
         labels.append({"id": identifier, "expected": expectation, "match": normalized})
     return labels
+
+
+def _validate_clean_paths(labels: list[dict[str, Any]], report: Path) -> None:
+    required = _required_clean_paths(labels)
+    if not required:
+        return
+    manifest = _read_object(report / "scan-manifest.json", 128 * 1024 * 1024)
+    inventory = manifest.get("inventory")
+    if not isinstance(inventory, dict):
+        raise TypeError("scan manifest inventory must be an object")
+    identity = verify_source_inventory_file(
+        report / "source-inventory.json",
+        inventory,
+        require_unchanged=True,
+    )
+    missing = sorted(required - identity.paths)
+    if missing:
+        raise ValueError(
+            "clean effectiveness label path is absent from the sealed source inventory: "
+            + ", ".join(missing)
+        )
+
+
+def _required_clean_paths(labels: list[dict[str, Any]]) -> set[str]:
+    return {
+        str(label["match"]["path"])
+        for label in labels
+        if label["expected"] == "clean" and label["match"]["path"]
+    }
 
 
 def _evaluate_label(

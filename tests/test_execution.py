@@ -4,6 +4,7 @@ import hashlib
 import os
 import signal
 import subprocess  # nosec B404 - subprocess behavior is the test subject
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -201,6 +202,20 @@ class IsolatedEnvironmentTests(unittest.TestCase):
         )
         self.assertEqual(
             sanitize_terminal_text("line\nsecret=x", maximum=12), "line�secret…"
+        )
+
+    @patch("py_security_suite.execution.shutil.which")
+    def test_executable_resolution_falls_back_to_interpreter_directory(
+        self, which: MagicMock
+    ) -> None:
+        expected = str(Path(sys.executable).resolve().parent / "scanner")
+        which.side_effect = [None, expected]
+
+        self.assertEqual(resolve_executable("scanner"), expected)
+        self.assertEqual(which.call_count, 2)
+        self.assertEqual(
+            which.call_args_list[1].kwargs["path"],
+            str(Path(sys.executable).resolve().parent),
         )
 
 

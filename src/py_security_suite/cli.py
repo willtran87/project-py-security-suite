@@ -8,22 +8,55 @@ import tempfile
 from pathlib import Path
 
 from . import __version__
+from .adapter_conformance import (
+    assess_adapter_conformance,
+    render_adapter_conformance,
+)
 from .baseline_candidate import build_baseline_candidate
+from .bundle_qualification import (
+    qualify_bundle,
+    render_bundle_qualification,
+    render_bundle_qualification_markdown,
+)
 from .audit_package import create_audit_package, verify_audit_package
 from .audience_report import AUDIENCES, build_audience_report, render_audience_markdown
+from .ci_workflow import build_github_workflow, render_workflow_receipt
 from .config import ConfigurationError, PROFILE_TOOLS, load_config
+from .config_advisor import (
+    advise_configuration,
+    render_config_advice,
+    render_config_advice_markdown,
+)
 from .config_provenance import build_config_provenance
-from .doctor import assess_readiness, render_readiness
+from .doctor import assess_readiness, render_readiness, render_readiness_markdown
 from .evidence_draft import build_governance_evidence_draft
 from .evidence_pack import create_evidence_pack, verify_evidence_pack
 from .finding_register import build_finding_register
 from .github_annotations import build_github_annotations, render_github_commands
 from .effectiveness_corpus import evaluate_report_corpus
 from .execution import sanitize_terminal_text
+from .native_bundle import (
+    render_native_bundle_verification,
+    render_native_bundle_verification_markdown,
+    verify_native_bundle,
+)
 from .orchestrator import scan_project
 from .operational_trend import build_operational_trend
 from .policy import exit_code
 from .policy_simulation import simulate_policy
+from .precommit_config import build_precommit_config, render_precommit_receipt
+from .project_init import (
+    PROJECT_TEMPLATES,
+    build_init_receipt,
+    project_profile,
+    render_init_receipt,
+    render_project_config,
+)
+from .provisioning import (
+    build_provision_plan,
+    render_provision_plan,
+    render_provision_plan_markdown,
+)
 from .portfolio_dashboard import build_portfolio_dashboard
 from .promotion import (
     build_promotion_plan,
@@ -60,13 +93,57 @@ from .release_readiness import assess_release_readiness
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="pysec",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
         description=(
             "Run an offline-first portfolio of security scanners against a "
             "Python project and generate one coordinated report artifact."
         ),
+        epilog=(
+            "Start here:\n"
+            "  pysec init PROJECT --template library\n"
+            "  pysec doctor PROJECT --config PROJECT/pysec.toml --explain\n"
+            "  pysec provision-plan PROJECT --config PROJECT/pysec.toml\n"
+            "  pysec scan PROJECT --config PROJECT/pysec.toml --network-isolated "
+            "--output PROJECT/.artifacts/pysec-report\n"
+            "  pysec inspect PROJECT/.artifacts/pysec-report"
+        ),
     )
     parser.add_argument("--version", action="version", version=__version__)
     subparsers = parser.add_subparsers(dest="command", required=True)
+
+    initialize = subparsers.add_parser(
+        "init", help="create a minimal offline-first repository configuration"
+    )
+    initialize.add_argument(
+        "target", type=Path, help="existing repository directory to initialize"
+    )
+    initialize.add_argument(
+        "--template",
+        choices=PROJECT_TEMPLATES,
+        default="library",
+        help="project shape used for profile and reachability guidance",
+    )
+    initialize.add_argument(
+        "--profile",
+        choices=sorted(PROFILE_TOOLS),
+        help="override the template-recommended scan profile",
+    )
+    initialize.add_argument(
+        "--output",
+        type=Path,
+        help="configuration path inside TARGET (default: TARGET/pysec.toml)",
+    )
+    initialize.add_argument(
+        "--format",
+        choices=("text", "json"),
+        default="text",
+        help="concise guidance or schema-governed initialization receipt",
+    )
+    initialize.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="explicitly replace an existing regular configuration file",
+    )
 
     scan = subparsers.add_parser("scan", help="scan a Python project")
     scan.add_argument("target", type=Path)
@@ -122,16 +199,59 @@ def build_parser() -> argparse.ArgumentParser:
         "doctor",
         help="check profile prerequisites without executing scanners",
     )
-    doctor.add_argument("target", type=Path)
-    doctor.add_argument("--config", type=Path)
-    doctor.add_argument("--policy", type=Path)
-    doctor.add_argument("--profile", choices=sorted(PROFILE_TOOLS))
+    doctor.add_argument(
+        "target", type=Path, help="existing repository directory to assess"
+    )
+    doctor.add_argument("--config", type=Path, help="repository TOML configuration")
+    doctor.add_argument("--policy", type=Path, help="organization TOML policy")
+    doctor.add_argument(
+        "--profile",
+        choices=sorted(PROFILE_TOOLS),
+        help="override the configured profile for this assessment",
+    )
     doctor.add_argument(
         "--format",
-        choices=("text", "json"),
+        choices=("text", "json", "markdown"),
         default="text",
-        help="operator text or machine-readable JSON",
+        help="operator text, machine-readable JSON, or GitHub-ready Markdown",
     )
+    doctor.add_argument(
+        "--explain",
+        action="store_true",
+        help="include ordered actions, reasons, identities, and selected controls",
+    )
+    doctor.add_argument(
+        "--output",
+        type=Path,
+        metavar="FILE",
+        help="atomically publish the rendered result",
+    )
+    doctor.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="explicitly replace an existing regular output file",
+    )
+
+    provision = subparsers.add_parser(
+        "provision-plan",
+        help="plan offline prerequisites without downloading or changing files",
+    )
+    provision.add_argument("target", type=Path, help="repository directory to assess")
+    provision.add_argument("--config", type=Path, help="repository TOML configuration")
+    provision.add_argument("--policy", type=Path, help="organization TOML policy")
+    provision.add_argument(
+        "--profile",
+        choices=sorted(PROFILE_TOOLS),
+        help="override the configured profile",
+    )
+    provision.add_argument(
+        "--format",
+        choices=("text", "json", "markdown"),
+        default="text",
+        help="operator text, schema-governed JSON, or GitHub-ready Markdown",
+    )
+    provision.add_argument("--output", type=Path, metavar="FILE")
+    provision.add_argument("--overwrite", action="store_true")
 
     attest = subparsers.add_parser(
         "attest", help="create a portable, optionally signed Security Passport"
@@ -336,6 +456,135 @@ def build_parser() -> argparse.ArgumentParser:
     )
     list_tools.add_argument("--profile", choices=sorted(PROFILE_TOOLS))
     list_tools.add_argument("--format", choices=("text", "json"), default="text")
+
+    adapter_check = subparsers.add_parser(
+        "adapter-check",
+        help="validate the non-executing adapter SDK and registry contract",
+    )
+    adapter_check.add_argument("--format", choices=("text", "json"), default="text")
+    adapter_check.add_argument("--output", type=Path, metavar="FILE")
+    adapter_check.add_argument("--overwrite", action="store_true")
+
+    qualify = subparsers.add_parser(
+        "qualify-bundle",
+        help="join adapter contracts and activation-free profile readiness",
+    )
+    qualify.add_argument("target", type=Path, help="repository used for applicability")
+    qualify.add_argument("--config", type=Path)
+    qualify.add_argument("--policy", type=Path)
+    qualify.add_argument("--profile", choices=sorted(PROFILE_TOOLS))
+    qualify.add_argument(
+        "--format", choices=("text", "json", "markdown"), default="text"
+    )
+    qualify.add_argument(
+        "--effectiveness-evaluation",
+        type=Path,
+        help="digest-bound labeled-corpus evaluation produced by 'pysec benchmark'",
+    )
+    qualify.add_argument(
+        "--effectiveness-report",
+        type=Path,
+        help="sealed report that produced the labeled-corpus evaluation",
+    )
+    qualify.add_argument("--effectiveness-sha256", default="")
+    qualify.add_argument("--minimum-effectiveness-labels", type=int, default=0)
+    qualify.add_argument("--minimum-effectiveness-tools", type=int, default=0)
+    qualify.add_argument(
+        "--required-effectiveness-tool",
+        action="append",
+        default=[],
+        help="require behavioral evidence for this scanner (repeatable)",
+    )
+    qualify.add_argument("--output", type=Path, metavar="FILE")
+    qualify.add_argument("--overwrite", action="store_true")
+
+    verify_bundle = subparsers.add_parser(
+        "verify-native-bundle",
+        help="verify the closed native scanner bundle and offline wheelhouse",
+    )
+    verify_bundle.add_argument("bundle", type=Path, help="transferred bundle directory")
+    verify_bundle.add_argument(
+        "--manifest-sha256",
+        default="",
+        help="independently transferred approved manifest digest",
+    )
+    verify_bundle.add_argument(
+        "--python",
+        type=Path,
+        help="trusted Python with pip used for no-index dependency resolution",
+    )
+    verify_bundle.add_argument(
+        "--require-wheelhouse-closure",
+        action="store_true",
+        help="fail unless every declared Python environment resolves with --no-index",
+    )
+    verify_bundle.add_argument(
+        "--format", choices=("text", "json", "markdown"), default="text"
+    )
+    verify_bundle.add_argument("--output", type=Path, metavar="FILE")
+    verify_bundle.add_argument("--overwrite", action="store_true")
+
+    generate_ci = subparsers.add_parser(
+        "generate-ci",
+        help="create a pinned GitHub workflow for a pre-provisioned isolated runner",
+    )
+    generate_ci.add_argument("target", type=Path, help="repository directory")
+    generate_ci.add_argument(
+        "--output",
+        type=Path,
+        help="workflow path inside target (default: .github/workflows/python-security.yml)",
+    )
+    generate_ci.add_argument(
+        "--profile", choices=sorted(PROFILE_TOOLS), default="production"
+    )
+    generate_ci.add_argument("--config", default="pysec.toml", metavar="REPO_PATH")
+    generate_ci.add_argument("--checkout-sha", required=True)
+    generate_ci.add_argument("--upload-artifact-sha", required=True)
+    generate_ci.add_argument("--upload-sarif-sha", required=True)
+    generate_ci.add_argument("--policy-variable", default="PYSEC_ORGANIZATION_POLICY")
+    generate_ci.add_argument(
+        "--isolation-command",
+        default="enterprise-verify-pysec-isolation",
+        help="one-line organization-owned isolation verification command",
+    )
+    generate_ci.add_argument(
+        "--runner-label",
+        action="append",
+        default=[],
+        help="repeat for each required self-hosted runner label",
+    )
+    generate_ci.add_argument("--format", choices=("text", "json"), default="text")
+    generate_ci.add_argument("--overwrite", action="store_true")
+
+    generate_hooks = subparsers.add_parser(
+        "generate-hooks",
+        help="create safe local pre-commit diagnostics without running scanners",
+    )
+    generate_hooks.add_argument("target", type=Path, help="repository directory")
+    generate_hooks.add_argument(
+        "--output",
+        type=Path,
+        help="hook configuration inside target (default: .pre-commit-config.yaml)",
+    )
+    generate_hooks.add_argument(
+        "--profile", choices=sorted(PROFILE_TOOLS), default="quick"
+    )
+    generate_hooks.add_argument("--config", default="pysec.toml", metavar="REPO_PATH")
+    generate_hooks.add_argument("--format", choices=("text", "json"), default="text")
+    generate_hooks.add_argument("--overwrite", action="store_true")
+
+    config_check = subparsers.add_parser(
+        "config-check",
+        help="validate configuration and provide migration and portability advice",
+    )
+    config_check.add_argument("--config", type=Path, required=True)
+    config_check.add_argument("--policy", type=Path)
+    config_check.add_argument("--profile", choices=sorted(PROFILE_TOOLS))
+    config_check.add_argument(
+        "--format", choices=("text", "json", "markdown"), default="text"
+    )
+    config_check.add_argument("--output", type=Path, metavar="FILE")
+    config_check.add_argument("--overwrite", action="store_true")
 
     benchmark = subparsers.add_parser(
         "benchmark",
@@ -726,6 +975,12 @@ def main(argv: list[str] | None = None) -> int:
 def _dispatch_command(args: argparse.Namespace) -> int:
     handlers = {
         "schema": _schema_command,
+        "adapter-check": _adapter_check_command,
+        "qualify-bundle": _qualify_bundle_command,
+        "verify-native-bundle": _verify_native_bundle_command,
+        "generate-ci": _generate_ci_command,
+        "generate-hooks": _generate_hooks_command,
+        "config-check": _config_check_command,
         "benchmark": _benchmark_command,
         "release-check": _release_check_command,
         "evidence-draft": _evidence_draft_command,
@@ -750,7 +1005,9 @@ def _dispatch_command(args: argparse.Namespace) -> int:
         "verify-signing-request": _verify_signing_request_command,
         "reachability": _reachability_command,
         "reachability-diff": _reachability_diff_command,
+        "init": _init_command,
         "doctor": _doctor_command,
+        "provision-plan": _provision_plan_command,
         "attest": _attest_command,
         "verify": _verify_attestation_command,
         "verify-report": _verify_report_command,
@@ -759,6 +1016,35 @@ def _dispatch_command(args: argparse.Namespace) -> int:
         "scan": _scan_command,
     }
     return handlers[args.command](args)
+
+
+def _init_command(args: argparse.Namespace) -> int:
+    target = resolve_regular_directory(args.target, "project target")
+    requested = args.output or (target / "pysec.toml")
+    requested = requested if requested.is_absolute() else target / requested
+    destination = resolve_unlinked_path(requested, "project configuration")
+    if not destination.is_relative_to(target):
+        raise ValueError("project configuration output must be inside the target")
+    profile = project_profile(args.template, args.profile)
+    content = render_project_config(args.template, profile)
+    _write_atomic_output(
+        output=destination,
+        content=content,
+        overwrite=args.overwrite,
+        label="project configuration",
+    )
+    receipt = build_init_receipt(
+        target=target,
+        config_path=destination,
+        template=args.template,
+        profile=profile,
+    )
+    print(
+        json.dumps(receipt, indent=2, sort_keys=True)
+        if args.format == "json"
+        else render_init_receipt(receipt)
+    )
+    return 0
 
 
 def _sign_artifacts_command(args: argparse.Namespace) -> int:
@@ -869,18 +1155,57 @@ def _reachability_diff_command(args: argparse.Namespace) -> int:
 
 
 def _doctor_command(args: argparse.Namespace) -> int:
+    if args.overwrite and not args.output:
+        raise ValueError("doctor --overwrite requires --output")
     config = load_config(
         organization_policy=args.policy,
         repository_config=args.config,
         profile_override=args.profile,
     )
     readiness = assess_readiness(target=args.target, config=config)
-    print(
+    rendered = (
         json.dumps(readiness, indent=2, sort_keys=True)
         if args.format == "json"
-        else render_readiness(readiness)
+        else render_readiness_markdown(readiness).rstrip("\n")
+        if args.format == "markdown"
+        else render_readiness(readiness, explain=args.explain)
     )
+    if args.output:
+        _write_atomic_output(
+            output=args.output,
+            content=rendered,
+            overwrite=args.overwrite,
+            label="doctor output",
+        )
+    print(rendered)
     return 0 if readiness["ready"] else 2
+
+
+def _provision_plan_command(args: argparse.Namespace) -> int:
+    if args.overwrite and not args.output:
+        raise ValueError("provision-plan --overwrite requires --output")
+    config = load_config(
+        organization_policy=args.policy,
+        repository_config=args.config,
+        profile_override=args.profile,
+    )
+    plan = build_provision_plan(target=args.target, config=config)
+    rendered = (
+        json.dumps(plan, indent=2, sort_keys=True)
+        if args.format == "json"
+        else render_provision_plan_markdown(plan).rstrip("\n")
+        if args.format == "markdown"
+        else render_provision_plan(plan)
+    )
+    if args.output:
+        _write_atomic_output(
+            output=args.output,
+            content=rendered,
+            overwrite=args.overwrite,
+            label="provision plan output",
+        )
+    print(rendered)
+    return 0 if plan["decision"]["disposition"] == "proceed" else 2
 
 
 def _attest_command(args: argparse.Namespace) -> int:
@@ -1035,6 +1360,176 @@ def _schema_command(args: argparse.Namespace) -> int:
         )
     print(rendered_schema)
     return 0
+
+
+def _adapter_check_command(args: argparse.Namespace) -> int:
+    if args.overwrite and not args.output:
+        raise ValueError("adapter-check --overwrite requires --output")
+    document = assess_adapter_conformance()
+    rendered = (
+        json.dumps(document, indent=2, sort_keys=True)
+        if args.format == "json"
+        else render_adapter_conformance(document)
+    )
+    if args.output:
+        _write_atomic_output(
+            output=args.output,
+            content=rendered,
+            overwrite=args.overwrite,
+            label="adapter conformance output",
+        )
+    print(rendered)
+    return 0 if document["status"] == "pass" else 1
+
+
+def _qualify_bundle_command(args: argparse.Namespace) -> int:
+    if args.overwrite and not args.output:
+        raise ValueError("qualify-bundle --overwrite requires --output")
+    config = load_config(
+        organization_policy=args.policy,
+        repository_config=args.config,
+        profile_override=args.profile,
+    )
+    document = qualify_bundle(
+        target=args.target,
+        config=config,
+        effectiveness_evaluation=args.effectiveness_evaluation,
+        effectiveness_report=args.effectiveness_report,
+        effectiveness_sha256=args.effectiveness_sha256,
+        minimum_effectiveness_labels=args.minimum_effectiveness_labels,
+        minimum_effectiveness_tools=args.minimum_effectiveness_tools,
+        required_effectiveness_tools=tuple(args.required_effectiveness_tool),
+    )
+    rendered = (
+        json.dumps(document, indent=2, sort_keys=True)
+        if args.format == "json"
+        else render_bundle_qualification_markdown(document).rstrip("\n")
+        if args.format == "markdown"
+        else render_bundle_qualification(document)
+    )
+    if args.output:
+        _write_atomic_output(
+            output=args.output,
+            content=rendered,
+            overwrite=args.overwrite,
+            label="bundle qualification output",
+        )
+    print(rendered)
+    return 0 if document["decision"]["disposition"] == "qualify" else 2
+
+
+def _verify_native_bundle_command(args: argparse.Namespace) -> int:
+    if args.overwrite and not args.output:
+        raise ValueError("verify-native-bundle --overwrite requires --output")
+    document = verify_native_bundle(
+        args.bundle,
+        manifest_sha256=args.manifest_sha256,
+        python=args.python,
+        require_wheelhouse_closure=args.require_wheelhouse_closure,
+    )
+    rendered = (
+        json.dumps(document, indent=2, sort_keys=True)
+        if args.format == "json"
+        else render_native_bundle_verification_markdown(document).rstrip("\n")
+        if args.format == "markdown"
+        else render_native_bundle_verification(document)
+    )
+    if args.output:
+        _write_atomic_output(
+            output=args.output,
+            content=rendered,
+            overwrite=args.overwrite,
+            label="native bundle verification output",
+            forbidden_root=args.bundle,
+        )
+    print(rendered)
+    return 0 if document["verified"] else 1
+
+
+def _generate_ci_command(args: argparse.Namespace) -> int:
+    target = resolve_regular_directory(args.target, "project target")
+    requested = args.output or Path(".github/workflows/python-security.yml")
+    requested = requested if requested.is_absolute() else target / requested
+    destination = resolve_unlinked_path(requested, "GitHub workflow output")
+    if not destination.is_relative_to(target):
+        raise ValueError("GitHub workflow output must be inside the target")
+    workflow, receipt = build_github_workflow(
+        target=target,
+        output=destination,
+        profile=args.profile,
+        config_path=args.config,
+        checkout_sha=args.checkout_sha,
+        upload_artifact_sha=args.upload_artifact_sha,
+        upload_sarif_sha=args.upload_sarif_sha,
+        policy_variable=args.policy_variable,
+        isolation_command=args.isolation_command,
+        runner_labels=tuple(args.runner_label),
+    )
+    _write_atomic_output(
+        output=destination,
+        content=workflow.rstrip("\n"),
+        overwrite=args.overwrite,
+        label="GitHub workflow output",
+    )
+    print(
+        json.dumps(receipt, indent=2, sort_keys=True)
+        if args.format == "json"
+        else render_workflow_receipt(receipt)
+    )
+    return 0
+
+
+def _generate_hooks_command(args: argparse.Namespace) -> int:
+    target = resolve_regular_directory(args.target, "project target")
+    requested = args.output or Path(".pre-commit-config.yaml")
+    requested = requested if requested.is_absolute() else target / requested
+    destination = resolve_unlinked_path(requested, "pre-commit configuration output")
+    if not destination.is_relative_to(target):
+        raise ValueError("pre-commit configuration output must be inside the target")
+    content, receipt = build_precommit_config(
+        target=target,
+        output=destination,
+        profile=args.profile,
+        config_path=args.config,
+    )
+    _write_atomic_output(
+        output=destination,
+        content=content.rstrip("\n"),
+        overwrite=args.overwrite,
+        label="pre-commit configuration output",
+    )
+    print(
+        json.dumps(receipt, indent=2, sort_keys=True)
+        if args.format == "json"
+        else render_precommit_receipt(receipt)
+    )
+    return 0
+
+
+def _config_check_command(args: argparse.Namespace) -> int:
+    if args.overwrite and not args.output:
+        raise ValueError("config-check --overwrite requires --output")
+    document = advise_configuration(
+        repository_config=args.config,
+        organization_policy=args.policy,
+        profile_override=args.profile,
+    )
+    rendered = (
+        json.dumps(document, indent=2, sort_keys=True)
+        if args.format == "json"
+        else render_config_advice_markdown(document).rstrip("\n")
+        if args.format == "markdown"
+        else render_config_advice(document)
+    )
+    if args.output:
+        _write_atomic_output(
+            output=args.output,
+            content=rendered,
+            overwrite=args.overwrite,
+            label="configuration assessment output",
+        )
+    print(rendered)
+    return 0 if document["decision"] != "invalid" else 2
 
 
 def _benchmark_command(args: argparse.Namespace) -> int:

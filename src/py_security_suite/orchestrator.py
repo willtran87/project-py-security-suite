@@ -20,7 +20,7 @@ from .governance import (
     validate_isolation_evidence,
 )
 from .effectiveness import assurance_claims_artifact, effectiveness_artifact
-from .inventory import inventory_target, source_snapshot
+from .inventory import inventory_target_with_evidence, source_snapshot
 from .models import (
     Finding,
     ScanManifest,
@@ -32,6 +32,7 @@ from .models import (
     json_ready,
 )
 from .policy import evaluate_policy
+from .admission import admission_decisions
 from .portfolio_health import portfolio_health_artifact
 from .path_safety import resolve_regular_directory, resolve_unlinked_path
 from .reports import write_reports
@@ -60,10 +61,13 @@ def scan_project(
 
     started_at = utc_now()
     started_clock = time.monotonic()
-    inventory = inventory_target(target, excluded_paths=(output,))
+    inventory, source_inventory = inventory_target_with_evidence(
+        target, excluded_paths=(output,)
+    )
     selected = list(config.selected_tools)
     diagnostics: dict[str, dict[str, Any]] = {}
     derived_artifacts: dict[str, Any] = {}
+    derived_artifacts["source-inventory.json"] = source_inventory
     context_errors: list[str] = []
     intelligence_artifact: dict[str, Any] = {}
     baseline_artifact: dict[str, Any] = {}
@@ -174,7 +178,16 @@ def scan_project(
         network_isolation_attested=network_isolation_attested,
     )
     derived_artifacts["portfolio-health.json"] = portfolio_health_artifact(
-        findings, tool_runs
+        findings,
+        tool_runs,
+        outcome=decision.outcome,
+        policy_reasons=decision.reasons,
+    )
+    derived_artifacts["admission-decisions.json"] = admission_decisions(
+        findings,
+        tool_runs,
+        network_isolation_attested=network_isolation_attested,
+        source_integrity_verified=inventory.source_integrity_verified,
     )
     finished_at = utc_now()
     duration = round(time.monotonic() - started_clock, 3)
@@ -256,7 +269,33 @@ def _annotate_tool_authority(
 
 def resolve_asset_paths(config: SuiteConfig, target: Path) -> None:
     """Resolve repository-relative offline assets against the scan target."""
+    configured_bundle = config.paths.bundle_root
+    bundle_candidate = (
+        configured_bundle
+        if configured_bundle.is_absolute()
+        else target / configured_bundle
+    )
+    bundle_root = resolve_unlinked_path(
+        bundle_candidate,
+        "offline scanner bundle root",
+        boundary=target if not configured_bundle.is_absolute() else None,
+    )
+    config.paths.bundle_root = bundle_root
     for tool_name, tool in config.tools.items():
+        for setting in ("executable", "auxiliary_executable"):
+            value = getattr(tool, setting)
+            if _is_bundle_reference(value):
+                setattr(
+                    tool,
+                    setting,
+                    str(
+                        _resolve_bundle_reference(
+                            value,
+                            bundle_root=bundle_root,
+                            label=f"{tool_name} {setting}",
+                        )
+                    ),
+                )
         for setting in (
             "rules_path",
             "database_path",
@@ -266,71 +305,121 @@ def resolve_asset_paths(config: SuiteConfig, target: Path) -> None:
         ):
             value = getattr(tool, setting)
             if value is not None:
-                candidate = value if value.is_absolute() else target / value
+                serialized = str(value)
+                if _is_bundle_reference(serialized):
+                    resolved = _resolve_bundle_reference(
+                        serialized,
+                        bundle_root=bundle_root,
+                        label=f"{tool_name} {setting}",
+                    )
+                    setattr(tool, setting, resolved)
+                    continue
                 setattr(
                     tool,
                     setting,
-                    resolve_unlinked_path(
-                        candidate,
-                        f"{tool_name} {setting}",
-                        boundary=target,
+                    _resolve_configured_path(
+                        value,
+                        target=target,
+                        bundle_root=bundle_root,
+                        label=f"{tool_name} {setting}",
                     ),
                 )
     acceptance = config.policy.risk_acceptance_path
     if acceptance is not None:
-        candidate = acceptance if acceptance.is_absolute() else target / acceptance
-        config.policy.risk_acceptance_path = resolve_unlinked_path(
-            candidate,
-            "risk-acceptance file",
-            boundary=target,
+        config.policy.risk_acceptance_path = _resolve_configured_path(
+            acceptance,
+            target=target,
+            bundle_root=bundle_root,
+            label="risk-acceptance file",
         )
     baseline = config.reports.baseline_path
     if baseline is not None:
-        candidate = baseline if baseline.is_absolute() else target / baseline
-        config.reports.baseline_path = resolve_unlinked_path(
-            candidate,
-            "baseline",
-            boundary=target,
+        config.reports.baseline_path = _resolve_configured_path(
+            baseline,
+            target=target,
+            bundle_root=bundle_root,
+            label="baseline",
         )
     for setting in ("kev_path", "epss_path", "vex_path"):
         value = getattr(config.intelligence, setting)
         if value is not None:
-            candidate = value if value.is_absolute() else target / value
             setattr(
                 config.intelligence,
                 setting,
-                resolve_unlinked_path(
-                    candidate,
-                    f"{setting} snapshot",
-                    boundary=target,
+                _resolve_configured_path(
+                    value,
+                    target=target,
+                    bundle_root=bundle_root,
+                    label=f"{setting} snapshot",
                 ),
             )
     approval = config.intelligence.approval_path
     if approval is not None:
-        candidate = approval if approval.is_absolute() else target / approval
-        config.intelligence.approval_path = resolve_unlinked_path(
-            candidate,
-            "intelligence approval",
-            boundary=target,
+        config.intelligence.approval_path = _resolve_configured_path(
+            approval,
+            target=target,
+            bundle_root=bundle_root,
+            label="intelligence approval",
         )
     isolation = config.isolation.evidence_path
     if isolation is not None:
-        candidate = isolation if isolation.is_absolute() else target / isolation
-        config.isolation.evidence_path = resolve_unlinked_path(
-            candidate,
-            "isolation evidence",
-            boundary=target,
+        config.isolation.evidence_path = _resolve_configured_path(
+            isolation,
+            target=target,
+            bundle_root=bundle_root,
+            label="isolation evidence",
         )
     trust_catalog = config.trust.catalog_path
     if trust_catalog is not None:
-        candidate = (
-            trust_catalog if trust_catalog.is_absolute() else target / trust_catalog
+        config.trust.catalog_path = _resolve_configured_path(
+            trust_catalog,
+            target=target,
+            bundle_root=bundle_root,
+            label="scanner trust catalog",
         )
-        config.trust.catalog_path = resolve_unlinked_path(
-            candidate,
-            "scanner trust catalog",
-            boundary=target,
+
+
+def _is_bundle_reference(value: str) -> bool:
+    normalized = value.replace("\\", "/")
+    return normalized == "@bundle" or normalized.startswith("@bundle/")
+
+
+def _resolve_bundle_reference(
+    value: str,
+    *,
+    bundle_root: Path,
+    label: str,
+) -> Path:
+    normalized = value.replace("\\", "/")
+    relative_text = normalized.removeprefix("@bundle/")
+    if normalized == "@bundle" or not relative_text:
+        raise ValueError(f"{label} must name a path below @bundle/")
+    relative = Path(relative_text)
+    if relative.is_absolute() or ".." in relative.parts:
+        raise ValueError(f"{label} cannot traverse outside @bundle/")
+    return resolve_unlinked_path(
+        bundle_root / relative,
+        label,
+        boundary=bundle_root,
+    )
+
+
+def _resolve_configured_path(
+    value: Path,
+    *,
+    target: Path,
+    bundle_root: Path,
+    label: str,
+) -> Path:
+    serialized = str(value)
+    if _is_bundle_reference(serialized):
+        return _resolve_bundle_reference(
+            serialized,
+            bundle_root=bundle_root,
+            label=label,
         )
+    candidate = value if value.is_absolute() else target / value
+    return resolve_unlinked_path(candidate, label, boundary=target)
 
 
 def _configuration_digest(config: SuiteConfig) -> str:

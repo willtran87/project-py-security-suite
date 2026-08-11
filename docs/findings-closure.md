@@ -2,7 +2,7 @@
 
 Last reviewed: 2026-08-09
 
-This register resolves the current 66-item maturity backlog. **Implemented**
+This register resolves the current 79-item maturity backlog. **Implemented**
 means this repository contains a testable control. **Conditional** means the
 adapter and strict evidence contract exist, but a project-specific target or
 companion run is required. **External authority** is deliberately fail-closed:
@@ -103,6 +103,24 @@ the suite prepares and verifies evidence but cannot approve itself.
 | 64 | Configuration provenance | Implemented validated, value-redacted per-key origin map plus source digests and effective scanner set |
 | 65 | Disclosure workflow | Implemented private reporting policy and response targets in `SECURITY.md`; incident system is external |
 | 66 | Suite threat model | Implemented assets, boundaries, threats, controls, residual ownership, and abuse cases in `threat-model.md` |
+| 67 | Project bootstrap | Implemented atomic offline templates for library, API, CLI, worker, and monorepo targets with safe argument-array handoff |
+| 68 | Explainable preflight | Implemented schema-governed text, JSON, and Markdown readiness with actionable classifications and atomic export |
+| 69 | Root-cause prerequisite triage | Implemented grouped remediation batches that preserve complete per-control evidence and fail-closed decisions |
+| 70 | Relocatable scanner bundle | Implemented explicit `[paths] bundle_root`, traversal-safe `@bundle/...` resolution, and portable native installer output |
+| 71 | Offline provisioning plan | Implemented non-mutating text, strict JSON, Markdown, atomic output, ordered batches, and argument-array verification |
+| 72 | Multi-axis admission decision | Implemented first-class source, test, dependency, artifact, and governance cards plus a strict derived artifact |
+| 73 | Adapter SDK qualification | Implemented non-executing registry, concrete-type, identity, configuration, exit-code, and environment checks for all 63 adapters |
+| 74 | CI workflow generation | Implemented pinned-action, no-install GitHub workflow scaffold with explicit isolation verification and deferred policy exit |
+| 75 | Local developer integration | Implemented local-only pre-commit adapter and readiness diagnostics with an explicit non-gate scope |
+| 76 | Bundle qualification | Implemented activation-free join over registry contracts, profile prerequisites, executable identities, applicability, and trust state |
+| 77 | Configuration assistance | Implemented bounded TOML validation, effective-profile summary, schema compatibility, portable-path inventory, and reviewed migration guidance |
+| 78 | Closed native bundle and wheelhouse | Implemented independent manifest-digest verification, exact-set comparison, link/path/size/hash checks, bounded wheel inspection, and optional fail-closed no-index dependency resolution for every declared environment |
+| 79 | Behavioral bundle qualification | Implemented schema 1.1 qualification that binds a labeled-corpus evaluation by approved digest, verifies its producing report, matches every measured unchanged executable digest to the current bundle, and enforces label/named-tool/required-tool minimums without misrepresenting retained evidence as execution |
+| 80 | Decision-safe grades | Implemented distinct execution, observed-risk, evidence, and release fields with strict schema validation and decision-state tests |
+| 81 | Conditional activation ownership | Implemented deterministic activation category, owner, trigger, action, closure evidence, and report references for every N/A control |
+| 82 | Native bundle reproducibility | Corrected the pinned Actionlint asset, added bounded semantic OSV snapshot validation, included hidden files in the manifest, and independently verified exact-set plus no-index closure for all declared environments |
+| 83 | Invented clean benchmark fixtures | Added a strict sealed source inventory and reject clean path labels unless the exact path participates in the unchanged source snapshot |
+| 84 | Narrow behavioral qualification | Expanded retained proof to 10 reviewed labels and three core scanners, with no FP/FN and exact current executable-digest continuity |
 
 ```mermaid
 flowchart TD

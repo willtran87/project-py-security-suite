@@ -79,7 +79,7 @@ the same observation as multiple independent risk votes. See the
 [compatibility matrix](compatibility-matrix.md) for all adapters, applicability,
 platform support, and acquisition requirements.
 
-## Current verified baseline
+## Current verified source assurance and scan baseline
 
 | Measure | Verified result |
 |---|---:|
@@ -88,40 +88,47 @@ platform support, and acquisition requirements.
 | Applicable and completed | 36 / 36 |
 | Correctly not applicable | 27 |
 | Unavailable, failed, timed out, or parse errors | 0 |
-| Policy outcome | `INCOMPLETE` — unsigned artifacts, external isolation, and comparable-baseline evidence remain open |
+| Policy outcome | `FAIL` — the two exact release distributions are intentionally unsigned |
 | Normalized findings | 2 expected Cosign bundle findings |
 | Reachability graph | Schema 1.2; per-island confidence and explained edges |
-| Reachability states | 1,148 executable; 106 load-only; 0 disconnected; 0 reportable islands |
+| Reachability states | 1,207 executable; 115 load-only; 0 disconnected; 0 reportable islands |
 | Runtime corroboration | Refreshed branch-aware coverage from every unit/property test; static states are not reclassified by runtime evidence |
-| Tests | 431 collected: 430 passed and 1 platform-limited skip; 4 property tests also passed independently |
-| Combined line and branch coverage | 90.24% across 11,738 statements and 3,990 branches; 93.11% statement and 81.80% branch coverage |
+| Tests | 477 collected: 476 passed and 1 platform-limited skip |
+| Combined line and branch coverage | 90.16% across 13,030 statements and 4,408 branches; 93.03% statement and 81.67% branch coverage |
 | Changed-line coverage | Recomputed on every scan; uncovered changed executable lines remain explicit in `diff-coverage.json` |
-| Operational portfolio | Grade A; 36/36 applicable control slots completed across 12 domains |
+| Operational portfolio | Execution A; observed risk D; evidence F; 36/36 applicable control slots completed across 12 domains |
 | Labeled self-scan benchmark | PASS; 1 TP, 1 TN, 0 FP, 0 FN |
+| Bundle behavioral qualification | PASS; 7 TP, 3 TN, 0 FP, 0 FN across Bandit, Semgrep, and detect-secrets; all three executable digests matched |
 
-The 2026-08-09 closure self-scan is published as
-`.artifacts/maturity-selfscan-v35`. Its 94-file checksum chain and semantic
-contracts verify. All applicable scanners completed,
-and the only normalized findings are the two expected missing Cosign bundles for
-the wheel and source distribution. Code security, secrets, dependency
-vulnerabilities, architecture, and quality were clean. The digest-pinned KEV and
-EPSS inputs were fresh, locally validated snapshots; the approval receipt
-correctly records absent organization authorization. All 38 scanner entry points were unchanged after
-execution; all 38 bindings across 34 unique digests remain candidates for
-organization provenance approval. The result correctly remains `INCOMPLETE`:
-the host did not provide external network-isolation evidence, the historical
-quick-profile baseline is not comparable to this comprehensive scanner set, and
-the exact distributions are unsigned.
-Approve the governed intelligence and scanner catalog, supply organization-
-policy-bound isolation evidence, rerun inside the enforced boundary, then sign
-both exact release artifacts. The release-readiness, promotion, finding-register,
-configuration-provenance, audience, annotation, trend, portfolio, release-
-manifest, and audit-package sidecars are consolidated in the 135-file
-`.artifacts/maturity-evidence-pack-v35` closed set. The approved self-scan
-effectiveness evaluation is a required member of both its release manifest and
-audit archive. Its audit-package verifier rechecks 105 archive members and the
-embedded report after transfer;
-none of these local controls can grant organization approval or release access.
+Each closure self-scan is published beneath `.artifacts/maturity-selfscan-*`
+with an external verification receipt. The artifact is intentionally ignored
+by Git because it contains generated evidence and exact candidate identities;
+the release handoff records the concrete run name and digest. The current
+baseline has a 96-file checksum chain and semantic contracts. All applicable
+scanners complete, and the intended unresolved findings are the two missing
+Cosign bundles for the exact wheel and source distribution. Code security,
+secrets, dependency vulnerabilities, architecture, and quality are expected to
+remain clean before the run is accepted. The digest-pinned KEV and EPSS inputs
+are fresh, locally validated snapshots; the approval receipt correctly records
+absent organization authorization. All 38 scanner entry points are checked for
+post-execution integrity; the 38 bindings across 34 unique digests remain
+candidates for organization provenance approval. The comprehensive baseline is
+comparable, and the scan remains `FAIL` until the exact distributions have
+approved Sigstore bundles. The network-isolated switch records an operator
+assertion; external enforcement and organization attestation remain independent
+enterprise responsibilities.
+
+The admission decomposition reports source, tests, and dependencies as
+`ALLOW`; built artifacts as `BLOCK`; and governance as `INCOMPLETE` until the
+38 scanner bindings receive independent organization approval. These cards
+route work but never override the aggregate scan-policy decision.
+
+The prior 135-file `.artifacts/maturity-evidence-pack-v35` closed set remains
+available for regression and independent-verifier testing; it is historical
+evidence and does not represent the v42 source or distributions. Generate a new
+release pack only after scanner/intelligence approval, external isolation
+evidence, and controlled signing are available. None of these local controls
+can grant organization approval or release access.
 
 The report contains:
 
@@ -158,6 +165,18 @@ and zero findings on the safe negative control.
 
 | Contract | Current schema | Purpose |
 |---|---|---|
+| Project initialization | [1.0](../src/py_security_suite/schemas/project-init.schema.json) | Safe template, selected profile, and argument-safe next steps |
+| Scan preflight | [1.1](../src/py_security_suite/schemas/doctor-readiness-1.1.schema.json) | Non-executing readiness, blockers, conditional controls, and ordered actions |
+| Offline provisioning plan | [1.0](../src/py_security_suite/schemas/provision-plan.schema.json) | Non-mutating, grouped acquisition/staging work and safe verification arguments |
+| Configuration advice | [1.0](../src/py_security_suite/schemas/config-advice.schema.json) | Tolerant validation, schema migration guidance, and portable-path inventory |
+| Adapter conformance | [1.0](../src/py_security_suite/schemas/adapter-conformance.schema.json) | Static registry and SDK contract qualification |
+| Bundle qualification | [1.1](../src/py_security_suite/schemas/bundle-qualification-1.1.schema.json) | Adapter contracts and readiness joined with optional digest-bound behavioral evidence |
+| Native bundle verification | [1.0](../src/py_security_suite/schemas/native-bundle-verification.schema.json) | Closed file set, wheels, and optional no-index environment resolution |
+| Local hook configuration | [1.0](../src/py_security_suite/schemas/precommit-config.schema.json) | Non-authoritative local diagnostic scaffold |
+| GitHub workflow | [1.0](../src/py_security_suite/schemas/github-workflow.schema.json) | Pinned no-install isolated-runner workflow scaffold |
+| Admission decisions | [1.0](../src/py_security_suite/schemas/admission-decisions.schema.json) | Source, test, dependency, artifact, and governance evidence decomposition |
+| Portfolio health | [1.1](../src/py_security_suite/schemas/portfolio-health-1.1.schema.json) | Separate execution, observed-risk, evidence, and release grades plus conditional-control activation recipes |
+| Source inventory | [1.0](../src/py_security_suite/schemas/source-inventory.schema.json) | Exact path, size, and SHA-256 identities behind the sealed source aggregate and clean-fixture proof |
 | Inspection | [1.3](../src/py_security_suite/schemas/report-inspection-1.3.schema.json) | Verified machine-readable decision, health, action completeness, and prioritized findings |
 | Inspection verification | [1.3](../src/py_security_suite/schemas/report-inspection-verification-1.3.schema.json) | Binds the inspection digest, report checksum, action limit, and omission summary |
 | Report verification | [1.0](../src/py_security_suite/schemas/report-verification.schema.json) | Portable receipt for report integrity and semantic verification |
@@ -183,6 +202,16 @@ and zero findings on the safe negative control.
 Export exact schemas from the installed wheel without network access:
 
 ```text
+pysec schema project-init-1.0 --output contracts/project-init.schema.json
+pysec schema doctor-readiness-1.1 --output contracts/doctor-readiness.schema.json
+pysec schema provision-plan-1.0 --output contracts/provision-plan.schema.json
+pysec schema admission-decisions-1.0 --output contracts/admission-decisions.schema.json
+pysec schema adapter-conformance-1.0 --output contracts/adapter-conformance.schema.json
+pysec schema bundle-qualification-1.1 --output contracts/bundle-qualification.schema.json
+pysec schema native-bundle-verification-1.0 --output contracts/native-bundle-verification.schema.json
+pysec schema config-advice-1.0 --output contracts/config-advice.schema.json
+pysec schema precommit-config-1.0 --output contracts/precommit-config.schema.json
+pysec schema github-workflow-1.0 --output contracts/github-workflow.schema.json
 pysec schema report-inspection-1.3 --output contracts/report-inspection.schema.json
 pysec schema report-inspection-verification-1.3 --output contracts/report-inspection-verification.schema.json
 pysec schema report-verification-1.0 --output contracts/report-verification.schema.json

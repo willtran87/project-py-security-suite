@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:portfolio-health:1.1",
+  "title": "Operational portfolio coverage and decision grades",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "scope", "overall", "domains", "activation_recipes"],
+  "properties": {
+    "schema_version": {"const": "1.1"},
+    "scope": {"type": "string", "minLength": 1},
+    "overall": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "execution_grade", "risk_grade", "risk_status", "evidence_grade",
+        "evidence_status", "release_decision", "highest_active_severity",
+        "active_findings", "blocking_findings", "applicable_control_slots",
+        "completed_control_slots", "completion_percent",
+        "domains_with_execution_gaps", "domains_not_selected",
+        "policy_gap_count", "evidence_gaps"
+      ],
+      "properties": {
+        "execution_grade": {"$ref": "#/$defs/grade"},
+        "risk_grade": {"$ref": "#/$defs/grade"},
+        "risk_status": {"enum": ["critical", "high", "moderate", "low", "minimal", "none_observed"]},
+        "evidence_grade": {"$ref": "#/$defs/grade"},
+        "evidence_status": {"enum": ["complete_for_scan_scope", "observed_not_approved", "incomplete", "not_evaluated"]},
+        "release_decision": {"enum": ["blocked", "review_required", "eligible_for_external_approval", "not_evaluated"]},
+        "highest_active_severity": {
+          "anyOf": [
+            {"enum": ["critical", "high", "medium", "low", "informational", "unknown"]},
+            {"type": "null"}
+          ]
+        },
+        "active_findings": {"type": "integer", "minimum": 0},
+        "blocking_findings": {"type": "integer", "minimum": 0},
+        "applicable_control_slots": {"type": "integer", "minimum": 0},
+        "completed_control_slots": {"type": "integer", "minimum": 0},
+        "completion_percent": {"$ref": "#/$defs/nullablePercent"},
+        "domains_with_execution_gaps": {"type": "integer", "minimum": 0},
+        "domains_not_selected": {"type": "integer", "minimum": 0},
+        "policy_gap_count": {"type": "integer", "minimum": 0},
+        "evidence_gaps": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {"type": "string", "minLength": 1, "maxLength": 16000}
+        }
+      }
+    },
+    "domains": {
+      "type": "array",
+      "minItems": 12,
+      "maxItems": 12,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "domain", "purpose", "status", "execution_grade", "risk_grade",
+          "selected_tools", "applicable_tools", "completed_tools",
+          "completion_percent", "execution_gaps", "active_findings",
+          "blocking_findings"
+        ],
+        "properties": {
+          "domain": {"type": "string", "minLength": 1},
+          "purpose": {"type": "string", "minLength": 1},
+          "status": {"enum": ["not_selected", "conditional_only", "gap", "complete"]},
+          "execution_grade": {"$ref": "#/$defs/grade"},
+          "risk_grade": {"$ref": "#/$defs/grade"},
+          "selected_tools": {"type": "integer", "minimum": 0},
+          "applicable_tools": {"type": "integer", "minimum": 0},
+          "completed_tools": {"type": "integer", "minimum": 0},
+          "completion_percent": {"$ref": "#/$defs/nullablePercent"},
+          "execution_gaps": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {"type": "string", "minLength": 1}
+          },
+          "active_findings": {"type": "integer", "minimum": 0},
+          "blocking_findings": {"type": "integer", "minimum": 0}
+        }
+      }
+    },
+    "activation_recipes": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {"$ref": "#/$defs/activationRecipe"}
+    }
+  },
+  "$defs": {
+    "grade": {"enum": ["A", "B", "C", "D", "F", "N/A"]},
+    "nullablePercent": {
+      "anyOf": [
+        {"type": "number", "minimum": 0, "maximum": 100},
+        {"type": "null"}
+      ]
+    },
+    "activationRecipe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tool", "category", "owner", "reason", "activation_trigger",
+        "required_action", "evidence_required"
+      ],
+      "properties": {
+        "tool": {"type": "string", "minLength": 1, "maxLength": 256},
+        "category": {"enum": ["content_absent", "release_configuration", "target_environment", "companion_evidence", "missing_configuration", "platform_constraint"]},
+        "owner": {"type": "string", "minLength": 1, "maxLength": 256},
+        "reason": {"type": "string", "minLength": 1, "maxLength": 16000},
+        "activation_trigger": {"type": "string", "minLength": 1, "maxLength": 16000},
+        "required_action": {"type": "string", "minLength": 1, "maxLength": 16000},
+        "evidence_required": {"type": "string", "minLength": 1, "maxLength": 16000}
+      }
+    }
+  }
+}

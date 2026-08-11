@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote, urlsplit
 
+from .admission import admission_decisions
 from .models import (
     Citation,
     Finding,
@@ -29,7 +30,7 @@ from .passport import (
     verify_report,
 )
 from .prioritization import finding_order_key, finding_priority
-from .portfolio_health import portfolio_health_artifact
+from .portfolio_health import activation_recipe, portfolio_health_artifact
 from .source_context import source_language
 
 
@@ -316,15 +317,47 @@ def render_summary(manifest: ScanManifest, findings: list[Finding]) -> str:
     )
     lines.extend(["", "## Decision", ""])
     lines.extend(f"- {reason}" for reason in manifest.policy_reasons)
+    lines.extend(_render_admission_decisions(manifest, active_findings))
     lines.extend(_render_finding_lifecycle(manifest, active_findings))
     lines.extend(_render_finding_rollups(active_findings))
-    lines.extend(_render_portfolio_health(active_findings, manifest.tools))
+    lines.extend(_render_portfolio_health(manifest, active_findings))
     lines.extend(_render_markdown_findings(active_findings, tool_versions))
     lines.extend(_render_tool_coverage(manifest.tools, coverage_gaps, not_applicable))
     lines.extend(_render_coverage_actions(manifest, coverage_gaps, not_applicable))
     lines.extend(_render_derived_evidence(manifest))
     lines.extend(_render_triage_workflow(manifest.outcome))
     return "\n".join(lines)
+
+
+def _render_admission_decisions(
+    manifest: ScanManifest, findings: list[Finding]
+) -> list[str]:
+    decisions = admission_decisions(
+        findings,
+        manifest.tools,
+        network_isolation_attested=manifest.network_isolation_attested,
+        source_integrity_verified=manifest.inventory.source_integrity_verified,
+    )
+    lines = [
+        "",
+        "## Admission decisions by evidence axis",
+        "",
+        "These cards separate evidence domains for triage. The scan-policy decision above remains authoritative.",
+        "",
+        "| Evidence axis | Decision | Completed / applicable | Findings | Blocking | Gaps | Required action |",
+        "|---|:---:|---:|---:|---:|---|---|",
+    ]
+    for row in decisions["axes"]:
+        gaps = [*row["execution_gaps"], *row["integrity_gaps"]]
+        lines.append(
+            f"| {_markdown_table(row['label'])} | "
+            f"**{_markdown_table(row['decision'].upper())}** | "
+            f"{row['completed_tools']}/{row['applicable_tools']} | "
+            f"{row['active_findings']} | {row['blocking_findings']} | "
+            f"{_markdown_table('; '.join(gaps) or '-')} | "
+            f"{_markdown_table(row['required_action'])} |"
+        )
+    return lines
 
 
 def _render_summary_header(
@@ -341,7 +374,12 @@ def _render_summary_header(
         severity.value: sum(finding.severity is severity for finding in active_findings)
         for severity in Severity
     }
-    health = portfolio_health_artifact(active_findings, manifest.tools)["overall"]
+    health = portfolio_health_artifact(
+        active_findings,
+        manifest.tools,
+        outcome=manifest.outcome,
+        policy_reasons=manifest.policy_reasons,
+    )["overall"]
     release_status = _report_release_status(manifest.outcome)
     return [
         f"# Security result: {manifest.outcome.value.upper()}",
@@ -358,9 +396,14 @@ def _render_summary_header(
         f"- **Not applicable:** "
         f"{len(manifest.tools) - _applicable_tools(manifest.tools)} selected tool(s)",
         f"- **Applicable scanner execution gaps:** {coverage_gap_count}",
-        f"- **Operational coverage:** Grade {health['grade']}; "
+        f"- **Execution coverage grade:** {health['execution_grade']}; "
         f"{health['completed_control_slots']}/{health['applicable_control_slots']} "
         "applicable control slots completed",
+        f"- **Observed-risk grade:** {health['risk_grade']} "
+        f"({health['risk_status'].replace('_', ' ')})",
+        f"- **Evidence grade:** {health['evidence_grade']} "
+        f"({health['evidence_status'].replace('_', ' ')}); "
+        f"release decision `{health['release_decision']}`",
         f"- **Release readiness from this report:** `{release_status}`; "
         "run `pysec release-check` for the governed aggregate decision",
         f"- **Network isolation attested:** "
@@ -437,27 +480,36 @@ def _render_finding_rollups(active_findings: list[Finding]) -> list[str]:
 
 
 def _render_portfolio_health(
-    findings: list[Finding], tools: list[ToolRun]
+    manifest: ScanManifest, findings: list[Finding]
 ) -> list[str]:
-    health = portfolio_health_artifact(findings, tools)
+    health = portfolio_health_artifact(
+        findings,
+        manifest.tools,
+        outcome=manifest.outcome,
+        policy_reasons=manifest.policy_reasons,
+    )
     overall = health["overall"]
     lines = [
         "",
         "## Operational coverage by domain",
         "",
         (
-            f"**Grade {overall['grade']}** — {overall['completed_control_slots']}/"
+            f"**Execution {overall['execution_grade']} · Risk "
+            f"{overall['risk_grade']} · Evidence {overall['evidence_grade']}** — "
+            f"{overall['completed_control_slots']}/"
             f"{overall['applicable_control_slots']} applicable control slots completed. "
-            "This measures execution coverage, not vulnerability absence or certification."
+            "These independent grades prevent completed execution from being mistaken "
+            "for low risk, complete evidence, or release approval."
         ),
         "",
-        "| Domain | Grade | Status | Completed / applicable | Findings | Blocking | Gaps |",
-        "|---|:---:|---|---:|---:|---:|---|",
+        "| Domain | Execution | Risk | Status | Completed / applicable | Findings | Blocking | Gaps |",
+        "|---|:---:|:---:|---|---:|---:|---:|---|",
     ]
     for row in health["domains"]:
         gaps = ", ".join(row["execution_gaps"]) or "-"
         lines.append(
-            f"| {_markdown_table(row['domain'])} | {row['grade']} | "
+            f"| {_markdown_table(row['domain'])} | {row['execution_grade']} | "
+            f"{row['risk_grade']} | "
             f"{_markdown_table(row['status'].replace('_', ' '))} | "
             f"{row['completed_tools']}/{row['applicable_tools']} | "
             f"{row['active_findings']} | {row['blocking_findings']} | "
@@ -530,15 +582,18 @@ def _render_coverage_actions(
                 f"<details><summary>{len(not_applicable)} not-applicable controls "
                 "(informational)</summary>",
                 "",
-                "| Tool | Reason | Re-enable condition | Reference |",
-                "|---|---|---|---|",
+                "| Tool | Category | Owner | Activation trigger | Required evidence | Action | Reference |",
+                "|---|---|---|---|---|---|---|",
             ]
         )
         lines.extend(
             (
                 f"| {_markdown_table(run.tool)} | "
-                f"{_markdown_table(run.error or 'No diagnostic supplied')} | "
-                f"{_markdown_table(_coverage_action(run, manifest))} | "
+                f"{_markdown_table(activation_recipe(run)['category'])} | "
+                f"{_markdown_table(activation_recipe(run)['owner'])} | "
+                f"{_markdown_table(activation_recipe(run)['activation_trigger'])} | "
+                f"{_markdown_table(activation_recipe(run)['evidence_required'])} | "
+                f"{_markdown_table(activation_recipe(run)['required_action'])} | "
                 f"{_markdown_tool_reference(run.tool)} |"
             )
             for run in not_applicable
@@ -704,7 +759,7 @@ def render_action_plan(manifest: ScanManifest, findings: list[Finding]) -> str:
         f"- **Finding ownership:** {assigned_findings}/{len(findings)} findings "
         f"assigned across {len(owner_queues)} named owner queues; "
         f"{unassigned_findings} unassigned",
-        f"- **Immediate next step:** {_next_action(manifest.outcome)}",
+        f"- **Immediate next step:** {_next_action_for_manifest(manifest)}",
         "",
         "## Finding actions",
         "",
@@ -1401,26 +1456,32 @@ def _html_coverage_gap_rows(
     )
 
 
-def _html_not_applicable_details(
-    manifest: ScanManifest, not_applicable: list[ToolRun]
-) -> str:
+def _html_not_applicable_details(not_applicable: list[ToolRun]) -> str:
     if not not_applicable:
         return ""
-    rows = "".join(
-        "<tr>"
-        f"<td><strong>{html.escape(run.tool)}</strong></td>"
-        f"<td>{html.escape(run.error or 'No diagnostic supplied')}</td>"
-        f"<td>{html.escape(_coverage_action(run, manifest))}</td>"
-        f"<td>{_html_tool_reference(run.tool)}</td>"
-        "</tr>"
-        for run in not_applicable
-    )
+    rows = "".join(_html_activation_recipe(run) for run in not_applicable)
     return (
         "<details class='coverage-details'><summary>"
         f"{len(not_applicable)} not-applicable controls (informational)"
-        "</summary><table><thead><tr><th>Tool</th><th>Reason</th>"
-        "<th>Re-enable condition</th><th>Reference</th></tr></thead>"
+        "</summary><table><thead><tr><th>Tool</th><th>Category</th>"
+        "<th>Owner</th><th>Activation trigger</th><th>Required evidence</th>"
+        "<th>Action</th><th>Reference</th></tr></thead>"
         f"<tbody>{rows}</tbody></table></details>"
+    )
+
+
+def _html_activation_recipe(run: ToolRun) -> str:
+    recipe = activation_recipe(run)
+    return (
+        "<tr>"
+        f"<td><strong>{html.escape(run.tool)}</strong></td>"
+        f"<td>{html.escape(recipe['category'])}</td>"
+        f"<td>{html.escape(recipe['owner'])}</td>"
+        f"<td>{html.escape(recipe['activation_trigger'])}</td>"
+        f"<td>{html.escape(recipe['evidence_required'])}</td>"
+        f"<td>{html.escape(recipe['required_action'])}</td>"
+        f"<td>{_html_tool_reference(run.tool)}</td>"
+        "</tr>"
     )
 
 
@@ -1466,6 +1527,34 @@ def _severity_counts(findings: list[Finding]) -> dict[str, int]:
     }
 
 
+def _html_admission_cards(manifest: ScanManifest, findings: list[Finding]) -> str:
+    decisions = admission_decisions(
+        findings,
+        manifest.tools,
+        network_isolation_attested=manifest.network_isolation_attested,
+        source_integrity_verified=manifest.inventory.source_integrity_verified,
+    )
+    cards: list[str] = []
+    for row in decisions["axes"]:
+        gaps = [*row["execution_gaps"], *row["integrity_gaps"]]
+        gap_text = "; ".join(gaps) or "No axis-specific evidence gaps."
+        cards.append(
+            f'<article class="axis-card {html.escape(row["decision"])}">'
+            f'<div class="axis-heading"><h3>{html.escape(row["label"])}</h3>'
+            f'<span class="decision-badge {html.escape(row["decision"])}">'
+            f"{html.escape(row['decision'].upper())}</span></div>"
+            f"<p>{html.escape(row['purpose'])}</p>"
+            f"<p><strong>Coverage:</strong> {row['completed_tools']}/"
+            f"{row['applicable_tools']} applicable completed &middot; "
+            f"{row['active_findings']} finding(s) &middot; "
+            f"{row['blocking_findings']} blocking</p>"
+            f"<p><strong>Evidence:</strong> {html.escape(gap_text)}</p>"
+            f"<p><strong>Action:</strong> {html.escape(row['required_action'])}</p>"
+            "</article>"
+        )
+    return "".join(cards)
+
+
 def render_html(manifest: ScanManifest, findings: list[Finding]) -> str:
     tool_versions = {run.tool: run.version for run in manifest.tools}
     active_findings = [
@@ -1481,7 +1570,7 @@ def render_html(manifest: ScanManifest, findings: list[Finding]) -> str:
     finding_rows = _html_finding_rows(ordered)
     reasons = _html_policy_reasons(manifest)
     gap_rows = _html_coverage_gap_rows(manifest, coverage_gaps)
-    not_applicable_details = _html_not_applicable_details(manifest, not_applicable)
+    not_applicable_details = _html_not_applicable_details(not_applicable)
     tools = _html_tool_rows(manifest.tools)
     area_rows = _html_area_rows(active_findings)
     counts = _severity_counts(active_findings)
@@ -1492,8 +1581,14 @@ def render_html(manifest: ScanManifest, findings: list[Finding]) -> str:
     decision = _policy_decision_value(manifest.outcome)
     completed = _completed_tools(manifest.tools)
     applicable = _applicable_tools(manifest.tools)
-    health = portfolio_health_artifact(active_findings, manifest.tools)["overall"]
+    health = portfolio_health_artifact(
+        active_findings,
+        manifest.tools,
+        outcome=manifest.outcome,
+        policy_reasons=manifest.policy_reasons,
+    )["overall"]
     release_status = _report_release_status(manifest.outcome)
+    admission_cards = _html_admission_cards(manifest, active_findings)
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -1533,6 +1628,17 @@ code {{ overflow-wrap: anywhere; }}
 .decision-badge.block {{ background: #f8dddd; color: #8c1616; }}
 .decision-badge.review {{ background: #fff0c7; color: #6e4e00; }}
 .decision-badge.allow {{ background: #dcefe4; color: #185c36; }}
+.decision-badge.incomplete, .decision-badge.not_applicable {{
+  background: #fff0c7; color: #6e4e00; }}
+.axis-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: .8rem; margin: 1rem 0 2rem; }}
+.axis-card {{ background: #fff; border: 1px solid #d5dde7; border-left: .4rem solid #247044;
+  border-radius: .4rem; padding: 1rem; }}
+.axis-card.block {{ border-left-color: #a61b1b; }}
+.axis-card.incomplete {{ border-left-color: #9a6e00; }}
+.axis-card.not_applicable {{ border-left-color: #718096; }}
+.axis-heading {{ display: flex; align-items: center; justify-content: space-between; gap: .75rem; }}
+.axis-heading h3 {{ margin: 0; }}
 .coverage-details {{ margin: 1rem 0 2rem; }}
 .coverage-details summary {{ color: #17395f; cursor: pointer; font-weight: 700;
   padding: .65rem 0; }}
@@ -1628,8 +1734,12 @@ target <code>{html.escape(manifest.target)}</code></p>
 <span>Entrypoints approved</span></div>
 <div class="stat"><strong>{unchanged_entrypoints}/{entrypoints}</strong>
 <span>Entrypoints unchanged</span></div>
-<div class="stat"><strong>{health["grade"]}</strong>
-<span>Operational coverage</span></div>
+<div class="stat"><strong>{health["execution_grade"]}</strong>
+<span>Execution grade</span></div>
+<div class="stat"><strong>{health["risk_grade"]}</strong>
+<span>Observed-risk grade</span></div>
+<div class="stat"><strong>{health["evidence_grade"]}</strong>
+<span>Evidence grade</span></div>
 <div class="stat"><strong>{html.escape(release_status)}</strong>
 <span>Release readiness</span></div>
 <div class="stat"><strong>{
@@ -1644,6 +1754,11 @@ target <code>{html.escape(manifest.target)}</code></p>
 required governed sidecars; this report alone does not authorize release.</p>
 <p><a href="action-plan.md">Open the prioritized action plan</a></p>
 <p><a href="assurance-case.md">Open the production assurance case</a></p>
+</section>
+<section aria-labelledby="admission-heading">
+<h2 id="admission-heading">Admission decisions by evidence axis</h2>
+<p>Use these cards to route work quickly. The scan-policy decision remains authoritative.</p>
+<div class="axis-grid">{admission_cards}</div>
 </section>
 <main>
 <h2>Prioritized findings</h2>

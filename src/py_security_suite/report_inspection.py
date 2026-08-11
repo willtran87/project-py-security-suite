@@ -25,6 +25,17 @@ _REPORT_VERIFICATION_SCHEMA_ID = (
     "urn:project-py-security-suite:schema:report-verification:1.0"
 )
 BUNDLED_SCHEMA_RESOURCES = {
+    "adapter-conformance-1.0": "adapter-conformance.schema.json",
+    "bundle-qualification-1.0": "bundle-qualification.schema.json",
+    "bundle-qualification-1.1": "bundle-qualification-1.1.schema.json",
+    "native-bundle-verification-1.0": "native-bundle-verification.schema.json",
+    "config-advice-1.0": "config-advice.schema.json",
+    "github-workflow-1.0": "github-workflow.schema.json",
+    "precommit-config-1.0": "precommit-config.schema.json",
+    "project-init-1.0": "project-init.schema.json",
+    "doctor-readiness-1.1": "doctor-readiness-1.1.schema.json",
+    "provision-plan-1.0": "provision-plan.schema.json",
+    "admission-decisions-1.0": "admission-decisions.schema.json",
     "evidence-pack-1.0": "evidence-pack.schema.json",
     "evidence-pack-verification-1.0": "evidence-pack-verification.schema.json",
     "baseline-candidate-1.0": "baseline-candidate.schema.json",
@@ -32,6 +43,8 @@ BUNDLED_SCHEMA_RESOURCES = {
     "effectiveness-evaluation-1.0": "effectiveness-evaluation.schema.json",
     "scanner-trust-catalog-1.0": "scanner-trust-catalog.schema.json",
     "portfolio-health-1.0": "portfolio-health.schema.json",
+    "portfolio-health-1.1": "portfolio-health-1.1.schema.json",
+    "source-inventory-1.0": "source-inventory.schema.json",
     "isolation-attestation-1.0": "isolation-attestation.schema.json",
     "intelligence-approval-1.0": "intelligence-approval.schema.json",
     "release-readiness-1.0": "release-readiness.schema.json",

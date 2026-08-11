@@ -361,6 +361,15 @@ class OrchestratorTests(unittest.TestCase):
         self.assertIn("Automated test evidence | partial coverage", incomplete)
         self.assertIn("Generate branch-enabled coverage JSON", incomplete)
 
+        manifest.outcome = Outcome.INCOMPLETE
+        manifest.policy_reasons = ["External isolation attestation is absent."]
+        action_plan = render_action_plan(manifest, [])
+        self.assertIn(
+            "Immediate next step:** Resolve the first blocking evidence gap: "
+            "External isolation attestation is absent.",
+            action_plan,
+        )
+
     def test_entrypoint_trust_actions_cover_clean_changed_and_helper_states(
         self,
     ) -> None:
@@ -515,6 +524,38 @@ class OrchestratorTests(unittest.TestCase):
                 ):
                     resolve_asset_paths(config, target)
 
+    def test_portable_bundle_references_resolve_below_governed_root(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory).resolve()
+            config = load_config(profile_override="quick")
+            config.paths.bundle_root = Path("vendor/security")
+            tool = config.tools["bandit"]
+            tool.executable = "@bundle/bin/bandit.exe"
+            tool.auxiliary_executable = "@bundle/bin/helper.exe"
+            tool.rules_path = Path("@bundle/rules/bandit.yml")
+            config.intelligence.kev_path = Path("@bundle/intelligence/kev.json")
+
+            resolve_asset_paths(config, target)
+
+            bundle = (target / "vendor/security").resolve()
+            self.assertEqual(config.paths.bundle_root, bundle)
+            self.assertEqual(tool.executable, str(bundle / "bin/bandit.exe"))
+            self.assertEqual(tool.auxiliary_executable, str(bundle / "bin/helper.exe"))
+            self.assertEqual(tool.rules_path, bundle / "rules/bandit.yml")
+            self.assertEqual(
+                config.intelligence.kev_path,
+                bundle / "intelligence/kev.json",
+            )
+
+    def test_portable_bundle_references_reject_escape(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory).resolve()
+            config = load_config(profile_override="quick")
+            config.tools["bandit"].executable = "@bundle/../outside/bandit"
+
+            with self.assertRaisesRegex(ValueError, "cannot traverse"):
+                resolve_asset_paths(config, target)
+
     def test_end_to_end_report_is_coordinated(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -565,6 +606,8 @@ class OrchestratorTests(unittest.TestCase):
                 "effectiveness.json",
                 "assurance-claims.json",
                 "portfolio-health.json",
+                "source-inventory.json",
+                "admission-decisions.json",
                 "scanner-trust.json",
                 "isolation-attestation.json",
                 "intelligence-approval.json",
@@ -572,11 +615,18 @@ class OrchestratorTests(unittest.TestCase):
                 self.assertTrue((output / name).is_file(), name)
             findings = json.loads((output / "findings.json").read_text("utf-8"))
             manifest = json.loads((output / "scan-manifest.json").read_text("utf-8"))
+            source_inventory = json.loads(
+                (output / "source-inventory.json").read_text("utf-8")
+            )
             passport = json.loads(
                 (output / "security-passport.json").read_text("utf-8")
             )
             self.assertEqual(findings["outcome"], "fail")
             self.assertEqual(manifest["outcome"], "fail")
+            self.assertEqual(
+                source_inventory["source_sha256"],
+                manifest["inventory"]["source_sha256"],
+            )
             self.assertEqual(passport["predicate"]["verificationResult"], "FAILED")
             with self.assertRaisesRegex(FileExistsError, "already exists"):
                 write_reports(
@@ -609,6 +659,8 @@ class OrchestratorTests(unittest.TestCase):
             self.assertIn("## Findings by domain", markdown)
             self.assertIn("`security` / `injection`", markdown)
             self.assertIn("## Findings by area", markdown)
+            self.assertIn("## Admission decisions by evidence axis", markdown)
+            self.assertIn(r"| Built artifacts | **NOT\_APPLICABLE** |", markdown)
             self.assertIn(
                 "**Found by:** `bandit 1.9.4` rule `B602`",
                 markdown,
@@ -669,6 +721,8 @@ class OrchestratorTests(unittest.TestCase):
                 report_html,
             )
             self.assertIn("Open the production assurance case", report_html)
+            self.assertIn("Admission decisions by evidence axis", report_html)
+            self.assertIn("Source and architecture", report_html)
             self.assertIn("Entrypoints approved", report_html)
             self.assertIn("Entrypoints unchanged", report_html)
             self.assertIn("What was detected", report_html)

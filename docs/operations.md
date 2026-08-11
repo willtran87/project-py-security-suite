@@ -73,7 +73,8 @@ The default output is `.artifacts/native-bundle`. It contains:
   NuGet configuration;
 - the pinned PyPI OSV advisory snapshot and a connected-lane Grype database;
   and
-- `bundle-manifest.json` with the size and SHA-256 digest of every file.
+- schema 2.0 `bundle-manifest.json` with the size and SHA-256 digest of every
+  file plus the exact root requirements for each isolated Python environment.
 
 Use `-Force` only to replace a previously marked bundle:
 
@@ -85,9 +86,13 @@ The script refuses unsafe workspace and drive-root destinations.
 
 The upstream OSV `all.zip` endpoint is a rolling database export. The script
 therefore accepts only the explicitly reviewed SHA-256 snapshot embedded in
-the preparation script. Updating advisory data is a governed source change:
-validate every JSON record, review additions and removals, update the approved
-digest, and rebuild the bundle. A checksum mismatch stops preparation.
+the preparation script. `scripts/validate-osv-snapshot.py` then checks bounded
+archive/member/record/expanded sizes, safe paths, JSON-only members, CRCs,
+unique advisory IDs, `affected` arrays, and parseable `modified` timestamps.
+It emits a compact validation receipt before the snapshot can enter the bundle.
+Updating advisory data is a governed source change: validate every record,
+review additions and removals, update the approved digest, and rebuild the
+bundle. A checksum, structure, or semantic failure stops preparation.
 
 The runtime accepts a Grype database for at most ten days from its build time,
 allowing a bounded approval and transfer window. Preflight reads the database's
@@ -113,6 +118,32 @@ resolution captured by that bundle build. Treat `bundle-manifest.json` as the
 exact immutable transfer record; identical rebuilds require an
 organization-maintained fully pinned constraints set or artifact mirror.
 
+Before installation, independently verify the transferred artifact. Supply the
+manifest digest through a separately controlled channel:
+
+```powershell
+pysec verify-native-bundle .artifacts\native-bundle `
+  --manifest-sha256 APPROVED_SHA256 `
+  --python C:\Approved\Python311\python.exe `
+  --require-wheelhouse-closure `
+  --format json `
+  --output .artifacts\native-bundle-verification.json
+```
+
+This performs a closed-set comparison, so an injected file fails even if every
+declared digest remains correct. It rejects links and junctions, unsafe or
+case-colliding paths, size or digest changes, malformed/encrypted wheels, CRC
+failures, and a wheelhouse that cannot resolve every declared environment with
+`pip --isolated --no-index --dry-run`. Schema 1 manifests remain verifiable but
+cannot claim dependency closure; rebuild them to schema 2.0.
+
+The current dogfood schema-2 proof verified 5,779 declared files and 274 wheels
+with no missing, unexpected, changed, or structurally invalid entry. All four
+declared Python environments resolved from the wheelhouse with `--no-index`.
+That proves closed-set integrity and offline dependency closure for the tested
+bundle; publisher identity, malware absence, network enforcement, and
+organization approval remain independent controls.
+
 ## 3. Install without package-index access
 
 Inside the secure boundary:
@@ -124,7 +155,7 @@ Inside the secure boundary:
 The installer:
 
 1. validates the bundle schema and Windows platform;
-2. verifies every recorded bundle digest;
+2. rejects undeclared, missing, linked, resized, or digest-changed bundle files;
 3. creates `.pysec-tools`;
 4. installs wheels with `pip --no-index --no-compile`;
 5. copies OSV-Scanner and its advisory data;
@@ -585,7 +616,11 @@ For finding triage, open `index.html` first. Its prioritized table leads to a
 finding card containing the exact file/range, highlighted source context,
 scanner and rule, classification links, impact, and recommended action.
 The decision badge and scanner-health grid provide the release-log summary;
-the primary coverage-gap table contains only applicable execution gaps. Expand
+execution, observed-risk, and evidence grades remain separate from the release
+disposition, so `Execution A` cannot conceal a high-severity finding or missing
+approval. Conditional rows include an owner, activation trigger, required
+action, and closure evidence. The primary coverage-gap table contains only
+applicable execution gaps. Expand
 the not-applicable controls beneath it when reviewing conditional coverage.
 `summary.md` carries the same first 20 actionable findings into the GitHub job
 summary. Secret-bearing content is deliberately absent from every format; use
@@ -599,17 +634,102 @@ Before committing runner time to a production scan, perform the same offline
 readiness assessment against the target and governed configuration:
 
 ```powershell
-pysec doctor . --config .pysec-tools\pysec.native.toml --profile production
+pysec doctor . --config .pysec-tools\pysec.native.toml `
+  --profile production --explain
+pysec doctor . --config .pysec-tools\pysec.native.toml `
+  --profile production --format markdown `
+  --output .artifacts\pysec-preflight.md
+pysec provision-plan . --config .pysec-tools\pysec.native.toml `
+  --profile production --format markdown `
+  --output .artifacts\pysec-provision-plan.md
 ```
 
 The text view leads with `PROCEED TO ISOLATED SCAN` or `BLOCK PRE-FLIGHT`, then
 shows required and applicable readiness counts. Attention items are labeled
 `required`, `optional`, or `required context`, so an operator can distinguish a
-hard prerequisite from a useful conditional control. The decision is preflight
-only and never grants release approval. Use `--format json` to archive the same
-structured decision and blocking reasons in runner diagnostics. Discovery
+hard prerequisite from a useful conditional control. `--explain` gives each
+gap an ordered priority, reason, action, and selected-control identity.
+Equivalent actions are consolidated into root-cause batches while per-control
+reasons remain in expandable evidence. The decision is preflight only and
+never grants release approval. Use `--format json` for the strict
+`doctor-readiness-1.1` contract or `--format markdown` for a readable GitHub
+artifact. `--output` is atomic and overwrite-safe. Discovery
 prunes generated artifacts, virtual environments, installed scanner trees,
 build outputs, and symlinked directories before descent.
+
+`provision-plan` reuses that evidence but performs no acquisition or filesystem
+mutation. It groups work into priority-ordered root-cause batches, retains each
+control-specific reason, emits argument arrays for verification, and states
+that trust and release authority remain external. Native installer
+configurations use relocatable `@bundle/...` references whenever the tool root
+is inside the repository; moving the repository and scanner tree together does
+not require rewriting executable or rule paths.
+
+Before rolling out a configuration, bundle, adapter, or workflow change,
+publish the activation-free qualification receipts and generate reviewed local
+and CI integration:
+
+```powershell
+pysec config-check --config .pysec-tools\pysec.native.toml `
+  --format markdown --output .artifacts\config-assessment.md
+pysec adapter-check --format json `
+  --output .artifacts\adapter-conformance.json
+pysec verify-native-bundle .artifacts\native-bundle `
+  --manifest-sha256 APPROVED_SHA256 `
+  --python C:\Approved\Python311\python.exe `
+  --require-wheelhouse-closure `
+  --format markdown --output .artifacts\native-bundle-verification.md
+pysec qualify-bundle . --config .pysec-tools\pysec.native.toml `
+  --profile production `
+  --effectiveness-evaluation effectiveness-evaluation.json `
+  --effectiveness-report .artifacts\detection-validation `
+  --effectiveness-sha256 APPROVED_SHA256 `
+  --minimum-effectiveness-labels 25 `
+  --minimum-effectiveness-tools 2 `
+  --required-effectiveness-tool bandit `
+  --required-effectiveness-tool semgrep `
+  --format markdown `
+  --output .artifacts\bundle-qualification.md
+pysec generate-hooks . --config .pysec-tools\pysec.native.toml `
+  --profile quick
+pysec generate-ci . `
+  --checkout-sha APPROVED_40_CHARACTER_COMMIT `
+  --upload-artifact-sha APPROVED_40_CHARACTER_COMMIT `
+  --upload-sarif-sha APPROVED_40_CHARACTER_COMMIT
+```
+
+`adapter-check` proves registry completeness, concrete implementations,
+identity/config bindings, bounded exit-code contracts, and fail-closed
+environment construction without executing a scanner. `verify-native-bundle`
+proves the transferred file set and optional no-index dependency closure before
+installation. `qualify-bundle` adds target applicability, local assets,
+executable digests, required-control readiness, organization-approval state,
+and an optional digest-bound result from the separate labeled corpus gate to one
+strict receipt. The producing report is independently verified and every named
+behavioral tool must have completed unchanged with the same executable digest as
+the currently staged bundle. It never represents retained evidence as a scanner execution.
+`config-check` tolerantly reports invalid or unsupported
+configuration, never rewrites it, and supplies reviewed migration and portable-
+path actions. `generate-hooks` creates only local adapter/readiness diagnostics;
+it is not a scan or isolation claim. `generate-ci` refuses floating action tags, unsafe repository
+paths, multiline isolation commands, and output outside the target. It assumes
+the enterprise runner is already provisioned; it never performs package
+installation or claims the external boundary is active.
+
+```mermaid
+flowchart LR
+    Config["config-check<br/>syntax + compatibility"] --> Hooks["generate-hooks<br/>developer diagnostics"]
+    Transfer["transferred native bundle"] --> VerifyBundle["verify-native-bundle<br/>closed set + wheel closure"]
+    Config --> Qualify["qualify-bundle<br/>contracts + readiness + behavior"]
+    VerifyBundle --> Qualify
+    Corpus["benchmark<br/>digest-bound corpus"] --> Qualify
+    Qualify --> CI["generate-ci<br/>pinned isolated-runner workflow"]
+    CI --> Scan["scan<br/>runtime evidence + policy"]
+    Scan --> Verify["verify-report<br/>sealed artifact integrity"]
+    Verify --> Admission["release-check<br/>external approval boundary"]
+    Hooks -. "does not replace" .-> Scan
+    Qualify -. "does not execute" .-> Scan
+```
 
 After scanning, use `pysec inspect REPORT` as the terminal and release-log entry
 point. It verifies checksums first and then shows the scan-policy disposition

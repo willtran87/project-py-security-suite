@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:source-inventory:1.0",
+  "title": "Sealed source file inventory",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "scope", "source_sha256", "total_files", "total_bytes", "files"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "scope": {"type": "string", "minLength": 1},
+    "source_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "total_files": {"type": "integer", "minimum": 0, "maximum": 1000000},
+    "total_bytes": {"type": "integer", "minimum": 0},
+    "files": {
+      "type": "array",
+      "maxItems": 1000000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "size_bytes", "sha256"],
+        "properties": {
+          "path": {"type": "string", "minLength": 1, "maxLength": 4096},
+          "size_bytes": {"type": "integer", "minimum": 0},
+          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        }
+      }
+    }
+  }
+}

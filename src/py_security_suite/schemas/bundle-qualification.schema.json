@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:bundle-qualification:1.0",
+  "type": "object",
+  "required": ["schema_version", "schema_id", "authoritative", "qualification_scope", "qualification_id", "target", "profile", "platform", "decision", "summary", "adapter_failures", "context_errors", "actions", "tools", "scope"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "schema_id": {"const": "urn:project-py-security-suite:schema:bundle-qualification:1.0"},
+    "authoritative": {"const": false},
+    "qualification_scope": {"const": "static-readiness"},
+    "qualification_id": {"type": "string", "pattern": "^qualification-[0-9a-f]{24}$"},
+    "target": {"type": "string", "minLength": 1},
+    "profile": {"type": "string", "minLength": 1},
+    "platform": {
+      "type": "object", "additionalProperties": false,
+      "required": ["system", "machine", "python"],
+      "properties": {"system": {"type": "string", "minLength": 1}, "machine": {"type": "string", "minLength": 1}, "python": {"type": "string", "minLength": 1}}
+    },
+    "decision": {
+      "type": "object", "additionalProperties": false,
+      "required": ["disposition", "adapter_contracts", "profile_readiness", "scanner_execution_performed", "release_approval"],
+      "properties": {
+        "disposition": {"enum": ["qualify", "block"]},
+        "adapter_contracts": {"enum": ["pass", "fail"]},
+        "profile_readiness": {"enum": ["ready", "not_ready"]},
+        "scanner_execution_performed": {"const": false},
+        "release_approval": {"const": false}
+      }
+    },
+    "summary": {
+      "type": "object", "additionalProperties": false,
+      "required": ["registered_adapters", "conformant_adapters", "adapter_checks", "selected_controls", "applicable_controls", "ready_controls", "required_applicable", "required_ready", "not_applicable", "attention", "observed_digests", "organization_approved"],
+      "properties": {
+        "registered_adapters": {"$ref": "#/$defs/count"}, "conformant_adapters": {"$ref": "#/$defs/count"}, "adapter_checks": {"$ref": "#/$defs/count"}, "selected_controls": {"$ref": "#/$defs/count"}, "applicable_controls": {"$ref": "#/$defs/count"}, "ready_controls": {"$ref": "#/$defs/count"}, "required_applicable": {"$ref": "#/$defs/count"}, "required_ready": {"$ref": "#/$defs/count"}, "not_applicable": {"$ref": "#/$defs/count"}, "attention": {"$ref": "#/$defs/count"}, "observed_digests": {"$ref": "#/$defs/count"}, "organization_approved": {"$ref": "#/$defs/count"}
+      }
+    },
+    "adapter_failures": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["adapter", "failed_checks"], "properties": {"adapter": {"$ref": "#/$defs/text"}, "failed_checks": {"type": "array", "items": {"$ref": "#/$defs/text"}}}}},
+    "context_errors": {"type": "array", "items": {"$ref": "#/$defs/text"}},
+    "actions": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["priority", "blocking", "category", "subjects", "required_action"], "properties": {"priority": {"enum": ["P0", "P1", "P2", "P3", "P4"]}, "blocking": {"type": "boolean"}, "category": {"$ref": "#/$defs/text"}, "subjects": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/text"}}, "required_action": {"$ref": "#/$defs/text"}}}},
+    "tools": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["tool", "status", "category", "required", "entrypoint", "sha256", "integrity_verified", "organization_approved"], "properties": {"tool": {"$ref": "#/$defs/text"}, "status": {"$ref": "#/$defs/text"}, "category": {"$ref": "#/$defs/text"}, "required": {"type": "boolean"}, "entrypoint": {"type": ["string", "null"]}, "sha256": {"type": ["string", "null"], "pattern": "^[0-9a-fA-F]{64}$"}, "integrity_verified": {"type": ["boolean", "null"]}, "organization_approved": {"type": "boolean"}}}},
+    "scope": {"$ref": "#/$defs/text"}
+  },
+  "$defs": {"count": {"type": "integer", "minimum": 0}, "text": {"type": "string", "minLength": 1, "maxLength": 16000}}
+}

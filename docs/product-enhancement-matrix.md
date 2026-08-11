@@ -2,7 +2,7 @@
 
 Last reviewed: 2026-08-09
 
-The latest findings-driven 66-item backlog is resolved in the
+The latest findings-driven 79-item backlog is resolved in the
 [closure register](findings-closure.md), including conditional activation and
 external-authority boundaries.
 
@@ -74,6 +74,28 @@ bounded handoff, but an independent enterprise control must grant approval.
 | 60 | Closed artifact-directory integrity | Implemented now | Relative file records, `checksums.sha256`, `COMPLETE`, and the pack-manifest digest detect missing, added, changed, or partial content. |
 | 61 | Relocatable independent verification | Implemented now | `verify-evidence-pack` rechecks the closed set and embedded report archive without trusting original absolute paths. |
 | 62 | Safe pack replacement | Implemented now | `--overwrite` first verifies the existing pack and restores it if publication fails. |
+| 63 | Policy simulation | Implemented | `policy-simulate` previews severity, confidence, required-tool, and finding-count gates without mutating evidence. |
+| 64 | Configuration provenance | Implemented | Value-redacted origin and digest records explain every effective setting and selected control. |
+| 65 | Disclosure workflow | Implemented | `SECURITY.md` defines private reporting, response expectations, and supported-version handling. |
+| 66 | Suite threat model | Implemented | Assets, boundaries, abuse cases, controls, and residual ownership are explicit and reviewed. |
+| 67 | Project bootstrap | Implemented now | `init` atomically creates valid library, API, CLI, worker, or monorepo configurations with safe next steps. |
+| 68 | Explainable scan preflight | Implemented now | Doctor schema 1.1 and Markdown/text views provide ordered reasons, actions, identities, and overwrite-safe artifact export. |
+| 69 | Root-cause preflight triage | Implemented now | Equivalent prerequisite remediation is consolidated into resolution batches while per-control reasons remain available in JSON and expandable Markdown evidence. |
+| 70 | Relocatable scanner bundle | Implemented now | `[paths] bundle_root` and traversal-safe `@bundle/...` references remove machine-specific paths from native configurations. |
+| 71 | Offline provisioning workflow | Implemented now | `provision-plan` emits non-mutating text, strict JSON, or GitHub-ready Markdown with root-cause batches and safe argv. |
+| 72 | Multi-axis admission cards | Implemented now | Reports and `admission-decisions.json` separate source, tests, dependencies, artifacts, and governance without weakening the aggregate gate. |
+| 73 | Adapter conformance command | Implemented now | `adapter-check` emits a strict offline receipt for all 63 registry and SDK contracts without executing scanners. |
+| 74 | Hardened CI generator | Implemented now | `generate-ci` requires immutable action pins and produces a no-install, least-privilege, fail-closed workflow for pre-provisioned isolated runners. |
+| 75 | Safe local developer hooks | Implemented now | `generate-hooks` emits local adapter/readiness diagnostics without installing dependencies, forwarding source paths, executing scanners, or claiming production isolation. |
+| 76 | Scanner bundle qualification | Implemented now | `qualify-bundle` joins all 63 adapter contracts with profile applicability, assets, exact executable identities, required readiness, and organization-approval state. |
+| 77 | Configuration validation and migration guidance | Implemented now | `config-check` emits a tolerant, strict receipt for valid, invalid, or unsupported configuration; inventories portable paths and refuses unsafe automatic semantic migration. |
+| 78 | Closed offline scanner bundle | Implemented now | `verify-native-bundle` rejects undeclared, missing, changed, linked, unsafe, or malformed content and can require no-index resolution of every declared Python environment. |
+| 79 | Behavioral scanner qualification | Implemented now | Bundle qualification 1.1 binds approved labeled-corpus evidence and its verified report, requires current unchanged scanner digests to match the measured run, and enforces fail-closed minimums while keeping execution a separate event. |
+| 80 | Decision-safe portfolio grades | Implemented now | Portfolio health 1.1 separates execution completion, observed risk, evidence completeness, and release disposition so a green execution score cannot conceal findings or authority gaps. |
+| 81 | Conditional-control activation recipes | Implemented now | Every N/A control receives a deterministic category, accountable owner, activation trigger, concrete action, required closure evidence, and reference in JSON, Markdown, and HTML. |
+| 82 | Reproducible native-bundle closure | Implemented now | Connected preparation validates the rolling OSV archive structurally and semantically, inventories hidden files, uses the correct pinned Actionlint asset, and produced a 5,779-file/274-wheel schema-2 bundle that resolved all four environments with no index. |
+| 83 | Nonexistent clean-fixture defense | Implemented now | New reports seal an exact source-file inventory; effectiveness evaluation refuses path-based clean labels absent from that digest-bound, unchanged snapshot. |
+| 84 | Multi-scanner behavioral qualification | Implemented now | The reviewed detection corpus passed 7 positive and 3 negative labels across Bandit, Semgrep, and detect-secrets, and qualification matched all three measured executable digests to the current bundle. |
 
 ## Closure model
 

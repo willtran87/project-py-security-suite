@@ -58,7 +58,8 @@ flowchart LR
     Bundle --> Transfer["Approved transfer"]
     subgraph Boundary["Externally isolated execution boundary"]
         Project["Python project"] --> Doctor["Preflight applicability and trust"]
-        Doctor --> Scan["Run applicable adapters"]
+        Doctor --> Plan["Offline provisioning plan"]
+        Plan --> Scan["Run applicable adapters"]
         Scan --> Findings["Normalize and correlate"]
         Findings --> Policy["PASS | WARN | FAIL | INCOMPLETE"]
         Policy --> Reports["Seal reports and evidence"]
@@ -71,19 +72,100 @@ flowchart LR
 
 ## Development run
 
+Bootstrap a new repository with a minimal, valid configuration tailored to its
+shape. The command is offline, never installs tools, and refuses to replace an
+existing configuration unless `--overwrite` is explicit:
+
+```text
+pysec init PATH_TO_PROJECT --template library
+pysec init PATH_TO_API --template api --format json
+```
+
+Templates are available for `library`, `api`, `cli`, `worker`, and `monorepo`
+projects. Each receipt provides argument-safe next-step arrays and clearly
+separates repository setup from external isolation and release authority.
+
 Preflight the exact profile first. This validates applicability, executables,
 approved digests, local rules, vulnerability snapshots, baselines, and risk
 governance without running a scanner or importing target code:
 
 ```text
-pysec doctor PATH_TO_PROJECT --config pysec.toml --profile production
+pysec doctor PATH_TO_PROJECT --config pysec.toml --profile production --explain
+pysec doctor PATH_TO_PROJECT --config pysec.toml --profile production \
+  --format markdown --output .artifacts/pysec-preflight.md
 ```
 
 `READY` and `PROCEED TO ISOLATED SCAN` mean every applicable required
 prerequisite is present. Optional tools that need attention remain visible but
 do not create a false required-tool blocker. This preflight decision never
 replaces the scan, the external network boundary, or release approval. Use
-`--format json` for CI and inventory automation.
+`--format json` for schema-governed CI automation or `--format markdown` for a
+GitHub-ready prerequisite artifact. Equivalent remediation is consolidated
+into root-cause batches, with every tool-specific reason retained in expandable
+evidence. Both formats can be published atomically with `--output`; replacement
+requires `--overwrite`.
+
+Turn the same evidence into an offline, non-mutating acquisition and staging
+plan. JSON is strict for enterprise workflow automation; Markdown is ready to
+upload as a GitHub artifact:
+
+```text
+pysec provision-plan PATH_TO_PROJECT --config pysec.toml --profile production \
+  --format markdown --output .artifacts/pysec-provision-plan.md
+pysec schema provision-plan-1.0 --output contracts/provision-plan.schema.json
+```
+
+Portable configurations can declare `[paths] bundle_root` and use
+`@bundle/...` for executables, rules, databases, trust material, and evidence.
+The namespace is resolved beneath the governed root and rejects parent
+traversal; it does not expand environment variables or contact a network.
+
+Validate configuration, qualify the staged bundle without starting scanners,
+and generate local or CI integration without installing packages:
+
+```text
+pysec config-check --config pysec.toml --format markdown \
+  --output .artifacts/config-assessment.md
+pysec adapter-check --format json --output .artifacts/adapter-conformance.json
+pysec verify-native-bundle PATH_TO_NATIVE_BUNDLE \
+  --manifest-sha256 APPROVED_SHA256 --python PATH_TO_TRUSTED_PYTHON \
+  --require-wheelhouse-closure --format markdown \
+  --output .artifacts/native-bundle-verification.md
+pysec qualify-bundle PATH_TO_PROJECT --config pysec.toml --profile production \
+  --effectiveness-evaluation effectiveness-evaluation.json \
+  --effectiveness-report PATH_TO_CORPUS_SCAN_REPORT \
+  --effectiveness-sha256 APPROVED_SHA256 \
+  --minimum-effectiveness-labels 25 \
+  --required-effectiveness-tool bandit \
+  --format markdown --output .artifacts/bundle-qualification.md
+pysec generate-hooks PATH_TO_PROJECT --profile quick
+pysec generate-ci PATH_TO_PROJECT \
+  --checkout-sha APPROVED_COMMIT_SHA \
+  --upload-artifact-sha APPROVED_COMMIT_SHA \
+  --upload-sarif-sha APPROVED_COMMIT_SHA
+```
+
+`config-check` returns a strict, read-only compatibility receipt even for an
+unsupported schema or invalid setting, inventories portable and absolute paths,
+and explains why repository digest pins are not organization approval.
+`verify-native-bundle` rejects missing, changed, injected, linked, or malformed
+bundle content and can prove each declared Python environment resolves entirely
+from the staged wheelhouse. `qualify-bundle` joins all adapter contracts with
+profile-specific executable, asset, applicability, trust readiness, and optional
+digest-bound labeled effectiveness evidence. `generate-hooks` writes local,
+activation-free adapter and readiness diagnostics; it deliberately does not run
+the portfolio or claim a production boundary.
+
+The workflow preserves the scan decision until the sealed report and verification
+receipt are uploaded, then applies the original exit code. Its isolation command,
+runner labels, action pins, and organization policy variable remain enterprise-
+owned inputs.
+
+When the suite is invoked as `python -m py_security_suite`, executable
+discovery also checks the invoking interpreter's script directory. This keeps
+preflight and scans usable without activating that virtual environment;
+ordinary `PATH` resolution retains precedence and every resolved executable is
+still hashed.
 
 After a scan, verify and understand the result from one concise command:
 
@@ -159,8 +241,14 @@ or atomically exports them for disconnected validators. Names are deliberately
 version-explicit; there is no network lookup and no ambiguous `latest` alias.
 Existing exports are preserved unless `--overwrite` is supplied.
 
-Every report also includes `portfolio-health.json`, a 12-domain operational
-coverage scorecard, and `effectiveness.json`, which measures attribution and
+Every report also includes `admission-decisions.json`, which separates source,
+test, dependency, built-artifact, and governance disposition so a missing
+signature is not presented as a source-code defect. The same five cards lead
+the Markdown and self-contained HTML reports. `portfolio-health.json` adds a
+12-domain scorecard with separate execution, observed-risk, and evidence grades;
+it never lets a clean execution grade disguise active findings or missing approval.
+Every conditional control also carries an owner, activation trigger, required
+action, and required evidence. `effectiveness.json` measures attribution and
 actionability without pretending to measure detection accuracy. Measure actual
 precision and recall with a separately reviewed labeled corpus:
 
@@ -492,6 +580,7 @@ python-security-report/
 |-- security-passport.json         # in-toto Statement / SLSA VSA predicate
 |-- checksums.sha256
 |-- risk-intelligence.json         # bounded offline snapshot provenance/results
+|-- source-inventory.json          # exact file identities behind source digest
 |-- isolation-attestation.json     # isolation validation and policy authority
 |-- intelligence-approval.json     # snapshot approval validation and authority
 |-- finding-delta.json             # new/existing/regressed/resolved lifecycle
@@ -525,8 +614,10 @@ integrity and per-tool entry-point integrity. The CodeQL record separately
 binds its `run-codeql` wrapper and the governed CodeQL CLI helper.
 The self-contained HTML dashboard shows the scan-policy decision as a visible
 badge and separates applicable execution gaps from expandable, informational
-not-applicable controls. Its summary grid includes completed/applicable,
-execution-gap, conditional-control, and target-integrity counts.
+not-applicable controls. Its summary grid keeps execution coverage, observed
+risk, evidence completeness, and release disposition visibly distinct. Each
+conditional row says who owns activation, what condition activates it, and what
+evidence closes it.
 The Markdown reports lead with an explicit `ALLOW`, `REVIEW`, or `BLOCK`
 scan-policy disposition. Applicable scanner failures remain in the primary
 action table, while not-applicable conditional controls are retained in a

@@ -21,6 +21,42 @@ flowchart LR
 Unknown sections, keys, tools, profiles, and invalid values are rejected.
 Repository settings cannot weaken isolation or organization-required policy.
 
+## Portable offline bundle paths
+
+Use one explicit bundle root when a scanner environment must move between
+approved preparation, transfer, runner, and review locations:
+
+```toml
+[paths]
+bundle_root = ".pysec-tools"
+
+[tools.bandit]
+executable = "@bundle/Scripts/bandit.exe"
+
+[tools.semgrep]
+rules_path = "@bundle/Lib/site-packages/py_security_suite/rules/python-security.yml"
+```
+
+`@bundle/...` works for primary and auxiliary executables and every governed
+asset path, including rules, databases, baselines, intelligence, isolation
+evidence, and trust catalogs. References must remain below the configured root;
+empty references, parent traversal, symbolic links, and junctions are rejected.
+Ordinary relative paths remain scan-target-relative. Absolute paths remain
+available for administrator-managed external trust stores. No environment,
+shell, or network expansion occurs.
+
+```mermaid
+flowchart LR
+    Config["Portable TOML with @bundle references"] --> Root["Governed bundle root"]
+    Root --> Entry["Pinned scanner entry points"]
+    Root --> Data["Rules and offline databases"]
+    Root --> Trust["Digest-bound trust evidence"]
+    Entry --> Preflight["Doctor / provision-plan"]
+    Data --> Preflight
+    Trust --> Preflight
+    Preflight --> Scan["Externally isolated scan"]
+```
+
 ## Scanner trust catalog
 
 An organization may replace repetitive per-tool digest declarations with one
@@ -206,6 +242,9 @@ entry-point digests and writes them to `pysec.native.toml`.
 schema_version = "1"
 profile = "standard"
 
+[paths]
+bundle_root = ".pysec-tools"
+
 [isolation]
 network = "deny"
 require_attestation = true
@@ -322,8 +361,12 @@ Required applicable scanners cannot be disabled.
 ## CLI reference
 
 ```text
+pysec init TARGET [--template library|api|cli|worker|monorepo]
+  [--profile NAME] [--output TARGET_RELATIVE_PATH] [--format text|json]
+  [--overwrite]
 pysec scan TARGET --output REPORT [options]
 pysec doctor TARGET [--config PATH] [--policy PATH] [--profile NAME]
+  [--explain] [--format text|json|markdown] [--output FILE] [--overwrite]
 pysec inspect REPORT [--limit 0-100] [--format text|json]
   [--output FILE] [--overwrite]
 pysec verify-inspection INSPECTION --report REPORT [--limit 0-100]
@@ -341,6 +384,15 @@ pysec list-tools [--profile NAME] [--format text|json]
 pysec --version
 ```
 
+`init` writes a minimal repository configuration for a library, API, CLI,
+worker, or monorepo. The output must stay inside the target, existing content is
+preserved unless `--overwrite` is explicit, and publication is atomic. Template
+defaults are recommendations, not enterprise authority: initialization never
+installs a scanner, approves a digest, attests isolation, signs an artifact, or
+admits a release. JSON output conforms to the bundled `project-init-1.0`
+contract and uses argument arrays so automation does not need to parse a shell
+command string.
+
 `doctor` performs a non-executing prerequisite assessment and exits `0` when
 all applicable required tools and governed context files are ready, `2` when
 readiness is incomplete, and `3` for invalid invocation or configuration. Its
@@ -349,9 +401,37 @@ preflight `proceed` from `block`, lists required-tool and governed-context
 blocking reasons, and always sets `release_approval` to false. `summary`
 separates selected, applicable, required-ready, not-applicable, and
 attention-needed counts; `optional_attention_tools` remains visible without
-blocking the run. Doctor does not run scanner version commands, execute target
+blocking the run. `--explain` adds an ordered P0/P2 action plan, evidence
+reasons, selected-control state, and the isolated-lane next command. JSON is
+governed by `doctor-readiness-1.1`; `action_groups` consolidates equivalent
+remediation while `next_actions` retains every control-specific reason.
+Markdown leads with those root-cause batches and keeps the complete evidence in
+expandable tables. `--output` publishes either form atomically, rejects
+link-like paths, and preserves existing files unless `--overwrite` is explicit. Doctor
+does not run scanner version commands, execute target
 code, attest network isolation, or predict the policy outcome of the eventual
 scan.
+
+Use `config-check` before doctor when adopting or upgrading a repository
+configuration:
+
+```text
+pysec config-check --config pysec.toml [--policy organization.toml] \
+  [--profile NAME] [--format text|json|markdown] [--output FILE]
+```
+
+The command reads bounded TOML, validates the exact effective merge, records
+input names and SHA-256 identities without exposing absolute paths, inventories
+relative, absolute, and `@bundle/` settings, and returns migration guidance for
+an unsupported schema. It never performs an automatic semantic rewrite: a new
+template must be reviewed before governed settings are transferred. Repository
+digest pins are called out as substitution evidence, not organization approval.
+JSON output conforms to `config-advice-1.0`.
+
+Bare executable names are resolved from `PATH` first and then from the script
+directory beside the invoking Python interpreter. The second lookup supports
+activation-free `python -m py_security_suite` operation; it does not bypass
+executable hashing, configured digest verification, or organization approval.
 
 `inspect` verifies the report checksum chain before reading normalized JSON.
 Its JSON form retains `policy_reasons` for compatibility and adds structured

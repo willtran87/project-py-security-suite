@@ -3,6 +3,10 @@ schema_version = "1"
 # repo | iac-deep | governance | comprehensive | production | release
 profile = "standard"
 
+[paths]
+# `@bundle/...` references resolve beneath this root without environment expansion.
+bundle_root = ".pysec-tools"
+
 [isolation]
 network = "deny"
 require_attestation = true
