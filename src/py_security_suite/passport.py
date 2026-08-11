@@ -42,6 +42,7 @@ REQUIRED_REPORT_ARTIFACTS = {
     "manifest": "scan-manifest.json",
     "checksums": "checksums.sha256",
     "security_passport": "security-passport.json",
+    "source-inventory.json": "source-inventory.json",
 }
 
 
@@ -1109,8 +1110,6 @@ def _verify_report_source_inventory(report: Path, manifest: dict[str, Any]) -> N
         raise ValueError("report artifact manifest is missing or invalid")
     binding = artifacts.get("source-inventory.json")
     path = report / "source-inventory.json"
-    if binding is None and not path.exists():
-        return
     if binding != "source-inventory.json":
         raise ValueError("source inventory artifact binding is invalid")
     inventory = manifest.get("inventory")

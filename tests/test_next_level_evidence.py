@@ -576,6 +576,41 @@ class PassportTests(unittest.TestCase):
                         verify_report(report)
                     manifest["artifacts"].pop(key)
 
+    def test_report_validation_requires_semantic_source_inventory(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            report = _fixture_report(Path(directory))
+            manifest_path = report / "scan-manifest.json"
+            source_path = report / "source-inventory.json"
+
+            source_path.unlink()
+            _write_checksums(report)
+            with self.assertRaisesRegex(ValueError, "artifact is missing"):
+                verify_report(report)
+
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            write_embedded_statement(report, manifest)
+            malformed = json.loads(source_path.read_text(encoding="utf-8"))
+            malformed["unexpected"] = True
+            source_path.write_text(json.dumps(malformed), encoding="utf-8")
+            _write_checksums(report)
+            with self.assertRaisesRegex(ValueError, "fields do not match"):
+                verify_report(report)
+
+            write_embedded_statement(report, manifest)
+            manifest["inventory"]["hashed_files"] = 1
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            _write_checksums(report)
+            with self.assertRaisesRegex(ValueError, "not bound to the scan manifest"):
+                verify_report(report)
+
+            manifest["artifacts"].pop("source-inventory.json")
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            _write_checksums(report)
+            with self.assertRaisesRegex(
+                ValueError, "binding is invalid: source-inventory.json"
+            ):
+                verify_report(report)
+
     def test_report_validation_binds_embedded_security_passport(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

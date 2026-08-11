@@ -13,6 +13,7 @@ from . import __version__
 from .adapters import ADAPTER_TYPES
 from .adapters.base import AdapterResult, ScannerAdapter
 from .config import SuiteConfig
+from .closure_plan import closure_plan_artifact
 from .correlation import correlate_findings
 from .finding_delta import apply_finding_delta
 from .governance import (
@@ -227,6 +228,11 @@ def scan_project(
         risk_acceptance_sha256=config.policy.risk_acceptance_sha256,
         intelligence=intelligence_artifact,
         baseline=baseline_artifact,
+    )
+    derived_artifacts["closure-plan.json"] = closure_plan_artifact(
+        manifest,
+        findings,
+        derived_artifacts,
     )
     write_reports(
         output=output,

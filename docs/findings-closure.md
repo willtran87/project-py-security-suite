@@ -1,8 +1,8 @@
 # Findings-driven closure register
 
-Last reviewed: 2026-08-09
+Last reviewed: 2026-08-10
 
-This register resolves the current 79-item maturity backlog. **Implemented**
+This register resolves the current 89-item maturity backlog. **Implemented**
 means this repository contains a testable control. **Conditional** means the
 adapter and strict evidence contract exist, but a project-specific target or
 companion run is required. **External authority** is deliberately fail-closed:
@@ -121,6 +121,11 @@ the suite prepares and verifies evidence but cannot approve itself.
 | 82 | Native bundle reproducibility | Corrected the pinned Actionlint asset, added bounded semantic OSV snapshot validation, included hidden files in the manifest, and independently verified exact-set plus no-index closure for all declared environments |
 | 83 | Invented clean benchmark fixtures | Added a strict sealed source inventory and reject clean path labels unless the exact path participates in the unchanged source snapshot |
 | 84 | Narrow behavioral qualification | Expanded retained proof to 10 reviewed labels and three core scanners, with no FP/FN and exact current executable-digest continuity |
+| 85 | Divergent applicability guidance | Centralized conditional-control classification so doctor and portfolio reporting share deterministic categories while retaining audience-appropriate actions and ownership |
+| 86 | Optional source inventory downgrade | Made the exact source inventory a canonical required report artifact and independently verify its bounded canonical records, aggregate identity, and manifest binding before Passport claims are accepted |
+| 87 | Fragmented gap remediation | Implemented a canonical `closure-plan.json` in every report plus verified JSON/Markdown export with stable IDs, ownership, authority, evidence, and safe command arrays |
+| 88 | Reproducibility evidence producer | Implemented deterministic safe `normalize-sdist` plus `compare-builds` with hidden-file inclusion, link rejection, exact-set and SHA-256 comparison, strict schemas, actionable mismatch findings, and adapter-compatible output |
+| 89 | Closure-plan report integration | Linked the owned backlog from Markdown and HTML, exported immutable schemas, and kept repository work distinct from organization and external authority |
 
 ```mermaid
 flowchart TD

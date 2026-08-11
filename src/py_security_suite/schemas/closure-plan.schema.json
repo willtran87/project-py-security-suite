@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:closure-plan:1.0",
+  "title": "Findings closure plan",
+  "description": "A non-authoritative, owned work plan derived from one verified suite report.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "schema_id",
+    "authoritative",
+    "scope",
+    "scan_id",
+    "outcome",
+    "source_sha256",
+    "parameters",
+    "summary",
+    "items"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "schema_id": { "const": "urn:project-py-security-suite:schema:closure-plan:1.0" },
+    "authoritative": { "const": false },
+    "scope": { "type": "string", "minLength": 1, "maxLength": 16000 },
+    "scan_id": { "type": "string", "minLength": 1, "maxLength": 4096 },
+    "outcome": { "enum": ["pass", "warn", "fail", "incomplete"] },
+    "source_sha256": { "$ref": "#/$defs/sha256" },
+    "parameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["coverage_target_percent", "hotspot_limit"],
+      "properties": {
+        "coverage_target_percent": { "type": "number", "minimum": 0, "maximum": 100 },
+        "hotspot_limit": { "type": "integer", "minimum": 0, "maximum": 100 }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["open_items", "authority_items", "by_priority", "by_status", "by_authority"],
+      "properties": {
+        "open_items": { "type": "integer", "minimum": 0 },
+        "authority_items": { "type": "integer", "minimum": 0 },
+        "by_priority": { "$ref": "#/$defs/countMap" },
+        "by_status": { "$ref": "#/$defs/countMap" },
+        "by_authority": { "$ref": "#/$defs/countMap" }
+      }
+    },
+    "items": {
+      "type": "array",
+      "maxItems": 10000,
+      "items": { "$ref": "#/$defs/item" }
+    }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "countMap": {
+      "type": "object",
+      "additionalProperties": { "type": "integer", "minimum": 0 }
+    },
+    "stringArray": {
+      "type": "array",
+      "maxItems": 10000,
+      "items": { "type": "string", "maxLength": 16000 }
+    },
+    "command": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 128,
+      "items": { "type": "string", "maxLength": 4096 }
+    },
+    "item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "priority",
+        "category",
+        "authority",
+        "status",
+        "owner",
+        "title",
+        "why",
+        "action",
+        "acceptance_criteria",
+        "evidence_refs",
+        "commands",
+        "related_findings",
+        "tools",
+        "details"
+      ],
+      "properties": {
+        "id": { "type": "string", "pattern": "^PYSEC-ACT-[A-F0-9]{12}$" },
+        "priority": { "enum": ["P0", "P1", "P2", "P3", "P4"] },
+        "category": { "enum": ["finding", "governance", "conditional-control", "test-assurance", "architecture"] },
+        "authority": { "enum": ["repository", "organization", "external"] },
+        "status": { "enum": ["open", "review", "conditional", "external_required"] },
+        "owner": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "title": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "why": { "type": "string", "minLength": 1, "maxLength": 16000 },
+        "action": { "type": "string", "minLength": 1, "maxLength": 16000 },
+        "acceptance_criteria": { "$ref": "#/$defs/stringArray" },
+        "evidence_refs": { "$ref": "#/$defs/stringArray" },
+        "commands": {
+          "type": "array",
+          "maxItems": 128,
+          "items": { "$ref": "#/$defs/command" }
+        },
+        "related_findings": { "$ref": "#/$defs/stringArray" },
+        "tools": { "$ref": "#/$defs/stringArray" },
+        "details": { "type": "object" }
+      }
+    }
+  }
+}

@@ -646,6 +646,8 @@ class OrchestratorTests(unittest.TestCase):
                         result.manifest,
                         {reserved: {"unexpected": True}},
                     )
+            with self.assertRaisesRegex(ValueError, "source-inventory.json"):
+                _register_report_artifacts(result.manifest, {})
             self.assertTrue(manifest["inventory"]["source_integrity_verified"])
             self.assertEqual(
                 manifest["inventory"]["source_sha256"],

@@ -232,6 +232,8 @@ def _register_report_artifacts(
 ) -> None:
     manifest.artifacts = dict(REQUIRED_REPORT_ARTIFACTS)
     for name in sorted(derived_artifacts or {}):
+        if name == "source-inventory.json":
+            continue
         if (
             "/" in name
             or "\\" in name
@@ -240,6 +242,8 @@ def _register_report_artifacts(
         ):
             raise ValueError(f"unsafe or reserved derived artifact name: {name}")
         manifest.artifacts[name] = name
+    if "source-inventory.json" not in (derived_artifacts or {}):
+        raise ValueError("required source-inventory.json derived artifact is missing")
 
 
 def _write_primary_report_files(
@@ -315,6 +319,12 @@ def render_summary(manifest: ScanManifest, findings: list[Finding]) -> str:
         governed_count=len(findings) - len(active_findings),
         coverage_gap_count=len(coverage_gaps),
     )
+    closure_backlog = (
+        "**Owned closure backlog:** `closure-plan.json` is the stable, "
+        + "machine-readable work plan. Render it with "
+        + "`pysec closure-plan REPORT --format markdown`."
+    )
+    lines.extend(["", closure_backlog])
     lines.extend(["", "## Decision", ""])
     lines.extend(f"- {reason}" for reason in manifest.policy_reasons)
     lines.extend(_render_admission_decisions(manifest, active_findings))
@@ -1753,6 +1763,7 @@ target <code>{html.escape(manifest.target)}</code></p>
 <p><strong>Promotion:</strong> Run <code>pysec release-check</code> with the
 required governed sidecars; this report alone does not authorize release.</p>
 <p><a href="action-plan.md">Open the prioritized action plan</a></p>
+<p><a href="closure-plan.json">Download the owned closure backlog (JSON)</a></p>
 <p><a href="assurance-case.md">Open the production assurance case</a></p>
 </section>
 <section aria-labelledby="admission-heading">

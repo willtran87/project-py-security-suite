@@ -5,6 +5,16 @@ for published releases.
 
 ## Unreleased
 
+- Add a verified, machine-readable closure plan that turns findings, governance
+  gaps, conditional controls, coverage hotspots, and reachability warnings into
+  stable owner-routed actions with acceptance criteria and evidence references.
+- Add closed-set reproducible-build comparison and deterministic Python sdist
+  normalization. Comparison rejects self-comparison, emits scanner-consumable
+  mismatch findings, and preserves the external boundary for independent build
+  provenance.
+- Publish a 52-item findings-driven enhancement register, wire the closure plan
+  into every report, and document the activation, ownership, and authority
+  boundary for controls that cannot be honestly completed inside one repository.
 - Version portfolio health at 1.1 with separate execution, observed-risk,
   evidence, and release grades. Conditional controls now carry deterministic
   owner-routed activation recipes in JSON, Markdown, and offline HTML, backed

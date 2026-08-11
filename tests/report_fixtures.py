@@ -6,7 +6,37 @@ from pathlib import Path
 from typing import Any
 
 
+def _write_source_inventory(report: Path, manifest: dict[str, Any]) -> None:
+    """Give verification fixtures the same mandatory source identity contract."""
+    digest = hashlib.sha256().hexdigest()
+    inventory = manifest.get("inventory")
+    if not isinstance(inventory, dict):
+        raise TypeError("fixture manifest inventory must be an object")
+    inventory.update(
+        {
+            "source_sha256": digest,
+            "hashed_files": 0,
+            "hashed_bytes": 0,
+        }
+    )
+    document = {
+        "schema_version": "1.0",
+        "scope": "Empty source fixture used by report-contract tests.",
+        "source_sha256": digest,
+        "total_files": 0,
+        "total_bytes": 0,
+        "files": [],
+    }
+    (report / "source-inventory.json").write_text(
+        json.dumps(document), encoding="utf-8"
+    )
+    manifest_path = report / "scan-manifest.json"
+    if manifest_path.is_file():
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+
 def write_embedded_statement(report: Path, manifest: dict[str, Any]) -> None:
+    _write_source_inventory(report, manifest)
     inputs = [
         {
             "uri": path.relative_to(report).as_posix(),

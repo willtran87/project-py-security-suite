@@ -9,7 +9,7 @@ creates a GitHub-friendly report artifact.
 |---|---|
 | Portfolio | 63 governed adapters across source security, secrets, dependencies, architecture, quality, delivery, artifacts, and assurance evidence |
 | Decisions | Explicit `PASS`, `WARN`, `FAIL`, and `INCOMPLETE` outcomes |
-| Reports | Markdown, self-contained HTML, SARIF 2.1.0, SonarQube external issues, normalized JSON, and SHA-256 manifests |
+| Reports | Markdown, self-contained HTML, SARIF 2.1.0, SonarQube external issues, normalized JSON, an owned closure backlog, and SHA-256 manifests |
 | Risk context | Digest-pinned CISA KEV, FIRST EPSS, CycloneDX VEX, finding lifecycle, CODEOWNERS, and governed acceptances |
 | Supply chain | Source and artifact SBOMs, package checks, provenance findings, and a locally verifiable Security Passport |
 | Reachability | Offline three-state executable/load-only/disconnected graph with explained dispatch paths, ranked islands, and optional coverage corroboration |
@@ -235,7 +235,11 @@ The verification receipt has its own installable strict
 and is atomically published outside the sealed report for audit retention.
 `verify-report` can atomically retain its own strict receipt before any derived
 inspection is trusted. The receipt proves report integrity and semantic
-binding, not signer authenticity or release approval. `schema` reads all three
+binding, not signer authenticity or release approval. Verification requires
+the canonical `source-inventory.json`, recomputes its strictly sorted
+path/size/SHA-256 aggregate, and rejects removal, duplicate or unsafe paths,
+boundedness violations, or disagreement with the scan manifest before trusting
+Passport claims. `schema` reads all three
 exact contracts from the installed package and prints them
 or atomically exports them for disconnected validators. Names are deliberately
 version-explicit; there is no network lookup and no ambiguous `latest` alias.
@@ -340,6 +344,8 @@ pysec promotion-plan REPORT --format json \
 
 pysec promotion-plan REPORT --format markdown --output promotion-plan.md
 pysec promotion-plan REPORT --format html --output promotion-plan.html
+pysec closure-plan REPORT --coverage-target 90 --hotspot-limit 10 \
+  --format markdown --output closure-plan.md
 pysec baseline-candidate REPORT --format json --output baseline-candidate.json
 pysec trend PREVIOUS_REPORT CURRENT_REPORT --format json \
   --output operational-trend.json
@@ -348,6 +354,15 @@ pysec prepare-signing REPORT dist --output signing-request.json
 pysec verify-signing-request signing-request.json dist \
   --request-sha256 APPROVED_SHA256 \
   --format json --output signing-request-verification.json
+
+pysec normalize-sdist clean-build-a/project.tar.gz \
+  --output clean-build-a/project.tar.gz --source-date-epoch REVIEWED_EPOCH \
+  --overwrite --format json
+pysec normalize-sdist clean-build-b/project.tar.gz \
+  --output clean-build-b/project.tar.gz --source-date-epoch REVIEWED_EPOCH \
+  --overwrite --format json
+pysec compare-builds clean-build-a clean-build-b --format json \
+  --output reproducible-build.json
 
 pysec release-manifest REPORT \
   --evidence release-readiness=release-readiness.json@APPROVED_SHA256 \

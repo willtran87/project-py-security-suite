@@ -192,6 +192,21 @@ depends_on = ["py_security_suite.passport", "py_security_suite.path_safety"]
 layer = "services"
 
 [[modules]]
+path = "py_security_suite.closure_plan"
+depends_on = [
+    "py_security_suite.execution",
+    "py_security_suite.models",
+    "py_security_suite.passport",
+    "py_security_suite.path_safety",
+]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.reproducibility"
+depends_on = ["py_security_suite.execution", "py_security_suite.path_safety"]
+layer = "services"
+
+[[modules]]
 path = "py_security_suite.release_manifest"
 depends_on = [
     "py_security_suite.execution",
@@ -377,6 +392,7 @@ depends_on = [
     "py_security_suite",
     "py_security_suite.admission",
     "py_security_suite.adapters",
+    "py_security_suite.closure_plan",
     "py_security_suite.config",
     "py_security_suite.correlation",
     "py_security_suite.effectiveness",
@@ -420,6 +436,7 @@ depends_on = [
     "py_security_suite.audience_report",
     "py_security_suite.adapter_conformance",
     "py_security_suite.ci_workflow",
+    "py_security_suite.closure_plan",
     "py_security_suite.config",
     "py_security_suite.config_advisor",
     "py_security_suite.config_provenance",
@@ -450,6 +467,7 @@ depends_on = [
     "py_security_suite.report_inspection",
     "py_security_suite.release_readiness",
     "py_security_suite.reports",
+    "py_security_suite.reproducibility",
 ]
 layer = "entrypoints"
 

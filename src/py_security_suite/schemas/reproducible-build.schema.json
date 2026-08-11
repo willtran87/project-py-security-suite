@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:reproducible-build:1.0",
+  "title": "Reproducible build comparison",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "schema_id", "authoritative", "kind", "scope", "status", "reproducible", "summary", "builds", "differences", "findings"],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "schema_id": { "const": "urn:project-py-security-suite:schema:reproducible-build:1.0" },
+    "authoritative": { "const": false },
+    "kind": { "const": "reproducible-build" },
+    "scope": { "type": "string", "minLength": 1, "maxLength": 16000 },
+    "status": { "enum": ["match", "mismatch"] },
+    "reproducible": { "type": "boolean" },
+    "summary": { "type": "string", "minLength": 1, "maxLength": 16000 },
+    "builds": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": { "$ref": "#/$defs/build" }
+    },
+    "differences": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["missing_from_second", "unexpected_in_second", "changed"],
+      "properties": {
+        "missing_from_second": { "$ref": "#/$defs/paths" },
+        "unexpected_in_second": { "$ref": "#/$defs/paths" },
+        "changed": {
+          "type": "array",
+          "maxItems": 100000,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "first_sha256", "second_sha256", "first_size_bytes", "second_size_bytes"],
+            "properties": {
+              "path": { "$ref": "#/$defs/path" },
+              "first_sha256": { "$ref": "#/$defs/sha256" },
+              "second_sha256": { "$ref": "#/$defs/sha256" },
+              "first_size_bytes": { "$ref": "#/$defs/size" },
+              "second_size_bytes": { "$ref": "#/$defs/size" }
+            }
+          }
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "maxItems": 1,
+      "items": { "type": "object" }
+    }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "path": { "type": "string", "minLength": 1, "maxLength": 4096 },
+    "size": { "type": "integer", "minimum": 0, "maximum": 4294967296 },
+    "paths": {
+      "type": "array",
+      "maxItems": 100000,
+      "items": { "$ref": "#/$defs/path" }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "size_bytes"],
+      "properties": {
+        "path": { "$ref": "#/$defs/path" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "size_bytes": { "$ref": "#/$defs/size" }
+      }
+    },
+    "build": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["label", "total_files", "total_bytes", "aggregate_sha256", "artifacts"],
+      "properties": {
+        "label": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "total_files": { "type": "integer", "minimum": 0, "maximum": 100000 },
+        "total_bytes": { "type": "integer", "minimum": 0 },
+        "aggregate_sha256": { "$ref": "#/$defs/sha256" },
+        "artifacts": {
+          "type": "array",
+          "maxItems": 100000,
+          "items": { "$ref": "#/$defs/artifact" }
+        }
+      }
+    }
+  }
+}

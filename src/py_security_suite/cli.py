@@ -21,6 +21,7 @@ from .bundle_qualification import (
 from .audit_package import create_audit_package, verify_audit_package
 from .audience_report import AUDIENCES, build_audience_report, render_audience_markdown
 from .ci_workflow import build_github_workflow, render_workflow_receipt
+from .closure_plan import build_closure_plan, render_closure_plan_markdown
 from .config import ConfigurationError, PROFILE_TOOLS, load_config
 from .config_advisor import (
     advise_configuration,
@@ -88,6 +89,11 @@ from .release_manifest import (
     verify_release_evidence_manifest,
 )
 from .release_readiness import assess_release_readiness
+from .reproducibility import (
+    compare_builds,
+    normalize_sdist,
+    render_reproducibility_markdown,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -655,6 +661,58 @@ def build_parser() -> argparse.ArgumentParser:
     promotion.add_argument("--output", type=Path, metavar="FILE")
     promotion.add_argument("--overwrite", action="store_true")
 
+    closure = subparsers.add_parser(
+        "closure-plan",
+        help="turn a verified report into an owned, evidence-based closure backlog",
+    )
+    closure.add_argument("report", type=Path, metavar="REPORT_DIRECTORY")
+    closure.add_argument(
+        "--coverage-target",
+        type=float,
+        default=90.0,
+        help="combined module coverage target used to select hotspots (default: 90)",
+    )
+    closure.add_argument(
+        "--hotspot-limit",
+        type=int,
+        default=10,
+        help="maximum number of source coverage hotspots (default: 10)",
+    )
+    closure.add_argument(
+        "--format", choices=("text", "json", "markdown"), default="text"
+    )
+    closure.add_argument("--output", type=Path, metavar="FILE")
+    closure.add_argument("--overwrite", action="store_true")
+
+    compare = subparsers.add_parser(
+        "compare-builds",
+        help="compare two independently produced artifact directories byte for byte",
+    )
+    compare.add_argument("first", type=Path, metavar="FIRST_BUILD_DIRECTORY")
+    compare.add_argument("second", type=Path, metavar="SECOND_BUILD_DIRECTORY")
+    compare.add_argument("--first-label", default="build-a")
+    compare.add_argument("--second-label", default="build-b")
+    compare.add_argument(
+        "--format", choices=("text", "json", "markdown"), default="text"
+    )
+    compare.add_argument("--output", type=Path, metavar="FILE")
+    compare.add_argument("--overwrite", action="store_true")
+
+    normalize = subparsers.add_parser(
+        "normalize-sdist",
+        help="rewrite one .tar.gz source distribution with deterministic metadata",
+    )
+    normalize.add_argument("source", type=Path, metavar="SOURCE_TAR_GZ")
+    normalize.add_argument("--output", type=Path, required=True, metavar="TAR_GZ")
+    normalize.add_argument(
+        "--source-date-epoch",
+        type=int,
+        required=True,
+        help="reviewed non-negative Unix epoch applied to every archive header",
+    )
+    normalize.add_argument("--format", choices=("text", "json"), default="text")
+    normalize.add_argument("--overwrite", action="store_true")
+
     baseline_candidate = subparsers.add_parser(
         "baseline-candidate",
         help="prepare a verified, revision-bound findings report for external approval",
@@ -985,6 +1043,9 @@ def _dispatch_command(args: argparse.Namespace) -> int:
         "release-check": _release_check_command,
         "evidence-draft": _evidence_draft_command,
         "promotion-plan": _promotion_plan_command,
+        "closure-plan": _closure_plan_command,
+        "compare-builds": _compare_builds_command,
+        "normalize-sdist": _normalize_sdist_command,
         "baseline-candidate": _baseline_candidate_command,
         "trend": _trend_command,
         "release-manifest": _release_manifest_command,
@@ -1668,6 +1729,94 @@ def _promotion_plan_command(args: argparse.Namespace) -> int:
             f"{len(result['next_actions'])} next action(s)"
         )
     return 0 if result["status"] == "ready" else 1
+
+
+def _closure_plan_command(args: argparse.Namespace) -> int:
+    if args.overwrite and not args.output:
+        raise ValueError("closure-plan --overwrite requires --output")
+    result = build_closure_plan(
+        args.report,
+        coverage_target=args.coverage_target,
+        hotspot_limit=args.hotspot_limit,
+    )
+    rendered_json = json.dumps(result, indent=2, sort_keys=True)
+    rendered = (
+        render_closure_plan_markdown(result)
+        if args.format == "markdown"
+        else rendered_json
+    )
+    if args.output:
+        _write_atomic_output(
+            output=args.output,
+            content=rendered,
+            overwrite=args.overwrite,
+            label="closure plan output",
+            forbidden_root=args.report,
+        )
+    if args.format in {"json", "markdown"}:
+        print(rendered)
+    else:
+        summary = result["summary"]
+        print(
+            f"CLOSURE: {summary['open_items']} item(s); "
+            f"{summary['authority_items']} require organization or external authority"
+        )
+    return 0
+
+
+def _compare_builds_command(args: argparse.Namespace) -> int:
+    if args.overwrite and not args.output:
+        raise ValueError("compare-builds --overwrite requires --output")
+    result = compare_builds(
+        args.first,
+        args.second,
+        first_label=args.first_label,
+        second_label=args.second_label,
+    )
+    rendered_json = json.dumps(result, indent=2, sort_keys=True)
+    rendered = (
+        render_reproducibility_markdown(result)
+        if args.format == "markdown"
+        else rendered_json
+    )
+    if args.output:
+        requested = args.output.expanduser().absolute()
+        second_root = args.second.expanduser().absolute().resolve()
+        if requested == second_root or requested.is_relative_to(second_root):
+            raise ValueError(
+                "reproducible build output must be outside both compared directories"
+            )
+        _write_atomic_output(
+            output=args.output,
+            content=rendered,
+            overwrite=args.overwrite,
+            label="reproducible build output",
+            forbidden_root=args.first,
+        )
+    if args.format in {"json", "markdown"}:
+        print(rendered)
+    else:
+        print(
+            f"REPRODUCIBLE BUILD {str(result['status']).upper()}: {result['summary']}"
+        )
+    return 0 if result["reproducible"] else 1
+
+
+def _normalize_sdist_command(args: argparse.Namespace) -> int:
+    result = normalize_sdist(
+        args.source,
+        args.output,
+        epoch=args.source_date_epoch,
+        overwrite=args.overwrite,
+    )
+    if args.format == "json":
+        print(json.dumps(result, indent=2, sort_keys=True))
+    else:
+        print(
+            f"NORMALIZED SDIST: {result['members']} member(s); "
+            f"SHA-256 {result['output_sha256']}"
+        )
+    return 0
 
 
 def _baseline_candidate_command(args: argparse.Namespace) -> int:

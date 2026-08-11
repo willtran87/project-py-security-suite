@@ -12,6 +12,7 @@ from .path_safety import resolve_regular_file
 _MAX_DOCUMENT_BYTES = 128 * 1024 * 1024
 _MAX_FILES = 1_000_000
 _MAX_PATH_BYTES = 4096
+_MAX_SCOPE_BYTES = 16_000
 _MAX_U64 = (1 << 64) - 1
 _DOCUMENT_KEYS = {
     "schema_version",
@@ -37,11 +38,13 @@ class SourceInventoryIdentity:
 def load_source_inventory(path: Path) -> dict[str, Any]:
     """Read a bounded source inventory from a regular, unlinked file."""
     source = resolve_regular_file(path, "source inventory")
-    if source.stat().st_size > _MAX_DOCUMENT_BYTES:
+    with source.open("rb") as handle:
+        payload = handle.read(_MAX_DOCUMENT_BYTES + 1)
+    if len(payload) > _MAX_DOCUMENT_BYTES:
         raise ValueError("source inventory exceeds the maximum document size")
     try:
-        value = json.loads(source.read_bytes())
-    except json.JSONDecodeError as exc:
+        value = json.loads(payload)
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
         raise ValueError(f"source inventory JSON is invalid: {exc}") from exc
     if not isinstance(value, dict):
         raise TypeError("source inventory root must be an object")
@@ -74,8 +77,12 @@ def verify_source_inventory(
     if document.get("schema_version") != "1.0":
         raise ValueError("source inventory schema_version must be '1.0'")
     scope = document.get("scope")
-    if not isinstance(scope, str) or not scope.strip():
-        raise ValueError("source inventory scope must be a non-empty string")
+    if (
+        not isinstance(scope, str)
+        or not scope.strip()
+        or len(scope.encode("utf-8")) > _MAX_SCOPE_BYTES
+    ):
+        raise ValueError("source inventory scope must be a non-empty bounded string")
     files = document.get("files")
     if not isinstance(files, list):
         raise TypeError("source inventory files must be an array")
@@ -114,6 +121,8 @@ def verify_source_inventory(
         aggregate.update(size.to_bytes(8, "big"))
         aggregate.update(bytes.fromhex(digest))
         total_bytes += size
+        if total_bytes > _MAX_U64:
+            raise ValueError("source inventory total byte count exceeds uint64")
         paths.add(relative)
 
     file_count = len(files)
@@ -157,8 +166,10 @@ def _canonical_path(value: Any) -> str:
     if any(ord(character) < 32 or ord(character) == 127 for character in value):
         raise ValueError("source inventory path contains a control character")
     pure = PurePosixPath(value)
+    drive_like = len(value) >= 2 and value[0].isalpha() and value[1] == ":"
     if (
         pure.is_absolute()
+        or drive_like
         or value != pure.as_posix()
         or not pure.parts
         or pure.parts == (".",)

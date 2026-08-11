@@ -1,6 +1,6 @@
 # Detection effectiveness and operational coverage
 
-Last reviewed: 2026-08-09
+Last reviewed: 2026-08-10
 
 The suite separates five questions that are often incorrectly collapsed into
 one score:
@@ -74,7 +74,10 @@ For a `clean` label that names a path, the evaluator now requires that path in
 the sealed `source-inventory.json` and verifies the inventory's exact aggregate
 digest, file/byte totals, and binding to an unchanged scan-manifest snapshot.
 This prevents an invented or omitted fixture from being counted as a true
-negative. Rule-wide clean labels do not require a path but still require the
+negative. The inventory is also a mandatory canonical report artifact:
+`verify-report` rejects its removal, non-canonical or duplicate paths, invalid
+file identities, unsorted records, excessive size/count, aggregate mismatch,
+or disagreement with the scan manifest. Rule-wide clean labels do not require a path but still require the
 named scanner's unchanged executable identity at bundle qualification.
 
 Run the benchmark only after sealing and verifying the scan report:

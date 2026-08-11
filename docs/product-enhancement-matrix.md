@@ -1,8 +1,8 @@
 # Product enhancement matrix
 
-Last reviewed: 2026-08-09
+Last reviewed: 2026-08-10
 
-The latest findings-driven 79-item backlog is resolved in the
+The latest findings-driven 89-item backlog is resolved in the
 [closure register](findings-closure.md), including conditional activation and
 external-authority boundaries.
 
@@ -96,6 +96,11 @@ bounded handoff, but an independent enterprise control must grant approval.
 | 82 | Reproducible native-bundle closure | Implemented now | Connected preparation validates the rolling OSV archive structurally and semantically, inventories hidden files, uses the correct pinned Actionlint asset, and produced a 5,779-file/274-wheel schema-2 bundle that resolved all four environments with no index. |
 | 83 | Nonexistent clean-fixture defense | Implemented now | New reports seal an exact source-file inventory; effectiveness evaluation refuses path-based clean labels absent from that digest-bound, unchanged snapshot. |
 | 84 | Multi-scanner behavioral qualification | Implemented now | The reviewed detection corpus passed 7 positive and 3 negative labels across Bandit, Semgrep, and detect-secrets, and qualification matched all three measured executable digests to the current bundle. |
+| 85 | Consistent conditional-control routing | Implemented now | One shared structured classifier drives both preflight categories/actions and portfolio owner/trigger/evidence recipes, preventing free-text routing drift between operator surfaces. |
+| 86 | Mandatory semantic source evidence | Implemented now | Every generated and independently verified report requires `source-inventory.json`; verification rejects removal, unsafe or unsorted paths, duplicate records, malformed identities, boundedness violations, aggregate mismatches, and scan-manifest binding mismatches. |
+| 87 | Fragmented findings-to-work conversion | Implemented now | Every sealed report receives `closure-plan.json`; the CLI regenerates verified JSON or Markdown with stable item identity, priority, owner, authority, evidence references, acceptance criteria, and argument-array handoffs. |
+| 88 | Reproducible-build evidence generation | Implemented now | `normalize-sdist` removes safe archive metadata variance; `compare-builds` then compares two closed directories without executing content, includes hidden files, rejects links, verifies exact membership and bytes, and emits adapter-compatible findings. |
+| 89 | Authority-safe closure UX | Implemented now | Report Markdown and HTML link the machine backlog while explicitly preventing repository work from self-satisfying signing, isolation, scanner approval, or release authority. |
 
 ## Closure model
 

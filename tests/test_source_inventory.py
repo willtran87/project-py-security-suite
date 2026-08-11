@@ -6,6 +6,8 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from typing import cast
+from unittest.mock import patch
 
 from py_security_suite.source_inventory import (
     load_source_inventory,
@@ -22,8 +24,7 @@ def _document() -> tuple[dict[str, object], dict[str, object]]:
     aggregate = hashlib.sha256()
     for record in records:
         relative = str(record["path"]).encode()
-        size = record["size_bytes"]
-        assert isinstance(size, int)
+        size = cast(int, record["size_bytes"])
         aggregate.update(len(relative).to_bytes(8, "big"))
         aggregate.update(relative)
         aggregate.update(size.to_bytes(8, "big"))
@@ -59,6 +60,8 @@ class SourceInventoryTests(unittest.TestCase):
             ["../outside.py"],
             ["/absolute.py"],
             ["src\\windows.py"],
+            ["C:/windows.py"],
+            ["C:drive-relative.py"],
             ["src//duplicate.py"],
             ["z.py", "a.py"],
             ["a.py", "a.py"],
@@ -82,8 +85,7 @@ class SourceInventoryTests(unittest.TestCase):
             verify_source_inventory(document, manifest)
 
         document, manifest = _document()
-        records = copy.deepcopy(document["files"])
-        assert isinstance(records, list)
+        records = cast(list[dict[str, object]], copy.deepcopy(document["files"]))
         records[0]["size_bytes"] = True
         document["files"] = records
         with self.assertRaisesRegex(ValueError, "file identity"):
@@ -106,6 +108,30 @@ class SourceInventoryTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "unchanged"):
             verify_source_inventory(document, manifest, require_unchanged=True)
 
+    def test_file_count_and_total_bytes_are_bounded(self) -> None:
+        document, manifest = _document()
+        with (
+            patch("py_security_suite.source_inventory._MAX_FILES", 1),
+            self.assertRaisesRegex(ValueError, "exceeds 1 files"),
+        ):
+            verify_source_inventory(document, manifest)
+
+        document, manifest = _document()
+        records = cast(list[dict[str, object]], copy.deepcopy(document["files"]))
+        records[0]["size_bytes"] = (1 << 64) - 1
+        records[1]["size_bytes"] = 1
+        document["files"] = records
+        with self.assertRaisesRegex(ValueError, "total byte count"):
+            verify_source_inventory(document, manifest)
+
+        document, manifest = _document()
+        document["scope"] = "x" * 5
+        with (
+            patch("py_security_suite.source_inventory._MAX_SCOPE_BYTES", 4),
+            self.assertRaisesRegex(ValueError, "bounded string"),
+        ):
+            verify_source_inventory(document, manifest)
+
     def test_file_loader_is_bounded_to_regular_json_objects(self) -> None:
         document, manifest = _document()
         with tempfile.TemporaryDirectory() as directory:
@@ -116,6 +142,15 @@ class SourceInventoryTests(unittest.TestCase):
             )
             path.write_text("[]", encoding="utf-8")
             with self.assertRaisesRegex(TypeError, "root"):
+                load_source_inventory(path)
+            path.write_bytes(b"\xff\xfe")
+            with self.assertRaisesRegex(ValueError, "JSON is invalid"):
+                load_source_inventory(path)
+            path.write_bytes(b"{}")
+            with (
+                patch("py_security_suite.source_inventory._MAX_DOCUMENT_BYTES", 1),
+                self.assertRaisesRegex(ValueError, "maximum document size"),
+            ):
                 load_source_inventory(path)
 
 

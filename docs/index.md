@@ -1,6 +1,6 @@
 # Python Security Suite documentation
 
-Last reviewed: 2026-08-09
+Last reviewed: 2026-08-10
 
 This directory is the canonical documentation set. The suite is offline-first:
 tool and data acquisition happens in a connected preparation lane; scanning and
@@ -20,6 +20,7 @@ verification happen inside an enterprise-controlled isolated boundary.
 | Make one fail-closed promotion decision | [Governed release readiness](release-readiness.md) |
 | Track every enhancement and its authority boundary | [Product enhancement matrix](product-enhancement-matrix.md) |
 | Review closure of the latest findings backlog | [Findings-driven closure register](findings-closure.md) |
+| Review the 52 findings-derived enhancements | [Findings enhancement plan](findings-enhancement-plan.md) |
 | Compare scanner coverage and platform support | [Compatibility matrix](compatibility-matrix.md) |
 | Enforce a production release gate | [Production security](production-security.md) |
 | Verify provenance, risk intelligence, and passports | [Security Passport](security-passport.md) |
@@ -88,13 +89,13 @@ platform support, and acquisition requirements.
 | Applicable and completed | 36 / 36 |
 | Correctly not applicable | 27 |
 | Unavailable, failed, timed out, or parse errors | 0 |
-| Policy outcome | `FAIL` — the two exact release distributions are intentionally unsigned |
+| Policy outcome | `INCOMPLETE` — required external network-isolation attestation is absent; the two exact release distributions are also intentionally unsigned |
 | Normalized findings | 2 expected Cosign bundle findings |
 | Reachability graph | Schema 1.2; per-island confidence and explained edges |
-| Reachability states | 1,207 executable; 115 load-only; 0 disconnected; 0 reportable islands |
+| Reachability states | 1,255 executable; 116 load-only; 0 disconnected; 0 reportable islands |
 | Runtime corroboration | Refreshed branch-aware coverage from every unit/property test; static states are not reclassified by runtime evidence |
-| Tests | 477 collected: 476 passed and 1 platform-limited skip |
-| Combined line and branch coverage | 90.16% across 13,030 statements and 4,408 branches; 93.03% statement and 81.67% branch coverage |
+| Tests | 495 collected: 494 passed and 1 platform-limited skip; 4 property tests also passed in the retained replay lane |
+| Combined line and branch coverage | 90.07% across 13,486 statements and 4,558 branches; 92.98% statement and 81.48% branch coverage |
 | Changed-line coverage | Recomputed on every scan; uncovered changed executable lines remain explicit in `diff-coverage.json` |
 | Operational portfolio | Execution A; observed risk D; evidence F; 36/36 applicable control slots completed across 12 domains |
 | Labeled self-scan benchmark | PASS; 1 TP, 1 TN, 0 FP, 0 FN |
@@ -113,14 +114,16 @@ are fresh, locally validated snapshots; the approval receipt correctly records
 absent organization authorization. All 38 scanner entry points are checked for
 post-execution integrity; the 38 bindings across 34 unique digests remain
 candidates for organization provenance approval. The comprehensive baseline is
-comparable, and the scan remains `FAIL` until the exact distributions have
-approved Sigstore bundles. The network-isolated switch records an operator
-assertion; external enforcement and organization attestation remain independent
-enterprise responsibilities.
+comparable, and the scan remains `INCOMPLETE` until an independent isolation
+authority attests the exact run; the exact distributions additionally require
+approved Sigstore bundles before release. A local network-isolated switch is
+only an operator assertion, never a substitute for external enforcement and
+organization attestation.
 
 The admission decomposition reports source, tests, and dependencies as
 `ALLOW`; built artifacts as `BLOCK`; and governance as `INCOMPLETE` until the
-38 scanner bindings receive independent organization approval. These cards
+38 scanner/helper entry-point bindings receive independent organization
+approval and the isolation attestation is supplied. These cards
 route work but never override the aggregate scan-policy decision.
 
 The prior 135-file `.artifacts/maturity-evidence-pack-v35` closed set remains
@@ -182,6 +185,9 @@ and zero findings on the safe negative control.
 | Report verification | [1.0](../src/py_security_suite/schemas/report-verification.schema.json) | Portable receipt for report integrity and semantic verification |
 | Release readiness | [1.2](../src/py_security_suite/schemas/release-readiness-1.2.schema.json) | Causal root/derived blockers, owners, authority, and remediation |
 | Promotion plan | [1.1](../src/py_security_suite/schemas/promotion-plan-1.1.schema.json) | Lifecycle, freshness, configuration provenance, SLA, annotations, and audience views |
+| Closure plan | [1.0](../src/py_security_suite/schemas/closure-plan.schema.json) | Stable owned backlog across findings, governance, conditional controls, coverage, and reachability |
+| Reproducible build | [1.0](../src/py_security_suite/schemas/reproducible-build.schema.json) | Exact-set byte comparison for two independently supplied artifact directories |
+| Sdist normalization | [1.0](../src/py_security_suite/schemas/sdist-normalization.schema.json) | Deterministic safe tar/gzip metadata receipt for Python source distributions |
 | Baseline candidate | [1.0](../src/py_security_suite/schemas/baseline-candidate.schema.json) | Revision-bound baseline approval handoff |
 | Operational trend | [1.1](../src/py_security_suite/schemas/operational-trend-1.1.schema.json) | Findings churn, scanner reliability, versions, applicability, and performance anomalies |
 | Release evidence verification | [1.0](../src/py_security_suite/schemas/release-evidence-manifest-verification.schema.json) | Independent report/evidence/manifest integrity receipt |

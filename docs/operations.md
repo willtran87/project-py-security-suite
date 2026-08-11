@@ -1,6 +1,6 @@
 # Python Security Suite operations
 
-Last reviewed: 2026-08-09
+Last reviewed: 2026-08-10
 
 ## Operating model
 
@@ -926,9 +926,41 @@ pysec promotion-plan REPORT --release-readiness release-readiness.json \
 
 pysec promotion-plan REPORT --format markdown --output promotion-plan.md
 pysec promotion-plan REPORT --format html --output promotion-plan.html
+pysec closure-plan REPORT --coverage-target 90 --hotspot-limit 10 \
+  --format markdown --output closure-plan.md
 pysec baseline-candidate REPORT --format json --output baseline-candidate.json
 pysec trend PREVIOUS_REPORT REPORT --format json --output operational-trend.json
 ```
+
+Every newly sealed report also contains `closure-plan.json`. It combines active
+findings, admission integrity gaps, conditional-control activation recipes,
+coverage hotspots, and dynamic-reachability warnings into stable owned work
+items. Each item distinguishes repository, organization, and external authority;
+lists acceptance evidence; and stores commands as argument arrays. The plan is
+non-authoritative and cannot approve trust, isolation, signing, or release.
+
+Generate native reproducibility evidence from two separately produced artifact
+directories:
+
+```text
+pysec normalize-sdist clean-build-a/project.tar.gz \
+  --output clean-build-a/project.tar.gz --source-date-epoch REVIEWED_EPOCH \
+  --overwrite --format json
+pysec normalize-sdist clean-build-b/project.tar.gz \
+  --output clean-build-b/project.tar.gz --source-date-epoch REVIEWED_EPOCH \
+  --overwrite --format json
+pysec compare-builds clean-build-a clean-build-b --format json \
+  --output reproducible-build.json
+```
+
+`normalize-sdist` rejects unsafe paths, links, devices, duplicate members, and
+boundedness violations before applying the reviewed epoch, canonical modes and
+ownership, stable member order, and deterministic gzip metadata. The comparison
+then includes hidden files, rejects filesystem links, requires an exact relative
+file set, and compares size plus SHA-256. A mismatch returns a nonzero status and
+emits a high-severity finding consumable by the `reproducible-build` adapter.
+Source identity, independent builder identity, and custody remain separate
+governed evidence.
 
 Before transferring distributions to the controlled signing lane, bind the
 closed subject set to the verified scan and verify it again at receipt:
@@ -989,7 +1021,10 @@ At the first handoff, validate the report itself with
 `pysec verify-report REPORT`. This checks every checksum entry, requires the
 complete canonical report set, and validates its scan-manifest artifact bindings
 without requiring a signing key. Missing, duplicate, ambiguous, unsafe, or
-linked declared evidence is rejected. The embedded in-toto/SLSA statement must
+linked declared evidence is rejected. The required `source-inventory.json` is
+recomputed from its strictly sorted, duplicate-free path/size/SHA-256 records;
+its totals and aggregate must match the scan manifest before Passport claims
+are considered. The embedded in-toto/SLSA statement must
 bind every report input and agree with the manifest's source, policy, outcome,
 finding counts, and tool statuses. Its exact source and release-artifact subject
 set must agree with the source inventory and `artifact-manifest.json`.

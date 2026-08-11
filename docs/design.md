@@ -119,11 +119,16 @@ x86-64 and Python 3.11.
 
 ```mermaid
 flowchart LR
-    Source["Exact source revision"] --> Build["Reproducible build lane"]
+    Source["Exact source revision"] --> BuildA["Clean build A"]
+    Source --> BuildB["Clean build B"]
+    BuildA --> Normalize["normalize-sdist<br/>reviewed fixed epoch"]
+    BuildB --> Normalize
+    Normalize --> Compare["compare-builds<br/>exact set + byte identity"]
     Source --> Scan["Isolated comprehensive scan"]
-    Build --> Payload["Wheel + sdist identities"]
+    Compare --> Payload["Wheel + sdist identities<br/>reproducibility evidence"]
     Scan --> Seal["Checksum-sealed report"]
     Seal --> Decision["release-check"]
+    Seal --> Closure["closure-plan<br/>owned evidence backlog"]
     Decision --> Plan["promotion-plan"]
     Seal --> Baseline["baseline-candidate<br/>revision + exact digest"]
     Seal --> Trend["trend<br/>verified report history"]
@@ -138,6 +143,13 @@ flowchart LR
     Passport --> Manifest
     Manifest --> Admission
 ```
+
+`closure-plan.json` is generated inside the same atomic report publication. It
+joins active findings, governance integrity gaps, conditional activation,
+coverage hotspots, and reachability uncertainty without becoming an admission
+decision. Stable work IDs survive reruns when the underlying issue is unchanged;
+authority labels prevent repository automation from self-approving external
+signing, isolation, scanner trust, or release controls.
 
 The evidence-pack application layer composes existing verified services; it
 does not create a second evidence model. Payload files are generated in private
@@ -524,7 +536,9 @@ flowchart LR
 - `findings.json` is the stable machine-readable finding collection.
 - `source-inventory.json` binds each maintained source path, byte size, and
   SHA-256 to the aggregate source digest and supports non-invented clean-corpus
-  labels without retaining source contents.
+  labels without retaining source contents. It is a canonical required report
+  artifact, not optional derived evidence; independent verification recomputes
+  its bounded, strictly sorted, duplicate-free aggregate and manifest binding.
 - `scan-manifest.json` records tool health, versions, inventory, policy
   reasons, timestamps, profile, and isolation attestation.
 - `checksums.sha256` protects report integrity after generation. Verification
@@ -665,14 +679,16 @@ See [configuration.md](configuration.md) for the complete supported schema.
 The native Windows self-scan process verifies:
 
 - the `comprehensive` profile selects all 63 adapters;
-- all 36 applicable scanners completed without failures, timeouts, or parse
-  errors; 27 conditional scanners were correctly not applicable;
+- the latest readiness assessment identifies 37 applicable controls and 26
+  conditional or content-not-applicable controls, with no unavailable scanner;
 - Pylint, Radon, Ruff formatting, coverage, and JUnit adapters executed through
-  approved entry-point bindings and emitted normalized derived evidence;
-- the separately generated branch-coverage evidence records 92.55% combined
-  line-and-branch coverage and 85.96% branch coverage, satisfying both 80%
-  repository gates with no per-file hotspots; JUnit records 319 passing tests,
-  one platform-limited symlink skip, and no failures or errors;
+  unchanged observed entry-point bindings and emitted normalized derived
+  evidence; organization approval remains an external decision;
+- the separately generated branch-coverage evidence records 90.07% combined
+  line-and-branch coverage across 13,486 statements and 4,558 branches,
+  including 92.98% statement and 81.48% branch coverage; JUnit records 495
+  collected tests, 494 passes, one platform-limited skip, and no failures or
+  errors;
 - CycloneDX completed from `uv.lock` through a frozen offline export with a
   hash-verified helper; zizmor, actionlint, Pysa, GuardDog, Flawfinder, and
   REUSE were correctly not applicable to this repository and native host;
@@ -680,26 +696,29 @@ The native Windows self-scan process verifies:
   correctly not applicable because these dogfood artifacts have no Trusted
   Publisher repository identity;
 - Syft and Grype inspected safely expanded wheel and source distributions;
-- the artifact manifest bound both distributions by SHA-256;
+- two fixed-epoch builds produced identical wheels and, after deterministic
+  metadata normalization, identical source distributions; the artifact
+  manifest bound both distributions by SHA-256;
 - all generated report checksums verified and target content remained
   unchanged;
-- all 38 observed scanner and helper entry points were confirmed unchanged
-  after execution; 13 were also bound to approved digests, while the remaining
-  25 are explicitly reported as provenance-approval work;
-- the 2026-08-06 isolated comprehensive outcome was `INCOMPLETE` because the
-  digest-pinned KEV and EPSS snapshots were 5.00 days old against a 3-day
-  maximum; the suite failed closed despite complete scanner execution;
+- every observed scanner and helper entry point was confirmed unchanged after
+  execution; each remains explicitly routed as independent
+  provenance-approval work rather than being locally self-approved;
+- the 2026-08-10 comprehensive outcome was `INCOMPLETE` solely because the
+  required external network-isolation attestation was absent; fresh local
+  intelligence and complete scanner execution did not weaken that boundary;
 - exactly two high-severity Cosign observations remain for intentionally absent
   wheel and source-distribution bundles, with no testing-coverage findings; and
 - the bundled reachability analyzer completed its schema-1.2 three-state model
-  at medium confidence because bounded polymorphic dispatch was used: four roots,
-  73 modules, 964 nodes, 6,983 explained edges, 871 executable nodes, 93 load-only
-  nodes, no disconnected nodes, and no reportable islands; coverage corroborated
-  every executable node and 92 load-only nodes exercised directly or indirectly
-  by tests; and
+  at medium confidence because bounded polymorphic dispatch was used: four
+  entry points, no disconnected code, and no reportable islands; coverage
+  corroborated every executable node and nearly every load-only node; and
 - code security, secrets, dependency-vulnerability, architecture, and quality
-  perspectives had no findings. Release remains blocked until approved
-  intelligence is refreshed and an approved signing lane supplies bundles for
+  perspectives had no unresolved repository finding. `closure-plan.json`
+  preserves the remaining governed and conditional work as stable owned
+  actions. Release remains blocked until the external
+  isolation authority attests the exact run, the scanner identities are
+  independently approved, and a controlled signing lane supplies bundles for
   both exact artifact digests.
 
 ## Expanded implementation state

@@ -234,6 +234,19 @@ class CliSafetyTests(unittest.TestCase):
             ]
         )
         self.assertEqual(promotion.command, "promotion-plan")
+        closure = parser.parse_args(
+            [
+                "closure-plan",
+                "report",
+                "--coverage-target",
+                "92",
+                "--hotspot-limit",
+                "5",
+            ]
+        )
+        self.assertEqual(closure.command, "closure-plan")
+        self.assertEqual(closure.coverage_target, 92.0)
+        self.assertEqual(closure.hotspot_limit, 5)
         baseline = parser.parse_args(["baseline-candidate", "report"])
         self.assertEqual(baseline.command, "baseline-candidate")
         trend = parser.parse_args(["trend", "before", "after"])
@@ -981,6 +994,48 @@ class CliSafetyTests(unittest.TestCase):
                         1,
                     )
                     self.assertTrue(destination.read_text("utf-8").startswith(prefix))
+
+    def test_closure_plan_exports_machine_and_human_views(self) -> None:
+        plan = {
+            "scan_id": "scan-1",
+            "outcome": "incomplete",
+            "summary": {"open_items": 1, "authority_items": 1},
+            "items": [
+                {
+                    "id": "PYSEC-ACT-AAAAAAAAAAAA",
+                    "priority": "P1",
+                    "authority": "external",
+                    "status": "external_required",
+                    "owner": "release-engineering",
+                    "title": "Sign artifact",
+                    "action": "Use controlled signing.",
+                    "acceptance_criteria": ["Bundle verifies."],
+                    "commands": [["pysec", "prepare-signing"]],
+                }
+            ],
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "closure.md"
+            with (
+                patch("py_security_suite.cli.build_closure_plan", return_value=plan),
+                patch("builtins.print"),
+            ):
+                self.assertEqual(
+                    main(
+                        [
+                            "closure-plan",
+                            "report",
+                            "--format",
+                            "markdown",
+                            "--output",
+                            str(output),
+                        ]
+                    ),
+                    0,
+                )
+            rendered = output.read_text(encoding="utf-8")
+            self.assertIn("# Findings closure plan", rendered)
+            self.assertIn("pysec prepare-signing", rendered)
 
     def test_evidence_pack_forwards_governed_inputs_and_performance_policy(
         self,
