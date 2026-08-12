@@ -27,9 +27,26 @@ flowchart LR
     Tach["Tach<br/>declared boundaries"] --> Cycles
     Findings --> Cycles
 
+    Diff["Diff coverage<br/>changed + uncovered lines"] --> Change["Change-impact and test targeting"]
+    Graph --> Change
+    Coverage --> Change
+    Radon --> Change
+    Findings --> Change
+
+    Graph --> Orphans["Structural orphan symbols"]
+    Reach --> Orphans
+    Coverage --> Orphans
+    Vulture --> Orphans
+
+    Graph --> Boundary["Island boundary evidence"]
+    Reach --> Boundary
+
     Dead --> Artifact["structural-synthesis.json"]
     Islands --> Artifact
     Cycles --> Artifact
+    Change --> Artifact
+    Orphans --> Artifact
+    Boundary --> Artifact
     Artifact --> Reports["Markdown | HTML | JSON | SARIF | SonarQube"]
     Artifact --> Fusion["Evidence-fusion review tier"]
 ```
@@ -41,6 +58,9 @@ flowchart LR
 | Disconnected/load-only island + security finding | `latent-attack-surface` | State does not establish exploitability |
 | Disconnected island + external Graphify caller | `missing-entry-point` | Reference can still be non-executable |
 | Graphify import cycle + Tach/security finding | High-priority architecture hotspot | Cycles indicate coupling, not a vulnerability by themselves |
+| Changed lines + Graphify reverse paths + coverage | Direct and transitive test targets with a compound change-risk score | Static test dependencies cannot replace dynamic integration tests |
+| Unreferenced Graphify callable + disconnected/load-only + not observed + uncovered | Conservative structural-orphan candidate | Framework, inheritance, registry, or plugin dispatch may be implicit |
+| Island boundary edges + source/test path role | Distinguishes test-only fixtures from probable missing production entry points | A file reference is not necessarily executable |
 
 ## Dead-code dispositions
 
@@ -78,14 +98,58 @@ complexity, owners, related finding IDs, evidence, counter-evidence, and a
 specific next action. Import strongly connected components are separately listed
 with Tach and security correlations.
 
+## Change impact and graph-guided tests
+
+For every changed non-test Python file reported by diff-cover, synthesis walks
+Graphify's reverse file graph for two bounded hops. Direct tests import, call,
+reference, or use the changed file; transitive tests reach it through one
+intermediate production file. For a changed package `__init__.py`, associated
+tests exercise modules that the package imports or re-exports; these are labeled
+separately because they do not prove a dependency path to the package surface.
+The artifact reports all three groups separately and never claims that the
+selected tests replace the full suite.
+
+Change risk combines uncovered changed-line ratio, mapping confidence (direct,
+transitive, package-associated, or absent), two-hop upstream blast radius,
+local security findings, and high complexity.
+Each assessment includes the exact uncovered lines, test files, upstream and
+downstream paths, findings, risk score, priority, and a concrete test action.
+Findings in changed files receive the same context in Markdown, HTML, SARIF,
+SonarQube, and evidence-fusion review reasons.
+
+## Structural orphan symbols
+
+Graphify-only absence of callers is too noisy for Python, so the suite retains
+an orphan candidate only when all of these hold:
+
+- the node is a production Python callable with no Graphify call/reference/use;
+- its containing reachability scope is `disconnected` or `load-only`;
+- runtime coverage did not observe the scope; and
+- line evidence marks the definition uncovered.
+
+Vulture agreement raises confidence and is explicitly cited. Without Vulture,
+the result stays a structural review candidate. Observed runtime execution
+always prevents an orphan conclusion.
+
+## Island boundary evidence
+
+Every island now retains bounded inbound and outbound file edges with relation
+and count, candidate entry paths, and directly mapped tests. Boundary analysis
+distinguishes `test-only-or-fixture`, `candidate-missing-entry-point`,
+`runtime-model-gap`, `closed-boundary`, and `referenced-boundary`. These refine
+triage without overwriting the underlying reachability state.
+
 ## Report contract and limits
 
-The artifact uses bundled JSON Schema `structural-synthesis-1.0`. Output is
-bounded to 100 dead-code assessments, 100 island assessments, 50 import cycles,
-and 250 finding links; omitted counts are explicit. Relevant findings receive a
+The current artifact uses bundled JSON Schema `structural-synthesis-1.1`; the
+1.0 schema remains bundled for existing consumers. Output is bounded to 100
+dead-code assessments, 100 island assessments, 50 import cycles, 100 change
+impacts, 100 orphan symbols, 100 island boundaries, and 250 finding links;
+omitted counts are explicit. Relevant findings receive a
 compact `structural_synthesis` evidence object and supporting Graphify and
 reachability citations. The main summary shows counts and the five highest-value
-islands, while the full artifact preserves machine-readable evidence.
+islands and change hotspots, while the full artifact preserves machine-readable
+evidence.
 
 Static analysis cannot completely model reflection, dependency injection,
 generated code, native extensions, data-driven plugins, or framework dispatch.

@@ -357,6 +357,15 @@ def _review_reasons(
     cycle = structural.get("import_cycle")
     if isinstance(cycle, dict) and cycle.get("priority") == "high":
         reasons.append("finding occurs in a high-priority import cycle")
+    change = structural.get("change_impact")
+    if isinstance(change, dict) and change.get("priority") == "high":
+        reasons.append("finding occurs in a high-priority changed graph neighborhood")
+    boundary = structural.get("island_boundary")
+    if (
+        isinstance(boundary, dict)
+        and boundary.get("boundary_classification") == "candidate-missing-entry-point"
+    ):
+        reasons.append("island has concrete inbound paths but no modeled entry point")
     if artifact_context.get("finding_sha256_matches_manifest") is False:
         reasons.append("finding artifact digest conflicts with the artifact manifest")
     return reasons

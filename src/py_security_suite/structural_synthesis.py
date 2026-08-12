@@ -6,6 +6,7 @@ from collections import defaultdict
 from typing import Any
 
 from .models import Citation, Finding
+from .structural_leverage import build_structural_leverage
 
 
 _GRAPHIFY_REFERENCE = "https://graphify.com/docs/cli"
@@ -79,6 +80,12 @@ def build_structural_synthesis(
 
     _attach_island_context(findings, island_assessments, finding_assessments)
     _attach_cycle_context(findings, cycles, finding_assessments)
+    leverage = build_structural_leverage(
+        findings,
+        artifacts,
+        island_assessments,
+        dead_assessments,
+    )
 
     likely_removable = sum(
         item["disposition"] == "likely-removable" for item in dead_assessments
@@ -90,8 +97,8 @@ def build_structural_synthesis(
         item["classification"] == "latent-attack-surface" for item in island_assessments
     )
     return {
-        "schema_version": "1.0",
-        "schema_id": "urn:project-py-security-suite:structural-synthesis:1.0",
+        "schema_version": "1.1",
+        "schema_id": "urn:project-py-security-suite:structural-synthesis:1.1",
         "authoritative": False,
         "purpose": (
             "advisory cross-reference of static topology, entry-point reachability, "
@@ -116,10 +123,14 @@ def build_structural_synthesis(
                 bool(item["tach_finding_ids"] or item["security_finding_ids"])
                 for item in cycles
             ),
+            **leverage["summary"],
         },
         "dead_code_assessments": dead_assessments[:_MAX_DEAD_CODE],
         "island_assessments": island_assessments[:_MAX_ISLANDS],
         "import_cycles": cycles[:_MAX_CYCLES],
+        "change_impact_assessments": leverage["change_impact_assessments"],
+        "orphan_symbol_candidates": leverage["orphan_symbol_candidates"],
+        "island_boundary_assessments": leverage["island_boundary_assessments"],
         "finding_assessments": sorted(
             finding_assessments,
             key=lambda item: (str(item["finding_id"]), str(item["kind"])),
@@ -132,11 +143,14 @@ def build_structural_synthesis(
                 0, len(island_assessments) - _MAX_ISLANDS
             ),
             "import_cycles_omitted": max(0, len(cycles) - _MAX_CYCLES),
+            **leverage["truncation"],
         },
         "interpretation_limits": [
             "Static reachability cannot fully model reflection, registries, plugins, dependency injection, generated code, or framework conventions.",
             "Runtime coverage demonstrates observed execution only; absence of coverage does not prove dead code.",
             "Graph references and import cycles indicate coupling, not exploitability or required behavior.",
+            "Graph-mapped tests are prioritized targets, not a complete replacement for integration or system tests.",
+            "A structurally orphaned symbol remains advisory because Python framework, inheritance, and plugin dispatch can be implicit.",
             "Removal requires owner review, focused tests, and a clean isolated rescan.",
         ],
         "references": [

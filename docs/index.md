@@ -97,7 +97,7 @@ platform support, and acquisition requirements.
 | Graphify evidence | 9,614 nodes and 18,121 edges across 251 files; zero model tokens |
 | Evidence fusion | 2 findings enriched, 103 package lineages, 3 compound hotspots, 0 contradictions or version drift |
 | Latest deep source validation | Zero normalized findings; CodeQL, Bandit, Semgrep, detect-secrets, OSV-Scanner, CycloneDX, and Ruff completed (`maturity-source-deep-v68`) |
-| Latest structural validation | Schema-valid synthesis over 9,930 Graphify nodes and 18,617 edges: 13 runtime-observed likely-dynamic islands, 0 dead-code candidates, 0 latent attack-surface islands, 0 cycles, and no truncation (`maturity-structural-quality-v69`) |
+| Latest structural validation | Verified, schema-valid synthesis over 10,408 Graphify nodes and 19,343 edges: 53 changed Python files mapped to 59 focused tests, 0 unmapped changes, 13 boundary-traced runtime-model gaps, 0 supported orphan/dead-code candidates, 0 cycles, and no truncation (`maturity-structural-quality-v73`) |
 | Reachability graph | Schema 1.2; per-island confidence and explained edges |
 | Reachability states | 1,350 executable; 123 load-only; 0 disconnected; 0 reportable islands |
 | Runtime corroboration | Refreshed branch-aware coverage from every unit/property test; static states are not reclassified by runtime evidence |
@@ -191,7 +191,7 @@ and zero findings on the safe negative control.
 | Graphify evidence | [1.0](../src/py_security_suite/schemas/graphify-evidence.schema.json) | Validated code-only nodes, edges, confidence, and bounded file topology |
 | Graph analysis | [1.0](../src/py_security_suite/schemas/graph-analysis.schema.json) | Finding neighborhoods, cross-tool clusters, and structural hotspots |
 | Evidence fusion | [1.0](../src/py_security_suite/schemas/evidence-fusion.schema.json) | Semantic, test, graph, package-lineage, and provenance cross-references |
-| Structural synthesis | [1.0](../src/py_security_suite/schemas/structural-synthesis.schema.json) | Dead-code dispositions, code-island classifications, and import-cycle correlations |
+| Structural synthesis | [1.1](../src/py_security_suite/schemas/structural-synthesis-1.1.schema.json) | Dead-code dispositions, island boundaries, structural orphans, import cycles, change-risk scoring, and graph-guided test selection; 1.0 remains bundled |
 | Inspection | [1.3](../src/py_security_suite/schemas/report-inspection-1.3.schema.json) | Verified machine-readable decision, health, action completeness, and prioritized findings |
 | Inspection verification | [1.3](../src/py_security_suite/schemas/report-inspection-verification-1.3.schema.json) | Binds the inspection digest, report checksum, action limit, and omission summary |
 | Report verification | [1.0](../src/py_security_suite/schemas/report-verification.schema.json) | Portable receipt for report integrity and semantic verification |

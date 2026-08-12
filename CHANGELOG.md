@@ -17,6 +17,11 @@ for published releases.
   distinguish likely removable from likely dynamic dead-code candidates,
   classify latent attack-surface and missing-entry-point islands, and correlate
   import cycles with architecture and security findings.
+- Version structural synthesis at 1.1 with graph-guided direct/transitive test
+  targeting, compound changed-file risk scoring, conservative orphan-symbol
+  discovery, and concrete island boundary evidence that distinguishes test-only
+  fixtures from probable missing production entry points. Schema 1.0 remains
+  available for existing consumers.
 
 - Add a verified, machine-readable closure plan that turns findings, governance
   gaps, conditional controls, coverage hotspots, and reachability warnings into

@@ -17,7 +17,7 @@ empty scanner result as proof of safety.
 | Trivy and ScanCode license evidence | Source/artifact component inventories | Connects license policy findings to the component and lifecycle stage where it appears |
 | Cosign, attestations, reproducible-build evidence | Artifact manifest | Binds provenance conclusions to the exact artifact SHA-256 and detects digest disagreement |
 | Any normalized finding | High-value classification and package indexes | Links CVE, GHSA, CWE, license, SLSA, and package observations even when tools report different paths or lifecycle stages |
-| Vulture, reachability islands, and Graphify | Runtime coverage, Radon, Tach, ownership, and normalized findings | Imports [structural synthesis](structural-synthesis.md) into finding review reasons so likely removable, likely dynamic, latent attack-surface, and import-cycle evidence affects triage without changing severity |
+| Vulture, reachability islands, changed files, and Graphify | Runtime/diff coverage, Radon, Tach, ownership, mapped tests, and normalized findings | Imports [structural synthesis](structural-synthesis.md) into finding review reasons so dead-code, latent attack-surface, import-cycle, missing-root, and high-risk change evidence affects triage without changing severity |
 | Applicable tool status | Evidence-lane matrix | Separates completed perspectives, not-applicable controls, and real execution gaps without inferring a clean result |
 
 ## Flow

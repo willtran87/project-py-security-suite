@@ -398,6 +398,9 @@ def _render_structural_summary(value: dict[str, Any] | None) -> list[str]:
         return []
     summary = value["summary"]
     islands = value.get("island_assessments", [])
+    changes = value.get("change_impact_assessments", [])
+    orphans = value.get("orphan_symbol_candidates", [])
+    boundaries = value.get("island_boundary_assessments", [])
     priority_islands = (
         [
             item
@@ -405,6 +408,30 @@ def _render_structural_summary(value: dict[str, Any] | None) -> list[str]:
             if isinstance(item, dict) and item.get("priority") in {"high", "medium"}
         ]
         if isinstance(islands, list)
+        else []
+    )
+    priority_changes = (
+        [
+            item
+            for item in changes
+            if isinstance(item, dict) and item.get("priority") in {"high", "medium"}
+        ]
+        if isinstance(changes, list)
+        else []
+    )
+    actionable_boundaries = (
+        [
+            item
+            for item in boundaries
+            if isinstance(item, dict)
+            and item.get("boundary_classification")
+            in {
+                "candidate-missing-entry-point",
+                "test-only-or-fixture",
+                "closed-boundary",
+            }
+        ]
+        if isinstance(boundaries, list)
         else []
     )
     interpretation = " ".join(
@@ -428,6 +455,14 @@ def _render_structural_summary(value: dict[str, Any] | None) -> list[str]:
         f"| Latent attack-surface islands | {int(summary.get('latent_attack_surface_islands', 0))} |",
         f"| Import cycles | {int(summary.get('import_cycles', 0))} |",
         f"| Architecture hotspots | {int(summary.get('architecture_hotspots', 0))} |",
+        f"| Changed Python files analyzed | {int(summary.get('changed_python_files_analyzed', 0))} |",
+        f"| Changed files without mapped tests | {int(summary.get('changed_files_without_mapped_tests', 0))} |",
+        f"| Changed files with uncovered lines | {int(summary.get('changed_files_with_uncovered_lines', 0))} |",
+        f"| High-priority change hotspots | {int(summary.get('high_priority_change_hotspots', 0))} |",
+        f"| Graph-recommended test files | {int(summary.get('recommended_test_files', 0))} |",
+        f"| Structural orphan symbols | {int(summary.get('orphan_symbol_candidates', 0))} |",
+        f"| Candidate missing entry points | {int(summary.get('candidate_missing_entry_points', 0))} |",
+        f"| Test-only island candidates | {int(summary.get('test_only_island_candidates', 0))} |",
         "",
         interpretation,
     ]
@@ -452,6 +487,79 @@ def _render_structural_summary(value: dict[str, Any] | None) -> list[str]:
                 + " |"
             )
             for item in priority_islands[:5]
+        )
+    if priority_changes:
+        lines.extend(
+            [
+                "",
+                "| Change hotspot | Classification | Risk | Mapped tests | Action |",
+                "|---|---|---:|---:|---|",
+            ]
+        )
+        lines.extend(
+            "| `"
+            + _markdown_code(str(item.get("path", "unknown")))
+            + "` | `"
+            + _markdown_code(str(item.get("classification", "review")))
+            + "` | "
+            + str(int(item.get("risk_score", 0)))
+            + " | "
+            + str(
+                len(item.get("direct_test_files", []))
+                + len(item.get("transitive_test_files", []))
+                + len(item.get("associated_test_files", []))
+            )
+            + " | "
+            + _markdown_text(str(item.get("recommended_action", "Review.")))
+            + " |"
+            for item in priority_changes[:5]
+        )
+    if isinstance(orphans, list) and orphans:
+        lines.extend(
+            [
+                "",
+                "| Structural orphan | Location | Classification | Confidence | Action |",
+                "|---|---|---|---|---|",
+            ]
+        )
+        lines.extend(
+            "| `"
+            + _markdown_code(str(item.get("label", "unknown")))
+            + "` | `"
+            + _markdown_code(str(item.get("path", "unknown")))
+            + ":"
+            + str(int(item.get("line", 1)))
+            + "` | `"
+            + _markdown_code(str(item.get("classification", "review")))
+            + "` | `"
+            + _markdown_code(str(item.get("confidence", "low")))
+            + "` | "
+            + _markdown_text(str(item.get("recommended_action", "Review.")))
+            + " |"
+            for item in orphans[:5]
+            if isinstance(item, dict)
+        )
+    if actionable_boundaries:
+        lines.extend(
+            [
+                "",
+                "| Island boundary review | Classification | Boundary relations | Entry paths | Action |",
+                "|---|---|---:|---:|---|",
+            ]
+        )
+        lines.extend(
+            "| `"
+            + _markdown_code(str(item.get("island_id", "unknown")))
+            + "` | `"
+            + _markdown_code(str(item.get("boundary_classification", "review")))
+            + "` | "
+            + str(int(item.get("boundary_relation_count", 0)))
+            + " | "
+            + str(len(item.get("candidate_entry_paths", [])))
+            + " | "
+            + _markdown_text(str(item.get("recommended_action", "Review.")))
+            + " |"
+            for item in actionable_boundaries[:5]
         )
     return lines
 
@@ -2117,6 +2225,8 @@ def render_sonarqube_external_issues(findings: list[Finding]) -> dict[str, Any]:
             disposition = structural.get("disposition")
             island = structural.get("island")
             cycle = structural.get("import_cycle")
+            change = structural.get("change_impact")
+            boundary = structural.get("island_boundary")
             labels = []
             if disposition:
                 labels.append(f"dead-code disposition {disposition}")
@@ -2127,6 +2237,17 @@ def render_sonarqube_external_issues(findings: list[Finding]) -> dict[str, Any]:
             if isinstance(cycle, dict):
                 labels.append(
                     f"import cycle across {int(cycle.get('file_count', 0))} files"
+                )
+            if isinstance(change, dict):
+                labels.append(
+                    "change impact "
+                    f"{change.get('classification', 'review')} with risk "
+                    f"{int(change.get('risk_score', 0))}"
+                )
+            if isinstance(boundary, dict):
+                labels.append(
+                    "island boundary "
+                    f"{boundary.get('boundary_classification', 'review')}"
                 )
             if labels:
                 issue["primaryLocation"]["message"] += (
@@ -2391,6 +2512,29 @@ def _markdown_structural_context(finding: Finding) -> list[str]:
             + _markdown_code(str(cycle.get("priority", "low")))
             + "` priority)"
         )
+    change = structural.get("change_impact")
+    if isinstance(change, dict):
+        test_count = (
+            len(change.get("direct_test_files", []))
+            + len(change.get("transitive_test_files", []))
+            + len(change.get("associated_test_files", []))
+        )
+        parts.append(
+            "change impact `"
+            + _markdown_code(str(change.get("classification", "review")))
+            + "` (risk `"
+            + str(int(change.get("risk_score", 0)))
+            + "`, mapped tests `"
+            + str(test_count)
+            + "`)"
+        )
+    boundary = structural.get("island_boundary")
+    if isinstance(boundary, dict):
+        parts.append(
+            "island boundary `"
+            + _markdown_code(str(boundary.get("boundary_classification", "review")))
+            + "`"
+        )
     if not parts:
         return []
     action = structural.get("recommended_action")
@@ -2398,6 +2542,10 @@ def _markdown_structural_context(finding: Finding) -> list[str]:
         action = island.get("recommended_action")
     if not action and isinstance(cycle, dict):
         action = cycle.get("recommended_action")
+    if not action and isinstance(change, dict):
+        action = change.get("recommended_action")
+    if not action and isinstance(boundary, dict):
+        action = boundary.get("recommended_action")
     suffix = f" - {_markdown_text(str(action))}" if action else ""
     return ["- **Structural synthesis:** " + "; ".join(parts) + suffix]
 
@@ -2466,6 +2614,22 @@ def _html_structural_context(finding: Finding) -> str:
             + str(int(cycle.get("file_count", 0)))
             + "</strong> files"
         )
+    change = structural.get("change_impact")
+    if isinstance(change, dict):
+        parts.append(
+            "change impact <strong>"
+            + html.escape(str(change.get("classification", "review")))
+            + "</strong> (risk "
+            + str(int(change.get("risk_score", 0)))
+            + ")"
+        )
+    boundary = structural.get("island_boundary")
+    if isinstance(boundary, dict):
+        parts.append(
+            "island boundary <strong>"
+            + html.escape(str(boundary.get("boundary_classification", "review")))
+            + "</strong>"
+        )
     if not parts:
         return ""
     action = structural.get("recommended_action")
@@ -2473,6 +2637,10 @@ def _html_structural_context(finding: Finding) -> str:
         action = island.get("recommended_action")
     if not action and isinstance(cycle, dict):
         action = cycle.get("recommended_action")
+    if not action and isinstance(change, dict):
+        action = change.get("recommended_action")
+    if not action and isinstance(boundary, dict):
+        action = boundary.get("recommended_action")
     action_html = f" {html.escape(str(action))}" if action else ""
     return (
         "<section class='source-context'><h4>Structural synthesis</h4><p>"

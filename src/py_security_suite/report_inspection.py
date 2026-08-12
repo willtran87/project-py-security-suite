@@ -29,6 +29,7 @@ BUNDLED_SCHEMA_RESOURCES = {
     "graphify-evidence-1.0": "graphify-evidence.schema.json",
     "graph-analysis-1.0": "graph-analysis.schema.json",
     "structural-synthesis-1.0": "structural-synthesis.schema.json",
+    "structural-synthesis-1.1": "structural-synthesis-1.1.schema.json",
     "adapter-conformance-1.0": "adapter-conformance.schema.json",
     "bundle-qualification-1.0": "bundle-qualification.schema.json",
     "bundle-qualification-1.1": "bundle-qualification-1.1.schema.json",

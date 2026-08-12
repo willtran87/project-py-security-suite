@@ -99,6 +99,11 @@ layer = "services"
 
 [[modules]]
 path = "py_security_suite.structural_synthesis"
+depends_on = ["py_security_suite.models", "py_security_suite.structural_leverage"]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.structural_leverage"
 depends_on = ["py_security_suite.models"]
 layer = "services"
 

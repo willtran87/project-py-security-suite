@@ -312,7 +312,11 @@ without importing or executing target code.
 and Vulture candidates against Graphify references, runtime coverage, Radon
 complexity, Tach boundaries, ownership, and security findings. This produces
 advisory removal/dynamic-use dispositions, latent attack-surface classifications,
-and import-cycle hotspots without changing native scanner severity.
+and import-cycle hotspots without changing native scanner severity. Schema 1.1
+also joins diff coverage to reverse Graphify paths for direct/transitive test
+selection and compound change-risk scoring, discovers conservative structural
+orphans, and retains concrete island boundary evidence for missing-root versus
+test-only triage.
 
 ## Scan sequence
 
@@ -498,7 +502,7 @@ report/
 |-- reachability.json               # three-state topology, explanations, coverage, and islands
 |-- graphify.json                    # validated code-only topology
 |-- graph-analysis.json              # graph-aware finding neighborhoods
-|-- structural-synthesis.json        # dead-code, island, and import-cycle joins
+|-- structural-synthesis.json        # dead code, island boundaries, change risk, and test targets
 |-- evidence-fusion.json             # semantic and cross-stage evidence joins
 |-- coverage-summary.json           # validated pre-generated coverage
 |-- junit-summary.json              # validated test result metadata

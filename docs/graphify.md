@@ -27,7 +27,7 @@ flowchart LR
     Graph --> Join
     Join --> Context["Finding context<br/>upstream, downstream, related findings"]
     Join --> Hotspots["graph-analysis.json<br/>cross-tool clusters and hotspots"]
-    Hotspots --> Synthesis["structural-synthesis.json<br/>dead code, islands, import cycles"]
+    Hotspots --> Synthesis["structural-synthesis.json<br/>dead code, islands, changes, tests"]
     Graph --> Synthesis
     Context --> Reports["Markdown, HTML, JSON, SARIF"]
     Synthesis --> Reports
@@ -40,7 +40,9 @@ flowchart LR
   tools.
 - `structural-synthesis.json` cross-validates symbol/file references against
   reachability islands, Vulture, runtime coverage, Radon, Tach, ownership, and
-  findings. See [Structural synthesis](structural-synthesis.md).
+  findings. It also maps changed files to direct and transitive tests, identifies
+  conservative orphan symbols, and retains concrete island boundary relations.
+  See [Structural synthesis](structural-synthesis.md).
 - Each located finding receives concise upstream, downstream, centrality, and
   related-finding context in Markdown, HTML, and JSON.
 - Static connectivity does not prove runtime reachability, exploitability, or

@@ -15,7 +15,7 @@ creates a GitHub-friendly report artifact.
 | Reachability | Offline three-state executable/load-only/disconnected graph with explained dispatch paths, ranked islands, and optional coverage corroboration |
 | Graph context | Graphify code-only topology joined to findings for blast radius, structural hotspots, and cross-tool neighborhoods |
 | Evidence fusion | Source-to-artifact package lineage, semantic finding links, changed-line/test/graph context, and digest-bound provenance joins |
-| Structural synthesis | Cross-validated dead-code dispositions, code-island attack-surface classification, and Graphify/Tach import-cycle hotspots |
+| Structural synthesis | Cross-validated dead code, island boundaries, structural orphans, import-cycle hotspots, change-risk scoring, and graph-guided test targets |
 | Runtime | Python 3.11+; scanners are installed separately from approved offline bundles |
 
 Key trust properties:
@@ -616,7 +616,7 @@ python-security-report/
 |-- reachability.json               # three-state topology, explained paths, coverage, and islands
 |-- graphify.json                    # validated code-only nodes, edges, and file topology
 |-- graph-analysis.json              # graph-aware finding context and hotspots
-|-- structural-synthesis.json        # dead-code, island, and import-cycle cross-validation
+|-- structural-synthesis.json        # dead code, island boundaries, change risk, and graph-guided tests
 |-- evidence-fusion.json             # cross-scanner and source/artifact evidence joins
 |-- coverage-summary.json           # validated pre-generated test coverage
 |-- junit-summary.json              # validated test outcome metadata

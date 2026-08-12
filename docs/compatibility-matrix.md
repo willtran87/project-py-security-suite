@@ -77,7 +77,7 @@ closed instead of hiding findings.
 | Intelligence approval receipt | Yes | Organization-policy-bound approval listing the exact KEV/EPSS/VEX digests consumed | Prevents an unapproved snapshot refresh from inheriting an earlier approval |
 | Reachability regression gate | Yes | Two schema-1.1/1.2 graphs, each bound to an explicit SHA-256 | New disconnected code, new reportable islands, state regressions, and lost observations |
 | Cross-tool evidence fusion | Yes | Normalized findings, tool status, source/artifact SBOMs, graph, reachability, coverage, complexity, source inventory, and artifact manifest | Per-finding review reasons, semantic/cross-stage corroboration, package lineage drift, digest agreement, compound hotspots, and evidence-lane gaps |
-| Structural synthesis | Yes | Graphify node/file topology, reachability states and islands, Vulture findings, runtime coverage, Radon, Tach, CODEOWNERS, and normalized findings | Dead-code disposition with counter-evidence, latent attack-surface and missing-entry-point islands, import-cycle hotspots, bounded action guidance |
+| Structural synthesis | Yes | Graphify node/file topology, reachability states and islands, Vulture, runtime and diff coverage, Radon, Tach, CODEOWNERS, and normalized findings | Dead-code disposition with counter-evidence, structural orphans, concrete island boundaries, test-only versus missing-root classification, import-cycle hotspots, change-risk scoring, and direct/transitive test targets |
 | Unified release readiness | Yes | Verified report plus optional digest-bound effectiveness and Passport verification receipts | Strict control-by-control `approved` or `not_approved` CI decision |
 
 This is distinct from `unavailable`, which means relevant analysis could not be
