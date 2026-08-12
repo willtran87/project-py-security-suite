@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:evidence-fusion:1.0",
+  "type": "object",
+  "required": ["schema_version", "schema_id", "authoritative", "purpose", "summary", "evidence_lanes", "finding_contexts", "package_lineage", "compound_hotspots", "contradictions", "limitations"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "schema_id": {"const": "urn:project-py-security-suite:evidence-fusion:1.0"},
+    "authoritative": {"const": false},
+    "purpose": {"type": "string", "minLength": 1},
+    "summary": {"type": "object", "required": ["findings_enriched", "independently_corroborated", "cross_stage_findings", "changed_line_findings", "uncovered_findings", "package_lineages", "source_only_packages", "artifact_only_packages", "version_drift_packages", "compound_hotspots"], "additionalProperties": {"type": "integer", "minimum": 0}},
+    "evidence_lanes": {"type": "array", "maxItems": 20, "items": {"type": "object", "required": ["lane", "selected_tools", "completed_tools", "execution_gaps", "available_artifacts"]}},
+    "finding_contexts": {"type": "array", "maxItems": 1000000, "items": {"type": "object", "required": ["finding_id", "review_tier", "review_reasons", "corroboration", "related_finding_ids", "related_tools", "shared_classifications", "source_context", "package_context", "artifact_context", "structural_context"], "properties": {"review_tier": {"enum": ["urgent", "elevated", "standard"]}, "corroboration": {"enum": ["single-tool", "contextual", "independent", "cross-stage"]}, "structural_context": {"type": "object"}}}},
+    "package_lineage": {"type": "array", "maxItems": 10000, "items": {"type": "object", "required": ["package", "source_versions", "artifact_versions", "status", "finding_ids"], "properties": {"status": {"enum": ["matched", "version-drift", "source-only", "artifact-only"]}}}},
+    "compound_hotspots": {"type": "array", "maxItems": 25},
+    "contradictions": {"type": "array", "maxItems": 1000000, "items": {"type": "object", "required": ["finding_id", "kind", "message"]}},
+    "limitations": {"type": "array", "minItems": 1, "items": {"type": "string"}}
+  }
+}

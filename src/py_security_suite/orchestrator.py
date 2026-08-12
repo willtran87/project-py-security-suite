@@ -20,7 +20,9 @@ from .governance import (
     validate_intelligence_approval,
     validate_isolation_evidence,
 )
+from .graph_analysis import apply_graph_context
 from .effectiveness import assurance_claims_artifact, effectiveness_artifact
+from .evidence_fusion import build_evidence_fusion
 from .inventory import inventory_target_with_evidence, source_snapshot
 from .models import (
     Finding,
@@ -39,6 +41,7 @@ from .path_safety import resolve_regular_directory, resolve_unlinked_path
 from .reports import write_reports
 from .risk_intelligence import enrich_findings
 from .source_context import attach_source_context
+from .structural_synthesis import build_structural_synthesis
 from .trust_catalog import apply_trust_catalog
 
 
@@ -146,6 +149,21 @@ def scan_project(
         baseline_artifact = delta.artifact
         derived_artifacts["finding-delta.json"] = delta.artifact
         attach_source_context(target, findings)
+        graph_analysis = apply_graph_context(findings, derived_artifacts)
+        if graph_analysis is not None:
+            derived_artifacts["graph-analysis.json"] = graph_analysis
+        structural_synthesis = build_structural_synthesis(findings, derived_artifacts)
+        if structural_synthesis is not None:
+            derived_artifacts["structural-synthesis.json"] = structural_synthesis
+        fusion = build_evidence_fusion(findings, derived_artifacts, tool_runs)
+        derived_artifacts["evidence-fusion.json"] = fusion
+        context_errors.extend(
+            (
+                "evidence fusion contradiction for "
+                f"{contradiction['finding_id']}: {contradiction['message']}"
+            )
+            for contradiction in fusion["contradictions"]
+        )
 
     _annotate_tool_authority(tool_runs, diagnostics, config)
 

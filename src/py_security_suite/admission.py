@@ -39,6 +39,7 @@ AXES = (
                 "deptry",
                 "radon",
                 "tach",
+                "graphify",
                 "vulture",
                 "reachability",
                 "git-sizer",

@@ -313,7 +313,7 @@ for _profile in ("comprehensive", "release"):
     )
 for _profile in ("quality", "repo", "comprehensive", "production", "release"):
     PROFILE_TOOLS[_profile] = tuple(
-        dict.fromkeys(PROFILE_TOOLS[_profile] + ("reachability",))
+        dict.fromkeys(PROFILE_TOOLS[_profile] + ("reachability", "graphify"))
     )
 
 SUPPORTED_TOOLS = frozenset(
@@ -605,6 +605,11 @@ def _default_mapping() -> dict[str, Any]:
                 "source_roots": [],
                 "discover_framework_roots": True,
                 "coverage_path": None,
+            },
+            "graphify": {
+                "enabled": True,
+                "executable": "graphify",
+                "timeout_seconds": 900,
             },
             "coverage": {
                 "enabled": True,

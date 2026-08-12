@@ -30,7 +30,7 @@ class ConfigTests(unittest.TestCase):
 
     def test_comprehensive_profile_selects_every_implemented_tool(self) -> None:
         config = load_config(profile_override="comprehensive")
-        self.assertEqual(len(config.selected_tools), 63)
+        self.assertEqual(len(config.selected_tools), 64)
         self.assertEqual(config.required_tools, config.selected_tools)
         self.assertIn("cyclonedx-py", config.selected_tools)
         self.assertIn("codeql", config.selected_tools)
@@ -61,11 +61,12 @@ class ConfigTests(unittest.TestCase):
         self.assertIn("reproducible-build", config.selected_tools)
         self.assertIn("yara", config.selected_tools)
         self.assertIn("reachability", config.selected_tools)
+        self.assertIn("graphify", config.selected_tools)
 
     def test_production_profile_blocks_medium_and_selects_full_suite(self) -> None:
         config = load_config(profile_override="production")
         self.assertEqual(config.required_tools, config.selected_tools)
-        self.assertEqual(len(config.selected_tools), 50)
+        self.assertEqual(len(config.selected_tools), 51)
         self.assertIn(
             "medium", {severity.value for severity in config.policy.block_severities}
         )
@@ -76,7 +77,7 @@ class ConfigTests(unittest.TestCase):
 
     def test_release_profile_adds_artifact_assurance(self) -> None:
         config = load_config(profile_override="release")
-        self.assertEqual(len(config.selected_tools), 63)
+        self.assertEqual(len(config.selected_tools), 64)
         self.assertIn("grype", config.required_tools)
         self.assertIn("check-wheel-contents", config.required_tools)
         self.assertIn("cosign", config.required_tools)
@@ -84,8 +85,8 @@ class ConfigTests(unittest.TestCase):
     def test_quality_and_repo_profiles_expose_distinct_coverage(self) -> None:
         quality = load_config(profile_override="quality")
         repo = load_config(profile_override="repo")
-        self.assertEqual(len(quality.selected_tools), 25)
-        self.assertEqual(len(repo.selected_tools), 53)
+        self.assertEqual(len(quality.selected_tools), 26)
+        self.assertEqual(len(repo.selected_tools), 54)
         self.assertIn("ruff-quality", quality.selected_tools)
         self.assertIn("mypy", repo.selected_tools)
         self.assertIn("tach", quality.selected_tools)

@@ -154,6 +154,7 @@ require release evidence.
 | `radon` | `radon` | Rank C+ complexity evidence; rank E/F findings |
 | `tach` | `tach` | Repository-root `tach.toml`; conditional when absent |
 | `reachability` | `pysec` | Built-in AST-only graph; optional `entry_points`, `source_roots`, and island threshold |
+| `graphify` | `graphify` | Code-only AST graph; dedicated pinned sidecar in the native bundle |
 | `coverage` | `pysec-evidence` | Pre-generated coverage.py JSON at `artifacts_path` |
 | `junit` | `pysec-evidence` | Pre-generated JUnit XML file or directory at `artifacts_path` |
 | `diff-cover` | `diff-cover` | Cobertura `coverage.xml`, Git history, `compare_branch`, and threshold |

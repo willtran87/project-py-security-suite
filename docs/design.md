@@ -1,7 +1,7 @@
 # Python Security Suite design
 
 Status: alpha foundation  
-Last reviewed: 2026-08-08
+Last reviewed: 2026-08-12
 
 ## Purpose
 
@@ -42,7 +42,7 @@ flowchart LR
         Install["install-native-tools.ps1<br/>hash verification + pip --no-index"]
         Project["Python project<br/>read-only by policy"]
         Suite["Python Security Suite"]
-        Scanners["63 governed adapters<br/>security | quality | testing | policy | architecture | supply chain | artifact | governance"]
+        Scanners["64 governed adapters<br/>security | quality | testing | policy | architecture | supply chain | artifact | governance"]
         Reports["Markdown | HTML | SARIF | SonarQube | JSON<br/>SBOM + delta + intelligence + Security Passport"]
         Contracts["Version-explicit JSON Schemas<br/>installed package resources"]
         Install --> Suite
@@ -212,7 +212,7 @@ flowchart TD
 
     subgraph Adapters["Scanner adapter boundary"]
         Fast["Fast Python security<br/>Bandit | Semgrep | Ruff S"]
-        Quality["Code quality and architecture<br/>Ruff | Pylint | mypy | Pyright | deptry | Vulture | Radon | Tach | Reachability"]
+        Quality["Code quality and architecture<br/>Ruff | Pylint | mypy | Pyright | deptry | Vulture | Radon | Tach | Reachability | Graphify"]
         Tests["Passive test evidence<br/>coverage.py | diff-cover | JUnit XML"]
         Secrets["Secrets<br/>detect-secrets | Gitleaks | TruffleHog"]
         Supply["Supply chain<br/>OSV | CycloneDX | GuardDog"]
@@ -267,6 +267,13 @@ health and output digests.
 ### Enforced suite architecture
 
 The repository dogfoods Tach with a checked-in [`tach.toml`](../tach.toml).
+
+Cross-tool joins are governed by the
+[evidence-fusion contract](evidence-fusion.md). The fusion layer links semantic
+classifications, source and artifact package inventories, exact artifact
+digests, changed-line coverage, runtime observations, complexity, ownership,
+and graph neighborhoods. It emits explanatory triage context without changing
+scanner severity or treating missing observations as negative evidence.
 Every internal dependency is explicit, unconfigured source modules are
 forbidden, circular dependencies fail the check, and unused declarations fail
 because exact mode is enabled.
@@ -300,6 +307,12 @@ observed, not-observed, or not-measured corroboration. The sealed
 `reachability.json` records representative execution sequences, applied precision
 features, and ranked islands with removal readiness, blockers, and ordered actions
 without importing or executing target code.
+
+[Structural synthesis](structural-synthesis.md) then cross-validates these islands
+and Vulture candidates against Graphify references, runtime coverage, Radon
+complexity, Tach boundaries, ownership, and security findings. This produces
+advisory removal/dynamic-use dispositions, latent attack-surface classifications,
+and import-cycle hotspots without changing native scanner severity.
 
 ## Scan sequence
 
@@ -356,7 +369,7 @@ additional perspectives:
 | Deep | Pysa, CodeQL through `run-codeql` | Interprocedural and semantic data-flow analysis |
 | Supply chain | Trivy, GuardDog, ScanCode, Gitleaks, TruffleHog | IaC, licenses, malicious packages, origin inventory, diverse secret detectors |
 | Artifact | Syft, Grype, check-wheel-contents, Twine, PyPI attestations, Cosign | Final-distribution SBOM, vulnerabilities, source parity, contents, metadata, signatures, identity, and provenance |
-| Quality, structure, and test evidence | Ruff quality/format, Pylint, mypy, Pyright, deptry, Vulture, Radon, Tach, reachability, coverage, diff-cover, JUnit, PSScriptAnalyzer, ShellCheck, actionlint, Hadolint, REUSE | Correctness, formatting, type contracts, dependency declarations, dead code, entry-point sequences, disconnected islands, complexity, dependency boundaries, test adequacy/outcomes, scripts, workflows, containers, and SPDX metadata |
+| Quality, structure, and test evidence | Ruff quality/format, Pylint, mypy, Pyright, deptry, Vulture, Radon, Tach, reachability, Graphify, coverage, diff-cover, JUnit, PSScriptAnalyzer, ShellCheck, actionlint, Hadolint, REUSE | Correctness, formatting, type contracts, dependency declarations, dead code, entry-point sequences, disconnected islands, graph impact, complexity, dependency boundaries, test adequacy/outcomes, scripts, workflows, containers, and SPDX metadata |
 | Deep IaC | Checkov plus Trivy, Hadolint, actionlint, and zizmor | Graph-aware cloud/IaC policies plus independent deployment and pipeline perspectives |
 | Governance evidence | OpenSSF Scorecard evidence ingestion | Repository-host controls generated in a separately authorized connected lane |
 | Repository insight | Conftest, KICS, pipdeptree, git-sizer, validate-pyproject, Vale, KubeLinter | Organization policy, IaC diversity, environment health, Git scale, packaging metadata, prose, and Kubernetes readiness |
@@ -483,6 +496,10 @@ report/
 |-- pylint-summary.json            # Pylint counts/statistics
 |-- radon-complexity.json           # complete rank C+ complexity evidence
 |-- reachability.json               # three-state topology, explanations, coverage, and islands
+|-- graphify.json                    # validated code-only topology
+|-- graph-analysis.json              # graph-aware finding neighborhoods
+|-- structural-synthesis.json        # dead-code, island, and import-cycle joins
+|-- evidence-fusion.json             # semantic and cross-stage evidence joins
 |-- coverage-summary.json           # validated pre-generated coverage
 |-- junit-summary.json              # validated test result metadata
 |-- reuse-compliance.json           # when REUSE opt-in is present
@@ -678,7 +695,7 @@ See [configuration.md](configuration.md) for the complete supported schema.
 
 The native Windows self-scan process verifies:
 
-- the `comprehensive` profile selects all 63 adapters;
+- the `comprehensive` profile selects all 64 adapters;
 - the latest readiness assessment identifies 37 applicable controls and 26
   conditional or content-not-applicable controls, with no unavailable scanner;
 - Pylint, Radon, Ruff formatting, coverage, and JUnit adapters executed through
@@ -724,7 +741,7 @@ The native Windows self-scan process verifies:
 ## Expanded implementation state
 
 Adapters, parser fixtures, applicability handling, profiles, attribution, and
-offline command construction are implemented for all 63 portfolio tools,
+offline command construction are implemented for all 64 portfolio tools,
 including CodeQL through `run-codeql`, final-distribution controls, seven
 repository-health scanners, and trusted-lane evidence adapters including final
 OCI-image assurance.

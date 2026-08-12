@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:graph-analysis:1.0",
+  "type": "object",
+  "required": ["schema_version", "schema_id", "authoritative", "purpose", "graph_summary", "finding_contexts", "cross_tool_clusters", "structural_hotspots", "references"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "schema_id": {"const": "urn:project-py-security-suite:graph-analysis:1.0"},
+    "authoritative": {"const": false},
+    "purpose": {"type": "string", "minLength": 1},
+    "graph_summary": {"type": "object"},
+    "finding_contexts": {"type": "array", "items": {"type": "object", "required": ["finding_id", "path", "degree", "two_hop_upstream_count", "two_hop_downstream_count", "interpretation"]}},
+    "cross_tool_clusters": {"type": "array"},
+    "structural_hotspots": {"type": "array", "maxItems": 25},
+    "references": {"type": "array", "items": {"type": "string", "format": "uri"}}
+  }
+}

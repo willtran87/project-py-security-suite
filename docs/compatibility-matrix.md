@@ -1,6 +1,6 @@
 # Python Security Suite compatibility and coverage matrix
 
-Last reviewed: 2026-08-08
+Last reviewed: 2026-08-12
 
 See the [documentation index](index.md), [solution design](design.md), and
 [operations guide](operations.md) for the surrounding architecture.
@@ -76,6 +76,8 @@ closed instead of hiding findings.
 | External isolation receipt | Yes | Digest-bound, time-bounded evidence authorized in organization policy and tied to target/source digest | Separates structural validation, organization authorization, and the operator isolation assertion |
 | Intelligence approval receipt | Yes | Organization-policy-bound approval listing the exact KEV/EPSS/VEX digests consumed | Prevents an unapproved snapshot refresh from inheriting an earlier approval |
 | Reachability regression gate | Yes | Two schema-1.1/1.2 graphs, each bound to an explicit SHA-256 | New disconnected code, new reportable islands, state regressions, and lost observations |
+| Cross-tool evidence fusion | Yes | Normalized findings, tool status, source/artifact SBOMs, graph, reachability, coverage, complexity, source inventory, and artifact manifest | Per-finding review reasons, semantic/cross-stage corroboration, package lineage drift, digest agreement, compound hotspots, and evidence-lane gaps |
+| Structural synthesis | Yes | Graphify node/file topology, reachability states and islands, Vulture findings, runtime coverage, Radon, Tach, CODEOWNERS, and normalized findings | Dead-code disposition with counter-evidence, latent attack-surface and missing-entry-point islands, import-cycle hotspots, bounded action guidance |
 | Unified release readiness | Yes | Verified report plus optional digest-bound effectiveness and Passport verification receipts | Strict control-by-control `approved` or `not_approved` CI decision |
 
 This is distinct from `unavailable`, which means relevant analysis could not be
@@ -101,6 +103,7 @@ performed.
 | Radon | Cyclomatic-complexity measurement | Local source; C+ retained as evidence and E/F normalized as findings | quality, repo, comprehensive, production, release | Yes |
 | Tach | Declared Python module boundaries, dependency direction, cycles, and public interfaces | Reads local source and repository-owned `tach.toml`; no target imports or execution | quality, repo, comprehensive, production, release | Yes |
 | Reachability | Three-state executable/load-only/disconnected topology, entry-point sequences, runtime corroboration, and ranked Python islands | Bundled bounded AST analysis; typed confidence-bearing edges; framework and polymorphic dispatch; optional bounded coverage.py JSON; explicit dynamic roots; no target imports or execution | quality, repo, comprehensive, production, release | Yes |
+| Graphify | Code-property graph, symbol/file relationships, edge confidence, centrality, and impact neighborhoods | Dedicated `graphifyy` environment; `--code-only --no-cluster`; zero model tokens; AST origins and paths validated; no target imports or execution | quality, repo, comprehensive, production, release | Yes |
 | Coverage evidence | Branch and statement test adequacy | Validates pre-generated coverage.py JSON; never runs tests | quality, repo, comprehensive, production, release | Yes |
 | JUnit evidence | Automated test outcomes | Validates bounded XML metadata; drops output and failure bodies | quality, repo, comprehensive, production, release | Yes |
 | Hypothesis evidence | Property-based security invariants and minimized edge cases | Executes only in a disposable test lane; bounded producer-attributed JUnit ingestion | repo, comprehensive, production, release | Yes |

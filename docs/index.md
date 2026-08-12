@@ -1,6 +1,6 @@
 # Python Security Suite documentation
 
-Last reviewed: 2026-08-10
+Last reviewed: 2026-08-12
 
 This directory is the canonical documentation set. The suite is offline-first:
 tool and data acquisition happens in a connected preparation lane; scanning and
@@ -16,6 +16,9 @@ verification happen inside an enterprise-controlled isolated boundary.
 | Understand threats, trust boundaries, and abuse cases | [Suite threat model](threat-model.md) |
 | Govern scanner upgrades and retirement | [Scanner bundle lifecycle](tool-lifecycle.md) |
 | Trace entry points and investigate disconnected code | [Python reachability](reachability.md) |
+| Add graph-aware blast radius and cross-tool context | [Graphify integration](graphify.md) |
+| Cross-validate dead code, islands, and import cycles | [Structural synthesis](structural-synthesis.md) |
+| Understand source-to-artifact and cross-scanner joins | [Cross-tool evidence fusion](evidence-fusion.md) |
 | Measure scanner execution and labeled detection effectiveness | [Effectiveness](effectiveness.md) |
 | Make one fail-closed promotion decision | [Governed release readiness](release-readiness.md) |
 | Track every enhancement and its authority boundary | [Product enhancement matrix](product-enhancement-matrix.md) |
@@ -46,7 +49,7 @@ flowchart LR
     subgraph Isolated["Externally enforced isolated boundary"]
         Transfer --> Doctor["pysec doctor"]
         Repo["Python repository"] --> Doctor
-        Doctor --> Scan["63-adapter applicability-aware scan"]
+        Doctor --> Scan["64-adapter applicability-aware scan"]
         Scan --> Normalize["Normalize, correlate, classify, and own"]
         Normalize --> Gate["Policy decision"]
         Gate --> Seal["Checksum-sealed report"]
@@ -70,7 +73,7 @@ sandbox. The VM, container, runner, or network policy must enforce isolation.
 | Python source security | AST patterns, structural rules, data flow, native extensions | Bandit, Semgrep, CodeQL, Pysa, Ruff, DevSkim, Flawfinder |
 | Secrets | Working tree, history, detector diversity | detect-secrets, Gitleaks, TruffleHog |
 | Dependencies and components | Vulnerabilities, malicious packages, SBOMs, licenses | OSV-Scanner, Grype, GuardDog, CycloneDX, Syft, Trivy, ScanCode |
-| Architecture and quality | Boundaries, cycles, types, correctness, complexity, three-state reachability, explained entry-point paths, disconnected islands, runtime corroboration, changed-line coverage | Tach, reachability, mypy, Pyright, Pylint, deptry, Radon, Vulture, coverage, diff-cover |
+| Architecture and quality | Boundaries, cycles, types, correctness, complexity, code-graph impact, three-state reachability, explained entry-point paths, disconnected islands, runtime corroboration, changed-line coverage | Tach, Graphify, reachability, mypy, Pyright, Pylint, deptry, Radon, Vulture, coverage, diff-cover |
 | Delivery configuration | GitHub Actions, containers, IaC, shell and PowerShell | zizmor, actionlint, Hadolint, Checkov, ShellCheck, PSScriptAnalyzer |
 | Distribution assurance | Wheel/sdist structure, metadata, attestations, signing | check-wheel-contents, Twine, PyPI attestations, Cosign, in-toto evidence |
 | Governance | KEV/EPSS/VEX, ownership, lifecycle, accepted risk, release evidence | CISA KEV, FIRST EPSS, CycloneDX VEX, CODEOWNERS, Security Passport |
@@ -85,19 +88,23 @@ platform support, and acquisition requirements.
 | Measure | Verified result |
 |---|---:|
 | Profile | `comprehensive` |
-| Selected adapters | 63 |
-| Applicable and completed | 36 / 36 |
-| Correctly not applicable | 27 |
-| Unavailable, failed, timed out, or parse errors | 0 |
-| Policy outcome | `INCOMPLETE` — required external network-isolation attestation is absent; the two exact release distributions are also intentionally unsigned |
+| Selected adapters | 64 |
+| Applicable and completed | 37 / 38 |
+| Correctly not applicable | 26 |
+| Unavailable, failed, timed out, or parse errors | 1 — Grype correctly rejected its 10.9-day-old offline database against the 10-day policy |
+| Policy outcome | `INCOMPLETE` — the Grype database requires connected-lane refresh, the previous baseline predates the 64-tool set, and the two exact release distributions remain intentionally unsigned |
 | Normalized findings | 2 expected Cosign bundle findings |
+| Graphify evidence | 9,614 nodes and 18,121 edges across 251 files; zero model tokens |
+| Evidence fusion | 2 findings enriched, 103 package lineages, 3 compound hotspots, 0 contradictions or version drift |
+| Latest deep source validation | Zero normalized findings; CodeQL, Bandit, Semgrep, detect-secrets, OSV-Scanner, CycloneDX, and Ruff completed (`maturity-source-deep-v68`) |
+| Latest structural validation | Schema-valid synthesis over 9,930 Graphify nodes and 18,617 edges: 13 runtime-observed likely-dynamic islands, 0 dead-code candidates, 0 latent attack-surface islands, 0 cycles, and no truncation (`maturity-structural-quality-v69`) |
 | Reachability graph | Schema 1.2; per-island confidence and explained edges |
-| Reachability states | 1,255 executable; 116 load-only; 0 disconnected; 0 reportable islands |
+| Reachability states | 1,350 executable; 123 load-only; 0 disconnected; 0 reportable islands |
 | Runtime corroboration | Refreshed branch-aware coverage from every unit/property test; static states are not reclassified by runtime evidence |
-| Tests | 495 collected: 494 passed and 1 platform-limited skip; 4 property tests also passed in the retained replay lane |
+| Tests | 508 collected: 507 passed and 1 platform-limited skip; 244 subtests passed |
 | Combined line and branch coverage | 90.07% across 13,486 statements and 4,558 branches; 92.98% statement and 81.48% branch coverage |
 | Changed-line coverage | Recomputed on every scan; uncovered changed executable lines remain explicit in `diff-coverage.json` |
-| Operational portfolio | Execution A; observed risk D; evidence F; 36/36 applicable control slots completed across 12 domains |
+| Operational portfolio | Execution A; observed risk D; evidence F; the stale Grype database remains an explicit supply-chain evidence gap |
 | Labeled self-scan benchmark | PASS; 1 TP, 1 TN, 0 FP, 0 FN |
 | Bundle behavioral qualification | PASS; 7 TP, 3 TN, 0 FP, 0 FN across Bandit, Semgrep, and detect-secrets; all three executable digests matched |
 
@@ -105,11 +112,12 @@ Each closure self-scan is published beneath `.artifacts/maturity-selfscan-*`
 with an external verification receipt. The artifact is intentionally ignored
 by Git because it contains generated evidence and exact candidate identities;
 the release handoff records the concrete run name and digest. The current
-baseline has a 96-file checksum chain and semantic contracts. All applicable
-scanners complete, and the intended unresolved findings are the two missing
+baseline has a 102-file checksum chain and semantic contracts. All applicable
+scanners except Grype complete, and the intended unresolved findings are the two missing
 Cosign bundles for the exact wheel and source distribution. Code security,
 secrets, dependency vulnerabilities, architecture, and quality are expected to
-remain clean before the run is accepted. The digest-pinned KEV and EPSS inputs
+remain clean before the run is accepted; Grype must be rerun after its governed
+offline database is refreshed. The digest-pinned KEV and EPSS inputs
 are fresh, locally validated snapshots; the approval receipt correctly records
 absent organization authorization. All 38 scanner entry points are checked for
 post-execution integrity; the 38 bindings across 34 unique digests remain
@@ -180,6 +188,10 @@ and zero findings on the safe negative control.
 | Admission decisions | [1.0](../src/py_security_suite/schemas/admission-decisions.schema.json) | Source, test, dependency, artifact, and governance evidence decomposition |
 | Portfolio health | [1.1](../src/py_security_suite/schemas/portfolio-health-1.1.schema.json) | Separate execution, observed-risk, evidence, and release grades plus conditional-control activation recipes |
 | Source inventory | [1.0](../src/py_security_suite/schemas/source-inventory.schema.json) | Exact path, size, and SHA-256 identities behind the sealed source aggregate and clean-fixture proof |
+| Graphify evidence | [1.0](../src/py_security_suite/schemas/graphify-evidence.schema.json) | Validated code-only nodes, edges, confidence, and bounded file topology |
+| Graph analysis | [1.0](../src/py_security_suite/schemas/graph-analysis.schema.json) | Finding neighborhoods, cross-tool clusters, and structural hotspots |
+| Evidence fusion | [1.0](../src/py_security_suite/schemas/evidence-fusion.schema.json) | Semantic, test, graph, package-lineage, and provenance cross-references |
+| Structural synthesis | [1.0](../src/py_security_suite/schemas/structural-synthesis.schema.json) | Dead-code dispositions, code-island classifications, and import-cycle correlations |
 | Inspection | [1.3](../src/py_security_suite/schemas/report-inspection-1.3.schema.json) | Verified machine-readable decision, health, action completeness, and prioritized findings |
 | Inspection verification | [1.3](../src/py_security_suite/schemas/report-inspection-verification-1.3.schema.json) | Binds the inspection digest, report checksum, action limit, and omission summary |
 | Report verification | [1.0](../src/py_security_suite/schemas/report-verification.schema.json) | Portable receipt for report integrity and semantic verification |

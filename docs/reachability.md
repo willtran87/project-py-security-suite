@@ -39,6 +39,9 @@ Tach's declared module boundaries.
   statically reachable code that was observed, not observed, or not measured.
 - Emits normalized, cited findings only when an island meets the configured size
   threshold. The complete graph and all candidates remain in `reachability.json`.
+- Feeds [structural synthesis](structural-synthesis.md), where Graphify, Vulture,
+  runtime coverage, Radon, Tach, ownership, and security findings provide
+  explicit corroborating and counter-evidence for each actionable conclusion.
 
 ```mermaid
 flowchart LR

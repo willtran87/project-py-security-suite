@@ -26,6 +26,7 @@ from .diff_cover import DiffCoverAdapter
 from .devskim import DevSkimAdapter
 from .flawfinder import FlawfinderAdapter
 from .gitleaks import GitleaksAdapter
+from .graphify import GraphifyAdapter
 from .grype import GrypeAdapter
 from .guarddog import GuardDogAdapter
 from .hadolint import HadolintAdapter
@@ -84,6 +85,7 @@ ADAPTER_TYPES = {
     "vulture": VultureAdapter,
     "radon": RadonAdapter,
     "reachability": ReachabilityAdapter,
+    "graphify": GraphifyAdapter,
     "zizmor": ZizmorAdapter,
     "actionlint": ActionlintAdapter,
     "hadolint": HadolintAdapter,
@@ -159,6 +161,7 @@ __all__ = [
     "GitHubAttestationAdapter",
     "GitSizerAdapter",
     "GitleaksAdapter",
+    "GraphifyAdapter",
     "GrypeAdapter",
     "GuardDogAdapter",
     "HadolintAdapter",

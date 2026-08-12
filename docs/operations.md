@@ -61,7 +61,7 @@ Run only in an approved connected update lane:
 The default output is `.artifacts/native-bundle`. It contains:
 
 - pinned top-level Bandit, Semgrep, detect-secrets, Ruff, Pylint, mypy,
-  Vulture, Radon, Tach, the bundled reachability analyzer, REUSE, Flawfinder,
+  Vulture, Radon, Tach, Graphify, the bundled reachability analyzer, REUSE, Flawfinder,
   CycloneDX Python, zizmor, ScanCode,
   `run-codeql`, PyPI attestations,
   check-wheel-contents, Twine, and suite wheels, plus their resolved
@@ -75,6 +75,8 @@ The default output is `.artifacts/native-bundle`. It contains:
   and
 - schema 2.0 `bundle-manifest.json` with the size and SHA-256 digest of every
   file plus the exact root requirements for each isolated Python environment.
+  Graphify is installed into its own sidecar environment and runs in code-only
+  AST mode; see the [Graphify integration](graphify.md).
 
 Use `-Force` only to replace a previously marked bundle:
 

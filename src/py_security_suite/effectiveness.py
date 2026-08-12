@@ -20,10 +20,17 @@ def effectiveness_artifact(
             unique_by_tool.update(tools)
     completed = [run for run in tool_runs if run.status is ToolStatus.COMPLETED]
     applicable = [run for run in tool_runs if run.applicable]
-    corroborated = sum(
+    exact_corroborated = sum(
         len({source.tool for source in finding.sources}) > 1 for finding in findings
     )
+    semantic_corroborated = sum(
+        isinstance(finding.evidence.get("fusion"), dict)
+        and finding.evidence["fusion"].get("corroboration")
+        in {"independent", "cross-stage"}
+        for finding in findings
+    )
     total = len(findings)
+    corroborated = min(total, exact_corroborated + semantic_corroborated)
     return {
         "schema_version": "1.0",
         "scope": (
@@ -46,6 +53,8 @@ def effectiveness_artifact(
         "independence": {
             "corroborated_findings": corroborated,
             "single_tool_findings": total - corroborated,
+            "exact_location_merges": exact_corroborated,
+            "semantic_or_cross_stage_corroboration": semantic_corroborated,
         },
         "tool_contribution": [
             {

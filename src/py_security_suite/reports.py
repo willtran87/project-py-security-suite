@@ -56,6 +56,7 @@ _TOOL_REFERENCES = {
         "https://github.com/willtran87/project-py-security-suite/"
         "blob/main/docs/reachability.md"
     ),
+    "graphify": "https://graphify.com/docs/cli",
     "coverage": "https://coverage.readthedocs.io/",
     "junit": "https://github.com/testmoapp/junitxml",
     "hypothesis": "https://hypothesis.readthedocs.io/",
@@ -216,7 +217,9 @@ def _write_report_contents(
         for finding in findings
         if finding.status is not FindingStatus.SUPPRESSED
     ]
-    _write_primary_report_files(output, manifest, findings, active_findings)
+    _write_primary_report_files(
+        output, manifest, findings, active_findings, derived_artifacts
+    )
     _write_evidence(output, manifest, diagnostics, include_evidence)
     _write_derived_artifacts(output, derived_artifacts)
     _write_json(output / "scan-manifest.json", manifest)
@@ -251,8 +254,19 @@ def _write_primary_report_files(
     manifest: ScanManifest,
     findings: list[Finding],
     active_findings: list[Finding],
+    derived_artifacts: dict[str, Any] | None,
 ) -> None:
-    _write_text(output / "summary.md", render_summary(manifest, findings))
+    fusion = (derived_artifacts or {}).get("evidence-fusion.json")
+    structural = (derived_artifacts or {}).get("structural-synthesis.json")
+    _write_text(
+        output / "summary.md",
+        render_summary(
+            manifest,
+            findings,
+            evidence_fusion=fusion if isinstance(fusion, dict) else None,
+            structural_synthesis=structural if isinstance(structural, dict) else None,
+        ),
+    )
     _write_text(
         output / "action-plan.md", render_action_plan(manifest, active_findings)
     )
@@ -304,7 +318,12 @@ def _write_derived_artifacts(
         _write_json(output / name, value)
 
 
-def render_summary(manifest: ScanManifest, findings: list[Finding]) -> str:
+def render_summary(
+    manifest: ScanManifest,
+    findings: list[Finding],
+    evidence_fusion: dict[str, Any] | None = None,
+    structural_synthesis: dict[str, Any] | None = None,
+) -> str:
     active_findings = [
         finding
         for finding in findings
@@ -325,6 +344,8 @@ def render_summary(manifest: ScanManifest, findings: list[Finding]) -> str:
         + "`pysec closure-plan REPORT --format markdown`."
     )
     lines.extend(["", closure_backlog])
+    lines.extend(_render_fusion_summary(evidence_fusion))
+    lines.extend(_render_structural_summary(structural_synthesis))
     lines.extend(["", "## Decision", ""])
     lines.extend(f"- {reason}" for reason in manifest.policy_reasons)
     lines.extend(_render_admission_decisions(manifest, active_findings))
@@ -337,6 +358,102 @@ def render_summary(manifest: ScanManifest, findings: list[Finding]) -> str:
     lines.extend(_render_derived_evidence(manifest))
     lines.extend(_render_triage_workflow(manifest.outcome))
     return "\n".join(lines)
+
+
+def _render_fusion_summary(value: dict[str, Any] | None) -> list[str]:
+    if not isinstance(value, dict) or not isinstance(value.get("summary"), dict):
+        return []
+    summary = value["summary"]
+    lanes = value.get("evidence_lanes", [])
+    gaps = (
+        sum(
+            len(item.get("execution_gaps", []))
+            for item in lanes
+            if isinstance(item, dict) and isinstance(item.get("execution_gaps"), list)
+        )
+        if isinstance(lanes, list)
+        else 0
+    )
+    return [
+        "",
+        "## Cross-referenced evidence",
+        "",
+        "| Signal | Count |",
+        "|---|---:|",
+        f"| Findings enriched | {int(summary.get('findings_enriched', 0))} |",
+        f"| Independent or cross-stage corroboration | {int(summary.get('independently_corroborated', 0))} |",
+        f"| Changed-line findings | {int(summary.get('changed_line_findings', 0))} |",
+        f"| Uncovered finding lines | {int(summary.get('uncovered_findings', 0))} |",
+        f"| Source/artifact package version drift | {int(summary.get('version_drift_packages', 0))} |",
+        f"| Compound structural hotspots | {int(summary.get('compound_hotspots', 0))} |",
+        f"| Evidence-lane execution gaps | {gaps} |",
+        f"| Evidence contradictions | {int(summary.get('contradictions', 0))} |",
+        "",
+        "Detailed lineage, review reasons, limitations, and evidence-lane health are in `evidence-fusion.json`. Fusion guides triage; scanner severity and policy remain authoritative.",
+    ]
+
+
+def _render_structural_summary(value: dict[str, Any] | None) -> list[str]:
+    if not isinstance(value, dict) or not isinstance(value.get("summary"), dict):
+        return []
+    summary = value["summary"]
+    islands = value.get("island_assessments", [])
+    priority_islands = (
+        [
+            item
+            for item in islands
+            if isinstance(item, dict) and item.get("priority") in {"high", "medium"}
+        ]
+        if isinstance(islands, list)
+        else []
+    )
+    interpretation = " ".join(
+        (
+            "Conclusions combine Graphify topology, entry-point reachability, runtime coverage, Vulture, Radon, Tach, and normalized findings.",
+            "They are advisory; absence of runtime observation does not prove code is removable.",
+        )
+    )
+    lines = [
+        "",
+        "## Structural synthesis",
+        "",
+        "| Signal | Count |",
+        "|---|---:|",
+        f"| Dead-code candidates cross-checked | {int(summary.get('dead_code_candidates', 0))} |",
+        f"| Likely removable dead-code candidates | {int(summary.get('likely_removable_dead_code_candidates', 0))} |",
+        f"| Likely dynamic dead-code candidates | {int(summary.get('likely_dynamic_dead_code_candidates', 0))} |",
+        f"| Code islands analyzed | {int(summary.get('islands_analyzed', 0))} |",
+        f"| Likely removable islands | {int(summary.get('likely_removable_islands', 0))} |",
+        f"| Likely dynamic islands | {int(summary.get('likely_dynamic_islands', 0))} |",
+        f"| Latent attack-surface islands | {int(summary.get('latent_attack_surface_islands', 0))} |",
+        f"| Import cycles | {int(summary.get('import_cycles', 0))} |",
+        f"| Architecture hotspots | {int(summary.get('architecture_hotspots', 0))} |",
+        "",
+        interpretation,
+    ]
+    if priority_islands:
+        lines.extend(
+            [
+                "",
+                "| Priority island | Classification | LOC | Action |",
+                "|---|---|---:|---|",
+            ]
+        )
+        lines.extend(
+            (
+                "| `"
+                + _markdown_code(str(item.get("island_id", "unknown")))
+                + "` | `"
+                + _markdown_code(str(item.get("classification", "review")))
+                + "` | "
+                + str(int(item.get("lines_of_code", 0)))
+                + " | "
+                + _markdown_text(str(item.get("recommended_action", "Review.")))
+                + " |"
+            )
+            for item in priority_islands[:5]
+        )
+    return lines
 
 
 def _render_admission_decisions(
@@ -705,6 +822,9 @@ def _render_markdown_findings(
                 f"`{_markdown_code(finding.confidence.value)}`",
                 f"- **Classification:** {classifications}",
                 f"- **References:** {references}",
+                *_markdown_graph_context(finding),
+                *_markdown_structural_context(finding),
+                *_markdown_fusion_context(finding),
                 "",
                 f"**What was detected:** {_markdown_text(finding.description)}",
                 "",
@@ -1905,6 +2025,15 @@ def render_sarif(findings: list[Finding]) -> dict[str, Any]:
                 ],
             },
         }
+        graph_context = finding.evidence.get("graph_context")
+        if isinstance(graph_context, dict):
+            result["properties"]["graph_context"] = json_ready(graph_context)
+        structural = finding.evidence.get("structural_synthesis")
+        if isinstance(structural, dict):
+            result["properties"]["structural_synthesis"] = json_ready(structural)
+        fusion = finding.evidence.get("fusion")
+        if isinstance(fusion, dict):
+            result["properties"]["evidence_fusion"] = json_ready(fusion)
         if finding.locations:
             location = finding.locations[0]
             physical: dict[str, Any] = {"artifactLocation": {"uri": location.path}}
@@ -1975,6 +2104,41 @@ def render_sonarqube_external_issues(findings: list[Finding]) -> dict[str, Any]:
                 "filePath": location.path,
             },
         }
+        graph_context = finding.evidence.get("graph_context")
+        if isinstance(graph_context, dict):
+            issue["primaryLocation"]["message"] += (
+                f" Graph impact: {int(graph_context.get('two_hop_upstream_count', 0))} "
+                "upstream and "
+                f"{int(graph_context.get('two_hop_downstream_count', 0))} "
+                "downstream files within two hops."
+            )
+        structural = finding.evidence.get("structural_synthesis")
+        if isinstance(structural, dict):
+            disposition = structural.get("disposition")
+            island = structural.get("island")
+            cycle = structural.get("import_cycle")
+            labels = []
+            if disposition:
+                labels.append(f"dead-code disposition {disposition}")
+            if isinstance(island, dict):
+                labels.append(
+                    f"island classification {island.get('classification', 'review')}"
+                )
+            if isinstance(cycle, dict):
+                labels.append(
+                    f"import cycle across {int(cycle.get('file_count', 0))} files"
+                )
+            if labels:
+                issue["primaryLocation"]["message"] += (
+                    " Structural synthesis: " + "; ".join(labels) + "."
+                )
+        fusion = finding.evidence.get("fusion")
+        if isinstance(fusion, dict):
+            issue["primaryLocation"]["message"] += (
+                " Evidence fusion: "
+                f"{fusion.get('review_tier', 'standard')} review tier, "
+                f"{fusion.get('corroboration', 'single-tool')} corroboration."
+            )
         if location.start_line:
             issue["primaryLocation"]["textRange"] = {
                 "startLine": location.start_line,
@@ -2099,6 +2263,9 @@ def _render_html_finding(finding: Finding, tool_versions: dict[str, str]) -> str
         or "<li>No external reference.</li>"
     )
     source_context = _html_source_excerpt(finding)
+    graph_context = _html_graph_context(finding)
+    structural_context = _html_structural_context(finding)
+    fusion_context = _html_fusion_context(finding)
     return (
         f"<article class='finding {severity}' "
         f"id='{html.escape(finding.finding_id, quote=True)}'>"
@@ -2123,6 +2290,9 @@ def _render_html_finding(finding: Finding, tool_versions: dict[str, str]) -> str
         "<div class='finding-location'><strong>Review this location:</strong> "
         f"<code>{html.escape(_location_text(finding))}</code></div>"
         f"{source_context}"
+        f"{graph_context}"
+        f"{structural_context}"
+        f"{fusion_context}"
         "<div class='detail-grid'>"
         "<section class='detail'><h4>What was detected</h4>"
         f"<p>{html.escape(finding.description)}</p></section>"
@@ -2144,6 +2314,193 @@ def _finding_tools(finding: Finding) -> str:
         ", ".join(f"{source.tool}/{source.rule_id}" for source in finding.sources)
         or "unattributed"
     )
+
+
+def _markdown_graph_context(finding: Finding) -> list[str]:
+    context = finding.evidence.get("graph_context")
+    if not isinstance(context, dict):
+        return []
+    upstream = int(context.get("two_hop_upstream_count", 0))
+    downstream = int(context.get("two_hop_downstream_count", 0))
+    degree = int(context.get("degree", 0))
+    interpretation = _markdown_text(str(context.get("interpretation", "")))
+    related = context.get("related_finding_ids", [])
+    related_text = ", ".join(f"`{_markdown_code(str(value))}`" for value in related[:5])
+    suffix = f" Related: {related_text}." if related_text else ""
+    corroboration = _graph_corroboration_text(context.get("corroborating_evidence", {}))
+    if corroboration:
+        suffix += f" Corroboration: {corroboration}."
+    return [
+        "- **Graph impact:** "
+        f"degree `{degree}`; two-hop upstream `{upstream}`; "
+        f"two-hop downstream `{downstream}` — {interpretation}.{suffix}"
+    ]
+
+
+def _markdown_fusion_context(finding: Finding) -> list[str]:
+    fusion = finding.evidence.get("fusion")
+    if not isinstance(fusion, dict):
+        return []
+    reasons = fusion.get("review_reasons", [])
+    reason_text = "; ".join(_markdown_text(str(value)) for value in reasons[:5])
+    related = fusion.get("related_finding_ids", [])
+    related_text = ", ".join(f"`{_markdown_code(str(value))}`" for value in related[:5])
+    details = []
+    if reason_text:
+        details.append(reason_text)
+    if related_text:
+        details.append(f"related findings {related_text}")
+    suffix = " — " + "; ".join(details) if details else ""
+    return [
+        "- **Evidence fusion:** "
+        f"review tier `{_markdown_code(str(fusion.get('review_tier', 'standard')))}`; "
+        f"corroboration `{_markdown_code(str(fusion.get('corroboration', 'single-tool')))}`"
+        f"{suffix}"
+    ]
+
+
+def _markdown_structural_context(finding: Finding) -> list[str]:
+    structural = finding.evidence.get("structural_synthesis")
+    if not isinstance(structural, dict):
+        return []
+    parts: list[str] = []
+    disposition = structural.get("disposition")
+    confidence = structural.get("confidence")
+    if disposition:
+        label = f"dead-code `{_markdown_code(str(disposition))}`"
+        if confidence:
+            label += f" ({_markdown_code(str(confidence))} confidence)"
+        parts.append(label)
+    island = structural.get("island")
+    if isinstance(island, dict):
+        parts.append(
+            "island `"
+            + _markdown_code(str(island.get("classification", "review")))
+            + "` ("
+            + str(int(island.get("lines_of_code", 0)))
+            + " LOC, `"
+            + _markdown_code(str(island.get("priority", "low")))
+            + "` priority)"
+        )
+    cycle = structural.get("import_cycle")
+    if isinstance(cycle, dict):
+        parts.append(
+            "import cycle `"
+            + str(int(cycle.get("file_count", 0)))
+            + "` files (`"
+            + _markdown_code(str(cycle.get("priority", "low")))
+            + "` priority)"
+        )
+    if not parts:
+        return []
+    action = structural.get("recommended_action")
+    if not action and isinstance(island, dict):
+        action = island.get("recommended_action")
+    if not action and isinstance(cycle, dict):
+        action = cycle.get("recommended_action")
+    suffix = f" - {_markdown_text(str(action))}" if action else ""
+    return ["- **Structural synthesis:** " + "; ".join(parts) + suffix]
+
+
+def _html_graph_context(finding: Finding) -> str:
+    context = finding.evidence.get("graph_context")
+    if not isinstance(context, dict):
+        return ""
+    degree = int(context.get("degree", 0))
+    upstream = int(context.get("two_hop_upstream_count", 0))
+    downstream = int(context.get("two_hop_downstream_count", 0))
+    interpretation = html.escape(str(context.get("interpretation", "")))
+    corroboration = html.escape(
+        _graph_corroboration_text(context.get("corroborating_evidence", {}))
+    )
+    corroboration_html = f" Corroboration: {corroboration}." if corroboration else ""
+    return (
+        "<section class='source-context'><h4>Graph-aware impact context</h4>"
+        f"<p>Degree <strong>{degree}</strong>; two-hop upstream "
+        f"<strong>{upstream}</strong>; two-hop downstream "
+        f"<strong>{downstream}</strong>. {interpretation}.{corroboration_html}</p></section>"
+    )
+
+
+def _html_fusion_context(finding: Finding) -> str:
+    fusion = finding.evidence.get("fusion")
+    if not isinstance(fusion, dict):
+        return ""
+    tier = html.escape(str(fusion.get("review_tier", "standard")))
+    corroboration = html.escape(str(fusion.get("corroboration", "single-tool")))
+    reasons = fusion.get("review_reasons", [])
+    reason_text = "; ".join(str(value) for value in reasons[:5])
+    reason_html = f" {html.escape(reason_text)}." if reason_text else ""
+    return (
+        "<section class='source-context'><h4>Cross-referenced evidence</h4>"
+        f"<p>Review tier <strong>{tier}</strong>; corroboration "
+        f"<strong>{corroboration}</strong>.{reason_html}</p></section>"
+    )
+
+
+def _html_structural_context(finding: Finding) -> str:
+    structural = finding.evidence.get("structural_synthesis")
+    if not isinstance(structural, dict):
+        return ""
+    parts: list[str] = []
+    disposition = structural.get("disposition")
+    if disposition:
+        parts.append(
+            "Dead-code disposition <strong>"
+            + html.escape(str(disposition))
+            + "</strong>"
+        )
+    island = structural.get("island")
+    if isinstance(island, dict):
+        parts.append(
+            "island <strong>"
+            + html.escape(str(island.get("classification", "review")))
+            + "</strong> ("
+            + str(int(island.get("lines_of_code", 0)))
+            + " LOC)"
+        )
+    cycle = structural.get("import_cycle")
+    if isinstance(cycle, dict):
+        parts.append(
+            "import cycle across <strong>"
+            + str(int(cycle.get("file_count", 0)))
+            + "</strong> files"
+        )
+    if not parts:
+        return ""
+    action = structural.get("recommended_action")
+    if not action and isinstance(island, dict):
+        action = island.get("recommended_action")
+    if not action and isinstance(cycle, dict):
+        action = cycle.get("recommended_action")
+    action_html = f" {html.escape(str(action))}" if action else ""
+    return (
+        "<section class='source-context'><h4>Structural synthesis</h4><p>"
+        + "; ".join(parts)
+        + "."
+        + action_html
+        + "</p></section>"
+    )
+
+
+def _graph_corroboration_text(value: Any) -> str:
+    if not isinstance(value, dict):
+        return ""
+    parts: list[str] = []
+    coverage = value.get("coverage_percent")
+    if isinstance(coverage, (int, float)) and not isinstance(coverage, bool):
+        parts.append(f"coverage {float(coverage):.1f}%")
+    states = value.get("reachability_states", [])
+    if isinstance(states, list) and states:
+        parts.append("reachability " + "/".join(str(item) for item in states[:3]))
+    rank = value.get("maximum_complexity_rank")
+    complexity = value.get("maximum_complexity")
+    if rank and isinstance(complexity, int):
+        parts.append(f"max complexity {complexity} ({rank})")
+    scanners = value.get("neighboring_scanners", [])
+    if isinstance(scanners, list) and scanners:
+        parts.append("nearby scanners " + ", ".join(str(item) for item in scanners[:5]))
+    return "; ".join(parts)
 
 
 def _markdown_source_excerpt(finding: Finding) -> list[str]:

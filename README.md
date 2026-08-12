@@ -7,12 +7,15 @@ creates a GitHub-friendly report artifact.
 
 | Area | Capability |
 |---|---|
-| Portfolio | 63 governed adapters across source security, secrets, dependencies, architecture, quality, delivery, artifacts, and assurance evidence |
+| Portfolio | 64 governed adapters across source security, secrets, dependencies, architecture, quality, delivery, artifacts, and assurance evidence |
 | Decisions | Explicit `PASS`, `WARN`, `FAIL`, and `INCOMPLETE` outcomes |
 | Reports | Markdown, self-contained HTML, SARIF 2.1.0, SonarQube external issues, normalized JSON, an owned closure backlog, and SHA-256 manifests |
 | Risk context | Digest-pinned CISA KEV, FIRST EPSS, CycloneDX VEX, finding lifecycle, CODEOWNERS, and governed acceptances |
 | Supply chain | Source and artifact SBOMs, package checks, provenance findings, and a locally verifiable Security Passport |
 | Reachability | Offline three-state executable/load-only/disconnected graph with explained dispatch paths, ranked islands, and optional coverage corroboration |
+| Graph context | Graphify code-only topology joined to findings for blast radius, structural hotspots, and cross-tool neighborhoods |
+| Evidence fusion | Source-to-artifact package lineage, semantic finding links, changed-line/test/graph context, and digest-bound provenance joins |
+| Structural synthesis | Cross-validated dead-code dispositions, code-island attack-surface classification, and Graphify/Tach import-cycle hotspots |
 | Runtime | Python 3.11+; scanners are installed separately from approved offline bundles |
 
 Key trust properties:
@@ -39,6 +42,9 @@ Markdown is the canonical documentation format:
 - [Native and GitHub operations](docs/operations.md)
 - [Configuration reference](docs/configuration.md)
 - [Python reachability and code-island analysis](docs/reachability.md)
+- [Graphify code-graph integration](docs/graphify.md)
+- [Cross-tool evidence fusion](docs/evidence-fusion.md)
+- [Structural synthesis for dead code and islands](docs/structural-synthesis.md)
 - [Detection effectiveness and operational coverage](docs/effectiveness.md)
 - [Governed release readiness](docs/release-readiness.md)
 - [Compatibility and coverage matrix](docs/compatibility-matrix.md)
@@ -608,6 +614,10 @@ python-security-report/
 |-- pylint-summary.json            # when Pylint is applicable
 |-- radon-complexity.json           # rank C+ complexity evidence
 |-- reachability.json               # three-state topology, explained paths, coverage, and islands
+|-- graphify.json                    # validated code-only nodes, edges, and file topology
+|-- graph-analysis.json              # graph-aware finding context and hotspots
+|-- structural-synthesis.json        # dead-code, island, and import-cycle cross-validation
+|-- evidence-fusion.json             # cross-scanner and source/artifact evidence joins
 |-- coverage-summary.json           # validated pre-generated test coverage
 |-- junit-summary.json              # validated test outcome metadata
 |-- reuse-compliance.json           # when a REUSE marker opts the repo in
@@ -730,7 +740,7 @@ rejection, and rebuild actions can target the precise wheel or source archive.
 
 ## Current boundaries
 
-This is an alpha foundation. All 63 offline/static, evidence-ingestion, and
+This is an alpha foundation. All 64 offline/static, evidence-ingestion, and
 artifact adapters are
 implemented, but enterprise
 rollout still requires pinned approved assets, framework-specific Pysa models,

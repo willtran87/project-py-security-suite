@@ -5,6 +5,19 @@ for published releases.
 
 ## Unreleased
 
+- Add pinned Graphify code-only scanning, strict AST/token/path validation,
+  normalized graph evidence, and graph-aware finding blast radius, structural
+  hotspots, and cross-tool neighborhoods.
+- Add bounded cross-tool evidence fusion across semantic classifications,
+  changed-line coverage, reachability, runtime observations, graph centrality,
+  complexity, source/artifact SBOMs, and artifact manifests. Findings now carry
+  explicit review tiers and cross-stage lineage without changing severity.
+- Add structural synthesis across Graphify, reachability, Vulture, runtime
+  coverage, Radon, Tach, ownership, and normalized findings. Reports now
+  distinguish likely removable from likely dynamic dead-code candidates,
+  classify latent attack-surface and missing-entry-point islands, and correlate
+  import cycles with architecture and security findings.
+
 - Add a verified, machine-readable closure plan that turns findings, governance
   gaps, conditional controls, coverage hotspots, and reachability warnings into
   stable owner-routed actions with acceptance criteria and evidence references.

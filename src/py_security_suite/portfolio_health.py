@@ -79,8 +79,8 @@ DOMAINS = (
     ),
     CoverageDomain(
         "architecture-reachability",
-        "Boundaries, cycles, repository scale, unused code, and entry-point reachability",
-        frozenset({"tach", "vulture", "reachability", "git-sizer"}),
+        "Boundaries, cycles, repository scale, unused code, entry-point reachability, and code-graph impact",
+        frozenset({"tach", "vulture", "reachability", "graphify", "git-sizer"}),
     ),
     CoverageDomain(
         "test-assurance",

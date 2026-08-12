@@ -223,6 +223,17 @@ $scanCodePython = Join-Path $scanCodeDirectory "Scripts\python.exe"
 if ($LASTEXITCODE -ne 0) {
     throw "Offline ScanCode sidecar installation failed."
 }
+$graphifyDirectory = Join-Path $toolDirectory "graphify-env"
+& $Python -m venv $graphifyDirectory
+if ($LASTEXITCODE -ne 0) {
+    throw "Creating the Graphify sidecar environment failed."
+}
+$graphifyPython = Join-Path $graphifyDirectory "Scripts\python.exe"
+& $graphifyPython -m pip install --no-index --no-compile `
+    --find-links $wheelhouse "graphifyy==$($bundleManifest.tools.graphify)"
+if ($LASTEXITCODE -ne 0) {
+    throw "Offline Graphify sidecar installation failed."
+}
 $artifactDirectory = Join-Path $toolDirectory "artifact-env"
 & $Python -m venv $artifactDirectory
 if ($LASTEXITCODE -ne 0) {
@@ -521,6 +532,9 @@ $deptry = & $toTomlPath (Join-Path $toolDirectory "Scripts\deptry.exe")
 $diffCover = & $toTomlPath (Join-Path $toolDirectory "Scripts\diff-cover.exe")
 $vulture = & $toTomlPath (Join-Path $toolDirectory "Scripts\vulture.exe")
 $tach = & $toTomlPath (Join-Path $toolDirectory "Scripts\tach.exe")
+$graphify = & $toTomlPath (
+    Join-Path $graphifyDirectory "Scripts\graphify.exe"
+)
 $pylint = & $toTomlPath (Join-Path $toolDirectory "Scripts\pylint.exe")
 $radon = & $toTomlPath (Join-Path $toolDirectory "Scripts\radon.exe")
 $reuse = & $toTomlPath (Join-Path $toolDirectory "Scripts\reuse.exe")
@@ -578,6 +592,7 @@ $deptrySha256 = & $toSha256 $deptry
 $diffCoverSha256 = & $toSha256 $diffCover
 $vultureSha256 = & $toSha256 $vulture
 $tachSha256 = & $toSha256 $tach
+$graphifySha256 = & $toSha256 $graphify
 $pylintSha256 = & $toSha256 $pylint
 $radonSha256 = & $toSha256 $radon
 $reuseSha256 = & $toSha256 $reuse
@@ -614,7 +629,7 @@ $pipdeptreeSha256 = & $toSha256 $pipdeptree
 $validatePyprojectSha256 = & $toSha256 $validatePyproject
 $portableVariables = @(
     "bandit", "semgrep", "detectSecrets", "ruff", "mypy", "deptry",
-    "diffCover", "vulture", "tach", "pylint", "radon", "reuse", "pysec",
+    "diffCover", "vulture", "tach", "graphify", "pylint", "radon", "reuse", "pysec",
     "pysecEvidence", "flawfinder", "cycloneDx", "uv", "zizmor", "scanCode",
     "osvScanner", "trivy", "gitleaks", "truffleHog", "syft", "grype",
     "actionlint", "conftest", "gitSizer", "vale", "kubeLinter", "hadolint",
@@ -778,6 +793,12 @@ executable_sha256 = "$pysecSha256"
 timeout_seconds = 600
 minimum_island_loc = 100
 discover_framework_roots = true
+
+[tools.graphify]
+enabled = true
+executable = "$graphify"
+executable_sha256 = "$graphifySha256"
+timeout_seconds = 900
 
 [tools.coverage]
 enabled = true
@@ -1128,6 +1149,9 @@ $versions = [ordered]@{
     tach = Get-NativeToolVersion (
         Join-Path $toolDirectory "Scripts\tach.exe"
     )
+    graphify = Get-NativeToolVersion (
+        Join-Path $graphifyDirectory "Scripts\graphify.exe"
+    )
     pylint = Get-NativeToolVersion (
         Join-Path $toolDirectory "Scripts\pylint.exe"
     )
@@ -1209,6 +1233,7 @@ $installManifest = [ordered]@{
     scancode_packages = @(& $scanCodePython -m pip freeze --all)
     artifact_packages = @(& $artifactPython -m pip freeze --all)
     checkov_packages = @(& $checkovPython -m pip freeze --all)
+    graphify_packages = @(& $graphifyPython -m pip freeze --all)
 }
 $installManifest | ConvertTo-Json -Depth 8 |
     Set-Content -LiteralPath (Join-Path $toolDirectory "native-install.json") `

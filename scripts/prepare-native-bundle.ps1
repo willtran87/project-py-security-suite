@@ -11,6 +11,7 @@ param(
     [string]$MypyVersion = "2.1.0",
     [string]$VultureVersion = "2.16",
     [string]$TachVersion = "0.35.0",
+    [string]$GraphifyVersion = "0.9.40",
     [string]$PylintVersion = "4.0.6",
     [string]$RadonVersion = "6.0.1",
     [string]$ReuseVersion = "6.2.0",
@@ -177,6 +178,12 @@ $requirements = @(
 & $Python -m pip download --only-binary=:all: --dest $wheelhouse @requirements
 if ($LASTEXITCODE -ne 0) {
     throw "Downloading the pinned native Python wheels failed."
+}
+$graphifyRequirements = @("graphifyy==$GraphifyVersion")
+& $Python -m pip download --only-binary=:all: --dest $wheelhouse `
+    @graphifyRequirements
+if ($LASTEXITCODE -ne 0) {
+    throw "Downloading the pinned Graphify wheels failed."
 }
 # REUSE 6.2.0 is distributed as an sdist. Build its wheel only in this
 # connected preparation lane, then install the resulting immutable wheel in
@@ -507,6 +514,10 @@ $pythonEnvironments = @(
     [ordered]@{
         name = "checkov"
         requirements = @("checkov==$CheckovVersion")
+    },
+    [ordered]@{
+        name = "graphify"
+        requirements = @($graphifyRequirements)
     }
 )
 $manifest = [ordered]@{
@@ -525,6 +536,7 @@ $manifest = [ordered]@{
         mypy = $MypyVersion
         vulture = $VultureVersion
         tach = $TachVersion
+        graphify = $GraphifyVersion
         pylint = $PylintVersion
         radon = $RadonVersion
         reuse = $ReuseVersion

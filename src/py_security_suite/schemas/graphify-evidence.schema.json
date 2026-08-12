@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:graphify-evidence:1.0",
+  "type": "object",
+  "required": ["schema_version", "schema_id", "tool", "authoritative", "mode", "source_sha256", "summary", "nodes", "edges", "topology"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "schema_id": {"const": "urn:project-py-security-suite:graphify-evidence:1.0"},
+    "tool": {"const": "graphify"},
+    "authoritative": {"const": false},
+    "source_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "mode": {"type": "object", "required": ["code_only", "clustering", "model_calls", "target_execution"], "properties": {"code_only": {"const": true}, "clustering": {"const": false}, "model_calls": {"const": false}, "target_execution": {"const": false}}},
+    "summary": {"type": "object", "required": ["nodes", "edges", "files", "input_tokens", "output_tokens"], "properties": {"nodes": {"type": "integer", "minimum": 0}, "edges": {"type": "integer", "minimum": 0}, "files": {"type": "integer", "minimum": 0}, "input_tokens": {"const": 0}, "output_tokens": {"const": 0}}},
+    "nodes": {"type": "array", "maxItems": 250000},
+    "edges": {"type": "array", "maxItems": 750000},
+    "topology": {"type": "object", "required": ["top_nodes", "top_files", "file_edges"]}
+  }
+}
