@@ -25,10 +25,19 @@ flowchart LR
     Fusion["Evidence fusion<br/>change, coverage, related tools"] --> Context["Route context"]
     Structure["Structural synthesis<br/>tests, islands, cycles"] --> Context
     Owners["CODEOWNERS"] --> Context
-    Route --> Result["risk-paths.json"]
-    Context --> Result
-    Result --> Converge["Convergence hotspots<br/>shared control points"]
-    Result --> Queues["Owner work queues<br/>shared validation scope"]
+    Route --> Routed["Bounded risk routes"]
+    Context --> Routed
+    Routed --> Converge["Convergence hotspots<br/>shared control points"]
+    Graph --> Campaign["Validation campaigns<br/>direct + transitive tests"]
+    Converge --> Campaign
+    Tests["JUnit / Hypothesis / Schemathesis cases"] --> Campaign
+    Coverage["File coverage + missing lines"] --> Campaign
+    Routed --> Queues["Owner work queues<br/>shared validation scope"]
+    Campaign --> Queues
+    Routed --> Result["risk-paths.json"]
+    Converge --> Result
+    Campaign --> Result
+    Queues --> Result
     Result --> Reports["Markdown, HTML, SARIF, JSON"]
     Result --> Closure["Owner and validation action"]
 ```
@@ -59,10 +68,49 @@ Entry-point files are excluded from this calculation so a universal CLI root
 does not become a low-value hotspot by definition.
 
 Owner work queues collect exact route and hotspot IDs with P0-P4 and
-aligned/gap/partial/not-assessed counts. A route can appear in multiple queues
+aligned/gap/partial/not-assessed counts plus the exact shared validation
+campaign IDs. A route can appear in multiple queues
 when ownership overlaps; this preserves accountability rather than selecting an
 arbitrary owner. These groups coordinate work and tests but do not merge or
 inflate the underlying scanner findings.
+
+## Shared validation campaigns
+
+Every retained convergence hotspot receives one stable `campaign-*` ID. The
+campaign converts a shared control point into an executable validation handoff
+by joining:
+
+- direct and two-hop transitive test candidates selected from Graphify's reverse
+  file graph;
+- focused tests already mapped by change/exposure synthesis, retained separately
+  when no direct graph path is available;
+- exact file-attributed JUnit, Hypothesis, and Schemathesis case results;
+- file coverage percent and bounded missing-line evidence for the shared control
+  point, explicitly labeled as aggregate retained file evidence rather than
+  coverage attributable solely to the selected tests; and
+- exact source-inventory bindings for the control point and selected tests,
+  plus aligned/mismatched/unbound revision state for retained case and coverage
+  evidence; and
+- routes, targets, findings, priority, owners, evidence artifacts, a transparent
+  factor-by-factor review score, and one next action.
+
+The alignment is explicit: `tests-failing`, `tests-not-observed`,
+`tests-incomplete`, `test-evidence-not-available`, `coverage-not-available`,
+`coverage-gap`, `aligned-current-evidence`, or `not-selected`. Selected test
+files and campaign IDs flow into finding evidence, SARIF properties, owner
+queues, Markdown/HTML summaries, and closure acceptance criteria. This makes a
+shared remediation runnable without presenting static selection or a passing
+test as a security proof.
+
+`shared-control-review-v1` ranks review work from route priority and convergence,
+security-target and tool diversity, coverage/test state, complexity, graph
+centrality, ownership, and evidence-revision coherence. The report retains every
+non-zero factor and its source artifacts; the score is triage guidance, not a
+vulnerability severity or exploitability calculation. Evidence revision state
+is `aligned` only when all retained coverage/case artifacts declare the exact
+sealed source-inventory digest. `mismatch` and `not-established` generate
+explicit regeneration/binding work and flow into owner queues and closure
+acceptance criteria.
 
 Targets with no route are retained in `unrouted_targets`. They are not presented
 as safe or unreachable: the action is to confirm framework, registry, plugin,
@@ -82,15 +130,18 @@ not import target code, execute the target, install packages, or access a
 network. It retains at most 100 declared entry points, searches at most 100,000
 graph files to a depth of eight hops, analyzes the highest-priority 10,000
 targets, and emits at most 250 routed targets, 250 unrouted targets, 50
-convergence hotspots, and 100 owner queues. Omitted counts are explicit.
+convergence hotspots/validation campaigns, 50 tests per campaign, and 100 owner
+queues. Reverse test selection examines at most 500 graph neighbors per
+campaign and retains at most 100 missing lines. Omitted counts are explicit.
 
 The current JSON Schema is
 [`risk-paths.schema.json`](../src/py_security_suite/schemas/risk-paths.schema.json).
 The artifact and finding-level route context are included in the checksum-sealed
 report; SARIF carries the same `risk_path` property used by Markdown and HTML.
 Finding closure items cite the route artifact and exact route files, preserve
-the route ID and assessment state, and require missing validation evidence or
-an unrouted dynamic-entry rationale to be closed in the replacement report.
+route, hotspot, and campaign IDs plus selected test files and assessment state,
+and require missing validation evidence or an unrouted dynamic-entry rationale
+to be closed in the replacement report.
 
 ## Interpretation limits
 

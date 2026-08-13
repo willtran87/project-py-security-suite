@@ -24,7 +24,11 @@ from py_security_suite.models import (
     ToolRun,
     ToolStatus,
 )
-from py_security_suite.orchestrator import resolve_asset_paths, scan_project
+from py_security_suite.orchestrator import (
+    _runtime_evidence_paths,
+    resolve_asset_paths,
+    scan_project,
+)
 from py_security_suite.passport import verify_report
 from py_security_suite.reports import (
     _finding_priority,
@@ -506,6 +510,25 @@ class OrchestratorTests(unittest.TestCase):
             self.assertEqual(
                 config.intelligence.vex_path, (target / "vex.json").resolve()
             )
+
+    def test_runtime_evidence_and_binding_sidecars_are_excluded_from_source_snapshot(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory).resolve()
+            config = load_config(profile_override="quality")
+
+            resolve_asset_paths(config, target)
+            excluded = set(_runtime_evidence_paths(config, list(config.selected_tools)))
+
+            coverage = (target / "coverage.json").resolve()
+            junit = (target / "junit.xml").resolve()
+            self.assertIn(coverage, excluded)
+            self.assertIn(
+                coverage.with_name("coverage.json.pysec-binding.json"), excluded
+            )
+            self.assertIn(junit, excluded)
+            self.assertIn(junit.with_name("junit.xml.pysec-binding.json"), excluded)
 
     def test_governed_asset_paths_reject_linked_parent_components(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

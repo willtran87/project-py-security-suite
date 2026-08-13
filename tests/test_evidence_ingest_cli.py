@@ -16,6 +16,7 @@ from py_security_suite.evidence_ingest import (
     _junit_document,
     _junit_paths,
     _scorecard_document,
+    _binding_path,
     main,
 )
 
@@ -76,6 +77,59 @@ class EvidenceIngestCliTests(unittest.TestCase):
         self.assertEqual(status, 2)
         self.assertEqual(output, "")
         self.assertIn("invalid coverage evidence", error)
+
+    def test_bind_command_attaches_verified_source_identity_to_runtime_evidence(
+        self,
+    ) -> None:
+        (self.root / "src").mkdir()
+        (self.root / "src" / "app.py").write_text("VALUE = 1\n", encoding="utf-8")
+        coverage = self.root / "coverage.json"
+        coverage.write_text(
+            json.dumps({"meta": {}, "totals": {}, "files": {}}),
+            encoding="utf-8",
+        )
+        junit = self.root / "junit.xml"
+        junit.write_text(
+            '<testsuite><testcase name="ok" file="tests/test_app.py" /></testsuite>',
+            encoding="utf-8",
+        )
+
+        status, output, error = self._run(
+            "bind",
+            "--source-root",
+            str(self.root),
+            str(coverage),
+            str(junit),
+        )
+
+        self.assertEqual(status, 0)
+        self.assertEqual(error, "")
+        receipt = json.loads(output)
+        self.assertEqual(receipt["kind"], "evidence-binding")
+        self.assertEqual(len(receipt["bindings"]), 2)
+        normalized_coverage = _coverage_document(coverage)
+        normalized_junit = _junit_document(junit)
+        self.assertEqual(normalized_coverage["source_sha256"], receipt["source_sha256"])
+        self.assertEqual(normalized_junit["source_sha256"], receipt["source_sha256"])
+        self.assertTrue(normalized_coverage["evidence_binding"]["verified"])
+        self.assertTrue(normalized_junit["evidence_binding"]["verified"])
+        self.assertTrue(_binding_path(coverage.resolve()).is_file())
+
+        coverage.write_text(
+            json.dumps({"meta": {}, "totals": {}, "files": {}, "changed": True}),
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(ValueError, "does not match"):
+            _coverage_document(coverage)
+        second_status, _, second_error = self._run(
+            "bind",
+            "--source-root",
+            str(self.root),
+            str(coverage),
+            str(junit),
+        )
+        self.assertEqual(second_status, 2)
+        self.assertIn("already exists", second_error)
 
     def test_coverage_rejects_invalid_shapes_and_values(self) -> None:
         path = self.root / "coverage.json"

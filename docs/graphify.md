@@ -58,8 +58,10 @@ flowchart LR
 - Each located finding receives concise upstream, downstream, centrality, and
   related-finding context in Markdown, HTML, and JSON.
 - `risk-paths.json` uses the normalized file graph to connect declared entry
-  points to findings and review-worthy sensitive sinks, then adds owner and
-  validation context. See [Static risk routes](risk-paths.md).
+  points to findings and review-worthy sensitive sinks, then reverses the same
+  graph at shared control points to select direct/transitive tests. Retained
+  case execution and file coverage turn those candidates into explicit shared
+  validation campaigns. See [Static risk routes](risk-paths.md).
 - Static connectivity does not prove runtime reachability, exploitability, or
   safety. The built-in reachability analyzer and test evidence remain separate.
 - Graph centrality alone never raises or lowers a finding's native severity.

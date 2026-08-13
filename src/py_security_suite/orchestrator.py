@@ -67,10 +67,11 @@ def scan_project(
 
     started_at = utc_now()
     started_clock = time.monotonic()
-    inventory, source_inventory = inventory_target_with_evidence(
-        target, excluded_paths=(output,)
-    )
     selected = list(config.selected_tools)
+    source_exclusions = (output, *_runtime_evidence_paths(config, selected))
+    inventory, source_inventory = inventory_target_with_evidence(
+        target, excluded_paths=source_exclusions
+    )
     diagnostics: dict[str, dict[str, Any]] = {}
     derived_artifacts: dict[str, Any] = {}
     derived_artifacts["source-inventory.json"] = source_inventory
@@ -182,7 +183,7 @@ def scan_project(
         inventory.source_sha256_after,
         inventory.hashed_files_after,
         inventory.hashed_bytes_after,
-    ) = source_snapshot(target, excluded_paths=(output,))
+    ) = source_snapshot(target, excluded_paths=source_exclusions)
     inventory.source_integrity_verified = (
         inventory.source_sha256 == inventory.source_sha256_after
         and inventory.hashed_files == inventory.hashed_files_after
@@ -412,6 +413,27 @@ def resolve_asset_paths(config: SuiteConfig, target: Path) -> None:
             bundle_root=bundle_root,
             label="scanner trust catalog",
         )
+
+
+def _runtime_evidence_paths(
+    config: SuiteConfig, selected: list[str]
+) -> tuple[Path, ...]:
+    paths: set[Path] = set()
+    for name in ("coverage", "junit", "hypothesis", "schemathesis", "diff-cover"):
+        if name not in selected or name not in config.tools:
+            continue
+        path = config.tools[name].artifacts_path
+        if path is None:
+            continue
+        resolved = path.resolve()
+        paths.add(resolved)
+        paths.add(resolved.with_name(resolved.name + ".pysec-binding.json"))
+    reachability = config.tools.get("reachability")
+    if "reachability" in selected and reachability is not None:
+        path = reachability.coverage_path
+        if path is not None:
+            paths.add(path.resolve())
+    return tuple(sorted(paths, key=str))
 
 
 def _is_bundle_reference(value: str) -> bool:

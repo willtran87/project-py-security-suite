@@ -10,6 +10,7 @@ coverage.xml
 junit.xml
 hypothesis-junit.xml
 schemathesis-junit.xml
+*.pysec-binding.json
 .venv/
 build/
 dist/

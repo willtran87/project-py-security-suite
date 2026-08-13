@@ -277,7 +277,17 @@ $env:COVERAGE_FILE = ".artifacts/test-evidence/.coverage"
 python -m coverage run --branch -m pytest `
   --junitxml=.artifacts/test-evidence/junit.xml
 python -m coverage json -o .artifacts/test-evidence/coverage.json
+pysec-evidence bind --source-root . `
+  .artifacts/test-evidence/coverage.json `
+  .artifacts/test-evidence/junit.xml
 ```
+
+Bind every report from the same test run in one invocation, after report
+generation and before scanning. The helper excludes those reports and their
+sidecars from the source digest, writes each `*.pysec-binding.json` atomically,
+and records both the common source digest and exact evidence-payload digest.
+Ingestion rejects a sidecar after its report changes. Use `--overwrite` only
+when intentionally replacing bindings for newly generated evidence.
 
 Configure `tools.coverage.artifacts_path`,
 `tools.coverage.minimum_coverage_percent`, and `tools.junit.artifacts_path`.
@@ -297,6 +307,13 @@ Structural and advisory synthesis also compare passing selected-test evidence
 with changed-line or affected import-path coverage. A `coverage-gap` is an
 actionable contradiction: extend the selected tests and regenerate both the
 case ledger and coverage artifact before approval.
+
+The sidecar proves digest agreement, not producer identity, test isolation, or
+that the declared source was the code executed. Preserve the test lane's
+attestation and access controls separately. A validation campaign reports
+`aligned` only when every retained case/coverage artifact declares the sealed
+scan source digest; missing declarations remain `not-established`, and a
+different digest is `mismatch` with a regenerate-evidence action.
 
 When separate API, worker, CLI, or scheduled-job lanes produce coverage, merge
 their exact artifacts before reachability analysis:

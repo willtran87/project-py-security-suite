@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import os
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -10,6 +13,7 @@ from defusedxml import ElementTree as DefusedET  # type: ignore[import-untyped]
 from defusedxml.common import DefusedXmlException  # type: ignore[import-untyped]
 
 from . import __version__
+from .inventory import source_snapshot
 
 _MAX_REPORT_BYTES = 64 * 1024 * 1024
 _MAX_JUNIT_REPORTS = 128
@@ -31,6 +35,7 @@ _ASSURANCE_KINDS = frozenset(
     }
 )
 _MAX_ASSURANCE_FINDINGS = 10_000
+_BINDING_SUFFIX = ".pysec-binding.json"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -44,6 +49,13 @@ def main(argv: list[str] | None = None) -> int:
     coverage.add_argument("path", type=Path)
     junit = subparsers.add_parser("junit")
     junit.add_argument("path", type=Path)
+    bind = subparsers.add_parser(
+        "bind",
+        help="bind pre-generated evidence to the current non-evidence source snapshot",
+    )
+    bind.add_argument("paths", type=Path, nargs="+")
+    bind.add_argument("--source-root", type=Path, required=True)
+    bind.add_argument("--overwrite", action="store_true")
     scorecard = subparsers.add_parser("scorecard")
     scorecard.add_argument("path", type=Path)
     assurance = subparsers.add_parser("assurance")
@@ -51,7 +63,13 @@ def main(argv: list[str] | None = None) -> int:
     assurance.add_argument("path", type=Path)
     args = parser.parse_args(argv)
     try:
-        if args.kind == "coverage":
+        if args.kind == "bind":
+            document = _bind_evidence(
+                args.paths,
+                source_root=args.source_root,
+                overwrite=args.overwrite,
+            )
+        elif args.kind == "coverage":
             document = _coverage_document(args.path)
         elif args.kind == "junit":
             document = _junit_document(args.path)
@@ -74,6 +92,128 @@ def _read_bounded(path: Path) -> bytes:
     if size > _MAX_REPORT_BYTES:
         raise ValueError(f"report exceeds {_MAX_REPORT_BYTES} bytes: {path}")
     return path.read_bytes()
+
+
+def _bind_evidence(
+    paths: list[Path], *, source_root: Path, overwrite: bool
+) -> dict[str, Any]:
+    if source_root.is_symlink() or not source_root.is_dir():
+        raise ValueError(f"source root is not a regular directory: {source_root}")
+    if len(paths) > 16:
+        raise ValueError("at most 16 evidence paths may be bound together")
+    resolved_paths: list[Path] = []
+    for path in paths:
+        if path.is_symlink() or not (path.is_file() or path.is_dir()):
+            raise ValueError(f"evidence path does not exist or is linked: {path}")
+        resolved_paths.append(path.resolve())
+    sidecars = [_binding_path(path) for path in resolved_paths]
+    digest, files, total_bytes = source_snapshot(
+        source_root.resolve(), excluded_paths=tuple([*resolved_paths, *sidecars])
+    )
+    bindings: list[dict[str, Any]] = []
+    for path, sidecar in zip(resolved_paths, sidecars, strict=True):
+        evidence_sha256 = _evidence_sha256(path)
+        binding = {
+            "schema_version": "1.0",
+            "source_sha256": digest,
+            "evidence_sha256": evidence_sha256,
+        }
+        _write_binding(sidecar, binding, overwrite=overwrite)
+        bindings.append(
+            {
+                "evidence_path": str(path),
+                "binding_path": str(sidecar),
+                "evidence_sha256": evidence_sha256,
+            }
+        )
+    return {
+        "schema_version": "1.0",
+        "kind": "evidence-binding",
+        "source_root": str(source_root.resolve()),
+        "source_sha256": digest,
+        "source_files": files,
+        "source_bytes": total_bytes,
+        "bindings": bindings,
+    }
+
+
+def _apply_source_binding(document: dict[str, Any], path: Path) -> dict[str, Any]:
+    sidecar = _binding_path(path.resolve())
+    if not sidecar.exists():
+        return document
+    binding = json.loads(_read_bounded(sidecar))
+    if not isinstance(binding, dict) or set(binding) != {
+        "schema_version",
+        "source_sha256",
+        "evidence_sha256",
+    }:
+        raise ValueError("evidence source binding fields do not match the contract")
+    if binding.get("schema_version") != "1.0":
+        raise ValueError("evidence source binding schema_version must be '1.0'")
+    source_sha256 = binding.get("source_sha256")
+    evidence_sha256 = binding.get("evidence_sha256")
+    if not _digest(source_sha256) or not _digest(evidence_sha256):
+        raise ValueError("evidence source binding contains an invalid digest")
+    observed = _evidence_sha256(path.resolve())
+    if observed != evidence_sha256:
+        raise ValueError("evidence source binding does not match the evidence payload")
+    document["source_sha256"] = source_sha256
+    document["evidence_binding"] = {
+        "schema_version": "1.0",
+        "evidence_sha256": evidence_sha256,
+        "binding_file": sidecar.name,
+        "verified": True,
+    }
+    return document
+
+
+def _binding_path(path: Path) -> Path:
+    return path.with_name(path.name + _BINDING_SUFFIX)
+
+
+def _evidence_sha256(path: Path) -> str:
+    if path.is_file() and not path.is_symlink():
+        return hashlib.sha256(_read_bounded(path)).hexdigest()
+    reports = _junit_paths(path)
+    aggregate = hashlib.sha256()
+    resolved = path.resolve()
+    for report in reports:
+        payload = _read_bounded(report)
+        relative = report.resolve().relative_to(resolved).as_posix().encode("utf-8")
+        aggregate.update(len(relative).to_bytes(8, "big"))
+        aggregate.update(relative)
+        aggregate.update(len(payload).to_bytes(8, "big"))
+        aggregate.update(hashlib.sha256(payload).digest())
+    return aggregate.hexdigest()
+
+
+def _write_binding(path: Path, document: dict[str, Any], *, overwrite: bool) -> None:
+    if path.exists() and (path.is_symlink() or not overwrite):
+        raise ValueError(f"binding output already exists: {path}")
+    payload = (
+        json.dumps(document, sort_keys=True, separators=(",", ":")) + "\n"
+    ).encode("utf-8")
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
+    )
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    finally:
+        if temporary.exists():
+            temporary.unlink()
+
+
+def _digest(value: Any) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all(character in "0123456789abcdef" for character in value)
+    )
 
 
 def _coverage_document(path: Path) -> dict[str, Any]:
@@ -100,18 +240,21 @@ def _coverage_document(path: Path) -> dict[str, Any]:
                 "missing_branches": _branch_list(value.get("missing_branches")),
             }
         )
-    return {
-        "schema_version": "1.0",
-        "kind": "coverage",
-        "report": str(path.resolve()),
-        "meta": {
-            "format": _integer(meta.get("format")),
-            "branch_coverage": bool(meta.get("branch_coverage", False)),
-            "timestamp": str(meta.get("timestamp") or ""),
+    return _apply_source_binding(
+        {
+            "schema_version": "1.0",
+            "kind": "coverage",
+            "report": str(path.resolve()),
+            "meta": {
+                "format": _integer(meta.get("format")),
+                "branch_coverage": bool(meta.get("branch_coverage", False)),
+                "timestamp": str(meta.get("timestamp") or ""),
+            },
+            "totals": _coverage_summary(totals),
+            "files": normalized_files,
         },
-        "totals": _coverage_summary(totals),
-        "files": normalized_files,
-    }
+        path,
+    )
 
 
 def _coverage_summary(value: dict[str, Any]) -> dict[str, int | float]:
@@ -182,15 +325,18 @@ def _junit_document(path: Path) -> dict[str, Any]:
                         "type": _bounded_text(result.attrib.get("type")),
                     }
                 )
-    return {
-        "schema_version": "1.0",
-        "kind": "junit",
-        "report_count": len(reports),
-        "totals": totals,
-        "failures": failures,
-        "test_cases": test_cases,
-        "test_case_inventory_complete": totals["tests"] <= _MAX_JUNIT_TEST_CASES,
-    }
+    return _apply_source_binding(
+        {
+            "schema_version": "1.0",
+            "kind": "junit",
+            "report_count": len(reports),
+            "totals": totals,
+            "failures": failures,
+            "test_cases": test_cases,
+            "test_case_inventory_complete": totals["tests"] <= _MAX_JUNIT_TEST_CASES,
+        },
+        path,
+    )
 
 
 def _scorecard_document(path: Path) -> dict[str, Any]:

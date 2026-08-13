@@ -339,7 +339,10 @@ model gaps; neither a route nor its absence is treated as an exploitability or
 safety verdict. Routes converging on the same non-entry file become bounded
 shared control points with one cross-target validation action. Exact route and
 hotspot IDs are also grouped into owner queues so teams can coordinate one
-remediation/test campaign without collapsing the underlying findings.
+remediation/test campaign without collapsing the underlying findings. Each
+hotspot also becomes a stable validation campaign: reverse Graphify edges select
+direct/transitive tests, bounded case inventories establish observed execution,
+and file coverage exposes unexercised shared-control code.
 
 ```mermaid
 flowchart LR
@@ -348,11 +351,22 @@ flowchart LR
     Findings["Normalized findings"] --> Targets["Review targets"]
     Exposure["Sensitive sink surfaces"] --> Targets
     Targets --> Search
-    Validation["Coverage + focused tests"] --> Routes["risk-paths.json"]
-    Ownership["CODEOWNERS"] --> Routes
-    Search --> Routes
-    Routes --> Hotspots["Shared control points"]
-    Routes --> Queues["Owner route queues"]
+    Ownership["CODEOWNERS"] --> Routed["Bounded risk routes"]
+    Search --> Routed
+    Routed --> Hotspots["Shared control points"]
+    Graph --> Campaigns["Graph-selected validation campaigns"]
+    Hotspots --> Campaigns
+    Tests["Case-level execution"] --> Binding["Payload-verified source binding"]
+    Coverage["Hotspot file coverage"] --> Binding
+    Inventory["Sealed source inventory"] --> Binding
+    Binding --> Campaigns
+    Context["Complexity + graph centrality"] --> Campaigns
+    Routed --> Queues["Owner route queues"]
+    Campaigns --> Queues
+    Routed --> Routes["risk-paths.json"]
+    Hotspots --> Routes
+    Campaigns --> Routes
+    Queues --> Routes
     Routes --> Report["Finding cards + summary + SARIF"]
 ```
 
@@ -607,7 +621,7 @@ report/
 |-- reachability.json               # three-state topology, explanations, coverage, and islands
 |-- graphify.json                    # validated code-only topology
 |-- graph-analysis.json              # graph-aware finding neighborhoods
-|-- risk-paths.json                  # entry-point routes, owners, and validation gaps
+|-- risk-paths.json                  # entry routes, shared campaigns, owners, and validation gaps
 |-- structural-synthesis.json        # dead code, island boundaries, change risk, and test targets
 |-- data-exposure.json               # sensitive-data paths and SDK/sink review surfaces
 |-- evidence-fusion.json             # semantic and cross-stage evidence joins

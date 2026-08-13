@@ -14,7 +14,16 @@ for published releases.
   interpretation remains conservative about exploitability and leakage.
   Cross-route convergence now identifies shared transit/target control points,
   consolidates validation work, and creates exact owner queues without merging
-  or multiplying native findings. Bundle and document the version 1.0 schema.
+  or multiplying native findings. Each hotspot now produces a stable shared
+  validation campaign by joining direct/transitive Graphify test selection,
+  exact retained case execution, and hotspot file coverage. Campaigns bind
+  control points and selected tests to the source inventory, distinguish
+  aligned, mismatched, and unbound test/coverage revisions, and expose a
+  factor-by-factor shared-control review score. Campaign IDs, scores, revision
+  state, evidence gaps, and actions propagate through findings, SARIF, reports,
+  owner queues, and closure work. Add `pysec-evidence bind` to atomically create
+  payload-verified source-binding sidecars for coverage and JUnit evidence.
+  Bundle and document the version 1.0 schema.
 - Version promotion plans at 1.2 and cross-reference sealed closure-plan 1.2
   validation work with optional digest-bound operational-trend 1.3 evidence.
   Promotion now fails closed on current validation debt or blocking validation

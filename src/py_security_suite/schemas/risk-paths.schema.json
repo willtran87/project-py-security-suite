@@ -6,7 +6,7 @@
   "required": [
     "schema_version", "schema_id", "authoritative", "purpose", "summary",
     "evidence_availability", "routes", "convergence_hotspots",
-    "owner_work_queues", "unrouted_targets", "truncation",
+    "validation_campaigns", "owner_work_queues", "unrouted_targets", "truncation",
     "interpretation_limits", "references"
   ],
   "properties": {
@@ -26,6 +26,13 @@
         "validation_assessed_routes", "validation_unassessed_routes", "owned_routes",
         "convergence_hotspots", "shared_control_points",
         "routes_in_convergence_hotspots", "owner_work_queues",
+        "validation_campaigns", "campaigns_with_selected_tests",
+        "campaigns_with_failing_tests", "campaigns_with_coverage_gaps",
+        "campaigns_aligned_current_evidence", "campaigns_requiring_evidence",
+        "unique_campaign_test_files", "campaigns_by_review_tier",
+        "campaigns_revision_aligned", "campaigns_revision_mismatched",
+        "campaigns_revision_unbound", "campaigns_with_source_bound_control_points",
+        "selected_test_source_bindings",
         "routes_by_priority"
       ],
       "properties": {
@@ -50,6 +57,19 @@
         "shared_control_points": {"$ref": "#/$defs/count"},
         "routes_in_convergence_hotspots": {"$ref": "#/$defs/count"},
         "owner_work_queues": {"$ref": "#/$defs/count"},
+        "validation_campaigns": {"$ref": "#/$defs/count"},
+        "campaigns_with_selected_tests": {"$ref": "#/$defs/count"},
+        "campaigns_with_failing_tests": {"$ref": "#/$defs/count"},
+        "campaigns_with_coverage_gaps": {"$ref": "#/$defs/count"},
+        "campaigns_aligned_current_evidence": {"$ref": "#/$defs/count"},
+        "campaigns_requiring_evidence": {"$ref": "#/$defs/count"},
+        "unique_campaign_test_files": {"$ref": "#/$defs/count"},
+        "campaigns_by_review_tier": {"$ref": "#/$defs/reviewTierCounts"},
+        "campaigns_revision_aligned": {"$ref": "#/$defs/count"},
+        "campaigns_revision_mismatched": {"$ref": "#/$defs/count"},
+        "campaigns_revision_unbound": {"$ref": "#/$defs/count"},
+        "campaigns_with_source_bound_control_points": {"$ref": "#/$defs/count"},
+        "selected_test_source_bindings": {"$ref": "#/$defs/count"},
         "routes_by_priority": {
           "type": "object",
           "additionalProperties": false,
@@ -78,6 +98,11 @@
       "type": "array",
       "maxItems": 50,
       "items": {"$ref": "#/$defs/convergenceHotspot"}
+    },
+    "validation_campaigns": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {"$ref": "#/$defs/validationCampaign"}
     },
     "owner_work_queues": {
       "type": "array",
@@ -122,6 +147,7 @@
       "type": "array", "items": {"type": "string", "minLength": 1}
     },
     "nullableString": {"type": ["string", "null"]},
+    "nullableDigest": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
     "entryPoint": {
       "type": "object",
       "additionalProperties": false,
@@ -212,7 +238,7 @@
       "required": [
         "route_id", "priority", "entry_point", "target", "hop_count",
         "files", "edges", "owners", "runtime_context", "validation",
-        "correlations", "convergence_hotspot_ids", "recommended_action",
+        "correlations", "convergence_hotspot_ids", "validation_campaign_ids", "recommended_action",
         "evidence_artifacts"
       ],
       "properties": {
@@ -228,6 +254,7 @@
         "validation": {"$ref": "#/$defs/validation"},
         "correlations": {"type": "object"},
         "convergence_hotspot_ids": {"$ref": "#/$defs/strings"},
+        "validation_campaign_ids": {"$ref": "#/$defs/strings"},
         "recommended_action": {"type": "string", "minLength": 1},
         "evidence_artifacts": {"$ref": "#/$defs/strings"}
       }
@@ -255,13 +282,26 @@
         "P4": {"$ref": "#/$defs/count"}
       }
     },
+    "reviewTierCounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["critical", "high", "medium", "low"],
+      "properties": {
+        "critical": {"$ref": "#/$defs/count"},
+        "high": {"$ref": "#/$defs/count"},
+        "medium": {"$ref": "#/$defs/count"},
+        "low": {"$ref": "#/$defs/count"}
+      }
+    },
     "convergenceHotspot": {
       "type": "object",
       "additionalProperties": false,
       "required": [
         "hotspot_id", "path", "kind", "priority", "route_ids", "target_ids",
-        "finding_ids", "entry_point_ids", "tools", "owners",
+        "finding_ids", "entry_point_ids", "tools", "target_domains",
+        "security_target_count", "owners",
         "validation_statuses", "mapped_test_files", "evidence_artifacts",
+        "validation_campaign_id",
         "recommended_action"
       ],
       "properties": {
@@ -274,11 +314,159 @@
         "finding_ids": {"$ref": "#/$defs/strings"},
         "entry_point_ids": {"$ref": "#/$defs/strings"},
         "tools": {"$ref": "#/$defs/strings"},
+        "target_domains": {"$ref": "#/$defs/strings"},
+        "security_target_count": {"$ref": "#/$defs/count"},
         "owners": {"$ref": "#/$defs/strings"},
         "validation_statuses": {"$ref": "#/$defs/validationCounts"},
         "mapped_test_files": {"$ref": "#/$defs/strings"},
         "evidence_artifacts": {"$ref": "#/$defs/strings"},
+        "validation_campaign_id": {"type": "string", "pattern": "^campaign-[0-9a-f]{16}$"},
         "recommended_action": {"type": "string", "minLength": 1}
+      }
+    },
+    "testExecutionRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path", "status", "tests", "passed", "failures", "errors", "skipped",
+        "sources", "path_attributions"
+      ],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "status": {"enum": ["failed", "partial", "passed", "skipped", "not-observed"]},
+        "tests": {"$ref": "#/$defs/count"},
+        "passed": {"$ref": "#/$defs/count"},
+        "failures": {"$ref": "#/$defs/count"},
+        "errors": {"$ref": "#/$defs/count"},
+        "skipped": {"$ref": "#/$defs/count"},
+        "sources": {"$ref": "#/$defs/strings"},
+        "path_attributions": {"$ref": "#/$defs/strings"}
+      }
+    },
+    "validationCampaign": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "campaign_id", "hotspot_id", "path", "priority", "owners", "route_ids",
+        "target_ids", "finding_ids", "direct_test_files", "transitive_test_files",
+        "route_mapped_test_files", "selected_test_files", "test_selection_confidence",
+        "test_execution_evidence_available", "test_case_inventory_available",
+        "test_case_inventory_complete", "test_execution_sources",
+        "focused_test_execution", "focused_test_validation_status",
+        "unobserved_recommended_test_files", "coverage_status", "coverage_evidence_scope",
+        "coverage_attribution", "coverage_percent",
+        "missing_line_count", "missing_lines", "test_coverage_alignment",
+        "validation_gap_reasons", "control_point_context", "source_snapshot",
+        "review_score_model", "review_score", "review_tier", "review_factors",
+        "recommended_action", "evidence_artifacts",
+        "interpretation"
+      ],
+      "properties": {
+        "campaign_id": {"type": "string", "pattern": "^campaign-[0-9a-f]{16}$"},
+        "hotspot_id": {"type": "string", "pattern": "^hotspot-[0-9a-f]{16}$"},
+        "path": {"type": "string", "minLength": 1},
+        "priority": {"enum": ["P0", "P1", "P2", "P3", "P4"]},
+        "owners": {"$ref": "#/$defs/strings"},
+        "route_ids": {"$ref": "#/$defs/strings"},
+        "target_ids": {"$ref": "#/$defs/strings"},
+        "finding_ids": {"$ref": "#/$defs/strings"},
+        "direct_test_files": {"type": "array", "maxItems": 50, "items": {"type": "string", "minLength": 1}},
+        "transitive_test_files": {"type": "array", "maxItems": 50, "items": {"type": "string", "minLength": 1}},
+        "route_mapped_test_files": {"type": "array", "maxItems": 50, "items": {"type": "string", "minLength": 1}},
+        "selected_test_files": {"type": "array", "maxItems": 50, "items": {"type": "string", "minLength": 1}},
+        "test_selection_confidence": {"enum": ["high", "medium", "context-only", "not-available"]},
+        "test_execution_evidence_available": {"type": "boolean"},
+        "test_case_inventory_available": {"type": "boolean"},
+        "test_case_inventory_complete": {"type": ["boolean", "null"]},
+        "test_execution_sources": {"$ref": "#/$defs/strings"},
+        "focused_test_execution": {"type": "array", "maxItems": 50, "items": {"$ref": "#/$defs/testExecutionRecord"}},
+        "focused_test_validation_status": {"enum": ["not-selected", "not-available", "failed", "not-observed", "passed", "incomplete"]},
+        "unobserved_recommended_test_files": {"$ref": "#/$defs/strings"},
+        "coverage_status": {"enum": ["not-available", "gap", "covered"]},
+        "coverage_evidence_scope": {"enum": ["aggregate-retained-file", "not-available"]},
+        "coverage_attribution": {"const": "not-established"},
+        "coverage_percent": {"type": ["number", "null"], "minimum": 0, "maximum": 100},
+        "missing_line_count": {"$ref": "#/$defs/count"},
+        "missing_lines": {"type": "array", "maxItems": 100, "items": {"type": "integer", "minimum": 1}},
+        "test_coverage_alignment": {"enum": ["not-selected", "test-evidence-not-available", "tests-failing", "tests-not-observed", "tests-incomplete", "coverage-not-available", "coverage-gap", "aligned-current-evidence"]},
+        "validation_gap_reasons": {"$ref": "#/$defs/strings"},
+        "control_point_context": {"$ref": "#/$defs/controlPointContext"},
+        "source_snapshot": {"$ref": "#/$defs/sourceSnapshot"},
+        "review_score_model": {"const": "shared-control-review-v1"},
+        "review_score": {"type": "integer", "minimum": 0, "maximum": 100},
+        "review_tier": {"enum": ["critical", "high", "medium", "low"]},
+        "review_factors": {"type": "array", "maxItems": 20, "items": {"$ref": "#/$defs/reviewFactor"}},
+        "recommended_action": {"type": "string", "minLength": 1},
+        "evidence_artifacts": {"$ref": "#/$defs/strings"},
+        "interpretation": {"type": "string", "minLength": 1}
+      }
+    },
+    "sourceFileBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "size_bytes"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "size_bytes": {"type": "integer", "minimum": 0}
+      }
+    },
+    "evidenceSourceBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact", "declared_source_sha256", "status"],
+      "properties": {
+        "artifact": {"type": "string", "minLength": 1},
+        "declared_source_sha256": {"$ref": "#/$defs/nullableDigest"},
+        "status": {"enum": ["aligned", "mismatch", "not-declared", "no-source-inventory"]}
+      }
+    },
+    "sourceSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_inventory_available", "source_sha256", "control_point_binding",
+        "selected_test_bindings", "selected_test_files_bound",
+        "selected_test_files_missing", "evidence_revision_binding",
+        "evidence_revision_binding_reason", "evidence_source_bindings"
+      ],
+      "properties": {
+        "source_inventory_available": {"type": "boolean"},
+        "source_sha256": {"$ref": "#/$defs/nullableDigest"},
+        "control_point_binding": {"anyOf": [{"$ref": "#/$defs/sourceFileBinding"}, {"type": "null"}]},
+        "selected_test_bindings": {"type": "array", "maxItems": 50, "items": {"$ref": "#/$defs/sourceFileBinding"}},
+        "selected_test_files_bound": {"type": "integer", "minimum": 0, "maximum": 50},
+        "selected_test_files_missing": {"type": "array", "maxItems": 50, "items": {"type": "string", "minLength": 1}},
+        "evidence_revision_binding": {"enum": ["aligned", "mismatch", "not-established", "not-applicable"]},
+        "evidence_revision_binding_reason": {"type": "string", "minLength": 1},
+        "evidence_source_bindings": {"type": "array", "maxItems": 4, "items": {"$ref": "#/$defs/evidenceSourceBinding"}}
+      }
+    },
+    "controlPointContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "graph_degree", "maximum_complexity", "maximum_complexity_rank",
+        "reachability_states", "runtime_observations", "evidence_artifacts"
+      ],
+      "properties": {
+        "graph_degree": {"type": ["integer", "null"], "minimum": 0},
+        "maximum_complexity": {"type": ["integer", "null"], "minimum": 0},
+        "maximum_complexity_rank": {"$ref": "#/$defs/nullableString"},
+        "reachability_states": {"$ref": "#/$defs/strings"},
+        "runtime_observations": {"$ref": "#/$defs/strings"},
+        "evidence_artifacts": {"$ref": "#/$defs/strings"}
+      }
+    },
+    "reviewFactor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "points", "evidence", "evidence_artifacts"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "points": {"type": "integer", "minimum": 1, "maximum": 100},
+        "evidence": {"type": "string", "minLength": 1},
+        "evidence_artifacts": {"$ref": "#/$defs/strings"}
       }
     },
     "ownerQueue": {
@@ -286,7 +474,9 @@
       "additionalProperties": false,
       "required": [
         "queue_id", "owner", "priority", "routes", "targets", "route_ids",
-        "target_ids", "convergence_hotspot_ids", "routes_by_priority",
+        "target_ids", "convergence_hotspot_ids", "validation_campaign_ids",
+        "campaigns_by_review_tier", "campaigns_revision_mismatched",
+        "campaigns_revision_unbound", "highest_campaign_review_score", "routes_by_priority",
         "validation_statuses", "recommended_action"
       ],
       "properties": {
@@ -298,6 +488,11 @@
         "route_ids": {"$ref": "#/$defs/strings"},
         "target_ids": {"$ref": "#/$defs/strings"},
         "convergence_hotspot_ids": {"$ref": "#/$defs/strings"},
+        "validation_campaign_ids": {"$ref": "#/$defs/strings"},
+        "campaigns_by_review_tier": {"$ref": "#/$defs/reviewTierCounts"},
+        "campaigns_revision_mismatched": {"$ref": "#/$defs/count"},
+        "campaigns_revision_unbound": {"$ref": "#/$defs/count"},
+        "highest_campaign_review_score": {"type": "integer", "minimum": 0, "maximum": 100},
         "routes_by_priority": {"$ref": "#/$defs/priorityCounts"},
         "validation_statuses": {"$ref": "#/$defs/validationCounts"},
         "recommended_action": {"type": "string", "minLength": 1}

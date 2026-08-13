@@ -525,6 +525,69 @@ def _risk_path_closure_context(
         refs.extend(files)
         validation = _as_object(risk_path.get("validation"))
         assessment = str(validation.get("assessment_status") or "not-assessed")
+        campaign_ids = _string_values(risk_path.get("validation_campaign_ids"), 50)
+        raw_campaigns = risk_path.get("validation_campaigns")
+        campaigns: list[dict[str, Any]] = (
+            [
+                {
+                    "campaign_id": str(campaign.get("campaign_id") or "unknown"),
+                    "hotspot_id": str(campaign.get("hotspot_id") or "unknown"),
+                    "path": str(campaign.get("path") or "unknown"),
+                    "selected_test_files": _string_values(
+                        campaign.get("selected_test_files"), 50
+                    ),
+                    "focused_test_validation_status": campaign.get(
+                        "focused_test_validation_status"
+                    ),
+                    "coverage_status": campaign.get("coverage_status"),
+                    "coverage_evidence_scope": campaign.get("coverage_evidence_scope"),
+                    "coverage_attribution": campaign.get("coverage_attribution"),
+                    "coverage_percent": campaign.get("coverage_percent"),
+                    "test_coverage_alignment": campaign.get("test_coverage_alignment"),
+                    "review_score_model": campaign.get("review_score_model"),
+                    "review_score": campaign.get("review_score"),
+                    "review_tier": campaign.get("review_tier"),
+                    "source_snapshot": {
+                        "source_sha256": _as_object(
+                            campaign.get("source_snapshot")
+                        ).get("source_sha256"),
+                        "control_point_binding": _as_object(
+                            _as_object(campaign.get("source_snapshot")).get(
+                                "control_point_binding"
+                            )
+                        ),
+                        "selected_test_files_bound": _as_object(
+                            campaign.get("source_snapshot")
+                        ).get("selected_test_files_bound"),
+                        "selected_test_files_missing": _string_values(
+                            _as_object(campaign.get("source_snapshot")).get(
+                                "selected_test_files_missing"
+                            ),
+                            50,
+                        ),
+                        "evidence_revision_binding": _as_object(
+                            campaign.get("source_snapshot")
+                        ).get("evidence_revision_binding"),
+                        "evidence_revision_binding_reason": _as_object(
+                            campaign.get("source_snapshot")
+                        ).get("evidence_revision_binding_reason"),
+                    },
+                    "recommended_action": campaign.get("recommended_action"),
+                }
+                for campaign in raw_campaigns[:50]
+                if isinstance(campaign, dict)
+            ]
+            if isinstance(raw_campaigns, list)
+            else []
+        )
+        refs.extend(
+            test for campaign in campaigns for test in campaign["selected_test_files"]
+        )
+        if any(
+            _as_object(campaign.get("source_snapshot")).get("source_sha256")
+            for campaign in campaigns
+        ):
+            refs.append("source-inventory.json")
         details.update(
             {
                 "route_id": route_id,
@@ -534,6 +597,8 @@ def _risk_path_closure_context(
                 "convergence_hotspot_ids": _string_values(
                     risk_path.get("convergence_hotspot_ids"), 50
                 ),
+                "validation_campaign_ids": campaign_ids,
+                "validation_campaigns": campaigns,
                 "validation_assessment": assessment,
                 "validation_action": validation.get("action"),
             }
@@ -548,6 +613,31 @@ def _risk_path_closure_context(
         elif assessment in {"partial", "not-assessed"}:
             acceptance.append(
                 "The route has retained change-scope, line-coverage, and focused-test evidence sufficient for an aligned or explicit-gap assessment."
+            )
+        campaign_gaps = [
+            campaign
+            for campaign in campaigns
+            if campaign.get("test_coverage_alignment") != "aligned-current-evidence"
+        ]
+        if campaign_gaps:
+            acceptance.append(
+                "Every linked shared validation campaign has passing observed tests and retained hotspot coverage, or an approved evidence-gap disposition."
+            )
+        elif campaigns:
+            acceptance.append(
+                "Linked shared validation campaigns are rerun after remediation and retain their case-level and hotspot-coverage evidence."
+            )
+        revision_gaps = [
+            campaign
+            for campaign in campaigns
+            if _as_object(campaign.get("source_snapshot")).get(
+                "evidence_revision_binding"
+            )
+            in {"mismatch", "not-established"}
+        ]
+        if revision_gaps:
+            acceptance.append(
+                "Every linked campaign's retained test and coverage evidence declares the replacement report's sealed source-inventory digest."
             )
         return refs, acceptance, details
     reason = str(risk_path.get("reason") or "bounded static route unavailable")
