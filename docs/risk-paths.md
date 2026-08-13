@@ -54,6 +54,8 @@ Each retained route includes:
 - a stable route ID and P0-P4 priority inherited from the finding or sink review
   priority;
 - the exact declared entry point and a maximum eight-hop file sequence;
+- a bounded matrix of every other declared entry point with its own stable
+  exposure ID, exact file/edge sequence, entry kind, and explicit omissions;
 - the Graphify relation for every step;
 - target tool, rule/classification, file, and line attribution;
 - reachability state and retained runtime observation;
@@ -78,6 +80,56 @@ campaign IDs. A route can appear in multiple queues
 when ownership overlaps; this preserves accountability rather than selecting an
 arbitrary owner. These groups coordinate work and tests but do not merge or
 inflate the underlying scanner findings.
+
+## Multi-entry exposure matrix
+
+The primary route remains the deterministic shortest path used for the stable
+route ID. Risk synthesis then performs a bounded per-entry search and attaches
+every declared entry point that reaches the same target within eight file hops.
+Declarations that share a source file remain distinct because a console script,
+`python -m` module, worker, framework hook, or plugin declaration can require a
+different validation plan. Unrelated entry points are not attached, and at most
+25 exposure records are retained per route with exact omission counts.
+
+```mermaid
+flowchart LR
+    CLI["CLI entry"] --> Target["Finding, sink, or advisory importer"]
+    Module["python -m entry"] --> Target
+    Worker["Worker/framework entry"] --> Mid["Graphify file route"] --> Target
+    Other["Unrelated entry"] -. "no bounded path" .-> Separate["Not attached"]
+    Target --> Matrix["Stable entry-exposure IDs + exact paths"]
+    Matrix --> Report["Report, finding/SARIF, owner queue, closure"]
+```
+
+Summary counters show retained exposure records, multi-entry routes, multi-entry
+security routes, the maximum interface breadth, and route-level truncation.
+Owner queues coordinate interface-specific validation, while closure requires
+each retained route to be exercised or covered by an approved equivalence
+disposition. Static interface breadth does not establish network exposure,
+attacker control, distinct runtime interfaces, execution, or exploitability.
+
+Each exposure also joins the declaration's exact `target` node from
+`reachability.json`. Its runtime assessment is `observed`, `not-observed`, or
+`not-available`; matching by file alone is never accepted. Summary counters,
+sensitive-boundary intersections, owner queues, finding/SARIF context, and
+closure work preserve those states. Unobserved interfaces require
+production-representative runtime evidence or an approved equivalence
+disposition, while unavailable evidence requires an exact modeled node.
+
+```mermaid
+flowchart LR
+    Declaration["Declared entry + exact target node ID"] --> Join{"Exact node present?"}
+    Nodes["Reachability nodes + retained runtime observation"] --> Join
+    Join -->|Observed| Observed["Observed during supplied tests"]
+    Join -->|Not observed| Gap["Interface runtime-validation gap"]
+    Join -->|Missing node| Missing["Runtime evidence unavailable"]
+    Gap --> Owner["Owner queue + closure criterion"]
+    Missing --> Owner
+```
+
+Observation is attributable only to the retained test/runtime evidence. It does
+not establish production traffic, external accessibility, attacker control, or
+sufficient behavioral coverage; non-observation does not prove dead code.
 
 ## Dependency-advisory importer routes
 

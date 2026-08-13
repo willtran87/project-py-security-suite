@@ -356,6 +356,14 @@ scanner-attributed fixes, citations, owners, tests, coverage, and validation;
 it links back to every native cluster finding without duplicating the finding.
 This answers “which entry point reaches an affected package importer?” while
 explicitly leaving vulnerable-function invocation and exploitability unproven.
+Instead of collapsing a target to one shortest origin, risk synthesis retains
+up to 25 exact file routes from every declared entry point that reaches it.
+Duplicate declarations on one file remain distinct interfaces, bounded
+omissions are counted, and one primary route remains stable so finding identity
+does not multiply. Reports and closure can therefore coordinate CLI, module,
+worker, or framework-interface validation separately. Each declaration's exact
+reachability target node supplies an interface-local observed, unobserved, or
+unavailable runtime state; path-level runtime evidence is not borrowed.
 Each importer also joins exact source and built-artifact package inventories,
 distinguishing matched versions, drift, source-only, artifact-only, and missing
 composition evidence without interpreting a version string as proof of safety.
@@ -368,6 +376,7 @@ leaving disclosure, attacker control, and vulnerable-function use unproven.
 ```mermaid
 flowchart LR
     Entry["Declared entry points"] --> Search["Bounded static route search"]
+    Runtime["Exact entry target-node runtime evidence"] --> Matrix
     Graph["Graphify file relations"] --> Search
     Findings["Normalized findings"] --> Targets["Review targets"]
     Exposure["Sensitive sink surfaces"] --> Targets
@@ -379,6 +388,8 @@ flowchart LR
     Importers --> ExactJoin
     ExactJoin --> Targets
     Targets --> Search
+    Search --> Matrix["Per-target multi-entry exposure matrix"]
+    Matrix --> Routed
     Ownership["CODEOWNERS"] --> Routed["Bounded risk routes"]
     Search --> Routed
     Routed --> Hotspots["Shared control points"]

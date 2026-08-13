@@ -44,6 +44,7 @@ _MAX_TEST_GRAPH_NEIGHBORS = 500
 _MAX_ADVISORY_IMPORT_PATHS = 50
 _MAX_FINDING_ADVISORY_ROUTES = 25
 _MAX_EXPOSURE_ADVISORY_INTERSECTIONS = 100
+_MAX_ENTRY_POINT_EXPOSURES = 25
 
 
 def build_risk_paths(
@@ -61,6 +62,7 @@ def build_risk_paths(
     structural = artifacts.get("structural-synthesis.json")
     adjacency, graph_available, graph_truncated = _file_graph(graph)
     entry_points = _entry_points(reachability)
+    entry_point_runtime = _entry_point_runtime_index(reachability)
     path_context = _campaign_control_context_index(structural, reachability)
     dependency_targets, dependency_targets_omitted = _dependency_advisory_targets(
         fusion, path_context
@@ -82,6 +84,9 @@ def build_risk_paths(
     routed.sort(key=_route_order)
     unrouted.sort(key=_target_order)
     retained_routes = routed[:_MAX_ROUTES]
+    _attach_entry_point_exposures(
+        retained_routes, entry_points, adjacency, entry_point_runtime
+    )
     all_convergence_hotspots = _convergence_hotspots(retained_routes)
     convergence_hotspots = all_convergence_hotspots[:_MAX_CONVERGENCE_HOTSPOTS]
     validation_campaigns = _validation_campaigns(
@@ -185,7 +190,7 @@ def build_risk_paths(
         "schema_id": "urn:project-py-security-suite:risk-paths:1.0",
         "authoritative": False,
         "purpose": (
-            "bounded static routes from declared Python entry points to normalized "
+            "bounded multi-entry static routes from declared Python entry points to normalized "
             "findings, review-worthy sensitive-data sink surfaces, and exact "
             "dependency-advisory importers, with bounded compound intersections"
         ),
@@ -218,6 +223,57 @@ def build_risk_paths(
             "routed_dependency_advisory_imports": sum(
                 route["target"]["kind"] == "dependency-advisory-import"
                 for route in routed
+            ),
+            "retained_entry_point_exposures": sum(
+                len(route["entry_point_exposures"]) for route in retained_routes
+            ),
+            "observed_entry_point_exposures": sum(
+                exposure["runtime_context"]["assessment"] == "observed"
+                for route in retained_routes
+                for exposure in route["entry_point_exposures"]
+            ),
+            "unobserved_entry_point_exposures": sum(
+                exposure["runtime_context"]["assessment"] == "not-observed"
+                for route in retained_routes
+                for exposure in route["entry_point_exposures"]
+            ),
+            "entry_point_exposures_without_runtime_evidence": sum(
+                exposure["runtime_context"]["assessment"] == "not-available"
+                for route in retained_routes
+                for exposure in route["entry_point_exposures"]
+            ),
+            "multi_entry_routes_with_unobserved_interfaces": sum(
+                int(route["entry_point_exposure_count"]) > 1
+                and any(
+                    exposure["runtime_context"]["assessment"] == "not-observed"
+                    for exposure in route["entry_point_exposures"]
+                )
+                for route in retained_routes
+            ),
+            "multi_entry_routes_with_runtime_evidence_gaps": sum(
+                int(route["entry_point_exposure_count"]) > 1
+                and any(
+                    exposure["runtime_context"]["assessment"] == "not-available"
+                    for exposure in route["entry_point_exposures"]
+                )
+                for route in retained_routes
+            ),
+            "routes_with_multiple_entry_points": sum(
+                int(route["entry_point_exposure_count"]) > 1
+                for route in retained_routes
+            ),
+            "security_routes_with_multiple_entry_points": sum(
+                int(route["entry_point_exposure_count"]) > 1
+                and route["target"]["domain"] in {"security", "supply-chain"}
+                for route in retained_routes
+            ),
+            "maximum_entry_points_per_route": max(
+                (int(route["entry_point_exposure_count"]) for route in retained_routes),
+                default=0,
+            ),
+            "routes_with_entry_point_exposure_truncation": sum(
+                int(route["entry_point_exposures_omitted"]) > 0
+                for route in retained_routes
             ),
             "unrouted_dependency_advisory_imports": sum(
                 target["target"]["kind"] == "dependency-advisory-import"
@@ -500,6 +556,9 @@ def build_risk_paths(
             "targets_omitted": dependency_targets_omitted
             + max(0, len(candidate_targets) - _MAX_TARGETS),
             "dependency_advisory_import_targets_omitted": dependency_targets_omitted,
+            "entry_point_exposures_omitted": sum(
+                int(route["entry_point_exposures_omitted"]) for route in retained_routes
+            ),
             "routes_omitted": max(0, len(routed) - _MAX_ROUTES),
             "unrouted_targets_omitted": max(0, len(unrouted) - _MAX_UNROUTED),
             "convergence_hotspots_omitted": max(
@@ -520,6 +579,8 @@ def build_risk_paths(
         },
         "interpretation_limits": [
             "A static route is a review path, not proof of attacker-controlled input, vulnerable-function reachability, exploitability, or sensitive-data flow.",
+            "Multiple declared entry-point routes establish bounded static interface breadth only; they do not prove distinct runtime interfaces, external exposure, attacker control, or execution.",
+            "Entry-point runtime observation proves only that the exact retained reachability node executed during supplied tests; non-observation or missing node evidence does not prove an interface is dead or inaccessible.",
             "No bounded route may indicate reflection, registries, dependency injection, generated code, framework dispatch, or an incomplete entry-point model.",
             "Runtime observation proves only that code executed during retained tests; absence of observation does not prove dead code.",
             "Sensitive-data sink surfaces are inventory signals unless a normalized scanner finding establishes a source-to-sink concern.",
@@ -602,11 +663,29 @@ def _entry_points(value: Any) -> list[dict[str, Any]]:
                 "declared_as": str(item.get("declared_as") or path)[:1000],
                 "path": path,
                 "line": _positive_integer(item.get("line")),
+                "target": _optional_string(item.get("target")),
             }
         )
     return sorted(result, key=lambda item: (item["path"], item["id"]))[
         :_MAX_ENTRY_POINTS
     ]
+
+
+def _entry_point_runtime_index(value: Any) -> dict[str, dict[str, Any]]:
+    raw = value.get("nodes") if isinstance(value, dict) else None
+    nodes = raw if isinstance(raw, list) else []
+    result: dict[str, dict[str, Any]] = {}
+    for item in nodes[:_MAX_GRAPH_FILES]:
+        if not isinstance(item, dict):
+            continue
+        identifier = _optional_string(item.get("id"))
+        if not identifier:
+            continue
+        result[identifier] = {
+            "reachability_state": _optional_string(item.get("state")),
+            "runtime_observation": _optional_string(item.get("runtime_observation")),
+        }
+    return result
 
 
 def _finding_targets(findings: list[Finding]) -> list[dict[str, Any]]:
@@ -1336,6 +1415,11 @@ def _exposure_advisory_intersections(
                     ),
                 }
             )[:100]
+            entry_exposures = {
+                str(exposure["exposure_id"]): exposure
+                for route in (sink_route, dependency_route)
+                for exposure in route["entry_point_exposures"]
+            }
             result.append(
                 {
                     "intersection_id": intersection_id,
@@ -1386,6 +1470,26 @@ def _exposure_advisory_intersections(
                     is True,
                     "package_lifecycle": _object(
                         dependency_route["correlations"].get("package_lifecycle")
+                    ),
+                    "entry_point_exposure_ids": sorted(entry_exposures),
+                    "entry_point_ids": sorted(
+                        {
+                            str(exposure["entry_point"]["id"])
+                            for exposure in entry_exposures.values()
+                        }
+                    ),
+                    "entry_point_exposure_count": len(
+                        {
+                            str(exposure["entry_point"]["id"])
+                            for exposure in entry_exposures.values()
+                        }
+                    ),
+                    "entry_point_exposures_omitted": max(
+                        int(sink_route["entry_point_exposures_omitted"]),
+                        int(dependency_route["entry_point_exposures_omitted"]),
+                    ),
+                    "entry_point_runtime_statuses": _entry_runtime_counts(
+                        entry_exposures.values()
                     ),
                     "validation_statuses": {
                         "sink": str(
@@ -1495,6 +1599,120 @@ def _route_targets(
             }
         )
     return routed, unrouted
+
+
+def _attach_entry_point_exposures(
+    routes: list[dict[str, Any]],
+    entry_points: list[dict[str, Any]],
+    adjacency: dict[str, dict[str, str]],
+    runtime_index: dict[str, dict[str, Any]],
+) -> None:
+    """Retain every bounded declared-entry route without multiplying targets."""
+    routes_by_path: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for route in routes:
+        routes_by_path[str(route["target"]["path"])].append(route)
+    entries_by_path: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for entry in entry_points:
+        entries_by_path[str(entry["path"])].append(entry)
+    candidates: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for _entry_path, entries in sorted(entries_by_path.items()):
+        representative = entries[0]
+        parent, _origin, depth = _multi_source_paths([representative], adjacency)
+        for target_path, target_routes in routes_by_path.items():
+            if target_path not in depth:
+                continue
+            files, edges = _reconstruct_route(target_path, parent)
+            for route in target_routes:
+                for entry in entries:
+                    primary = (
+                        entry["id"] == route["entry_point"]["id"]
+                        and entry["path"] == route["entry_point"]["path"]
+                    )
+                    candidates[str(route["route_id"])].append(
+                        {
+                            "exposure_id": "entry-exposure-"
+                            + _digest(
+                                {
+                                    "route_id": route["route_id"],
+                                    "entry_point": entry["id"],
+                                    "entry_path": entry["path"],
+                                    "files": files,
+                                }
+                            )[:16],
+                            "primary": primary,
+                            "entry_point": entry,
+                            "runtime_context": _entry_runtime_context(
+                                entry, runtime_index
+                            ),
+                            "hop_count": depth[target_path],
+                            "files": files,
+                            "edges": edges,
+                        }
+                    )
+    for route in routes:
+        values = sorted(
+            candidates.get(str(route["route_id"]), []),
+            key=lambda item: (
+                not item["primary"],
+                int(item["hop_count"]),
+                str(item["entry_point"]["kind"]),
+                str(item["entry_point"]["path"]),
+                str(item["entry_point"]["id"]),
+            ),
+        )
+        route["entry_point_exposure_count"] = len(values)
+        route["entry_point_exposures"] = values[:_MAX_ENTRY_POINT_EXPOSURES]
+        route["entry_point_exposures_omitted"] = max(
+            0, len(values) - _MAX_ENTRY_POINT_EXPOSURES
+        )
+        route["entry_point_kinds"] = sorted(
+            {str(item["entry_point"]["kind"]) for item in values}
+        )
+
+
+def _entry_runtime_context(
+    entry: dict[str, Any], runtime_index: dict[str, dict[str, Any]]
+) -> dict[str, Any]:
+    target = _optional_string(entry.get("target"))
+    record = runtime_index.get(target or "")
+    state = _optional_string(record.get("reachability_state")) if record else None
+    observation = (
+        _optional_string(record.get("runtime_observation")) if record else None
+    )
+    assessment = (
+        "observed"
+        if observation == "observed"
+        else "not-observed"
+        if observation == "not-observed"
+        else "not-available"
+    )
+    return {
+        "target_node_id": target,
+        "node_evidence_available": record is not None,
+        "reachability_state": state,
+        "runtime_observation": observation,
+        "assessment": assessment,
+        "evidence_artifacts": ["reachability.json"] if record is not None else [],
+    }
+
+
+def _entry_runtime_counts(values: Any) -> dict[str, int]:
+    exposures = list(values)
+    by_entry: dict[str, dict[str, Any]] = {}
+    for exposure in exposures:
+        if not isinstance(exposure, dict):
+            continue
+        entry = _object(exposure.get("entry_point"))
+        identifier = _optional_string(entry.get("id"))
+        if identifier:
+            by_entry[identifier] = exposure
+    return {
+        status: sum(
+            _object(exposure.get("runtime_context")).get("assessment") == status
+            for exposure in by_entry.values()
+        )
+        for status in ("observed", "not-observed", "not-available")
+    }
 
 
 def _multi_source_paths(
@@ -2671,6 +2889,30 @@ def _owner_work_queues(
                 )
             }
         )[:_MAX_EXPOSURE_ADVISORY_INTERSECTIONS]
+        multi_entry_routes = sum(
+            int(route["entry_point_exposure_count"]) > 1 for route in owned_routes
+        )
+        entry_runtime_counts = _entry_runtime_counts(
+            exposure
+            for route in owned_routes
+            for exposure in route["entry_point_exposures"]
+        )
+        unobserved_entry_ids = sorted(
+            {
+                str(exposure["entry_point"]["id"])
+                for route in owned_routes
+                for exposure in route["entry_point_exposures"]
+                if exposure["runtime_context"]["assessment"] == "not-observed"
+            }
+        )
+        unavailable_entry_ids = sorted(
+            {
+                str(exposure["entry_point"]["id"])
+                for route in owned_routes
+                for exposure in route["entry_point_exposures"]
+                if exposure["runtime_context"]["assessment"] == "not-available"
+            }
+        )
         result.append(
             {
                 "queue_id": queue_id,
@@ -2702,6 +2944,21 @@ def _owner_work_queues(
                 ),
                 "exposure_advisory_intersection_ids": intersection_ids,
                 "exposure_advisory_intersections": len(intersection_ids),
+                "multi_entry_routes": multi_entry_routes,
+                "retained_entry_point_ids": sorted(
+                    {
+                        str(exposure["entry_point"]["id"])
+                        for route in owned_routes
+                        for exposure in route["entry_point_exposures"]
+                    }
+                ),
+                "entry_point_exposures_omitted": sum(
+                    int(route["entry_point_exposures_omitted"])
+                    for route in owned_routes
+                ),
+                "entry_point_runtime_statuses": entry_runtime_counts,
+                "unobserved_entry_point_ids": unobserved_entry_ids,
+                "entry_points_without_runtime_evidence": unavailable_entry_ids,
                 "shared_validation_test_files": len(
                     {
                         str(hotspot_id)
@@ -2743,7 +3000,13 @@ def _owner_work_queues(
                 "routes_by_priority": priorities,
                 "validation_statuses": assessments,
                 "recommended_action": _owner_queue_action(
-                    owner, assessments, owned_campaigns, len(intersection_ids)
+                    owner,
+                    assessments,
+                    owned_campaigns,
+                    len(intersection_ids),
+                    multi_entry_routes,
+                    len(unobserved_entry_ids),
+                    len(unavailable_entry_ids),
                 ),
             }
         )
@@ -2762,6 +3025,9 @@ def _owner_queue_action(
     assessments: dict[str, int],
     campaigns: list[dict[str, Any]],
     exposure_advisory_intersections: int,
+    multi_entry_routes: int,
+    unobserved_entry_points: int,
+    unavailable_entry_points: int,
 ) -> str:
     mismatched = sum(
         campaign["source_snapshot"]["evidence_revision_binding"] == "mismatch"
@@ -2799,6 +3065,21 @@ def _owner_queue_action(
             f" Coordinate boundary controls and dependency remediation for "
             f"{exposure_advisory_intersections} exact-path exposure/advisory "
             "intersection(s)."
+        )
+    if multi_entry_routes:
+        shared_suffix += (
+            f" Coordinate interface-specific validation for {multi_entry_routes} "
+            "route(s) reached from multiple declared entry points."
+        )
+    if unobserved_entry_points:
+        shared_suffix += (
+            f" Retain representative runtime evidence for {unobserved_entry_points} "
+            "unobserved declared interface(s)."
+        )
+    if unavailable_entry_points:
+        shared_suffix += (
+            f" Model exact reachability nodes for {unavailable_entry_points} "
+            "declared interface(s) without runtime evidence."
         )
     if mismatched:
         return (
@@ -2896,6 +3177,10 @@ def _attach_finding_routes(
                 "target_id": route["target"]["id"],
                 "priority": route["priority"],
                 "entry_point": route["entry_point"],
+                "entry_point_exposure_count": route["entry_point_exposure_count"],
+                "entry_point_exposures": route["entry_point_exposures"],
+                "entry_point_exposures_omitted": route["entry_point_exposures_omitted"],
+                "entry_point_kinds": route["entry_point_kinds"],
                 "hop_count": route["hop_count"],
                 "files": route["files"],
                 "runtime_context": route["runtime_context"],
@@ -2999,6 +3284,13 @@ def _compact_dependency_advisory_route(
         "dependency_usage_assessment": correlations.get("dependency_usage_assessment"),
         "import_path_assessment": correlations.get("import_path_assessment"),
         "entry_point": route["entry_point"],
+        "entry_point_exposure_count": route["entry_point_exposure_count"],
+        "entry_point_exposures": list(route["entry_point_exposures"]),
+        "entry_point_exposures_omitted": route["entry_point_exposures_omitted"],
+        "entry_point_kinds": list(route["entry_point_kinds"]),
+        "entry_point_runtime_statuses": _entry_runtime_counts(
+            route["entry_point_exposures"]
+        ),
         "hop_count": route["hop_count"],
         "files": list(route["files"]),
         "runtime_context": route["runtime_context"],
@@ -3048,6 +3340,11 @@ def _compact_exposure_advisory_intersection(
             "epss_high",
             "fix_available",
             "package_lifecycle",
+            "entry_point_exposure_ids",
+            "entry_point_ids",
+            "entry_point_exposure_count",
+            "entry_point_exposures_omitted",
+            "entry_point_runtime_statuses",
             "validation_statuses",
             "advisory_citations",
             "recommended_action",

@@ -821,7 +821,7 @@ def _render_risk_path_summary(value: dict[str, Any] | None) -> list[str]:
         "## Static risk routes",
         "",
         (
-            "These bounded Graphify routes connect declared Python entry points to "
+            "These bounded Graphify routes retain every matched declared Python entry point to "
             "review targets and their owner/test evidence. A route is triage context, "
             "not proof of attacker control, exploitability, or sensitive-data flow."
         ),
@@ -833,6 +833,14 @@ def _render_risk_path_summary(value: dict[str, Any] | None) -> list[str]:
         f"| Sensitive sink-surface targets | {int(summary.get('sink_surface_targets', 0))} |",
         f"| Dependency-advisory importer targets | {int(summary.get('dependency_advisory_import_targets', 0))} |",
         f"| Routed dependency-advisory importers | {int(summary.get('routed_dependency_advisory_imports', 0))} |",
+        f"| Retained declared-entry exposures | {int(summary.get('retained_entry_point_exposures', 0))} |",
+        f"| Entry exposures runtime observed / unobserved / unavailable | {int(summary.get('observed_entry_point_exposures', 0))} / {int(summary.get('unobserved_entry_point_exposures', 0))} / {int(summary.get('entry_point_exposures_without_runtime_evidence', 0))} |",
+        f"| Routes reached by multiple entry points | {int(summary.get('routes_with_multiple_entry_points', 0))} |",
+        f"| Multi-entry routes with unobserved interfaces | {int(summary.get('multi_entry_routes_with_unobserved_interfaces', 0))} |",
+        f"| Multi-entry routes with interface runtime-evidence gaps | {int(summary.get('multi_entry_routes_with_runtime_evidence_gaps', 0))} |",
+        f"| Security routes reached by multiple entry points | {int(summary.get('security_routes_with_multiple_entry_points', 0))} |",
+        f"| Maximum entry points for one route | {int(summary.get('maximum_entry_points_per_route', 0))} |",
+        f"| Routes with entry-point exposure truncation | {int(summary.get('routes_with_entry_point_exposure_truncation', 0))} |",
         f"| Unrouted dependency-advisory importers | {int(summary.get('unrouted_dependency_advisory_imports', 0))} |",
         f"| Distinct routed dependency advisories | {int(summary.get('distinct_routed_dependency_advisories', 0))} |",
         f"| Known-exploited / high-EPSS dependency routes | {int(summary.get('known_exploited_dependency_routes', 0))} / {int(summary.get('high_epss_dependency_routes', 0))} |",
@@ -933,6 +941,8 @@ def _render_risk_path_summary(value: dict[str, Any] | None) -> list[str]:
                 )
                 + "`<br>"
                 + _markdown_text(route_text or "same-file entry point")
+                + "<br>"
+                + _markdown_text(_entry_point_exposure_text(route))
                 + " | "
                 + _markdown_text(signals)
                 + " | **"
@@ -1244,6 +1254,9 @@ def _render_exposure_advisory_intersections(values: list[Any]) -> list[str]:
         if value.get("fix_available") is True:
             threat.append("fix available")
         lifecycle_text = _package_lifecycle_text(value.get("package_lifecycle"))
+        entry_runtime = _entry_runtime_status_text(
+            value.get("entry_point_runtime_statuses")
+        )
         lines.append(
             "| `"
             + _markdown_code(str(value.get("priority") or "P4"))
@@ -1268,6 +1281,10 @@ def _render_exposure_advisory_intersections(values: list[Any]) -> list[str]:
             + _markdown_text(", ".join(threat) or "no elevated threat signal retained")
             + "<br>"
             + _markdown_text(lifecycle_text)
+            + "<br>entry exposure `"
+            + _markdown_code(str(int(value.get("entry_point_exposure_count") or 0)))
+            + "` declared route(s); "
+            + _markdown_text(entry_runtime)
             + " | sink / dependency `"
             + _markdown_code(str(statuses.get("sink") or "not-assessed"))
             + "/"
@@ -1290,7 +1307,7 @@ def _render_risk_owner_queues(queues: list[Any]) -> list[str]:
         "",
         "### Route owner queues",
         "",
-        "| Owner | Priority | Routes / targets | Controls / campaigns / shared tests / boundary intersections | Validation / campaign review | Next action |",
+        "| Owner | Priority | Routes / targets | Controls / campaigns / shared tests / boundary intersections / multi-entry | Validation / campaign review | Next action |",
         "|---|---|---:|---:|---|---|",
     ]
     for queue in queues[:10]:
@@ -1317,6 +1334,12 @@ def _render_risk_owner_queues(queues: list[Any]) -> list[str]:
             + str(int(queue.get("shared_validation_test_files") or 0))
             + " / "
             + str(int(queue.get("exposure_advisory_intersections") or 0))
+            + "; multi-entry routes `"
+            + _markdown_code(str(int(queue.get("multi_entry_routes") or 0)))
+            + "`<br>interface runtime "
+            + _markdown_text(
+                _entry_runtime_status_text(queue.get("entry_point_runtime_statuses"))
+            )
             + " | "
             + _markdown_text(_validation_count_summary(validation))
             + "<br>highest campaign score `"
@@ -1423,7 +1446,9 @@ def _render_dependency_route_row(route: dict[str, Any]) -> str:
         + _markdown_code(import_line_text)
         + "`; hops `"
         + _markdown_code(str(int(route.get("hop_count") or 0)))
-        + "` | "
+        + "`<br>"
+        + _markdown_text(_entry_point_exposure_text(route))
+        + " | "
         + _markdown_text(threat_text)
         + "<br>fix `"
         + _markdown_code(
@@ -1471,6 +1496,60 @@ def _package_lifecycle_text(value: Any) -> str:
     return (
         f"lifecycle {assessment}; source {source_text}; artifact {artifact_text}; "
         f"exact fixed version in artifact {exact_text}"
+    )
+
+
+def _entry_point_exposure_text(value: Any) -> str:
+    route = value if isinstance(value, dict) else {}
+    exposures = route.get("entry_point_exposures")
+    retained = exposures if isinstance(exposures, list) else []
+    count = int(route.get("entry_point_exposure_count") or len(retained))
+    omitted = int(route.get("entry_point_exposures_omitted") or 0)
+    kinds = route.get("entry_point_kinds")
+    kind_values = kinds if isinstance(kinds, list) else []
+    alternates = [
+        str(entry.get("declared_as") or entry.get("id") or "unknown")
+        + (
+            f" ({entry['path']})"
+            if entry.get("path") and entry.get("path") != entry.get("declared_as")
+            else ""
+        )
+        for item in retained
+        if isinstance(item, dict)
+        and item.get("primary") is not True
+        and isinstance((entry := item.get("entry_point")), dict)
+    ][:3]
+    text = f"{count} declared entry-point route(s)"
+    if kind_values:
+        text += " across " + ", ".join(str(item) for item in kind_values[:5])
+    if alternates:
+        text += "; alternate(s): " + ", ".join(alternates)
+    if omitted:
+        text += f"; {omitted} omitted by bound"
+    runtime_counts = _entry_runtime_counts_from_exposures(retained)
+    text += "; " + _entry_runtime_status_text(runtime_counts)
+    return text
+
+
+def _entry_runtime_counts_from_exposures(values: list[Any]) -> dict[str, int]:
+    return {
+        status: sum(
+            isinstance(item, dict)
+            and isinstance(item.get("runtime_context"), dict)
+            and item["runtime_context"].get("assessment") == status
+            for item in values
+        )
+        for status in ("observed", "not-observed", "not-available")
+    }
+
+
+def _entry_runtime_status_text(value: Any) -> str:
+    counts = value if isinstance(value, dict) else {}
+    return (
+        "runtime observed/unobserved/unavailable "
+        f"{int(counts.get('observed') or 0)}/"
+        f"{int(counts.get('not-observed') or 0)}/"
+        f"{int(counts.get('not-available') or 0)}"
     )
 
 
@@ -3923,6 +4002,8 @@ def _markdown_risk_path_context(finding: Finding) -> list[str]:
             + ("; fixed version retained" if first.get("fix_available") is True else "")
             + "; "
             + _markdown_text(_package_lifecycle_text(first.get("package_lifecycle")))
+            + "; "
+            + _markdown_text(_entry_point_exposure_text(first))
             + ("; citations " + citations if citations else "")
             + "."
         )
@@ -3952,6 +4033,16 @@ def _markdown_risk_path_context(finding: Finding) -> list[str]:
             + _markdown_text(
                 _package_lifecycle_text(first_intersection.get("package_lifecycle"))
             )
+            + "; entry exposure `"
+            + _markdown_code(
+                str(int(first_intersection.get("entry_point_exposure_count") or 0))
+            )
+            + "` declared route(s); "
+            + _markdown_text(
+                _entry_runtime_status_text(
+                    first_intersection.get("entry_point_runtime_statuses")
+                )
+            )
             + ". This is compound review context, not leakage or vulnerable-function proof."
         )
     return [
@@ -3963,6 +4054,8 @@ def _markdown_risk_path_context(finding: Finding) -> list[str]:
         + _markdown_code(str(int(context.get("hop_count") or 0)))
         + "` file hop(s): "
         + _markdown_text(route or str(entry.get("path") or "same file"))
+        + ". **Entry exposure:** "
+        + _markdown_text(_entry_point_exposure_text(context))
         + ". **Validation:** "
         + _markdown_text(_risk_path_validation_signals(validation, runtime))
         + "."
@@ -4400,6 +4493,8 @@ def _html_risk_path_context(finding: Finding) -> str:
             + html.escape(
                 _package_lifecycle_text(first_advisory.get("package_lifecycle"))
             )
+            + "; "
+            + html.escape(_entry_point_exposure_text(first_advisory))
             + ("; citations " + citation_html if citation_html else "")
             + "."
         )
@@ -4427,6 +4522,14 @@ def _html_risk_path_context(finding: Finding) -> str:
             + html.escape(
                 _package_lifecycle_text(first_intersection.get("package_lifecycle"))
             )
+            + "; entry exposure <code>"
+            + str(int(first_intersection.get("entry_point_exposure_count") or 0))
+            + "</code> declared route(s); "
+            + html.escape(
+                _entry_runtime_status_text(
+                    first_intersection.get("entry_point_runtime_statuses")
+                )
+            )
             + ". This is compound review context, not leakage or vulnerable-function proof."
         )
     return (
@@ -4439,6 +4542,8 @@ def _html_risk_path_context(finding: Finding) -> str:
         + str(int(context.get("hop_count") or 0))
         + "</strong> file hop(s): "
         + html.escape(route or str(entry.get("path") or "same file"))
+        + ". <strong>Entry exposure:</strong> "
+        + html.escape(_entry_point_exposure_text(context))
         + ". <strong>Validation:</strong> "
         + html.escape(_risk_path_validation_signals(validation, runtime))
         + "."

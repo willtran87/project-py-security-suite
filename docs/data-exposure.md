@@ -211,7 +211,8 @@ when an SDK sink and an affected importer share the exact normalized path,
 package, and alias-collapsed advisory cluster. The intersection carries the
 boundary/protection and advisory/remediation evidence into reports, SARIF, and
 closure work, including fail-closed source-versus-built-artifact package
-lifecycle context. Aggregate SDK context or a different importer path does not
+lifecycle context and the bounded set of declared entry points reaching the
+shared path, including exact entry-node runtime states. Aggregate SDK context or a different importer path does not
 qualify, preventing a repository-wide SDK observation from being presented as
 path-specific disclosure evidence.
 

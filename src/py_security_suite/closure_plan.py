@@ -523,6 +523,12 @@ def _risk_path_closure_context(
         route_id = str(risk_path.get("route_id") or "unknown")
         files = _string_values(risk_path.get("files"), 9)
         refs.extend(files)
+        entry_point_exposures = _closure_entry_point_exposures(
+            risk_path.get("entry_point_exposures")
+        )
+        refs.extend(
+            path for exposure in entry_point_exposures for path in exposure["files"]
+        )
         validation = _as_object(risk_path.get("validation"))
         assessment = str(validation.get("assessment_status") or "not-assessed")
         campaign_ids = _string_values(risk_path.get("validation_campaign_ids"), 50)
@@ -629,6 +635,21 @@ def _risk_path_closure_context(
                         item.get("import_path_assessment")
                     ),
                     "entry_point": _as_object(item.get("entry_point")),
+                    "entry_point_exposure_count": item.get(
+                        "entry_point_exposure_count"
+                    ),
+                    "entry_point_exposures": _closure_entry_point_exposures(
+                        item.get("entry_point_exposures")
+                    ),
+                    "entry_point_exposures_omitted": item.get(
+                        "entry_point_exposures_omitted"
+                    ),
+                    "entry_point_runtime_statuses": _as_object(
+                        item.get("entry_point_runtime_statuses")
+                    ),
+                    "entry_point_kinds": _string_values(
+                        item.get("entry_point_kinds"), 25
+                    ),
                     "hop_count": item.get("hop_count"),
                     "files": _string_values(item.get("files"), 9),
                     "runtime_context": _as_object(item.get("runtime_context")),
@@ -707,6 +728,16 @@ def _risk_path_closure_context(
                     "epss_high": item.get("epss_high") is True,
                     "fix_available": item.get("fix_available") is True,
                     "package_lifecycle": _as_object(item.get("package_lifecycle")),
+                    "entry_point_exposure_count": item.get(
+                        "entry_point_exposure_count"
+                    ),
+                    "entry_point_ids": _string_values(item.get("entry_point_ids"), 50),
+                    "entry_point_exposures_omitted": item.get(
+                        "entry_point_exposures_omitted"
+                    ),
+                    "entry_point_runtime_statuses": _as_object(
+                        item.get("entry_point_runtime_statuses")
+                    ),
                     "validation_statuses": _as_object(item.get("validation_statuses")),
                     "advisory_citations": [
                         _as_object(citation)
@@ -738,6 +769,16 @@ def _risk_path_closure_context(
             {
                 "route_id": route_id,
                 "entry_point": _as_object(risk_path.get("entry_point")),
+                "entry_point_exposure_count": risk_path.get(
+                    "entry_point_exposure_count"
+                ),
+                "entry_point_exposures": entry_point_exposures,
+                "entry_point_exposures_omitted": risk_path.get(
+                    "entry_point_exposures_omitted"
+                ),
+                "entry_point_kinds": _string_values(
+                    risk_path.get("entry_point_kinds"), 25
+                ),
                 "hop_count": risk_path.get("hop_count"),
                 "files": files,
                 "convergence_hotspot_ids": _string_values(
@@ -779,6 +820,7 @@ def _risk_path_closure_context(
             acceptance.append(
                 "The route has retained change-scope, line-coverage, and focused-test evidence sufficient for an aligned or explicit-gap assessment."
             )
+        acceptance.extend(_entry_point_exposure_acceptance(risk_path))
         campaign_gaps = [
             campaign
             for campaign in campaigns
@@ -828,21 +870,7 @@ def _risk_path_closure_context(
                 "Shared validation-test hotspots have coordinated assertions and an independent-test or approved concentration-risk disposition."
             )
         if dependency_routes:
-            acceptance.extend(
-                [
-                    "Every linked dependency-advisory importer is reviewed for vulnerable-function invocation from its declared entry-point route; static import reachability alone is not used as exploitability proof.",
-                    "The affected dependency is upgraded, removed, mitigated, or covered by a governed VEX disposition, and focused importer tests are rerun with replacement evidence.",
-                ]
-            )
-            if any(item["fix_available"] for item in dependency_routes):
-                acceptance.append(
-                    "A retained fixed-version candidate is applied or an explicit exception records why it is not applicable."
-                )
-            if any(item["uncovered_changed_lines"] for item in dependency_routes):
-                acceptance.append(
-                    "Focused importer validation covers every retained uncovered changed line, or the replacement report records an approved coverage disposition."
-                )
-            acceptance.extend(_package_lifecycle_acceptance(dependency_routes))
+            acceptance.extend(_dependency_route_acceptance(dependency_routes))
         if exposure_advisory_intersections:
             acceptance.extend(
                 [
@@ -914,6 +942,85 @@ def _package_lifecycle_acceptance(
         ),
     )
     result.extend(text for applies, text in criteria if applies)
+    return result
+
+
+def _entry_point_exposure_acceptance(value: dict[str, Any]) -> list[str]:
+    result: list[str] = []
+    if _nonnegative_integer(value.get("entry_point_exposure_count")) > 1:
+        result.append(
+            "Focused validation exercises every retained declared entry-point route to the target, or records an approved interface-equivalence disposition."
+        )
+    if _nonnegative_integer(value.get("entry_point_exposures_omitted")) > 0:
+        result.append(
+            "The replacement report retains the complete declared entry-point route set without bounded omissions before interface exposure is closed."
+        )
+    exposures = _closure_entry_point_exposures(value.get("entry_point_exposures"))
+    assessments = {
+        str(_as_object(item.get("runtime_context")).get("assessment") or "")
+        for item in exposures
+    }
+    if "not-observed" in assessments:
+        result.append(
+            "Every previously unobserved declared interface is exercised by retained production-representative runtime evidence, or has an approved interface-equivalence disposition."
+        )
+    if "not-available" in assessments:
+        result.append(
+            "Every declared interface is joined to its exact reachability node and a retained runtime-observation assessment in the replacement report."
+        )
+    return result
+
+
+def _dependency_route_acceptance(
+    dependency_routes: list[dict[str, Any]],
+) -> list[str]:
+    result = [
+        "Every linked dependency-advisory importer is reviewed for vulnerable-function invocation from its declared entry-point route; static import reachability alone is not used as exploitability proof.",
+        "The affected dependency is upgraded, removed, mitigated, or covered by a governed VEX disposition, and focused importer tests are rerun with replacement evidence.",
+    ]
+    if any(item["fix_available"] for item in dependency_routes):
+        result.append(
+            "A retained fixed-version candidate is applied or an explicit exception records why it is not applicable."
+        )
+    if any(item["uncovered_changed_lines"] for item in dependency_routes):
+        result.append(
+            "Focused importer validation covers every retained uncovered changed line, or the replacement report records an approved coverage disposition."
+        )
+    result.extend(_package_lifecycle_acceptance(dependency_routes))
+    if any(
+        _nonnegative_integer(item.get("entry_point_exposure_count")) > 1
+        for item in dependency_routes
+    ):
+        result.append(
+            "Dependency remediation validation covers every retained declared entry-point route to each exact importer, or records an approved interface-equivalence disposition."
+        )
+    return result
+
+
+def _closure_entry_point_exposures(value: Any) -> list[dict[str, Any]]:
+    result: list[dict[str, Any]] = []
+    for item in _object_list(value, "entry-point exposures")[:25]:
+        edges = [
+            {
+                "source": str(edge.get("source") or "unknown"),
+                "target": str(edge.get("target") or "unknown"),
+                "relation": str(edge.get("relation") or "unknown"),
+            }
+            for edge in _object_list(item.get("edges"), "entry-point exposure edges")[
+                :8
+            ]
+        ]
+        result.append(
+            {
+                "exposure_id": str(item.get("exposure_id") or "unknown"),
+                "primary": item.get("primary") is True,
+                "entry_point": _as_object(item.get("entry_point")),
+                "runtime_context": _as_object(item.get("runtime_context")),
+                "hop_count": item.get("hop_count"),
+                "files": _string_values(item.get("files"), 9),
+                "edges": edges,
+            }
+        )
     return result
 
 
@@ -1576,6 +1683,12 @@ def _integer_values(value: Any, limit: int) -> list[int]:
         for item in value[:limit]
         if isinstance(item, int) and not isinstance(item, bool) and item > 0
     ]
+
+
+def _nonnegative_integer(value: Any) -> int:
+    if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+        return value
+    return 0
 
 
 def _validate_options(coverage_target: float, hotspot_limit: int) -> None:

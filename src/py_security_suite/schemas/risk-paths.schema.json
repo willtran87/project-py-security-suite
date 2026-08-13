@@ -23,6 +23,13 @@
         "dependency_advisory_import_targets",
         "routed_targets", "unrouted_targets", "routed_findings",
         "routed_sink_surfaces", "routed_dependency_advisory_imports",
+        "retained_entry_point_exposures", "routes_with_multiple_entry_points",
+        "observed_entry_point_exposures", "unobserved_entry_point_exposures",
+        "entry_point_exposures_without_runtime_evidence",
+        "multi_entry_routes_with_unobserved_interfaces",
+        "multi_entry_routes_with_runtime_evidence_gaps",
+        "security_routes_with_multiple_entry_points", "maximum_entry_points_per_route",
+        "routes_with_entry_point_exposure_truncation",
         "unrouted_dependency_advisory_imports", "distinct_routed_dependency_advisories",
         "known_exploited_dependency_routes", "high_epss_dependency_routes",
         "dependency_routes_with_fixed_versions", "dependency_routes_with_validation_gaps",
@@ -70,6 +77,16 @@
         "routed_findings": {"$ref": "#/$defs/count"},
         "routed_sink_surfaces": {"$ref": "#/$defs/count"},
         "routed_dependency_advisory_imports": {"$ref": "#/$defs/count"},
+        "retained_entry_point_exposures": {"$ref": "#/$defs/count"},
+        "observed_entry_point_exposures": {"$ref": "#/$defs/count"},
+        "unobserved_entry_point_exposures": {"$ref": "#/$defs/count"},
+        "entry_point_exposures_without_runtime_evidence": {"$ref": "#/$defs/count"},
+        "multi_entry_routes_with_unobserved_interfaces": {"$ref": "#/$defs/count"},
+        "multi_entry_routes_with_runtime_evidence_gaps": {"$ref": "#/$defs/count"},
+        "routes_with_multiple_entry_points": {"$ref": "#/$defs/count"},
+        "security_routes_with_multiple_entry_points": {"$ref": "#/$defs/count"},
+        "maximum_entry_points_per_route": {"$ref": "#/$defs/count"},
+        "routes_with_entry_point_exposure_truncation": {"$ref": "#/$defs/count"},
         "unrouted_dependency_advisory_imports": {"$ref": "#/$defs/count"},
         "distinct_routed_dependency_advisories": {"$ref": "#/$defs/count"},
         "known_exploited_dependency_routes": {"$ref": "#/$defs/count"},
@@ -179,6 +196,7 @@
       "required": [
         "graph_files_omitted", "entry_points_omitted", "targets_omitted",
         "dependency_advisory_import_targets_omitted",
+        "entry_point_exposures_omitted",
         "routes_omitted", "unrouted_targets_omitted",
         "convergence_hotspots_omitted", "validation_test_hotspots_omitted", "exposure_advisory_intersections_omitted",
         "owner_work_queues_omitted"
@@ -188,6 +206,7 @@
         "entry_points_omitted": {"$ref": "#/$defs/count"},
         "targets_omitted": {"$ref": "#/$defs/count"},
         "dependency_advisory_import_targets_omitted": {"$ref": "#/$defs/count"},
+        "entry_point_exposures_omitted": {"$ref": "#/$defs/count"},
         "routes_omitted": {"$ref": "#/$defs/count"},
         "unrouted_targets_omitted": {"$ref": "#/$defs/count"},
         "convergence_hotspots_omitted": {"$ref": "#/$defs/count"},
@@ -215,13 +234,56 @@
     "entryPoint": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "kind", "declared_as", "path", "line"],
+      "required": ["id", "kind", "declared_as", "path", "line", "target"],
       "properties": {
         "id": {"type": "string", "minLength": 1},
         "kind": {"type": "string", "minLength": 1},
         "declared_as": {"type": "string", "minLength": 1},
         "path": {"type": "string", "minLength": 1},
-        "line": {"type": ["integer", "null"], "minimum": 1}
+        "line": {"type": ["integer", "null"], "minimum": 1},
+        "target": {"$ref": "#/$defs/nullableString"}
+      }
+    },
+    "entryPointExposure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "exposure_id", "primary", "entry_point", "runtime_context", "hop_count", "files", "edges"
+      ],
+      "properties": {
+        "exposure_id": {"type": "string", "pattern": "^entry-exposure-[0-9a-f]{16}$"},
+        "primary": {"type": "boolean"},
+        "entry_point": {"$ref": "#/$defs/entryPoint"},
+        "runtime_context": {"$ref": "#/$defs/entryPointRuntimeContext"},
+        "hop_count": {"type": "integer", "minimum": 0, "maximum": 8},
+        "files": {"type": "array", "minItems": 1, "maxItems": 9, "items": {"type": "string", "minLength": 1}},
+        "edges": {"type": "array", "maxItems": 8, "items": {"$ref": "#/$defs/edge"}}
+      }
+    },
+    "entryPointRuntimeContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "target_node_id", "node_evidence_available", "reachability_state",
+        "runtime_observation", "assessment", "evidence_artifacts"
+      ],
+      "properties": {
+        "target_node_id": {"$ref": "#/$defs/nullableString"},
+        "node_evidence_available": {"type": "boolean"},
+        "reachability_state": {"$ref": "#/$defs/nullableString"},
+        "runtime_observation": {"$ref": "#/$defs/nullableString"},
+        "assessment": {"enum": ["observed", "not-observed", "not-available"]},
+        "evidence_artifacts": {"$ref": "#/$defs/strings"}
+      }
+    },
+    "entryPointRuntimeCounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["observed", "not-observed", "not-available"],
+      "properties": {
+        "observed": {"$ref": "#/$defs/count"},
+        "not-observed": {"$ref": "#/$defs/count"},
+        "not-available": {"$ref": "#/$defs/count"}
       }
     },
     "target": {
@@ -300,7 +362,9 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "route_id", "priority", "entry_point", "target", "hop_count",
+        "route_id", "priority", "entry_point", "entry_point_exposure_count",
+        "entry_point_exposures", "entry_point_exposures_omitted", "entry_point_kinds",
+        "target", "hop_count",
         "files", "edges", "owners", "runtime_context", "validation",
         "correlations", "convergence_hotspot_ids", "validation_campaign_ids",
         "validation_test_hotspot_ids", "exposure_advisory_intersection_ids", "recommended_action",
@@ -310,6 +374,10 @@
         "route_id": {"type": "string", "pattern": "^route-[0-9a-f]{16}$"},
         "priority": {"enum": ["P0", "P1", "P2", "P3", "P4"]},
         "entry_point": {"$ref": "#/$defs/entryPoint"},
+        "entry_point_exposure_count": {"$ref": "#/$defs/count"},
+        "entry_point_exposures": {"type": "array", "maxItems": 25, "items": {"$ref": "#/$defs/entryPointExposure"}},
+        "entry_point_exposures_omitted": {"$ref": "#/$defs/count"},
+        "entry_point_kinds": {"$ref": "#/$defs/strings"},
         "target": {"$ref": "#/$defs/target"},
         "hop_count": {"type": "integer", "minimum": 0, "maximum": 8},
         "files": {"type": "array", "minItems": 1, "maxItems": 9, "items": {"type": "string", "minLength": 1}},
@@ -334,7 +402,8 @@
         "sink_route_id", "sink_target_id", "dependency_route_id", "dependency_target_id",
         "advisory_cluster_id", "primary_identifier", "package", "sdk", "sink_family",
         "trust_boundary", "data_classes", "protection_status", "finding_ids", "tools",
-        "owners", "known_exploited", "epss_high", "fix_available", "package_lifecycle", "validation_statuses",
+        "owners", "known_exploited", "epss_high", "fix_available", "package_lifecycle",
+        "entry_point_exposure_ids", "entry_point_ids", "entry_point_exposure_count", "entry_point_exposures_omitted", "entry_point_runtime_statuses", "validation_statuses",
         "advisory_citations", "evidence_artifacts", "recommended_action"
       ],
       "properties": {
@@ -362,6 +431,11 @@
         "epss_high": {"type": "boolean"},
         "fix_available": {"type": "boolean"},
         "package_lifecycle": {"$ref": "#/$defs/packageLifecycle"},
+        "entry_point_exposure_ids": {"type": "array", "maxItems": 50, "items": {"type": "string", "pattern": "^entry-exposure-[0-9a-f]{16}$"}},
+        "entry_point_ids": {"$ref": "#/$defs/strings"},
+        "entry_point_exposure_count": {"$ref": "#/$defs/count"},
+        "entry_point_exposures_omitted": {"$ref": "#/$defs/count"},
+        "entry_point_runtime_statuses": {"$ref": "#/$defs/entryPointRuntimeCounts"},
         "validation_statuses": {
           "type": "object",
           "additionalProperties": false,
@@ -677,6 +751,8 @@
         "queue_id", "owner", "priority", "routes", "targets", "route_ids",
         "target_ids", "convergence_hotspot_ids", "validation_campaign_ids",
         "validation_test_hotspot_ids", "shared_validation_test_files", "exposure_advisory_intersection_ids", "exposure_advisory_intersections",
+        "multi_entry_routes", "retained_entry_point_ids", "entry_point_exposures_omitted",
+        "entry_point_runtime_statuses", "unobserved_entry_point_ids", "entry_points_without_runtime_evidence",
         "campaigns_by_review_tier", "campaigns_revision_mismatched",
         "campaigns_revision_unbound", "campaigns_with_uncovered_changed_lines",
         "campaigns_with_runtime_observation_gaps", "highest_campaign_review_score", "routes_by_priority",
@@ -696,6 +772,12 @@
         "shared_validation_test_files": {"$ref": "#/$defs/count"},
         "exposure_advisory_intersection_ids": {"type": "array", "maxItems": 100, "items": {"type": "string", "pattern": "^exposure-advisory-[0-9a-f]{16}$"}},
         "exposure_advisory_intersections": {"$ref": "#/$defs/count"},
+        "multi_entry_routes": {"$ref": "#/$defs/count"},
+        "retained_entry_point_ids": {"$ref": "#/$defs/strings"},
+        "entry_point_exposures_omitted": {"$ref": "#/$defs/count"},
+        "entry_point_runtime_statuses": {"$ref": "#/$defs/entryPointRuntimeCounts"},
+        "unobserved_entry_point_ids": {"$ref": "#/$defs/strings"},
+        "entry_points_without_runtime_evidence": {"$ref": "#/$defs/strings"},
         "campaigns_by_review_tier": {"$ref": "#/$defs/reviewTierCounts"},
         "campaigns_revision_mismatched": {"$ref": "#/$defs/count"},
         "campaigns_revision_unbound": {"$ref": "#/$defs/count"},

@@ -45,6 +45,16 @@ for published releases.
   source-only, and artifact-only components; missing inventories fail closed as
   evidence gaps. Reports and closure work retain exact versions and exact-match
   fixed-version evidence without inferring semantic-version safety.
+  Risk routes now retain a bounded exposure matrix for every declared entry
+  point that Graphify can connect to the same target. Stable exposure IDs,
+  exact file/edge sequences, entry kinds, omissions, owner-queue counts,
+  finding/SARIF context, and interface-aware closure criteria preserve attack-
+  surface breadth without multiplying findings or claiming runtime exposure.
+  Each exposure now joins its exact declared reachability target node and
+  distinguishes observed, unobserved, and unavailable runtime evidence.
+  Interface-specific runtime gaps flow into intersections, owner queues,
+  reports, SARIF, and closure criteria without treating non-observation as
+  proof that an interface is dead or inaccessible.
   Campaign IDs, scores, revision state, evidence gaps, and actions propagate
   through findings, SARIF, reports, owner queues, and closure work. Add
   `pysec-evidence bind` to atomically create

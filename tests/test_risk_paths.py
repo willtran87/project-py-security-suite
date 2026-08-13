@@ -57,6 +57,7 @@ class RiskPathTests(unittest.TestCase):
             }
         }
         artifacts = _artifacts()
+        _add_multi_entry_paths(artifacts)
 
         result = build_risk_paths([finding], artifacts)
 
@@ -96,11 +97,45 @@ class RiskPathTests(unittest.TestCase):
             result["summary"]["campaigns_with_source_bound_control_points"], 2
         )
         self.assertEqual(result["summary"]["selected_test_source_bindings"], 2)
+        self.assertEqual(result["summary"]["retained_entry_point_exposures"], 6)
+        self.assertEqual(result["summary"]["observed_entry_point_exposures"], 2)
+        self.assertEqual(result["summary"]["unobserved_entry_point_exposures"], 2)
+        self.assertEqual(
+            result["summary"]["entry_point_exposures_without_runtime_evidence"],
+            2,
+        )
+        self.assertEqual(
+            result["summary"]["multi_entry_routes_with_unobserved_interfaces"], 2
+        )
+        self.assertEqual(
+            result["summary"]["multi_entry_routes_with_runtime_evidence_gaps"], 2
+        )
+        self.assertEqual(result["summary"]["routes_with_multiple_entry_points"], 2)
+        self.assertEqual(
+            result["summary"]["security_routes_with_multiple_entry_points"], 2
+        )
+        self.assertEqual(result["summary"]["maximum_entry_points_per_route"], 3)
         queue = result["owner_work_queues"][0]
         self.assertEqual(queue["campaigns_with_uncovered_changed_lines"], 1)
         self.assertEqual(queue["campaigns_with_runtime_observation_gaps"], 1)
         self.assertEqual(queue["shared_validation_test_files"], 1)
         self.assertEqual(len(queue["validation_test_hotspot_ids"]), 1)
+        self.assertEqual(queue["multi_entry_routes"], 2)
+        self.assertEqual(
+            queue["retained_entry_point_ids"],
+            ["entry:cli", "entry:cli-module", "entry:worker"],
+        )
+        self.assertIn("interface-specific validation", queue["recommended_action"])
+        self.assertEqual(
+            queue["entry_point_runtime_statuses"],
+            {"observed": 1, "not-observed": 1, "not-available": 1},
+        )
+        self.assertEqual(queue["unobserved_entry_point_ids"], ["entry:worker"])
+        self.assertEqual(
+            queue["entry_points_without_runtime_evidence"], ["entry:cli-module"]
+        )
+        self.assertIn("representative runtime evidence", queue["recommended_action"])
+        self.assertIn("Model exact reachability nodes", queue["recommended_action"])
         finding_route = next(
             route for route in result["routes"] if route["target"]["kind"] == "finding"
         )
@@ -113,6 +148,27 @@ class RiskPathTests(unittest.TestCase):
             ["calls", "calls"],
         )
         self.assertEqual(finding_route["owners"], ["@security-team"])
+        self.assertEqual(finding_route["entry_point_exposure_count"], 3)
+        self.assertTrue(finding_route["entry_point_exposures"][0]["primary"])
+        self.assertEqual(
+            {
+                item["entry_point"]["id"]
+                for item in finding_route["entry_point_exposures"]
+            },
+            {"entry:cli", "entry:cli-module", "entry:worker"},
+        )
+        runtime_by_entry = {
+            item["entry_point"]["id"]: item["runtime_context"]["assessment"]
+            for item in finding_route["entry_point_exposures"]
+        }
+        self.assertEqual(
+            runtime_by_entry,
+            {
+                "entry:cli": "observed",
+                "entry:cli-module": "not-available",
+                "entry:worker": "not-observed",
+            },
+        )
         self.assertEqual(len(finding_route["convergence_hotspot_ids"]), 2)
         self.assertEqual(len(finding_route["validation_campaign_ids"]), 2)
         self.assertEqual(
@@ -120,6 +176,7 @@ class RiskPathTests(unittest.TestCase):
             ["tests/test_sink.py"],
         )
         self.assertEqual(finding.evidence["risk_path"]["status"], "routed")
+        self.assertEqual(finding.evidence["risk_path"]["entry_point_exposure_count"], 3)
         self.assertEqual(len(finding.evidence["risk_path"]["validation_campaigns"]), 2)
         self.assertEqual(
             len(finding.evidence["risk_path"]["validation_test_hotspot_ids"]), 1
@@ -234,6 +291,9 @@ class RiskPathTests(unittest.TestCase):
         self.assertIn("uncovered changed lines 9", rendered)
         self.assertIn("runtime not-observed", rendered)
         self.assertIn("changed-control-risk +15", rendered)
+        self.assertIn("3 declared entry-point route(s)", rendered)
+        self.assertIn("src/worker.py", rendered)
+        self.assertIn("runtime observed/unobserved/unavailable 1/1/1", rendered)
         html_context = _html_risk_path_context(finding)
         self.assertIn("changed-control-risk +15", html_context)
         self.assertIn("uncovered changed lines 9", html_context)
@@ -243,6 +303,7 @@ class RiskPathTests(unittest.TestCase):
         sarif = render_sarif([finding])
         properties = sarif["runs"][0]["results"][0]["properties"]
         self.assertEqual(properties["risk_path"]["status"], "routed")
+        self.assertEqual(properties["risk_path"]["entry_point_exposure_count"], 3)
         self.assertEqual(
             properties["risk_path"]["validation_test_hotspot_ids"],
             [test_hotspot["test_hotspot_id"]],
@@ -261,6 +322,10 @@ class RiskPathTests(unittest.TestCase):
             closure["details"]["risk_path"]["validation_campaign_ids"],
             finding_route["validation_campaign_ids"],
         )
+        self.assertEqual(
+            closure["details"]["risk_path"]["entry_point_exposure_count"], 3
+        )
+        self.assertIn("src/worker.py", closure["evidence_refs"])
         self.assertIn("tests/test_sink.py", closure["evidence_refs"])
         closure_campaigns = closure["details"]["risk_path"]["validation_campaigns"]
         self.assertTrue(
@@ -297,6 +362,24 @@ class RiskPathTests(unittest.TestCase):
         self.assertTrue(
             any(
                 "validation assessment" in item
+                for item in closure["acceptance_criteria"]
+            )
+        )
+        self.assertTrue(
+            any(
+                "every retained declared entry-point route" in item
+                for item in closure["acceptance_criteria"]
+            )
+        )
+        self.assertTrue(
+            any(
+                "previously unobserved declared interface" in item
+                for item in closure["acceptance_criteria"]
+            )
+        )
+        self.assertTrue(
+            any(
+                "joined to its exact reachability node" in item
                 for item in closure["acceptance_criteria"]
             )
         )
@@ -343,9 +426,44 @@ class RiskPathTests(unittest.TestCase):
         schema = json.loads(read_bundled_schema("risk-paths-1.0"))
         Draft202012Validator(schema).validate(mismatched)
 
+    def test_entry_point_exposure_is_exact_and_bounded(self) -> None:
+        artifacts = _artifacts()
+        _add_multi_entry_paths(artifacts)
+
+        with patch("py_security_suite.risk_paths._MAX_ENTRY_POINT_EXPOSURES", 1):
+            result = build_risk_paths([_finding("src/sink.py", 9)], artifacts)
+
+        routes = result["routes"]
+        self.assertTrue(routes)
+        self.assertTrue(
+            all(route["entry_point_exposure_count"] == 3 for route in routes)
+        )
+        self.assertTrue(
+            all(len(route["entry_point_exposures"]) == 1 for route in routes)
+        )
+        self.assertTrue(
+            all(route["entry_point_exposures"][0]["primary"] for route in routes)
+        )
+        self.assertTrue(
+            all(route["entry_point_exposures_omitted"] == 2 for route in routes)
+        )
+        self.assertEqual(
+            result["summary"]["routes_with_entry_point_exposure_truncation"], 2
+        )
+        self.assertEqual(result["truncation"]["entry_point_exposures_omitted"], 4)
+        retained_ids = {
+            exposure["entry_point"]["id"]
+            for route in routes
+            for exposure in route["entry_point_exposures"]
+        }
+        self.assertNotIn("entry:unrelated", retained_ids)
+        schema = json.loads(read_bundled_schema("risk-paths-1.0"))
+        Draft202012Validator(schema).validate(result)
+
     def test_routes_dependency_advisories_through_exact_importers(self) -> None:
         finding = _finding("requirements.txt", 1)
         artifacts = _artifacts()
+        _add_multi_entry_paths(artifacts)
         artifacts["evidence-fusion.json"] = {
             "schema_version": "1.3",
             "advisory_clusters": [_dependency_advisory_cluster()],
@@ -416,6 +534,7 @@ class RiskPathTests(unittest.TestCase):
         self.assertEqual(route["correlations"]["fixed_version_candidates"], ["2.0.0"])
         self.assertEqual(route["correlations"]["change_risk_score"], 70)
         self.assertEqual(route["correlations"]["uncovered_changed_lines"], [4])
+        self.assertEqual(route["entry_point_exposure_count"], 3)
         self.assertEqual(
             route["correlations"]["package_lifecycle"]["assessment"],
             "version-drift",
@@ -436,6 +555,10 @@ class RiskPathTests(unittest.TestCase):
         self.assertEqual(
             risk_path["dependency_advisory_routes"][0]["route_id"],
             route["route_id"],
+        )
+        self.assertEqual(
+            risk_path["dependency_advisory_routes"][0]["entry_point_exposure_count"],
+            3,
         )
         rendered = "\n".join(_render_risk_path_summary(result))
         self.assertIn("Routed dependency-advisory imports", rendered)
@@ -471,6 +594,12 @@ class RiskPathTests(unittest.TestCase):
         self.assertTrue(
             any(
                 "uncovered changed line" in criterion
+                for criterion in closure["acceptance_criteria"]
+            )
+        )
+        self.assertTrue(
+            any(
+                "Dependency remediation validation covers every retained" in criterion
                 for criterion in closure["acceptance_criteria"]
             )
         )
@@ -652,6 +781,7 @@ class RiskPathTests(unittest.TestCase):
     def test_joins_sensitive_sdk_sink_to_exact_advisory_importer(self) -> None:
         finding = _finding("requirements.txt", 1)
         artifacts = _artifacts()
+        _add_multi_entry_paths(artifacts)
         cluster = _dependency_advisory_cluster()
         usage = cluster["dependency_usage"]
         usage["import_paths"] = ["src/sink.py"]
@@ -704,6 +834,15 @@ class RiskPathTests(unittest.TestCase):
         self.assertEqual(intersection["data_classes"], ["credential"])
         self.assertTrue(intersection["known_exploited"])
         self.assertEqual(intersection["validation_statuses"]["dependency"], "gap")
+        self.assertEqual(intersection["entry_point_exposure_count"], 3)
+        self.assertEqual(
+            intersection["entry_point_runtime_statuses"],
+            {"observed": 1, "not-observed": 1, "not-available": 1},
+        )
+        self.assertEqual(
+            intersection["entry_point_ids"],
+            ["entry:cli", "entry:cli-module", "entry:worker"],
+        )
         self.assertEqual(
             intersection["package_lifecycle"]["assessment"], "artifact-only"
         )
@@ -753,6 +892,12 @@ class RiskPathTests(unittest.TestCase):
         self.assertEqual(
             risk_path["exposure_advisory_intersections"][0]["package"],
             "demo-package",
+        )
+        self.assertEqual(
+            risk_path["exposure_advisory_intersections"][0][
+                "entry_point_exposure_count"
+            ],
+            3,
         )
         rendered = "\n".join(_render_risk_path_summary(result))
         self.assertIn("Sensitive-boundary dependency intersections", rendered)
@@ -1078,9 +1223,16 @@ def _artifacts() -> dict[str, Any]:
                     "declared_as": "example.cli:main",
                     "path": "src/cli.py",
                     "line": 3,
+                    "target": "symbol:example.cli:main",
                 }
             ],
             "nodes": [
+                {
+                    "id": "symbol:example.cli:main",
+                    "path": "src/cli.py",
+                    "state": "executable",
+                    "runtime_observation": "observed",
+                },
                 {
                     "path": "src/service.py",
                     "state": "executable",
@@ -1261,6 +1413,60 @@ def _dependency_advisory_cluster() -> dict[str, Any]:
             "recommended_action": "Upgrade demo-package to 2.0.0.",
         },
     }
+
+
+def _add_multi_entry_paths(artifacts: dict[str, Any]) -> None:
+    artifacts["reachability.json"]["entry_points"].extend(
+        [
+            {
+                "id": "entry:cli-module",
+                "kind": "python-main",
+                "declared_as": "src/cli.py",
+                "path": "src/cli.py",
+                "line": 1,
+                "target": "module:example.cli",
+            },
+            {
+                "id": "entry:worker",
+                "kind": "worker",
+                "declared_as": "example.worker:run",
+                "path": "src/worker.py",
+                "line": 2,
+                "target": "symbol:example.worker:run",
+            },
+            {
+                "id": "entry:unrelated",
+                "kind": "project-scripts",
+                "declared_as": "example.unrelated:main",
+                "path": "src/unrelated.py",
+                "line": 2,
+                "target": "symbol:example.unrelated:main",
+            },
+        ]
+    )
+    artifacts["graphify.json"]["topology"]["file_edges"].append(
+        {
+            "source": "src/worker.py",
+            "target": "src/service.py",
+            "relation": "calls",
+        }
+    )
+    artifacts["reachability.json"]["nodes"].extend(
+        [
+            {
+                "id": "symbol:example.worker:run",
+                "path": "src/worker.py",
+                "state": "executable",
+                "runtime_observation": "not-observed",
+            },
+            {
+                "id": "symbol:example.unrelated:main",
+                "path": "src/unrelated.py",
+                "state": "executable",
+                "runtime_observation": "observed",
+            },
+        ]
+    )
 
 
 def _package_lineage(
