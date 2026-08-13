@@ -321,6 +321,7 @@ def _finding_items(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
         rules = {str(source.get("rule_id")) for source in sources}
         external = "COSIGN-BUNDLE-MISSING" in rules
         evidence = _as_object(finding.get("evidence"))
+        risk_refs, risk_acceptance, risk_details = _risk_path_closure_context(evidence)
         advisory = _as_object(
             _as_object(evidence.get("fusion")).get("advisory_context")
         )
@@ -347,6 +348,7 @@ def _finding_items(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 [
                     f"Advisory cluster {cluster_id} is absent or explicitly governed in a newly sealed report.",
                     "The replacement report independently passes pysec verify-report.",
+                    *risk_acceptance,
                 ]
             )
             evidence_basis = remediation.get("evidence_basis")
@@ -401,6 +403,7 @@ def _finding_items(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
                         *test_files,
                         *test_execution_sources,
                         *dependency_evidence_refs,
+                        *risk_refs,
                     ],
                     related_findings=cluster_findings or [finding_id],
                     tools=_string_values(advisory.get("tools"), 25),
@@ -441,6 +444,7 @@ def _finding_items(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
                         ),
                         "owners": remediation.get("owners", []),
                         "uncertainties": remediation.get("uncertainties", []),
+                        "risk_path": risk_details,
                     },
                 )
             )
@@ -476,8 +480,14 @@ def _finding_items(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 acceptance=[
                     f"Finding {finding_id} is absent or governed in a newly sealed report.",
                     "The replacement report independently passes pysec verify-report.",
+                    *risk_acceptance,
                 ],
-                evidence_refs=["findings.json", "action-plan.md", *location_paths],
+                evidence_refs=[
+                    "findings.json",
+                    "action-plan.md",
+                    *location_paths,
+                    *risk_refs,
+                ],
                 commands=(
                     [
                         [
@@ -494,9 +504,61 @@ def _finding_items(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 ),
                 related_findings=[finding_id],
                 tools=tools,
+                details={"risk_path": risk_details} if risk_details else {},
             )
         )
     return items
+
+
+def _risk_path_closure_context(
+    evidence: dict[str, Any],
+) -> tuple[list[str], list[str], dict[str, Any]]:
+    risk_path = _as_object(evidence.get("risk_path"))
+    if not risk_path:
+        return [], [], {}
+    status = str(risk_path.get("status") or "unknown")
+    refs = ["risk-paths.json"]
+    details: dict[str, Any] = {"status": status}
+    if status == "routed":
+        route_id = str(risk_path.get("route_id") or "unknown")
+        files = _string_values(risk_path.get("files"), 9)
+        refs.extend(files)
+        validation = _as_object(risk_path.get("validation"))
+        assessment = str(validation.get("assessment_status") or "not-assessed")
+        details.update(
+            {
+                "route_id": route_id,
+                "entry_point": _as_object(risk_path.get("entry_point")),
+                "hop_count": risk_path.get("hop_count"),
+                "files": files,
+                "convergence_hotspot_ids": _string_values(
+                    risk_path.get("convergence_hotspot_ids"), 50
+                ),
+                "validation_assessment": assessment,
+                "validation_action": validation.get("action"),
+            }
+        )
+        acceptance = [
+            f"Static route {route_id} is reviewed with its owner and retained in the replacement report."
+        ]
+        if assessment == "gap":
+            acceptance.append(
+                "The route validation assessment no longer reports a coverage or focused-test gap."
+            )
+        elif assessment in {"partial", "not-assessed"}:
+            acceptance.append(
+                "The route has retained change-scope, line-coverage, and focused-test evidence sufficient for an aligned or explicit-gap assessment."
+            )
+        return refs, acceptance, details
+    reason = str(risk_path.get("reason") or "bounded static route unavailable")
+    details["reason"] = reason
+    return (
+        refs,
+        [
+            "The target has a governed entry-point route or a documented dynamic/external-entry rationale in the replacement report."
+        ],
+        details,
+    )
 
 
 def _governance_items(

@@ -37,6 +37,7 @@ BUNDLED_SCHEMA_RESOURCES = {
     "evidence-fusion-1.3": "evidence-fusion.schema.json",
     "graphify-evidence-1.0": "graphify-evidence.schema.json",
     "graph-analysis-1.0": "graph-analysis.schema.json",
+    "risk-paths-1.0": "risk-paths.schema.json",
     "structural-synthesis-1.0": "structural-synthesis.schema.json",
     "structural-synthesis-1.1": "structural-synthesis-1.1.schema.json",
     "structural-synthesis-1.2": "structural-synthesis-1.2.schema.json",

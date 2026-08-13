@@ -37,8 +37,12 @@ flowchart LR
     Join --> Hotspots["graph-analysis.json<br/>cross-tool clusters and hotspots"]
     Hotspots --> Synthesis["structural-synthesis.json<br/>dead code, islands, changes, tests"]
     Graph --> Synthesis
+    Graph --> Routes["risk-paths.json<br/>entry point to review target"]
+    Reach --> Routes
+    Findings --> Routes
     Context --> Reports["Markdown, HTML, JSON, SARIF"]
     Synthesis --> Reports
+    Routes --> Reports
 ```
 
 ## Interpretation
@@ -53,6 +57,9 @@ flowchart LR
   See [Structural synthesis](structural-synthesis.md).
 - Each located finding receives concise upstream, downstream, centrality, and
   related-finding context in Markdown, HTML, and JSON.
+- `risk-paths.json` uses the normalized file graph to connect declared entry
+  points to findings and review-worthy sensitive sinks, then adds owner and
+  validation context. See [Static risk routes](risk-paths.md).
 - Static connectivity does not prove runtime reachability, exploitability, or
   safety. The built-in reachability analyzer and test evidence remain separate.
 - Graph centrality alone never raises or lowers a finding's native severity.

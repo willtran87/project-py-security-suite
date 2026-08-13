@@ -83,6 +83,11 @@ depends_on = ["py_security_suite.models"]
 layer = "services"
 
 [[modules]]
+path = "py_security_suite.risk_paths"
+depends_on = ["py_security_suite.models", "py_security_suite.prioritization"]
+layer = "services"
+
+[[modules]]
 path = "py_security_suite.source_context"
 depends_on = ["py_security_suite.models"]
 layer = "services"
@@ -450,6 +455,7 @@ depends_on = [
     "py_security_suite.path_safety",
     "py_security_suite.reports",
     "py_security_suite.risk_intelligence",
+    "py_security_suite.risk_paths",
     "py_security_suite.source_context",
     "py_security_suite.structural_synthesis",
     "py_security_suite.trust_catalog",

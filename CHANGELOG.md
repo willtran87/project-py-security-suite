@@ -5,6 +5,16 @@ for published releases.
 
 ## Unreleased
 
+- Add `risk-paths.json`, a bounded offline synthesis of declared reachability
+  entry points, Graphify file relations, normalized findings, review-worthy
+  sensitive-data sinks, runtime state, coverage, focused tests, structural
+  risks, and CODEOWNERS. Stable routes and explicit unrouted model gaps flow
+  back into finding JSON, Markdown, HTML, and SARIF with actionable validation
+  steps and explicit aligned/gap/partial/not-assessed states, while
+  interpretation remains conservative about exploitability and leakage.
+  Cross-route convergence now identifies shared transit/target control points,
+  consolidates validation work, and creates exact owner queues without merging
+  or multiplying native findings. Bundle and document the version 1.0 schema.
 - Version promotion plans at 1.2 and cross-reference sealed closure-plan 1.2
   validation work with optional digest-bound operational-trend 1.3 evidence.
   Promotion now fails closed on current validation debt or blocking validation

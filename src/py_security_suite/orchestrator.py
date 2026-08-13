@@ -41,6 +41,7 @@ from .portfolio_health import portfolio_health_artifact
 from .path_safety import resolve_regular_directory, resolve_unlinked_path
 from .reports import write_reports
 from .risk_intelligence import enrich_findings
+from .risk_paths import build_risk_paths
 from .source_context import attach_source_context
 from .structural_synthesis import build_structural_synthesis
 from .trust_catalog import apply_trust_catalog
@@ -163,6 +164,9 @@ def scan_project(
         derived_artifacts["evidence-fusion.json"] = fusion
         apply_data_exposure_fusion(
             derived_artifacts["data-exposure.json"], findings, fusion
+        )
+        derived_artifacts["risk-paths.json"] = build_risk_paths(
+            findings, derived_artifacts
         )
         context_errors.extend(
             (

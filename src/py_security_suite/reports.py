@@ -259,6 +259,7 @@ def _write_primary_report_files(
     fusion = (derived_artifacts or {}).get("evidence-fusion.json")
     structural = (derived_artifacts or {}).get("structural-synthesis.json")
     data_exposure = (derived_artifacts or {}).get("data-exposure.json")
+    risk_paths = (derived_artifacts or {}).get("risk-paths.json")
     _write_text(
         output / "summary.md",
         render_summary(
@@ -267,6 +268,7 @@ def _write_primary_report_files(
             evidence_fusion=fusion if isinstance(fusion, dict) else None,
             structural_synthesis=structural if isinstance(structural, dict) else None,
             data_exposure=data_exposure if isinstance(data_exposure, dict) else None,
+            risk_paths=risk_paths if isinstance(risk_paths, dict) else None,
         ),
     )
     _write_text(
@@ -326,6 +328,7 @@ def render_summary(
     evidence_fusion: dict[str, Any] | None = None,
     structural_synthesis: dict[str, Any] | None = None,
     data_exposure: dict[str, Any] | None = None,
+    risk_paths: dict[str, Any] | None = None,
 ) -> str:
     active_findings = [
         finding
@@ -350,6 +353,7 @@ def render_summary(
     lines.extend(_render_fusion_summary(evidence_fusion))
     lines.extend(_render_structural_summary(structural_synthesis))
     lines.extend(_render_data_exposure_summary(data_exposure))
+    lines.extend(_render_risk_path_summary(risk_paths))
     lines.extend(["", "## Decision", ""])
     lines.extend(f"- {reason}" for reason in manifest.policy_reasons)
     lines.extend(_render_admission_decisions(manifest, active_findings))
@@ -785,6 +789,266 @@ def _render_data_exposure_summary(value: dict[str, Any] | None) -> list[str]:
             )[:5]
         )
     return lines
+
+
+def _render_risk_path_summary(value: dict[str, Any] | None) -> list[str]:
+    if not isinstance(value, dict) or not isinstance(value.get("summary"), dict):
+        return []
+    summary = value["summary"]
+    routes = value.get("routes")
+    routes = routes if isinstance(routes, list) else []
+    unrouted = value.get("unrouted_targets")
+    unrouted = unrouted if isinstance(unrouted, list) else []
+    hotspots = value.get("convergence_hotspots")
+    hotspots = hotspots if isinstance(hotspots, list) else []
+    owner_queues = value.get("owner_work_queues")
+    owner_queues = owner_queues if isinstance(owner_queues, list) else []
+    lines = [
+        "",
+        "## Static risk routes",
+        "",
+        (
+            "These bounded Graphify routes connect declared Python entry points to "
+            "review targets and their owner/test evidence. A route is triage context, "
+            "not proof of attacker control, exploitability, or sensitive-data flow."
+        ),
+        "",
+        "| Signal | Count |",
+        "|---|---:|",
+        f"| Declared entry points | {int(summary.get('entry_points', 0))} |",
+        f"| Finding targets | {int(summary.get('finding_targets', 0))} |",
+        f"| Sensitive sink-surface targets | {int(summary.get('sink_surface_targets', 0))} |",
+        f"| Targets analyzed within bound | {int(summary.get('targets_analyzed', 0))} |",
+        f"| Targets with a bounded route | {int(summary.get('routed_targets', 0))} |",
+        f"| Targets without a bounded route | {int(summary.get('unrouted_targets', 0))} |",
+        f"| Runtime-observed routes | {int(summary.get('runtime_observed_routes', 0))} |",
+        f"| Routes with line-coverage gaps | {int(summary.get('coverage_gap_routes', 0))} |",
+        f"| Routes with validation gaps | {int(summary.get('validation_gap_routes', 0))} |",
+        f"| Routes with validation evidence | {int(summary.get('validation_assessed_routes', 0))} |",
+        f"| Routes not validation-assessed | {int(summary.get('validation_unassessed_routes', 0))} |",
+        f"| Routes with an assigned owner | {int(summary.get('owned_routes', 0))} |",
+        f"| Shared route convergence hotspots | {int(summary.get('convergence_hotspots', 0))} |",
+        f"| Shared transit/control points | {int(summary.get('shared_control_points', 0))} |",
+        f"| Routes benefiting from shared remediation | {int(summary.get('routes_in_convergence_hotspots', 0))} |",
+        f"| Owner work queues | {int(summary.get('owner_work_queues', 0))} |",
+        "",
+    ]
+    if routes:
+        lines.extend(
+            [
+                "| Priority / target | Entry point and bounded route | Runtime / validation | Owner and action |",
+                "|---|---|---|---|",
+            ]
+        )
+        for route in routes[:10]:
+            if not isinstance(route, dict):
+                continue
+            target = route.get("target")
+            entry = route.get("entry_point")
+            validation = route.get("validation")
+            runtime = route.get("runtime_context")
+            target = target if isinstance(target, dict) else {}
+            entry = entry if isinstance(entry, dict) else {}
+            validation = validation if isinstance(validation, dict) else {}
+            runtime = runtime if isinstance(runtime, dict) else {}
+            files = route.get("files")
+            file_values = files if isinstance(files, list) else []
+            route_text = " → ".join(str(item) for item in file_values[:5])
+            if len(file_values) > 5:
+                route_text += f" → … (+{len(file_values) - 5})"
+            signals = _risk_path_validation_signals(validation, runtime)
+            owners = route.get("owners")
+            owner_text = (
+                ", ".join(str(item) for item in owners[:3])
+                if isinstance(owners, list) and owners
+                else "Unassigned"
+            )
+            lines.append(
+                "| `"
+                + _markdown_code(str(route.get("priority") or "P4"))
+                + "` "
+                + _markdown_text(
+                    str(target.get("label") or target.get("id") or "target")
+                )
+                + "<br>`"
+                + _markdown_code(
+                    str(target.get("path") or "unknown")
+                    + (f":{target['line']}" if target.get("line") else "")
+                )
+                + "` | `"
+                + _markdown_code(
+                    str(entry.get("declared_as") or entry.get("id") or "unknown")
+                )
+                + "`<br>"
+                + _markdown_text(route_text or "same-file entry point")
+                + " | "
+                + _markdown_text(signals)
+                + " | **"
+                + _markdown_text(owner_text)
+                + "**<br>"
+                + _markdown_text(
+                    str(route.get("recommended_action") or "Review the route.")
+                )
+                + " |"
+            )
+    if hotspots:
+        lines.extend(
+            [
+                "",
+                "### Shared route control points",
+                "",
+                "These files occur on multiple distinct target routes. Review shared remediation and integration-test scope before creating duplicate work.",
+                "",
+                "| Priority / control point | Role | Routes / targets | Owners | Validation | Consolidated action |",
+                "|---|---|---:|---|---|---|",
+            ]
+        )
+        for hotspot in hotspots[:10]:
+            if not isinstance(hotspot, dict):
+                continue
+            validation = hotspot.get("validation_statuses")
+            validation = validation if isinstance(validation, dict) else {}
+            owners = hotspot.get("owners")
+            owner_text = (
+                ", ".join(str(item) for item in owners[:3])
+                if isinstance(owners, list) and owners
+                else "Unassigned"
+            )
+            lines.append(
+                "| `"
+                + _markdown_code(str(hotspot.get("priority") or "P4"))
+                + "` `"
+                + _markdown_code(str(hotspot.get("path") or "unknown"))
+                + "`<br>`"
+                + _markdown_code(str(hotspot.get("hotspot_id") or "unknown"))
+                + "` | `"
+                + _markdown_code(str(hotspot.get("kind") or "unknown"))
+                + "` | "
+                + str(len(hotspot.get("route_ids") or []))
+                + " / "
+                + str(len(hotspot.get("target_ids") or []))
+                + " | "
+                + _markdown_text(owner_text)
+                + " | "
+                + _markdown_text(_validation_count_summary(validation))
+                + " | "
+                + _markdown_text(
+                    str(hotspot.get("recommended_action") or "Review shared scope.")
+                )
+                + " |"
+            )
+    if owner_queues:
+        lines.extend(
+            [
+                "",
+                "### Route owner queues",
+                "",
+                "| Owner | Priority | Routes / targets | Shared hotspots | Validation | Next action |",
+                "|---|---|---:|---:|---|---|",
+            ]
+        )
+        for queue in owner_queues[:10]:
+            if not isinstance(queue, dict):
+                continue
+            validation = queue.get("validation_statuses")
+            validation = validation if isinstance(validation, dict) else {}
+            lines.append(
+                "| **"
+                + _markdown_text(str(queue.get("owner") or "Unassigned"))
+                + "**<br>`"
+                + _markdown_code(str(queue.get("queue_id") or "unknown"))
+                + "` | `"
+                + _markdown_code(str(queue.get("priority") or "P4"))
+                + "` | "
+                + str(int(queue.get("routes") or 0))
+                + " / "
+                + str(int(queue.get("targets") or 0))
+                + " | "
+                + str(len(queue.get("convergence_hotspot_ids") or []))
+                + " | "
+                + _markdown_text(_validation_count_summary(validation))
+                + " | "
+                + _markdown_text(
+                    str(queue.get("recommended_action") or "Review the queue.")
+                )
+                + " |"
+            )
+    if unrouted:
+        lines.extend(
+            [
+                "",
+                "### Unrouted review targets",
+                "",
+                "No route is not a clean result: confirm dynamic or externally invoked entry points before disposition.",
+                "",
+            ]
+        )
+        for item in unrouted[:5]:
+            if not isinstance(item, dict):
+                continue
+            target = item.get("target")
+            target = target if isinstance(target, dict) else {}
+            lines.append(
+                "- `"
+                + _markdown_code(str(item.get("priority") or "P4"))
+                + "` `"
+                + _markdown_code(str(target.get("path") or "unknown"))
+                + "`: "
+                + _markdown_text(str(item.get("reason") or "route unavailable"))
+            )
+    return lines
+
+
+def _validation_count_summary(value: dict[str, Any]) -> str:
+    labels = (
+        ("gap", "gap"),
+        ("not-assessed", "not assessed"),
+        ("partial", "partial"),
+        ("aligned", "aligned"),
+    )
+    parts = [
+        f"{int(value.get(key) or 0)} {label}"
+        for key, label in labels
+        if int(value.get(key) or 0)
+    ]
+    return ", ".join(parts) or "no retained assessment"
+
+
+def _risk_path_validation_signals(
+    validation: dict[str, Any], runtime: dict[str, Any]
+) -> str:
+    signals: list[str] = []
+    status = validation.get("assessment_status")
+    if isinstance(status, str):
+        signals.append("assessment " + status)
+    assessment_reasons = validation.get("assessment_reasons")
+    if isinstance(assessment_reasons, list) and assessment_reasons:
+        signals.append(
+            "missing "
+            + ", ".join(
+                str(item).removeprefix("retained ").removesuffix(" is unavailable")
+                for item in assessment_reasons[:3]
+            )
+        )
+    states = runtime.get("reachability_states")
+    if isinstance(states, list) and states:
+        signals.append("reachability " + "/".join(str(item) for item in states[:3]))
+    observations = runtime.get("observations")
+    if isinstance(observations, list) and observations:
+        signals.append("runtime " + "/".join(str(item) for item in observations[:3]))
+    if validation.get("changed_line") is True:
+        signals.append("changed line")
+    if validation.get("line_covered") is False:
+        signals.append("uncovered line")
+    elif validation.get("line_covered") is True:
+        signals.append("covered line")
+    alignment = validation.get("coverage_alignment")
+    if isinstance(alignment, str):
+        signals.append("validation " + alignment)
+    mapped = validation.get("mapped_test_files")
+    if isinstance(mapped, list) and mapped:
+        signals.append("tests " + ", ".join(str(item) for item in mapped[:2]))
+    return "; ".join(signals) or "runtime and validation evidence unavailable"
 
 
 def _surface_context_summary(value: Any) -> str:
@@ -1472,6 +1736,7 @@ def _render_markdown_findings(
                 f"- **Classification:** {classifications}",
                 f"- **References:** {references}",
                 *_markdown_graph_context(finding),
+                *_markdown_risk_path_context(finding),
                 *_markdown_structural_context(finding),
                 *_markdown_data_exposure_context(finding),
                 *_markdown_fusion_context(finding),
@@ -2678,6 +2943,9 @@ def render_sarif(findings: list[Finding]) -> dict[str, Any]:
         graph_context = finding.evidence.get("graph_context")
         if isinstance(graph_context, dict):
             result["properties"]["graph_context"] = json_ready(graph_context)
+        risk_path = finding.evidence.get("risk_path")
+        if isinstance(risk_path, dict):
+            result["properties"]["risk_path"] = json_ready(risk_path)
         structural = finding.evidence.get("structural_synthesis")
         if isinstance(structural, dict):
             result["properties"]["structural_synthesis"] = json_ready(structural)
@@ -2943,6 +3211,7 @@ def _render_html_finding(finding: Finding, tool_versions: dict[str, str]) -> str
     )
     source_context = _html_source_excerpt(finding)
     graph_context = _html_graph_context(finding)
+    risk_path_context = _html_risk_path_context(finding)
     structural_context = _html_structural_context(finding)
     data_exposure_context = _html_data_exposure_context(finding)
     fusion_context = _html_fusion_context(finding)
@@ -2971,6 +3240,7 @@ def _render_html_finding(finding: Finding, tool_versions: dict[str, str]) -> str
         f"<code>{html.escape(_location_text(finding))}</code></div>"
         f"{source_context}"
         f"{graph_context}"
+        f"{risk_path_context}"
         f"{structural_context}"
         f"{data_exposure_context}"
         f"{fusion_context}"
@@ -3015,6 +3285,51 @@ def _markdown_graph_context(finding: Finding) -> list[str]:
         "- **Graph impact:** "
         f"degree `{degree}`; two-hop upstream `{upstream}`; "
         f"two-hop downstream `{downstream}` — {interpretation}.{suffix}"
+    ]
+
+
+def _markdown_risk_path_context(finding: Finding) -> list[str]:
+    context = finding.evidence.get("risk_path")
+    if not isinstance(context, dict):
+        return []
+    if context.get("status") != "routed":
+        return [
+            "- **Static risk route:** no bounded declared-entry-point route; "
+            + _markdown_text(str(context.get("reason") or "review model coverage"))
+            + ". This is an evidence gap, not proof that the code is unreachable."
+        ]
+    entry = context.get("entry_point")
+    entry = entry if isinstance(entry, dict) else {}
+    files = context.get("files")
+    file_values = files if isinstance(files, list) else []
+    route = " → ".join(str(item) for item in file_values[:6])
+    if len(file_values) > 6:
+        route += f" → … (+{len(file_values) - 6})"
+    validation = context.get("validation")
+    runtime = context.get("runtime_context")
+    validation = validation if isinstance(validation, dict) else {}
+    runtime = runtime if isinstance(runtime, dict) else {}
+    hotspot_ids = context.get("convergence_hotspot_ids")
+    hotspot_text = (
+        " **Shared control points:** "
+        + ", ".join(f"`{_markdown_code(str(value))}`" for value in hotspot_ids[:5])
+        + "."
+        if isinstance(hotspot_ids, list) and hotspot_ids
+        else ""
+    )
+    return [
+        "- **Static risk route:** `"
+        + _markdown_code(str(context.get("route_id") or "unknown"))
+        + "` from `"
+        + _markdown_code(str(entry.get("declared_as") or entry.get("id") or "unknown"))
+        + "` in `"
+        + _markdown_code(str(int(context.get("hop_count") or 0)))
+        + "` file hop(s): "
+        + _markdown_text(route or str(entry.get("path") or "same file"))
+        + ". **Validation:** "
+        + _markdown_text(_risk_path_validation_signals(validation, runtime))
+        + "."
+        + hotspot_text
     ]
 
 
@@ -3316,6 +3631,56 @@ def _html_graph_context(finding: Finding) -> str:
         f"<p>Degree <strong>{degree}</strong>; two-hop upstream "
         f"<strong>{upstream}</strong>; two-hop downstream "
         f"<strong>{downstream}</strong>. {interpretation}.{corroboration_html}</p></section>"
+    )
+
+
+def _html_risk_path_context(finding: Finding) -> str:
+    context = finding.evidence.get("risk_path")
+    if not isinstance(context, dict):
+        return ""
+    if context.get("status") != "routed":
+        reason = html.escape(str(context.get("reason") or "review model coverage"))
+        return (
+            "<section class='source-context'><h4>Static risk route</h4>"
+            f"<p>No bounded declared-entry-point route: {reason}. This is an "
+            "evidence gap, not proof that the code is unreachable.</p></section>"
+        )
+    entry = context.get("entry_point")
+    entry = entry if isinstance(entry, dict) else {}
+    files = context.get("files")
+    file_values = files if isinstance(files, list) else []
+    route = " → ".join(str(item) for item in file_values[:6])
+    if len(file_values) > 6:
+        route += f" → … (+{len(file_values) - 6})"
+    validation = context.get("validation")
+    runtime = context.get("runtime_context")
+    validation = validation if isinstance(validation, dict) else {}
+    runtime = runtime if isinstance(runtime, dict) else {}
+    hotspot_ids = context.get("convergence_hotspot_ids")
+    hotspot_html = (
+        " <strong>Shared control points:</strong> "
+        + ", ".join(
+            "<code>" + html.escape(str(value)) + "</code>" for value in hotspot_ids[:5]
+        )
+        + "."
+        if isinstance(hotspot_ids, list) and hotspot_ids
+        else ""
+    )
+    return (
+        "<section class='source-context'><h4>Static risk route</h4><p>"
+        "Route <code>"
+        + html.escape(str(context.get("route_id") or "unknown"))
+        + "</code> from <code>"
+        + html.escape(str(entry.get("declared_as") or entry.get("id") or "unknown"))
+        + "</code> in <strong>"
+        + str(int(context.get("hop_count") or 0))
+        + "</strong> file hop(s): "
+        + html.escape(route or str(entry.get("path") or "same file"))
+        + ". <strong>Validation:</strong> "
+        + html.escape(_risk_path_validation_signals(validation, runtime))
+        + "."
+        + hotspot_html
+        + "</p></section>"
     )
 
 

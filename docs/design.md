@@ -328,6 +328,34 @@ observed, not-observed, or not-measured corroboration. The sealed
 features, and ranked islands with removal readiness, blockers, and ordered actions
 without importing or executing target code.
 
+[Static risk-route synthesis](risk-paths.md) combines the complementary graph
+views after finding, structural, exposure, and evidence-fusion enrichment. A
+bounded multi-source search starts at declared reachability entry points and
+walks deterministic Graphify file relations to normalized findings and
+review-worthy sensitive-data sinks. Each route carries runtime state, changed-
+line and coverage evidence, focused tests, validation gaps, owners, related
+findings, and exact supporting artifacts. Unrouted targets remain explicit
+model gaps; neither a route nor its absence is treated as an exploitability or
+safety verdict. Routes converging on the same non-entry file become bounded
+shared control points with one cross-target validation action. Exact route and
+hotspot IDs are also grouped into owner queues so teams can coordinate one
+remediation/test campaign without collapsing the underlying findings.
+
+```mermaid
+flowchart LR
+    Entry["Declared entry points"] --> Search["Bounded static route search"]
+    Graph["Graphify file relations"] --> Search
+    Findings["Normalized findings"] --> Targets["Review targets"]
+    Exposure["Sensitive sink surfaces"] --> Targets
+    Targets --> Search
+    Validation["Coverage + focused tests"] --> Routes["risk-paths.json"]
+    Ownership["CODEOWNERS"] --> Routes
+    Search --> Routes
+    Routes --> Hotspots["Shared control points"]
+    Routes --> Queues["Owner route queues"]
+    Routes --> Report["Finding cards + summary + SARIF"]
+```
+
 [Structural synthesis](structural-synthesis.md) then cross-validates these islands
 and Vulture candidates against Graphify references, runtime coverage, Radon
 complexity, Tach boundaries, ownership, and security findings. This produces
@@ -579,6 +607,7 @@ report/
 |-- reachability.json               # three-state topology, explanations, coverage, and islands
 |-- graphify.json                    # validated code-only topology
 |-- graph-analysis.json              # graph-aware finding neighborhoods
+|-- risk-paths.json                  # entry-point routes, owners, and validation gaps
 |-- structural-synthesis.json        # dead code, island boundaries, change risk, and test targets
 |-- data-exposure.json               # sensitive-data paths and SDK/sink review surfaces
 |-- evidence-fusion.json             # semantic and cross-stage evidence joins

@@ -14,6 +14,7 @@ creates a GitHub-friendly report artifact.
 | Supply chain | Source and artifact SBOMs, package checks, provenance findings, and a locally verifiable Security Passport |
 | Reachability | Offline three-state executable/load-only/disconnected graph with explained dispatch paths, ranked islands, and optional coverage corroboration |
 | Graph context | Graphify code-only topology joined to findings for blast radius, structural hotspots, and cross-tool neighborhoods |
+| Risk routes | Bounded declared-entry-point routes to findings and sensitive sink surfaces, joined with owners, runtime state, coverage, focused tests, shared control-point convergence, owner queues, and explicit model gaps |
 | Evidence fusion | Source-to-artifact package lineage, semantic finding links, changed-line/test/graph context, exact selected-test execution, digest-bound provenance joins, and feedback into owned exposure and SDK-package verification plans |
 | Structural synthesis | Cross-validated dead code, island boundaries, structural orphans, import-cycle hotspots, change-risk scoring, graph-guided test targets, exact execution status, and test/changed-line coverage alignment |
 | Advisory fusion | Package-scoped CVE/GHSA/PYSEC/OSV alias clustering across source and artifact scanners, with distinct-risk/observation counts plus CycloneDX introducing-root paths, pipdeptree environment health, Graphify imports, reachability/runtime state, and deptry-use context |
@@ -45,6 +46,7 @@ Markdown is the canonical documentation format:
 - [Configuration reference](docs/configuration.md)
 - [Python reachability and code-island analysis](docs/reachability.md)
 - [Graphify code-graph integration](docs/graphify.md)
+- [Static risk-route synthesis](docs/risk-paths.md)
 - [Cross-tool evidence fusion](docs/evidence-fusion.md)
 - [Structural synthesis for dead code and islands](docs/structural-synthesis.md)
 - [Sensitive-data exposure analysis](docs/data-exposure.md)
@@ -652,6 +654,7 @@ python-security-report/
 |-- reachability.json               # three-state topology, explained paths, coverage, and islands
 |-- graphify.json                    # validated code-only nodes, edges, and file topology
 |-- graph-analysis.json              # graph-aware finding context and hotspots
+|-- risk-paths.json                  # entry-point-to-risk routes with owner and validation context
 |-- structural-synthesis.json        # dead code, island boundaries, change risk, and graph-guided tests
 |-- data-exposure.json               # prioritized disclosure paths joined with graph, coverage, reachability, and fusion
 |-- evidence-fusion.json             # cross-scanner, advisory-alias, and source/artifact evidence joins
