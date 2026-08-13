@@ -184,6 +184,20 @@ modeling remains explicit, and “unused” or “disconnected” never proves t
 vulnerable function is unreachable. Conflicting Graphify-import and
 deptry-unused evidence produces a dedicated reconciliation action.
 
+The SDK boundary now also receives each distinct advisory's threat and
+remediation context. Reviewers can see KEV/EPSS/VEX state, P0-P4 priority,
+scanner-attributed fixed-version candidates, and the leading action beside the
+sensitive-data path. Summary counters distinguish known-exploited, high-EPSS,
+fix-available, P0, and VEX-validation advisories. This compound context answers
+what to do first and how to verify it; it still does not prove that the SDK
+disclosed data or that a vulnerable function executes.
+
+When topology and ownership evidence exist, the same SDK advisory names the
+owners of exact importing files, Graphify-selected direct/transitive tests with
+confidence, and import surfaces below 80% coverage. Missing CODEOWNERS matches
+or test mappings remain explicit rather than silently falling back to a guessed
+team or broad test command.
+
 An inventory item is **not a finding**. It tells reviewers where disclosure
 controls should exist and activates SDK-specific context when a scanner reports
 a supported flow. Vendored SDK code remains visible to source scanners; a
@@ -208,7 +222,8 @@ For supported findings, the suite adds:
   change-risk score and classification, and structural hotspot identifiers;
 - curated SDK package names, normalized package-finding IDs/tools/
   classifications, distinct advisory clusters and observation counts,
-  source/artifact version lineage, and advisory citations;
+  source/artifact version lineage, advisory citations, threat intelligence,
+  scanner-attributed fix candidates, and remediation decisions;
 - a contextual verification plan that calls for targeted tests, local canary
   capture, entry-point validation, graph-guided regression, protection testing,
   or trust-boundary control review only when the corresponding evidence exists;

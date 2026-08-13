@@ -104,7 +104,7 @@ layer = "services"
 
 [[modules]]
 path = "py_security_suite.advisory_fusion"
-depends_on = ["py_security_suite.models"]
+depends_on = ["py_security_suite.models", "py_security_suite.prioritization"]
 layer = "services"
 
 [[modules]]

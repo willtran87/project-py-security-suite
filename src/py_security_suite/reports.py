@@ -397,6 +397,14 @@ def _render_fusion_summary(value: dict[str, Any] | None) -> list[str]:
         f"| Advisories with runtime-observed imports | {int(summary.get('runtime_observed_dependency_advisories', 0))} |",
         f"| Advisories whose package declaration is flagged unused | {int(summary.get('advisories_with_unused_declarations', 0))} |",
         f"| Import-versus-unused evidence conflicts | {int(summary.get('dependency_use_conflicts', 0))} |",
+        f"| Known-exploited dependency advisories | {int(summary.get('known_exploited_advisories', 0))} |",
+        f"| High-EPSS dependency advisories | {int(summary.get('high_epss_advisories', 0))} |",
+        f"| Dependency advisories with scanner-reported fixes | {int(summary.get('advisories_with_fixed_versions', 0))} |",
+        f"| P0 dependency advisories | {int(summary.get('p0_advisories', 0))} |",
+        f"| Dependency advisories requiring VEX validation | {int(summary.get('advisories_requiring_vex_validation', 0))} |",
+        f"| Dependency advisories with graph-selected focused tests | {int(summary.get('advisories_with_focused_tests', 0))} |",
+        f"| Dependency advisories with import-path owners | {int(summary.get('advisories_with_import_path_owners', 0))} |",
+        f"| Dependency advisories on import paths below 80% coverage | {int(summary.get('advisories_with_uncovered_import_paths', 0))} |",
         f"| Compound structural hotspots | {int(summary.get('compound_hotspots', 0))} |",
         f"| Evidence-lane execution gaps | {gaps} |",
         f"| Evidence contradictions | {int(summary.get('contradictions', 0))} |",
@@ -646,6 +654,14 @@ def _render_data_exposure_summary(value: dict[str, Any] | None) -> list[str]:
         f"| SDK advisories with exact import evidence | {int(summary.get('sdk_advisories_with_import_evidence', 0))} |",
         f"| SDK advisories imported by executable code | {int(summary.get('sdk_advisories_in_executable_imports', 0))} |",
         f"| SDK advisories whose packages are flagged unused | {int(summary.get('sdk_advisories_flagged_unused', 0))} |",
+        f"| Known-exploited SDK advisories | {int(summary.get('sdk_known_exploited_advisories', 0))} |",
+        f"| High-EPSS SDK advisories | {int(summary.get('sdk_high_epss_advisories', 0))} |",
+        f"| SDK advisories with scanner-reported fixes | {int(summary.get('sdk_advisories_with_fixed_versions', 0))} |",
+        f"| P0 SDK advisories | {int(summary.get('sdk_p0_advisories', 0))} |",
+        f"| SDK advisories requiring VEX validation | {int(summary.get('sdk_advisories_requiring_vex_validation', 0))} |",
+        f"| SDK advisories with graph-selected focused tests | {int(summary.get('sdk_advisories_with_focused_tests', 0))} |",
+        f"| SDK advisories with import-path owners | {int(summary.get('sdk_advisories_with_import_path_owners', 0))} |",
+        f"| SDK advisories on import paths below 80% coverage | {int(summary.get('sdk_advisories_with_uncovered_import_paths', 0))} |",
         f"| Logging, telemetry, analytics, and egress SDK families | {int(summary.get('sdk_families_observed', 0))} |",
         "",
         "A sink surface is an inventory item, not proof of leakage. A finding requires source-to-sink scanner evidence and retains CWE/OWASP guidance.",
@@ -878,6 +894,20 @@ def _sdk_dependency_context_summary(value: Any) -> str:
             )
             if usage_summaries:
                 signals.append("use " + " / ".join(usage_summaries[:3]))
+            remediation_summaries = sorted(
+                {
+                    summary
+                    for item in clusters
+                    if isinstance(item, dict)
+                    and (
+                        summary := _remediation_context_summary(
+                            item.get("remediation_context")
+                        )
+                    )
+                }
+            )
+            if remediation_summaries:
+                signals.append("action " + " / ".join(remediation_summaries[:3]))
         else:
             finding_ids = value.get("package_finding_ids")
             if isinstance(finding_ids, list) and finding_ids:
@@ -938,7 +968,57 @@ def _dependency_usage_summary(value: Any) -> str:
         signals.append("deptry " + ", ".join(str(item) for item in statuses[:2]))
     if value.get("signals_conflict") is True:
         signals.append("evidence conflict")
+    tests = value.get("recommended_test_files")
+    if isinstance(tests, list) and tests:
+        signals.append(
+            "focused tests "
+            + ", ".join(str(item) for item in tests[:2])
+            + f" ({value.get('test_selection_confidence', 'unknown')})"
+        )
+    elif value.get("import_observed") is True:
+        signals.append(
+            "no focused test mapping"
+            if value.get("test_mapping_evidence_available") is True
+            else "test mapping unavailable"
+        )
+    owners = value.get("import_path_owners")
+    if isinstance(owners, list) and owners:
+        signals.append("owners " + ", ".join(str(item) for item in owners[:2]))
+    elif value.get("import_observed") is True:
+        signals.append(
+            "no matched import-path owner"
+            if value.get("ownership_evidence_available") is True
+            else "ownership evidence unavailable"
+        )
+    uncovered = value.get("uncovered_import_paths")
+    if isinstance(uncovered, list) and uncovered:
+        signals.append("below 80% coverage " + ", ".join(str(item) for item in uncovered[:2]))
+    elif (
+        value.get("import_observed") is True
+        and value.get("coverage_evidence_available") is not True
+    ):
+        signals.append("coverage evidence unavailable")
     return ", ".join(signals)
+
+
+def _remediation_context_summary(value: Any) -> str:
+    if not isinstance(value, dict):
+        return ""
+    priority = str(value.get("priority") or "P4")
+    kind = str(value.get("action_kind") or "review")
+    candidates = value.get("fixed_version_candidates")
+    parts = [priority, kind]
+    if isinstance(candidates, list) and candidates:
+        parts.append("fix candidates " + ", ".join(str(item) for item in candidates[:4]))
+    elif value.get("fix_available") is False:
+        parts.append("no scanner-reported fix")
+    owners = value.get("owners")
+    if isinstance(owners, list) and owners:
+        parts.append("owner " + ", ".join(str(item) for item in owners[:2]))
+    tests = value.get("recommended_test_files")
+    if isinstance(tests, list) and tests:
+        parts.append("tests " + ", ".join(str(item) for item in tests[:2]))
+    return ", ".join(parts)
 
 
 def _render_admission_decisions(
@@ -2871,12 +2951,24 @@ def _markdown_fusion_context(finding: Finding) -> list[str]:
     if isinstance(advisory, dict) and advisory.get("cluster_id"):
         primary = str(advisory.get("primary_identifier") or advisory["cluster_id"])
         usage = _dependency_usage_summary(advisory.get("dependency_usage"))
+        remediation = advisory.get("remediation_context")
+        remediation_summary = _remediation_context_summary(remediation)
         details.append(
             "advisory `"
             + _markdown_code(primary)
             + "`"
             + ("; dependency use " + _markdown_text(usage) if usage else "")
+            + (
+                "; remediation " + _markdown_text(remediation_summary)
+                if remediation_summary
+                else ""
+            )
         )
+        if isinstance(remediation, dict) and remediation.get("recommended_action"):
+            details.append(
+                "action "
+                + _markdown_text(str(remediation["recommended_action"]))
+            )
     suffix = " — " + "; ".join(details) if details else ""
     return [
         "- **Evidence fusion:** "
@@ -2973,12 +3065,34 @@ def _markdown_sdk_dependency_context(value: Any) -> list[str]:
                 else f"`{_markdown_code(identifier)}`"
             )
     suffix = "; citations " + ", ".join(links) if links else ""
-    return [
+    result = [
         "- **SDK dependency cross-reference:** "
         + _markdown_text(summary)
         + suffix
         + ". This context raises review priority but does not prove SDK-mediated disclosure."
     ]
+    clusters = value.get("advisory_clusters") if isinstance(value, dict) else None
+    if isinstance(clusters, list):
+        actions = [
+            (
+                str(item.get("primary_identifier") or item.get("cluster_id") or "advisory"),
+                str(remediation.get("priority") or "P4"),
+                str(remediation.get("recommended_action") or ""),
+            )
+            for item in clusters[:5]
+            if isinstance(item, dict)
+            and isinstance((remediation := item.get("remediation_context")), dict)
+            and remediation.get("recommended_action")
+        ]
+        if actions:
+            result.append(
+                "- **SDK advisory action:** "
+                + " ".join(
+                    f"`{_markdown_code(priority)}` `{_markdown_code(identifier)}`: {_markdown_text(action)}"
+                    for identifier, priority, action in actions[:3]
+                )
+            )
+    return result
 
 
 def _exposure_cross_reference_signals(context: dict[str, Any]) -> str:
@@ -3124,10 +3238,19 @@ def _html_fusion_context(finding: Finding) -> str:
     if isinstance(advisory, dict) and advisory.get("cluster_id"):
         primary = str(advisory.get("primary_identifier") or advisory["cluster_id"])
         usage = _dependency_usage_summary(advisory.get("dependency_usage"))
+        remediation = advisory.get("remediation_context")
+        remediation_summary = _remediation_context_summary(remediation)
+        action = (
+            str(remediation.get("recommended_action") or "")
+            if isinstance(remediation, dict)
+            else ""
+        )
         advisory_text = (
             " Advisory "
             + primary
             + ("; dependency use " + usage if usage else "")
+            + ("; remediation " + remediation_summary if remediation_summary else "")
+            + ("; action " + action if action else "")
             + "."
         )
     reason_html = f" {html.escape(reason_text)}." if reason_text else ""

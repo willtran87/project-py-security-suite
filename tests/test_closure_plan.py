@@ -44,18 +44,42 @@ class ClosurePlanTests(unittest.TestCase):
                 "architecture",
             }.issubset(categories)
         )
-        finding = next(item for item in first["items"] if item["category"] == "finding")
+        finding = next(
+            item
+            for item in first["items"]
+            if item["category"] == "finding" and item["authority"] == "external"
+        )
         self.assertEqual(finding["authority"], "external")
         self.assertEqual(finding["status"], "external_required")
         self.assertEqual(finding["commands"][0][0:2], ["pysec", "prepare-signing"])
         self.assertIn("organization", first["summary"]["by_authority"])
+        advisory_items = [
+            item
+            for item in first["items"]
+            if item["details"].get("advisory_cluster_id") == "ADV-ABC123"
+        ]
+        self.assertEqual(len(advisory_items), 1)
+        advisory = advisory_items[0]
+        self.assertEqual(advisory["priority"], "P0")
+        self.assertEqual(advisory["owner"], "@dependency-team")
+        self.assertEqual(
+            advisory["related_findings"], ["GRYPE-1", "OSV-1"]
+        )
+        self.assertEqual(advisory["tools"], ["grype", "osv-scanner"])
+        self.assertIn("tests/test_client.py", advisory["evidence_refs"])
+        self.assertIn("Upgrade demo-lib", advisory["action"])
+        self.assertEqual(first["summary"]["advisory_items"], 1)
+        self.assertEqual(first["summary"]["advisory_observations"], 2)
+        self.assertEqual(first["summary"]["alias_observations_consolidated"], 1)
 
-        schema = json.loads(read_bundled_schema("closure-plan-1.0"))
+        self.assertEqual(first["schema_version"], "1.1")
+        schema = json.loads(read_bundled_schema("closure-plan-1.1"))
         Draft202012Validator.check_schema(schema)
         Draft202012Validator(schema).validate(first)
 
         markdown = render_closure_plan_markdown(first)
         self.assertIn("# Findings closure plan", markdown)
+        self.assertIn("Distinct advisory work:** 1 item(s) from 2", markdown)
         self.assertIn("non-authoritative", markdown)
         self.assertIn("```text\npysec prepare-signing", markdown)
 
@@ -112,7 +136,9 @@ def _write_report(report: Path) -> None:
                     ],
                     "locations": [{"path": "dist/project.whl"}],
                     "evidence": {"owners": ["@release"]},
-                }
+                },
+                _advisory_finding("OSV-1", "osv-scanner"),
+                _advisory_finding("GRYPE-1", "grype"),
             ]
         },
     )
@@ -167,6 +193,53 @@ def _write_report(report: Path) -> None:
 
 def _write(path: Path, value: object) -> None:
     path.write_text(json.dumps(value), encoding="utf-8")
+
+
+def _advisory_finding(finding_id: str, tool: str) -> dict[str, object]:
+    return {
+        "finding_id": finding_id,
+        "status": "new",
+        "severity": "critical",
+        "title": "CVE-2026-12345 affects demo-lib",
+        "impact": "The affected package is present.",
+        "remediation": "Upgrade the dependency.",
+        "sources": [{"tool": tool, "rule_id": "CVE-2026-12345"}],
+        "locations": [{"path": "uv.lock", "package": "demo-lib"}],
+        "evidence": {
+            "fusion": {
+                "advisory_context": {
+                    "cluster_id": "ADV-ABC123",
+                    "primary_identifier": "CVE-2026-12345",
+                    "identifiers": ["CVE-2026-12345", "GHSA-DEMO"],
+                    "package": "demo-lib",
+                    "versions": ["1.0"],
+                    "finding_ids": ["GRYPE-1", "OSV-1"],
+                    "tools": ["grype", "osv-scanner"],
+                    "dependency_usage": {
+                        "assessment": "executable-import",
+                        "import_paths": ["src/client.py"],
+                    },
+                    "remediation_context": {
+                        "priority": "P0",
+                        "action_kind": "upgrade",
+                        "owners": ["@dependency-team"],
+                        "recommended_test_files": ["tests/test_client.py"],
+                        "test_selection_confidence": "high",
+                        "fixed_version_candidates": ["2.0"],
+                        "recommended_action": "Upgrade demo-lib to an approved 2.0 release.",
+                        "verification_steps": [
+                            "Run tests/test_client.py.",
+                            "Regenerate and verify the report.",
+                        ],
+                        "evidence_basis": ["OSV and Grype observations"],
+                        "uncertainties": [
+                            "Package use does not prove vulnerable API execution."
+                        ],
+                    },
+                }
+            }
+        },
+    }
 
 
 if __name__ == "__main__":

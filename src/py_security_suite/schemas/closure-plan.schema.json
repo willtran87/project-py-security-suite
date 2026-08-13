@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:project-py-security-suite:schema:closure-plan:1.0",
+  "$id": "urn:project-py-security-suite:schema:closure-plan:1.1",
   "title": "Findings closure plan",
   "description": "A non-authoritative, owned work plan derived from one verified suite report.",
   "type": "object",
@@ -18,8 +18,8 @@
     "items"
   ],
   "properties": {
-    "schema_version": { "const": "1.0" },
-    "schema_id": { "const": "urn:project-py-security-suite:schema:closure-plan:1.0" },
+    "schema_version": { "const": "1.1" },
+    "schema_id": { "const": "urn:project-py-security-suite:schema:closure-plan:1.1" },
     "authoritative": { "const": false },
     "scope": { "type": "string", "minLength": 1, "maxLength": 16000 },
     "scan_id": { "type": "string", "minLength": 1, "maxLength": 4096 },
@@ -37,10 +37,13 @@
     "summary": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["open_items", "authority_items", "by_priority", "by_status", "by_authority"],
+      "required": ["open_items", "authority_items", "advisory_items", "advisory_observations", "alias_observations_consolidated", "by_priority", "by_status", "by_authority"],
       "properties": {
         "open_items": { "type": "integer", "minimum": 0 },
         "authority_items": { "type": "integer", "minimum": 0 },
+        "advisory_items": { "type": "integer", "minimum": 0 },
+        "advisory_observations": { "type": "integer", "minimum": 0 },
+        "alias_observations_consolidated": { "type": "integer", "minimum": 0 },
         "by_priority": { "$ref": "#/$defs/countMap" },
         "by_status": { "$ref": "#/$defs/countMap" },
         "by_authority": { "$ref": "#/$defs/countMap" }

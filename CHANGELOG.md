@@ -5,6 +5,26 @@ for published releases.
 
 ## Unreleased
 
+- Consolidate scanner-reported fixed versions, approved offline CISA KEV/FIRST
+  EPSS/CycloneDX VEX intelligence, alias-aware advisories, source dependency
+  relationship, exact imports, reachability, runtime observations, and deptry
+  signals into one conservative remediation context per distinct advisory.
+  Reports now show P0-P4 priority, action kind, scanner-attributed fixed-version
+  candidates, evidence basis, uncertainties, and verification steps. VEX
+  bounded/resolved states require scope and provenance validation and never
+  suppress the native finding automatically. SDK disclosure-boundary reports
+  surface the same decisions and dedicated summary counters.
+- Join advisory import paths to reverse Graphify test dependencies, retained
+  file coverage, and CODEOWNERS-derived finding ownership. Remediation records
+  now name focused direct/transitive tests, selection confidence, responsible
+  owners, and import paths below 80% coverage. Closure planning uses the stable
+  advisory cluster ID to create one owned work item across alias-equivalent
+  scanner observations while retaining all finding IDs, tools, citations,
+  uncertainties, and acceptance evidence. Version closure-plan output at 1.1
+  with distinct-advisory/observation counters and retain schema 1.0. Release
+  readiness now performs the same advisory-ID consolidation and carries fused
+  priority, ownership, import paths, and focused tests into its operational
+  remediation actions.
 - Version evidence fusion at 1.1 with package-scoped, transitive advisory-alias
   clustering. CVE, GHSA, PYSEC, and OSV identifiers can now converge across
   OSV-Scanner, Grype, and other normalized package findings while retaining

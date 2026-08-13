@@ -125,6 +125,7 @@ class DataExposureSynthesisTests(unittest.TestCase):
                 classifications=["CWE-201"],
                 rule_id="python.sensitive-data-to-telemetry",
             )
+            exposure.evidence["owners"] = ["@observability"]
             package = Finding(
                 finding_id="PYSEC-SENTRY-ADVISORY",
                 fingerprint="sha256:sentry-advisory",
@@ -165,10 +166,17 @@ class DataExposureSynthesisTests(unittest.TestCase):
                         uri="https://example.invalid/graph",
                     ),
                 ],
+                evidence={
+                    "fixed_versions": ["2.1"],
+                    "risk_intelligence": {
+                        "cves": ["CVE-2026-9000"],
+                        "known_exploited": [{"cve": "CVE-2026-9000"}],
+                    },
+                },
             )
             result = build_data_exposure_synthesis(root, [exposure, package], {})
             fusion = build_evidence_fusion(
-                [package],
+                [package, exposure],
                 {
                     "sbom.cdx.json": {
                         "components": [
@@ -207,6 +215,25 @@ class DataExposureSynthesisTests(unittest.TestCase):
                                 "line": 2,
                             }
                         ],
+                        "topology": {
+                            "file_edges": [
+                                {
+                                    "source": "tests/test_app.py",
+                                    "target": "src/app.py",
+                                    "relation": "imports",
+                                    "count": 1,
+                                }
+                            ]
+                        },
+                    },
+                    "finding-delta.json": {"ownership_rules": 1},
+                    "coverage-summary.json": {
+                        "files": [
+                            {
+                                "path": "src/app.py",
+                                "summary": {"percent_covered": 72.0},
+                            }
+                        ]
                     },
                     "reachability.json": {
                         "analysis": {"complete": True, "confidence": "high"},
@@ -246,6 +273,22 @@ class DataExposureSynthesisTests(unittest.TestCase):
         self.assertEqual(usage["import_paths"], ["src/app.py"])
         self.assertEqual(dependency["advisories_with_import_evidence"], 1)
         self.assertEqual(dependency["advisories_in_executable_imports"], 1)
+        self.assertEqual(dependency["known_exploited_advisories"], 1)
+        self.assertEqual(dependency["advisories_with_fixed_versions"], 1)
+        self.assertEqual(dependency["p0_advisories"], 1)
+        self.assertEqual(dependency["advisories_with_focused_tests"], 1)
+        self.assertEqual(dependency["advisories_with_import_path_owners"], 1)
+        self.assertEqual(dependency["advisories_with_uncovered_import_paths"], 1)
+        cluster = dependency["advisory_clusters"][0]
+        self.assertTrue(cluster["threat_context"]["known_exploited"])
+        self.assertEqual(
+            cluster["remediation_context"]["fixed_version_candidates"], ["2.1"]
+        )
+        self.assertEqual(cluster["remediation_context"]["owners"], ["@observability"])
+        self.assertEqual(
+            cluster["remediation_context"]["recommended_test_files"],
+            ["tests/test_app.py"],
+        )
         self.assertEqual(dependency["lineage"][0]["status"], "version-drift")
         self.assertEqual(dependency["citations"][0]["identifier"], "GHSA-DEMO")
         self.assertEqual(len(dependency["citations"]), 1)
@@ -260,6 +303,13 @@ class DataExposureSynthesisTests(unittest.TestCase):
         self.assertEqual(result["summary"]["sdk_advisory_observations"], 1)
         self.assertEqual(result["summary"]["sdk_advisories_with_import_evidence"], 1)
         self.assertEqual(result["summary"]["sdk_advisories_in_executable_imports"], 1)
+        self.assertEqual(result["summary"]["sdk_advisories_with_focused_tests"], 1)
+        self.assertEqual(
+            result["summary"]["sdk_advisories_with_import_path_owners"], 1
+        )
+        self.assertEqual(
+            result["summary"]["sdk_advisories_with_uncovered_import_paths"], 1
+        )
         self.assertTrue(
             any("GHSA-DEMO" in step for step in assessment["verification_steps"])
         )
@@ -271,6 +321,8 @@ class DataExposureSynthesisTests(unittest.TestCase):
         )
         self.assertIn("advisories GHSA-DEMO", rendered)
         self.assertIn("use executable-import, direct dependency", rendered)
+        self.assertIn("focused tests tests/test\\_app.py", rendered)
+        self.assertIn("owners @observability", rendered)
         self.assertIn("SDK dependency cross-reference", detailed)
         self.assertIn("[GHSA-DEMO](https://example.invalid/GHSA-DEMO)", detailed)
         schema = json.loads(read_bundled_schema("data-exposure-1.3"))

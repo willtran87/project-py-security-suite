@@ -178,7 +178,12 @@ class GrypeAdapter(ScannerAdapter):
                             uri=uri,
                         )
                     ],
-                    evidence={"fixed_versions": list(versions or [])},
+                    evidence={
+                        "fixed_versions": list(versions or []),
+                        "fixed_versions_by_tool": {
+                            self.name: list(versions or []),
+                        },
+                    },
                 )
             )
         return findings

@@ -840,6 +840,13 @@ The isolated scan rejects an unbound, stale, oversized, malformed, symlinked,
 or digest-mismatched snapshot. KEV matches become `P0` and block policy even if
 the originating scanner assigned a lower severity. EPSS affects priority, not
 severity. VEX state is displayed but never suppresses a finding by itself.
+Evidence fusion joins those matches with OSV/Grype fixed-version candidates and
+dependency-use evidence. Treat candidates as scanner assertions, not an
+automatic upgrade selection: review the supported release branch and release
+notes, choose an organization-approved version, regenerate source locks and
+built-artifact SBOMs, run focused tests, and rescan. A bounded/resolved VEX state
+requires product, component, version, justification, and approval-provenance
+validation before disposition.
 
 Scanner executable approvals follow the same connected-preparation pattern.
 Validate publisher provenance and custody outside the scan, create an approved

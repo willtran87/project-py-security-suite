@@ -343,6 +343,17 @@ Those clusters also join CycloneDX dependency roots, exact Graphify import
 edges, importing-file reachability/runtime state, and deptry findings. The
 result is actionable dependency-use context with explicit incomplete and
 conflicting states, never an exploitability verdict or severity override.
+OSV and Grype fixed-version records plus approved offline KEV, EPSS, and VEX
+then form a per-advisory remediation context. It retains scanner attribution,
+uses the established P0-P4 priority model, adapts the action to dependency-use
+evidence, and carries uncertainties and verification steps. It deliberately
+does not guess a minimum safe version, accept VEX without scoped validation, or
+change native severity.
+Reverse Graphify edges then map each exact importing file to direct/transitive
+tests, while retained coverage and CODEOWNERS-derived finding ownership provide
+validation gaps and responsible teams. The closure plan keys work by advisory
+cluster, consolidating alias-equivalent observations without dropping native
+finding IDs or scanner attribution.
 CWE/OWASP/OpenTelemetry-backed actions remain
 independent of native scanner severity and no sensitive values are retained.
 

@@ -126,6 +126,13 @@ reference. Markdown and HTML actions expose priority, owner, authority, SLA
 target, evidence subjects, and safely encoded suggested commands. The plan
 cannot approve or publish a release.
 
+Alias-equivalent OSV, Grype, and other advisory observations are consolidated
+under the stable evidence-fusion advisory ID. The resulting release action
+retains every native finding ID while inheriting the fused P0-P4 priority,
+CODEOWNERS route, affected import paths, and focused direct or transitive tests.
+Missing ownership, test mapping, or coverage remains explicit evidence—not an
+implicit pass.
+
 After build and scan, create an exact-set handoff for the controlled signer:
 
 ```text

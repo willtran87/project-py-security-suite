@@ -107,6 +107,7 @@ class OsvScannerAdapter(ScannerAdapter):
                 continue
             advisory = str(vulnerability.get("id") or "OSV-UNKNOWN")
             aliases = _advisory_aliases(vulnerability, advisory)
+            fixed_versions = _fixed_versions(vulnerability)
             summary = str(
                 vulnerability.get("summary") or vulnerability.get("details") or advisory
             )
@@ -170,7 +171,13 @@ class OsvScannerAdapter(ScannerAdapter):
                         )
                         for alias in aliases[:10]
                     ],
-                    evidence={"advisory_aliases": aliases},
+                    evidence={
+                        "advisory_aliases": aliases,
+                        "fixed_versions": fixed_versions,
+                        "fixed_versions_by_tool": {
+                            self.name: fixed_versions,
+                        },
+                    },
                 )
             )
         return findings
@@ -190,6 +197,38 @@ def _advisory_aliases(vulnerability: dict[str, Any], primary: str) -> list[str]:
             and _ADVISORY_IDENTIFIER.fullmatch(value)
         }
     )[:50]
+
+
+def _fixed_versions(vulnerability: dict[str, Any]) -> list[str]:
+    affected = vulnerability.get("affected")
+    if not isinstance(affected, list):
+        return []
+    versions: set[str] = set()
+    for record in affected[:100]:
+        if not isinstance(record, dict):
+            continue
+        ranges = record.get("ranges")
+        if not isinstance(ranges, list):
+            continue
+        for version_range in ranges[:100]:
+            if not isinstance(version_range, dict):
+                continue
+            range_type = str(version_range.get("type") or "").upper()
+            if range_type not in {"ECOSYSTEM", "SEMVER"}:
+                continue
+            events = version_range.get("events")
+            if not isinstance(events, list):
+                continue
+            for event in events[:500]:
+                if not isinstance(event, dict):
+                    continue
+                value = event.get("fixed")
+                if not isinstance(value, (str, int, float)):
+                    continue
+                normalized = " ".join(str(value).split())[:100]
+                if normalized and not any(ord(character) < 32 for character in normalized):
+                    versions.add(normalized)
+    return sorted(versions)[:100]
 
 
 def _native_severity(vulnerability: dict[str, Any]) -> str:

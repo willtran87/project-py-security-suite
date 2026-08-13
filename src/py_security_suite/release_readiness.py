@@ -335,6 +335,77 @@ def _remediation(blockers: list[str], findings: list[Any]) -> list[dict[str, Any
             ):
                 continue
             evidence = finding.get("evidence")
+            evidence = evidence if isinstance(evidence, dict) else {}
+            fusion = evidence.get("fusion")
+            fusion = fusion if isinstance(fusion, dict) else {}
+            advisory = fusion.get("advisory_context")
+            advisory = advisory if isinstance(advisory, dict) else {}
+            remediation = advisory.get("remediation_context")
+            remediation = remediation if isinstance(remediation, dict) else {}
+            cluster_id = str(advisory.get("cluster_id") or "")
+            if cluster_id and remediation:
+                raw_owners = remediation.get("owners")
+                finding_owners = evidence.get("owners")
+                owner = (
+                    str(raw_owners[0])
+                    if isinstance(raw_owners, list) and raw_owners
+                    else str(finding_owners[0])
+                    if isinstance(finding_owners, list) and finding_owners
+                    else "repository-owner"
+                )
+                raw_priority = str(remediation.get("priority") or "P2")
+                priority = (
+                    raw_priority
+                    if raw_priority in {"P0", "P1", "P2", "P3", "P4"}
+                    else "P2"
+                )
+                cluster_findings = advisory.get("finding_ids")
+                cluster_findings = (
+                    [str(item) for item in cluster_findings[:90] if item]
+                    if isinstance(cluster_findings, list)
+                    else [str(finding.get("finding_id") or "findings.json")]
+                )
+                usage = advisory.get("dependency_usage")
+                usage = usage if isinstance(usage, dict) else {}
+                import_paths = usage.get("import_paths")
+                import_paths = (
+                    [str(item) for item in import_paths[:5] if item]
+                    if isinstance(import_paths, list)
+                    else []
+                )
+                tests = remediation.get("recommended_test_files")
+                tests = (
+                    [str(item) for item in tests[:4] if item]
+                    if isinstance(tests, list)
+                    else []
+                )
+                actions.append(
+                    {
+                        "id": f"advisory:{cluster_id}",
+                        "blocker": "blocking-findings",
+                        "priority": priority,
+                        "owner": owner,
+                        "authority": "repository",
+                        "automatable": False,
+                        "action": str(
+                            remediation.get("recommended_action")
+                            or finding.get("remediation")
+                            or "Resolve the blocking advisory and regenerate the report."
+                        ),
+                        "evidence": list(
+                            dict.fromkeys(
+                                [
+                                    *cluster_findings,
+                                    "evidence-fusion.json",
+                                    *import_paths,
+                                    *tests,
+                                ]
+                            )
+                        )[:100],
+                        "commands": [],
+                    }
+                )
+                continue
             owners = evidence.get("owners") if isinstance(evidence, dict) else []
             owner = (
                 str(owners[0])
@@ -412,9 +483,25 @@ def _consolidate_finding_remediation(
 ) -> list[dict[str, Any]]:
     """Collapse equivalent finding work while retaining every evidence subject."""
     controls: list[dict[str, Any]] = []
+    advisory_actions: dict[str, dict[str, Any]] = {}
     groups: dict[tuple[object, ...], list[dict[str, Any]]] = {}
     for action in actions:
-        if not str(action.get("id") or "").startswith("finding:"):
+        action_id = str(action.get("id") or "")
+        if action_id.startswith("advisory:"):
+            current = advisory_actions.get(action_id)
+            if current is None:
+                advisory_actions[action_id] = action
+            else:
+                current["evidence"] = sorted(
+                    {
+                        str(subject)
+                        for item in (current, action)
+                        for subject in item.get("evidence", [])
+                        if subject
+                    }
+                )[:100]
+            continue
+        if not action_id.startswith("finding:"):
             controls.append(action)
             continue
         key = (
@@ -445,6 +532,7 @@ def _consolidate_finding_remediation(
             }
         )
         controls.append(value)
+    controls.extend(advisory_actions[key] for key in sorted(advisory_actions))
     return controls
 
 

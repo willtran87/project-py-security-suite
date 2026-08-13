@@ -147,6 +147,28 @@ class AdapterParserTests(unittest.TestCase):
                                         ],
                                         "summary": "Example vulnerability",
                                         "database_specific": {"severity": "CRITICAL"},
+                                        "affected": [
+                                            {
+                                                "ranges": [
+                                                    {
+                                                        "type": "ECOSYSTEM",
+                                                        "events": [
+                                                            {"introduced": "0"},
+                                                            {"fixed": "1.2.3"},
+                                                            {"introduced": "2.0"},
+                                                            {"fixed": "2.1.4"},
+                                                        ],
+                                                    },
+                                                    {
+                                                        "type": "GIT",
+                                                        "events": [
+                                                            {"introduced": "0"},
+                                                            {"fixed": "c45d7c49ea75133e"},
+                                                        ],
+                                                    },
+                                                ]
+                                            }
+                                        ],
                                     }
                                 ],
                             }
@@ -163,6 +185,7 @@ class AdapterParserTests(unittest.TestCase):
             finding.evidence["advisory_aliases"],
             ["CVE-2026-12345", "PYSEC-2026-42"],
         )
+        self.assertEqual(finding.evidence["fixed_versions"], ["1.2.3", "2.1.4"])
         self.assertEqual(
             finding.classifications,
             ["CVE-2026-12345", "GHSA-AAAA-BBBB-CCCC", "PYSEC-2026-42"],

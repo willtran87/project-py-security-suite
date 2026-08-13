@@ -361,6 +361,64 @@ class ReleaseReadinessTests(unittest.TestCase):
         _validate_schema(result)
 
     @patch("py_security_suite.release_readiness.verify_report")
+    def test_alias_equivalent_advisories_share_one_operational_action(
+        self, verify_report_mock
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            report = Path(directory)
+            _write_release_evidence(report)
+            context = {
+                "cluster_id": "ADV-ABC123",
+                "finding_ids": ["GRYPE-ADV", "OSV-ADV"],
+                "dependency_usage": {"import_paths": ["src/client.py"]},
+                "remediation_context": {
+                    "priority": "P0",
+                    "owners": ["@dependency-team"],
+                    "recommended_test_files": ["tests/test_client.py"],
+                    "recommended_action": "Upgrade demo-lib and rebuild.",
+                },
+            }
+            findings = [
+                {
+                    "finding_id": finding_id,
+                    "blocking": True,
+                    "status": "new",
+                    "classifications": [classification],
+                    "remediation": "Review the native advisory.",
+                    "evidence": {"fusion": {"advisory_context": context}},
+                }
+                for finding_id, classification in (
+                    ("OSV-ADV", "GHSA-DEMO"),
+                    ("GRYPE-ADV", "CVE-2026-12345"),
+                )
+            ]
+            _write_json(report / "findings.json", {"findings": findings})
+            verify_report_mock.return_value = _verification()
+
+            result = assess_release_readiness(report)
+
+        actions = [
+            item
+            for item in result["remediation"]
+            if item["id"] == "advisory:ADV-ABC123"
+        ]
+        self.assertEqual(len(actions), 1)
+        self.assertEqual(actions[0]["priority"], "P0")
+        self.assertEqual(actions[0]["owner"], "@dependency-team")
+        self.assertEqual(actions[0]["action"], "Upgrade demo-lib and rebuild.")
+        self.assertEqual(
+            actions[0]["evidence"],
+            [
+                "GRYPE-ADV",
+                "OSV-ADV",
+                "evidence-fusion.json",
+                "src/client.py",
+                "tests/test_client.py",
+            ],
+        )
+        _validate_schema(result)
+
+    @patch("py_security_suite.release_readiness.verify_report")
     def test_skipped_tools_are_ignored_and_codeql_helper_is_required(
         self, verify_report_mock
     ) -> None:

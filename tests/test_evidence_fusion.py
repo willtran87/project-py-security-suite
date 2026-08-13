@@ -66,6 +66,28 @@ class EvidenceFusionTests(unittest.TestCase):
             package="Example_Pkg",
         )
         osv.evidence["advisory_aliases"] = ["CVE-2026-1000"]
+        osv.evidence["fixed_versions"] = ["1.5"]
+        osv.evidence["risk_intelligence"] = {
+            "cves": ["CVE-2026-1000"],
+            "known_exploited": [
+                {
+                    "cve": "CVE-2026-1000",
+                    "date_added": "2026-01-02",
+                    "due_date": "2026-01-23",
+                    "known_ransomware_campaign_use": "Known",
+                    "required_action": "Apply the vendor remediation.",
+                }
+            ],
+            "epss": [
+                {
+                    "cve": "CVE-2026-1000",
+                    "probability": 0.75,
+                    "percentile": 0.99,
+                }
+            ],
+            "vex": [{"cve": "CVE-2026-1000", "state": "exploitable"}],
+        }
+        osv.classifications.append("EPSS-HIGH")
         osv.citations = [
             Citation(
                 kind="advisory",
@@ -113,10 +135,12 @@ class EvidenceFusionTests(unittest.TestCase):
                 "maximum_complexity_rank": "D",
             },
         }
+        source.evidence["owners"] = ["@platform-security"]
         grype.evidence.update(
             {
                 "artifact_path": "dist/app.whl",
                 "artifact_sha256": "c" * 64,
+                "fixed_versions": ["2.0"],
             }
         )
         artifacts = {
@@ -201,7 +225,18 @@ class EvidenceFusionTests(unittest.TestCase):
                         "line": 1,
                     }
                 ],
+                "topology": {
+                    "file_edges": [
+                        {
+                            "source": "tests/test_app.py",
+                            "target": "src/app.py",
+                            "relation": "imports",
+                            "count": 1,
+                        }
+                    ]
+                },
             },
+            "finding-delta.json": {"ownership_rules": 1},
             "reachability.json": {
                 "analysis": {"complete": True, "confidence": "high"},
                 "nodes": [
@@ -266,12 +301,77 @@ class EvidenceFusionTests(unittest.TestCase):
         self.assertTrue(usage["import_observed"])
         self.assertEqual(usage["import_paths"], ["src/app.py"])
         self.assertEqual(usage["reachability_states"], ["executable"])
+        self.assertTrue(usage["test_mapping_evidence_available"])
+        self.assertEqual(usage["recommended_test_files"], ["tests/test_app.py"])
+        self.assertEqual(usage["direct_test_files"], ["tests/test_app.py"])
+        self.assertEqual(usage["test_selection_confidence"], "high")
+        self.assertTrue(usage["ownership_evidence_available"])
+        self.assertEqual(usage["import_path_owners"], ["@platform-security"])
+        self.assertTrue(usage["coverage_evidence_available"])
+        self.assertEqual(
+            usage["import_path_coverage"],
+            [{"path": "src/app.py", "coverage_percent": 55.0}],
+        )
+        self.assertEqual(usage["uncovered_import_paths"], ["src/app.py"])
+        threat = advisory["threat_context"]
+        self.assertTrue(threat["known_exploited"])
+        self.assertEqual(threat["known_exploited_cves"], ["CVE-2026-1000"])
+        self.assertEqual(
+            threat["known_exploited_records"][0]["required_action"],
+            "Apply the vendor remediation.",
+        )
+        self.assertEqual(threat["epss_probability"], 0.75)
+        self.assertEqual(threat["epss_percentile"], 0.99)
+        self.assertEqual(threat["epss_records"][0]["cve"], "CVE-2026-1000")
+        self.assertTrue(threat["epss_high"])
+        self.assertEqual(threat["vex_disposition"], "exploitable")
+        remediation = advisory["remediation_context"]
+        self.assertEqual(remediation["priority"], "P0")
+        self.assertEqual(remediation["action_kind"], "upgrade")
+        self.assertTrue(remediation["fix_available"])
+        self.assertEqual(remediation["owners"], ["@platform-security"])
+        self.assertEqual(
+            remediation["recommended_test_files"], ["tests/test_app.py"]
+        )
+        self.assertEqual(remediation["test_selection_confidence"], "high")
+        self.assertEqual(remediation["fixed_version_candidates"], ["1.5", "2.0"])
+        self.assertEqual(
+            remediation["fixed_version_sources"],
+            [
+                {"tool": "grype", "versions": ["2.0"]},
+                {"tool": "osv-scanner", "versions": ["1.5"]},
+            ],
+        )
+        self.assertIn("Immediately upgrade", remediation["recommended_action"])
+        self.assertIn("CISA KEV direction", remediation["recommended_action"])
+        self.assertIn("2026-01-23", remediation["recommended_action"])
+        self.assertTrue(remediation["verification_steps"])
+        self.assertTrue(remediation["evidence_basis"])
+        self.assertIn(
+            "Package-level use evidence does not establish vulnerable-function exploitability.",
+            remediation["uncertainties"],
+        )
         self.assertEqual(document["summary"]["advisories_with_import_evidence"], 1)
         self.assertEqual(document["summary"]["advisories_in_executable_imports"], 1)
+        self.assertEqual(document["summary"]["known_exploited_advisories"], 1)
+        self.assertEqual(document["summary"]["high_epss_advisories"], 1)
+        self.assertEqual(document["summary"]["advisories_with_fixed_versions"], 1)
+        self.assertEqual(document["summary"]["p0_advisories"], 1)
+        self.assertEqual(document["summary"]["advisories_with_focused_tests"], 1)
+        self.assertEqual(
+            document["summary"]["advisories_with_import_path_owners"], 1
+        )
+        self.assertEqual(
+            document["summary"]["advisories_with_uncovered_import_paths"], 1
+        )
         rendered = "\n".join(_render_fusion_summary(document))
         detailed = "\n".join(_markdown_fusion_context(osv))
         self.assertIn("Advisories with exact static import evidence | 1", rendered)
         self.assertIn("dependency use executable-import", detailed)
+        self.assertIn("remediation P0, upgrade", detailed)
+        self.assertIn("Immediately upgrade", detailed)
+        self.assertIn("focused tests tests/test\\_app.py", detailed)
+        self.assertIn("owners @platform-security", detailed)
         self.assertIn("imports src/app.py", detailed)
         self.assertEqual(
             osv.evidence["fusion"]["advisory_context"]["cluster_id"],
@@ -297,6 +397,116 @@ class EvidenceFusionTests(unittest.TestCase):
         self.assertEqual(document["package_lineage"], [])
         self.assertEqual(document["advisory_clusters"], [])
         self.assertIn("not treated as proof of safety", document["limitations"][0])
+
+    def test_vex_not_affected_claim_requires_validation_and_does_not_suppress(self) -> None:
+        advisory = _finding(
+            "OSV-VEX",
+            tool="osv-scanner",
+            path="uv.lock",
+            classification="CVE-2026-4000",
+            package="bounded-lib",
+        )
+        advisory.evidence = {
+            "fixed_versions": ["2.0"],
+            "risk_intelligence": {
+                "cves": ["CVE-2026-4000"],
+                "vex": [
+                    {
+                        "cve": "CVE-2026-4000",
+                        "state": "not_affected",
+                        "justification": "vulnerable_code_not_present",
+                    }
+                ],
+            },
+        }
+
+        document = build_evidence_fusion([advisory], {}, [])
+
+        cluster = document["advisory_clusters"][0]
+        self.assertEqual(
+            cluster["threat_context"]["vex_disposition"],
+            "bounded-or-resolved-claim",
+        )
+        self.assertEqual(
+            cluster["threat_context"]["vex_records"][0]["justification"],
+            "vulnerable_code_not_present",
+        )
+        self.assertEqual(cluster["remediation_context"]["priority"], "P1")
+        self.assertEqual(
+            cluster["remediation_context"]["action_kind"], "validate-vex"
+        )
+        self.assertTrue(cluster["remediation_context"]["fix_available"])
+        self.assertIn(
+            "preserve the native finding",
+            cluster["remediation_context"]["recommended_action"],
+        )
+        self.assertEqual(
+            document["summary"]["advisories_requiring_vex_validation"], 1
+        )
+        self.assertEqual(
+            cluster["dependency_usage"]["test_selection_confidence"],
+            "not-available",
+        )
+        self.assertFalse(
+            cluster["dependency_usage"]["coverage_evidence_available"]
+        )
+
+    def test_transitive_reverse_graph_selects_medium_confidence_focused_test(
+        self,
+    ) -> None:
+        advisory = _finding(
+            "OSV-TRANSITIVE-TEST",
+            tool="osv-scanner",
+            path="uv.lock",
+            classification="CVE-2026-5000",
+            package="client-lib",
+        )
+        artifacts = {
+            "graphify.json": {
+                "nodes": [
+                    {"id": "client", "kind": "code", "path": "src/client.py"},
+                    {
+                        "id": "client_lib",
+                        "kind": "external",
+                        "label": "client_lib",
+                    },
+                ],
+                "edges": [
+                    {
+                        "source": "client",
+                        "target": "client_lib",
+                        "relation": "imports",
+                        "path": "src/client.py",
+                    }
+                ],
+                "topology": {
+                    "file_edges": [
+                        {
+                            "source": "src/service.py",
+                            "target": "src/client.py",
+                            "relation": "imports",
+                        },
+                        {
+                            "source": "tests/test_service.py",
+                            "target": "src/service.py",
+                            "relation": "imports",
+                        },
+                    ]
+                },
+            }
+        }
+
+        document = build_evidence_fusion([advisory], artifacts, [])
+
+        usage = document["advisory_clusters"][0]["dependency_usage"]
+        self.assertEqual(usage["direct_test_files"], [])
+        self.assertEqual(
+            usage["transitive_test_files"], ["tests/test_service.py"]
+        )
+        self.assertEqual(
+            usage["recommended_test_files"], ["tests/test_service.py"]
+        )
+        self.assertEqual(usage["test_selection_confidence"], "medium")
 
     def test_exposure_protection_and_priority_influence_fusion_reasons(self) -> None:
         finding = _finding(

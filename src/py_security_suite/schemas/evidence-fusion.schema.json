@@ -12,7 +12,7 @@
     "purpose": {"type": "string", "minLength": 1},
     "summary": {
       "type": "object",
-      "required": ["findings_enriched", "independently_corroborated", "cross_stage_findings", "changed_line_findings", "uncovered_findings", "package_lineages", "source_only_packages", "artifact_only_packages", "version_drift_packages", "compound_hotspots", "contradictions", "distinct_advisories", "advisory_observations", "alias_collapsed_observations", "advisories_with_import_evidence", "advisories_in_executable_imports", "runtime_observed_dependency_advisories", "advisories_with_unused_declarations", "dependency_use_conflicts"],
+      "required": ["findings_enriched", "independently_corroborated", "cross_stage_findings", "changed_line_findings", "uncovered_findings", "package_lineages", "source_only_packages", "artifact_only_packages", "version_drift_packages", "compound_hotspots", "contradictions", "distinct_advisories", "advisory_observations", "alias_collapsed_observations", "advisories_with_import_evidence", "advisories_in_executable_imports", "runtime_observed_dependency_advisories", "advisories_with_unused_declarations", "dependency_use_conflicts", "known_exploited_advisories", "high_epss_advisories", "advisories_with_fixed_versions", "p0_advisories", "advisories_requiring_vex_validation", "advisories_with_focused_tests", "advisories_with_import_path_owners", "advisories_with_uncovered_import_paths"],
       "additionalProperties": {"type": "integer", "minimum": 0}
     },
     "evidence_lanes": {"type": "array", "maxItems": 20, "items": {"type": "object", "required": ["lane", "selected_tools", "completed_tools", "execution_gaps", "available_artifacts"]}},
@@ -51,7 +51,7 @@
     "advisoryContext": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["cluster_id", "primary_identifier", "identifiers", "package", "versions", "finding_ids", "tools", "observation_count", "alias_count", "cross_tool", "dependency_usage"],
+      "required": ["cluster_id", "primary_identifier", "identifiers", "package", "versions", "finding_ids", "tools", "observation_count", "alias_count", "cross_tool", "dependency_usage", "threat_context", "remediation_context"],
       "properties": {
         "cluster_id": {"type": ["string", "null"]},
         "primary_identifier": {"type": ["string", "null"]},
@@ -63,13 +63,15 @@
         "observation_count": {"type": "integer", "minimum": 0},
         "alias_count": {"type": "integer", "minimum": 0},
         "cross_tool": {"type": "boolean"},
-        "dependency_usage": {"$ref": "#/$defs/dependencyUsage"}
+        "dependency_usage": {"$ref": "#/$defs/dependencyUsage"},
+        "threat_context": {"$ref": "#/$defs/threatContext"},
+        "remediation_context": {"$ref": "#/$defs/remediationContext"}
       }
     },
     "advisoryCluster": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["cluster_id", "package", "versions", "primary_identifier", "identifiers", "finding_ids", "tools", "source_paths", "highest_severity", "observation_count", "alias_count", "cross_tool", "citations", "dependency_usage"],
+      "required": ["cluster_id", "package", "versions", "primary_identifier", "identifiers", "finding_ids", "tools", "source_paths", "highest_severity", "observation_count", "alias_count", "cross_tool", "citations", "dependency_usage", "threat_context", "remediation_context"],
       "properties": {
         "cluster_id": {"type": "string", "pattern": "^ADV-[A-F0-9]{12}$"},
         "package": {"type": "string", "minLength": 1},
@@ -84,13 +86,100 @@
         "alias_count": {"type": "integer", "minimum": 0},
         "cross_tool": {"type": "boolean"},
         "citations": {"type": "array", "maxItems": 25, "items": {"$ref": "#/$defs/citation"}},
-        "dependency_usage": {"$ref": "#/$defs/dependencyUsage"}
+        "dependency_usage": {"$ref": "#/$defs/dependencyUsage"},
+        "threat_context": {"$ref": "#/$defs/threatContext"},
+        "remediation_context": {"$ref": "#/$defs/remediationContext"}
+      }
+    },
+    "threatContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["intelligence_available", "intelligence_sources", "cves", "known_exploited", "known_exploited_cves", "known_exploited_records", "epss_probability", "epss_percentile", "epss_high", "epss_records", "vex_states", "vex_disposition", "vex_records"],
+      "properties": {
+        "intelligence_available": {"type": "boolean"},
+        "intelligence_sources": {"$ref": "#/$defs/strings"},
+        "cves": {"$ref": "#/$defs/strings"},
+        "known_exploited": {"type": "boolean"},
+        "known_exploited_cves": {"$ref": "#/$defs/strings"},
+        "known_exploited_records": {"type": "array", "maxItems": 100, "items": {"$ref": "#/$defs/kevRecord"}},
+        "epss_probability": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "epss_percentile": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "epss_high": {"type": "boolean"},
+        "epss_records": {"type": "array", "maxItems": 100, "items": {"$ref": "#/$defs/epssRecord"}},
+        "vex_states": {"$ref": "#/$defs/strings"},
+        "vex_disposition": {"enum": ["unassessed", "exploitable", "bounded-or-resolved-claim", "mixed", "in_triage"]},
+        "vex_records": {"type": "array", "maxItems": 100, "items": {"$ref": "#/$defs/vexRecord"}}
+      }
+    },
+    "kevRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cve", "date_added", "due_date", "known_ransomware_campaign_use", "required_action"],
+      "properties": {
+        "cve": {"type": "string", "minLength": 1},
+        "date_added": {"type": "string"},
+        "due_date": {"type": "string"},
+        "known_ransomware_campaign_use": {"type": "string"},
+        "required_action": {"type": "string"}
+      }
+    },
+    "epssRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cve", "probability", "percentile"],
+      "properties": {
+        "cve": {"type": "string", "minLength": 1},
+        "probability": {"type": "number", "minimum": 0, "maximum": 1},
+        "percentile": {"type": "number", "minimum": 0, "maximum": 1}
+      }
+    },
+    "vexRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cve", "state", "justification", "detail", "response"],
+      "properties": {
+        "cve": {"type": "string", "minLength": 1},
+        "state": {"type": "string", "minLength": 1},
+        "justification": {"type": "string"},
+        "detail": {"type": "string"},
+        "response": {"$ref": "#/$defs/strings"}
+      }
+    },
+    "remediationContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["priority", "action_kind", "fix_available", "fixed_version_candidates", "fixed_version_sources", "owners", "recommended_test_files", "test_selection_confidence", "recommended_action", "verification_steps", "evidence_basis", "uncertainties"],
+      "properties": {
+        "priority": {"enum": ["P0", "P1", "P2", "P3", "P4"]},
+        "action_kind": {"enum": ["upgrade", "remove-or-upgrade", "mitigate-or-replace", "resolve-evidence-conflict", "validate-vex"]},
+        "fix_available": {"type": "boolean"},
+        "fixed_version_candidates": {"$ref": "#/$defs/strings"},
+        "fixed_version_sources": {
+          "type": "array",
+          "maxItems": 25,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["tool", "versions"],
+            "properties": {
+              "tool": {"type": "string", "minLength": 1},
+              "versions": {"$ref": "#/$defs/strings"}
+            }
+          }
+        },
+        "owners": {"$ref": "#/$defs/strings"},
+        "recommended_test_files": {"$ref": "#/$defs/strings"},
+        "test_selection_confidence": {"enum": ["high", "medium", "low", "not-available"]},
+        "recommended_action": {"type": "string", "minLength": 1},
+        "verification_steps": {"type": "array", "maxItems": 6, "items": {"type": "string", "minLength": 1}},
+        "evidence_basis": {"type": "array", "maxItems": 20, "items": {"type": "string", "minLength": 1}},
+        "uncertainties": {"type": "array", "maxItems": 20, "items": {"type": "string", "minLength": 1}}
       }
     },
     "dependencyUsage": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["assessment", "source_relationship", "relationship_evidence_available", "import_evidence_available", "import_observed", "import_modules", "import_paths", "reachability_evidence_available", "reachability_complete", "reachability_confidence", "reachability_states", "runtime_observations", "deptry_statuses", "deptry_finding_ids", "signals_conflict", "evidence_artifacts"],
+      "required": ["assessment", "source_relationship", "relationship_evidence_available", "import_evidence_available", "import_observed", "import_modules", "import_paths", "reachability_evidence_available", "reachability_complete", "reachability_confidence", "reachability_states", "runtime_observations", "deptry_statuses", "deptry_finding_ids", "signals_conflict", "test_mapping_evidence_available", "recommended_test_files", "direct_test_files", "transitive_test_files", "test_selection_confidence", "ownership_evidence_available", "import_path_owners", "coverage_evidence_available", "import_path_coverage", "uncovered_import_paths", "evidence_artifacts"],
       "properties": {
         "assessment": {"enum": ["runtime-observed-import", "executable-import", "load-only-import", "disconnected-import", "imported-reachability-incomplete", "import-observed", "declared-unused", "import-not-observed", "import-vs-unused-conflict", "unknown"]},
         "source_relationship": {"enum": ["direct", "transitive", "unknown"]},
@@ -107,6 +196,28 @@
         "deptry_statuses": {"$ref": "#/$defs/strings"},
         "deptry_finding_ids": {"$ref": "#/$defs/strings"},
         "signals_conflict": {"type": "boolean"},
+        "test_mapping_evidence_available": {"type": "boolean"},
+        "recommended_test_files": {"$ref": "#/$defs/strings"},
+        "direct_test_files": {"$ref": "#/$defs/strings"},
+        "transitive_test_files": {"$ref": "#/$defs/strings"},
+        "test_selection_confidence": {"enum": ["high", "medium", "low", "not-available"]},
+        "ownership_evidence_available": {"type": "boolean"},
+        "import_path_owners": {"$ref": "#/$defs/strings"},
+        "coverage_evidence_available": {"type": "boolean"},
+        "import_path_coverage": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "coverage_percent"],
+            "properties": {
+              "path": {"type": "string", "minLength": 1},
+              "coverage_percent": {"type": ["number", "null"], "minimum": 0, "maximum": 100}
+            }
+          }
+        },
+        "uncovered_import_paths": {"$ref": "#/$defs/strings"},
         "evidence_artifacts": {"$ref": "#/$defs/strings"}
       }
     }

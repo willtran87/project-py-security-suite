@@ -10,7 +10,7 @@ creates a GitHub-friendly report artifact.
 | Portfolio | 64 governed adapters across source security, secrets, dependencies, architecture, quality, delivery, artifacts, and assurance evidence |
 | Decisions | Explicit `PASS`, `WARN`, `FAIL`, and `INCOMPLETE` outcomes |
 | Reports | Markdown, self-contained HTML, SARIF 2.1.0, SonarQube external issues, normalized JSON, an owned closure backlog, and SHA-256 manifests |
-| Risk context | Digest-pinned CISA KEV, FIRST EPSS, CycloneDX VEX, finding lifecycle, CODEOWNERS, and governed acceptances |
+| Risk context | Digest-pinned CISA KEV, FIRST EPSS, CycloneDX VEX, alias-aware advisory decisions, scanner-attributed fix candidates, finding lifecycle, CODEOWNERS, and governed acceptances |
 | Supply chain | Source and artifact SBOMs, package checks, provenance findings, and a locally verifiable Security Passport |
 | Reachability | Offline three-state executable/load-only/disconnected graph with explained dispatch paths, ranked islands, and optional coverage corroboration |
 | Graph context | Graphify code-only topology joined to findings for blast radius, structural hotspots, and cross-tool neighborhoods |
@@ -227,6 +227,10 @@ Finding order uses the derived P0-P4 priority rather than native severity alone:
 known-exploited findings are P0 and qualifying high-EPSS findings are P1. Within
 a priority, blocking and new or regressed work appears first. Terminal actions
 show the same decision context, summary, and impact before cited evidence.
+Alias-aware dependency work also joins scanner fix candidates, KEV/EPSS/VEX,
+exact import paths, Graphify-selected tests, coverage, and CODEOWNERS-derived
+owners. `closure-plan.json` emits one stable owned item per distinct advisory
+while retaining every native scanner observation and citation.
 The optional output is published atomically, refuses accidental replacement
 unless `--overwrite` is explicit, and must remain outside the report's exact
 checksum boundary. Exported entry points and finding-detail links are artifact-

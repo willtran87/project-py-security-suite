@@ -4,7 +4,7 @@ import re
 from collections import defaultdict
 from typing import Any
 
-from .advisory_fusion import build_advisory_clusters
+from .advisory_fusion import build_advisory_clusters, refresh_advisory_decision
 from .models import Finding, ToolRun, ToolStatus
 
 
@@ -143,6 +143,37 @@ def build_evidence_fusion(
         ),
         "dependency_use_conflicts": sum(
             item["dependency_usage"]["signals_conflict"] for item in advisory_clusters
+        ),
+        "known_exploited_advisories": sum(
+            item["threat_context"]["known_exploited"] for item in advisory_clusters
+        ),
+        "high_epss_advisories": sum(
+            item["threat_context"]["epss_high"] for item in advisory_clusters
+        ),
+        "advisories_with_fixed_versions": sum(
+            item["remediation_context"]["fix_available"]
+            for item in advisory_clusters
+        ),
+        "p0_advisories": sum(
+            item["remediation_context"]["priority"] == "P0"
+            for item in advisory_clusters
+        ),
+        "advisories_requiring_vex_validation": sum(
+            item["threat_context"]["vex_disposition"]
+            in {"bounded-or-resolved-claim", "mixed"}
+            for item in advisory_clusters
+        ),
+        "advisories_with_focused_tests": sum(
+            bool(item["dependency_usage"]["recommended_test_files"])
+            for item in advisory_clusters
+        ),
+        "advisories_with_import_path_owners": sum(
+            bool(item["dependency_usage"]["import_path_owners"])
+            for item in advisory_clusters
+        ),
+        "advisories_with_uncovered_import_paths": sum(
+            bool(item["dependency_usage"]["uncovered_import_paths"])
+            for item in advisory_clusters
         ),
     }
     return {
@@ -471,16 +502,35 @@ def _enrich_advisory_clusters(
         artifacts.get("sbom.cdx.json")
     )
     imports, import_evidence = _external_imports(artifacts.get("graphify.json"))
+    test_mappings, test_mapping_evidence = _dependency_test_mappings(
+        artifacts.get("graphify.json")
+    )
     reachability, reachability_evidence = _reachability_by_path(
         artifacts.get("reachability.json")
     )
+    coverage = _coverage(artifacts.get("coverage-summary.json"))
+    coverage_evidence = isinstance(artifacts.get("coverage-summary.json"), dict)
+    owners_by_path = _owners_by_path(findings)
+    ownership_evidence = _ownership_evidence_available(
+        artifacts.get("finding-delta.json"), owners_by_path
+    )
     deptry = _deptry_package_signals(findings)
+    findings_by_id = {finding.finding_id: finding for finding in findings}
     for cluster in clusters:
         package = str(cluster["package"])
         import_records = imports.get(package, [])
         import_paths = sorted(
             {str(item["path"]) for item in import_records if item.get("path")}
         )[:50]
+        validation = _dependency_validation_handoff(
+            import_paths,
+            test_mappings=test_mappings,
+            test_mapping_evidence=test_mapping_evidence,
+            owners_by_path=owners_by_path,
+            ownership_evidence=ownership_evidence,
+            coverage=coverage,
+            coverage_evidence=coverage_evidence,
+        )
         path_reachability = [
             reachability[path] for path in import_paths if path in reachability
         ]
@@ -537,17 +587,21 @@ def _enrich_advisory_clusters(
                 {str(item["finding_id"]) for item in deptry_records}
             )[:50],
             "signals_conflict": signals_conflict,
+            **validation,
             "evidence_artifacts": sorted(
                 name
                 for name, available in (
                     ("sbom.cdx.json", relationship_evidence),
                     ("graphify.json", import_evidence),
                     ("reachability.json", bool(reachability_evidence)),
+                    ("coverage-summary.json", coverage_evidence),
+                    ("finding-delta.json", ownership_evidence),
                     ("findings.json", bool(deptry_records)),
                 )
                 if available
             ),
         }
+        refresh_advisory_decision(cluster, findings_by_id)
     return clusters
 
 
@@ -605,6 +659,170 @@ def _source_dependency_relationships(value: Any) -> tuple[dict[str, str], bool]:
         if relationships.get(package) != "direct":
             relationships[package] = relationship
     return relationships, True
+
+
+def _dependency_test_mappings(
+    value: Any,
+) -> tuple[dict[str, dict[str, list[str]]], bool]:
+    if not isinstance(value, dict):
+        return {}, False
+    topology = value.get("topology")
+    if not isinstance(topology, dict) or not isinstance(
+        topology.get("file_edges"), list
+    ):
+        return {}, False
+    incoming: dict[str, set[str]] = defaultdict(set)
+    for item in topology["file_edges"][:100_000]:
+        if not isinstance(item, dict):
+            continue
+        relation = str(item.get("relation") or "")
+        if relation not in {"calls", "imports", "imports_from", "references", "uses"}:
+            continue
+        source = _path(str(item.get("source") or ""))
+        target = _path(str(item.get("target") or ""))
+        if source and target and source != target:
+            incoming[target].add(source)
+    result: dict[str, dict[str, list[str]]] = {}
+    for path in sorted(incoming)[:100_000]:
+        direct = sorted(item for item in incoming[path] if _is_test_path(item))[:50]
+        transitive = sorted(
+            item
+            for item in _bounded_graph_walk(incoming, path)
+            if _is_test_path(item) and item not in direct
+        )[:50]
+        result[path] = {"direct": direct, "transitive": transitive}
+    return result, True
+
+
+def _bounded_graph_walk(
+    adjacency: dict[str, set[str]], root: str
+) -> set[str]:
+    visited: set[str] = set()
+    frontier = {root}
+    for _depth in range(2):
+        following = {
+            neighbor
+            for current in frontier
+            for neighbor in adjacency.get(current, set())
+            if neighbor != root and neighbor not in visited
+        }
+        visited.update(following)
+        frontier = following
+        if not frontier or len(visited) >= 500:
+            break
+    return set(sorted(visited)[:500])
+
+
+def _is_test_path(path: str) -> bool:
+    normalized = "/" + path.casefold().strip("/")
+    name = normalized.rsplit("/", 1)[-1]
+    return (
+        "/tests/" in normalized
+        or "/test/" in normalized
+        or name.startswith("test_")
+        or name.endswith("_test.py")
+    )
+
+
+def _owners_by_path(findings: list[Finding]) -> dict[str, set[str]]:
+    result: dict[str, set[str]] = defaultdict(set)
+    for finding in findings:
+        owners = finding.evidence.get("owners")
+        if not isinstance(owners, list):
+            continue
+        normalized = {
+            str(owner)[:256]
+            for owner in owners[:20]
+            if isinstance(owner, str) and owner
+        }
+        for location in finding.locations:
+            path = _path(location.path)
+            if path:
+                result[path].update(normalized)
+    return dict(result)
+
+
+def _ownership_evidence_available(
+    value: Any, owners_by_path: dict[str, set[str]]
+) -> bool:
+    if owners_by_path:
+        return True
+    if not isinstance(value, dict):
+        return False
+    count = value.get("ownership_rules")
+    return isinstance(count, int) and not isinstance(count, bool) and count > 0
+
+
+def _dependency_validation_handoff(
+    import_paths: list[str],
+    *,
+    test_mappings: dict[str, dict[str, list[str]]],
+    test_mapping_evidence: bool,
+    owners_by_path: dict[str, set[str]],
+    ownership_evidence: bool,
+    coverage: dict[str, dict[str, Any]],
+    coverage_evidence: bool,
+) -> dict[str, Any]:
+    direct = sorted(
+        {
+            test
+            for path in import_paths
+            for test in test_mappings.get(path, {}).get("direct", [])
+        }
+    )[:50]
+    transitive = sorted(
+        {
+            test
+            for path in import_paths
+            for test in test_mappings.get(path, {}).get("transitive", [])
+            if test not in direct
+        }
+    )[:50]
+    owners = sorted(
+        {owner for path in import_paths for owner in owners_by_path.get(path, set())}
+    )[:20]
+    coverage_records = [
+        {
+            "path": path,
+            "coverage_percent": (
+                float(percent)
+                if isinstance(
+                    percent := coverage.get(path, {}).get("percent"), (int, float)
+                )
+                and not isinstance(percent, bool)
+                and 0 <= float(percent) <= 100
+                else None
+            ),
+        }
+        for path in import_paths
+    ][:50]
+    uncovered = sorted(
+        str(item["path"])
+        for item in coverage_records
+        if isinstance(item["coverage_percent"], (int, float))
+        and float(item["coverage_percent"]) < 80
+    )[:50]
+    confidence = (
+        "high"
+        if direct
+        else "medium"
+        if transitive
+        else "low"
+        if test_mapping_evidence and import_paths
+        else "not-available"
+    )
+    return {
+        "test_mapping_evidence_available": test_mapping_evidence,
+        "recommended_test_files": [*direct, *transitive][:50],
+        "direct_test_files": direct,
+        "transitive_test_files": transitive,
+        "test_selection_confidence": confidence,
+        "ownership_evidence_available": ownership_evidence,
+        "import_path_owners": owners,
+        "coverage_evidence_available": coverage_evidence,
+        "import_path_coverage": coverage_records,
+        "uncovered_import_paths": uncovered,
+    }
 
 
 def _external_imports(value: Any) -> tuple[dict[str, list[dict[str, Any]]], bool]:
@@ -738,6 +956,8 @@ def _advisory_context(cluster: dict[str, Any] | None) -> dict[str, Any]:
             "alias_count": 0,
             "cross_tool": False,
             "dependency_usage": _empty_dependency_usage(),
+            "threat_context": _empty_threat_context(),
+            "remediation_context": _empty_remediation_context(),
         }
     return {
         key: cluster[key]
@@ -753,6 +973,8 @@ def _advisory_context(cluster: dict[str, Any] | None) -> dict[str, Any]:
             "alias_count",
             "cross_tool",
             "dependency_usage",
+            "threat_context",
+            "remediation_context",
         )
     }
 
@@ -774,7 +996,52 @@ def _empty_dependency_usage() -> dict[str, Any]:
         "deptry_statuses": [],
         "deptry_finding_ids": [],
         "signals_conflict": False,
+        "test_mapping_evidence_available": False,
+        "recommended_test_files": [],
+        "direct_test_files": [],
+        "transitive_test_files": [],
+        "test_selection_confidence": "not-available",
+        "ownership_evidence_available": False,
+        "import_path_owners": [],
+        "coverage_evidence_available": False,
+        "import_path_coverage": [],
+        "uncovered_import_paths": [],
         "evidence_artifacts": [],
+    }
+
+
+def _empty_threat_context() -> dict[str, Any]:
+    return {
+        "intelligence_available": False,
+        "intelligence_sources": [],
+        "cves": [],
+        "known_exploited": False,
+        "known_exploited_cves": [],
+        "known_exploited_records": [],
+        "epss_probability": None,
+        "epss_percentile": None,
+        "epss_high": False,
+        "epss_records": [],
+        "vex_states": [],
+        "vex_disposition": "unassessed",
+        "vex_records": [],
+    }
+
+
+def _empty_remediation_context() -> dict[str, Any]:
+    return {
+        "priority": "P4",
+        "action_kind": "mitigate-or-replace",
+        "fix_available": False,
+        "fixed_version_candidates": [],
+        "fixed_version_sources": [],
+        "owners": [],
+        "recommended_test_files": [],
+        "test_selection_confidence": "not-available",
+        "recommended_action": "Review and remediate the native advisory evidence.",
+        "verification_steps": [],
+        "evidence_basis": [],
+        "uncertainties": [],
     }
 
 

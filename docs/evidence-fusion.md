@@ -16,6 +16,8 @@ empty scanner result as proof of safety.
 | Grype artifact finding | Source and artifact SBOMs plus OSV findings | Links artifact exposure back to the source dependency and related advisory observations |
 | OSV/Grype package advisories | Exact normalized package plus transitive CVE/GHSA/PYSEC/OSV alias overlap | Preserves native findings and sources while presenting one distinct actionable advisory, canonical identifier, versions, tools, and citations instead of double-counting aliases |
 | Distinct package advisory | CycloneDX dependency roots, exact Graphify external imports, importing-file reachability/runtime state, and deptry findings | Distinguishes direct/transitive, imported, executable, load-only, disconnected, reachability-incomplete, apparently unused, and conflicting evidence without asserting exploitability |
+| Distinct package advisory | OSV/Grype fixed-version evidence plus digest-approved CISA KEV, FIRST EPSS, and CycloneDX VEX snapshots | Produces one P0-P4 remediation record with scanner-attributed fix candidates, action kind, evidence basis, uncertainties, and verification steps; VEX claims require validation and never suppress native findings automatically |
+| Advisory importing files | Graphify reverse dependencies, coverage, CODEOWNERS-derived finding ownership, and native findings | Routes the remediation to observed import-path owners, selects direct/transitive focused tests with explicit confidence, and highlights import paths below 80% coverage |
 | Trivy and ScanCode license evidence | Source/artifact component inventories | Connects license policy findings to the component and lifecycle stage where it appears |
 | Cosign, attestations, reproducible-build evidence | Artifact manifest | Binds provenance conclusions to the exact artifact SHA-256 and detects digest disagreement |
 | Any normalized finding | High-value classification and package indexes | Links CVE, GHSA, CWE, license, SLSA, and package observations even when tools report different paths or lifecycle stages |
@@ -37,6 +39,8 @@ flowchart LR
         Reach["Reachability and runtime observations"]
         Complexity["Radon complexity"]
         Exposure["Sensitive-data and SDK/sink synthesis"]
+        Intelligence["Approved offline<br/>KEV + EPSS + VEX"]
+        Owners["CODEOWNERS-derived<br/>import-path ownership"]
     end
     subgraph Artifact["Artifact stage"]
         ArtifactSBOM["Syft artifact SBOM"]
@@ -51,6 +55,8 @@ flowchart LR
     Reach --> Fusion
     Complexity --> Fusion
     Exposure --> Fusion
+    Intelligence --> Fusion
+    Owners --> Decision
     ArtifactSBOM --> Fusion
     Vuln --> Fusion
     Manifest --> Fusion
@@ -64,6 +70,13 @@ flowchart LR
     Graph --> Use
     Reach --> Use
     Use --> Advisory
+    Vuln --> Fixes["Scanner-attributed<br/>fixed-version candidates"]
+    Fixes --> Decision["Advisory remediation context<br/>priority + action + verification"]
+    Intelligence --> Decision
+    Use --> Decision
+    Advisory --> Decision
+    Decision --> Verify
+    Decision --> Closure["One stable closure item<br/>per advisory cluster"]
     Advisory --> Verify
     Fusion --> Hotspots["Compound structural and test-risk hotspots"]
     Fusion --> Lanes["Evidence coverage and execution gaps"]
@@ -88,6 +101,14 @@ Each finding receives `evidence.fusion` containing:
 - dependency-use assessment with source relationship, exact importing files,
   reachability completeness/state, runtime observations, deptry signals, and
   explicit import-versus-unused conflicts; and
+- advisory threat context with known-exploited CVEs, maximum matched EPSS
+  probability/percentile, VEX states, and the exact offline intelligence sources;
+- remediation context with operational priority, action kind, scanner-attributed
+  fixed-version candidates, evidence basis, uncertainties, and bounded
+  verification steps; and
+- validation handoff with import-path owners, Graphify-selected direct/transitive
+  test files, test-selection confidence, file coverage, and explicit unmapped
+  states; and
 - artifact-manifest digest agreement.
 
 An artifact digest contradiction is stronger than ordinary triage context: it
@@ -118,6 +139,40 @@ reachability analysis is complete; otherwise the report says
 `declared-unused`, while an exact import plus `DEP002` becomes an evidence
 conflict that requires mapping and dynamic/plugin review. None of these states
 suppresses or lowers the package scanner finding.
+
+## Advisory remediation semantics
+
+The suite intentionally reports **fixed-version candidates**, not an invented
+"safest" or "minimum" version. OSV range events and Grype fix records can report
+different valid branches, and lexical ordering is not a sound package upgrade
+decision. Only OSV `ECOSYSTEM`/`SEMVER` fix events qualify; Git commit boundary
+events are not presented as package versions. Every candidate remains attributed
+to the scanner that supplied it.
+The recommended action tells the operator to select an organization-approved
+candidate after compatibility and release-note review, regenerate locks and
+artifacts, run focused tests, and rescan both source and built artifacts.
+
+Priority reuses the suite's established P0-P4 finding semantics. A CISA KEV
+match or native critical finding is P0; qualifying EPSS-high or native high
+findings are P1. Dependency-use signals change the **kind and evidence needed
+for the action**, not scanner severity. For example, `declared-unused` calls for
+dynamic/plugin-load validation followed by removal or upgrade, while an exact
+Graphify import that conflicts with deptry requires reconciliation first.
+
+VEX is treated as scoped product evidence. `not_affected`, `false_positive`, or
+resolved states produce `validate-vex`, requiring product, component, version,
+justification, and approval-provenance review. Mixed VEX states are surfaced as
+an uncertainty. Presence of VEX alone never suppresses the native finding or
+authorizes release.
+
+Closure planning uses the advisory cluster ID as its stable work identity.
+Alias-equivalent OSV/Grype observations remain visible in `findings.json`, but
+`closure-plan.json` creates one owned remediation item with every native finding
+ID, contributing tool, import path, focused test, fix candidate, uncertainty,
+and acceptance step. This avoids issuing duplicate work for reciprocal advisory
+identifiers without losing audit evidence. Closure-plan schema 1.1 carries
+distinct-advisory and retained-observation counters; frozen schema 1.0 remains
+available for existing consumers.
 
 ## Trust and limits
 

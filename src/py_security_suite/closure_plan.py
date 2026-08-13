@@ -13,7 +13,7 @@ from .path_safety import resolve_regular_file
 
 
 _MAX_JSON_BYTES = 128 * 1024 * 1024
-_SCHEMA_ID = "urn:project-py-security-suite:schema:closure-plan:1.0"
+_SCHEMA_ID = "urn:project-py-security-suite:schema:closure-plan:1.1"
 _PRIORITY_ORDER = {"P0": 0, "P1": 1, "P2": 2, "P3": 3, "P4": 4}
 _SEVERITY_PRIORITY = {
     "critical": "P0",
@@ -102,6 +102,7 @@ def render_closure_plan_markdown(plan: dict[str, Any]) -> str:
         f"- **Scan:** `{_md(plan.get('scan_id'))}`",
         f"- **Outcome:** `{_md(plan.get('outcome'))}`",
         f"- **Open work:** {int(summary.get('open_items') or 0)} item(s)",
+        f"- **Distinct advisory work:** {int(summary.get('advisory_items') or 0)} item(s) from {int(summary.get('advisory_observations') or 0)} retained scanner observation(s)",
         authority_line,
         "",
         authority_notice,
@@ -180,8 +181,13 @@ def _build(
     priorities = Counter(str(item["priority"]) for item in items)
     statuses = Counter(str(item["status"]) for item in items)
     authorities = Counter(str(item["authority"]) for item in items)
+    advisory_items = [
+        item
+        for item in items
+        if _as_object(item.get("details")).get("advisory_cluster_id")
+    ]
     return {
-        "schema_version": "1.0",
+        "schema_version": "1.1",
         "schema_id": _SCHEMA_ID,
         "authoritative": False,
         "scope": (
@@ -202,6 +208,14 @@ def _build(
                 count
                 for name, count in authorities.items()
                 if name in {"organization", "external"}
+            ),
+            "advisory_items": len(advisory_items),
+            "advisory_observations": sum(
+                len(item.get("related_findings", [])) for item in advisory_items
+            ),
+            "alias_observations_consolidated": sum(
+                max(0, len(item.get("related_findings", [])) - 1)
+                for item in advisory_items
             ),
             "by_priority": dict(sorted(priorities.items())),
             "by_status": dict(sorted(statuses.items())),
@@ -225,6 +239,99 @@ def _finding_items(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
         rules = {str(source.get("rule_id")) for source in sources}
         external = "COSIGN-BUNDLE-MISSING" in rules
         evidence = _as_object(finding.get("evidence"))
+        advisory = _as_object(_as_object(evidence.get("fusion")).get("advisory_context"))
+        remediation = _as_object(advisory.get("remediation_context"))
+        cluster_id = str(advisory.get("cluster_id") or "")
+        if cluster_id and remediation:
+            usage = _as_object(advisory.get("dependency_usage"))
+            advisory_owners = remediation.get("owners")
+            finding_owners = evidence.get("owners")
+            owner = (
+                str(advisory_owners[0])
+                if isinstance(advisory_owners, list) and advisory_owners
+                else str(finding_owners[0])
+                if isinstance(finding_owners, list) and finding_owners
+                else "repository-maintainers"
+            )
+            verification_steps = remediation.get("verification_steps")
+            acceptance = (
+                [str(item) for item in verification_steps[:6]]
+                if isinstance(verification_steps, list)
+                else []
+            )
+            acceptance.extend(
+                [
+                    f"Advisory cluster {cluster_id} is absent or explicitly governed in a newly sealed report.",
+                    "The replacement report independently passes pysec verify-report.",
+                ]
+            )
+            evidence_basis = remediation.get("evidence_basis")
+            import_paths = _string_values(usage.get("import_paths"), 50)
+            test_files = _string_values(
+                remediation.get("recommended_test_files"), 50
+            )
+            cluster_findings = _string_values(advisory.get("finding_ids"), 100)
+            raw_priority = str(remediation.get("priority") or "")
+            priority = (
+                raw_priority
+                if raw_priority in _PRIORITY_ORDER
+                else _SEVERITY_PRIORITY.get(
+                    str(finding.get("severity") or "unknown"), "P3"
+                )
+            )
+            items.append(
+                _item(
+                    key=f"advisory:{cluster_id}",
+                    priority=priority,
+                    category="finding",
+                    authority="repository",
+                    status="open",
+                    owner=owner,
+                    title=(
+                        f"Remediate {advisory.get('primary_identifier') or cluster_id} "
+                        f"in {advisory.get('package') or 'the affected package'}"
+                    ),
+                    why=(
+                        "; ".join(str(item) for item in evidence_basis[:20])
+                        if isinstance(evidence_basis, list) and evidence_basis
+                        else str(finding.get("impact") or finding.get("description") or "")
+                    ),
+                    action=str(
+                        remediation.get("recommended_action")
+                        or finding.get("remediation")
+                        or "Review and resolve the advisory."
+                    ),
+                    acceptance=acceptance,
+                    evidence_refs=[
+                        "evidence-fusion.json",
+                        "findings.json",
+                        *import_paths,
+                        *test_files,
+                    ],
+                    related_findings=cluster_findings or [finding_id],
+                    tools=_string_values(advisory.get("tools"), 25),
+                    details={
+                        "advisory_cluster_id": cluster_id,
+                        "primary_identifier": advisory.get("primary_identifier"),
+                        "identifiers": advisory.get("identifiers", []),
+                        "package": advisory.get("package"),
+                        "affected_versions": advisory.get("versions", []),
+                        "action_kind": remediation.get("action_kind"),
+                        "fixed_version_candidates": remediation.get(
+                            "fixed_version_candidates", []
+                        ),
+                        "dependency_use_assessment": usage.get("assessment"),
+                        "import_paths": import_paths,
+                        "recommended_test_files": test_files,
+                        "test_selection_confidence": remediation.get(
+                            "test_selection_confidence"
+                        ),
+                        "owners": remediation.get("owners", []),
+                        "uncertainties": remediation.get("uncertainties", []),
+                    },
+                )
+            )
+            continue
         owners = evidence.get("owners")
         owner = (
             str(owners[0])
@@ -565,8 +672,33 @@ def _item(
 def _deduplicate(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     result: dict[str, dict[str, Any]] = {}
     for item in items:
-        result.setdefault(str(item["id"]), item)
+        key = str(item["id"])
+        current = result.get(key)
+        if current is None:
+            result[key] = item
+            continue
+        for field in (
+            "acceptance_criteria",
+            "evidence_refs",
+            "commands",
+            "related_findings",
+            "tools",
+        ):
+            combined = [*current.get(field, []), *item.get(field, [])]
+            current[field] = _unique_values(combined)
     return list(result.values())
+
+
+def _unique_values(values: list[Any]) -> list[Any]:
+    result: list[Any] = []
+    seen: set[Any] = set()
+    for value in values:
+        marker = tuple(value) if isinstance(value, list) else value
+        if marker in seen:
+            continue
+        seen.add(marker)
+        result.append(value)
+    return result
 
 
 def _read_object(path: Path) -> dict[str, Any]:
@@ -598,6 +730,12 @@ def _object_list(value: Any, label: str) -> list[dict[str, Any]]:
     if not isinstance(value, list) or not all(isinstance(item, dict) for item in value):
         raise TypeError(f"{label} must be an array of objects")
     return value
+
+
+def _string_values(value: Any, limit: int) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value[:limit] if isinstance(item, str) and item]
 
 
 def _validate_options(coverage_target: float, hotspot_limit: int) -> None:

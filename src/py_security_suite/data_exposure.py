@@ -332,6 +332,14 @@ def build_data_exposure_synthesis(
             "sdk_advisories_with_import_evidence": 0,
             "sdk_advisories_in_executable_imports": 0,
             "sdk_advisories_flagged_unused": 0,
+            "sdk_known_exploited_advisories": 0,
+            "sdk_high_epss_advisories": 0,
+            "sdk_advisories_with_fixed_versions": 0,
+            "sdk_p0_advisories": 0,
+            "sdk_advisories_requiring_vex_validation": 0,
+            "sdk_advisories_with_focused_tests": 0,
+            "sdk_advisories_with_import_path_owners": 0,
+            "sdk_advisories_with_uncovered_import_paths": 0,
             "sdk_families_observed": len(observed_sdk_families),
             "files_analyzed": inventory["files_analyzed"],
             "parse_errors": inventory["parse_errors"],
@@ -548,6 +556,71 @@ def apply_data_exposure_fusion(
                     for cluster in context["advisory_clusters"]
                 }.values()
             ),
+            "sdk_known_exploited_advisories": sum(
+                cluster["threat_context"]["known_exploited"]
+                for cluster in {
+                    str(cluster["cluster_id"]): cluster
+                    for context in dependency_contexts.values()
+                    for cluster in context["advisory_clusters"]
+                }.values()
+            ),
+            "sdk_high_epss_advisories": sum(
+                cluster["threat_context"]["epss_high"]
+                for cluster in {
+                    str(cluster["cluster_id"]): cluster
+                    for context in dependency_contexts.values()
+                    for cluster in context["advisory_clusters"]
+                }.values()
+            ),
+            "sdk_advisories_with_fixed_versions": sum(
+                cluster["remediation_context"]["fix_available"]
+                for cluster in {
+                    str(cluster["cluster_id"]): cluster
+                    for context in dependency_contexts.values()
+                    for cluster in context["advisory_clusters"]
+                }.values()
+            ),
+            "sdk_p0_advisories": sum(
+                cluster["remediation_context"]["priority"] == "P0"
+                for cluster in {
+                    str(cluster["cluster_id"]): cluster
+                    for context in dependency_contexts.values()
+                    for cluster in context["advisory_clusters"]
+                }.values()
+            ),
+            "sdk_advisories_requiring_vex_validation": sum(
+                cluster["threat_context"]["vex_disposition"]
+                in {"bounded-or-resolved-claim", "mixed"}
+                for cluster in {
+                    str(cluster["cluster_id"]): cluster
+                    for context in dependency_contexts.values()
+                    for cluster in context["advisory_clusters"]
+                }.values()
+            ),
+            "sdk_advisories_with_focused_tests": sum(
+                bool(cluster["dependency_usage"]["recommended_test_files"])
+                for cluster in {
+                    str(cluster["cluster_id"]): cluster
+                    for context in dependency_contexts.values()
+                    for cluster in context["advisory_clusters"]
+                }.values()
+            ),
+            "sdk_advisories_with_import_path_owners": sum(
+                bool(cluster["dependency_usage"]["import_path_owners"])
+                for cluster in {
+                    str(cluster["cluster_id"]): cluster
+                    for context in dependency_contexts.values()
+                    for cluster in context["advisory_clusters"]
+                }.values()
+            ),
+            "sdk_advisories_with_uncovered_import_paths": sum(
+                bool(cluster["dependency_usage"]["uncovered_import_paths"])
+                for cluster in {
+                    str(cluster["cluster_id"]): cluster
+                    for context in dependency_contexts.values()
+                    for cluster in context["advisory_clusters"]
+                }.values()
+            ),
         }
     )
     assessments.sort(
@@ -581,6 +654,14 @@ def _empty_sdk_dependency_context() -> dict[str, Any]:
         "advisories_with_import_evidence": 0,
         "advisories_in_executable_imports": 0,
         "advisories_flagged_unused": 0,
+        "known_exploited_advisories": 0,
+        "high_epss_advisories": 0,
+        "advisories_with_fixed_versions": 0,
+        "p0_advisories": 0,
+        "advisories_requiring_vex_validation": 0,
+        "advisories_with_focused_tests": 0,
+        "advisories_with_import_path_owners": 0,
+        "advisories_with_uncovered_import_paths": 0,
         "highest_severity": None,
         "lineage": [],
         "risk_reasons": [],
@@ -711,6 +792,38 @@ def _sdk_dependency_contexts(
             "unused-declaration" in item["dependency_usage"]["deptry_statuses"]
             for item in advisory_clusters
         )
+        known_exploited_count = sum(
+            item["threat_context"]["known_exploited"]
+            for item in advisory_clusters
+        )
+        high_epss_count = sum(
+            item["threat_context"]["epss_high"] for item in advisory_clusters
+        )
+        fixed_count = sum(
+            item["remediation_context"]["fix_available"]
+            for item in advisory_clusters
+        )
+        p0_count = sum(
+            item["remediation_context"]["priority"] == "P0"
+            for item in advisory_clusters
+        )
+        vex_validation_count = sum(
+            item["threat_context"]["vex_disposition"]
+            in {"bounded-or-resolved-claim", "mixed"}
+            for item in advisory_clusters
+        )
+        focused_test_count = sum(
+            bool(item["dependency_usage"]["recommended_test_files"])
+            for item in advisory_clusters
+        )
+        owner_count = sum(
+            bool(item["dependency_usage"]["import_path_owners"])
+            for item in advisory_clusters
+        )
+        uncovered_import_count = sum(
+            bool(item["dependency_usage"]["uncovered_import_paths"])
+            for item in advisory_clusters
+        )
         if import_count:
             reasons.append(
                 f"{import_count} distinct advisory risk(s) have exact static import evidence"
@@ -722,6 +835,30 @@ def _sdk_dependency_contexts(
         if unused_count:
             reasons.append(
                 f"deptry flags the declaration for {unused_count} distinct advisory risk(s) as unused"
+            )
+        if known_exploited_count:
+            reasons.append(
+                f"{known_exploited_count} distinct advisory risk(s) match the approved offline CISA KEV snapshot"
+            )
+        if fixed_count:
+            reasons.append(
+                f"{fixed_count} distinct advisory risk(s) have scanner-reported fixed-version candidates"
+            )
+        if vex_validation_count:
+            reasons.append(
+                f"{vex_validation_count} distinct advisory risk(s) require VEX scope and justification validation"
+            )
+        if focused_test_count:
+            reasons.append(
+                f"{focused_test_count} distinct advisory risk(s) have graph-selected focused tests"
+            )
+        if owner_count:
+            reasons.append(
+                f"{owner_count} distinct advisory risk(s) have import-path owners"
+            )
+        if uncovered_import_count:
+            reasons.append(
+                f"{uncovered_import_count} distinct advisory risk(s) map to import paths below 80% coverage"
             )
         citation_sources = advisory_clusters if advisory_clusters else records
         citations = {
@@ -759,6 +896,14 @@ def _sdk_dependency_contexts(
             "advisories_with_import_evidence": import_count,
             "advisories_in_executable_imports": executable_count,
             "advisories_flagged_unused": unused_count,
+            "known_exploited_advisories": known_exploited_count,
+            "high_epss_advisories": high_epss_count,
+            "advisories_with_fixed_versions": fixed_count,
+            "p0_advisories": p0_count,
+            "advisories_requiring_vex_validation": vex_validation_count,
+            "advisories_with_focused_tests": focused_test_count,
+            "advisories_with_import_path_owners": owner_count,
+            "advisories_with_uncovered_import_paths": uncovered_import_count,
             "highest_severity": highest_severity,
             "lineage": lineage[:50],
             "risk_reasons": reasons[:20],
@@ -808,6 +953,10 @@ def _sdk_advisory_cluster(value: Any) -> dict[str, Any] | None:
         ),
         "cross_tool": value.get("cross_tool") is True,
         "dependency_usage": _sdk_dependency_usage(value.get("dependency_usage")),
+        "threat_context": _sdk_threat_context(value.get("threat_context")),
+        "remediation_context": _sdk_remediation_context(
+            value.get("remediation_context")
+        ),
         "citations": [
             {
                 "identifier": str(item.get("identifier") or "")[:200],
@@ -818,6 +967,143 @@ def _sdk_advisory_cluster(value: Any) -> dict[str, Any] | None:
             if isinstance(item, dict) and item.get("identifier") and item.get("title")
         ],
     }
+
+
+def _sdk_threat_context(value: Any) -> dict[str, Any]:
+    raw = value if isinstance(value, dict) else {}
+    disposition = str(raw.get("vex_disposition") or "unassessed")
+    allowed = {
+        "unassessed",
+        "exploitable",
+        "bounded-or-resolved-claim",
+        "mixed",
+        "in_triage",
+    }
+    return {
+        "intelligence_available": raw.get("intelligence_available") is True,
+        "intelligence_sources": _bounded_strings(
+            raw.get("intelligence_sources"), 10
+        ),
+        "cves": _bounded_strings(raw.get("cves"), 100),
+        "known_exploited": raw.get("known_exploited") is True,
+        "known_exploited_cves": _bounded_strings(
+            raw.get("known_exploited_cves"), 100
+        ),
+        "known_exploited_records": _sdk_kev_records(
+            raw.get("known_exploited_records")
+        ),
+        "epss_probability": _bounded_probability(raw.get("epss_probability")),
+        "epss_percentile": _bounded_probability(raw.get("epss_percentile")),
+        "epss_high": raw.get("epss_high") is True,
+        "epss_records": _sdk_epss_records(raw.get("epss_records")),
+        "vex_states": _bounded_strings(raw.get("vex_states"), 20),
+        "vex_disposition": disposition if disposition in allowed else "unassessed",
+        "vex_records": _sdk_vex_records(raw.get("vex_records")),
+    }
+
+
+def _sdk_kev_records(value: Any) -> list[dict[str, Any]]:
+    raw = value if isinstance(value, list) else []
+    return [
+        {
+            "cve": str(item.get("cve") or "")[:100],
+            "date_added": str(item.get("date_added") or "")[:30],
+            "due_date": str(item.get("due_date") or "")[:30],
+            "known_ransomware_campaign_use": str(
+                item.get("known_ransomware_campaign_use") or ""
+            )[:30],
+            "required_action": str(item.get("required_action") or "")[:500],
+        }
+        for item in raw[:100]
+        if isinstance(item, dict) and item.get("cve")
+    ]
+
+
+def _sdk_epss_records(value: Any) -> list[dict[str, Any]]:
+    raw = value if isinstance(value, list) else []
+    return [
+        {
+            "cve": str(item.get("cve") or "")[:100],
+            "probability": _bounded_probability(item.get("probability")),
+            "percentile": _bounded_probability(item.get("percentile")),
+        }
+        for item in raw[:100]
+        if isinstance(item, dict)
+        and item.get("cve")
+        and _bounded_probability(item.get("probability")) is not None
+        and _bounded_probability(item.get("percentile")) is not None
+    ]
+
+
+def _sdk_vex_records(value: Any) -> list[dict[str, Any]]:
+    raw = value if isinstance(value, list) else []
+    return [
+        {
+            "cve": str(item.get("cve") or "")[:100],
+            "state": str(item.get("state") or "")[:100],
+            "justification": str(item.get("justification") or "")[:100],
+            "detail": str(item.get("detail") or "")[:500],
+            "response": _bounded_strings(item.get("response"), 20),
+        }
+        for item in raw[:100]
+        if isinstance(item, dict) and item.get("state")
+    ]
+
+
+def _sdk_remediation_context(value: Any) -> dict[str, Any]:
+    raw = value if isinstance(value, dict) else {}
+    priority = str(raw.get("priority") or "P4")
+    action_kind = str(raw.get("action_kind") or "mitigate-or-replace")
+    allowed_actions = {
+        "upgrade",
+        "remove-or-upgrade",
+        "mitigate-or-replace",
+        "resolve-evidence-conflict",
+        "validate-vex",
+    }
+    raw_sources = raw.get("fixed_version_sources")
+    sources = raw_sources if isinstance(raw_sources, list) else []
+    return {
+        "priority": priority if priority in {"P0", "P1", "P2", "P3", "P4"} else "P4",
+        "action_kind": (
+            action_kind if action_kind in allowed_actions else "mitigate-or-replace"
+        ),
+        "fix_available": raw.get("fix_available") is True,
+        "fixed_version_candidates": _bounded_strings(
+            raw.get("fixed_version_candidates"), 100
+        ),
+        "fixed_version_sources": [
+            {
+                "tool": str(item.get("tool") or "unknown")[:100],
+                "versions": _bounded_strings(item.get("versions"), 50),
+            }
+            for item in sources[:25]
+            if isinstance(item, dict)
+        ],
+        "owners": _bounded_strings(raw.get("owners"), 20),
+        "recommended_test_files": _bounded_strings(
+            raw.get("recommended_test_files"), 50
+        ),
+        "test_selection_confidence": (
+            str(raw.get("test_selection_confidence"))
+            if str(raw.get("test_selection_confidence"))
+            in {"high", "medium", "low", "not-available"}
+            else "not-available"
+        ),
+        "recommended_action": str(
+            raw.get("recommended_action")
+            or "Review and remediate the native advisory evidence."
+        )[:2000],
+        "verification_steps": _bounded_strings(raw.get("verification_steps"), 6),
+        "evidence_basis": _bounded_strings(raw.get("evidence_basis"), 20),
+        "uncertainties": _bounded_strings(raw.get("uncertainties"), 20),
+    }
+
+
+def _bounded_probability(value: Any) -> float | None:
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return None
+    return round(float(value), 6) if 0 <= float(value) <= 1 else None
 
 
 def _sdk_dependency_usage(value: Any) -> dict[str, Any]:
@@ -870,8 +1156,54 @@ def _sdk_dependency_usage(value: Any) -> dict[str, Any]:
         "deptry_statuses": _bounded_strings(raw.get("deptry_statuses"), 10),
         "deptry_finding_ids": _bounded_strings(raw.get("deptry_finding_ids"), 50),
         "signals_conflict": raw.get("signals_conflict") is True,
+        "test_mapping_evidence_available": raw.get(
+            "test_mapping_evidence_available"
+        )
+        is True,
+        "recommended_test_files": _bounded_strings(
+            raw.get("recommended_test_files"), 50
+        ),
+        "direct_test_files": _bounded_strings(raw.get("direct_test_files"), 50),
+        "transitive_test_files": _bounded_strings(
+            raw.get("transitive_test_files"), 50
+        ),
+        "test_selection_confidence": (
+            str(raw.get("test_selection_confidence"))
+            if str(raw.get("test_selection_confidence"))
+            in {"high", "medium", "low", "not-available"}
+            else "not-available"
+        ),
+        "ownership_evidence_available": raw.get("ownership_evidence_available")
+        is True,
+        "import_path_owners": _bounded_strings(raw.get("import_path_owners"), 20),
+        "coverage_evidence_available": raw.get("coverage_evidence_available")
+        is True,
+        "import_path_coverage": _sdk_import_path_coverage(
+            raw.get("import_path_coverage")
+        ),
+        "uncovered_import_paths": _bounded_strings(
+            raw.get("uncovered_import_paths"), 50
+        ),
         "evidence_artifacts": _bounded_strings(raw.get("evidence_artifacts"), 10),
     }
+
+
+def _sdk_import_path_coverage(value: Any) -> list[dict[str, Any]]:
+    raw = value if isinstance(value, list) else []
+    return [
+        {
+            "path": str(item.get("path") or "")[:4096],
+            "coverage_percent": (
+                round(float(percent), 3)
+                if isinstance(percent := item.get("coverage_percent"), (int, float))
+                and not isinstance(percent, bool)
+                and 0 <= float(percent) <= 100
+                else None
+            ),
+        }
+        for item in raw[:50]
+        if isinstance(item, dict) and item.get("path")
+    ]
 
 
 def _sdk_package_finding_index(
@@ -976,12 +1308,37 @@ def _sdk_dependency_verification_steps(context: Any) -> list[str]:
             if isinstance(tools, list) and tools
             else ""
         )
-        steps.append(
-            "Review distinct SDK advisories "
-            + ", ".join(primary_identifiers[:5])
-            + attribution
-            + "; upgrade, replace, or govern the affected package before approving this data path."
+        prioritized = sorted(
+            (item for item in advisory_clusters if isinstance(item, dict)),
+            key=lambda item: {
+                "P0": 0,
+                "P1": 1,
+                "P2": 2,
+                "P3": 3,
+                "P4": 4,
+            }.get(
+                str(item.get("remediation_context", {}).get("priority") or "P4"),
+                5,
+            ),
         )
+        leading: dict[str, Any] = prioritized[0] if prioritized else {}
+        raw_remediation = leading.get("remediation_context")
+        remediation = raw_remediation if isinstance(raw_remediation, dict) else {}
+        action = str(remediation.get("recommended_action") or "")
+        if action:
+            identifier = str(
+                leading.get("primary_identifier") or leading.get("cluster_id")
+            )
+            steps.append(
+                f"{remediation.get('priority', 'P4')} SDK advisory {identifier}: {action}"
+            )
+        else:
+            steps.append(
+                "Review distinct SDK advisories "
+                + ", ".join(primary_identifiers[:5])
+                + attribution
+                + "; upgrade, replace, or govern the affected package before approving this data path."
+            )
         usage: list[dict[str, Any]] = []
         for item in advisory_clusters:
             if not isinstance(item, dict):
