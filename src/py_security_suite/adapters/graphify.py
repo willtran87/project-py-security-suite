@@ -16,6 +16,7 @@ _LINE = re.compile(r"(?:^|:)L(?P<line>\d+)(?:$|[-:])")
 _MAX_NODES = 250_000
 _MAX_EDGES = 750_000
 _MAX_TEXT = 4_096
+_MINIMUM_GRAPH_JSON_BYTES = 64 * 1024 * 1024
 
 
 class GraphifyAdapter(JsonFileScannerAdapter):
@@ -23,6 +24,7 @@ class GraphifyAdapter(JsonFileScannerAdapter):
 
     name = "graphify"
     output_filename = "graphify-out/graph.json"
+    minimum_json_output_bytes = _MINIMUM_GRAPH_JSON_BYTES
 
     def not_applicable_reason(self, target: Path) -> str | None:
         if not maintained_files(target, frozenset({".py"})):

@@ -79,6 +79,32 @@ class ReleaseReadinessTests(unittest.TestCase):
         _validate_schema(result)
 
     @patch("py_security_suite.release_readiness.verify_report")
+    def test_missing_change_assessment_scope_cannot_approve_zero_debt(
+        self, verify_report_mock
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            report = Path(directory)
+            _write_release_evidence(report)
+            (report / "diff-coverage.json").unlink()
+            verify_report_mock.return_value = _verification()
+            result = assess_release_readiness(report)
+
+        self.assertEqual(result["decision"], "not_approved")
+        control = next(
+            value
+            for value in result["controls"]
+            if value["id"] == "change-validation-alignment"
+        )
+        self.assertEqual(control["status"], "fail")
+        self.assertIn("cannot prove alignment", control["detail"])
+        action = next(
+            value
+            for value in result["remediation"]
+            if value["id"] == "control:change-validation-alignment"
+        )
+        self.assertIn("diff-coverage", action["action"])
+
+    @patch("py_security_suite.release_readiness.verify_report")
     def test_groups_shared_validation_causes_without_losing_file_subjects(
         self, verify_report_mock
     ) -> None:
@@ -639,6 +665,13 @@ def _write_release_evidence(
             "schema_version": "1.2",
             "summary": {"validation_alignment_items": 0},
             "items": [],
+        },
+        "diff-coverage.json": {
+            "schema_version": "1.0",
+            "diff_name": "approved-base...current",
+            "minimum_percent": 80.0,
+            "num_changed_lines": 0,
+            "src_stats": {},
         },
     }
     for name, document in documents.items():

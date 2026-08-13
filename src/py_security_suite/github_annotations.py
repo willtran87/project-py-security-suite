@@ -22,8 +22,11 @@ def build_github_annotations(
     if source.stat().st_size > _MAX_JSON_BYTES:
         raise ValueError("promotion plan exceeds 128 MiB")
     document = json.loads(source.read_bytes())
-    if not isinstance(document, dict) or document.get("schema_version") != "1.1":
-        raise ValueError("promotion plan schema_version must be '1.1'")
+    if not isinstance(document, dict) or document.get("schema_version") not in {
+        "1.1",
+        "1.2",
+    }:
+        raise ValueError("promotion plan schema_version must be '1.1' or '1.2'")
     verification = verify_report(report)
     bound = document.get("report")
     if (

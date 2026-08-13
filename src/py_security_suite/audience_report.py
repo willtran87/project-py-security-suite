@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from html import escape
 from pathlib import Path
 from typing import Any
 
@@ -25,8 +26,11 @@ def build_audience_report(
     if source.stat().st_size > _MAX_JSON_BYTES:
         raise ValueError("promotion plan exceeds 128 MiB")
     document = json.loads(source.read_bytes())
-    if not isinstance(document, dict) or document.get("schema_version") != "1.1":
-        raise ValueError("promotion plan schema_version must be '1.1'")
+    if not isinstance(document, dict) or document.get("schema_version") not in {
+        "1.1",
+        "1.2",
+    }:
+        raise ValueError("promotion plan schema_version must be '1.1' or '1.2'")
     verification = verify_report(report)
     bound = document.get("report")
     if (
@@ -55,7 +59,7 @@ def build_audience_report(
 def render_audience_markdown(document: dict[str, Any]) -> str:
     """Render a small stable Markdown card without remote dependencies."""
     lines = [
-        f"# {str(document['audience']).replace('_', ' ').title()} security view",
+        f"# {str(document['audience']).replace('_', ' ').title()} promotion view",
         "",
         f"**Status:** {str(document['status']).upper()}  ",
         f"**Scan:** `{document['report']['scan_id']}`  ",
@@ -65,13 +69,16 @@ def render_audience_markdown(document: dict[str, Any]) -> str:
         "",
     ]
     for key, value in document["view"].items():
-        label = str(key).replace("_", " ").title()
+        label = _label(str(key))
         if isinstance(value, list):
-            lines.append(
-                f"- **{label}:** {', '.join(str(item) for item in value) or 'none'}"
-            )
+            if value:
+                lines.append(f"- **{label}:**")
+                lines.extend(f"  - {_markdown_text(item)}" for item in value)
+            else:
+                lines.append(f"- **{label}:** none")
         else:
-            lines.append(f"- **{label}:** {value}")
+            rendered = "yes" if value is True else "no" if value is False else value
+            lines.append(f"- **{label}:** {_markdown_text(rendered)}")
     lines.extend(
         [
             "",
@@ -89,3 +96,21 @@ def _digest(value: str) -> str:
     ):
         raise ValueError("plan SHA-256 must be a lowercase digest")
     return normalized
+
+
+def _markdown_text(value: object) -> str:
+    text = escape(" ".join(str(value).split()), quote=False).replace("\\", "\\\\")
+    for character in ("`", "*", "_", "[", "]", "|"):
+        text = text.replace(character, f"\\{character}")
+    return text
+
+
+def _label(value: str) -> str:
+    words = value.replace("_", " ").split()
+    acronyms = {
+        "id": "ID",
+        "ids": "IDs",
+        "sha256": "SHA-256",
+        "codeowner": "CODEOWNER",
+    }
+    return " ".join(acronyms.get(word.casefold(), word.title()) for word in words)

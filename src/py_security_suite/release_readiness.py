@@ -56,7 +56,7 @@ _CONTROL_REMEDIATION = {
     "change-validation-alignment": (
         "quality-engineering",
         "repository",
-        "Resolve every changed-file focused-test and changed-line coverage mismatch, then regenerate the sealed report.",
+        "Restore retained diff-coverage assessment scope, resolve every changed-file focused-test and changed-line coverage mismatch, then regenerate the sealed report.",
         [],
     ),
 }
@@ -110,6 +110,7 @@ def assess_release_readiness(
     intelligence_approval = _optional_object(root / "intelligence-approval.json")
     trust = _entrypoint_trust(manifest)
     closure = _optional_object(root / "closure-plan.json")
+    diff_coverage = _optional_object(root / "diff-coverage.json")
 
     findings = findings_document.get("findings")
     if not isinstance(findings, list):
@@ -143,7 +144,7 @@ def assess_release_readiness(
         trust=trust,
     )
     controls.append(_intelligence_control(intelligence, intelligence_approval))
-    controls.append(_change_validation_control(closure))
+    controls.append(_change_validation_control(closure, diff_coverage))
     evaluation_control = _effectiveness_control(
         effectiveness_evaluation,
         effectiveness_sha256,
@@ -274,7 +275,9 @@ def _intelligence_control(
     )
 
 
-def _change_validation_control(closure: dict[str, Any]) -> dict[str, Any]:
+def _change_validation_control(
+    closure: dict[str, Any], diff_coverage: dict[str, Any]
+) -> dict[str, Any]:
     summary = closure.get("summary")
     if closure.get("schema_version") != "1.2" or not isinstance(summary, dict):
         return _control(
@@ -282,6 +285,26 @@ def _change_validation_control(closure: dict[str, Any]) -> dict[str, Any]:
             False,
             "Current closure-plan validation alignment evidence is absent.",
             ["closure-plan.json#summary.validation_alignment_items"],
+        )
+    stats = diff_coverage.get("src_stats")
+    changed_lines = diff_coverage.get("num_changed_lines")
+    if (
+        diff_coverage.get("schema_version") != "1.0"
+        or not isinstance(stats, dict)
+        or not isinstance(diff_coverage.get("diff_name"), str)
+        or not str(diff_coverage["diff_name"]).strip()
+        or not isinstance(changed_lines, int)
+        or isinstance(changed_lines, bool)
+        or changed_lines < 0
+    ):
+        return _control(
+            "change-validation-alignment",
+            False,
+            "Retained diff-coverage change-assessment scope is absent; zero validation gaps cannot prove alignment.",
+            [
+                "closure-plan.json#summary.validation_alignment_items",
+                "diff-coverage.json",
+            ],
         )
     gaps = int(summary.get("validation_alignment_items") or 0)
     return _control(
@@ -292,7 +315,10 @@ def _change_validation_control(closure: dict[str, Any]) -> dict[str, Any]:
             if gaps == 0
             else f"{gaps} changed-file validation alignment gap(s) remain."
         ),
-        ["closure-plan.json#summary.validation_alignment_items"],
+        [
+            "closure-plan.json#summary.validation_alignment_items",
+            "diff-coverage.json",
+        ],
     )
 
 

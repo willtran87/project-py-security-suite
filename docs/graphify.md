@@ -1,6 +1,6 @@
 # Graphify code-graph integration
 
-Last reviewed: 2026-08-12
+Last reviewed: 2026-08-13
 
 Graphify adds a deterministic code-property graph to the suite's finding,
 architecture, complexity, coverage, and reachability perspectives. The adapter
@@ -12,8 +12,16 @@ graphify extract TARGET --code-only --no-cluster --out TEMP --max-workers 1
 
 The scan supplies no LLM backend and does not enable document, URL, hook,
 Postgres, or live-input analysis. It rejects nonzero model tokens, non-AST
-origins, hyperedges, unknown edge endpoints, escaping paths, and oversized
-graphs. API-key variables are excluded by the suite's reduced environment.
+origins, hyperedges, escaping paths, and oversized graphs; Graphify's implicit
+package/external endpoints are normalized into bounded explicit placeholders.
+API-key variables are excluded by the suite's reduced environment.
+
+Graph JSON is written to a private temporary file. Graphify receives a bounded
+64 MiB file allowance because real repository graphs can exceed the generic
+16 MiB scanner-stream cap; captured stdout and stderr remain subject to that
+smaller global cap. Normalization still enforces 250,000 nodes, 750,000 edges,
+4,096-character fields, zero hyperedges/model tokens, repository-relative
+paths, and the report's 128 MiB artifact boundary.
 
 ## Evidence flow
 

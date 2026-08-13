@@ -5,6 +5,26 @@ for published releases.
 
 ## Unreleased
 
+- Version promotion plans at 1.2 and cross-reference sealed closure-plan 1.2
+  validation work with optional digest-bound operational-trend 1.3 evidence.
+  Promotion now fails closed on current validation debt or blocking validation
+  regressions, preserves stable CODEOWNER work queues and exact closure
+  references, and surfaces concise trajectory, owner, action, anomaly, and
+  evidence-binding views for developers, security, release engineering,
+  executives, and auditors. Evidence packs build trend evidence before
+  promotion, retain a readable trend Markdown artifact, and bind the trend's
+  latest snapshot to the exact promoted report.
+- Version operational trend at 1.3 and require both a current closure ledger and
+  retained diff-coverage change-assessment scope before claiming validation
+  subjects are new or resolved. Missing assessment scope now produces an
+  explicit comparability reason and anomaly; owner deltas become unavailable
+  instead of falsely reporting debt resolution. Release readiness and promotion
+  apply the same fail-closed rule, so an empty closure queue without retained
+  change scope cannot approve a candidate.
+- Give Graphify JSON files a bounded 64 MiB adapter allowance while retaining
+  the generic scanner-stream cap for stdout and stderr. This prevents healthy
+  medium-sized AST graphs from becoming parse errors without relaxing node,
+  edge, path, origin, token, or report-artifact validation.
 - Cross-reference structural change impacts, graph-selected tests, case-level
   execution, changed-line coverage, whole-file coverage, and retained
   CODEOWNERS rules into one stable owned closure item per changed file. Closure

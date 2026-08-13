@@ -231,9 +231,15 @@ class CliSafetyTests(unittest.TestCase):
                 "readiness.json",
                 "--release-readiness-sha256",
                 "b" * 64,
+                "--operational-trend",
+                "trend.json",
+                "--operational-trend-sha256",
+                "c" * 64,
             ]
         )
         self.assertEqual(promotion.command, "promotion-plan")
+        self.assertEqual(promotion.operational_trend, Path("trend.json"))
+        self.assertEqual(promotion.operational_trend_sha256, "c" * 64)
         closure = parser.parse_args(
             [
                 "closure-plan",

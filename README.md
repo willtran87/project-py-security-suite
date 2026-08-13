@@ -366,6 +366,8 @@ pysec evidence-draft REPORT --format json \
 pysec promotion-plan REPORT --format json \
   --release-readiness release-readiness.json \
   --release-readiness-sha256 APPROVED_SHA256 \
+  --operational-trend operational-trend.json \
+  --operational-trend-sha256 APPROVED_TREND_SHA256 \
   --output promotion-plan.json
 
 pysec promotion-plan REPORT --format markdown --output promotion-plan.md
@@ -429,6 +431,14 @@ pysec merge-coverage \
 pysec portfolio REPORT_ONE REPORT_TWO --format json --output portfolio.json
 ```
 
+Promotion plan 1.2 automatically joins the sealed report's closure plan and,
+when supplied, verifies both the trend digest and that its latest scan ID and
+report seal match `REPORT`. It turns changed-file test and coverage gaps into
+stable CODEOWNER queues, carries validation regressions into causal blockers,
+and gives every audience a bounded view of current debt, trajectory, owners,
+actions, anomalies, and evidence bindings. A missing trend is reported as
+unavailable and never interpreted as zero historical debt.
+
 A report `PASS` is necessary but does not itself authorize promotion. See
 [Governed release readiness](docs/release-readiness.md). Release-readiness 1.3
 separates causal root blockers from derived policy outcomes and includes owner-,
@@ -441,9 +451,10 @@ are dependency-free GitHub artifacts. Equivalent work is consolidated without
 dropping finding or artifact references; each rendered action shows priority,
 owner, required authority, SLA target, evidence subjects, and safe suggested
 commands. `trend` compares only checksum-verified reports. Operational trend
-1.2 adds validation-debt churn, state and ownership transitions, CODEOWNER queue
+1.3 adds validation-debt churn, state and ownership transitions, CODEOWNER queue
 history, and explicit comparability gaps from each report's closure-plan 1.2
-ledger; missing evidence is not treated as zero debt. The release manifest
+ledger and retained diff-coverage assessment scope. Missing ledger or scope
+evidence is not treated as zero or resolved debt. The release manifest
 closes the evidence set but cannot approve it;
 `verify-release-manifest` independently rechecks the report and every evidence
 digest after transfer (`--evidence-location NAME=PATH` safely remaps relocated

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from html import escape
@@ -50,9 +51,12 @@ def build_promotion_plan(
     *,
     release_readiness: Path | None = None,
     release_readiness_sha256: str = "",
+    operational_trend: Path | None = None,
+    operational_trend_sha256: str = "",
 ) -> dict[str, Any]:
     """Build one decision-first, non-authoritative promotion plan."""
     _paired(release_readiness, release_readiness_sha256, "release readiness")
+    _paired(operational_trend, operational_trend_sha256, "operational trend")
     verification = verify_report(report)
     root = report.expanduser().resolve()
     manifest = _read_object(root / "scan-manifest.json")
@@ -60,6 +64,8 @@ def build_promotion_plan(
     claims_document = _read_object(root / "assurance-claims.json")
     portfolio = _read_object(root / "portfolio-health.json")
     delta = _read_object(root / "finding-delta.json")
+    closure = _read_optional_object(root / "closure-plan.json")
+    diff_coverage = _read_optional_object(root / "diff-coverage.json")
     findings = _object_list(findings_document.get("findings"), "findings")
     claims = _object_list(claims_document.get("claims"), "assurance claims")
     tools = _object_list(manifest.get("tools"), "tools")
@@ -79,6 +85,17 @@ def build_promotion_plan(
             or bound_report.get("checksums_sha256") != verification["checksums_sha256"]
         ):
             raise ValueError("release readiness is not bound to this report")
+    trend = (
+        _digest_bound_object(
+            operational_trend,
+            operational_trend_sha256,
+            "operational trend",
+        )
+        if operational_trend is not None
+        else {}
+    )
+    if trend:
+        _validate_trend_binding(trend, verification)
     active = [finding for finding in findings if finding.get("status") != "suppressed"]
     blocking = [finding for finding in active if finding.get("blocking") is True]
     claim_closure = [_claim_closure(claim) for claim in claims]
@@ -86,11 +103,22 @@ def build_promotion_plan(
     reliability = _scanner_reliability(tools)
     conditional = _conditional_domains(portfolio)
     baseline = _baseline_summary(delta)
+    validation = _validation_accountability(closure, diff_coverage)
+    trend_summary = _operational_trend_summary(
+        trend,
+        operational_trend_sha256=operational_trend_sha256,
+    )
+    evidence_bindings = _evidence_bindings(
+        closure=closure,
+        release_readiness_sha256=release_readiness_sha256,
+        operational_trend_sha256=operational_trend_sha256,
+    )
     blockers = (
         [str(value) for value in readiness.get("blockers", [])]
         if isinstance(readiness.get("blockers"), list)
         else _derived_blockers(manifest, blocking, claim_closure)
     )
+    blockers = _cross_referenced_blockers(blockers, validation, trend_summary)
     lifecycle = _lifecycle(
         manifest,
         blocking=blocking,
@@ -104,10 +132,12 @@ def build_promotion_plan(
         blockers=blockers,
         conditional=conditional,
         baseline=baseline,
+        validation=validation,
+        trend=trend_summary,
     )
     actions = _with_service_levels(actions, manifest)
     return {
-        "schema_version": "1.1",
+        "schema_version": "1.2",
         "status": "ready" if not blockers else "blocked",
         "authoritative": False,
         "scope": (
@@ -130,7 +160,19 @@ def build_promotion_plan(
             "conditional_domains": len(conditional),
             "evidence_quality_average": _average_quality(evidence_quality),
             "scanner_execution_complete": reliability["execution_gaps"] == 0,
+            "validation_evidence_available": validation["evidence_available"],
+            "validation_alignment_items": validation["items"],
+            "validation_items_with_failing_tests": validation[
+                "items_with_failing_tests"
+            ],
+            "validation_items_with_coverage_gaps": validation[
+                "items_with_coverage_gaps"
+            ],
+            "validation_owner_queues": len(validation["owner_queues"]),
+            "operational_trend_available": trend_summary["available"],
+            "validation_debt_delta": trend_summary["validation_debt_delta"],
         },
+        "evidence_bindings": evidence_bindings,
         "release_blockers": blockers,
         "blocker_graph": blocker_graph,
         "lifecycle": lifecycle,
@@ -141,13 +183,23 @@ def build_promotion_plan(
         "conditional_coverage": conditional,
         "scanner_reliability": reliability,
         "evidence_freshness": freshness,
+        "validation_accountability": validation,
+        "operational_trend": trend_summary,
         "configuration_provenance": _configuration_provenance(manifest, tools),
-        "artifact_graph": _artifact_graph(manifest, findings),
+        "artifact_graph": _artifact_graph(
+            manifest,
+            findings,
+            evidence_bindings=evidence_bindings,
+        ),
         "audiences": _audience_views(
             blockers=blockers,
             blocking=blocking,
             claim_closure=claim_closure,
             conditional=conditional,
+            validation=validation,
+            trend=trend_summary,
+            actions=actions,
+            evidence_bindings=evidence_bindings,
         ),
         "retention": _retention_plan(),
         "github_annotations": _github_annotations(blockers, blocking),
@@ -158,6 +210,16 @@ def build_promotion_plan(
 def render_promotion_markdown(plan: dict[str, Any]) -> str:
     """Render the decision-support plan for a GitHub artifact or job summary."""
     summary = plan["summary"]
+    validation = plan.get("validation_accountability")
+    validation = validation if isinstance(validation, dict) else {}
+    trend = plan.get("operational_trend")
+    trend = trend if isinstance(trend, dict) else {}
+    validation_delta = (
+        "not comparable"
+        if trend.get("available")
+        and trend.get("validation_evidence_comparable") is not True
+        else _trend_delta(summary.get("validation_debt_delta"))
+    )
     lines = [
         "# Release promotion plan",
         "",
@@ -173,6 +235,10 @@ def render_promotion_markdown(plan: dict[str, Any]) -> str:
         f"| Blocking findings | {summary['blocking_findings']} |",
         f"| Release blockers | {summary['release_blockers']} |",
         f"| Evidence quality | {summary['evidence_quality_average']}% |",
+        f"| Validation work items | {summary.get('validation_alignment_items', 0)} |",
+        f"| Validation items with failing tests | {summary.get('validation_items_with_failing_tests', 0)} |",
+        f"| Validation items with coverage gaps | {summary.get('validation_items_with_coverage_gaps', 0)} |",
+        f"| Validation debt delta | {validation_delta} |",
         "",
         "## Lifecycle",
         "",
@@ -182,6 +248,48 @@ def render_promotion_markdown(plan: dict[str, Any]) -> str:
     for item in plan["lifecycle"]:
         detail = str(item["detail"]).replace("|", "\\|").replace("\n", " ")
         lines.append(f"| {item['stage']} | {item['status']} | {detail} |")
+    lines.extend(
+        [
+            "",
+            "## Validation accountability",
+            "",
+            f"**Closure ledger:** {'available' if validation.get('ledger_available') else 'unavailable'}  ",
+            f"**Change assessment:** {'available' if validation.get('assessment_available') else 'unavailable'}  ",
+            f"**Trajectory:** {_markdown_text(_validation_trajectory_label(trend) if trend else 'not supplied; no longitudinal claim made')}",
+            "",
+            "| Owner | Open validation items |",
+            "|---|---:|",
+        ]
+    )
+    owner_queues = validation.get("owner_queues")
+    if isinstance(owner_queues, list) and owner_queues:
+        lines.extend(
+            f"| {_markdown_text(item.get('owner') or 'Unassigned')} | {int(item.get('items') or 0)} |"
+            for item in owner_queues[:50]
+            if isinstance(item, dict)
+        )
+    else:
+        lines.append("| none | 0 |")
+    lines.extend(["", "### Longitudinal signals", ""])
+    if trend.get("available"):
+        lines.extend(
+            [
+                f"- **Reports compared:** {int(trend.get('reports') or 0)}",
+                f"- **Validation evidence comparable:** {'yes' if trend.get('validation_evidence_comparable') else 'no'}",
+                f"- **New / resolved / unchanged:** {int(trend.get('new_validation_items') or 0)} / {int(trend.get('resolved_validation_items') or 0)} / {int(trend.get('unchanged_validation_items') or 0)}",
+                f"- **State transitions:** {int(trend.get('validation_state_transitions') or 0)}",
+            ]
+        )
+        anomalies = trend.get("anomalies")
+        if isinstance(anomalies, list) and anomalies:
+            lines.append("- **Anomalies:**")
+            lines.extend(
+                f"  - {_markdown_text(item.get('severity') or 'review')}: {_markdown_text(item.get('kind') or 'unknown')} - {_markdown_text(item.get('detail') or 'Review required')}"
+                for item in anomalies[:20]
+                if isinstance(item, dict)
+            )
+    else:
+        lines.append("No digest-bound operational trend was supplied.")
     lines.extend(["", "## Next actions", ""])
     actions = plan["next_actions"]
     if not actions:
@@ -235,6 +343,37 @@ def render_promotion_html(plan: dict[str, Any]) -> str:
         or "<p>No repository actions remain; continue with external admission policy.</p>"
     )
     summary = plan["summary"]
+    validation = plan.get("validation_accountability")
+    validation = validation if isinstance(validation, dict) else {}
+    trend = plan.get("operational_trend")
+    trend = trend if isinstance(trend, dict) else {}
+    owner_rows = (
+        "".join(
+            f"<tr><td>{escape(str(item.get('owner') or 'Unassigned'))}</td><td>{int(item.get('items') or 0)}</td></tr>"
+            for item in validation.get("owner_queues", [])[:50]
+            if isinstance(item, dict)
+        )
+        or "<tr><td>none</td><td>0</td></tr>"
+    )
+    trend_items = (
+        "".join(
+            f"<li><strong>{escape(str(item.get('severity') or 'review'))}:</strong> {escape(str(item.get('kind') or 'unknown'))} - {escape(str(item.get('detail') or 'Review required'))}</li>"
+            for item in trend.get("anomalies", [])[:20]
+            if isinstance(item, dict)
+        )
+        or "<li>No operational trend anomalies were reported.</li>"
+    )
+    trajectory = (
+        _validation_trajectory_label(trend)
+        if trend
+        else "not supplied; no longitudinal claim made"
+    )
+    validation_delta = (
+        "not comparable"
+        if trend.get("available")
+        and trend.get("validation_evidence_comparable") is not True
+        else _trend_delta(summary.get("validation_debt_delta"))
+    )
     freshness_rows = "".join(
         f"<tr><td>{escape(str(item['kind']))}</td><td>{escape(str(item['status']))}</td><td>{escape(str(item.get('valid_until') or 'not supplied'))}</td></tr>"
         for item in plan.get("evidence_freshness", [])
@@ -253,8 +392,10 @@ body{{font:16px/1.5 system-ui,sans-serif;color:#172033;background:#f5f7fb;margin
 </style></head><body><main><h1>Release promotion plan</h1>
 <p class="{escape(str(plan["status"]))}">{escape(str(plan["status"]).upper())}</p>
 <p>Scan <code>{escape(str(plan["report"]["scan_id"]))}</code><br>Evidence seal <code>{escape(str(plan["report"]["checksums_sha256"]))}</code></p>
-<section class="cards"><div class="card"><strong>{summary["active_findings"]}</strong><br>Active findings</div><div class="card"><strong>{summary["blocking_findings"]}</strong><br>Blocking findings</div><div class="card"><strong>{summary["release_blockers"]}</strong><br>Release blockers</div><div class="card"><strong>{summary["evidence_quality_average"]}%</strong><br>Evidence quality</div></section>
+<section class="cards"><div class="card"><strong>{summary["active_findings"]}</strong><br>Active findings</div><div class="card"><strong>{summary["blocking_findings"]}</strong><br>Blocking findings</div><div class="card"><strong>{summary["release_blockers"]}</strong><br>Release blockers</div><div class="card"><strong>{summary["evidence_quality_average"]}%</strong><br>Evidence quality</div><div class="card"><strong>{summary.get("validation_alignment_items", 0)}</strong><br>Validation work items</div><div class="card"><strong>{escape(validation_delta)}</strong><br>Validation debt delta</div></section>
 <h2>Lifecycle</h2><table><thead><tr><th>Stage</th><th>Status</th><th>Detail</th></tr></thead><tbody>{lifecycle_rows}</tbody></table>
+<h2>Validation accountability</h2><p><strong>Trajectory:</strong> {escape(trajectory)}</p><table><thead><tr><th>Owner</th><th>Open validation items</th></tr></thead><tbody>{owner_rows}</tbody></table>
+<h3>Longitudinal signals</h3><ul>{trend_items}</ul>
 <h2>Evidence freshness</h2><table><thead><tr><th>Evidence</th><th>Status</th><th>Valid until</th></tr></thead><tbody>{freshness_rows}</tbody></table>
 <h2>Blocker relationships</h2><ul>{blocker_rows}</ul>
 <h2>Next actions</h2><section class="actions">{actions}</section><footer>Non-authoritative decision support. Verify the sealed report and apply organization admission policy.</footer>
@@ -271,7 +412,7 @@ def _render_markdown_action(action: dict[str, Any], number: int) -> list[str]:
         or "Review required"
     )
     lines = [
-        f"### {number}. {_markdown_text(priority)} · {_markdown_text(owner)}",
+        f"### {number}. {_markdown_text(priority)} | {_markdown_text(owner)}",
         "",
         _markdown_text(text),
         "",
@@ -360,6 +501,13 @@ def _render_html_action(action: dict[str, Any], number: int) -> str:
 
 def _single_line(value: Any) -> str:
     return " ".join(str(value).split())
+
+
+def _trend_delta(value: object) -> str:
+    if value is None:
+        return "not supplied"
+    number = int(str(value))
+    return f"+{number}" if number > 0 else str(number)
 
 
 def _markdown_text(value: Any) -> str:
@@ -635,7 +783,10 @@ def _lifecycle(
 
 
 def _artifact_graph(
-    manifest: dict[str, Any], findings: list[dict[str, Any]]
+    manifest: dict[str, Any],
+    findings: list[dict[str, Any]],
+    *,
+    evidence_bindings: dict[str, Any],
 ) -> dict[str, Any]:
     inventory = manifest.get("inventory")
     source_sha256 = (
@@ -660,6 +811,64 @@ def _artifact_graph(
         {"from": "source", "to": "sbom", "relation": "described-by"},
         {"from": "report", "to": "passport", "relation": "attested-by"},
     ]
+    closure_binding = evidence_bindings["closure_plan"]
+    readiness_binding = evidence_bindings["release_readiness"]
+    trend_binding = evidence_bindings["operational_trend"]
+    if closure_binding["supplied"]:
+        nodes.append(
+            {
+                "id": "closure-plan",
+                "kind": "validation-accountability",
+                "identity": "closure-plan.json",
+            }
+        )
+        edges.append({"from": "report", "to": "closure-plan", "relation": "contains"})
+    if readiness_binding["supplied"]:
+        nodes.append(
+            {
+                "id": "release-readiness",
+                "kind": "release-decision",
+                "identity": str(readiness_binding["sha256"]),
+            }
+        )
+        edges.append(
+            {
+                "from": "report",
+                "to": "release-readiness",
+                "relation": "evaluated-by",
+            }
+        )
+        if closure_binding["supplied"]:
+            edges.append(
+                {
+                    "from": "closure-plan",
+                    "to": "release-readiness",
+                    "relation": "gates",
+                }
+            )
+    if trend_binding["supplied"]:
+        nodes.append(
+            {
+                "id": "operational-trend",
+                "kind": "longitudinal-evidence",
+                "identity": str(trend_binding["sha256"]),
+            }
+        )
+        edges.append(
+            {
+                "from": "operational-trend",
+                "to": "report",
+                "relation": "latest-snapshot",
+            }
+        )
+        if closure_binding["supplied"]:
+            edges.append(
+                {
+                    "from": "closure-plan",
+                    "to": "operational-trend",
+                    "relation": "tracked-by",
+                }
+            )
     artifacts: dict[str, str] = {}
     for finding in findings:
         evidence = finding.get("evidence")
@@ -688,17 +897,397 @@ def _artifact_graph(
     return {"nodes": nodes, "edges": edges}
 
 
+def _validation_accountability(
+    closure: dict[str, Any], diff_coverage: dict[str, Any]
+) -> dict[str, Any]:
+    summary = closure.get("summary")
+    raw_items = closure.get("items")
+    ledger_available = (
+        closure.get("schema_version") == "1.2"
+        and isinstance(summary, dict)
+        and isinstance(raw_items, list)
+    )
+    stats = diff_coverage.get("src_stats")
+    changed_lines = diff_coverage.get("num_changed_lines")
+    assessment_available = (
+        diff_coverage.get("schema_version") == "1.0"
+        and isinstance(stats, dict)
+        and isinstance(diff_coverage.get("diff_name"), str)
+        and bool(str(diff_coverage["diff_name"]).strip())
+        and isinstance(changed_lines, int)
+        and not isinstance(changed_lines, bool)
+        and changed_lines >= 0
+    )
+    if (
+        not ledger_available
+        or not isinstance(summary, dict)
+        or not isinstance(raw_items, list)
+    ):
+        return {
+            "evidence_available": False,
+            "ledger_available": False,
+            "assessment_available": assessment_available,
+            "schema_version": str(closure.get("schema_version") or "not-supplied"),
+            "reason": "current closure-plan 1.2 evidence is not available",
+            "items": 0,
+            "codeowner_backed_items": 0,
+            "items_with_failing_tests": 0,
+            "items_with_coverage_gaps": 0,
+            "owner_queues": [],
+            "priority_queues": [],
+            "alignment_queues": [],
+            "work_queues": [],
+        }
+    items = [
+        value
+        for value in raw_items
+        if isinstance(value, dict)
+        and value.get("category") == "test-assurance"
+        and isinstance(value.get("details"), dict)
+        and value["details"].get("validation_alignment")
+    ]
+    owner_counts = Counter(str(value.get("owner") or "Unassigned") for value in items)
+    priority_counts = Counter(str(value.get("priority") or "P3") for value in items)
+    alignment_counts = Counter(
+        str(value["details"].get("validation_alignment") or "unknown")
+        for value in items
+    )
+    grouped: dict[tuple[str, str, str, str], list[dict[str, Any]]] = {}
+    for item in items:
+        details = item["details"]
+        key = (
+            str(item.get("owner") or "Unassigned"),
+            str(item.get("priority") or "P3"),
+            str(details.get("validation_alignment") or "unknown"),
+            str(item.get("action") or "Resolve the validation evidence gap."),
+        )
+        grouped.setdefault(key, []).append(item)
+    work_queues: list[dict[str, Any]] = []
+    for key, values in grouped.items():
+        owner, priority, alignment, action = key
+        action_ids = sorted(str(value.get("id") or "") for value in values)
+        paths = sorted(
+            {
+                str(value["details"].get("path") or "")
+                for value in values
+                if value["details"].get("path")
+            }
+        )
+        identity = (
+            hashlib.sha256(
+                json.dumps(
+                    {
+                        "action_ids": action_ids,
+                        "alignment": alignment,
+                        "owner": owner,
+                        "priority": priority,
+                    },
+                    separators=(",", ":"),
+                    sort_keys=True,
+                ).encode("utf-8")
+            )
+            .hexdigest()[:12]
+            .upper()
+        )
+        work_queues.append(
+            {
+                "id": f"validation-queue:{identity}",
+                "priority": priority,
+                "owner": owner,
+                "authority": "repository",
+                "blocker": "change-validation-alignment",
+                "alignment": alignment,
+                "items": len(values),
+                "action": f"Resolve {len(values)} validation item(s): {action}",
+                "evidence": [
+                    *(f"closure-plan.json#{value}" for value in action_ids[:100]),
+                    *paths[:100],
+                ],
+            }
+        )
+    work_queues.sort(
+        key=lambda value: (
+            str(value["priority"]),
+            str(value["owner"]),
+            str(value["alignment"]),
+            str(value["id"]),
+        )
+    )
+    return {
+        "evidence_available": assessment_available,
+        "ledger_available": True,
+        "assessment_available": assessment_available,
+        "schema_version": "1.2",
+        "reason": (
+            "validation work joins a sealed closure ledger and retained diff-coverage assessment scope"
+            if assessment_available
+            else "closure ledger is present but retained diff-coverage assessment scope is unavailable"
+        ),
+        "items": len(items),
+        "codeowner_backed_items": int(
+            summary.get("codeowner_backed_validation_items") or 0
+        ),
+        "items_with_failing_tests": int(
+            summary.get("validation_items_with_failing_tests") or 0
+        ),
+        "items_with_coverage_gaps": int(
+            summary.get("validation_items_with_coverage_gaps") or 0
+        ),
+        "owner_queues": _count_queues(owner_counts, "owner"),
+        "priority_queues": _count_queues(priority_counts, "priority"),
+        "alignment_queues": _count_queues(alignment_counts, "alignment"),
+        "work_queues": work_queues,
+    }
+
+
+def _count_queues(counts: Counter[str], key: str) -> list[dict[str, Any]]:
+    return [
+        {key: name, "items": count}
+        for name, count in sorted(
+            counts.items(), key=lambda value: (-value[1], value[0])
+        )
+    ]
+
+
+def _validate_trend_binding(
+    trend: dict[str, Any], verification: dict[str, Any]
+) -> None:
+    if trend.get("schema_version") != "1.3":
+        raise ValueError("operational trend schema_version must be '1.3'")
+    timeline = trend.get("timeline")
+    if (
+        not isinstance(timeline, list)
+        or not timeline
+        or not isinstance(timeline[-1], dict)
+    ):
+        raise ValueError("operational trend must contain a latest report snapshot")
+    latest = timeline[-1]
+    if (
+        latest.get("checksums_sha256") != verification["checksums_sha256"]
+        or latest.get("scan_id") != verification["scan_id"]
+    ):
+        raise ValueError(
+            "operational trend is not bound to this report as its latest snapshot"
+        )
+
+
+def _operational_trend_summary(
+    trend: dict[str, Any], *, operational_trend_sha256: str
+) -> dict[str, Any]:
+    if not trend:
+        return {
+            "available": False,
+            "sha256": None,
+            "reports": 0,
+            "first_scan": None,
+            "last_scan": None,
+            "latest_outcome": None,
+            "validation_evidence_comparable": False,
+            "validation_comparability_reasons": [
+                "digest-bound operational trend evidence was not supplied"
+            ],
+            "latest_validation_items": 0,
+            "validation_debt_delta": None,
+            "new_validation_items": 0,
+            "resolved_validation_items": 0,
+            "unchanged_validation_items": 0,
+            "validation_state_transitions": 0,
+            "owner_trajectories": [],
+            "anomalies": [],
+        }
+    summary = trend.get("summary")
+    delta = trend.get("delta")
+    comparison = trend.get("comparison")
+    owner_history = trend.get("validation_owner_history")
+    anomalies = trend.get("anomalies")
+    if (
+        not isinstance(summary, dict)
+        or not isinstance(delta, dict)
+        or not isinstance(comparison, dict)
+    ):
+        raise TypeError(
+            "operational trend summary, delta, and comparison must be objects"
+        )
+    if not isinstance(owner_history, list) or not isinstance(anomalies, list):
+        raise TypeError("operational trend owner history and anomalies must be arrays")
+    owner_trajectories = [
+        {
+            "owner": str(value.get("owner") or "Unassigned"),
+            "first_items": int(value.get("first_subjects") or 0),
+            "latest_items": int(value.get("latest_subjects") or 0),
+            "comparable": value.get("comparable") is True,
+            "delta": (
+                int(value["delta"]) if isinstance(value.get("delta"), int) else None
+            ),
+        }
+        for value in owner_history[:1000]
+        if isinstance(value, dict)
+    ]
+    anomaly_values = [
+        {
+            "kind": str(value.get("kind") or "unknown"),
+            "severity": str(value.get("severity") or "review"),
+            "detail": str(value.get("detail") or "Review trend evidence."),
+        }
+        for value in anomalies[:100]
+        if isinstance(value, dict)
+    ]
+    validation_comparable = comparison.get("validation_evidence_comparable") is True
+    return {
+        "available": True,
+        "sha256": operational_trend_sha256.strip().casefold(),
+        "reports": int(summary.get("reports") or 0),
+        "first_scan": str(summary.get("first_scan") or ""),
+        "last_scan": str(summary.get("last_scan") or ""),
+        "latest_outcome": str(summary.get("latest_outcome") or "unknown"),
+        "validation_evidence_comparable": validation_comparable,
+        "validation_comparability_reasons": [
+            str(value)
+            for value in comparison.get("validation_comparability_reasons", [])[:20]
+        ]
+        if isinstance(comparison.get("validation_comparability_reasons"), list)
+        else [],
+        "latest_validation_items": int(
+            summary.get("latest_validation_alignment_items") or 0
+        ),
+        "validation_debt_delta": (
+            int(delta.get("validation_alignment_items") or 0)
+            if validation_comparable
+            else None
+        ),
+        "new_validation_items": _list_length(
+            comparison.get("new_validation_subject_ids")
+        ),
+        "resolved_validation_items": _list_length(
+            comparison.get("resolved_validation_subject_ids")
+        ),
+        "unchanged_validation_items": _list_length(
+            comparison.get("unchanged_validation_subject_ids")
+        ),
+        "validation_state_transitions": _list_length(
+            comparison.get("validation_state_transitions")
+        ),
+        "owner_trajectories": owner_trajectories,
+        "anomalies": anomaly_values,
+    }
+
+
+def _list_length(value: object) -> int:
+    return len(value) if isinstance(value, list) else 0
+
+
+def _evidence_bindings(
+    *,
+    closure: dict[str, Any],
+    release_readiness_sha256: str,
+    operational_trend_sha256: str,
+) -> dict[str, Any]:
+    return {
+        "closure_plan": {
+            "supplied": bool(closure),
+            "sha256": None,
+            "schema_version": str(closure.get("schema_version") or "not-supplied"),
+            "binding": "sealed-report",
+        },
+        "release_readiness": {
+            "supplied": bool(release_readiness_sha256),
+            "sha256": release_readiness_sha256.strip().casefold() or None,
+            "schema_version": "digest-bound-external",
+            "binding": "report-checksum",
+        },
+        "operational_trend": {
+            "supplied": bool(operational_trend_sha256),
+            "sha256": operational_trend_sha256.strip().casefold() or None,
+            "schema_version": "1.3" if operational_trend_sha256 else "not-supplied",
+            "binding": "latest-report-snapshot",
+        },
+    }
+
+
+def _cross_referenced_blockers(
+    blockers: list[str], validation: dict[str, Any], trend: dict[str, Any]
+) -> list[str]:
+    values = list(blockers)
+    if not validation["evidence_available"] or validation["items"]:
+        values.append("change-validation-alignment")
+    if any(value.get("severity") == "block" for value in trend["anomalies"]):
+        values.append("operational-trend-validation-regression")
+    return list(dict.fromkeys(values))
+
+
+def _validation_trajectory_label(trend: dict[str, Any]) -> str:
+    if not trend["available"]:
+        return "not supplied; no longitudinal claim made"
+    if not trend["validation_evidence_comparable"]:
+        reasons = "; ".join(trend["validation_comparability_reasons"][:2])
+        return f"not comparable; {reasons or 'restore validation assessment evidence'}"
+    delta = int(trend["validation_debt_delta"] or 0)
+    direction = f"+{delta}" if delta > 0 else str(delta)
+    return (
+        f"{trend['latest_validation_items']} item(s), delta {direction}; "
+        f"{trend['new_validation_items']} new, {trend['resolved_validation_items']} resolved"
+    )
+
+
+def _audience_action_labels(
+    actions: list[dict[str, Any]], *, repository_only: bool = False
+) -> list[str]:
+    selected = [
+        value
+        for value in actions
+        if not repository_only or value.get("authority") == "repository"
+    ]
+    return [
+        f"{value.get('priority') or 'P2'} | {value.get('owner') or 'unassigned'} | "
+        f"{value.get('action') or value.get('id') or 'Review required'} "
+        f"[{value.get('id') or 'unidentified'}]"
+        for value in selected[:20]
+    ]
+
+
+def _binding_label(name: str, value: object) -> str:
+    if not isinstance(value, dict) or value.get("supplied") is not True:
+        return f"{name}: not supplied"
+    digest = value.get("sha256") or value.get("binding") or "bound"
+    return f"{name}: {digest}"
+
+
 def _audience_views(
     *,
     blockers: list[str],
     blocking: list[dict[str, Any]],
     claim_closure: list[dict[str, Any]],
     conditional: list[dict[str, str]],
+    validation: dict[str, Any],
+    trend: dict[str, Any],
+    actions: list[dict[str, Any]],
+    evidence_bindings: dict[str, Any],
 ) -> dict[str, Any]:
+    trajectory = _validation_trajectory_label(trend)
+    owner_queues = [
+        f"{queue['owner']}: {queue['items']} item(s)"
+        for queue in validation["owner_queues"][:20]
+    ]
+    developer_actions = _audience_action_labels(
+        actions,
+        repository_only=True,
+    )
+    priority_actions = _audience_action_labels(actions)
+    anomalies = [
+        f"{value['severity']}: {value['kind']} - {value['detail']}"
+        for value in trend["anomalies"][:20]
+    ]
+    binding_labels = [
+        _binding_label(name, value) for name, value in evidence_bindings.items()
+    ]
     return {
         "executive": {
             "decision": "blocked" if blockers else "ready",
-            "material_risks": len(blocking),
+            "blocking_findings": len(blocking),
+            "release_blockers": len(blockers),
+            "validation_debt": validation["items"],
+            "validation_assessment_available": validation["assessment_available"],
+            "validation_trajectory": trajectory,
             "message": (
                 "Release is blocked pending controlled assurance work."
                 if blockers
@@ -708,7 +1297,19 @@ def _audience_views(
         "developer": {
             "blocking_finding_ids": [
                 str(finding.get("finding_id") or "unknown") for finding in blocking
-            ]
+            ],
+            "validation_items": validation["items"],
+            "validation_ledger_available": validation["ledger_available"],
+            "validation_assessment_available": validation["assessment_available"],
+            "validation_items_with_failing_tests": validation[
+                "items_with_failing_tests"
+            ],
+            "validation_items_with_coverage_gaps": validation[
+                "items_with_coverage_gaps"
+            ],
+            "validation_owner_queues": owner_queues,
+            "validation_trajectory": trajectory,
+            "priority_actions": developer_actions,
         },
         "security": {
             "failed_controls": [
@@ -717,8 +1318,19 @@ def _audience_views(
                 if claim["result"] != "satisfied"
             ],
             "conditional_domains": [item["domain"] for item in conditional],
+            "codeowner_backed_validation_items": validation["codeowner_backed_items"],
+            "validation_evidence_reason": validation["reason"],
+            "validation_trajectory": trajectory,
+            "trend_anomalies": anomalies,
+            "priority_actions": priority_actions,
         },
-        "release_engineering": {"blockers": blockers},
+        "release_engineering": {
+            "blockers": blockers,
+            "validation_work_queues": len(validation["work_queues"]),
+            "validation_assessment_available": validation["assessment_available"],
+            "validation_trajectory": trajectory,
+            "priority_actions": priority_actions,
+        },
         "auditor": {
             "required_chain": [
                 "source digest",
@@ -726,7 +1338,13 @@ def _audience_views(
                 "payload manifest",
                 "provenance and signatures",
                 "approved Passport",
-            ]
+            ],
+            "evidence_bindings": binding_labels,
+            "validation_evidence_available": validation["evidence_available"],
+            "validation_ledger_available": validation["ledger_available"],
+            "validation_assessment_available": validation["assessment_available"],
+            "validation_evidence_comparable": trend["validation_evidence_comparable"],
+            "validation_trajectory": trajectory,
         },
     }
 
@@ -757,26 +1375,82 @@ def _next_actions(
     blockers: list[str],
     conditional: list[dict[str, str]],
     baseline: dict[str, Any],
+    validation: dict[str, Any],
+    trend: dict[str, Any],
 ) -> list[dict[str, Any]]:
     remediation = readiness.get("remediation")
-    actions = (
+    actions: list[dict[str, Any]] = (
         [value for value in remediation if isinstance(value, dict)]
         if isinstance(remediation, list)
         else [
             {
                 "id": f"control:{blocker}",
+                "blocker": blocker,
                 "priority": "P1",
-                "action": "Resolve the failed control and regenerate sealed evidence.",
+                "owner": (
+                    "quality-engineering"
+                    if blocker == "change-validation-alignment"
+                    else "repository-owner"
+                ),
+                "authority": (
+                    "repository"
+                    if blocker == "change-validation-alignment"
+                    else "cross-functional"
+                ),
+                "action": (
+                    "Restore retained diff-coverage assessment scope, resolve every changed-file validation mismatch, and regenerate sealed evidence."
+                    if blocker == "change-validation-alignment"
+                    else "Resolve the failed control and regenerate sealed evidence."
+                ),
             }
             for blocker in blockers
         ]
     )
+    if validation["work_queues"]:
+        actions = [
+            value
+            for value in actions
+            if value.get("id") != "control:change-validation-alignment"
+        ]
     if baseline.get("comparable") is not True:
         actions.append(
             {
                 "id": "evidence:comparable-baseline",
                 "priority": "P1",
                 "action": "Use an approved baseline with the same profile and scanner set; verify source ancestry externally.",
+            }
+        )
+    if not any(
+        str(action.get("blocker") or "") == "change-validation-alignment"
+        for action in actions
+    ):
+        actions.extend(dict(queue) for queue in validation["work_queues"])
+    if trend["available"] and not trend["validation_evidence_comparable"]:
+        actions.append(
+            {
+                "id": "trend:restore-validation-comparability",
+                "priority": "P1",
+                "owner": "quality-engineering",
+                "authority": "repository",
+                "action": "Restore current closure-plan and diff-coverage change-assessment evidence, then compare reports carrying the same validation-accountability contract.",
+                "evidence": ["operational-trend.json"],
+            }
+        )
+    blocking_anomalies = [
+        value for value in trend["anomalies"] if value.get("severity") == "block"
+    ]
+    if blocking_anomalies:
+        actions.append(
+            {
+                "id": "trend:resolve-validation-regression",
+                "priority": "P1",
+                "owner": "quality-engineering",
+                "authority": "repository",
+                "action": "Resolve blocking validation regressions and regenerate the sealed report and operational trend before promotion.",
+                "evidence": [
+                    f"operational-trend.json#{value.get('kind')}"
+                    for value in blocking_anomalies[:100]
+                ],
             }
         )
     actions.extend(

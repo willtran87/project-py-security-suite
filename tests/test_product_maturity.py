@@ -246,10 +246,15 @@ class ProductMaturityTests(unittest.TestCase):
             _write(
                 plan,
                 {
-                    "schema_version": "1.1",
+                    "schema_version": "1.2",
                     "status": "blocked",
                     "report": {"checksums_sha256": "f" * 64},
-                    "audiences": {"executive": {"message": "Review required"}},
+                    "audiences": {
+                        "executive": {
+                            "message": "Review required",
+                            "actions": ["Fix **unsafe** <script>"],
+                        }
+                    },
                 },
             )
             result = build_audience_report(
@@ -258,7 +263,10 @@ class ProductMaturityTests(unittest.TestCase):
                 report=root,
                 audience="executive",
             )
-        self.assertIn("Review required", render_audience_markdown(result))
+        rendered = render_audience_markdown(result)
+        self.assertIn("Review required", rendered)
+        self.assertIn("  - Fix \\*\\*unsafe\\*\\* &lt;script&gt;", rendered)
+        self.assertNotIn("<script>", rendered)
         self.assertFalse(result["authoritative"])
 
     def test_config_provenance_reports_origins_without_values(self) -> None:

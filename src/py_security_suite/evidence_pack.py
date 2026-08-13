@@ -31,7 +31,10 @@ from .release_manifest import (
 )
 from .release_readiness import assess_release_readiness
 from .release_payload import prepare_signing_request, verify_signing_request
-from .operational_trend import build_operational_trend
+from .operational_trend import (
+    build_operational_trend,
+    render_operational_trend_markdown,
+)
 from .report_inspection import (
     inspect_report,
     report_verification_receipt,
@@ -238,10 +241,31 @@ def _build_payload(
         root / "governance-evidence-draft.json",
         build_governance_evidence_draft(report),
     )
+    reports = [report]
+    trend_path: Path | None = None
+    trend_digest = ""
+    if previous_report is not None:
+        reports.insert(0, previous_report)
+        trend_path = root / "operational-trend.json"
+        trend = build_operational_trend(
+            reports,
+            performance_regression_percent=performance_regression_percent,
+            maximum_total_seconds=maximum_total_seconds,
+            tool_budgets=tool_budgets,
+        )
+        _write_json(trend_path, trend)
+        (root / "operational-trend.md").write_text(
+            render_operational_trend_markdown(trend),
+            encoding="utf-8",
+            newline="\n",
+        )
+        trend_digest = sha256_file(trend_path)
     plan = build_promotion_plan(
         report,
         release_readiness=readiness_path,
         release_readiness_sha256=readiness_digest,
+        operational_trend=trend_path,
+        operational_trend_sha256=trend_digest,
     )
     plan_path = root / "promotion-plan.json"
     _write_json(plan_path, plan)
@@ -285,18 +309,7 @@ def _build_payload(
             render_audience_markdown(view), encoding="utf-8", newline="\n"
         )
     _write_json(root / "baseline-candidate.json", build_baseline_candidate(report))
-    reports = [report]
     if previous_report is not None:
-        reports.insert(0, previous_report)
-        _write_json(
-            root / "operational-trend.json",
-            build_operational_trend(
-                reports,
-                performance_regression_percent=performance_regression_percent,
-                maximum_total_seconds=maximum_total_seconds,
-                tool_budgets=tool_budgets,
-            ),
-        )
         _write_reachability_delta(previous_report, report, root)
     _write_json(root / "portfolio.json", build_portfolio_dashboard(reports))
     _write_json(
@@ -881,6 +894,13 @@ def _pack_readme(
 
 def _optional_input_links(root: Path) -> list[str]:
     links: list[str] = []
+    if (root / "operational-trend.json").is_file():
+        links.append(
+            "- [Operational trend](operational-trend.md) - validation debt, CODEOWNER queues, scanner reliability, and anomalies"
+        )
+        links.append(
+            "- `operational-trend.json` - machine-readable digest-bound trend evidence"
+        )
     if (root / "effectiveness-evaluation.json").is_file():
         links.append(
             "- `effectiveness-evaluation.json` - approved labeled-corpus evaluation"

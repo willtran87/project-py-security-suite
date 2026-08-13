@@ -322,7 +322,7 @@ contracts that complement scanner coverage:
 |---|---|---|---|
 | Unified release decision | `release-check` | Integrity, policy, claims, trust, isolation, intelligence, effectiveness, Passport | Decision support; admission remains external |
 | Governance review handoff | `evidence-draft` | Exact scanner, snapshot, runner, source, and artifact digests | Candidate only |
-| Promotion operating view | `promotion-plan` | Lifecycle, evidence quality, reliability, retention, audiences, actions | Non-authoritative |
+| Promotion operating view | `promotion-plan` | Lifecycle, evidence quality, reliability, retention, digest-bound validation trajectory, ledger/assessment comparability, CODEOWNER queues, audiences, actions | Non-authoritative |
 | Controlled-signing handoff | `prepare-signing` | Closed wheel/sdist/zip subject set bound to report and source | Candidate only; keys remain external |
 | Signing-request receipt | `verify-signing-request` | Detects added, missing, and changed distributions | Integrity proof, not signer identity |
 | Comparable lifecycle | scan baseline + `finding-delta.json` | New, unchanged, resolved, and unclassified findings | Requires same profile and scanner set |

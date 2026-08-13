@@ -12,6 +12,12 @@ from py_security_suite.models import Confidence, Finding, Location, Severity, So
 
 
 class GraphifyAdapterTests(unittest.TestCase):
+    def test_graph_output_allowance_is_bounded_above_generic_stream_limit(self) -> None:
+        adapter = GraphifyAdapter(ToolConfig(), 16 * 1024 * 1024)
+
+        self.assertEqual(adapter.json_output_limit_bytes(), 64 * 1024 * 1024)
+        self.assertEqual(adapter.max_output_bytes, 16 * 1024 * 1024)
+
     def setUp(self) -> None:
         temporary = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with
         self.target = Path(self.enterContext(temporary)).resolve()

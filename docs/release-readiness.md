@@ -104,12 +104,15 @@ accept it as isolation, intelligence, scanner, signing, or release approval.
 
 ## Promotion and controlled signing handoffs
 
-`promotion-plan` consolidates the verified report and optional digest-bound
-release decision into one non-authoritative operating view:
+`promotion-plan` consolidates the verified report, its sealed closure plan, and
+optional digest-bound release and trend decisions into one non-authoritative
+operating view:
 
 ```text
 pysec promotion-plan report --release-readiness release-readiness.json \
-  --release-readiness-sha256 READINESS_SHA256 --format json \
+  --release-readiness-sha256 READINESS_SHA256 \
+  --operational-trend operational-trend.json \
+  --operational-trend-sha256 TREND_SHA256 --format json \
   --output promotion-plan.json
 
 pysec promotion-plan report --format markdown --output promotion-plan.md
@@ -123,6 +126,11 @@ It shows built/scanned/reviewed/signed/verified/approved/published lifecycle
 states, claim prerequisites and owners, evidence-quality dimensions, scanner
 health limitations, conditional domain activation, artifact relationships,
 retention classes, audience-specific summaries, and ordered next actions.
+Schema 1.2 also cross-references closure-plan 1.2 validation items with the
+trend's new, resolved, unchanged, transitioned, anomalous, and owner-history
+signals. The trend must identify the promoted report as its latest sealed
+snapshot. Current debt and blocking regressions become causal promotion
+blockers; missing history remains explicit and makes no longitudinal claim.
 Equivalent finding work is grouped without losing any finding or artifact
 reference. Markdown and HTML actions expose priority, owner, authority, SLA
 target, evidence subjects, and safely encoded suggested commands. The plan
@@ -136,7 +144,9 @@ Missing ownership, test mapping, or coverage remains explicit evidence—not an
 implicit pass.
 
 The `change-validation-alignment` control requires closure-plan 1.2 evidence.
-It fails closed when that evidence is absent or any changed file still has
+It also requires retained diff-coverage scope so an empty closure queue can be
+distinguished from an unassessed change set. It fails closed when either input
+is absent or any changed file still has
 failing, incomplete, unobserved, unavailable, or changed-line coverage-mismatched
 validation. Each causal remediation action retains the closure item's
 CODEOWNER-derived owner, priority, exact test and source references, and required
@@ -204,12 +214,12 @@ pysec schema release-readiness-1.2
 pysec schema release-readiness-1.3
 pysec schema reachability-delta-1.0
 pysec schema governance-evidence-draft-1.0
-pysec schema promotion-plan-1.1
+pysec schema promotion-plan-1.2
 pysec schema signing-request-1.0
 pysec schema signing-request-verification-1.0
 pysec schema baseline-candidate-1.0
 pysec schema operational-trend-1.1
-pysec schema operational-trend-1.2
+pysec schema operational-trend-1.3
 pysec schema release-evidence-manifest-1.0
 ```
 

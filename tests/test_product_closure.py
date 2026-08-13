@@ -59,7 +59,7 @@ class ProductClosureTests(unittest.TestCase):
         self.assertEqual(result["summary"]["reports"], 2)
         self.assertEqual(result["delta"]["active_findings"], -1)
         self.assertEqual(result["timeline"][0]["scan_id"], "scan-1")
-        self.assertEqual(result["schema_version"], "1.2")
+        self.assertEqual(result["schema_version"], "1.3")
         self.assertEqual(result["scanner_history"][0]["completion_percent"], 100.0)
         self.assertEqual(result["delta"]["validation_alignment_items"], -1)
         self.assertTrue(result["comparison"]["validation_evidence_comparable"])
@@ -74,7 +74,7 @@ class ProductClosureTests(unittest.TestCase):
         self.assertIn("### Validation owner queues", markdown)
         self.assertIn("`@runtime-team`", markdown)
         self.assertIn("## Scanner reliability", markdown)
-        _validate(result, "operational-trend-1.2.schema.json")
+        _validate(result, "operational-trend-1.3.schema.json")
 
         with self.assertRaisesRegex(ValueError, "between 2 and 100"):
             build_operational_trend([Path("one")])
@@ -167,6 +167,36 @@ class ProductClosureTests(unittest.TestCase):
             "validation-evidence-comparability-gap",
             {item["kind"] for item in result["anomalies"]},
         )
+
+    @patch("py_security_suite.operational_trend.verify_report")
+    def test_trend_does_not_treat_missing_change_assessment_as_resolved_debt(
+        self, verify_mock
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            first, last = root / "first", root / "last"
+            first.mkdir()
+            last.mkdir()
+            _write_trend_report(first, "2026-01-01T00:00:00Z", findings=0, validation=2)
+            _write_trend_report(last, "2026-02-01T00:00:00Z", findings=0, validation=0)
+            (last / "diff-coverage.json").unlink()
+            verify_mock.side_effect = [
+                _verification("scan-1", "a"),
+                _verification("scan-2", "b"),
+            ]
+            result = build_operational_trend([first, last])
+
+        self.assertFalse(result["comparison"]["validation_evidence_comparable"])
+        self.assertEqual(result["comparison"]["resolved_validation_subject_ids"], [])
+        self.assertIn(
+            "latest report lacks retained diff-coverage change-assessment scope",
+            result["comparison"]["validation_comparability_reasons"],
+        )
+        self.assertFalse(result["validation_owner_history"][0]["comparable"])
+        self.assertIsNone(result["validation_owner_history"][0]["delta"])
+        markdown = render_operational_trend_markdown(result)
+        self.assertIn("no new or resolved debt claim is made", markdown)
+        self.assertIn("lacks retained diff-coverage", markdown)
 
     @patch("py_security_suite.release_manifest.verify_report")
     def test_release_manifest_binds_every_digest_to_report(self, verify_mock) -> None:
@@ -348,6 +378,18 @@ def _write_trend_report(
                 }
                 for index in range(validation)
             ],
+        },
+    )
+    _write(
+        report / "diff-coverage.json",
+        {
+            "schema_version": "1.0",
+            "diff_name": "approved-base...current",
+            "minimum_percent": 80.0,
+            "num_changed_lines": validation,
+            "src_stats": {
+                f"src/component_{index}.py": {} for index in range(validation)
+            },
         },
     )
 

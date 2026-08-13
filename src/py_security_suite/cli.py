@@ -658,6 +658,8 @@ def build_parser() -> argparse.ArgumentParser:
     promotion.add_argument("report", type=Path, metavar="REPORT_DIRECTORY")
     promotion.add_argument("--release-readiness", type=Path)
     promotion.add_argument("--release-readiness-sha256", default="")
+    promotion.add_argument("--operational-trend", type=Path)
+    promotion.add_argument("--operational-trend-sha256", default="")
     promotion.add_argument(
         "--format", choices=("text", "json", "markdown", "html"), default="text"
     )
@@ -1705,6 +1707,8 @@ def _promotion_plan_command(args: argparse.Namespace) -> int:
         args.report,
         release_readiness=args.release_readiness,
         release_readiness_sha256=args.release_readiness_sha256,
+        operational_trend=args.operational_trend,
+        operational_trend_sha256=args.operational_trend_sha256,
     )
     rendered_json = json.dumps(result, indent=2, sort_keys=True)
     rendered = (

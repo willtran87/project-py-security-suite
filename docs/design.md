@@ -129,11 +129,17 @@ flowchart LR
     Scan --> Seal["Checksum-sealed report"]
     Seal --> Decision["release-check"]
     Seal --> Closure["closure-plan<br/>owned evidence backlog"]
+    Seal --> Diff["diff-coverage<br/>retained change scope"]
     Closure -->|"validation alignment"| Decision
+    Diff -->|"assessment completeness"| Decision
     Decision --> Plan["promotion-plan"]
     Seal --> Baseline["baseline-candidate<br/>revision + exact digest"]
     Seal --> Trend["trend<br/>verified report history"]
     Closure -->|"validation debt + owner continuity"| Trend
+    Diff -->|"comparability scope"| Trend
+    Closure -->|"owned validation queues"| Plan
+    Diff -->|"assessment availability"| Plan
+    Trend -->|"digest-bound trajectory + regressions"| Plan
     Payload --> Request["prepare-signing<br/>closed artifact set"]
     Seal --> Request
     Request --> Signer["Independent controlled signer"]
@@ -156,11 +162,13 @@ survive reruns when the underlying issue is unchanged;
 authority labels prevent repository automation from self-approving external
 signing, isolation, scanner trust, or release controls.
 
-Operational trend 1.2 reads that closure evidence from each independently
-verified report. Stable work IDs distinguish new, resolved, unchanged, and
-state-transitioned validation subjects; CODEOWNERS routing produces owner-queue
-history and ownership deltas. Debt growth, ownership erosion, failing-test
-regression, and missing comparable closure evidence become explicit anomalies.
+Operational trend 1.3 reads that closure evidence and its retained diff-coverage
+assessment scope from each independently verified report. Stable work IDs
+distinguish new, resolved, unchanged, and state-transitioned validation subjects
+only when both endpoints contain current ledger and assessment evidence;
+CODEOWNERS routing produces owner-queue history and ownership deltas only under
+that same condition. Debt growth, ownership erosion, failing-test regression,
+and missing ledger or scope evidence become explicit anomalies.
 
 The evidence-pack application layer composes existing verified services; it
 does not create a second evidence model. Payload files are generated in private

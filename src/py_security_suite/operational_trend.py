@@ -56,7 +56,7 @@ def build_operational_trend(
         tool_budgets=budgets,
     )
     return {
-        "schema_version": "1.2",
+        "schema_version": "1.3",
         "authoritative": False,
         "scope": "Longitudinal decision support derived from verified reports; each report remains the evidence authority.",
         "summary": {
@@ -67,6 +67,10 @@ def build_operational_trend(
             "outcomes": dict(sorted(statuses.items())),
             "latest_validation_evidence_available": last[
                 "validation_evidence_available"
+            ],
+            "latest_validation_ledger_available": last["validation_ledger_available"],
+            "latest_validation_assessment_available": last[
+                "validation_assessment_available"
             ],
             "latest_validation_alignment_items": last["validation_alignment_items"],
             "latest_codeowner_backed_validation_items": last[
@@ -136,8 +140,20 @@ def render_operational_trend_markdown(trend: dict[str, Any]) -> str:
         ("completed_tools", "Completed tools"),
         ("execution_gaps", "Execution gaps"),
     ):
+        delta_value = (
+            "not comparable"
+            if not comparable
+            and key
+            in {
+                "validation_alignment_items",
+                "codeowner_backed_validation_items",
+                "validation_items_with_failing_tests",
+                "validation_items_with_coverage_gaps",
+            }
+            else _signed(delta.get(key))
+        )
         lines.append(
-            f"| {label} | {int(first.get(key) or 0)} | {int(latest.get(key) or 0)} | {_signed(delta.get(key))} |"
+            f"| {label} | {int(first.get(key) or 0)} | {int(latest.get(key) or 0)} | {delta_value} |"
         )
     lines.extend(
         [
@@ -145,9 +161,9 @@ def render_operational_trend_markdown(trend: dict[str, Any]) -> str:
             "## Validation continuity",
             "",
             (
-                "Closure-plan 1.2 evidence is comparable across the first and latest reports."
+                "Closure-plan 1.2 ledgers and change-assessment scopes are comparable across the first and latest reports."
                 if comparable
-                else "**Comparability gap:** current closure-plan 1.2 validation evidence is not present in both endpoint reports; no new or resolved debt claim is made."
+                else "**Comparability gap:** compatible closure ledgers and change-assessment scope are not present in both endpoint reports; no new or resolved debt claim is made."
             ),
             "",
             "| New subjects | Resolved subjects | Unchanged subjects | State/owner transitions |",
@@ -161,6 +177,16 @@ def render_operational_trend_markdown(trend: dict[str, Any]) -> str:
             "",
         ]
     )
+    reasons = _strings(comparison.get("validation_comparability_reasons"))
+    if reasons:
+        lines.extend(
+            [
+                "**Why comparison is unavailable:**",
+                "",
+                *(f"- {_md(reason)}" for reason in reasons),
+                "",
+            ]
+        )
     owner_history = _object_list(trend.get("validation_owner_history"))
     if owner_history:
         lines.extend(
@@ -241,6 +267,7 @@ def _snapshot(report: Path) -> dict[str, Any]:
     findings_document = _read(root / "findings.json")
     portfolio = _read(root / "portfolio-health.json")
     closure = _optional_read(root / "closure-plan.json")
+    diff_coverage = _optional_read(root / "diff-coverage.json")
     findings = findings_document.get("findings")
     tools = manifest.get("tools")
     if not isinstance(findings, list) or not isinstance(tools, list):
@@ -268,7 +295,7 @@ def _snapshot(report: Path) -> dict[str, Any]:
         "source_sha256": str(findings_document.get("source_sha256") or ""),
         "vcs_revision": str(findings_document.get("vcs_revision") or ""),
     }
-    validation = _validation_snapshot(closure)
+    validation = _validation_snapshot(closure, diff_coverage)
     return (
         identity
         | _snapshot_metrics(active, applicable, overall)
@@ -308,16 +335,28 @@ def _snapshot_metrics(
     }
 
 
-def _validation_snapshot(closure: dict[str, Any]) -> dict[str, Any]:
+def _validation_snapshot(
+    closure: dict[str, Any], diff_coverage: dict[str, Any]
+) -> dict[str, Any]:
     summary = closure.get("summary")
     items = closure.get("items")
+    assessment = _validation_assessment(diff_coverage)
+    ledger_available = (
+        closure.get("schema_version") == "1.2"
+        and isinstance(summary, dict)
+        and isinstance(items, list)
+    )
     if (
-        closure.get("schema_version") != "1.2"
+        not ledger_available
         or not isinstance(summary, dict)
         or not isinstance(items, list)
     ):
         return {
             "validation_evidence_available": False,
+            "validation_ledger_available": False,
+            "validation_assessment_available": assessment["available"],
+            "validation_assessment_reason": assessment["reason"],
+            "validation_assessment_scope": assessment["scope"],
             "validation_alignment_items": 0,
             "codeowner_backed_validation_items": 0,
             "validation_items_with_failing_tests": 0,
@@ -353,7 +392,11 @@ def _validation_snapshot(closure: dict[str, Any]) -> dict[str, Any]:
         )
     subjects.sort(key=lambda value: str(value["id"]))
     return {
-        "validation_evidence_available": True,
+        "validation_evidence_available": assessment["available"],
+        "validation_ledger_available": True,
+        "validation_assessment_available": assessment["available"],
+        "validation_assessment_reason": assessment["reason"],
+        "validation_assessment_scope": assessment["scope"],
         "validation_alignment_items": int(
             summary.get("validation_alignment_items") or 0
         ),
@@ -367,6 +410,36 @@ def _validation_snapshot(closure: dict[str, Any]) -> dict[str, Any]:
             summary.get("validation_items_with_coverage_gaps") or 0
         ),
         "validation_subjects": subjects,
+    }
+
+
+def _validation_assessment(diff_coverage: dict[str, Any]) -> dict[str, Any]:
+    stats = diff_coverage.get("src_stats")
+    diff_name = diff_coverage.get("diff_name")
+    changed_lines = diff_coverage.get("num_changed_lines")
+    if (
+        diff_coverage.get("schema_version") != "1.0"
+        or not isinstance(stats, dict)
+        or not isinstance(diff_name, str)
+        or not diff_name.strip()
+        or not isinstance(changed_lines, int)
+        or isinstance(changed_lines, bool)
+        or changed_lines < 0
+    ):
+        return {
+            "available": False,
+            "reason": "current diff-coverage change-assessment evidence is unavailable",
+            "scope": None,
+        }
+    return {
+        "available": True,
+        "reason": "changed-file scope is backed by retained diff-coverage evidence",
+        "scope": {
+            "diff_name": diff_name.strip(),
+            "changed_files": len(stats),
+            "changed_lines": changed_lines,
+            "minimum_percent": float(diff_coverage.get("minimum_percent") or 0.0),
+        },
     }
 
 
@@ -443,6 +516,7 @@ def _comparison(first: dict[str, Any], last: dict[str, Any]) -> dict[str, Any]:
     validation_comparable = bool(first["validation_evidence_available"]) and bool(
         last["validation_evidence_available"]
     )
+    comparability_reasons = _validation_comparability_reasons(first, last)
     return {
         "new_finding_ids": sorted(last_ids - first_ids),
         "resolved_finding_ids": sorted(first_ids - last_ids),
@@ -451,6 +525,7 @@ def _comparison(first: dict[str, Any], last: dict[str, Any]) -> dict[str, Any]:
         "source_changed": first["source_sha256"] != last["source_sha256"],
         "revision_changed": first["vcs_revision"] != last["vcs_revision"],
         "validation_evidence_comparable": validation_comparable,
+        "validation_comparability_reasons": comparability_reasons,
         "new_validation_subject_ids": (
             sorted(last_validation_ids - first_validation_ids)
             if validation_comparable
@@ -471,6 +546,20 @@ def _comparison(first: dict[str, Any], last: dict[str, Any]) -> dict[str, Any]:
             else []
         ),
     }
+
+
+def _validation_comparability_reasons(
+    first: dict[str, Any], last: dict[str, Any]
+) -> list[str]:
+    reasons: list[str] = []
+    for label, snapshot in (("first", first), ("latest", last)):
+        if snapshot.get("validation_ledger_available") is not True:
+            reasons.append(f"{label} report lacks a current closure-plan 1.2 ledger")
+        if snapshot.get("validation_assessment_available") is not True:
+            reasons.append(
+                f"{label} report lacks retained diff-coverage change-assessment scope"
+            )
+    return reasons
 
 
 def _scanner_history(timeline: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -546,7 +635,17 @@ def _validation_owner_history(
                 "observations": observations,
                 "first_subjects": observations[0]["subjects"],
                 "latest_subjects": observations[-1]["subjects"],
-                "delta": observations[-1]["subjects"] - observations[0]["subjects"],
+                "comparable": all(
+                    observation["evidence_available"] for observation in observations
+                ),
+                "delta": (
+                    observations[-1]["subjects"] - observations[0]["subjects"]
+                    if all(
+                        observation["evidence_available"]
+                        for observation in observations
+                    )
+                    else None
+                ),
             }
         )
     return result
@@ -654,14 +753,15 @@ def _validation_anomalies(
     before_available = previous["validation_evidence_available"] is True
     after_available = latest["validation_evidence_available"] is True
     if not before_available or not after_available:
+        reasons = _validation_comparability_reasons(previous, latest)
         return [
             {
                 "kind": "validation-evidence-comparability-gap",
                 "severity": "review",
                 "detail": (
-                    "current closure-plan 1.2 validation evidence is not available "
-                    "in both adjacent reports"
+                    "validation comparison is unavailable: " + "; ".join(reasons)
                 ),
+                "reasons": reasons,
             }
         ]
     result: list[dict[str, Any]] = []
@@ -818,5 +918,7 @@ def _md(value: Any) -> str:
 
 
 def _signed(value: Any) -> str:
+    if value is None:
+        return "not comparable"
     number = int(value or 0)
     return f"{number:+d}" if number else "0"

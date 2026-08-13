@@ -898,11 +898,17 @@ after the existing closed set verifies against the report.
 The sealed report is retained under `report/` for direct browsing, so
 `report/summary.md`, `report/index.html`, and `report/action-plan.md` preserve
 the original cited finding cards and stable anchors without extracting the ZIP.
+When `--previous-report` is supplied, the pack builds JSON and Markdown trend
+artifacts before promotion. Promotion verifies the trend digest and exact latest
+report binding, then propagates validation trajectory, CODEOWNER queues,
+regressions, and actions into all role views.
 
 ```mermaid
 flowchart LR
     Report["Sealed scan report"] --> Stage["Private staging directory"]
     Stage --> Views["Decision + role views"]
+    Stage --> Trend["Operational trend<br/>validation debt + owner continuity"]
+    Trend --> Views
     Stage --> Lifecycle["Findings + SLA + policy"]
     Stage --> Closure["Closed release manifest"]
     Closure --> Audit["Deterministic audit ZIP"]
@@ -921,7 +927,9 @@ Optional inputs keep adjacent workflows inside the same integrity boundary:
 
 - `--previous-report` adds longitudinal scanner/performance evidence,
   reachability changes, validation-debt and CODEOWNER queue continuity from
-  closure-plan 1.2, and an automatically chained finding register;
+  closure-plan 1.2, and an automatically chained finding register. Validation
+  new/resolved and owner-delta claims require retained diff-coverage assessment
+  scope in both reports; otherwise trend 1.3 records a comparability gap;
 - `--effectiveness-evaluation` and `--passport-verification`, each paired with
   its approved SHA-256, flow into release readiness and are retained as required
   release-manifest and audit-package evidence;
@@ -944,7 +952,9 @@ approval:
 
 ```text
 pysec promotion-plan REPORT --release-readiness release-readiness.json \
-  --release-readiness-sha256 READINESS_SHA256 --format json \
+  --release-readiness-sha256 READINESS_SHA256 \
+  --operational-trend operational-trend.json \
+  --operational-trend-sha256 TREND_SHA256 --format json \
   --output promotion-plan.json
 
 pysec promotion-plan REPORT --format markdown --output promotion-plan.md
@@ -972,6 +982,9 @@ ledger. `release-check` 1.3 applies a stricter grouping key—owner, priority,
 authority, action, and blocker must all match—and publishes separate validation
 group and subject totals. Inspect the referenced closure items for exact files,
 changed lines, and focused tests.
+Release readiness and promotion require retained `diff-coverage.json` scope in
+addition to the closure ledger; zero queue entries without that assessment are
+reported as unproven, never aligned.
 If the bounded structural artifact omits changed-file details, the plan emits a
 P1 completeness item and release readiness remains closed until a replacement
 report contains every assessment.

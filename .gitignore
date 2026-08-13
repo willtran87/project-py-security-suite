@@ -6,6 +6,7 @@ __pycache__/
 .ruff_cache/
 .coverage
 coverage.json
+coverage.xml
 junit.xml
 hypothesis-junit.xml
 schemathesis-junit.xml

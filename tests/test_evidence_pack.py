@@ -154,12 +154,19 @@ class EvidencePackTests(unittest.TestCase):
             self.assertEqual(trend["performance_regression_percent"], 25.0)
             self.assertEqual(trend["maximum_total_seconds"], 300.0)
             self.assertEqual(trend["tool_budgets"], {"bandit": 20.0})
+            promotion = mocks["build_promotion_plan"].call_args.kwargs
+            self.assertEqual(
+                promotion["operational_trend"].name, "operational-trend.json"
+            )
+            self.assertEqual(len(promotion["operational_trend_sha256"]), 64)
+            self.assertTrue((output / "operational-trend.md").is_file())
             required = mocks["verify_release_evidence_manifest"].call_args.kwargs[
                 "required_evidence"
             ]
             self.assertIn("effectiveness-evaluation", required)
             self.assertIn("passport-verification", required)
             readme = (output / "README.md").read_text(encoding="utf-8")
+            self.assertIn("[Operational trend](operational-trend.md)", readme)
             self.assertIn("approved labeled-corpus evaluation", readme)
             self.assertIn("approved signed-Passport verification", readme)
             retained_readiness = (output / "release-readiness.json").read_text(
@@ -196,6 +203,7 @@ def _pack_dependencies():
         build_promotion_plan=DEFAULT,
         render_promotion_markdown=DEFAULT,
         render_promotion_html=DEFAULT,
+        render_operational_trend_markdown=DEFAULT,
         build_finding_register=DEFAULT,
         build_github_annotations=DEFAULT,
         render_github_commands=DEFAULT,
@@ -247,7 +255,7 @@ def _pack_dependencies():
         mocks["build_governance_evidence_draft"].return_value = bound
         mocks["build_promotion_plan"].return_value = {
             **bound,
-            "schema_version": "1.1",
+            "schema_version": "1.2",
             "status": "blocked",
             "summary": {
                 "active_findings": 1,
@@ -258,6 +266,7 @@ def _pack_dependencies():
         }
         mocks["render_promotion_markdown"].return_value = "# Plan\n"
         mocks["render_promotion_html"].return_value = "<h1>Plan</h1>\n"
+        mocks["render_operational_trend_markdown"].return_value = "# Trend\n"
         mocks["build_finding_register"].return_value = {
             **bound,
             "summary": {"open": 1, "overdue": 0},
