@@ -65,6 +65,18 @@ rules:
               metavariable: $KEY
               regex: (?i).*(?:authorization|cookie|credential|password|secret|session|token).*
       - pattern: $REQUEST.cookies.get(...)
+      - patterns:
+          - pattern: $OBJECT.$FIELD
+          - metavariable-regex:
+              metavariable: $FIELD
+              regex: (?i)^(?:api_key|auth_token|authorization|connection_string|cookie|credential|database_url|dsn|encryption_key|otp|passcode|password|passwd|pin|private_key|secret|session|token)$
+      - patterns:
+          - pattern-either:
+              - pattern: $OBJECT[$KEY]
+              - pattern: $OBJECT.get($KEY, ...)
+          - metavariable-regex:
+              metavariable: $KEY
+              regex: (?i).*(?:api.?key|auth(?:entication|orization|[_-]?(?:header|token))|connection.?string|cookie|credential|database.?url|dsn|encryption.?key|otp|passcode|password|passwd|pin|private.?key|secret|session|token).*
       - pattern: $CLIENT.get_secret_value(...)
       - pattern: $CLIENT.access_secret_version(...)
     pattern-propagators:
@@ -131,6 +143,18 @@ rules:
               metavariable: $KEY
               regex: (?i).*(?:authorization|cookie|credential|password|secret|session|token).*
       - pattern: $REQUEST.cookies.get(...)
+      - patterns:
+          - pattern: $OBJECT.$FIELD
+          - metavariable-regex:
+              metavariable: $FIELD
+              regex: (?i)^(?:api_key|auth_token|authorization|connection_string|cookie|credential|database_url|dsn|encryption_key|otp|passcode|password|passwd|pin|private_key|secret|session|token)$
+      - patterns:
+          - pattern-either:
+              - pattern: $OBJECT[$KEY]
+              - pattern: $OBJECT.get($KEY, ...)
+          - metavariable-regex:
+              metavariable: $KEY
+              regex: (?i).*(?:api.?key|auth(?:entication|orization|[_-]?(?:header|token))|connection.?string|cookie|credential|database.?url|dsn|encryption.?key|otp|passcode|password|passwd|pin|private.?key|secret|session|token).*
       - pattern: $CLIENT.get_secret_value(...)
       - pattern: $CLIENT.access_secret_version(...)
     pattern-propagators:
@@ -166,6 +190,13 @@ rules:
               - pattern: newrelic.agent.record_custom_event(..., $DATA, ...)
               - pattern: rollbar.report_message(..., extra_data=$DATA, ...)
               - pattern: bugsnag.notify(..., metadata=$DATA, ...)
+              - pattern: $SPAN.add_attribute(..., $DATA, ...)
+              - pattern: $SPAN.put_annotation(..., $DATA, ...)
+              - pattern: $SPAN.put_metadata(..., $DATA, ...)
+              - pattern: $CLIENT.add_field(..., $DATA, ...)
+              - pattern: $CLIENT.set_custom_context($DATA, ...)
+              - pattern: $CLIENT.set_extra_context($DATA, ...)
+              - pattern: $CLIENT.notice_error(..., custom_params=$DATA, ...)
           - focus-metavariable: $DATA
 
   - id: python.private-data-to-log
@@ -294,6 +325,13 @@ rules:
               - pattern: newrelic.agent.record_custom_event(..., $DATA, ...)
               - pattern: rollbar.report_message(..., extra_data=$DATA, ...)
               - pattern: bugsnag.notify(..., metadata=$DATA, ...)
+              - pattern: $SPAN.add_attribute(..., $DATA, ...)
+              - pattern: $SPAN.put_annotation(..., $DATA, ...)
+              - pattern: $SPAN.put_metadata(..., $DATA, ...)
+              - pattern: $CLIENT.add_field(..., $DATA, ...)
+              - pattern: $CLIENT.set_custom_context($DATA, ...)
+              - pattern: $CLIENT.set_extra_context($DATA, ...)
+              - pattern: $CLIENT.notice_error(..., custom_params=$DATA, ...)
           - focus-metavariable: $DATA
 
   - id: python.request-data-to-log
@@ -313,12 +351,17 @@ rules:
       - pattern: await $REQUEST.json(...)
       - pattern: $REQUEST.json(...)
       - pattern: $REQUEST.get_json(...)
-      - pattern: $REQUEST.body
-      - pattern: $REQUEST.data
-      - pattern: $REQUEST.form
-      - pattern: $REQUEST.POST
-      - pattern: $REQUEST.GET
-      - pattern: $REQUEST.query_params
+      - patterns:
+          - pattern-either:
+              - pattern: $REQUEST.body
+              - pattern: $REQUEST.data
+              - pattern: $REQUEST.form
+              - pattern: $REQUEST.POST
+              - pattern: $REQUEST.GET
+              - pattern: $REQUEST.query_params
+          - metavariable-regex:
+              metavariable: $REQUEST
+              regex: (?i)^(?!.*response)(?:.*[._])?(?:req|request)$
     pattern-propagators:
       - pattern: $TO = $FROM
         from: $FROM
@@ -369,12 +412,17 @@ rules:
       - pattern: await $REQUEST.json(...)
       - pattern: $REQUEST.json(...)
       - pattern: $REQUEST.get_json(...)
-      - pattern: $REQUEST.body
-      - pattern: $REQUEST.data
-      - pattern: $REQUEST.form
-      - pattern: $REQUEST.POST
-      - pattern: $REQUEST.GET
-      - pattern: $REQUEST.query_params
+      - patterns:
+          - pattern-either:
+              - pattern: $REQUEST.body
+              - pattern: $REQUEST.data
+              - pattern: $REQUEST.form
+              - pattern: $REQUEST.POST
+              - pattern: $REQUEST.GET
+              - pattern: $REQUEST.query_params
+          - metavariable-regex:
+              metavariable: $REQUEST
+              regex: (?i)^(?!.*response)(?:.*[._])?(?:req|request)$
     pattern-propagators:
       - pattern: $TO = $FROM
         from: $FROM
@@ -408,6 +456,13 @@ rules:
               - pattern: newrelic.agent.record_custom_event(..., $DATA, ...)
               - pattern: rollbar.report_message(..., extra_data=$DATA, ...)
               - pattern: bugsnag.notify(..., metadata=$DATA, ...)
+              - pattern: $SPAN.add_attribute(..., $DATA, ...)
+              - pattern: $SPAN.put_annotation(..., $DATA, ...)
+              - pattern: $SPAN.put_metadata(..., $DATA, ...)
+              - pattern: $CLIENT.add_field(..., $DATA, ...)
+              - pattern: $CLIENT.set_custom_context($DATA, ...)
+              - pattern: $CLIENT.set_extra_context($DATA, ...)
+              - pattern: $CLIENT.notice_error(..., custom_params=$DATA, ...)
           - focus-metavariable: $DATA
 
   - id: python.sensitive-data-in-url-query
@@ -441,6 +496,18 @@ rules:
               metavariable: $KEY
               regex: (?i).*(?:authorization|cookie|credential|password|secret|session|token).*
       - pattern: $REQUEST.cookies.get(...)
+      - patterns:
+          - pattern: $OBJECT.$FIELD
+          - metavariable-regex:
+              metavariable: $FIELD
+              regex: (?i)^(?:api_key|auth_token|authorization|connection_string|cookie|credential|database_url|dsn|encryption_key|otp|passcode|password|passwd|pin|private_key|secret|session|token)$
+      - patterns:
+          - pattern-either:
+              - pattern: $OBJECT[$KEY]
+              - pattern: $OBJECT.get($KEY, ...)
+          - metavariable-regex:
+              metavariable: $KEY
+              regex: (?i).*(?:api.?key|auth(?:entication|orization|[_-]?(?:header|token))|connection.?string|cookie|credential|database.?url|dsn|encryption.?key|otp|passcode|password|passwd|pin|private.?key|secret|session|token).*
       - pattern: $CLIENT.get_secret_value(...)
       - pattern: $CLIENT.access_secret_version(...)
     pattern-propagators:
@@ -566,3 +633,126 @@ rules:
       source: https://docs.sentry.io/platforms/python/configuration/options/#send-default-pii
     patterns:
       - pattern: sentry_sdk.init(..., send_default_pii=True, ...)
+
+  - id: python.runtime-state-to-log
+    languages: [python]
+    mode: taint
+    message: A broad runtime-state snapshot may reach a log sink and disclose credentials or private fields.
+    severity: WARNING
+    metadata:
+      cwe:
+        - "CWE-532: Insertion of Sensitive Information into Log File"
+      category: data-exposure
+      confidence: MEDIUM
+      impact: Locals, object dictionaries, and arbitrary variable dictionaries can silently grow to include credentials, request data, personal information, or provider responses.
+      remediation: Replace broad state serialization with a small allowlisted event model and test it with synthetic credential and PII canaries.
+      source: https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html
+    pattern-sources:
+      - pattern: locals()
+      - pattern: vars(...)
+      - pattern: $OBJECT.__dict__
+    pattern-propagators:
+      - pattern: $TO = $FROM
+        from: $FROM
+        to: $TO
+    pattern-sanitizers:
+      - patterns:
+          - pattern: $SANITIZER(...)
+          - metavariable-regex:
+              metavariable: $SANITIZER
+              regex: (?i).*(?:allowlist|drop_sensitive|minimize|redact|remove_sensitive|sanitize|scrub).*
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: logging.$LEVEL(..., $DATA, ...)
+              - pattern: logger.$LEVEL(..., $DATA, ...)
+              - pattern: log.$LEVEL(..., $DATA, ...)
+              - pattern: loguru.logger.$LEVEL(..., $DATA, ...)
+              - pattern: structlog.get_logger(...).$LEVEL(..., $DATA, ...)
+          - focus-metavariable: $DATA
+          - metavariable-regex:
+              metavariable: $LEVEL
+              regex: (?:critical|debug|error|exception|info|log|warn|warning)
+      - patterns:
+          - pattern-either:
+              - pattern: print(..., $DATA, ...)
+              - pattern: sys.stdout.write($DATA)
+              - pattern: sys.stderr.write($DATA)
+          - focus-metavariable: $DATA
+
+  - id: config.opentelemetry-genai-content-capture-enabled
+    languages: [generic]
+    message: GenAI message-content capture is enabled; prompts, responses, tool arguments, and tool results require explicit data-governance approval.
+    severity: INFO
+    paths:
+      include:
+        - "**/.env"
+        - "**/*.env"
+        - "**/*.cfg"
+        - "**/*.conf"
+        - "**/*.ini"
+        - "**/*.properties"
+        - "**/*.toml"
+        - "**/*.yaml"
+        - "**/*.yml"
+    metadata:
+      cwe:
+        - "CWE-201: Insertion of Sensitive Information Into Sent Data"
+        - "CWE-359: Exposure of Private Personal Information to an Unauthorized Actor"
+      category: data-exposure
+      confidence: HIGH
+      impact: Full GenAI content can contain credentials, personal data, proprietary material, retrieved documents, and tool inputs or outputs that cross telemetry trust and retention boundaries.
+      remediation: Keep content capture disabled by default; when approved, minimize content, constrain exporters and retention, and verify redaction with synthetic canaries.
+      source: https://opentelemetry.io/docs/security/handling-sensitive-data/
+    pattern-regex: '(?mi)^\x{FEFF}?\s*["'']?OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT["'']?\s*(?:=|:)\s*["'']?(?:SPAN_ONLY|EVENT_ONLY|SPAN_AND_EVENT)["'']?\s*(?:#.*)?$'
+
+  - id: config.opentelemetry-genai-content-capture-invalid-mode
+    languages: [generic]
+    message: GenAI message-content capture uses a legacy boolean-like value instead of a named content-capture mode.
+    severity: WARNING
+    paths:
+      include:
+        - "**/.env"
+        - "**/*.env"
+        - "**/*.cfg"
+        - "**/*.conf"
+        - "**/*.ini"
+        - "**/*.properties"
+        - "**/*.toml"
+        - "**/*.yaml"
+        - "**/*.yml"
+    metadata:
+      cwe:
+        - "CWE-693: Protection Mechanism Failure"
+      category: configuration
+      confidence: HIGH
+      impact: A boolean-like value can fail closed or change meaning across SDK versions, leaving operators with telemetry behavior that differs from the reviewed configuration.
+      remediation: Replace the value with NO_CONTENT, SPAN_ONLY, EVENT_ONLY, or SPAN_AND_EVENT and document the intended data boundary.
+      source: https://opentelemetry.io/docs/security/handling-sensitive-data/
+    pattern-regex: '(?mi)^\x{FEFF}?\s*["'']?OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT["'']?\s*(?:=|:)\s*["'']?(?:true|false|yes|no|on|off|0|1)["'']?\s*(?:#.*)?$'
+
+  - id: config.opentelemetry-broad-http-header-capture
+    languages: [generic]
+    message: Broad OpenTelemetry HTTP-header capture can export authorization, cookie, or other sensitive headers unless an effective sanitization policy is enforced.
+    severity: WARNING
+    paths:
+      include:
+        - "**/.env"
+        - "**/*.env"
+        - "**/*.cfg"
+        - "**/*.conf"
+        - "**/*.ini"
+        - "**/*.properties"
+        - "**/*.toml"
+        - "**/*.yaml"
+        - "**/*.yml"
+    metadata:
+      cwe:
+        - "CWE-201: Insertion of Sensitive Information Into Sent Data"
+        - "CWE-200: Exposure of Sensitive Information to an Unauthorized Actor"
+      category: data-exposure
+      confidence: HIGH
+      impact: Wildcard header capture can copy credentials and private request metadata into telemetry backends with different access, residency, and retention controls.
+      remediation: Replace wildcard capture with an explicit allowlist, configure sensitive-header sanitization, and verify exported spans with synthetic canary headers.
+      source: https://opentelemetry.io/docs/security/handling-sensitive-data/
+    pattern-regex: '(?mi)^\x{FEFF}?\s*["'']?OTEL_INSTRUMENTATION_HTTP_CAPTURE_HEADERS_(?:SERVER_REQUEST|SERVER_RESPONSE|CLIENT_REQUEST|CLIENT_RESPONSE)["'']?\s*(?:=|:)\s*["'']?(?:\*|\.\*)["'']?\s*(?:#.*)?$'

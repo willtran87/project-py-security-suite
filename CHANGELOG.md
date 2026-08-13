@@ -11,6 +11,13 @@ for published releases.
   bound loggers, process streams, OpenTelemetry header capture, and additional
   observability SDKs; strengthen transformation handling so generic hashes,
   masks, filters, HMACs, and tokens no longer suppress taint by name alone.
+- Harden sensitive-data detection with credential-named object/dictionary
+  sources, runtime-state dump detection, additional tracing SDK sinks, precise
+  request-versus-response payload modeling, recursive monorepo dependency
+  discovery, and bounded `.env`/TOML/YAML/INI capture-configuration review.
+  Add OpenTelemetry GenAI content-capture and wildcard HTTP-header controls,
+  expand cloud and GenAI observability SDK coverage, and version the exposure
+  artifact at 1.1 while retaining schema 1.0 for existing consumers.
 
 - Add pinned Graphify code-only scanning, strict AST/token/path validation,
   normalized graph evidence, and graph-aware finding blast radius, structural

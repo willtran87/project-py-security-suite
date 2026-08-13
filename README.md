@@ -16,7 +16,7 @@ creates a GitHub-friendly report artifact.
 | Graph context | Graphify code-only topology joined to findings for blast radius, structural hotspots, and cross-tool neighborhoods |
 | Evidence fusion | Source-to-artifact package lineage, semantic finding links, changed-line/test/graph context, and digest-bound provenance joins |
 | Structural synthesis | Cross-validated dead code, island boundaries, structural orphans, import-cycle hotspots, change-risk scoring, and graph-guided test targets |
-| Data exposure | CWE-grounded flows into logs, telemetry, URL queries, client errors, and process streams; risky SDK configuration and request-payload review; graph-aware disclosure context |
+| Data exposure | CWE-grounded flows into logs, telemetry, URL queries, client errors, runtime-state dumps, and process streams; monorepo SDK/configuration inventory; graph-aware disclosure context |
 | Runtime | Python 3.11+; scanners are installed separately from approved offline bundles |
 
 Key trust properties:

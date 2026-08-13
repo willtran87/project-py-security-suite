@@ -10,6 +10,8 @@ from .models import Citation, Finding
 
 
 _MAX_FILES = 5000
+_MAX_CONFIGURATION_FILES = 1000
+_MAX_CONFIGURATION_BYTES = 2 * 1024 * 1024
 _MAX_SURFACES = 500
 _MAX_SDK_OBSERVATIONS = 500
 _SKIP_DIRECTORIES = frozenset(
@@ -56,6 +58,17 @@ _SDK_CATALOG: dict[str, tuple[str, str]] = {
     "aws_xray_sdk": ("AWS X-Ray SDK", "telemetry"),
     "posthog": ("PostHog", "analytics"),
     "bugsnag": ("Bugsnag", "error-monitoring"),
+    "azure.monitor.opentelemetry": ("Azure Monitor OpenTelemetry", "observability"),
+    "google.cloud.error_reporting": (
+        "Google Cloud Error Reporting",
+        "error-monitoring",
+    ),
+    "google.cloud.logging": ("Google Cloud Logging", "logging"),
+    "langfuse": ("Langfuse", "observability"),
+    "mlflow": ("MLflow", "observability"),
+    "openinference": ("OpenInference", "observability"),
+    "phoenix": ("Arize Phoenix", "observability"),
+    "splunk_otel": ("Splunk OpenTelemetry", "observability"),
 }
 _DEPENDENCY_TO_IMPORT = {
     "amplitude-analytics": "amplitude",
@@ -82,6 +95,14 @@ _DEPENDENCY_TO_IMPORT = {
     "posthog": "posthog",
     "bugsnag": "bugsnag",
     "aws-xray-sdk": "aws_xray_sdk",
+    "arize-phoenix": "phoenix",
+    "azure-monitor-opentelemetry": "azure.monitor.opentelemetry",
+    "google-cloud-error-reporting": "google.cloud.error_reporting",
+    "google-cloud-logging": "google.cloud.logging",
+    "langfuse": "langfuse",
+    "mlflow": "mlflow",
+    "openinference-instrumentation": "openinference",
+    "splunk-opentelemetry": "splunk_otel",
 }
 _LOG_METHODS = frozenset(
     {"critical", "debug", "error", "exception", "info", "log", "warning", "warn"}
@@ -109,6 +130,13 @@ _TELEMETRY_METHODS = {
     "set_tags": ("observability", "trace tags"),
     "set_user": ("error-monitoring", "user context"),
     "track": ("analytics", "analytics event"),
+    "add_attribute": ("telemetry", "trace attribute"),
+    "add_field": ("observability", "telemetry field"),
+    "notice_error": ("observability", "reported exception"),
+    "put_annotation": ("telemetry", "trace annotation"),
+    "put_metadata": ("telemetry", "trace metadata"),
+    "set_custom_context": ("observability", "custom telemetry context"),
+    "set_extra_context": ("observability", "extra telemetry context"),
 }
 _NETWORK_METHODS = frozenset(
     {"delete", "get", "head", "options", "patch", "post", "put", "request"}
@@ -118,11 +146,24 @@ _SENSITIVE_HINT = re.compile(
     r"(?i)(?:account.?id|address|api.?key|auth(?:entication|orization|_?(?:header|token))|birth|card|connection.?string|cookie|credential|cvv|database.?url|diagnosis|dsn|email|health|ip.?address|medical|national.?id|otp|passw(?:or)?d|patient|phone|pin|private.?key|secret|session|social.?security|ssn|token|user.?id|username)"
 )
 _REQUEST_DATA_HINT = re.compile(
-    r"(?i)(?:body|data|form|json|payload|post|query_params|request|response)"
+    r"(?i)(?:body|form|json|payload|post|query_params|request|request_data)"
+)
+_REQUEST_OBJECT_HINT = re.compile(
+    r"(?i)^(?!.*response)(?:[a-z][a-z0-9]*_)*(?:req|request)$"
 )
 _EXCEPTION_HINT = re.compile(r"(?i)(?:error|exception|exc|traceback)")
 _RESPONSE_SINKS = frozenset(
     {"abort", "HTTPException", "HttpResponse", "JSONResponse", "JsonResponse"}
+)
+_CONFIGURATION_SUFFIXES = frozenset(
+    {".cfg", ".conf", ".env", ".ini", ".properties", ".toml", ".yaml", ".yml"}
+)
+_GENAI_CAPTURE_NAME = "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT"
+_GENAI_CAPTURE_ENABLED = frozenset({"EVENT_ONLY", "SPAN_AND_EVENT", "SPAN_ONLY"})
+_GENAI_CAPTURE_LEGACY = frozenset({"0", "1", "FALSE", "NO", "OFF", "ON", "TRUE", "YES"})
+_CONFIG_ASSIGNMENT = re.compile(
+    r"^\s*[\"']?(?P<name>[A-Za-z_][A-Za-z0-9_]*)[\"']?\s*(?:=|:)\s*"
+    r"[\"']?(?P<value>[^\"'#\s,}]+)",
 )
 
 
@@ -161,8 +202,8 @@ def build_data_exposure_synthesis(
         }
     )
     return {
-        "schema_version": "1.0",
-        "schema_id": "urn:project-py-security-suite:data-exposure:1.0",
+        "schema_version": "1.1",
+        "schema_id": "urn:project-py-security-suite:data-exposure:1.1",
         "authoritative": False,
         "purpose": (
             "bounded sensitive-data disclosure analysis across normalized taint "
@@ -187,6 +228,12 @@ def build_data_exposure_synthesis(
             "production_sink_surfaces": len(production_surfaces),
             "test_sink_surfaces": len(inventory["sink_surfaces"])
             - len(production_surfaces),
+            "configuration_review_surfaces": sum(
+                str(item.get("label") or "").startswith(
+                    ("GenAI ", "invalid GenAI ", "broad OpenTelemetry ")
+                )
+                for item in inventory["sink_surfaces"]
+            ),
             "sdk_families_observed": len(observed_sdk_families),
             "files_analyzed": inventory["files_analyzed"],
             "parse_errors": inventory["parse_errors"],
@@ -234,9 +281,11 @@ def build_data_exposure_synthesis(
         ],
         "limits": {
             "maximum_python_files": _MAX_FILES,
+            "maximum_configuration_files": _MAX_CONFIGURATION_FILES,
             "maximum_sink_surfaces": _MAX_SURFACES,
             "maximum_sdk_observations": _MAX_SDK_OBSERVATIONS,
             "files_omitted": inventory["files_omitted"],
+            "configuration_files_omitted": inventory["configuration_files_omitted"],
             "sink_surfaces_omitted": max(
                 0, len(inventory["sink_surfaces"]) - _MAX_SURFACES
             ),
@@ -277,10 +326,15 @@ def _inventory(target: Path) -> dict[str, Any]:
         visitor.visit(tree)
         sink_surfaces.extend(visitor.sinks)
         sdk_observations.extend(visitor.sdks)
+    configuration_surfaces, configuration_files_omitted = _configuration_surfaces(
+        target
+    )
+    sink_surfaces.extend(configuration_surfaces)
     sdk_observations.extend(_declared_sdk_observations(target))
     return {
         "files_analyzed": len(selected),
         "files_omitted": max(0, len(python_files) - _MAX_FILES),
+        "configuration_files_omitted": configuration_files_omitted,
         "parse_errors": parse_errors,
         "sink_surfaces": _deduplicate(sink_surfaces),
         "sdk_observations": _deduplicate(sdk_observations),
@@ -300,15 +354,16 @@ class _ExposureVisitor(ast.NodeVisitor):
         for item in node.names:
             root = item.name.split(".", 1)[0]
             self.aliases[item.asname or root] = item.name
-            self._sdk(root, node.lineno, "import")
+            self._sdk(item.name, node.lineno, "import")
         self.generic_visit(node)
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
         if node.module:
-            root = node.module.split(".", 1)[0]
-            self._sdk(root, node.lineno, "import")
+            self._sdk(node.module, node.lineno, "import")
             for item in node.names:
-                self.aliases[item.asname or item.name] = f"{node.module}.{item.name}"
+                imported = f"{node.module}.{item.name}"
+                self.aliases[item.asname or item.name] = imported
+                self._sdk(imported, node.lineno, "import")
         self.generic_visit(node)
 
     def visit_Assign(self, node: ast.Assign) -> None:
@@ -349,7 +404,15 @@ class _ExposureVisitor(ast.NodeVisitor):
         elif _is_sentry_pii_configuration(qualified, node):
             family, label = "error-monitoring", "automatic PII collection enabled"
         elif _has_header_capture_configuration(node):
-            family, label = "telemetry", "HTTP header capture configured"
+            family = "telemetry"
+            label = (
+                "broad OpenTelemetry HTTP header capture"
+                if _has_broad_header_capture_configuration(node)
+                else "OpenTelemetry HTTP header capture"
+            )
+        elif (mode := _genai_capture_call_mode(qualified, node)) is not None:
+            family = "telemetry"
+            label = _genai_capture_label(mode)
         elif method in _TELEMETRY_METHODS and self.sdk_families & {
             "analytics",
             "error-monitoring",
@@ -414,23 +477,32 @@ class _ExposureVisitor(ast.NodeVisitor):
             if "OTEL_INSTRUMENTATION_HTTP_CAPTURE_HEADERS_" in name
             and not name.endswith("SANITIZE_FIELDS")
         }
-        if not capture_names or not _is_broad_capture(value):
-            return
-        self.sinks.append(
-            {
-                "path": self.path,
-                "line": line,
-                "scope": self.scope,
-                "sink_family": "telemetry",
-                "sink": sorted(capture_names)[0][:300],
-                "label": "broad OpenTelemetry HTTP header capture",
-                "sdk": "OpenTelemetry",
-                "sanitizer_visible": False,
-            }
-        )
+        if capture_names and _is_broad_capture(value):
+            self.sinks.append(
+                _configuration_surface(
+                    path=self.path,
+                    line=line,
+                    name=sorted(capture_names)[0],
+                    label="broad OpenTelemetry HTTP header capture",
+                    scope=self.scope,
+                )
+            )
+        if _GENAI_CAPTURE_NAME in names and (mode := _constant_text(value)) is not None:
+            label = _genai_capture_label(mode)
+            if label:
+                self.sinks.append(
+                    _configuration_surface(
+                        path=self.path,
+                        line=line,
+                        name=_GENAI_CAPTURE_NAME,
+                        label=label,
+                        scope=self.scope,
+                    )
+                )
 
-    def _sdk(self, root: str, line: int, evidence: str) -> None:
-        record = _SDK_CATALOG.get(root)
+    def _sdk(self, module: str, line: int, evidence: str) -> None:
+        matched = _sdk_catalog_key(module)
+        record = _SDK_CATALOG.get(matched or "")
         if record is None:
             return
         sdk, family = record
@@ -439,7 +511,7 @@ class _ExposureVisitor(ast.NodeVisitor):
             {
                 "sdk": sdk,
                 "family": family,
-                "module": root,
+                "module": matched,
                 "evidence": evidence,
                 "path": self.path,
                 "line": line,
@@ -449,24 +521,56 @@ class _ExposureVisitor(ast.NodeVisitor):
 
 
 def _declared_sdk_observations(target: Path) -> list[dict[str, Any]]:
-    path = target / "pyproject.toml"
-    if not path.is_file():
-        return []
-    try:
-        document = tomllib.loads(path.read_text(encoding="utf-8"))
-    except (OSError, tomllib.TOMLDecodeError, UnicodeError):
-        return []
-    dependencies: list[str] = []
-    project = document.get("project")
-    if isinstance(project, dict) and isinstance(project.get("dependencies"), list):
-        dependencies.extend(str(item) for item in project["dependencies"])
-    groups = document.get("dependency-groups")
-    if isinstance(groups, dict):
-        for values in groups.values():
-            if isinstance(values, list):
-                dependencies.extend(str(item) for item in values)
+    declarations: list[tuple[str, str, int | None]] = []
+    manifests = sorted(
+        (
+            path
+            for path in target.rglob("pyproject.toml")
+            if not path.is_symlink()
+            and not any(
+                part in _SKIP_DIRECTORIES for part in path.relative_to(target).parts
+            )
+        ),
+        key=lambda path: path.relative_to(target).as_posix(),
+    )
+    for path in manifests[:_MAX_CONFIGURATION_FILES]:
+        try:
+            document = tomllib.loads(path.read_text(encoding="utf-8"))
+        except (OSError, tomllib.TOMLDecodeError, UnicodeError):
+            continue
+        relative = path.relative_to(target).as_posix()
+        declarations.extend(
+            (dependency, relative, None)
+            for dependency in _pyproject_dependencies(document)
+        )
+
+    requirement_files = sorted(
+        (
+            path
+            for path in target.rglob("*.txt")
+            if path.name.casefold().startswith(("requirements", "constraints"))
+            and not path.is_symlink()
+            and not any(
+                part in _SKIP_DIRECTORIES for part in path.relative_to(target).parts
+            )
+        ),
+        key=lambda path: path.relative_to(target).as_posix(),
+    )
+    for path in requirement_files[:_MAX_CONFIGURATION_FILES]:
+        try:
+            lines = path.read_text(encoding="utf-8-sig").splitlines()
+        except (OSError, UnicodeError):
+            continue
+        relative = path.relative_to(target).as_posix()
+        declarations.extend(
+            (line.split("#", 1)[0].strip(), relative, number)
+            for number, line in enumerate(lines, start=1)
+            if line.split("#", 1)[0].strip()
+            and not line.lstrip().startswith(("-", "#"))
+        )
+
     result: list[dict[str, Any]] = []
-    for dependency in dependencies:
+    for dependency, path, line in declarations:
         name = re.split(r"[<>=!~;\[\s]", dependency, maxsplit=1)[0]
         normalized = re.sub(r"[-_.]+", "-", name).casefold()
         module = _DEPENDENCY_TO_IMPORT.get(normalized)
@@ -479,12 +583,123 @@ def _declared_sdk_observations(target: Path) -> list[dict[str, Any]]:
                 "family": family,
                 "module": module,
                 "evidence": "declared-dependency",
-                "path": "pyproject.toml",
-                "line": None,
+                "path": path,
+                "line": line,
                 "scope": "repository",
             }
         )
     return result
+
+
+def _pyproject_dependencies(document: dict[str, Any]) -> list[str]:
+    dependencies: list[str] = []
+    project = document.get("project")
+    if isinstance(project, dict):
+        if isinstance(project.get("dependencies"), list):
+            dependencies.extend(str(item) for item in project["dependencies"])
+        optional = project.get("optional-dependencies")
+        if isinstance(optional, dict):
+            for values in optional.values():
+                if isinstance(values, list):
+                    dependencies.extend(str(item) for item in values)
+    groups = document.get("dependency-groups")
+    if isinstance(groups, dict):
+        for values in groups.values():
+            if isinstance(values, list):
+                dependencies.extend(str(item) for item in values)
+    tool = document.get("tool")
+    poetry = tool.get("poetry") if isinstance(tool, dict) else None
+    if isinstance(poetry, dict):
+        dependencies.extend(_mapping_dependency_names(poetry.get("dependencies")))
+        poetry_groups = poetry.get("group")
+        if isinstance(poetry_groups, dict):
+            for group in poetry_groups.values():
+                if isinstance(group, dict):
+                    dependencies.extend(
+                        _mapping_dependency_names(group.get("dependencies"))
+                    )
+    return dependencies
+
+
+def _mapping_dependency_names(value: Any) -> list[str]:
+    if not isinstance(value, dict):
+        return []
+    return [str(name) for name in value if str(name).casefold() != "python"]
+
+
+def _configuration_surfaces(target: Path) -> tuple[list[dict[str, Any]], int]:
+    candidates = sorted(
+        (
+            path
+            for path in target.rglob("*")
+            if path.is_file()
+            and not path.is_symlink()
+            and _is_configuration_path(path)
+            and not any(
+                part in _SKIP_DIRECTORIES for part in path.relative_to(target).parts
+            )
+        ),
+        key=lambda path: path.relative_to(target).as_posix(),
+    )
+    result: list[dict[str, Any]] = []
+    for path in candidates[:_MAX_CONFIGURATION_FILES]:
+        try:
+            if path.stat().st_size > _MAX_CONFIGURATION_BYTES:
+                continue
+            lines = path.read_text(encoding="utf-8-sig").splitlines()
+        except (OSError, UnicodeError):
+            continue
+        relative = path.relative_to(target).as_posix()
+        for number, line in enumerate(lines, start=1):
+            match = _CONFIG_ASSIGNMENT.match(line)
+            if not match:
+                continue
+            name = match.group("name").upper()
+            value = match.group("value").strip().upper()
+            label: str | None = None
+            if name == _GENAI_CAPTURE_NAME:
+                label = _genai_capture_label(value)
+            elif (
+                "OTEL_INSTRUMENTATION_HTTP_CAPTURE_HEADERS_" in name
+                and not name.endswith("SANITIZE_FIELDS")
+                and value in {"*", ".*"}
+            ):
+                label = "broad OpenTelemetry HTTP header capture"
+            if label:
+                result.append(
+                    _configuration_surface(
+                        path=relative,
+                        line=number,
+                        name=name,
+                        label=label,
+                        scope=_scope(relative),
+                    )
+                )
+    return result, max(0, len(candidates) - _MAX_CONFIGURATION_FILES)
+
+
+def _is_configuration_path(path: Path) -> bool:
+    name = path.name.casefold()
+    return (
+        path.suffix.casefold() in _CONFIGURATION_SUFFIXES
+        or name == ".env"
+        or name.endswith(".env")
+    )
+
+
+def _configuration_surface(
+    *, path: str, line: int, name: str, label: str, scope: str
+) -> dict[str, Any]:
+    return {
+        "path": path,
+        "line": line,
+        "scope": scope,
+        "sink_family": "telemetry",
+        "sink": name[:300],
+        "label": label,
+        "sdk": "OpenTelemetry",
+        "sanitizer_visible": False,
+    }
 
 
 def _assessment(
@@ -777,6 +992,41 @@ def _has_header_capture_configuration(node: ast.Call) -> bool:
     )
 
 
+def _has_broad_header_capture_configuration(node: ast.Call) -> bool:
+    return any(
+        item.arg is not None
+        and item.arg.startswith("http_capture_headers_")
+        and item.arg != "http_capture_headers_sanitize_fields"
+        and _is_broad_capture(item.value)
+        for item in node.keywords
+    )
+
+
+def _genai_capture_call_mode(qualified: str, node: ast.Call) -> str | None:
+    if qualified == "os.environ.setdefault" and len(node.args) >= 2:
+        name = _constant_text(node.args[0])
+        return _constant_text(node.args[1]) if name == _GENAI_CAPTURE_NAME else None
+    if qualified == "os.putenv" and len(node.args) >= 2:
+        name = _constant_text(node.args[0])
+        return _constant_text(node.args[1]) if name == _GENAI_CAPTURE_NAME else None
+    return None
+
+
+def _genai_capture_label(value: str) -> str | None:
+    normalized = value.strip().upper()
+    if normalized in _GENAI_CAPTURE_ENABLED:
+        return "GenAI message content capture enabled"
+    if normalized in _GENAI_CAPTURE_LEGACY:
+        return "invalid GenAI content-capture mode"
+    return None
+
+
+def _constant_text(node: ast.AST) -> str | None:
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value.strip().upper()
+    return None
+
+
 def _call_has_protective_configuration(node: ast.Call) -> bool:
     return any(
         item.arg
@@ -807,7 +1057,14 @@ def _call_has_sensitive_hint(node: ast.Call) -> bool:
 
 
 def _call_has_request_data(node: ast.Call) -> bool:
-    return _node_matches_hint(node, _REQUEST_DATA_HINT)
+    if _node_matches_hint(node, _REQUEST_DATA_HINT):
+        return True
+    return any(
+        isinstance(item, ast.Attribute)
+        and item.attr == "data"
+        and _request_receiver(item.value)
+        for item in ast.walk(node)
+    )
 
 
 def _call_has_exception_data(node: ast.Call) -> bool:
@@ -848,9 +1105,26 @@ def _node_text(node: ast.AST) -> list[str]:
     ]
 
 
+def _request_receiver(node: ast.AST) -> bool:
+    value = _qualified_name(node, {})
+    return bool(
+        value and _REQUEST_OBJECT_HINT.fullmatch(value.rsplit(".", 1)[-1]) is not None
+    )
+
+
+def _sdk_catalog_key(module: str) -> str | None:
+    normalized = module.casefold()
+    matches = [
+        key
+        for key in _SDK_CATALOG
+        if normalized == key or normalized.startswith(f"{key}.")
+    ]
+    return max(matches, key=len, default=None)
+
+
 def _sdk_for_qualified_name(value: str) -> str | None:
-    root = value.split(".", 1)[0]
-    record = _SDK_CATALOG.get(root)
+    key = _sdk_catalog_key(value)
+    record = _SDK_CATALOG.get(key or "")
     return record[0] if record else None
 
 

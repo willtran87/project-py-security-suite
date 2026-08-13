@@ -59,7 +59,9 @@ The bundled Semgrep rules identify credential-bearing values obtained from:
 - credential-named environment variables;
 - authorization, cookie, session, and token headers;
 - request cookies; and
-- common cloud secret-manager result APIs.
+- common cloud secret-manager result APIs; and
+- credential-named object attributes and mapping entries, such as
+  `settings.api_key` and `config["auth_token"]`.
 
 A separate medium-confidence privacy lane recognizes explicit fields commonly
 associated with contact and account data, IP addresses, government identifiers,
@@ -77,7 +79,17 @@ and common analytics calls. Additional rules detect:
 - credentials or private fields serialized into HTTP query strings;
 - raw exception text returned through FastAPI, Starlette, Flask, or Django
   response primitives; and
-- Sentry `send_default_pii=True` as a high-confidence configuration review.
+- Sentry `send_default_pii=True` as a high-confidence configuration review;
+- broad `locals()`, `vars(...)`, or `__dict__` state snapshots written to logs;
+- OpenTelemetry GenAI message-content capture in `.env`, TOML, YAML, INI,
+  properties, and Python environment assignments; and
+- wildcard OpenTelemetry request/response header capture in those configuration
+  formats.
+
+Request payload matching distinguishes request-like receivers from generic SDK
+response objects. For example, `request.data` remains a review source while
+`embedding_response.data` does not become request taint merely because its
+attribute is named `data`.
 
 Only explicitly named minimization, allowlisting, redaction, removal, sanitizing,
 or scrubbing boundaries suppress bundled taint rules. Generic hashing, HMAC,
@@ -97,6 +109,12 @@ sink calls for:
 - Prometheus and StatsD clients;
 - Segment/Analytics, Mixpanel, Amplitude, and PostHog; and
 - Requests, HTTPX, and aiohttp egress surfaces.
+
+The catalog also covers Azure Monitor OpenTelemetry, Google Cloud Logging and
+Error Reporting, Splunk OpenTelemetry, Langfuse, OpenInference, Arize Phoenix,
+and MLflow. Dependency discovery walks nested `pyproject.toml` files, PEP 621
+optional dependencies, Poetry dependency groups, and requirements/constraints
+files so monorepo packages do not disappear behind the root manifest.
 
 The inventory also highlights custom logger variables, bound log context,
 process output, risky Sentry PII settings, broad OpenTelemetry HTTP-header
@@ -162,6 +180,8 @@ For every confirmed path:
 ## Artifact contract
 
 The current contract is bundled as
-[`data-exposure-1.0.schema.json`](../src/py_security_suite/schemas/data-exposure-1.0.schema.json).
-The analysis is bounded to 5,000 Python files, 500 sink surfaces, and 500 SDK
+[`data-exposure-1.1.schema.json`](../src/py_security_suite/schemas/data-exposure-1.1.schema.json);
+[1.0](../src/py_security_suite/schemas/data-exposure-1.0.schema.json) remains
+available for existing consumers. Analysis is bounded to 5,000 Python files,
+1,000 configuration files of at most 2 MiB each, 500 sink surfaces, and 500 SDK
 observations. Omitted counts and parse failures remain explicit.

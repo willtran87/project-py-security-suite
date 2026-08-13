@@ -605,6 +605,7 @@ def _render_data_exposure_summary(value: dict[str, Any] | None) -> list[str]:
         f"| Raw exception response findings | {response_findings} |",
         f"| Production sink review surfaces | {int(summary.get('production_sink_surfaces', 0))} |",
         f"| Test sink review surfaces | {int(summary.get('test_sink_surfaces', 0))} |",
+        f"| Explicit risky or invalid capture configurations | {int(summary.get('configuration_review_surfaces', 0))} |",
         f"| Logging, telemetry, analytics, and egress SDK families | {int(summary.get('sdk_families_observed', 0))} |",
         "",
         "A sink surface is an inventory item, not proof of leakage. A finding requires source-to-sink scanner evidence and retains CWE/OWASP guidance.",

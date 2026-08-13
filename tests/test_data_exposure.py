@@ -132,6 +132,37 @@ class DataExposureSynthesisTests(unittest.TestCase):
         self.assertIn("request data in structured log", labels)
         self.assertIn("process output stream", labels)
 
+    def test_response_data_is_not_mislabeled_as_http_request_payload(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "app.py").write_text(
+                "import logging\n\n"
+                "def summarize(embedding_response):\n"
+                "    logging.info('dimensions=%s', len(embedding_response.data))\n",
+                encoding="utf-8",
+            )
+
+            result = build_data_exposure_synthesis(root, [], {})
+
+        self.assertEqual(result["summary"]["production_sink_surfaces"], 1)
+        self.assertEqual(result["sink_surfaces"][0]["label"], "log.info")
+
+    def test_request_named_data_retains_request_payload_context(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "app.py").write_text(
+                "import logging\n\n"
+                "def audit(incoming_request):\n"
+                "    logging.info('payload=%s', incoming_request.data)\n",
+                encoding="utf-8",
+            )
+
+            result = build_data_exposure_synthesis(root, [], {})
+
+        self.assertEqual(
+            result["sink_surfaces"][0]["label"], "request data in structured log"
+        )
+
     def test_inventories_query_exception_and_risky_sdk_configuration(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -176,6 +207,81 @@ class DataExposureSynthesisTests(unittest.TestCase):
             result["sink_surfaces"][0]["label"],
             "broad OpenTelemetry HTTP header capture",
         )
+
+    def test_inventories_capture_configuration_outside_python(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / ".env").write_text(
+                "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=SPAN_ONLY\n"
+                "OTEL_INSTRUMENTATION_HTTP_CAPTURE_HEADERS_SERVER_REQUEST=.*\n",
+                encoding="utf-8",
+            )
+            (root / "service.toml").write_text(
+                'OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT = "true"\n',
+                encoding="utf-8",
+            )
+
+            result = build_data_exposure_synthesis(root, [], {})
+
+        labels = [item["label"] for item in result["sink_surfaces"]]
+        self.assertIn("GenAI message content capture enabled", labels)
+        self.assertIn("invalid GenAI content-capture mode", labels)
+        self.assertIn("broad OpenTelemetry HTTP header capture", labels)
+        self.assertEqual(result["summary"]["configuration_review_surfaces"], 3)
+
+    def test_inventories_genai_capture_setdefault_and_putenv(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "app.py").write_text(
+                "import os\n"
+                "os.environ.setdefault(\n"
+                "    'OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT',\n"
+                "    'EVENT_ONLY',\n"
+                ")\n"
+                "os.putenv(\n"
+                "    'OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT',\n"
+                "    'true',\n"
+                ")\n",
+                encoding="utf-8",
+            )
+
+            result = build_data_exposure_synthesis(root, [], {})
+
+        labels = {item["label"] for item in result["sink_surfaces"]}
+        self.assertIn("GenAI message content capture enabled", labels)
+        self.assertIn("invalid GenAI content-capture mode", labels)
+
+    def test_inventories_nested_manifests_requirements_and_cloud_sdks(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            package = root / "packages" / "worker"
+            package.mkdir(parents=True)
+            (package / "pyproject.toml").write_text(
+                "[project]\nname = 'worker'\nversion = '1'\n"
+                "dependencies = ['azure-monitor-opentelemetry>=1']\n"
+                "[project.optional-dependencies]\n"
+                "observability = ['langfuse>=3']\n",
+                encoding="utf-8",
+            )
+            (root / "requirements-observability.txt").write_text(
+                "google-cloud-logging==3.12.1\n",
+                encoding="utf-8",
+            )
+            (package / "app.py").write_text(
+                "from google.cloud import logging as cloud_logging\n"
+                "import phoenix as px\n"
+                "cloud_logging.Client()\n"
+                "px.Client()\n",
+                encoding="utf-8",
+            )
+
+            result = build_data_exposure_synthesis(root, [], {})
+
+        sdks = {item["sdk"] for item in result["sdk_observations"]}
+        self.assertIn("Azure Monitor OpenTelemetry", sdks)
+        self.assertIn("Langfuse", sdks)
+        self.assertIn("Google Cloud Logging", sdks)
+        self.assertIn("Arize Phoenix", sdks)
 
     def test_enriches_supported_finding_with_sdk_and_security_practice(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -288,7 +394,7 @@ class DataExposureSynthesisTests(unittest.TestCase):
     def test_artifact_validates_against_bundled_schema(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             result = build_data_exposure_synthesis(Path(temporary), [], {})
-        schema = json.loads(read_bundled_schema("data-exposure-1.0"))
+        schema = json.loads(read_bundled_schema("data-exposure-1.1"))
         Draft202012Validator(schema).validate(result)
 
     def test_portable_reports_render_exposure_context(self) -> None:

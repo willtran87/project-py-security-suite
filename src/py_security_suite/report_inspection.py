@@ -26,6 +26,7 @@ _REPORT_VERIFICATION_SCHEMA_ID = (
 )
 BUNDLED_SCHEMA_RESOURCES = {
     "data-exposure-1.0": "data-exposure-1.0.schema.json",
+    "data-exposure-1.1": "data-exposure-1.1.schema.json",
     "evidence-fusion-1.0": "evidence-fusion.schema.json",
     "graphify-evidence-1.0": "graphify-evidence.schema.json",
     "graph-analysis-1.0": "graph-analysis.schema.json",

@@ -107,6 +107,18 @@ def intentionally_expose_request_data(request) -> None:
     sentry_sdk.set_context("request-body", payload)
 
 
+def intentionally_expose_request_attribute(request) -> None:
+    logging.warning("request=%s", request.data)
+
+
+def intentionally_expose_named_secret(settings, span) -> None:
+    span.set_attribute("auth.token", settings.api_key)
+
+
+def intentionally_expose_runtime_state() -> None:
+    logging.debug("runtime=%s", locals())
+
+
 def intentionally_expose_url_data(user) -> None:
     token = os.getenv("API_KEY")
     requests.get("https://service.invalid/check", params={"access_token": token})
@@ -199,7 +211,22 @@ def safe_exception_response() -> None:
         raise RuntimeError("internal detail")
     except RuntimeError:
         raise HTTPException(status_code=500, detail="internal-error")
+
+
+def safe_response_summary(embedding_response) -> None:
+    logging.info("dimensions=%s", len(embedding_response.data))
 '@ | Set-Content -LiteralPath (Join-Path $resolvedFixture "safe.py") -Encoding UTF8
+    @'
+OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=SPAN_ONLY
+OTEL_INSTRUMENTATION_HTTP_CAPTURE_HEADERS_SERVER_REQUEST=.*
+'@ | Set-Content -LiteralPath (
+        Join-Path $resolvedFixture "capture.env"
+    ) -Encoding UTF8
+    @'
+OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true
+'@ | Set-Content -LiteralPath (
+        Join-Path $resolvedFixture "legacy.env"
+    ) -Encoding UTF8
 
     $arguments = @(
         "-m", "py_security_suite",
@@ -253,7 +280,11 @@ def safe_exception_response() -> None:
         "python.sensitive-data-in-url-query",
         "python.private-data-in-url-query",
         "python.exception-detail-to-http-response",
-        "python.sentry-default-pii-enabled"
+        "python.sentry-default-pii-enabled",
+        "python.runtime-state-to-log",
+        "config.opentelemetry-genai-content-capture-enabled",
+        "config.opentelemetry-genai-content-capture-invalid-mode",
+        "config.opentelemetry-broad-http-header-capture"
     )
     $observedRules = @($findings.sources.rule_id | Where-Object { $_ })
     $missingExposureRules = @(
