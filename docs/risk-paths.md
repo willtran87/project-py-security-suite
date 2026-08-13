@@ -5,8 +5,8 @@ Last reviewed: 2026-08-13
 `risk-paths.json` turns several separate observations into one bounded review
 route: a declared Python entry point, Graphify file relationships, a normalized
 finding or review-worthy sensitive-data sink, runtime/reachability state,
-coverage and focused-test evidence, related findings, and CODEOWNERS-derived
-ownership.
+coverage and focused-test evidence, related findings, dependency-advisory
+importers, and CODEOWNERS-derived ownership.
 
 The artifact answers a practical triage question: **where can a reviewer start,
 what files connect that start to the target, who owns it, and what validation is
@@ -21,6 +21,8 @@ flowchart LR
     Graph["Graphify file edges"] --> Route
     Finding["Normalized findings"] --> Target["Review targets"]
     Sink["High-priority or sensitive sink surfaces"] --> Target
+    Advisory["Alias-aware dependency advisories"] --> Importer["Exact Graphify importer paths"]
+    Importer --> Target
     Target --> Route
     Fusion["Evidence fusion<br/>change, coverage, related tools"] --> Context["Route context"]
     Structure["Structural synthesis<br/>tests, islands, cycles"] --> Context
@@ -73,6 +75,47 @@ campaign IDs. A route can appear in multiple queues
 when ownership overlaps; this preserves accountability rather than selecting an
 arbitrary owner. These groups coordinate work and tests but do not merge or
 inflate the underlying scanner findings.
+
+## Dependency-advisory importer routes
+
+The synthesis promotes each deduplicated advisory/importer pair from
+`evidence-fusion.json` into a stable `dependency-import-*` review target. This
+bridges the common lockfile gap: OSV, Grype, or another package scanner may cite
+dependency metadata that has no application entry-point route, while Graphify
+identifies the exact maintained source file importing that distribution.
+
+Each importer route cross-references:
+
+- the advisory cluster, every retained native finding ID/tool/citation, package,
+  version, direct/transitive relationship, and introducing dependency paths;
+- the exact importing file, declared entry point, bounded Graphify file sequence,
+  path-specific reachability/runtime state, CODEOWNERS result, and structural
+  change-risk context;
+- approved KEV/EPSS/VEX context, scanner-attributed fixed-version candidates,
+  and the advisory remediation action; and
+- graph-selected focused tests, exact retained case state, importer file
+  coverage, validation alignment, and any linked shared-control campaign.
+
+Validation is importer-local. `evidence-fusion.json` retains a bounded
+`import_path_assessments` ledger with the exact module and import line,
+reachability/runtime state, owners, test selection and case execution, coverage,
+alignment, and source artifacts for each path. A route consumes its own ledger
+record even when fields are empty; it never borrows another importer's owner,
+passing test, or coverage result. Older artifacts without the ledger use the
+documented conservative aggregate fallback.
+
+One advisory may produce several importer routes, but duplicate importer paths
+within the cluster are collapsed. The compact route set flows back to every
+native finding in the cluster, including when its lockfile location is itself
+unroutable. Markdown provides a citation-bearing dependency route table; finding
+JSON, HTML, SARIF, and closure work retain exact route, importer, advisory, test,
+fix, and action context. Closure requires vulnerable-function review and an
+upgrade, removal, mitigation, or governed VEX disposition.
+
+This is deliberately not call-level reachability. A route establishes a static
+path to a source file that imports the affected distribution; it does not prove
+that a vulnerable function executes, that input is attacker controlled, or that
+the advisory is exploitable in the application.
 
 ## Shared validation campaigns
 
@@ -159,7 +202,9 @@ targets, and emits at most 250 routed targets, 250 unrouted targets, 50
 convergence hotspots/validation campaigns, 50 tests per campaign, and 100 owner
 queues. It retains at most 100 shared validation-test hotspots. Reverse test
 selection examines at most 500 graph neighbors per
-campaign and retains at most 100 missing lines. Omitted counts are explicit.
+campaign and retains at most 100 missing lines. At most 50 normalized importer
+paths are promoted per advisory, inside the existing 10,000-target global bound.
+Omitted counts are explicit.
 
 The current JSON Schema is
 [`risk-paths.schema.json`](../src/py_security_suite/schemas/risk-paths.schema.json).
@@ -180,3 +225,5 @@ to be closed in the replacement report.
   a security property.
 - Route priority guides review; native scanner severity and policy remain
   authoritative.
+- Dependency importer reachability is not vulnerable-function reachability or
+  exploitability evidence.

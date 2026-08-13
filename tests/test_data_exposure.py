@@ -287,6 +287,23 @@ class DataExposureSynthesisTests(unittest.TestCase):
         self.assertEqual(dependency["p0_advisories"], 1)
         self.assertEqual(dependency["advisories_with_focused_tests"], 1)
         self.assertEqual(dependency["advisories_with_import_path_owners"], 1)
+        self.assertEqual(
+            dependency["advisory_clusters"][0]["dependency_usage"][
+                "import_path_ownership"
+            ],
+            [{"path": "src/app.py", "owners": ["@observability"]}],
+        )
+        importer = dependency["advisory_clusters"][0]["dependency_usage"][
+            "import_path_assessments"
+        ][0]
+        self.assertEqual(importer["path"], "src/app.py")
+        self.assertEqual(importer["import_modules"], ["sentry_sdk"])
+        self.assertEqual(importer["import_lines"], [2])
+        self.assertEqual(importer["owners"], ["@observability"])
+        self.assertEqual(importer["recommended_test_files"], ["tests/test_app.py"])
+        self.assertEqual(importer["focused_test_validation_status"], "passed")
+        self.assertEqual(importer["coverage_percent"], 72.0)
+        self.assertTrue(importer["coverage_gap"])
         self.assertEqual(dependency["advisories_with_uncovered_import_paths"], 1)
         self.assertEqual(dependency["advisories_with_test_coverage_mismatch"], 1)
         cluster = dependency["advisory_clusters"][0]

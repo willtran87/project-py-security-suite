@@ -797,6 +797,13 @@ def _render_risk_path_summary(value: dict[str, Any] | None) -> list[str]:
     summary = value["summary"]
     routes = value.get("routes")
     routes = routes if isinstance(routes, list) else []
+    dependency_routes = [
+        route
+        for route in routes
+        if isinstance(route, dict)
+        and isinstance(route.get("target"), dict)
+        and route["target"].get("kind") == "dependency-advisory-import"
+    ]
     unrouted = value.get("unrouted_targets")
     unrouted = unrouted if isinstance(unrouted, list) else []
     hotspots = value.get("convergence_hotspots")
@@ -822,6 +829,15 @@ def _render_risk_path_summary(value: dict[str, Any] | None) -> list[str]:
         f"| Declared entry points | {int(summary.get('entry_points', 0))} |",
         f"| Finding targets | {int(summary.get('finding_targets', 0))} |",
         f"| Sensitive sink-surface targets | {int(summary.get('sink_surface_targets', 0))} |",
+        f"| Dependency-advisory importer targets | {int(summary.get('dependency_advisory_import_targets', 0))} |",
+        f"| Routed dependency-advisory importers | {int(summary.get('routed_dependency_advisory_imports', 0))} |",
+        f"| Unrouted dependency-advisory importers | {int(summary.get('unrouted_dependency_advisory_imports', 0))} |",
+        f"| Distinct routed dependency advisories | {int(summary.get('distinct_routed_dependency_advisories', 0))} |",
+        f"| Known-exploited / high-EPSS dependency routes | {int(summary.get('known_exploited_dependency_routes', 0))} / {int(summary.get('high_epss_dependency_routes', 0))} |",
+        f"| Dependency routes with fixed versions | {int(summary.get('dependency_routes_with_fixed_versions', 0))} |",
+        f"| Dependency routes with validation gaps | {int(summary.get('dependency_routes_with_validation_gaps', 0))} |",
+        f"| Dependency routes at changed importers | {int(summary.get('dependency_routes_at_changed_importers', 0))} |",
+        f"| Dependency routes with uncovered changed lines | {int(summary.get('dependency_routes_with_uncovered_changed_lines', 0))} |",
         f"| Targets analyzed within bound | {int(summary.get('targets_analyzed', 0))} |",
         f"| Targets with a bounded route | {int(summary.get('routed_targets', 0))} |",
         f"| Targets without a bounded route | {int(summary.get('unrouted_targets', 0))} |",
@@ -915,6 +931,7 @@ def _render_risk_path_summary(value: dict[str, Any] | None) -> list[str]:
                 )
                 + " |"
             )
+    lines.extend(_render_dependency_route_table(dependency_routes))
     if test_hotspots:
         lines.extend(
             [
@@ -947,7 +964,7 @@ def _render_risk_path_summary(value: dict[str, Any] | None) -> list[str]:
                 "bound"
                 if isinstance(binding, dict)
                 and hotspot.get("source_binding_consistent") is True
-                else "inconsistent"
+                else "not established"
                 if hotspot.get("source_binding_consistent") is False
                 else "not bound"
             )
@@ -1135,66 +1152,7 @@ def _render_risk_path_summary(value: dict[str, Any] | None) -> list[str]:
                 )
                 + " |"
             )
-    if owner_queues:
-        lines.extend(
-            [
-                "",
-                "### Route owner queues",
-                "",
-                "| Owner | Priority | Routes / targets | Controls / campaigns / shared tests | Validation / campaign review | Next action |",
-                "|---|---|---:|---:|---|---|",
-            ]
-        )
-        for queue in owner_queues[:10]:
-            if not isinstance(queue, dict):
-                continue
-            validation = queue.get("validation_statuses")
-            validation = validation if isinstance(validation, dict) else {}
-            lines.append(
-                "| **"
-                + _markdown_text(str(queue.get("owner") or "Unassigned"))
-                + "**<br>`"
-                + _markdown_code(str(queue.get("queue_id") or "unknown"))
-                + "` | `"
-                + _markdown_code(str(queue.get("priority") or "P4"))
-                + "` | "
-                + str(int(queue.get("routes") or 0))
-                + " / "
-                + str(int(queue.get("targets") or 0))
-                + " | "
-                + str(len(queue.get("convergence_hotspot_ids") or []))
-                + " / "
-                + str(len(queue.get("validation_campaign_ids") or []))
-                + " / "
-                + str(int(queue.get("shared_validation_test_files") or 0))
-                + " | "
-                + _markdown_text(_validation_count_summary(validation))
-                + "<br>highest campaign score `"
-                + _markdown_code(
-                    str(int(queue.get("highest_campaign_review_score") or 0))
-                )
-                + "`; mismatch/unbound `"
-                + _markdown_code(
-                    str(int(queue.get("campaigns_revision_mismatched") or 0))
-                    + "/"
-                    + str(int(queue.get("campaigns_revision_unbound") or 0))
-                )
-                + "`"
-                + "; changed/runtime gaps `"
-                + _markdown_code(
-                    str(int(queue.get("campaigns_with_uncovered_changed_lines") or 0))
-                    + "/"
-                    + str(
-                        int(queue.get("campaigns_with_runtime_observation_gaps") or 0)
-                    )
-                )
-                + "`"
-                + " | "
-                + _markdown_text(
-                    str(queue.get("recommended_action") or "Review the queue.")
-                )
-                + " |"
-            )
+    lines.extend(_render_risk_owner_queues(owner_queues))
     if unrouted:
         lines.extend(
             [
@@ -1219,6 +1177,183 @@ def _render_risk_path_summary(value: dict[str, Any] | None) -> list[str]:
                 + _markdown_text(str(item.get("reason") or "route unavailable"))
             )
     return lines
+
+
+def _render_dependency_route_table(routes: list[Any]) -> list[str]:
+    if not routes:
+        return []
+    lines = [
+        "",
+        "### Routed dependency-advisory imports",
+        "",
+        "These routes join deduplicated advisory clusters to exact source importers and declared entry points. They prioritize vulnerable-function review but do not prove vulnerable-function invocation, attacker control, or exploitability.",
+        "",
+        "| Priority / advisory | Import exposure | Threat / fix | Validation | Citation / action |",
+        "|---|---|---|---|---|",
+    ]
+    lines.extend(
+        _render_dependency_route_row(route)
+        for route in routes[:10]
+        if isinstance(route, dict)
+    )
+    return lines
+
+
+def _render_risk_owner_queues(queues: list[Any]) -> list[str]:
+    if not queues:
+        return []
+    lines = [
+        "",
+        "### Route owner queues",
+        "",
+        "| Owner | Priority | Routes / targets | Controls / campaigns / shared tests | Validation / campaign review | Next action |",
+        "|---|---|---:|---:|---|---|",
+    ]
+    for queue in queues[:10]:
+        if not isinstance(queue, dict):
+            continue
+        validation = queue.get("validation_statuses")
+        validation = validation if isinstance(validation, dict) else {}
+        lines.append(
+            "| **"
+            + _markdown_text(str(queue.get("owner") or "Unassigned"))
+            + "**<br>`"
+            + _markdown_code(str(queue.get("queue_id") or "unknown"))
+            + "` | `"
+            + _markdown_code(str(queue.get("priority") or "P4"))
+            + "` | "
+            + str(int(queue.get("routes") or 0))
+            + " / "
+            + str(int(queue.get("targets") or 0))
+            + " | "
+            + str(len(queue.get("convergence_hotspot_ids") or []))
+            + " / "
+            + str(len(queue.get("validation_campaign_ids") or []))
+            + " / "
+            + str(int(queue.get("shared_validation_test_files") or 0))
+            + " | "
+            + _markdown_text(_validation_count_summary(validation))
+            + "<br>highest campaign score `"
+            + _markdown_code(str(int(queue.get("highest_campaign_review_score") or 0)))
+            + "`; mismatch/unbound `"
+            + _markdown_code(
+                str(int(queue.get("campaigns_revision_mismatched") or 0))
+                + "/"
+                + str(int(queue.get("campaigns_revision_unbound") or 0))
+            )
+            + "`; changed/runtime gaps `"
+            + _markdown_code(
+                str(int(queue.get("campaigns_with_uncovered_changed_lines") or 0))
+                + "/"
+                + str(int(queue.get("campaigns_with_runtime_observation_gaps") or 0))
+            )
+            + "` | "
+            + _markdown_text(
+                str(queue.get("recommended_action") or "Review the queue.")
+            )
+            + " |"
+        )
+    return lines
+
+
+def _render_dependency_route_row(route: dict[str, Any]) -> str:
+    target = route.get("target")
+    correlations = route.get("correlations")
+    validation = route.get("validation")
+    runtime = route.get("runtime_context")
+    target = target if isinstance(target, dict) else {}
+    correlations = correlations if isinstance(correlations, dict) else {}
+    validation = validation if isinstance(validation, dict) else {}
+    runtime = runtime if isinstance(runtime, dict) else {}
+    versions = correlations.get("versions")
+    version_text = (
+        ", ".join(str(item) for item in versions[:5])
+        if isinstance(versions, list) and versions
+        else "unknown"
+    )
+    fixed = correlations.get("fixed_version_candidates")
+    fixed_text = (
+        ", ".join(str(item) for item in fixed[:5])
+        if isinstance(fixed, list) and fixed
+        else "not retained"
+    )
+    citations = _risk_advisory_citations_text(correlations.get("advisory_citations"))
+    threat_signals = []
+    if correlations.get("known_exploited") is True:
+        threat_signals.append("CISA KEV")
+    if correlations.get("epss_high") is True:
+        probability = correlations.get("epss_probability")
+        threat_signals.append(
+            "high EPSS"
+            + (
+                f" {float(probability):.1%}"
+                if isinstance(probability, (int, float))
+                else ""
+            )
+        )
+    threat_text = ", ".join(threat_signals) or "no elevated signal retained"
+    change_signals = []
+    if isinstance(correlations.get("change_risk_score"), int):
+        change_signals.append(
+            "change risk "
+            + str(int(correlations["change_risk_score"]))
+            + (
+                f" ({correlations['change_priority']})"
+                if correlations.get("change_priority")
+                else ""
+            )
+        )
+    uncovered_changed = correlations.get("uncovered_changed_lines")
+    if isinstance(uncovered_changed, list) and uncovered_changed:
+        change_signals.append(
+            "uncovered changed lines "
+            + ", ".join(str(line) for line in uncovered_changed[:10])
+        )
+    import_lines = correlations.get("import_lines")
+    import_line_text = (
+        ", ".join(str(line) for line in import_lines[:10])
+        if isinstance(import_lines, list) and import_lines
+        else "not retained"
+    )
+    return (
+        "| `"
+        + _markdown_code(str(route.get("priority") or "P4"))
+        + "` `"
+        + _markdown_code(str(correlations.get("primary_identifier") or "advisory"))
+        + "`<br>"
+        + _markdown_text(str(correlations.get("package") or "unknown"))
+        + " `"
+        + _markdown_code(version_text)
+        + "` | `"
+        + _markdown_code(str(target.get("path") or "unknown"))
+        + "`<br>relationship `"
+        + _markdown_code(str(correlations.get("source_relationship") or "unknown"))
+        + "`; usage `"
+        + _markdown_code(
+            str(correlations.get("dependency_usage_assessment") or "unknown")
+        )
+        + "`; import lines `"
+        + _markdown_code(import_line_text)
+        + "`; hops `"
+        + _markdown_code(str(int(route.get("hop_count") or 0)))
+        + "` | "
+        + _markdown_text(threat_text)
+        + "<br>fix `"
+        + _markdown_code(
+            "available" if correlations.get("fix_available") else "unknown"
+        )
+        + "`: "
+        + _markdown_text(fixed_text)
+        + " | "
+        + _markdown_text(_risk_path_validation_signals(validation, runtime))
+        + ("<br>" + _markdown_text("; ".join(change_signals)) if change_signals else "")
+        + " | "
+        + (citations + "<br>" if citations else "")
+        + _markdown_text(
+            str(route.get("recommended_action") or "Review dependency use.")
+        )
+        + " |"
+    )
 
 
 def _validation_count_summary(value: dict[str, Any]) -> str:
@@ -1351,6 +1486,41 @@ def _exposure_accountability_summary(value: Any) -> str:
     if isinstance(risks, list) and risks:
         parts.append("structural " + ", ".join(str(item) for item in risks[:2]))
     return "; ".join(parts)
+
+
+def _risk_advisory_citations_text(value: Any) -> str:
+    if not isinstance(value, list):
+        return ""
+    citations: list[str] = []
+    for item in value[:5]:
+        if not isinstance(item, dict):
+            continue
+        identifier = str(item.get("identifier") or "reference")
+        uri = item.get("uri")
+        citations.append(
+            f"[{_markdown_text(identifier)}]({uri})"
+            if isinstance(uri, str) and uri.startswith(("https://", "http://"))
+            else f"`{_markdown_code(identifier)}`"
+        )
+    return ", ".join(citations)
+
+
+def _risk_advisory_citations_html(value: Any) -> str:
+    if not isinstance(value, list):
+        return ""
+    citations: list[str] = []
+    for item in value[:5]:
+        if not isinstance(item, dict):
+            continue
+        identifier = html.escape(str(item.get("identifier") or "reference"))
+        uri_value = item.get("uri")
+        uri = _safe_http_reference(uri_value) if isinstance(uri_value, str) else None
+        citations.append(
+            f"<a href='{html.escape(uri, quote=True)}' rel='noreferrer'>{identifier}</a>"
+            if uri
+            else f"<code>{identifier}</code>"
+        )
+    return ", ".join(citations)
 
 
 def _exposure_summary_context(item: dict[str, Any]) -> str:
@@ -3602,6 +3772,40 @@ def _markdown_risk_path_context(finding: Finding) -> list[str]:
                 + ("; " + _markdown_text(control_text) if control_text else "")
                 + "."
             )
+    advisory_routes = context.get("dependency_advisory_routes")
+    advisory_values = advisory_routes if isinstance(advisory_routes, list) else []
+    advisory_text = ""
+    if advisory_values and isinstance(advisory_values[0], dict):
+        first = advisory_values[0]
+        identifiers = sorted(
+            {
+                str(item.get("primary_identifier") or item.get("advisory_cluster_id"))
+                for item in advisory_values
+                if isinstance(item, dict)
+            }
+        )
+        import_paths = sorted(
+            {
+                str(item.get("import_path"))
+                for item in advisory_values
+                if isinstance(item, dict) and item.get("import_path")
+            }
+        )
+        citations = _risk_advisory_citations_text(first.get("advisory_citations"))
+        advisory_text = (
+            " **Dependency exposure routes:** "
+            + str(len(advisory_values))
+            + " route(s) for "
+            + ", ".join(
+                f"`{_markdown_code(identifier)}`" for identifier in identifiers[:5]
+            )
+            + " through importer(s) "
+            + ", ".join(f"`{_markdown_code(path)}`" for path in import_paths[:5])
+            + ("; known exploited" if first.get("known_exploited") is True else "")
+            + ("; fixed version retained" if first.get("fix_available") is True else "")
+            + ("; citations " + citations if citations else "")
+            + "."
+        )
     return [
         "- **Static risk route:** `"
         + _markdown_code(str(context.get("route_id") or "unknown"))
@@ -3617,6 +3821,7 @@ def _markdown_risk_path_context(finding: Finding) -> list[str]:
         + hotspot_text
         + test_hotspot_text
         + campaign_text
+        + advisory_text
     ]
 
 
@@ -4010,6 +4215,41 @@ def _html_risk_path_context(finding: Finding) -> str:
             + ("; " + html.escape(control_text) if control_text else "")
             + "."
         )
+    advisory_routes = context.get("dependency_advisory_routes")
+    advisory_values = advisory_routes if isinstance(advisory_routes, list) else []
+    advisory_html = ""
+    if advisory_values:
+        first_advisory = (
+            advisory_values[0] if isinstance(advisory_values[0], dict) else {}
+        )
+        identifiers = sorted(
+            {
+                str(item.get("primary_identifier") or item.get("advisory_cluster_id"))
+                for item in advisory_values
+                if isinstance(item, dict)
+            }
+        )
+        import_paths = sorted(
+            {
+                str(item.get("import_path"))
+                for item in advisory_values
+                if isinstance(item, dict) and item.get("import_path")
+            }
+        )
+        citation_html = _risk_advisory_citations_html(
+            first_advisory.get("advisory_citations")
+        )
+        advisory_html = (
+            " <strong>Dependency exposure routes:</strong> "
+            + str(len(advisory_values))
+            + " route(s) for <code>"
+            + html.escape(", ".join(identifiers[:5]))
+            + "</code> through importer(s) <code>"
+            + html.escape(", ".join(import_paths[:5]))
+            + "</code>"
+            + ("; citations " + citation_html if citation_html else "")
+            + "."
+        )
     return (
         "<section class='source-context'><h4>Static risk route</h4><p>"
         "Route <code>"
@@ -4026,6 +4266,7 @@ def _html_risk_path_context(finding: Finding) -> str:
         + hotspot_html
         + test_hotspot_html
         + campaign_html
+        + advisory_html
         + "</p></section>"
     )
 

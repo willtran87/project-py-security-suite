@@ -385,11 +385,28 @@ class EvidenceFusionTests(unittest.TestCase):
         self.assertEqual(usage["unobserved_recommended_test_files"], [])
         self.assertTrue(usage["ownership_evidence_available"])
         self.assertEqual(usage["import_path_owners"], ["@platform-security"])
+        self.assertEqual(
+            usage["import_path_ownership"],
+            [{"path": "src/app.py", "owners": ["@platform-security"]}],
+        )
         self.assertTrue(usage["coverage_evidence_available"])
         self.assertEqual(
             usage["import_path_coverage"],
             [{"path": "src/app.py", "coverage_percent": 55.0}],
         )
+        importer = usage["import_path_assessments"][0]
+        self.assertEqual(importer["path"], "src/app.py")
+        self.assertEqual(importer["import_modules"], ["example_pkg"])
+        self.assertEqual(importer["import_lines"], [1])
+        self.assertEqual(importer["assessment"], "executable-import")
+        self.assertEqual(importer["reachability_states"], ["executable"])
+        self.assertEqual(importer["runtime_observations"], ["not-observed"])
+        self.assertEqual(importer["owners"], ["@platform-security"])
+        self.assertEqual(importer["recommended_test_files"], ["tests/test_app.py"])
+        self.assertEqual(importer["focused_test_validation_status"], "passed")
+        self.assertEqual(importer["coverage_percent"], 55.0)
+        self.assertTrue(importer["coverage_gap"])
+        self.assertEqual(importer["test_coverage_alignment"], "coverage-gap")
         self.assertEqual(usage["uncovered_import_paths"], ["src/app.py"])
         self.assertEqual(usage["test_coverage_alignment"], "coverage-gap")
         self.assertIn(

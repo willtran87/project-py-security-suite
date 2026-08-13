@@ -324,7 +324,7 @@
     "dependencyUsage": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["assessment", "source_relationship", "relationship_evidence_available", "dependency_path_evidence_available", "dependency_paths", "dependency_paths_truncated", "introducing_packages", "dependency_path_confidence", "environment_health_evidence_available", "dependency_environment_health", "dependency_environment_warning", "import_evidence_available", "import_observed", "import_modules", "import_paths", "reachability_evidence_available", "reachability_complete", "reachability_confidence", "reachability_states", "runtime_observations", "deptry_statuses", "deptry_finding_ids", "signals_conflict", "test_mapping_evidence_available", "recommended_test_files", "direct_test_files", "transitive_test_files", "test_selection_confidence", "test_execution_evidence_available", "test_case_inventory_available", "test_case_inventory_complete", "test_execution_sources", "focused_test_execution", "focused_test_validation_status", "unobserved_recommended_test_files", "test_coverage_alignment", "validation_gap_reasons", "ownership_evidence_available", "import_path_owners", "coverage_evidence_available", "import_path_coverage", "uncovered_import_paths", "evidence_artifacts"],
+      "required": ["assessment", "source_relationship", "relationship_evidence_available", "dependency_path_evidence_available", "dependency_paths", "dependency_paths_truncated", "introducing_packages", "dependency_path_confidence", "environment_health_evidence_available", "dependency_environment_health", "dependency_environment_warning", "import_evidence_available", "import_observed", "import_modules", "import_paths", "reachability_evidence_available", "reachability_complete", "reachability_confidence", "reachability_states", "runtime_observations", "deptry_statuses", "deptry_finding_ids", "signals_conflict", "test_mapping_evidence_available", "recommended_test_files", "direct_test_files", "transitive_test_files", "test_selection_confidence", "test_execution_evidence_available", "test_case_inventory_available", "test_case_inventory_complete", "test_execution_sources", "focused_test_execution", "focused_test_validation_status", "unobserved_recommended_test_files", "test_coverage_alignment", "validation_gap_reasons", "ownership_evidence_available", "import_path_owners", "import_path_ownership", "coverage_evidence_available", "import_path_coverage", "import_path_assessments", "uncovered_import_paths", "evidence_artifacts"],
       "properties": {
         "assessment": {"enum": ["runtime-observed-import", "executable-import", "load-only-import", "disconnected-import", "imported-reachability-incomplete", "import-observed", "declared-unused", "import-not-observed", "import-vs-unused-conflict", "unknown"]},
         "source_relationship": {"enum": ["direct", "transitive", "unknown"]},
@@ -384,6 +384,19 @@
         "validation_gap_reasons": {"type": "array", "maxItems": 10, "items": {"type": "string", "minLength": 1}},
         "ownership_evidence_available": {"type": "boolean"},
         "import_path_owners": {"$ref": "#/$defs/strings"},
+        "import_path_ownership": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "owners"],
+            "properties": {
+              "path": {"type": "string", "minLength": 1},
+              "owners": {"$ref": "#/$defs/strings"}
+            }
+          }
+        },
         "coverage_evidence_available": {"type": "boolean"},
         "import_path_coverage": {
           "type": "array",
@@ -398,6 +411,7 @@
             }
           }
         },
+        "import_path_assessments": {"type": "array", "maxItems": 50, "items": {"$ref": "#/$defs/importPathAssessment"}},
         "uncovered_import_paths": {"$ref": "#/$defs/strings"},
         "evidence_artifacts": {"$ref": "#/$defs/strings"}
       }
@@ -503,6 +517,38 @@
         "uri": {"type": "string", "format": "uri"}
       }
     },
+    "importPathAssessment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "import_modules", "import_lines", "assessment", "reachability_states", "runtime_observations", "owners", "ownership_evidence_available", "direct_test_files", "transitive_test_files", "recommended_test_files", "test_selection_confidence", "test_execution_evidence_available", "test_case_inventory_available", "test_case_inventory_complete", "test_execution_sources", "focused_test_execution", "focused_test_validation_status", "unobserved_recommended_test_files", "coverage_evidence_available", "coverage_percent", "coverage_gap", "test_coverage_alignment", "validation_gap_reasons", "evidence_artifacts"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "import_modules": {"$ref": "#/$defs/strings"},
+        "import_lines": {"type": "array", "maxItems": 100, "items": {"type": "integer", "minimum": 1}},
+        "assessment": {"enum": ["runtime-observed-import", "executable-import", "load-only-import", "disconnected-import", "imported-reachability-incomplete", "import-observed"]},
+        "reachability_states": {"$ref": "#/$defs/strings"},
+        "runtime_observations": {"$ref": "#/$defs/strings"},
+        "owners": {"$ref": "#/$defs/strings"},
+        "ownership_evidence_available": {"type": "boolean"},
+        "direct_test_files": {"$ref": "#/$defs/strings"},
+        "transitive_test_files": {"$ref": "#/$defs/strings"},
+        "recommended_test_files": {"$ref": "#/$defs/strings"},
+        "test_selection_confidence": {"enum": ["high", "medium", "low", "not-available"]},
+        "test_execution_evidence_available": {"type": "boolean"},
+        "test_case_inventory_available": {"type": "boolean"},
+        "test_case_inventory_complete": {"type": ["boolean", "null"]},
+        "test_execution_sources": {"$ref": "#/$defs/strings"},
+        "focused_test_execution": {"type": "array", "maxItems": 50, "items": {"type": "object", "additionalProperties": false, "required": ["path", "status", "tests", "passed", "failures", "errors", "skipped", "sources", "path_attributions"], "properties": {"path": {"type": "string", "minLength": 1}, "status": {"enum": ["passed", "failed", "partial", "skipped", "not-observed"]}, "tests": {"type": "integer", "minimum": 0}, "passed": {"type": "integer", "minimum": 0}, "failures": {"type": "integer", "minimum": 0}, "errors": {"type": "integer", "minimum": 0}, "skipped": {"type": "integer", "minimum": 0}, "sources": {"$ref": "#/$defs/strings"}, "path_attributions": {"type": "array", "uniqueItems": true, "items": {"enum": ["producer", "classname-module"]}}}}},
+        "focused_test_validation_status": {"enum": ["passed", "failed", "incomplete", "not-observed", "not-available", "not-selected"]},
+        "unobserved_recommended_test_files": {"$ref": "#/$defs/strings"},
+        "coverage_evidence_available": {"type": "boolean"},
+        "coverage_percent": {"type": ["number", "null"], "minimum": 0, "maximum": 100},
+        "coverage_gap": {"type": ["boolean", "null"]},
+        "test_coverage_alignment": {"enum": ["aligned-current-evidence", "coverage-gap", "coverage-not-available", "test-evidence-not-available", "tests-failing", "tests-incomplete", "tests-not-observed", "not-selected"]},
+        "validation_gap_reasons": {"type": "array", "maxItems": 10, "items": {"type": "string", "minLength": 1}},
+        "evidence_artifacts": {"$ref": "#/$defs/strings"}
+      }
+    },
     "dependencyPath": {
       "type": "object",
       "additionalProperties": false,
@@ -530,4 +576,3 @@
     }
   }
 }
-

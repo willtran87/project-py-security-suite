@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import unittest
+from typing import Any
+from unittest.mock import patch
 
 from jsonschema import Draft202012Validator
 
@@ -17,6 +19,7 @@ from py_security_suite.models import (
 from py_security_suite.report_inspection import read_bundled_schema
 from py_security_suite.reports import (
     _html_risk_path_context,
+    _markdown_risk_path_context,
     _render_risk_path_summary,
     render_sarif,
 )
@@ -340,6 +343,182 @@ class RiskPathTests(unittest.TestCase):
         schema = json.loads(read_bundled_schema("risk-paths-1.0"))
         Draft202012Validator(schema).validate(mismatched)
 
+    def test_routes_dependency_advisories_through_exact_importers(self) -> None:
+        finding = _finding("requirements.txt", 1)
+        artifacts = _artifacts()
+        artifacts["evidence-fusion.json"] = {
+            "schema_version": "1.3",
+            "advisory_clusters": [_dependency_advisory_cluster()],
+        }
+        artifacts["structural-synthesis.json"]["change_impact_assessments"].append(
+            {
+                "path": "src/service.py",
+                "classification": "changed-lines-under-tested",
+                "priority": "high",
+                "risk_score": 70,
+                "changed_lines": 2,
+                "uncovered_changed_lines": [4],
+                "changed_line_coverage_percent": 50.0,
+            }
+        )
+        service_coverage = artifacts["coverage-summary.json"]["files"][0]
+        service_coverage["missing_lines"] = [4]
+        service_coverage["summary"]["percent_covered"] = 90.0
+
+        result = build_risk_paths([finding], artifacts)
+
+        summary = result["summary"]
+        self.assertEqual(summary["dependency_advisory_import_targets"], 1)
+        self.assertEqual(summary["routed_dependency_advisory_imports"], 1)
+        self.assertEqual(summary["unrouted_dependency_advisory_imports"], 0)
+        self.assertEqual(summary["distinct_routed_dependency_advisories"], 1)
+        self.assertEqual(summary["known_exploited_dependency_routes"], 1)
+        self.assertEqual(summary["high_epss_dependency_routes"], 1)
+        self.assertEqual(summary["dependency_routes_with_fixed_versions"], 1)
+        self.assertEqual(summary["dependency_routes_with_validation_gaps"], 1)
+        self.assertEqual(summary["dependency_routes_at_changed_importers"], 1)
+        self.assertEqual(summary["dependency_routes_with_uncovered_changed_lines"], 1)
+        route = next(
+            item
+            for item in result["routes"]
+            if item["target"]["kind"] == "dependency-advisory-import"
+        )
+        self.assertEqual(route["target"]["path"], "src/service.py")
+        self.assertIsNone(route["target"]["finding_id"])
+        self.assertEqual(route["priority"], "P0")
+        self.assertEqual(route["files"], ["src/cli.py", "src/service.py"])
+        self.assertEqual(route["owners"], ["@import-owner"])
+        self.assertEqual(route["correlations"]["import_lines"], [7])
+        self.assertEqual(
+            route["correlations"]["dependency_usage_assessment"],
+            "executable-import",
+        )
+        self.assertEqual(route["validation"]["assessment_status"], "gap")
+        self.assertEqual(
+            route["validation"]["mapped_test_files"], ["tests/test_sink.py"]
+        )
+        self.assertEqual(
+            route["correlations"]["advisory_cluster_id"], "ADV-ABCDEF123456"
+        )
+        self.assertEqual(
+            route["correlations"]["related_finding_ids"], ["PYSEC-RISK-PATH"]
+        )
+        self.assertTrue(route["correlations"]["known_exploited"])
+        self.assertEqual(route["correlations"]["fixed_version_candidates"], ["2.0.0"])
+        self.assertEqual(route["correlations"]["change_risk_score"], 70)
+        self.assertEqual(route["correlations"]["uncovered_changed_lines"], [4])
+        self.assertIn("evidence-fusion.json", route["evidence_artifacts"])
+
+        risk_path = finding.evidence["risk_path"]
+        self.assertEqual(risk_path["status"], "routed")
+        self.assertEqual(risk_path["target_kind"], "dependency-advisory-import")
+        self.assertEqual(risk_path["route_id"], route["route_id"])
+        self.assertEqual(len(risk_path["dependency_advisory_routes"]), 1)
+        self.assertEqual(
+            risk_path["dependency_advisory_import_paths"], ["src/service.py"]
+        )
+        self.assertEqual(
+            risk_path["dependency_advisory_cluster_ids"], ["ADV-ABCDEF123456"]
+        )
+        self.assertEqual(
+            risk_path["dependency_advisory_routes"][0]["route_id"],
+            route["route_id"],
+        )
+        rendered = "\n".join(_render_risk_path_summary(result))
+        self.assertIn("Routed dependency-advisory imports", rendered)
+        self.assertIn("GHSA-DEMO-1234", rendered)
+        self.assertIn("https://example.test/GHSA-DEMO-1234", rendered)
+        self.assertIn("vulnerable-function invocation", rendered)
+        self.assertIn("uncovered changed lines 4", rendered)
+        self.assertIn("import lines `7`", rendered)
+        markdown_context = "\n".join(_markdown_risk_path_context(finding))
+        self.assertIn("Dependency exposure routes", markdown_context)
+        self.assertIn("src/service.py", markdown_context)
+        html_context = _html_risk_path_context(finding)
+        self.assertIn("Dependency exposure routes", html_context)
+        self.assertIn("https://example.test/GHSA-DEMO-1234", html_context)
+        sarif = render_sarif([finding])
+        sarif_risk_path = sarif["runs"][0]["results"][0]["properties"]["risk_path"]
+        self.assertEqual(
+            sarif_risk_path["dependency_advisory_route_ids"], [route["route_id"]]
+        )
+        closure = _finding_items([json_ready(finding)])[0]
+        closure_risk = closure["details"]["risk_path"]
+        self.assertEqual(
+            closure_risk["dependency_advisory_import_paths"], ["src/service.py"]
+        )
+        self.assertIn("evidence-fusion.json", closure["evidence_refs"])
+        self.assertTrue(
+            any(
+                "vulnerable-function invocation" in criterion
+                for criterion in closure["acceptance_criteria"]
+            )
+        )
+        self.assertTrue(
+            any(
+                "uncovered changed line" in criterion
+                for criterion in closure["acceptance_criteria"]
+            )
+        )
+        schema = json.loads(read_bundled_schema("risk-paths-1.0"))
+        Draft202012Validator(schema).validate(result)
+
+    def test_dependency_routes_do_not_share_importer_validation_or_owners(
+        self,
+    ) -> None:
+        artifacts = _artifacts()
+        cluster = _dependency_advisory_cluster()
+        usage = cluster["dependency_usage"]
+        usage["import_paths"] = ["src/service.py", "src/sink.py"]
+        usage["import_path_assessments"] = [
+            _import_path_assessment(
+                "src/service.py",
+                owners=["@service-owner"],
+                tests=["tests/test_sink.py"],
+                coverage_percent=100.0,
+                alignment="aligned-current-evidence",
+                gap_reasons=[],
+            ),
+            _import_path_assessment(
+                "src/sink.py",
+                owners=[],
+                tests=[],
+                coverage_percent=55.5,
+                alignment="coverage-gap",
+                gap_reasons=["Exact importer coverage is below 80%."],
+            ),
+        ]
+        artifacts["evidence-fusion.json"] = {
+            "schema_version": "1.3",
+            "advisory_clusters": [cluster],
+        }
+
+        result = build_risk_paths([_finding("requirements.txt", 1)], artifacts)
+
+        routes = {
+            route["target"]["path"]: route
+            for route in result["routes"]
+            if route["target"]["kind"] == "dependency-advisory-import"
+        }
+        service = routes["src/service.py"]
+        sink = routes["src/sink.py"]
+        self.assertEqual(service["owners"], ["@service-owner"])
+        self.assertEqual(service["validation"]["assessment_status"], "aligned")
+        self.assertEqual(
+            service["validation"]["mapped_test_files"], ["tests/test_sink.py"]
+        )
+        self.assertEqual(sink["owners"], [])
+        self.assertEqual(sink["validation"]["assessment_status"], "gap")
+        self.assertEqual(sink["validation"]["mapped_test_files"], [])
+        self.assertEqual(
+            sink["validation"]["gap_reasons"],
+            ["Exact importer coverage is below 80%."],
+        )
+        self.assertIn("Add a focused test", sink["recommended_action"])
+        self.assertEqual(result["summary"]["dependency_routes_with_validation_gaps"], 1)
+        schema = json.loads(read_bundled_schema("risk-paths-1.0"))
+        Draft202012Validator(schema).validate(result)
+
     def test_unrouted_target_is_preserved_as_an_evidence_gap(self) -> None:
         finding = _finding("src/dynamic_plugin.py", 4)
         artifacts = _artifacts()
@@ -354,6 +533,33 @@ class RiskPathTests(unittest.TestCase):
         self.assertIn("no declared-entry-point route", record["reason"])
         self.assertEqual(finding.evidence["risk_path"]["status"], "unrouted")
         self.assertIn("not proof", "\n".join(_render_risk_path_summary(result)))
+
+    def test_dependency_import_target_bound_reports_exact_omissions(self) -> None:
+        artifacts = _artifacts()
+        cluster = _dependency_advisory_cluster()
+        usage = cluster["dependency_usage"]
+        usage["import_paths"] = [
+            "src/service.py",
+            "src/sink.py",
+            "src/third_importer.py",
+        ]
+        artifacts["evidence-fusion.json"] = {
+            "schema_version": "1.3",
+            "advisory_clusters": [cluster],
+        }
+
+        with patch("py_security_suite.risk_paths._MAX_TARGETS", 2):
+            result = build_risk_paths([_finding("src/sink.py", 9)], artifacts)
+
+        self.assertEqual(result["summary"]["dependency_advisory_import_targets"], 3)
+        self.assertEqual(
+            result["truncation"]["dependency_advisory_import_targets_omitted"], 1
+        )
+        self.assertEqual(result["summary"]["candidate_targets"], 5)
+        self.assertEqual(result["summary"]["targets_analyzed"], 2)
+        self.assertEqual(result["truncation"]["targets_omitted"], 3)
+        schema = json.loads(read_bundled_schema("risk-paths-1.0"))
+        Draft202012Validator(schema).validate(result)
 
     def test_missing_graph_and_entry_points_do_not_claim_clean_routes(self) -> None:
         finding = _finding("src/sink.py", 9)
@@ -464,6 +670,23 @@ class RiskPathTests(unittest.TestCase):
             )
         )
 
+    def test_shared_test_source_identity_requires_every_campaign_binding(
+        self,
+    ) -> None:
+        artifacts = _artifacts()
+        artifacts.pop("source-inventory.json")
+
+        result = build_risk_paths([_finding("src/sink.py", 9)], artifacts)
+
+        hotspot = result["validation_test_hotspots"][0]
+        self.assertIsNone(hotspot["source_binding"])
+        self.assertFalse(hotspot["source_binding_consistent"])
+        self.assertIn("not established", hotspot["recommended_action"])
+        self.assertIn(
+            "source `not established`",
+            "\n".join(_render_risk_path_summary(result)),
+        )
+
 
 def _finding(path: str, line: int) -> Finding:
     return Finding(
@@ -483,7 +706,7 @@ def _finding(path: str, line: int) -> Finding:
     )
 
 
-def _artifacts() -> dict[str, object]:
+def _artifacts() -> dict[str, Any]:
     return {
         "source-inventory.json": {
             "schema_version": "1.0",
@@ -634,4 +857,141 @@ def _artifacts() -> dict[str, object]:
                 }
             ],
         },
+    }
+
+
+def _dependency_advisory_cluster() -> dict[str, Any]:
+    return {
+        "cluster_id": "ADV-ABCDEF123456",
+        "package": "demo-package",
+        "versions": ["1.0.0"],
+        "primary_identifier": "GHSA-DEMO-1234",
+        "identifiers": ["GHSA-DEMO-1234", "CVE-2026-1234"],
+        "finding_ids": ["PYSEC-RISK-PATH"],
+        "tools": ["osv-scanner", "pip-audit"],
+        "highest_severity": "critical",
+        "citations": [
+            {
+                "identifier": "GHSA-DEMO-1234",
+                "title": "Demonstration advisory",
+                "uri": "https://example.test/GHSA-DEMO-1234",
+            }
+        ],
+        "dependency_usage": {
+            "assessment": "executable-import",
+            "source_relationship": "direct",
+            "dependency_paths": [
+                {
+                    "introducing_package": "demo-package",
+                    "path": ["demo-package"],
+                    "depth": 0,
+                }
+            ],
+            "dependency_path_confidence": "high",
+            "import_modules": ["demo_package"],
+            "import_paths": ["src/service.py", "src/service.py"],
+            "recommended_test_files": ["tests/test_sink.py"],
+            "focused_test_validation_status": "passed",
+            "test_coverage_alignment": "coverage-gap",
+            "validation_gap_reasons": ["Importer has uncovered executable lines."],
+            "import_path_owners": ["@dependency-team"],
+            "import_path_ownership": [
+                {"path": "src/service.py", "owners": ["@import-owner"]}
+            ],
+            "import_path_coverage": [
+                {"path": "src/service.py", "coverage_percent": 90.0}
+            ],
+            "import_path_assessments": [
+                _import_path_assessment(
+                    "src/service.py",
+                    owners=["@import-owner"],
+                    tests=["tests/test_sink.py"],
+                    coverage_percent=90.0,
+                    alignment="coverage-gap",
+                    gap_reasons=["Importer has uncovered executable lines."],
+                )
+            ],
+            "uncovered_import_paths": ["src/service.py"],
+            "evidence_artifacts": [
+                "graphify.json",
+                "coverage-summary.json",
+                "junit-summary.json",
+            ],
+        },
+        "threat_context": {
+            "known_exploited": True,
+            "epss_probability": 0.91,
+            "epss_percentile": 0.99,
+            "epss_high": True,
+            "vex_disposition": "unassessed",
+            "intelligence_sources": ["risk-intelligence.json"],
+        },
+        "remediation_context": {
+            "priority": "P0",
+            "action_kind": "upgrade",
+            "fix_available": True,
+            "fixed_version_candidates": ["2.0.0"],
+            "owners": ["@dependency-team"],
+            "recommended_action": "Upgrade demo-package to 2.0.0.",
+        },
+    }
+
+
+def _import_path_assessment(
+    path: str,
+    *,
+    owners: list[str],
+    tests: list[str],
+    coverage_percent: float,
+    alignment: str,
+    gap_reasons: list[str],
+) -> dict[str, object]:
+    selected = bool(tests)
+    return {
+        "path": path,
+        "import_modules": ["demo_package"],
+        "import_lines": [7],
+        "assessment": "executable-import",
+        "reachability_states": ["executable"],
+        "runtime_observations": ["not-observed"],
+        "owners": owners,
+        "ownership_evidence_available": True,
+        "direct_test_files": tests,
+        "transitive_test_files": [],
+        "recommended_test_files": tests,
+        "test_selection_confidence": "high" if selected else "low",
+        "test_execution_evidence_available": True,
+        "test_case_inventory_available": True,
+        "test_case_inventory_complete": True,
+        "test_execution_sources": ["junit-summary.json"],
+        "focused_test_validation_status": "passed" if selected else "not-selected",
+        "focused_test_execution": (
+            [
+                {
+                    "path": tests[0],
+                    "status": "passed",
+                    "tests": 1,
+                    "passed": 1,
+                    "failures": 0,
+                    "errors": 0,
+                    "skipped": 0,
+                    "sources": ["junit-summary.json"],
+                    "path_attributions": ["producer"],
+                }
+            ]
+            if selected
+            else []
+        ),
+        "unobserved_recommended_test_files": [],
+        "coverage_evidence_available": True,
+        "coverage_percent": coverage_percent,
+        "coverage_gap": coverage_percent < 80,
+        "test_coverage_alignment": alignment,
+        "validation_gap_reasons": gap_reasons,
+        "evidence_artifacts": [
+            "graphify.json",
+            "reachability.json",
+            "coverage-summary.json",
+            "junit-summary.json",
+        ],
     }

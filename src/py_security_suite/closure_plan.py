@@ -596,6 +596,83 @@ def _risk_path_closure_context(
         refs.extend(
             test for campaign in campaigns for test in campaign["selected_test_files"]
         )
+        raw_dependency_routes = risk_path.get("dependency_advisory_routes")
+        dependency_routes = (
+            [
+                {
+                    "route_id": str(item.get("route_id") or "unknown"),
+                    "target_id": str(item.get("target_id") or "unknown"),
+                    "priority": str(item.get("priority") or "P4"),
+                    "advisory_cluster_id": str(
+                        item.get("advisory_cluster_id") or "unknown"
+                    ),
+                    "primary_identifier": str(
+                        item.get("primary_identifier") or "unknown"
+                    ),
+                    "package": str(item.get("package") or "unknown"),
+                    "versions": _string_values(item.get("versions"), 25),
+                    "import_path": str(item.get("import_path") or "unknown"),
+                    "import_modules": _string_values(item.get("import_modules"), 50),
+                    "import_lines": [
+                        line
+                        for line in item.get("import_lines", [])[:100]
+                        if isinstance(line, int)
+                        and not isinstance(line, bool)
+                        and line > 0
+                    ]
+                    if isinstance(item.get("import_lines"), list)
+                    else [],
+                    "dependency_usage_assessment": item.get(
+                        "dependency_usage_assessment"
+                    ),
+                    "import_path_assessment": _as_object(
+                        item.get("import_path_assessment")
+                    ),
+                    "entry_point": _as_object(item.get("entry_point")),
+                    "hop_count": item.get("hop_count"),
+                    "files": _string_values(item.get("files"), 9),
+                    "runtime_context": _as_object(item.get("runtime_context")),
+                    "validation": _as_object(item.get("validation")),
+                    "validation_campaign_ids": _string_values(
+                        item.get("validation_campaign_ids"), 50
+                    ),
+                    "known_exploited": item.get("known_exploited") is True,
+                    "epss_probability": item.get("epss_probability"),
+                    "fix_available": item.get("fix_available") is True,
+                    "fixed_version_candidates": _string_values(
+                        item.get("fixed_version_candidates"), 25
+                    ),
+                    "change_risk_score": item.get("change_risk_score"),
+                    "change_priority": item.get("change_priority"),
+                    "uncovered_changed_lines": [
+                        line
+                        for line in item.get("uncovered_changed_lines", [])[:100]
+                        if isinstance(line, int)
+                        and not isinstance(line, bool)
+                        and line > 0
+                    ]
+                    if isinstance(item.get("uncovered_changed_lines"), list)
+                    else [],
+                    "advisory_citations": [
+                        _as_object(citation)
+                        for citation in _object_list(
+                            item.get("advisory_citations"),
+                            "dependency advisory citations",
+                        )[:25]
+                    ],
+                    "recommended_action": str(
+                        item.get("recommended_action") or "Review dependency use."
+                    ),
+                }
+                for item in raw_dependency_routes[:25]
+                if isinstance(item, dict)
+            ]
+            if isinstance(raw_dependency_routes, list)
+            else []
+        )
+        if dependency_routes:
+            refs.append("evidence-fusion.json")
+            refs.extend(str(item["import_path"]) for item in dependency_routes)
         if any(
             _as_object(campaign.get("source_snapshot")).get("source_sha256")
             for campaign in campaigns
@@ -615,6 +692,18 @@ def _risk_path_closure_context(
                     risk_path.get("validation_test_hotspot_ids"), 100
                 ),
                 "validation_campaigns": campaigns,
+                "target_kind": risk_path.get("target_kind"),
+                "target_id": risk_path.get("target_id"),
+                "dependency_advisory_route_ids": _string_values(
+                    risk_path.get("dependency_advisory_route_ids"), 25
+                ),
+                "dependency_advisory_import_paths": _string_values(
+                    risk_path.get("dependency_advisory_import_paths"), 50
+                ),
+                "dependency_advisory_cluster_ids": _string_values(
+                    risk_path.get("dependency_advisory_cluster_ids"), 50
+                ),
+                "dependency_advisory_routes": dependency_routes,
                 "validation_assessment": assessment,
                 "validation_action": validation.get("action"),
             }
@@ -678,6 +767,21 @@ def _risk_path_closure_context(
             acceptance.append(
                 "Shared validation-test hotspots have coordinated assertions and an independent-test or approved concentration-risk disposition."
             )
+        if dependency_routes:
+            acceptance.extend(
+                [
+                    "Every linked dependency-advisory importer is reviewed for vulnerable-function invocation from its declared entry-point route; static import reachability alone is not used as exploitability proof.",
+                    "The affected dependency is upgraded, removed, mitigated, or covered by a governed VEX disposition, and focused importer tests are rerun with replacement evidence.",
+                ]
+            )
+            if any(item["fix_available"] for item in dependency_routes):
+                acceptance.append(
+                    "A retained fixed-version candidate is applied or an explicit exception records why it is not applicable."
+                )
+            if any(item["uncovered_changed_lines"] for item in dependency_routes):
+                acceptance.append(
+                    "Focused importer validation covers every retained uncovered changed line, or the replacement report records an approved coverage disposition."
+                )
         return refs, acceptance, details
     reason = str(risk_path.get("reason") or "bounded static route unavailable")
     details["reason"] = reason

@@ -1392,9 +1392,15 @@ def _sdk_dependency_usage(value: Any) -> dict[str, Any]:
         ),
         "ownership_evidence_available": raw.get("ownership_evidence_available") is True,
         "import_path_owners": _bounded_strings(raw.get("import_path_owners"), 20),
+        "import_path_ownership": _sdk_import_path_ownership(
+            raw.get("import_path_ownership")
+        ),
         "coverage_evidence_available": raw.get("coverage_evidence_available") is True,
         "import_path_coverage": _sdk_import_path_coverage(
             raw.get("import_path_coverage")
+        ),
+        "import_path_assessments": _sdk_import_path_assessments(
+            raw.get("import_path_assessments")
         ),
         "uncovered_import_paths": _bounded_strings(
             raw.get("uncovered_import_paths"), 50
@@ -1434,6 +1440,115 @@ def _sdk_import_path_coverage(value: Any) -> list[dict[str, Any]]:
         for item in raw[:50]
         if isinstance(item, dict) and item.get("path")
     ]
+
+
+def _sdk_import_path_ownership(value: Any) -> list[dict[str, Any]]:
+    raw = value if isinstance(value, list) else []
+    return [
+        {
+            "path": str(item.get("path") or "")[:4096],
+            "owners": _bounded_strings(item.get("owners"), 20),
+        }
+        for item in raw[:50]
+        if isinstance(item, dict) and item.get("path")
+    ]
+
+
+def _sdk_import_path_assessments(value: Any) -> list[dict[str, Any]]:
+    raw = value if isinstance(value, list) else []
+    result: list[dict[str, Any]] = []
+    for item in raw[:50]:
+        if not isinstance(item, dict) or not item.get("path"):
+            continue
+        percent = item.get("coverage_percent")
+        coverage_percent = (
+            round(float(percent), 3)
+            if isinstance(percent, (int, float))
+            and not isinstance(percent, bool)
+            and 0 <= float(percent) <= 100
+            else None
+        )
+        coverage_gap = item.get("coverage_gap")
+        result.append(
+            {
+                "path": str(item.get("path"))[:4096],
+                "import_modules": _bounded_strings(item.get("import_modules"), 50),
+                "import_lines": sorted(
+                    {
+                        line
+                        for line in item.get("import_lines", [])[:100]
+                        if isinstance(line, int)
+                        and not isinstance(line, bool)
+                        and line > 0
+                    }
+                )
+                if isinstance(item.get("import_lines"), list)
+                else [],
+                "assessment": str(item.get("assessment") or "import-observed"),
+                "reachability_states": _bounded_strings(
+                    item.get("reachability_states"), 10
+                ),
+                "runtime_observations": _bounded_strings(
+                    item.get("runtime_observations"), 10
+                ),
+                "owners": _bounded_strings(item.get("owners"), 20),
+                "ownership_evidence_available": item.get("ownership_evidence_available")
+                is True,
+                "direct_test_files": _bounded_strings(
+                    item.get("direct_test_files"), 50
+                ),
+                "transitive_test_files": _bounded_strings(
+                    item.get("transitive_test_files"), 50
+                ),
+                "recommended_test_files": _bounded_strings(
+                    item.get("recommended_test_files"), 50
+                ),
+                "test_selection_confidence": str(
+                    item.get("test_selection_confidence") or "not-available"
+                ),
+                "test_execution_evidence_available": item.get(
+                    "test_execution_evidence_available"
+                )
+                is True,
+                "test_case_inventory_available": item.get(
+                    "test_case_inventory_available"
+                )
+                is True,
+                "test_case_inventory_complete": (
+                    item.get("test_case_inventory_complete")
+                    if isinstance(item.get("test_case_inventory_complete"), bool)
+                    else None
+                ),
+                "test_execution_sources": _bounded_strings(
+                    item.get("test_execution_sources"), 10
+                ),
+                "focused_test_execution": _sdk_focused_test_execution(
+                    item.get("focused_test_execution")
+                ),
+                "focused_test_validation_status": str(
+                    item.get("focused_test_validation_status") or "not-selected"
+                ),
+                "unobserved_recommended_test_files": _bounded_strings(
+                    item.get("unobserved_recommended_test_files"), 50
+                ),
+                "coverage_evidence_available": item.get("coverage_evidence_available")
+                is True,
+                "coverage_percent": coverage_percent,
+                "coverage_gap": coverage_gap
+                if isinstance(coverage_gap, bool)
+                else None,
+                "test_coverage_alignment": _sdk_test_coverage_alignment(
+                    item.get("test_coverage_alignment")
+                ),
+                "validation_gap_reasons": _bounded_strings(
+                    item.get("validation_gap_reasons"), 10
+                ),
+                "evidence_artifacts": _bounded_strings(
+                    item.get("evidence_artifacts"), 10
+                ),
+            }
+        )
+    return result
 
 
 def _sdk_dependency_paths(value: Any) -> list[dict[str, Any]]:
@@ -2823,7 +2938,7 @@ def _assessment(
 def _finding_data_classes(finding: Finding) -> list[str]:
     rule_value = " ".join(source.rule_id for source in finding.sources).casefold()
     value = " ".join(
-        [finding.title, finding.description] + finding.classifications
+        [finding.title, finding.description, *finding.classifications]
     ).casefold()
     result: set[str] = set()
     if "sensitive-data" in rule_value or (

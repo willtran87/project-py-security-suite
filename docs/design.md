@@ -331,8 +331,9 @@ without importing or executing target code.
 [Static risk-route synthesis](risk-paths.md) combines the complementary graph
 views after finding, structural, exposure, and evidence-fusion enrichment. A
 bounded multi-source search starts at declared reachability entry points and
-walks deterministic Graphify file relations to normalized findings and
-review-worthy sensitive-data sinks. Each route carries runtime state, changed-
+walks deterministic Graphify file relations to normalized findings,
+review-worthy sensitive-data sinks, and evidence-fusion advisory importer
+paths. Each route carries runtime state, changed-
 line and coverage evidence, focused tests, validation gaps, owners, related
 findings, and exact supporting artifacts. Unrouted targets remain explicit
 model gaps; neither a route nor its absence is treated as an exploitability or
@@ -347,12 +348,24 @@ adds changed-line risk while reachability contributes runtime observation state.
 The factorized review model cites each contributing artifact and keeps the native
 findings unchanged.
 
+Package findings frequently point at a lockfile rather than executable source.
+Risk-route synthesis now uses alias-aware advisory clusters as the identity
+boundary and promotes each exact Graphify importer path as a bounded target.
+The resulting route retains KEV/EPSS/VEX context, dependency lineage,
+scanner-attributed fixes, citations, owners, tests, coverage, and validation;
+it links back to every native cluster finding without duplicating the finding.
+This answers “which entry point reaches an affected package importer?” while
+explicitly leaving vulnerable-function invocation and exploitability unproven.
+
 ```mermaid
 flowchart LR
     Entry["Declared entry points"] --> Search["Bounded static route search"]
     Graph["Graphify file relations"] --> Search
     Findings["Normalized findings"] --> Targets["Review targets"]
     Exposure["Sensitive sink surfaces"] --> Targets
+    Advisories["Alias-aware advisories<br/>fix + KEV/EPSS/VEX"] --> Importers["Exact dependency importers"]
+    Graph --> Importers
+    Importers --> Targets
     Targets --> Search
     Ownership["CODEOWNERS"] --> Routed["Bounded risk routes"]
     Search --> Routed

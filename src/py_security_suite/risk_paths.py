@@ -41,6 +41,8 @@ _MAX_OWNER_QUEUES = 100
 _MAX_CAMPAIGN_TESTS = 50
 _MAX_CAMPAIGN_MISSING_LINES = 100
 _MAX_TEST_GRAPH_NEIGHBORS = 500
+_MAX_ADVISORY_IMPORT_PATHS = 50
+_MAX_FINDING_ADVISORY_ROUTES = 25
 
 
 def build_risk_paths(
@@ -54,11 +56,18 @@ def build_risk_paths(
     graph = artifacts.get("graphify.json")
     reachability = artifacts.get("reachability.json")
     exposure = artifacts.get("data-exposure.json")
+    fusion = artifacts.get("evidence-fusion.json")
+    structural = artifacts.get("structural-synthesis.json")
     adjacency, graph_available, graph_truncated = _file_graph(graph)
     entry_points = _entry_points(reachability)
+    path_context = _campaign_control_context_index(structural, reachability)
+    dependency_targets, dependency_targets_omitted = _dependency_advisory_targets(
+        fusion, path_context
+    )
     candidate_targets = [
         *_finding_targets(findings),
         *_sink_surface_targets(exposure),
+        *dependency_targets,
     ]
     targets = sorted(candidate_targets, key=_candidate_order)[:_MAX_TARGETS]
     for target in targets:
@@ -143,6 +152,7 @@ def build_risk_paths(
     _attach_finding_routes(
         findings,
         retained_route_ids,
+        retained_routes,
         unrouted,
         validation_campaigns,
     )
@@ -165,7 +175,7 @@ def build_risk_paths(
             "reachability_available": isinstance(reachability, dict)
             and reachability.get("schema_version") == "1.2",
             "entry_points": len(entry_points),
-            "candidate_targets": len(candidate_targets),
+            "candidate_targets": len(candidate_targets) + dependency_targets_omitted,
             "targets_analyzed": len(targets),
             "finding_targets": sum(
                 target["kind"] == "finding" for target in candidate_targets
@@ -173,6 +183,11 @@ def build_risk_paths(
             "sink_surface_targets": sum(
                 target["kind"] == "sink-surface" for target in candidate_targets
             ),
+            "dependency_advisory_import_targets": sum(
+                target["kind"] == "dependency-advisory-import"
+                for target in candidate_targets
+            )
+            + dependency_targets_omitted,
             "routed_targets": len(routed),
             "unrouted_targets": len(unrouted),
             "routed_findings": sum(
@@ -180,6 +195,51 @@ def build_risk_paths(
             ),
             "routed_sink_surfaces": sum(
                 route["target"]["kind"] == "sink-surface" for route in routed
+            ),
+            "routed_dependency_advisory_imports": sum(
+                route["target"]["kind"] == "dependency-advisory-import"
+                for route in routed
+            ),
+            "unrouted_dependency_advisory_imports": sum(
+                target["target"]["kind"] == "dependency-advisory-import"
+                for target in unrouted
+            ),
+            "distinct_routed_dependency_advisories": len(
+                {
+                    str(route["correlations"]["advisory_cluster_id"])
+                    for route in routed
+                    if route["target"]["kind"] == "dependency-advisory-import"
+                }
+            ),
+            "known_exploited_dependency_routes": sum(
+                route["target"]["kind"] == "dependency-advisory-import"
+                and route["correlations"].get("known_exploited") is True
+                for route in routed
+            ),
+            "high_epss_dependency_routes": sum(
+                route["target"]["kind"] == "dependency-advisory-import"
+                and route["correlations"].get("epss_high") is True
+                for route in routed
+            ),
+            "dependency_routes_with_fixed_versions": sum(
+                route["target"]["kind"] == "dependency-advisory-import"
+                and route["correlations"].get("fix_available") is True
+                for route in routed
+            ),
+            "dependency_routes_with_validation_gaps": sum(
+                route["target"]["kind"] == "dependency-advisory-import"
+                and route["validation"]["assessment_status"] == "gap"
+                for route in routed
+            ),
+            "dependency_routes_at_changed_importers": sum(
+                route["target"]["kind"] == "dependency-advisory-import"
+                and isinstance(route["correlations"].get("change_risk_score"), int)
+                for route in routed
+            ),
+            "dependency_routes_with_uncovered_changed_lines": sum(
+                route["target"]["kind"] == "dependency-advisory-import"
+                and bool(route["correlations"].get("uncovered_changed_lines"))
+                for route in routed
             ),
             "runtime_observed_routes": sum(
                 "observed" in route["runtime_context"]["observations"]
@@ -331,6 +391,8 @@ def build_risk_paths(
                 artifacts.get("structural-synthesis.json"), dict
             ),
             "data_exposure": isinstance(exposure, dict),
+            "dependency_advisory_imports": isinstance(fusion, dict)
+            and isinstance(fusion.get("advisory_clusters"), list),
             "source_inventory": isinstance(
                 artifacts.get("source-inventory.json"), dict
             ),
@@ -346,7 +408,9 @@ def build_risk_paths(
             "entry_points_omitted": max(
                 0, _raw_entry_point_count(reachability) - _MAX_ENTRY_POINTS
             ),
-            "targets_omitted": max(0, len(candidate_targets) - _MAX_TARGETS),
+            "targets_omitted": dependency_targets_omitted
+            + max(0, len(candidate_targets) - _MAX_TARGETS),
+            "dependency_advisory_import_targets_omitted": dependency_targets_omitted,
             "routes_omitted": max(0, len(routed) - _MAX_ROUTES),
             "unrouted_targets_omitted": max(0, len(unrouted) - _MAX_UNROUTED),
             "convergence_hotspots_omitted": max(
@@ -365,6 +429,7 @@ def build_risk_paths(
             "No bounded route may indicate reflection, registries, dependency injection, generated code, framework dispatch, or an incomplete entry-point model.",
             "Runtime observation proves only that code executed during retained tests; absence of observation does not prove dead code.",
             "Sensitive-data sink surfaces are inventory signals unless a normalized scanner finding establishes a source-to-sink concern.",
+            "A dependency-advisory import route proves only a retained static path to a source file that imports the affected distribution; it does not prove invocation of a vulnerable function, attacker control, or exploitability.",
             "Graph-selected tests are bounded static candidates; passing selected tests and full retained coverage improve regression confidence but do not prove security, exploitability, or complete runtime behavior.",
             "The shared-control review score is a transparent triage aid, not native scanner severity, exploitability probability, or an admission decision.",
             "A shared validation test hotspot identifies concentrated regression responsibility; it does not prove test independence, assertion quality, or sufficient behavioral coverage.",
@@ -579,6 +644,339 @@ def _sink_surface_targets(value: Any) -> list[dict[str, Any]]:
     return result
 
 
+def _dependency_advisory_targets(
+    value: Any,
+    path_context: dict[str, dict[str, Any]],
+) -> tuple[list[dict[str, Any]], int]:
+    """Promote advisory importer paths into bounded static review targets."""
+    clusters = value.get("advisory_clusters") if isinstance(value, dict) else None
+    if not isinstance(clusters, list):
+        return [], 0
+    result: list[dict[str, Any]] = []
+    omitted = 0
+    seen: set[tuple[str, str]] = set()
+    for cluster in clusters[:_MAX_TARGETS]:
+        if not isinstance(cluster, dict):
+            continue
+        cluster_id = str(cluster.get("cluster_id") or "").strip()[:500]
+        package = str(cluster.get("package") or "").strip()[:500]
+        primary = str(cluster.get("primary_identifier") or cluster_id).strip()[:500]
+        usage = _object(cluster.get("dependency_usage"))
+        if not cluster_id or not package or not primary:
+            continue
+        remediation = _object(cluster.get("remediation_context"))
+        threat = _object(cluster.get("threat_context"))
+        finding_ids = _strings(cluster.get("finding_ids"), 100)
+        tools = _strings(cluster.get("tools"), 25)
+        versions = _strings(cluster.get("versions"), 25)
+        identifiers = _strings(cluster.get("identifiers"), 50)
+        citations = _advisory_citations(cluster.get("citations"))
+        fallback_owners = _strings(
+            usage.get("import_path_owners") or remediation.get("owners"), 20
+        )
+        raw_ownership = usage.get("import_path_ownership")
+        ownership_records = raw_ownership if isinstance(raw_ownership, list) else []
+        ownership_by_path = {
+            owned_path: _strings(record.get("owners"), 20)
+            for record in ownership_records[:_MAX_ADVISORY_IMPORT_PATHS]
+            if isinstance(record, dict) and (owned_path := _path(record.get("path")))
+        }
+        priority = str(remediation.get("priority") or "P2")
+        if priority not in {"P0", "P1", "P2", "P3", "P4"}:
+            priority = "P2"
+        severity = str(cluster.get("highest_severity") or "unknown").casefold()
+        if severity not in {
+            "critical",
+            "high",
+            "medium",
+            "low",
+            "informational",
+            "unknown",
+        }:
+            severity = "unknown"
+        raw_coverage = usage.get("import_path_coverage")
+        coverage_records = raw_coverage if isinstance(raw_coverage, list) else []
+        coverage_by_path = {
+            path: _optional_number(record.get("coverage_percent"))
+            for record in coverage_records
+            if isinstance(record, dict) and (path := _path(record.get("path")))
+        }
+        raw_assessments = usage.get("import_path_assessments")
+        assessment_records = (
+            raw_assessments if isinstance(raw_assessments, list) else []
+        )
+        assessment_by_path = {
+            assessed_path: record
+            for record in assessment_records[:_MAX_ADVISORY_IMPORT_PATHS]
+            if isinstance(record, dict) and (assessed_path := _path(record.get("path")))
+        }
+        raw_dependency_paths = usage.get("dependency_paths")
+        dependency_paths = (
+            [item for item in raw_dependency_paths[:25] if isinstance(item, dict)]
+            if isinstance(raw_dependency_paths, list)
+            else []
+        )
+        import_paths = sorted(
+            {
+                path
+                for raw_path in _strings(
+                    usage.get("import_paths"), _MAX_ADVISORY_IMPORT_PATHS
+                )
+                if (path := _path(raw_path))
+            }
+        )[:_MAX_ADVISORY_IMPORT_PATHS]
+        for path in import_paths:
+            key = (cluster_id, path)
+            if key in seen:
+                continue
+            seen.add(key)
+            if len(result) >= _MAX_TARGETS:
+                omitted += 1
+                continue
+            context = path_context.get(path, _empty_campaign_control_context())
+            path_assessment = _object(assessment_by_path.get(path))
+            owners = (
+                _strings(path_assessment.get("owners"), 20)
+                if path_assessment
+                else ownership_by_path.get(path) or fallback_owners
+            )
+            reachability_states = _strings(
+                (
+                    path_assessment.get("reachability_states")
+                    if path_assessment
+                    else context.get("reachability_states")
+                ),
+                10,
+            )
+            runtime_observations = _strings(
+                (
+                    path_assessment.get("runtime_observations")
+                    if path_assessment
+                    else context.get("runtime_observations")
+                ),
+                10,
+            )
+            target_id = (
+                "dependency-import-"
+                + _digest({"cluster_id": cluster_id, "path": path})[:16]
+            )
+            result.append(
+                {
+                    "kind": "dependency-advisory-import",
+                    "id": target_id,
+                    "finding_id": None,
+                    "path": path,
+                    "line": None,
+                    "label": f"{primary} in {package} imported by {path}"[:1000],
+                    "domain": "supply-chain",
+                    "area": "dependency-vulnerabilities",
+                    "severity": severity,
+                    "priority": priority,
+                    "tools": tools,
+                    "classifications": _dependency_advisory_classifications(
+                        identifiers, threat
+                    ),
+                    "owners": owners,
+                    "runtime_context": {
+                        "reachability_states": reachability_states,
+                        "observations": runtime_observations,
+                    },
+                    "validation": _dependency_advisory_validation(
+                        path, usage, coverage_by_path, path_assessment
+                    ),
+                    "correlations": {
+                        "advisory_cluster_id": cluster_id,
+                        "primary_identifier": primary,
+                        "identifiers": identifiers,
+                        "package": package,
+                        "versions": versions,
+                        "related_finding_ids": finding_ids,
+                        "source_relationship": _optional_string(
+                            usage.get("source_relationship")
+                        ),
+                        "dependency_paths": dependency_paths,
+                        "dependency_path_confidence": _optional_string(
+                            usage.get("dependency_path_confidence")
+                        ),
+                        "dependency_usage_assessment": _optional_string(
+                            path_assessment.get("assessment")
+                            if path_assessment
+                            else usage.get("assessment")
+                        ),
+                        "import_modules": _strings(
+                            (
+                                path_assessment.get("import_modules")
+                                if path_assessment
+                                else usage.get("import_modules")
+                            ),
+                            50,
+                        ),
+                        "import_lines": _positive_integers(
+                            path_assessment.get("import_lines"), 100
+                        ),
+                        "import_path_assessment": path_assessment or None,
+                        "known_exploited": bool(threat.get("known_exploited")),
+                        "epss_probability": _optional_number(
+                            threat.get("epss_probability")
+                        ),
+                        "epss_percentile": _optional_number(
+                            threat.get("epss_percentile")
+                        ),
+                        "epss_high": bool(threat.get("epss_high")),
+                        "vex_disposition": _optional_string(
+                            threat.get("vex_disposition")
+                        ),
+                        "fix_available": bool(remediation.get("fix_available")),
+                        "fixed_version_candidates": _strings(
+                            remediation.get("fixed_version_candidates"), 25
+                        ),
+                        "action_kind": _optional_string(remediation.get("action_kind")),
+                        "advisory_citations": citations,
+                        "change_risk_score": context.get("change_risk_score"),
+                        "change_priority": context.get("change_priority"),
+                        "uncovered_changed_lines": list(
+                            context.get("uncovered_changed_lines") or []
+                        )[:_MAX_CAMPAIGN_MISSING_LINES],
+                    },
+                    "recommended_action": _dependency_advisory_action(
+                        package,
+                        primary,
+                        path,
+                        remediation,
+                        path_assessment or usage,
+                    ),
+                    "evidence_artifacts": sorted(
+                        {
+                            "evidence-fusion.json",
+                            *_strings(usage.get("evidence_artifacts"), 25),
+                            *_strings(path_assessment.get("evidence_artifacts"), 25),
+                            *(
+                                ["risk-intelligence.json"]
+                                if threat.get("intelligence_available") is True
+                                or threat.get("intelligence_sources")
+                                else []
+                            ),
+                        }
+                    ),
+                }
+            )
+    return result, omitted
+
+
+def _dependency_advisory_validation(
+    path: str,
+    usage: dict[str, Any],
+    coverage_by_path: dict[str, float | None],
+    path_assessment: dict[str, Any],
+) -> dict[str, Any]:
+    exact = bool(path_assessment)
+    alignment = _optional_string(
+        path_assessment.get("test_coverage_alignment")
+        if exact
+        else usage.get("test_coverage_alignment")
+    )
+    uncovered = set(_strings(usage.get("uncovered_import_paths"), 50))
+    gap_reasons = _strings(
+        (
+            path_assessment.get("validation_gap_reasons")
+            if exact
+            else usage.get("validation_gap_reasons")
+        ),
+        10,
+    )
+    if not exact and alignment == "coverage-gap" and path not in uncovered:
+        alignment = None
+        gap_reasons = [
+            reason for reason in gap_reasons if "cover" not in reason.casefold()
+        ]
+    return {
+        "changed_line": None,
+        "line_covered": None,
+        "coverage_percent": _optional_number(path_assessment.get("coverage_percent"))
+        if exact
+        else coverage_by_path.get(path),
+        "mapped_test_files": _strings(
+            (
+                path_assessment.get("recommended_test_files")
+                if exact
+                else usage.get("recommended_test_files")
+            ),
+            25,
+        ),
+        "focused_test_status": _optional_string(
+            path_assessment.get("focused_test_validation_status")
+            if exact
+            else usage.get("focused_test_validation_status")
+        ),
+        "coverage_alignment": alignment,
+        "gap_reasons": gap_reasons,
+        "action": (
+            "Use this exact importer assessment; do not infer validation from other import paths."
+            if exact
+            else None
+        ),
+    }
+
+
+def _dependency_advisory_classifications(
+    identifiers: list[str], threat: dict[str, Any]
+) -> list[str]:
+    values = {"DEPENDENCY-ADVISORY", *identifiers}
+    if threat.get("known_exploited") is True:
+        values.add("CISA-KEV")
+    if threat.get("epss_high") is True:
+        values.add("EPSS-HIGH")
+    vex = _optional_string(threat.get("vex_disposition"))
+    if vex:
+        values.add("VEX-" + vex.upper().replace("_", "-")[:100])
+    return sorted(values)[:50]
+
+
+def _advisory_citations(value: Any) -> list[dict[str, str | None]]:
+    if not isinstance(value, list):
+        return []
+    result: list[dict[str, str | None]] = []
+    seen: set[tuple[str, str | None]] = set()
+    for item in value[:25]:
+        if not isinstance(item, dict):
+            continue
+        identifier = str(item.get("identifier") or "").strip()[:500]
+        uri_value = item.get("uri")
+        uri = str(uri_value).strip()[:4000] if isinstance(uri_value, str) else None
+        if not identifier or (identifier, uri) in seen:
+            continue
+        seen.add((identifier, uri))
+        result.append(
+            {
+                "identifier": identifier,
+                "title": str(item.get("title") or identifier).strip()[:1000],
+                "uri": uri,
+            }
+        )
+    return result
+
+
+def _dependency_advisory_action(
+    package: str,
+    primary: str,
+    path: str,
+    remediation: dict[str, Any],
+    usage: dict[str, Any],
+) -> str:
+    action = str(remediation.get("recommended_action") or "").strip()
+    if not action:
+        action = (
+            f"Review {primary} for {package}, establish vulnerable-function use, "
+            "then upgrade, remove, mitigate, or record a governed VEX disposition."
+        )
+    tests = _strings(usage.get("recommended_test_files"), 5)
+    if tests:
+        action += " Re-run focused importer tests: " + ", ".join(tests) + "."
+    else:
+        action += f" Add a focused test that exercises dependency use from {path}."
+    return action[:2000]
+
+
 def _route_targets(
     entry_points: list[dict[str, Any]],
     targets: list[dict[str, Any]],
@@ -744,9 +1142,21 @@ def _convergence_hotspots(routes: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "target_ids": target_ids,
                 "finding_ids": sorted(
                     {
-                        str(route["target"]["finding_id"])
+                        str(finding_id)
                         for route, _role in observations
-                        if route["target"].get("finding_id")
+                        for finding_id in [
+                            route["target"].get("finding_id"),
+                            *(
+                                _strings(
+                                    route["correlations"].get("related_finding_ids"),
+                                    100,
+                                )
+                                if route["target"].get("kind")
+                                == "dependency-advisory-import"
+                                else []
+                            ),
+                        ]
+                        if finding_id
                     }
                 ),
                 "entry_point_ids": sorted(
@@ -1037,7 +1447,9 @@ def _validation_test_hotspots(
             json.dumps(binding, sort_keys=True, separators=(",", ":")): binding
             for binding in bindings
         }
-        binding_consistent = len(unique_bindings) <= 1
+        binding_consistent = (
+            len(bindings) == len(selected_campaigns) and len(unique_bindings) == 1
+        )
         source_binding = (
             next(iter(unique_bindings.values())) if len(unique_bindings) == 1 else None
         )
@@ -1183,7 +1595,10 @@ def _validation_test_hotspot_action(
     source_binding_consistent: bool,
 ) -> str:
     if not source_binding_consistent:
-        return f"Regenerate and source-bind {test_path}; selected campaigns disagree on its source identity."
+        return (
+            f"Regenerate and source-bind {test_path}; complete consistent source "
+            "identity is not established across its selected campaigns."
+        )
     if "failed" in statuses:
         return f"Resolve failures in {test_path} before using it across {campaigns} shared-control campaigns."
     if "not-observed" in statuses or not statuses:
@@ -1963,6 +2378,7 @@ def _owner_queue_action(
 def _attach_finding_routes(
     findings: list[Finding],
     routed: dict[str, dict[str, Any]],
+    all_routed: list[dict[str, Any]],
     unrouted: list[dict[str, Any]],
     validation_campaigns: list[dict[str, Any]],
 ) -> None:
@@ -1974,12 +2390,28 @@ def _attach_finding_routes(
         for item in unrouted
         if item["target"].get("finding_id")
     }
+    advisory_routes_by_finding: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for candidate_route in all_routed:
+        if candidate_route["target"].get("kind") != "dependency-advisory-import":
+            continue
+        for finding_id in _strings(
+            candidate_route["correlations"].get("related_finding_ids"), 100
+        ):
+            advisory_routes_by_finding[finding_id].append(candidate_route)
     for finding in findings:
-        route = routed.get(finding.finding_id)
+        advisory_routes = sorted(
+            advisory_routes_by_finding.get(finding.finding_id, []),
+            key=_route_order,
+        )[:_MAX_FINDING_ADVISORY_ROUTES]
+        route = routed.get(finding.finding_id) or (
+            advisory_routes[0] if advisory_routes else None
+        )
         if route is not None:
-            finding.evidence["risk_path"] = {
+            context = {
                 "status": "routed",
                 "route_id": route["route_id"],
+                "target_kind": route["target"]["kind"],
+                "target_id": route["target"]["id"],
                 "priority": route["priority"],
                 "entry_point": route["entry_point"],
                 "hop_count": route["hop_count"],
@@ -2020,6 +2452,28 @@ def _attach_finding_routes(
                 "recommended_action": route["recommended_action"],
                 "evidence_artifact": "risk-paths.json",
             }
+            if advisory_routes:
+                context.update(
+                    {
+                        "dependency_advisory_route_ids": [
+                            str(item["route_id"]) for item in advisory_routes
+                        ],
+                        "dependency_advisory_import_paths": sorted(
+                            {str(item["target"]["path"]) for item in advisory_routes}
+                        ),
+                        "dependency_advisory_cluster_ids": sorted(
+                            {
+                                str(item["correlations"]["advisory_cluster_id"])
+                                for item in advisory_routes
+                            }
+                        ),
+                        "dependency_advisory_routes": [
+                            _compact_dependency_advisory_route(item)
+                            for item in advisory_routes
+                        ],
+                    }
+                )
+            finding.evidence["risk_path"] = context
             _add_route_citations(finding)
         elif finding.finding_id in unrouted_by_id:
             record = unrouted_by_id[finding.finding_id]
@@ -2029,6 +2483,46 @@ def _attach_finding_routes(
                 "evidence_artifact": "risk-paths.json",
             }
             _add_route_citations(finding)
+
+
+def _compact_dependency_advisory_route(
+    route: dict[str, Any],
+) -> dict[str, Any]:
+    correlations = route["correlations"]
+    target = route["target"]
+    return {
+        "route_id": route["route_id"],
+        "target_id": target["id"],
+        "priority": route["priority"],
+        "advisory_cluster_id": correlations.get("advisory_cluster_id"),
+        "primary_identifier": correlations.get("primary_identifier"),
+        "package": correlations.get("package"),
+        "versions": list(correlations.get("versions") or [])[:25],
+        "import_path": target["path"],
+        "import_modules": list(correlations.get("import_modules") or [])[:50],
+        "import_lines": list(correlations.get("import_lines") or [])[:100],
+        "dependency_usage_assessment": correlations.get("dependency_usage_assessment"),
+        "import_path_assessment": correlations.get("import_path_assessment"),
+        "entry_point": route["entry_point"],
+        "hop_count": route["hop_count"],
+        "files": list(route["files"]),
+        "runtime_context": route["runtime_context"],
+        "validation": route["validation"],
+        "validation_campaign_ids": list(route["validation_campaign_ids"]),
+        "known_exploited": correlations.get("known_exploited") is True,
+        "epss_probability": correlations.get("epss_probability"),
+        "fix_available": correlations.get("fix_available") is True,
+        "fixed_version_candidates": list(
+            correlations.get("fixed_version_candidates") or []
+        )[:25],
+        "change_risk_score": correlations.get("change_risk_score"),
+        "change_priority": correlations.get("change_priority"),
+        "uncovered_changed_lines": list(
+            correlations.get("uncovered_changed_lines") or []
+        )[:_MAX_CAMPAIGN_MISSING_LINES],
+        "advisory_citations": list(correlations.get("advisory_citations") or [])[:25],
+        "recommended_action": route["recommended_action"],
+    }
 
 
 def _add_route_citations(finding: Finding) -> None:
@@ -2320,7 +2814,11 @@ def _has_validation_gap(value: dict[str, Any]) -> bool:
 def _route_order(value: dict[str, Any]) -> tuple[int, int, int, str]:
     return (
         _priority_rank(str(value["priority"])),
-        0 if value["target"]["kind"] == "finding" else 1,
+        {
+            "finding": 0,
+            "dependency-advisory-import": 1,
+            "sink-surface": 2,
+        }.get(str(value["target"]["kind"]), 3),
         -int(value["hop_count"]),
         str(value["route_id"]),
     )
@@ -2336,7 +2834,11 @@ def _target_order(value: dict[str, Any]) -> tuple[int, str]:
 def _candidate_order(value: dict[str, Any]) -> tuple[int, int, str]:
     return (
         _priority_rank(str(value["priority"])),
-        0 if value["kind"] == "finding" else 1,
+        {
+            "finding": 0,
+            "dependency-advisory-import": 1,
+            "sink-surface": 2,
+        }.get(str(value["kind"]), 3),
         str(value["id"]),
     )
 
@@ -2402,6 +2904,18 @@ def _strings(value: Any, limit: int) -> list[str]:
     else:
         candidates = []
     return sorted({item.strip()[:1000] for item in candidates if item.strip()})[:limit]
+
+
+def _positive_integers(value: Any, limit: int) -> list[int]:
+    if not isinstance(value, list):
+        return []
+    return sorted(
+        {
+            item
+            for item in value
+            if isinstance(item, int) and not isinstance(item, bool) and item > 0
+        }
+    )[:limit]
 
 
 def _optional_string(value: Any) -> str | None:

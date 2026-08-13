@@ -27,6 +27,15 @@ for published releases.
   selection modes without double-counting JUnit cases, expose sole-test
   dependencies, and propagate stable IDs into routes, findings, SARIF, owner
   queues, reports, and closure criteria.
+  Alias-aware dependency advisories now become bounded importer targets by
+  joining evidence-fusion clusters to exact Graphify source importers and
+  declared entry points. Citation-bearing routes retain package lineage,
+  KEV/EPSS/VEX context, scanner-attributed fixed versions, path-specific
+  runtime/coverage, owners, focused tests, validation, and closure actions;
+  they link back to every native cluster finding without multiplying findings
+  and explicitly do not claim vulnerable-function invocation or exploitability.
+  A bounded per-importer assessment ledger prevents one importer's passing tests,
+  ownership, or coverage from masking a validation gap at another importer.
   Campaign IDs, scores, revision state, evidence gaps, and actions propagate
   through findings, SARIF, reports, owner queues, and closure work. Add
   `pysec-evidence bind` to atomically create

@@ -567,6 +567,7 @@ def _enrich_advisory_clusters(
         )[:50]
         validation = _dependency_validation_handoff(
             import_paths,
+            import_records=import_records,
             test_mappings=test_mappings,
             test_mapping_evidence=test_mapping_evidence,
             test_executions=test_executions,
@@ -576,6 +577,8 @@ def _enrich_advisory_clusters(
             ownership_evidence=ownership_evidence,
             coverage=coverage,
             coverage_evidence=coverage_evidence,
+            reachability=reachability,
+            reachability_evidence=reachability_evidence,
         )
         package_paths = dependency_paths.get(package, [])
         environment_warning = bool(
@@ -794,9 +797,11 @@ def _dependency_paths(
             if adjacency.get(reference):
                 truncated = True
             continue
-        for child in sorted(adjacency.get(reference, set())):
-            if child in packages_by_ref and child not in references:
-                queue.append((child, (*references, child)))
+        queue.extend(
+            (child, (*references, child))
+            for child in sorted(adjacency.get(reference, set()))
+            if child in packages_by_ref and child not in references
+        )
     for records in result.values():
         records.sort(key=lambda item: (int(item["depth"]), item["path"]))
     return dict(result), truncated
@@ -938,6 +943,7 @@ def _ownership_evidence_available(
 def _dependency_validation_handoff(
     import_paths: list[str],
     *,
+    import_records: list[dict[str, Any]],
     test_mappings: dict[str, dict[str, list[str]]],
     test_mapping_evidence: bool,
     test_executions: dict[str, list[dict[str, str]]],
@@ -947,6 +953,8 @@ def _dependency_validation_handoff(
     ownership_evidence: bool,
     coverage: dict[str, dict[str, Any]],
     coverage_evidence: bool,
+    reachability: dict[str, dict[str, set[str]]],
+    reachability_evidence: dict[str, Any],
 ) -> dict[str, Any]:
     direct = sorted(
         {
@@ -963,15 +971,20 @@ def _dependency_validation_handoff(
             if test not in direct
         }
     )[:50]
-    owners = sorted(
+    ownership_records = [
         {
-            owner
-            for path in import_paths
-            for owner in (
-                *owners_by_path.get(path, set()),
-                *owners_for_path(path, ownership_rules),
-            )
+            "path": path,
+            "owners": sorted(
+                {
+                    *owners_by_path.get(path, set()),
+                    *owners_for_path(path, ownership_rules),
+                }
+            )[:20],
         }
+        for path in import_paths
+    ][:50]
+    owners = sorted(
+        {owner for record in ownership_records for owner in record["owners"]}
     )[:20]
     coverage_records = [
         {
@@ -1015,6 +1028,21 @@ def _dependency_validation_handoff(
         coverage_gap=bool(uncovered),
         coverage_subject="the affected dependency import path(s)",
     )
+    import_path_assessments = _dependency_import_path_assessments(
+        import_paths,
+        import_records=import_records,
+        test_mappings=test_mappings,
+        test_mapping_evidence=test_mapping_evidence,
+        test_executions=test_executions,
+        test_execution_evidence=test_execution_evidence,
+        owners_by_path=owners_by_path,
+        ownership_rules=ownership_rules,
+        ownership_evidence=ownership_evidence,
+        coverage=coverage,
+        coverage_evidence=coverage_evidence,
+        reachability=reachability,
+        reachability_evidence=reachability_evidence,
+    )
     return {
         "test_mapping_evidence_available": test_mapping_evidence,
         "recommended_test_files": recommended,
@@ -1025,10 +1053,130 @@ def _dependency_validation_handoff(
         **alignment,
         "ownership_evidence_available": ownership_evidence,
         "import_path_owners": owners,
+        "import_path_ownership": ownership_records,
         "coverage_evidence_available": coverage_evidence,
         "import_path_coverage": coverage_records,
+        "import_path_assessments": import_path_assessments,
         "uncovered_import_paths": uncovered,
     }
+
+
+def _dependency_import_path_assessments(
+    import_paths: list[str],
+    *,
+    import_records: list[dict[str, Any]],
+    test_mappings: dict[str, dict[str, list[str]]],
+    test_mapping_evidence: bool,
+    test_executions: dict[str, list[dict[str, str]]],
+    test_execution_evidence: dict[str, Any],
+    owners_by_path: dict[str, set[str]],
+    ownership_rules: list[tuple[str, list[str]]],
+    ownership_evidence: bool,
+    coverage: dict[str, dict[str, Any]],
+    coverage_evidence: bool,
+    reachability: dict[str, dict[str, set[str]]],
+    reachability_evidence: dict[str, Any],
+) -> list[dict[str, Any]]:
+    modules_by_path: dict[str, set[str]] = defaultdict(set)
+    lines_by_path: dict[str, set[int]] = defaultdict(set)
+    for record in import_records:
+        path = _path(str(record.get("path") or ""))
+        if not path:
+            continue
+        module = record.get("module")
+        if isinstance(module, str) and module:
+            modules_by_path[path].add(module[:500])
+        line = record.get("line")
+        if isinstance(line, int) and not isinstance(line, bool) and line > 0:
+            lines_by_path[path].add(line)
+    reachability_complete = (
+        reachability_evidence.get("complete")
+        if isinstance(reachability_evidence.get("complete"), bool)
+        else None
+    )
+    result: list[dict[str, Any]] = []
+    for path in import_paths[:50]:
+        mapping = test_mappings.get(path, {})
+        direct = sorted(set(mapping.get("direct", [])))[:50]
+        transitive = sorted(set(mapping.get("transitive", [])) - set(direct))[:50]
+        selected = [*direct, *transitive][:50]
+        confidence = (
+            "high"
+            if direct
+            else "medium"
+            if transitive
+            else "low"
+            if test_mapping_evidence
+            else "not-available"
+        )
+        execution = focused_test_execution(
+            selected,
+            test_executions=test_executions,
+            evidence=test_execution_evidence,
+        )
+        raw_percent = coverage.get(path, {}).get("percent")
+        percent = (
+            float(raw_percent)
+            if isinstance(raw_percent, (int, float))
+            and not isinstance(raw_percent, bool)
+            and 0 <= float(raw_percent) <= 100
+            else None
+        )
+        coverage_gap = isinstance(percent, float) and percent < 80
+        alignment = test_coverage_alignment(
+            execution,
+            coverage_evidence_available=coverage_evidence,
+            coverage_gap=coverage_gap,
+            coverage_subject=f"dependency import path {path}",
+        )
+        reachability_record = reachability.get(path, {})
+        states = sorted(str(item) for item in reachability_record.get("states", set()))
+        observations = sorted(
+            str(item) for item in reachability_record.get("runtime_observations", set())
+        )
+        result.append(
+            {
+                "path": path,
+                "import_modules": sorted(modules_by_path[path])[:50],
+                "import_lines": sorted(lines_by_path[path])[:100],
+                "assessment": _dependency_use_assessment(
+                    import_observed=True,
+                    states=states,
+                    runtime_observations=observations,
+                    reachability_complete=reachability_complete,
+                    deptry_statuses=[],
+                    signals_conflict=False,
+                ),
+                "reachability_states": states,
+                "runtime_observations": observations,
+                "owners": sorted(
+                    {
+                        *owners_by_path.get(path, set()),
+                        *owners_for_path(path, ownership_rules),
+                    }
+                )[:20],
+                "ownership_evidence_available": ownership_evidence,
+                "direct_test_files": direct,
+                "transitive_test_files": transitive,
+                "recommended_test_files": selected,
+                "test_selection_confidence": confidence,
+                **execution,
+                "coverage_evidence_available": coverage_evidence,
+                "coverage_percent": percent,
+                "coverage_gap": coverage_gap if percent is not None else None,
+                **alignment,
+                "evidence_artifacts": sorted(
+                    {
+                        *(["graphify.json"] if test_mapping_evidence else []),
+                        *(["reachability.json"] if reachability_evidence else []),
+                        *(["finding-delta.json"] if ownership_evidence else []),
+                        *(["coverage-summary.json"] if coverage_evidence else []),
+                        *test_execution_evidence["sources"],
+                    }
+                ),
+            }
+        )
+    return result
 
 
 def _external_imports(value: Any) -> tuple[dict[str, list[dict[str, Any]]], bool]:
@@ -1057,7 +1205,7 @@ def _external_imports(value: Any) -> tuple[dict[str, list[dict[str, Any]]], bool
             continue
         result[package].append(
             {
-                "module": str(edge.get("source") or "")[:500],
+                "module": external_name[:500],
                 "path": _path(str(source.get("path") or edge.get("path") or ""))
                 if isinstance(source, dict)
                 else _path(str(edge.get("path") or "")),
@@ -1228,8 +1376,10 @@ def _empty_dependency_usage() -> dict[str, Any]:
         ],
         "ownership_evidence_available": False,
         "import_path_owners": [],
+        "import_path_ownership": [],
         "coverage_evidence_available": False,
         "import_path_coverage": [],
+        "import_path_assessments": [],
         "uncovered_import_paths": [],
         "evidence_artifacts": [],
     }
