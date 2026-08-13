@@ -5,6 +5,19 @@ for published releases.
 
 ## Unreleased
 
+- Version evidence fusion at 1.2 and sensitive-data exposure synthesis at 1.4.
+  Passive JUnit, Hypothesis, and Schemathesis ingestion now retains a bounded,
+  output-free case/file/result ledger. Advisory remediation cross-references
+  Graphify-selected focused tests with exact current execution evidence and
+  reports passing, failing, incomplete, unobserved, unavailable, and unselected
+  states without treating aggregate green totals or pre-remediation passes as
+  future-build validation. Closure and release-readiness actions retain the
+  contributing test-evidence artifacts. CycloneDX dependency relationships now
+  identify bounded introducing-root paths for transitive advisories, while
+  pipdeptree environment-health evidence qualifies path confidence and exposes
+  missing, cyclic, or conflicting installed dependencies. Bounded CODEOWNERS rule metadata now
+  routes exact advisory import paths even when those files have no separate
+  normalized finding; prior schemas remain bundled.
 - Consolidate scanner-reported fixed versions, approved offline CISA KEV/FIRST
   EPSS/CycloneDX VEX intelligence, alias-aware advisories, source dependency
   relationship, exact imports, reachability, runtime observations, and deptry

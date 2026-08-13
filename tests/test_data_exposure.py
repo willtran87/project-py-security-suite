@@ -325,7 +325,7 @@ class DataExposureSynthesisTests(unittest.TestCase):
         self.assertIn("owners @observability", rendered)
         self.assertIn("SDK dependency cross-reference", detailed)
         self.assertIn("[GHSA-DEMO](https://example.invalid/GHSA-DEMO)", detailed)
-        schema = json.loads(read_bundled_schema("data-exposure-1.3"))
+        schema = json.loads(read_bundled_schema("data-exposure-1.4"))
         Draft202012Validator(schema).validate(result)
 
     def test_matched_sdk_lineage_without_package_findings_is_not_risk(self) -> None:
@@ -642,7 +642,7 @@ class DataExposureSynthesisTests(unittest.TestCase):
         self.assertIn("owner @security-team", rendered)
         self.assertIn("mapped tests/test\\_app.py", rendered)
         self.assertIn("Add a focused test", rendered)
-        schema = json.loads(read_bundled_schema("data-exposure-1.3"))
+        schema = json.loads(read_bundled_schema("data-exposure-1.4"))
         Draft202012Validator(schema).validate(result)
 
     def test_inventories_query_exception_and_risky_sdk_configuration(self) -> None:
@@ -899,7 +899,7 @@ class DataExposureSynthesisTests(unittest.TestCase):
     def test_artifact_validates_against_bundled_schema(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             result = build_data_exposure_synthesis(Path(temporary), [], {})
-        schema = json.loads(read_bundled_schema("data-exposure-1.3"))
+        schema = json.loads(read_bundled_schema("data-exposure-1.4"))
         Draft202012Validator(schema).validate(result)
 
     def test_joins_finalized_fusion_into_exposure_verification_plan(self) -> None:
@@ -1001,7 +1001,7 @@ class DataExposureSynthesisTests(unittest.TestCase):
         self.assertIn("owners @privacy-team", finding_markdown)
         self.assertIn("mapped tests tests/test_app.py", finding_markdown)
         self.assertIn("Exposure verification", finding_markdown)
-        schema = json.loads(read_bundled_schema("data-exposure-1.3"))
+        schema = json.loads(read_bundled_schema("data-exposure-1.4"))
         Draft202012Validator(schema).validate(result)
 
     def test_not_observed_runtime_signal_does_not_count_as_runtime_observed(

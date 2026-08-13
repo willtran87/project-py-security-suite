@@ -379,6 +379,22 @@ def _remediation(blockers: list[str], findings: list[Any]) -> list[dict[str, Any
                     if isinstance(tests, list)
                     else []
                 )
+                test_execution_sources = usage.get("test_execution_sources")
+                test_execution_sources = (
+                    [str(item) for item in test_execution_sources[:3] if item]
+                    if isinstance(test_execution_sources, list)
+                    else []
+                )
+                dependency_evidence = usage.get("evidence_artifacts")
+                dependency_evidence = (
+                    [
+                        str(item)
+                        for item in dependency_evidence[:10]
+                        if item in {"sbom.cdx.json", "pipdeptree-summary.json"}
+                    ]
+                    if isinstance(dependency_evidence, list)
+                    else []
+                )
                 actions.append(
                     {
                         "id": f"advisory:{cluster_id}",
@@ -399,6 +415,8 @@ def _remediation(blockers: list[str], findings: list[Any]) -> list[dict[str, Any
                                     "evidence-fusion.json",
                                     *import_paths,
                                     *tests,
+                                    *test_execution_sources,
+                                    *dependency_evidence,
                                 ]
                             )
                         )[:100],

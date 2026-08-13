@@ -339,6 +339,9 @@ def _remediation_context(
     usage = cluster.get("dependency_usage")
     usage = usage if isinstance(usage, dict) else {}
     assessment = str(usage.get("assessment") or "unknown")
+    introducing_packages = _bounded_text_list(
+        usage.get("introducing_packages"), 25, 300
+    )
     action_kind, action = _advisory_action(
         package=str(cluster.get("package") or "the affected package"),
         affected_versions=[
@@ -349,6 +352,8 @@ def _remediation_context(
         known_exploited=threat["known_exploited"] is True,
         vex_disposition=str(threat["vex_disposition"]),
         assessment=assessment,
+        source_relationship=str(usage.get("source_relationship") or "unknown"),
+        introducing_packages=introducing_packages,
     )
     kev_records = threat.get("known_exploited_records")
     if isinstance(kev_records, list) and kev_records:
@@ -368,6 +373,18 @@ def _remediation_context(
     test_confidence = str(usage.get("test_selection_confidence") or "not-available")
     if test_confidence not in {"high", "medium", "low", "not-available"}:
         test_confidence = "not-available"
+    test_validation = str(
+        usage.get("focused_test_validation_status") or "not-selected"
+    )
+    if test_validation not in {
+        "passed",
+        "failed",
+        "incomplete",
+        "not-observed",
+        "not-available",
+        "not-selected",
+    }:
+        test_validation = "not-available"
     return {
         "priority": priority,
         "action_kind": action_kind,
@@ -380,6 +397,12 @@ def _remediation_context(
         "owners": owners,
         "recommended_test_files": tests,
         "test_selection_confidence": test_confidence,
+        "focused_test_validation_status": test_validation,
+        "introducing_packages": introducing_packages,
+        "dependency_paths": _bounded_dependency_paths(usage.get("dependency_paths")),
+        "dependency_path_confidence": str(
+            usage.get("dependency_path_confidence") or "not-available"
+        ),
         "recommended_action": action,
         "verification_steps": _advisory_verification_steps(
             cluster, threat, usage, fixed_versions
@@ -398,6 +421,8 @@ def _advisory_action(
     known_exploited: bool,
     vex_disposition: str,
     assessment: str,
+    source_relationship: str,
+    introducing_packages: list[str],
 ) -> tuple[str, str]:
     affected = ", ".join(affected_versions[:5]) or "the reported affected version"
     candidates = ", ".join(fixed_versions[:8])
@@ -422,14 +447,26 @@ def _advisory_action(
         )
     if fixed_versions:
         lead = "Immediately upgrade" if known_exploited or priority == "P0" else "Upgrade"
+        if source_relationship == "transitive" and introducing_packages:
+            roots = ", ".join(introducing_packages[:8])
+            return (
+                "upgrade",
+                f"{lead} the transitive {package} from {affected} using an organization-approved scanner-reported fixed-version candidate ({candidates}) by updating or constraining introducing dependency root(s) {roots}; regenerate lockfiles and artifacts, run focused tests, and rescan.",
+            )
         return (
             "upgrade",
             f"{lead} {package} from {affected} using an organization-approved scanner-reported fixed-version candidate ({candidates}); regenerate lockfiles and artifacts, run focused tests, and rescan.",
         )
     lead = "Immediately assess" if known_exploited or priority == "P0" else "Assess"
+    root_context = (
+        " through introducing dependency root(s) "
+        + ", ".join(introducing_packages[:8])
+        if source_relationship == "transitive" and introducing_packages
+        else ""
+    )
     return (
         "mitigate-or-replace",
-        f"{lead} removal, substitution, or compensating controls for {package} {affected}; no completed scanner reported a fixed-version candidate. Document the decision, rebuild, and rescan.",
+        f"{lead} removal, substitution, or compensating controls for {package} {affected}{root_context}; no completed scanner reported a fixed-version candidate. Document the decision, rebuild, and rescan.",
     )
 
 
@@ -468,11 +505,37 @@ def _remediation_basis(
     relationship = str(usage.get("source_relationship") or "unknown")
     if relationship != "unknown":
         basis.append(f"source dependency relationship {relationship}")
+    dependency_paths = usage.get("dependency_paths")
+    if isinstance(dependency_paths, list) and dependency_paths:
+        for item in dependency_paths[:3]:
+            if not isinstance(item, dict) or not isinstance(item.get("path"), list):
+                continue
+            basis.append(
+                "CycloneDX introducing path: "
+                + " -> ".join(str(node) for node in item["path"][:12])
+            )
+    health = usage.get("dependency_environment_health")
+    if isinstance(health, dict) and usage.get("environment_health_evidence_available"):
+        basis.append(
+            "pipdeptree installed-environment health "
+            + ("clean" if health.get("healthy") is True else "has gaps")
+        )
     tests = usage.get("recommended_test_files")
     if isinstance(tests, list) and tests:
         basis.append(
             f"{len(tests)} graph-selected focused test file(s) with {usage.get('test_selection_confidence', 'unknown')} confidence"
         )
+        status = str(usage.get("focused_test_validation_status") or "not-available")
+        if status == "passed":
+            basis.append(
+                "retained passing JUnit cases cover every graph-selected focused test file"
+            )
+        elif status == "failed":
+            basis.append(
+                "retained JUnit cases contain a failure or error in a graph-selected focused test file"
+            )
+        elif status in {"incomplete", "not-observed"}:
+            basis.append(f"focused-test execution evidence is {status}")
     owners = usage.get("import_path_owners")
     if isinstance(owners, list) and owners:
         basis.append("import-path owner(s): " + ", ".join(str(item) for item in owners[:10]))
@@ -496,11 +559,53 @@ def _remediation_uncertainties(
         values.append("Import evidence exists, but reachability analysis is incomplete.")
     if usage.get("signals_conflict") is True:
         values.append("Graphify import evidence conflicts with deptry unused-declaration evidence.")
+    relationship = str(usage.get("source_relationship") or "unknown")
+    if relationship == "transitive":
+        if usage.get("dependency_path_evidence_available") is not True:
+            values.append(
+                "CycloneDX dependency-path evidence was unavailable for the transitive package."
+            )
+        elif not usage.get("dependency_paths"):
+            values.append(
+                "No bounded CycloneDX path connected a direct dependency root to the transitive package."
+            )
+    if usage.get("environment_health_evidence_available") is not True:
+        values.append(
+            "Approved pipdeptree installed-environment health evidence was unavailable."
+        )
+    elif usage.get("dependency_environment_warning") is True:
+        values.append(
+            "The approved installed environment has missing, conflicting, or cyclic dependency evidence; reconcile it with the source SBOM path."
+        )
     if usage.get("import_observed") is True:
         if usage.get("test_mapping_evidence_available") is not True:
             values.append("Graphify file-topology evidence was unavailable for focused test selection.")
         elif not usage.get("recommended_test_files"):
             values.append("No direct or transitive test file was mapped to the exact importing path.")
+        else:
+            validation = str(
+                usage.get("focused_test_validation_status") or "not-available"
+            )
+            if usage.get("test_execution_evidence_available") is not True:
+                values.append(
+                    "Retained JUnit execution evidence was unavailable for the focused tests."
+                )
+            elif usage.get("test_case_inventory_available") is not True:
+                values.append(
+                    "Retained JUnit evidence lacks a case-level file inventory, so focused-test execution cannot be proven."
+                )
+            elif validation == "not-observed":
+                values.append(
+                    "No retained JUnit case matched a graph-selected focused test file."
+                )
+            elif validation == "incomplete":
+                values.append(
+                    "Focused-test execution is incomplete because selected files were unobserved, skipped, or only partially exercised."
+                )
+            if validation == "passed":
+                values.append(
+                    "Passing focused-test evidence describes the scanned state and must be regenerated after remediation."
+                )
         if usage.get("ownership_evidence_available") is not True:
             values.append("CODEOWNERS-derived ownership evidence was unavailable.")
         elif not usage.get("import_path_owners"):
@@ -550,6 +655,19 @@ def _advisory_verification_steps(
         steps.append("Trace vulnerable API use from the exact importing file(s)" + (": " + ", ".join(paths[:5]) if paths else "") + ".")
     elif usage.get("assessment") == "declared-unused":
         steps.append("Confirm the package is not loaded dynamically or through plugins before removing it.")
+    dependency_paths = usage.get("dependency_paths")
+    if isinstance(dependency_paths, list) and dependency_paths:
+        paths = [
+            " -> ".join(str(node) for node in item.get("path", [])[:12])
+            for item in dependency_paths[:3]
+            if isinstance(item, dict) and isinstance(item.get("path"), list)
+        ]
+        if paths:
+            steps.append(
+                "Review and update the introducing dependency path(s): "
+                + "; ".join(paths)
+                + "."
+            )
     owners = usage.get("import_path_owners")
     if isinstance(owners, list) and owners:
         steps.append("Route implementation review to import-path owner(s): " + ", ".join(str(item) for item in owners[:10]) + ".")
@@ -578,6 +696,27 @@ def _bounded_versions(value: Any) -> list[str]:
             and not any(ord(character) < 32 for character in text)
         }
     )[:100]
+
+
+def _bounded_dependency_paths(value: Any) -> list[dict[str, Any]]:
+    raw = value if isinstance(value, list) else []
+    return [
+        {
+            "introducing_package": _bounded_text(
+                item.get("introducing_package"), 300
+            ),
+            "path": _bounded_text_list(item.get("path"), 12, 500),
+            "depth": (
+                int(item["depth"])
+                if isinstance(item.get("depth"), int)
+                and not isinstance(item.get("depth"), bool)
+                and 0 <= int(item["depth"]) <= 11
+                else 0
+            ),
+        }
+        for item in raw[:25]
+        if isinstance(item, dict) and item.get("introducing_package")
+    ]
 
 
 def _bounded_text(value: Any, maximum: int) -> str:

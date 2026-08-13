@@ -84,7 +84,7 @@ does not silently weaken the full-repository production policy.
 |---|---|
 | `security-passport.json` | Unsigned in-toto/SLSA statement generated with every scan |
 | `risk-intelligence.json` | Snapshot hashes, ages, record counts, thresholds, matches, and validation errors |
-| `finding-delta.json` | Baseline identity, match strategies, lifecycle counts, and bounded resolved records |
+| `finding-delta.json` | Baseline identity, match strategies, lifecycle counts, bounded resolved records, and bounded CODEOWNERS rules for routing files without separate findings |
 | `effectiveness.json` | Tool completion, attribution, actionability, corroboration, and unique contribution |
 | `assurance-claims.json` | NIST SSDF claim-to-evidence graph |
 

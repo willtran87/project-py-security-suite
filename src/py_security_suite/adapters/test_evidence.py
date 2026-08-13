@@ -125,7 +125,7 @@ class JUnitAdapter(ScannerAdapter):
         ]
 
     def parse(self, payload: str, target: Path) -> list[Finding]:
-        document = _document(payload, "junit")
+        document = _normalized_junit_document(payload, target)
         failures = document.get("failures")
         if not isinstance(failures, list):
             raise TypeError("JUnit evidence requires a failures list")
@@ -199,7 +199,7 @@ class JUnitAdapter(ScannerAdapter):
         return findings
 
     def derived_artifacts(self, payload: str, target: Path) -> dict[str, Any]:
-        return {self.summary_artifact: _document(payload, "junit")}
+        return {self.summary_artifact: _normalized_junit_document(payload, target)}
 
 
 class HypothesisAdapter(JUnitAdapter):
@@ -337,6 +337,54 @@ def _document(payload: str, kind: str) -> dict[str, Any]:
     if not isinstance(document, dict) or document.get("kind") != kind:
         raise TypeError(f"validated {kind} evidence must be an object")
     return document
+
+
+def _normalized_junit_document(payload: str, target: Path) -> dict[str, Any]:
+    document = _document(payload, "junit")
+    for key in ("failures", "test_cases"):
+        records = document.get(key)
+        if not isinstance(records, list):
+            continue
+        for record in records:
+            if not isinstance(record, dict):
+                continue
+            path = record.get("file")
+            if isinstance(path, str) and path:
+                normalized = normalize_repo_path(target, path)
+                record["file"] = normalized
+                record["file_attribution"] = (
+                    "producer" if normalized != "<outside-target>" else "unavailable"
+                )
+            elif key == "test_cases":
+                derived = _test_module_path(target, record.get("classname"))
+                record["file"] = derived or ""
+                record["file_attribution"] = (
+                    "classname-module" if derived else "unavailable"
+                )
+            report = record.get("report")
+            if isinstance(report, str) and report:
+                record["report"] = normalize_repo_path(target, report)
+    return document
+
+
+def _test_module_path(target: Path, value: Any) -> str | None:
+    classname = str(value or "").strip()
+    if not classname or any(character in classname for character in "/\\:"):
+        return None
+    parts = classname.split(".")
+    if not all(part and part.replace("_", "a").isalnum() for part in parts):
+        return None
+    for length in range(len(parts), 0, -1):
+        relative = Path(*parts[:length]).with_suffix(".py")
+        candidate = target / relative
+        normalized = normalize_repo_path(target, candidate)
+        if (
+            normalized == relative.as_posix()
+            and candidate.is_file()
+            and not candidate.is_symlink()
+        ):
+            return normalized
+    return None
 
 
 def _integer(value: object) -> int:

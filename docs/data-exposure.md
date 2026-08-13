@@ -179,7 +179,10 @@ risk.
 
 Each distinct SDK advisory also carries dependency-use context from CycloneDX,
 Graphify, reachability/runtime evidence, and deptry. Reports name exact importing
-files and whether the package is direct or transitive. Incomplete entry-point
+files, whether the package is direct or transitive, and bounded CycloneDX paths
+from introducing roots to affected transitive packages. pipdeptree environment
+health qualifies those paths and makes missing, cyclic, or conflicting installed
+dependencies visible beside the SDK risk. Incomplete entry-point
 modeling remains explicit, and “unused” or “disconnected” never proves that the
 vulnerable function is unreachable. Conflicting Graphify-import and
 deptry-unused evidence produces a dedicated reconciliation action.
@@ -194,9 +197,11 @@ disclosed data or that a vulnerable function executes.
 
 When topology and ownership evidence exist, the same SDK advisory names the
 owners of exact importing files, Graphify-selected direct/transitive tests with
-confidence, and import surfaces below 80% coverage. Missing CODEOWNERS matches
-or test mappings remain explicit rather than silently falling back to a guessed
-team or broad test command.
+confidence, case-level pre-remediation execution status from retained JUnit,
+Hypothesis, or Schemathesis evidence, and import surfaces below 80% coverage.
+Missing CODEOWNERS matches, test mappings, or exact executed-test records remain
+explicit rather than silently falling back to a guessed team or broad test
+command.
 
 An inventory item is **not a finding**. It tells reviewers where disclosure
 controls should exist and activates SDK-specific context when a scanner reports
@@ -220,6 +225,8 @@ For supported findings, the suite adds:
   and bounded graph blast radius;
 - CODEOWNERS-derived owners, graph-selected direct/transitive/associated tests,
   change-risk score and classification, and structural hotspot identifiers;
+- introducing dependency roots and paths, path confidence, and dependency-
+  environment health or gaps;
 - curated SDK package names, normalized package-finding IDs/tools/
   classifications, distinct advisory clusters and observation counts,
   source/artifact version lineage, advisory citations, threat intelligence,
@@ -284,7 +291,8 @@ For every confirmed path:
 ## Artifact contract
 
 The current contract is bundled as
-[`data-exposure-1.3.schema.json`](../src/py_security_suite/schemas/data-exposure-1.3.schema.json);
+[`data-exposure-1.4.schema.json`](../src/py_security_suite/schemas/data-exposure-1.4.schema.json);
+[1.3](../src/py_security_suite/schemas/data-exposure-1.3.schema.json),
 [1.2](../src/py_security_suite/schemas/data-exposure-1.2.schema.json),
 [1.1](../src/py_security_suite/schemas/data-exposure-1.1.schema.json), and
 [1.0](../src/py_security_suite/schemas/data-exposure-1.0.schema.json) remain

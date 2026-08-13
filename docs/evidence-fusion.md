@@ -16,8 +16,10 @@ empty scanner result as proof of safety.
 | Grype artifact finding | Source and artifact SBOMs plus OSV findings | Links artifact exposure back to the source dependency and related advisory observations |
 | OSV/Grype package advisories | Exact normalized package plus transitive CVE/GHSA/PYSEC/OSV alias overlap | Preserves native findings and sources while presenting one distinct actionable advisory, canonical identifier, versions, tools, and citations instead of double-counting aliases |
 | Distinct package advisory | CycloneDX dependency roots, exact Graphify external imports, importing-file reachability/runtime state, and deptry findings | Distinguishes direct/transitive, imported, executable, load-only, disconnected, reachability-incomplete, apparently unused, and conflicting evidence without asserting exploitability |
+| Transitive package advisory | CycloneDX dependency relationships plus pipdeptree environment health | Names bounded root-to-affected-package paths and qualifies their confidence when the installed environment reports missing, cyclic, or conflicting dependencies |
 | Distinct package advisory | OSV/Grype fixed-version evidence plus digest-approved CISA KEV, FIRST EPSS, and CycloneDX VEX snapshots | Produces one P0-P4 remediation record with scanner-attributed fix candidates, action kind, evidence basis, uncertainties, and verification steps; VEX claims require validation and never suppress native findings automatically |
 | Advisory importing files | Graphify reverse dependencies, coverage, CODEOWNERS-derived finding ownership, and native findings | Routes the remediation to observed import-path owners, selects direct/transitive focused tests with explicit confidence, and highlights import paths below 80% coverage |
+| Graph-selected advisory tests | Bounded JUnit, Hypothesis, and Schemathesis case ledgers | Shows whether each selected test file has retained passing, failing, partial, skipped, or no observed cases; aggregate green totals never prove a specific test ran |
 | Trivy and ScanCode license evidence | Source/artifact component inventories | Connects license policy findings to the component and lifecycle stage where it appears |
 | Cosign, attestations, reproducible-build evidence | Artifact manifest | Binds provenance conclusions to the exact artifact SHA-256 and detects digest disagreement |
 | Any normalized finding | High-value classification and package indexes | Links CVE, GHSA, CWE, license, SLSA, and package observations even when tools report different paths or lifecycle stages |
@@ -32,7 +34,9 @@ flowchart LR
     subgraph Source["Source stage"]
         SAST["SAST and quality findings"]
         SourceSBOM["CycloneDX source SBOM"]
+        Environment["pipdeptree<br/>environment health"]
         Diff["Changed-line coverage"]
+        Tests["Bounded case-level<br/>JUnit evidence"]
     end
     subgraph Structure["Structural context"]
         Graph["Graphify topology"]
@@ -50,7 +54,9 @@ flowchart LR
     end
     SAST --> Fusion["Bounded evidence fusion"]
     SourceSBOM --> Fusion
+    Environment --> Fusion
     Diff --> Fusion
+    Tests --> Use
     Graph --> Fusion
     Reach --> Fusion
     Complexity --> Fusion
@@ -107,8 +113,8 @@ Each finding receives `evidence.fusion` containing:
   fixed-version candidates, evidence basis, uncertainties, and bounded
   verification steps; and
 - validation handoff with import-path owners, Graphify-selected direct/transitive
-  test files, test-selection confidence, file coverage, and explicit unmapped
-  states; and
+  test files, test-selection confidence, exact retained execution status, file
+  coverage, and explicit unmapped or unobserved states; and
 - artifact-manifest digest agreement.
 
 An artifact digest contradiction is stronger than ordinary triage context: it
@@ -121,14 +127,30 @@ The report also records package lineage as `matched`, `version-drift`,
 dependencies and packaging helpers can legitimately be source-only, while an
 artifact-only component requires investigation before it is considered drift.
 
-Evidence-fusion schema 1.1 records `advisory_clusters`. A cluster is created
+Evidence-fusion schema 1.2 records `advisory_clusters`. A cluster is created
 only when exact normalized package names match and advisory identifiers overlap,
 including transitive alias chains. CVE is preferred as the display identifier,
 followed by GHSA, PYSEC, and OSV, but no native scanner source is discarded. The
 report therefore presents both the number of distinct risks and the number of
 retained scanner observations. Cross-tool clustering is corroboration, not
-proof of reachability or exploitation. The frozen 1.0 schema remains
+proof of reachability or exploitation. Frozen schemas 1.1 and 1.0 remain
 installable.
+
+Focused-test execution is a pre-remediation evidence join. The passive JUnit
+ingester retains bounded case identity, normalized repository file, result, and
+duration metadata while dropping captured output and failure bodies. Fusion
+requires an exact selected-file match. Producer file attributes are preferred;
+when xUnit2 omits them, a dotted classname is accepted only if its longest
+module prefix resolves to an existing, non-linked repository Python file, and
+the record identifies that attribution. Fusion reports `passed`, `failed`,
+`incomplete`, `not-observed`, `not-available`, or `not-selected`. A legacy or
+aggregate-only green report is `not-available`, never `passed`. Even a current
+`passed` state must be regenerated after the dependency or build changes.
+
+Owner routing uses bounded CODEOWNERS rules retained in `finding-delta.json`
+with the same last-match semantics used for normalized findings. This allows an
+exact advisory import path to receive its repository owner even when that file
+has no unrelated scanner finding; absence of a matching rule remains explicit.
 
 Dependency-use assessment is deliberately conservative. An exact Graphify
 external import can establish that a module name appears in a file, and
@@ -139,6 +161,15 @@ reachability analysis is complete; otherwise the report says
 `declared-unused`, while an exact import plus `DEP002` becomes an evidence
 conflict that requires mapping and dynamic/plugin review. None of these states
 suppresses or lowers the package scanner finding.
+
+For transitive advisories, CycloneDX relationship edges produce bounded,
+loop-safe paths from a metadata/root component to the affected package. The
+report identifies the introducing package and carries the path into remediation,
+closure, release-readiness, and SDK exposure context. A healthy pipdeptree
+summary gives that path `high` confidence; missing, cyclic, or conflicting
+installed dependencies make it `qualified`; absent environment evidence remains
+`not-available`. pipdeptree's aggregate summary does not independently prove the
+individual CycloneDX edge, so the suite never presents it as a second path source.
 
 ## Advisory remediation semantics
 

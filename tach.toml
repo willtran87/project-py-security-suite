@@ -94,8 +94,13 @@ layer = "services"
 
 [[modules]]
 path = "py_security_suite.evidence_fusion"
-depends_on = ["py_security_suite.advisory_fusion", "py_security_suite.models"]
+depends_on = ["py_security_suite.advisory_fusion", "py_security_suite.models", "py_security_suite.ownership"]
 layer = "services"
+
+[[modules]]
+path = "py_security_suite.ownership"
+depends_on = []
+layer = "core"
 
 [[modules]]
 path = "py_security_suite.data_exposure"
@@ -290,6 +295,7 @@ path = "py_security_suite.finding_delta"
 depends_on = [
     "py_security_suite.execution",
     "py_security_suite.models",
+    "py_security_suite.ownership",
     "py_security_suite.path_safety",
 ]
 layer = "services"

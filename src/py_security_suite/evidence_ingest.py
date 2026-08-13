@@ -13,6 +13,7 @@ from . import __version__
 
 _MAX_REPORT_BYTES = 64 * 1024 * 1024
 _MAX_JUNIT_REPORTS = 128
+_MAX_JUNIT_TEST_CASES = 100_000
 _ASSURANCE_KINDS = frozenset(
     {
         "atheris",
@@ -130,6 +131,7 @@ def _junit_document(path: Path) -> dict[str, Any]:
     reports = _junit_paths(path)
     totals = {"tests": 0, "failures": 0, "errors": 0, "skipped": 0, "time": 0.0}
     failures: list[dict[str, Any]] = []
+    test_cases: list[dict[str, Any]] = []
     for report in reports:
         data = _read_bounded(report)
         lowered = data[:4096].lower()
@@ -141,9 +143,10 @@ def _junit_document(path: Path) -> dict[str, Any]:
             forbid_entities=True,
             forbid_external=True,
         )
-        cases = [node for node in root.iter() if _local_name(node.tag) == "testcase"]
-        totals["tests"] += len(cases)
-        for case in cases:
+        for case in (
+            node for node in root.iter() if _local_name(node.tag) == "testcase"
+        ):
+            totals["tests"] += 1
             totals["time"] += _number(case.attrib.get("time"))
             result = next(
                 (
@@ -153,32 +156,42 @@ def _junit_document(path: Path) -> dict[str, Any]:
                 ),
                 None,
             )
-            if result is None:
-                continue
-            result_type = _local_name(result.tag)
-            total_key = "skipped" if result_type == "skipped" else f"{result_type}s"
-            totals[total_key] += 1
-            if result_type == "skipped":
-                continue
-            failures.append(
-                {
-                    "report": str(report.resolve()),
-                    "name": str(case.attrib.get("name") or "unnamed test"),
-                    "classname": str(case.attrib.get("classname") or ""),
-                    "file": str(case.attrib.get("file") or ""),
-                    "line": _optional_integer(case.attrib.get("line")),
-                    "time": _number(case.attrib.get("time")),
-                    "result": result_type,
-                    "message": _bounded_text(result.attrib.get("message")),
-                    "type": _bounded_text(result.attrib.get("type")),
-                }
-            )
+            result_type = "passed" if result is None else _local_name(result.tag)
+            if result_type != "passed":
+                total_key = (
+                    "skipped" if result_type == "skipped" else f"{result_type}s"
+                )
+                totals[total_key] += 1
+            case_record = {
+                "name": _bounded_text(case.attrib.get("name") or "unnamed test", 500),
+                "classname": _bounded_text(case.attrib.get("classname"), 500),
+                "file": _bounded_text(case.attrib.get("file"), 4096),
+                "line": _optional_integer(case.attrib.get("line")),
+                "time": _number(case.attrib.get("time")),
+                "result": result_type,
+                "file_attribution": (
+                    "producer" if case.attrib.get("file") else "unavailable"
+                ),
+            }
+            if len(test_cases) < _MAX_JUNIT_TEST_CASES:
+                test_cases.append(case_record)
+            if result is not None and result_type != "skipped":
+                failures.append(
+                    {
+                        "report": str(report.resolve()),
+                        **case_record,
+                        "message": _bounded_text(result.attrib.get("message")),
+                        "type": _bounded_text(result.attrib.get("type")),
+                    }
+                )
     return {
         "schema_version": "1.0",
         "kind": "junit",
         "report_count": len(reports),
         "totals": totals,
         "failures": failures,
+        "test_cases": test_cases,
+        "test_case_inventory_complete": totals["tests"] <= _MAX_JUNIT_TEST_CASES,
     }
 
 

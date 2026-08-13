@@ -6,6 +6,7 @@ from typing import Any
 
 from .advisory_fusion import build_advisory_clusters, refresh_advisory_decision
 from .models import Finding, ToolRun, ToolStatus
+from .ownership import owners_for_path, ownership_rules_from_artifact
 
 
 _NAME_SEPARATOR = re.compile(r"[-_.]+")
@@ -167,6 +168,18 @@ def build_evidence_fusion(
             bool(item["dependency_usage"]["recommended_test_files"])
             for item in advisory_clusters
         ),
+        "advisories_with_passing_focused_test_evidence": sum(
+            item["dependency_usage"]["focused_test_validation_status"] == "passed"
+            for item in advisory_clusters
+        ),
+        "advisories_with_failing_focused_test_evidence": sum(
+            item["dependency_usage"]["focused_test_validation_status"] == "failed"
+            for item in advisory_clusters
+        ),
+        "advisories_with_unobserved_focused_tests": sum(
+            bool(item["dependency_usage"]["unobserved_recommended_test_files"])
+            for item in advisory_clusters
+        ),
         "advisories_with_import_path_owners": sum(
             bool(item["dependency_usage"]["import_path_owners"])
             for item in advisory_clusters
@@ -175,10 +188,23 @@ def build_evidence_fusion(
             bool(item["dependency_usage"]["uncovered_import_paths"])
             for item in advisory_clusters
         ),
+        "advisories_with_introducing_dependency_paths": sum(
+            bool(item["dependency_usage"]["dependency_paths"])
+            for item in advisory_clusters
+        ),
+        "advisories_with_dependency_environment_gaps": sum(
+            item["dependency_usage"]["dependency_environment_warning"]
+            for item in advisory_clusters
+        ),
+        "transitive_advisories_without_dependency_paths": sum(
+            item["dependency_usage"]["source_relationship"] == "transitive"
+            and not item["dependency_usage"]["dependency_paths"]
+            for item in advisory_clusters
+        ),
     }
     return {
-        "schema_version": "1.1",
-        "schema_id": "urn:project-py-security-suite:evidence-fusion:1.1",
+        "schema_version": "1.2",
+        "schema_id": "urn:project-py-security-suite:evidence-fusion:1.2",
         "authoritative": False,
         "purpose": (
             "bounded cross-reference and triage evidence; does not infer absence, "
@@ -202,6 +228,7 @@ def build_evidence_fusion(
             "Package name matching uses normalized Python distribution names and exact versions.",
             "Advisory aliases are clustered for triage; every native scanner observation remains retained as a finding.",
             "Dependency-use context is static triage evidence and never proves that a vulnerable function is or is not exploitable.",
+            "Focused-test execution describes retained pre-remediation evidence and never proves that a future remediated build passed.",
             "Static graph and reachability evidence do not prove runtime exploitability.",
             "Fusion review tiers guide triage and never replace scanner severity or policy.",
         ],
@@ -498,19 +525,29 @@ def _enrich_advisory_clusters(
     artifacts: dict[str, Any],
     findings: list[Finding],
 ) -> list[dict[str, Any]]:
-    relationships, relationship_evidence = _source_dependency_relationships(
-        artifacts.get("sbom.cdx.json")
+    (
+        relationships,
+        dependency_paths,
+        relationship_evidence,
+        dependency_paths_truncated,
+    ) = _source_dependency_relationships(artifacts.get("sbom.cdx.json"))
+    environment_health, environment_health_evidence = _pipdeptree_health(
+        artifacts.get("pipdeptree-summary.json")
     )
     imports, import_evidence = _external_imports(artifacts.get("graphify.json"))
     test_mappings, test_mapping_evidence = _dependency_test_mappings(
         artifacts.get("graphify.json")
     )
+    test_executions, test_execution_evidence = _test_execution_index(artifacts)
     reachability, reachability_evidence = _reachability_by_path(
         artifacts.get("reachability.json")
     )
     coverage = _coverage(artifacts.get("coverage-summary.json"))
     coverage_evidence = isinstance(artifacts.get("coverage-summary.json"), dict)
     owners_by_path = _owners_by_path(findings)
+    ownership_rules = ownership_rules_from_artifact(
+        artifacts.get("finding-delta.json")
+    )
     ownership_evidence = _ownership_evidence_available(
         artifacts.get("finding-delta.json"), owners_by_path
     )
@@ -526,10 +563,18 @@ def _enrich_advisory_clusters(
             import_paths,
             test_mappings=test_mappings,
             test_mapping_evidence=test_mapping_evidence,
+            test_executions=test_executions,
+            test_execution_evidence=test_execution_evidence,
             owners_by_path=owners_by_path,
+            ownership_rules=ownership_rules,
             ownership_evidence=ownership_evidence,
             coverage=coverage,
             coverage_evidence=coverage_evidence,
+        )
+        package_paths = dependency_paths.get(package, [])
+        environment_warning = bool(
+            environment_health_evidence
+            and environment_health.get("healthy") is False
         )
         path_reachability = [
             reachability[path] for path in import_paths if path in reachability
@@ -567,6 +612,26 @@ def _enrich_advisory_clusters(
             "assessment": assessment,
             "source_relationship": relationships.get(package, "unknown"),
             "relationship_evidence_available": relationship_evidence,
+            "dependency_path_evidence_available": relationship_evidence,
+            "dependency_paths": package_paths,
+            "dependency_paths_truncated": dependency_paths_truncated,
+            "introducing_packages": sorted(
+                {
+                    str(item["introducing_package"])
+                    for item in package_paths
+                    if item.get("introducing_package")
+                }
+            )[:25],
+            "dependency_path_confidence": (
+                "qualified"
+                if package_paths and environment_warning
+                else "high"
+                if package_paths
+                else "not-available"
+            ),
+            "environment_health_evidence_available": environment_health_evidence,
+            "dependency_environment_health": environment_health,
+            "dependency_environment_warning": environment_warning,
             "import_evidence_available": import_evidence,
             "import_observed": import_observed,
             "import_modules": sorted(
@@ -589,32 +654,46 @@ def _enrich_advisory_clusters(
             "signals_conflict": signals_conflict,
             **validation,
             "evidence_artifacts": sorted(
-                name
-                for name, available in (
-                    ("sbom.cdx.json", relationship_evidence),
-                    ("graphify.json", import_evidence),
-                    ("reachability.json", bool(reachability_evidence)),
-                    ("coverage-summary.json", coverage_evidence),
-                    ("finding-delta.json", ownership_evidence),
-                    ("findings.json", bool(deptry_records)),
-                )
-                if available
+                {
+                    *(
+                        name
+                        for name, available in (
+                            ("sbom.cdx.json", relationship_evidence),
+                            ("graphify.json", import_evidence),
+                            ("reachability.json", bool(reachability_evidence)),
+                            ("coverage-summary.json", coverage_evidence),
+                            ("finding-delta.json", ownership_evidence),
+                            ("findings.json", bool(deptry_records)),
+                            (
+                                "pipdeptree-summary.json",
+                                environment_health_evidence,
+                            ),
+                        )
+                        if available
+                    ),
+                    *test_execution_evidence["sources"],
+                }
             ),
         }
         refresh_advisory_decision(cluster, findings_by_id)
     return clusters
 
 
-def _source_dependency_relationships(value: Any) -> tuple[dict[str, str], bool]:
+def _source_dependency_relationships(
+    value: Any,
+) -> tuple[
+    dict[str, str], dict[str, list[dict[str, Any]]], bool, bool
+]:
     if not isinstance(value, dict):
-        return {}, False
+        return {}, {}, False, False
     raw_components = value.get("components")
     raw_dependencies = value.get("dependencies")
     if not isinstance(raw_components, list) or not isinstance(raw_dependencies, list):
-        return {}, False
+        return {}, {}, False, False
     if not raw_dependencies:
-        return {}, True
+        return {}, {}, True, False
     packages_by_ref: dict[str, str] = {}
+    versions_by_ref: dict[str, str] = {}
     for item in raw_components:
         if not isinstance(item, dict):
             continue
@@ -622,8 +701,9 @@ def _source_dependency_relationships(value: Any) -> tuple[dict[str, str], bool]:
         package = _package_name(item.get("name"))
         if isinstance(reference, str) and reference and package:
             packages_by_ref[reference] = package
+            versions_by_ref[reference] = str(item.get("version") or "unknown")[:100]
     if not packages_by_ref:
-        return {}, True
+        return {}, {}, True, False
     adjacency: dict[str, set[str]] = defaultdict(set)
     incoming: dict[str, int] = {reference: 0 for reference in packages_by_ref}
     for item in raw_dependencies:
@@ -658,7 +738,104 @@ def _source_dependency_relationships(value: Any) -> tuple[dict[str, str], bool]:
         relationship = "direct" if reference in direct_refs else "transitive"
         if relationships.get(package) != "direct":
             relationships[package] = relationship
-    return relationships, True
+    paths, truncated = _dependency_paths(
+        packages_by_ref,
+        versions_by_ref,
+        adjacency,
+        direct_refs,
+    )
+    return relationships, paths, True, truncated
+
+
+def _dependency_paths(
+    packages_by_ref: dict[str, str],
+    versions_by_ref: dict[str, str],
+    adjacency: dict[str, set[str]],
+    direct_refs: set[str],
+) -> tuple[dict[str, list[dict[str, Any]]], bool]:
+    result: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    seen: dict[str, set[tuple[str, ...]]] = defaultdict(set)
+    queue: list[tuple[str, tuple[str, ...]]] = [
+        (reference, (reference,)) for reference in sorted(direct_refs)
+    ]
+    cursor = 0
+    steps = 0
+    truncated = False
+    while cursor < len(queue):
+        reference, references = queue[cursor]
+        cursor += 1
+        steps += 1
+        if steps > 100_000:
+            truncated = True
+            break
+        package = packages_by_ref.get(reference)
+        if package:
+            labels = tuple(
+                f"{packages_by_ref[item]}@{versions_by_ref.get(item, 'unknown')}"
+                for item in references
+                if item in packages_by_ref
+            )
+            if labels and labels not in seen[package]:
+                if len(result[package]) >= 25:
+                    truncated = True
+                else:
+                    seen[package].add(labels)
+                    result[package].append(
+                        {
+                            "introducing_package": packages_by_ref[references[0]],
+                            "path": list(labels),
+                            "depth": len(labels) - 1,
+                        }
+                    )
+        if len(references) >= 12:
+            if adjacency.get(reference):
+                truncated = True
+            continue
+        for child in sorted(adjacency.get(reference, set())):
+            if child in packages_by_ref and child not in references:
+                queue.append((child, (*references, child)))
+    for records in result.values():
+        records.sort(key=lambda item: (int(item["depth"]), item["path"]))
+    return dict(result), truncated
+
+
+def _pipdeptree_health(value: Any) -> tuple[dict[str, Any], bool]:
+    if not isinstance(value, dict) or not any(
+        key in value
+        for key in (
+            "total_packages",
+            "missing_dependencies",
+            "cyclic_dependencies",
+            "conflicting_dependencies",
+        )
+    ):
+        return {}, False
+    conflicts = value.get("conflicting_dependencies")
+    conflicts = conflicts if isinstance(conflicts, dict) else {}
+
+    def count(raw: Any) -> int:
+        return raw if isinstance(raw, int) and not isinstance(raw, bool) and raw >= 0 else 0
+
+    health = {
+        "total_packages": count(value.get("total_packages")),
+        "direct_dependencies": count(value.get("direct_dependencies")),
+        "transitive_dependencies": count(value.get("transitive_dependencies")),
+        "max_depth": count(value.get("max_depth")),
+        "missing_dependencies": count(value.get("missing_dependencies")),
+        "cyclic_dependencies": count(value.get("cyclic_dependencies")),
+        "conflicting_dependency_packages": count(conflicts.get("packages")),
+        "conflicting_dependency_edges": count(conflicts.get("edges")),
+    }
+    health["healthy"] = not any(
+        health[key]
+        for key in (
+            "missing_dependencies",
+            "cyclic_dependencies",
+            "conflicting_dependency_packages",
+            "conflicting_dependency_edges",
+        )
+    )
+    return health, True
 
 
 def _dependency_test_mappings(
@@ -758,7 +935,10 @@ def _dependency_validation_handoff(
     *,
     test_mappings: dict[str, dict[str, list[str]]],
     test_mapping_evidence: bool,
+    test_executions: dict[str, list[dict[str, str]]],
+    test_execution_evidence: dict[str, Any],
     owners_by_path: dict[str, set[str]],
+    ownership_rules: list[tuple[str, list[str]]],
     ownership_evidence: bool,
     coverage: dict[str, dict[str, Any]],
     coverage_evidence: bool,
@@ -779,7 +959,14 @@ def _dependency_validation_handoff(
         }
     )[:50]
     owners = sorted(
-        {owner for path in import_paths for owner in owners_by_path.get(path, set())}
+        {
+            owner
+            for path in import_paths
+            for owner in (
+                *owners_by_path.get(path, set()),
+                *owners_for_path(path, ownership_rules),
+            )
+        }
     )[:20]
     coverage_records = [
         {
@@ -811,17 +998,146 @@ def _dependency_validation_handoff(
         if test_mapping_evidence and import_paths
         else "not-available"
     )
+    recommended = [*direct, *transitive][:50]
+    execution = _focused_test_execution(
+        recommended,
+        test_executions=test_executions,
+        evidence=test_execution_evidence,
+    )
     return {
         "test_mapping_evidence_available": test_mapping_evidence,
-        "recommended_test_files": [*direct, *transitive][:50],
+        "recommended_test_files": recommended,
         "direct_test_files": direct,
         "transitive_test_files": transitive,
         "test_selection_confidence": confidence,
+        **execution,
         "ownership_evidence_available": ownership_evidence,
         "import_path_owners": owners,
         "coverage_evidence_available": coverage_evidence,
         "import_path_coverage": coverage_records,
         "uncovered_import_paths": uncovered,
+    }
+
+
+def _test_execution_index(
+    artifacts: dict[str, Any],
+) -> tuple[dict[str, list[dict[str, str]]], dict[str, Any]]:
+    by_path: dict[str, list[dict[str, str]]] = defaultdict(list)
+    sources: list[str] = []
+    inventory_sources: list[str] = []
+    inventory_complete: list[bool] = []
+    for name in (
+        "junit-summary.json",
+        "hypothesis-summary.json",
+        "schemathesis-summary.json",
+    ):
+        document = artifacts.get(name)
+        if not isinstance(document, dict):
+            continue
+        sources.append(name)
+        cases = document.get("test_cases")
+        if not isinstance(cases, list):
+            continue
+        inventory_sources.append(name)
+        inventory_complete.append(document.get("test_case_inventory_complete") is True)
+        for item in cases[:100_000]:
+            if not isinstance(item, dict):
+                continue
+            path = _path(str(item.get("file") or ""))
+            result = str(item.get("result") or "")
+            if not path or path in {".", "<outside-target>"} or result not in {
+                "passed",
+                "failure",
+                "error",
+                "skipped",
+            }:
+                continue
+            attribution = str(item.get("file_attribution") or "producer")
+            if attribution not in {"producer", "classname-module"}:
+                continue
+            by_path[path].append(
+                {
+                    "source": name,
+                    "result": result,
+                    "file_attribution": attribution,
+                }
+            )
+    return dict(by_path), {
+        "available": bool(sources),
+        "case_inventory_available": bool(inventory_sources),
+        "case_inventory_complete": (
+            all(inventory_complete) if inventory_sources else None
+        ),
+        "sources": sorted(sources),
+        "inventory_sources": sorted(inventory_sources),
+    }
+
+
+def _focused_test_execution(
+    recommended: list[str],
+    *,
+    test_executions: dict[str, list[dict[str, str]]],
+    evidence: dict[str, Any],
+) -> dict[str, Any]:
+    records: list[dict[str, Any]] = []
+    unobserved: list[str] = []
+    for path in recommended:
+        cases = test_executions.get(path, [])
+        counts = {
+            result: sum(item["result"] == result for item in cases)
+            for result in ("passed", "failure", "error", "skipped")
+        }
+        status = (
+            "failed"
+            if counts["failure"] or counts["error"]
+            else "partial"
+            if counts["passed"] and counts["skipped"]
+            else "passed"
+            if counts["passed"]
+            else "skipped"
+            if counts["skipped"]
+            else "not-observed"
+        )
+        if status == "not-observed":
+            unobserved.append(path)
+        records.append(
+            {
+                "path": path,
+                "status": status,
+                "tests": len(cases),
+                "passed": counts["passed"],
+                "failures": counts["failure"],
+                "errors": counts["error"],
+                "skipped": counts["skipped"],
+                "sources": sorted({item["source"] for item in cases}),
+                "path_attributions": sorted(
+                    {item["file_attribution"] for item in cases}
+                ),
+            }
+        )
+    statuses = {str(item["status"]) for item in records}
+    validation_status = (
+        "not-selected"
+        if not recommended
+        else "not-available"
+        if evidence.get("case_inventory_available") is not True
+        else "failed"
+        if "failed" in statuses
+        else "not-observed"
+        if statuses == {"not-observed"}
+        else "passed"
+        if statuses == {"passed"}
+        else "incomplete"
+    )
+    return {
+        "test_execution_evidence_available": evidence.get("available") is True,
+        "test_case_inventory_available": evidence.get("case_inventory_available")
+        is True,
+        "test_case_inventory_complete": evidence.get("case_inventory_complete"),
+        "test_execution_sources": list(evidence.get("sources") or [])[:10],
+        "focused_test_execution": records,
+        "focused_test_validation_status": validation_status,
+        "unobserved_recommended_test_files": unobserved,
     }
 
 
@@ -984,6 +1300,14 @@ def _empty_dependency_usage() -> dict[str, Any]:
         "assessment": "unknown",
         "source_relationship": "unknown",
         "relationship_evidence_available": False,
+        "dependency_path_evidence_available": False,
+        "dependency_paths": [],
+        "dependency_paths_truncated": False,
+        "introducing_packages": [],
+        "dependency_path_confidence": "not-available",
+        "environment_health_evidence_available": False,
+        "dependency_environment_health": {},
+        "dependency_environment_warning": False,
         "import_evidence_available": False,
         "import_observed": None,
         "import_modules": [],
@@ -1001,6 +1325,13 @@ def _empty_dependency_usage() -> dict[str, Any]:
         "direct_test_files": [],
         "transitive_test_files": [],
         "test_selection_confidence": "not-available",
+        "test_execution_evidence_available": False,
+        "test_case_inventory_available": False,
+        "test_case_inventory_complete": None,
+        "test_execution_sources": [],
+        "focused_test_execution": [],
+        "focused_test_validation_status": "not-selected",
+        "unobserved_recommended_test_files": [],
         "ownership_evidence_available": False,
         "import_path_owners": [],
         "coverage_evidence_available": False,
@@ -1038,6 +1369,10 @@ def _empty_remediation_context() -> dict[str, Any]:
         "owners": [],
         "recommended_test_files": [],
         "test_selection_confidence": "not-available",
+        "focused_test_validation_status": "not-selected",
+        "introducing_packages": [],
+        "dependency_paths": [],
+        "dependency_path_confidence": "not-available",
         "recommended_action": "Review and remediate the native advisory evidence.",
         "verification_steps": [],
         "evidence_basis": [],

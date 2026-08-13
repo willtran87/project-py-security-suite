@@ -5,7 +5,10 @@ import unittest
 
 from jsonschema import Draft202012Validator  # pylint: disable=import-error
 
-from py_security_suite.evidence_fusion import build_evidence_fusion
+from py_security_suite.evidence_fusion import (
+    _focused_test_execution,
+    build_evidence_fusion,
+)
 from py_security_suite.models import (
     Citation,
     Confidence,
@@ -237,6 +240,47 @@ class EvidenceFusionTests(unittest.TestCase):
                 },
             },
             "finding-delta.json": {"ownership_rules": 1},
+            "pipdeptree-summary.json": {
+                "total_packages": 12,
+                "direct_dependencies": 4,
+                "transitive_dependencies": 8,
+                "max_depth": 3,
+                "missing_dependencies": 0,
+                "cyclic_dependencies": 0,
+                "conflicting_dependencies": {"packages": 0, "edges": 0},
+            },
+            "junit-summary.json": {
+                "schema_version": "1.0",
+                "kind": "junit",
+                "report_count": 1,
+                "totals": {
+                    "tests": 2,
+                    "failures": 0,
+                    "errors": 0,
+                    "skipped": 0,
+                    "time": 0.02,
+                },
+                "failures": [],
+                "test_cases": [
+                    {
+                        "name": "test_request",
+                        "classname": "tests.test_app",
+                        "file": "tests/test_app.py",
+                        "line": 5,
+                        "time": 0.01,
+                        "result": "passed",
+                    },
+                    {
+                        "name": "test_error_path",
+                        "classname": "tests.test_app",
+                        "file": "tests/test_app.py",
+                        "line": 12,
+                        "time": 0.01,
+                        "result": "passed",
+                    },
+                ],
+                "test_case_inventory_complete": True,
+            },
             "reachability.json": {
                 "analysis": {"complete": True, "confidence": "high"},
                 "nodes": [
@@ -257,7 +301,7 @@ class EvidenceFusionTests(unittest.TestCase):
                 command=[name],
                 duration_seconds=1,
             )
-            for name in ("osv-scanner", "grype", "graphify", "coverage")
+            for name in ("osv-scanner", "grype", "graphify", "coverage", "junit")
         ]
 
         document = build_evidence_fusion([osv, grype, source], artifacts, runs)
@@ -277,7 +321,7 @@ class EvidenceFusionTests(unittest.TestCase):
         self.assertEqual(document["contradictions"][0]["finding_id"], "GRYPE-FINDING")
         self.assertEqual(document["summary"]["cross_stage_findings"], 2)
         self.assertEqual(document["summary"]["compound_hotspots"], 1)
-        self.assertEqual(document["schema_version"], "1.1")
+        self.assertEqual(document["schema_version"], "1.2")
         self.assertEqual(document["summary"]["distinct_advisories"], 1)
         self.assertEqual(document["summary"]["advisory_observations"], 2)
         self.assertEqual(document["summary"]["alias_collapsed_observations"], 1)
@@ -298,6 +342,21 @@ class EvidenceFusionTests(unittest.TestCase):
         usage = advisory["dependency_usage"]
         self.assertEqual(usage["assessment"], "executable-import")
         self.assertEqual(usage["source_relationship"], "direct")
+        self.assertEqual(
+            usage["dependency_paths"],
+            [
+                {
+                    "introducing_package": "example-pkg",
+                    "path": ["example-pkg@1.0"],
+                    "depth": 0,
+                }
+            ],
+        )
+        self.assertEqual(usage["introducing_packages"], ["example-pkg"])
+        self.assertEqual(usage["dependency_path_confidence"], "high")
+        self.assertTrue(usage["environment_health_evidence_available"])
+        self.assertTrue(usage["dependency_environment_health"]["healthy"])
+        self.assertFalse(usage["dependency_environment_warning"])
         self.assertTrue(usage["import_observed"])
         self.assertEqual(usage["import_paths"], ["src/app.py"])
         self.assertEqual(usage["reachability_states"], ["executable"])
@@ -305,6 +364,27 @@ class EvidenceFusionTests(unittest.TestCase):
         self.assertEqual(usage["recommended_test_files"], ["tests/test_app.py"])
         self.assertEqual(usage["direct_test_files"], ["tests/test_app.py"])
         self.assertEqual(usage["test_selection_confidence"], "high")
+        self.assertTrue(usage["test_execution_evidence_available"])
+        self.assertTrue(usage["test_case_inventory_available"])
+        self.assertTrue(usage["test_case_inventory_complete"])
+        self.assertEqual(usage["focused_test_validation_status"], "passed")
+        self.assertEqual(
+            usage["focused_test_execution"],
+            [
+                {
+                    "path": "tests/test_app.py",
+                    "status": "passed",
+                    "tests": 2,
+                    "passed": 2,
+                    "failures": 0,
+                    "errors": 0,
+                    "skipped": 0,
+                    "sources": ["junit-summary.json"],
+                    "path_attributions": ["producer"],
+                }
+            ],
+        )
+        self.assertEqual(usage["unobserved_recommended_test_files"], [])
         self.assertTrue(usage["ownership_evidence_available"])
         self.assertEqual(usage["import_path_owners"], ["@platform-security"])
         self.assertTrue(usage["coverage_evidence_available"])
@@ -334,6 +414,9 @@ class EvidenceFusionTests(unittest.TestCase):
             remediation["recommended_test_files"], ["tests/test_app.py"]
         )
         self.assertEqual(remediation["test_selection_confidence"], "high")
+        self.assertEqual(remediation["focused_test_validation_status"], "passed")
+        self.assertEqual(remediation["introducing_packages"], ["example-pkg"])
+        self.assertEqual(remediation["dependency_path_confidence"], "high")
         self.assertEqual(remediation["fixed_version_candidates"], ["1.5", "2.0"])
         self.assertEqual(
             remediation["fixed_version_sources"],
@@ -359,10 +442,26 @@ class EvidenceFusionTests(unittest.TestCase):
         self.assertEqual(document["summary"]["p0_advisories"], 1)
         self.assertEqual(document["summary"]["advisories_with_focused_tests"], 1)
         self.assertEqual(
+            document["summary"]["advisories_with_passing_focused_test_evidence"],
+            1,
+        )
+        self.assertEqual(
+            document["summary"]["advisories_with_failing_focused_test_evidence"],
+            0,
+        )
+        self.assertEqual(
             document["summary"]["advisories_with_import_path_owners"], 1
         )
         self.assertEqual(
             document["summary"]["advisories_with_uncovered_import_paths"], 1
+        )
+        self.assertEqual(
+            document["summary"]["advisories_with_introducing_dependency_paths"],
+            1,
+        )
+        self.assertEqual(
+            document["summary"]["advisories_with_dependency_environment_gaps"],
+            0,
         )
         rendered = "\n".join(_render_fusion_summary(document))
         detailed = "\n".join(_markdown_fusion_context(osv))
@@ -371,6 +470,7 @@ class EvidenceFusionTests(unittest.TestCase):
         self.assertIn("remediation P0, upgrade", detailed)
         self.assertIn("Immediately upgrade", detailed)
         self.assertIn("focused tests tests/test\\_app.py", detailed)
+        self.assertIn("scanned-state focused-test evidence passed", detailed)
         self.assertIn("owners @platform-security", detailed)
         self.assertIn("imports src/app.py", detailed)
         self.assertEqual(
@@ -386,7 +486,7 @@ class EvidenceFusionTests(unittest.TestCase):
             "artifact-only",
         )
 
-        schema = json.loads(read_bundled_schema("evidence-fusion-1.1"))
+        schema = json.loads(read_bundled_schema("evidence-fusion-1.2"))
         Draft202012Validator.check_schema(schema)
         Draft202012Validator(schema).validate(document)
 
@@ -493,7 +593,13 @@ class EvidenceFusionTests(unittest.TestCase):
                         },
                     ]
                 },
-            }
+            },
+            "finding-delta.json": {
+                "ownership_rules": 1,
+                "ownership_rule_details": [
+                    {"pattern": "src/*.py", "owners": ["@client-team"]}
+                ],
+            },
         }
 
         document = build_evidence_fusion([advisory], artifacts, [])
@@ -507,6 +613,52 @@ class EvidenceFusionTests(unittest.TestCase):
             usage["recommended_test_files"], ["tests/test_service.py"]
         )
         self.assertEqual(usage["test_selection_confidence"], "medium")
+        self.assertEqual(usage["focused_test_validation_status"], "not-available")
+        self.assertEqual(usage["import_path_owners"], ["@client-team"])
+
+    def test_focused_test_execution_fails_closed_per_selected_file(self) -> None:
+        result = _focused_test_execution(
+            ["tests/test_client.py", "tests/test_missing.py"],
+            test_executions={
+                "tests/test_client.py": [
+                    {
+                        "source": "junit-summary.json",
+                        "result": "passed",
+                        "file_attribution": "classname-module",
+                    },
+                    {
+                        "source": "junit-summary.json",
+                        "result": "failure",
+                        "file_attribution": "classname-module",
+                    },
+                ]
+            },
+            evidence={
+                "available": True,
+                "case_inventory_available": True,
+                "case_inventory_complete": True,
+                "sources": ["junit-summary.json"],
+            },
+        )
+
+        self.assertEqual(result["focused_test_validation_status"], "failed")
+        self.assertEqual(
+            result["unobserved_recommended_test_files"], ["tests/test_missing.py"]
+        )
+        self.assertEqual(result["focused_test_execution"][0]["tests"], 2)
+        self.assertEqual(result["focused_test_execution"][0]["failures"], 1)
+
+        legacy = _focused_test_execution(
+            ["tests/test_client.py"],
+            test_executions={},
+            evidence={
+                "available": True,
+                "case_inventory_available": False,
+                "case_inventory_complete": None,
+                "sources": ["junit-summary.json"],
+            },
+        )
+        self.assertEqual(legacy["focused_test_validation_status"], "not-available")
 
     def test_exposure_protection_and_priority_influence_fusion_reasons(self) -> None:
         finding = _finding(
@@ -617,7 +769,16 @@ class EvidenceFusionTests(unittest.TestCase):
                         "path": "app.py",
                     }
                 ],
-            }
+            },
+            "pipdeptree-summary.json": {
+                "total_packages": 2,
+                "direct_dependencies": 1,
+                "transitive_dependencies": 1,
+                "max_depth": 2,
+                "missing_dependencies": 0,
+                "cyclic_dependencies": 0,
+                "conflicting_dependencies": {"packages": 1, "edges": 1},
+            },
         }
 
         document = build_evidence_fusion([advisory, deptry], artifacts, [])
@@ -660,7 +821,16 @@ class EvidenceFusionTests(unittest.TestCase):
                     {"ref": "direct", "dependsOn": ["transitive"]},
                     {"ref": "transitive", "dependsOn": []},
                 ],
-            }
+            },
+            "pipdeptree-summary.json": {
+                "total_packages": 2,
+                "direct_dependencies": 1,
+                "transitive_dependencies": 1,
+                "max_depth": 2,
+                "missing_dependencies": 0,
+                "cyclic_dependencies": 0,
+                "conflicting_dependencies": {"packages": 1, "edges": 1},
+            },
         }
 
         document = build_evidence_fusion([direct, transitive], artifacts, [])
@@ -672,6 +842,39 @@ class EvidenceFusionTests(unittest.TestCase):
         self.assertEqual(
             relationships,
             {"direct-lib": "direct", "transitive-lib": "transitive"},
+        )
+        usage_by_package = {
+            item["package"]: item["dependency_usage"]
+            for item in document["advisory_clusters"]
+        }
+        self.assertEqual(
+            usage_by_package["transitive-lib"]["dependency_paths"],
+            [
+                {
+                    "introducing_package": "direct-lib",
+                    "path": ["direct-lib@1", "transitive-lib@1"],
+                    "depth": 1,
+                }
+            ],
+        )
+        self.assertEqual(
+            usage_by_package["transitive-lib"]["dependency_path_confidence"],
+            "qualified",
+        )
+        self.assertTrue(
+            usage_by_package["transitive-lib"]["dependency_environment_warning"]
+        )
+        self.assertIn(
+            "introducing dependency root(s) direct-lib",
+            next(
+                item
+                for item in document["advisory_clusters"]
+                if item["package"] == "transitive-lib"
+            )["remediation_context"]["recommended_action"],
+        )
+        self.assertEqual(
+            document["summary"]["advisories_with_dependency_environment_gaps"],
+            2,
         )
 
 

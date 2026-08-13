@@ -250,6 +250,20 @@ class HealthAdapterTests(unittest.TestCase):
             {
                 "kind": "junit",
                 "failures": [{"name": "unnamed", "result": "error"}],
+                "test_cases": [
+                    {
+                        "name": "test_ok",
+                        "file": "tests/test_ok.py",
+                        "result": "passed",
+                    },
+                    {
+                        "name": "test_module_mapping",
+                        "classname": "tests.test_health_adapters.HealthAdapterTests",
+                        "file": "",
+                        "result": "passed",
+                    },
+                ],
+                "test_case_inventory_complete": True,
             }
         )
         finding = adapter.parse(payload, Path("."))[0]
@@ -259,6 +273,24 @@ class HealthAdapterTests(unittest.TestCase):
         self.assertEqual(
             adapter.derived_artifacts(payload, Path("."))["junit-summary.json"]["kind"],
             "junit",
+        )
+        self.assertEqual(
+            adapter.derived_artifacts(payload, Path("."))["junit-summary.json"][
+                "test_cases"
+            ][0]["file"],
+            "tests/test_ok.py",
+        )
+        self.assertEqual(
+            adapter.derived_artifacts(payload, Path("."))["junit-summary.json"][
+                "test_cases"
+            ][1]["file"],
+            "tests/test_health_adapters.py",
+        )
+        self.assertEqual(
+            adapter.derived_artifacts(payload, Path("."))["junit-summary.json"][
+                "test_cases"
+            ][1]["file_attribution"],
+            "classname-module",
         )
         with self.assertRaisesRegex(TypeError, "failures list"):
             adapter.parse('{"kind":"junit","failures":{}}', Path("."))

@@ -270,6 +270,14 @@ def _finding_items(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
             test_files = _string_values(
                 remediation.get("recommended_test_files"), 50
             )
+            test_execution_sources = _string_values(
+                usage.get("test_execution_sources"), 10
+            )
+            dependency_evidence_refs = [
+                item
+                for item in _string_values(usage.get("evidence_artifacts"), 20)
+                if item in {"sbom.cdx.json", "pipdeptree-summary.json"}
+            ]
             cluster_findings = _string_values(advisory.get("finding_ids"), 100)
             raw_priority = str(remediation.get("priority") or "")
             priority = (
@@ -307,6 +315,8 @@ def _finding_items(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
                         "findings.json",
                         *import_paths,
                         *test_files,
+                        *test_execution_sources,
+                        *dependency_evidence_refs,
                     ],
                     related_findings=cluster_findings or [finding_id],
                     tools=_string_values(advisory.get("tools"), 25),
@@ -325,6 +335,25 @@ def _finding_items(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
                         "recommended_test_files": test_files,
                         "test_selection_confidence": remediation.get(
                             "test_selection_confidence"
+                        ),
+                        "focused_test_validation_status": remediation.get(
+                            "focused_test_validation_status"
+                        ),
+                        "focused_test_execution": usage.get(
+                            "focused_test_execution", []
+                        ),
+                        "introducing_packages": remediation.get(
+                            "introducing_packages", []
+                        ),
+                        "dependency_paths": remediation.get("dependency_paths", []),
+                        "dependency_path_confidence": remediation.get(
+                            "dependency_path_confidence"
+                        ),
+                        "dependency_environment_health": usage.get(
+                            "dependency_environment_health", {}
+                        ),
+                        "dependency_environment_warning": usage.get(
+                            "dependency_environment_warning", False
                         ),
                         "owners": remediation.get("owners", []),
                         "uncertainties": remediation.get("uncertainties", []),

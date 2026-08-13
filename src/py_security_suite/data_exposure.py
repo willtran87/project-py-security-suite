@@ -227,8 +227,8 @@ def build_data_exposure_synthesis(
         }
     )
     return {
-        "schema_version": "1.3",
-        "schema_id": "urn:project-py-security-suite:data-exposure:1.3",
+        "schema_version": "1.4",
+        "schema_id": "urn:project-py-security-suite:data-exposure:1.4",
         "authoritative": False,
         "purpose": (
             "bounded sensitive-data disclosure analysis across normalized taint "
@@ -338,8 +338,14 @@ def build_data_exposure_synthesis(
             "sdk_p0_advisories": 0,
             "sdk_advisories_requiring_vex_validation": 0,
             "sdk_advisories_with_focused_tests": 0,
+            "sdk_advisories_with_passing_focused_test_evidence": 0,
+            "sdk_advisories_with_failing_focused_test_evidence": 0,
+            "sdk_advisories_with_unobserved_focused_tests": 0,
             "sdk_advisories_with_import_path_owners": 0,
             "sdk_advisories_with_uncovered_import_paths": 0,
+            "sdk_advisories_with_introducing_dependency_paths": 0,
+            "sdk_advisories_with_dependency_environment_gaps": 0,
+            "sdk_transitive_advisories_without_dependency_paths": 0,
             "sdk_families_observed": len(observed_sdk_families),
             "files_analyzed": inventory["files_analyzed"],
             "parse_errors": inventory["parse_errors"],
@@ -605,6 +611,36 @@ def apply_data_exposure_fusion(
                     for cluster in context["advisory_clusters"]
                 }.values()
             ),
+            "sdk_advisories_with_passing_focused_test_evidence": sum(
+                cluster["dependency_usage"]["focused_test_validation_status"]
+                == "passed"
+                for cluster in {
+                    str(cluster["cluster_id"]): cluster
+                    for context in dependency_contexts.values()
+                    for cluster in context["advisory_clusters"]
+                }.values()
+            ),
+            "sdk_advisories_with_failing_focused_test_evidence": sum(
+                cluster["dependency_usage"]["focused_test_validation_status"]
+                == "failed"
+                for cluster in {
+                    str(cluster["cluster_id"]): cluster
+                    for context in dependency_contexts.values()
+                    for cluster in context["advisory_clusters"]
+                }.values()
+            ),
+            "sdk_advisories_with_unobserved_focused_tests": sum(
+                bool(
+                    cluster["dependency_usage"][
+                        "unobserved_recommended_test_files"
+                    ]
+                )
+                for cluster in {
+                    str(cluster["cluster_id"]): cluster
+                    for context in dependency_contexts.values()
+                    for cluster in context["advisory_clusters"]
+                }.values()
+            ),
             "sdk_advisories_with_import_path_owners": sum(
                 bool(cluster["dependency_usage"]["import_path_owners"])
                 for cluster in {
@@ -615,6 +651,31 @@ def apply_data_exposure_fusion(
             ),
             "sdk_advisories_with_uncovered_import_paths": sum(
                 bool(cluster["dependency_usage"]["uncovered_import_paths"])
+                for cluster in {
+                    str(cluster["cluster_id"]): cluster
+                    for context in dependency_contexts.values()
+                    for cluster in context["advisory_clusters"]
+                }.values()
+            ),
+            "sdk_advisories_with_introducing_dependency_paths": sum(
+                bool(cluster["dependency_usage"]["dependency_paths"])
+                for cluster in {
+                    str(cluster["cluster_id"]): cluster
+                    for context in dependency_contexts.values()
+                    for cluster in context["advisory_clusters"]
+                }.values()
+            ),
+            "sdk_advisories_with_dependency_environment_gaps": sum(
+                cluster["dependency_usage"]["dependency_environment_warning"]
+                for cluster in {
+                    str(cluster["cluster_id"]): cluster
+                    for context in dependency_contexts.values()
+                    for cluster in context["advisory_clusters"]
+                }.values()
+            ),
+            "sdk_transitive_advisories_without_dependency_paths": sum(
+                cluster["dependency_usage"]["source_relationship"] == "transitive"
+                and not cluster["dependency_usage"]["dependency_paths"]
                 for cluster in {
                     str(cluster["cluster_id"]): cluster
                     for context in dependency_contexts.values()
@@ -816,6 +877,31 @@ def _sdk_dependency_contexts(
             bool(item["dependency_usage"]["recommended_test_files"])
             for item in advisory_clusters
         )
+        passing_test_count = sum(
+            item["dependency_usage"]["focused_test_validation_status"] == "passed"
+            for item in advisory_clusters
+        )
+        failing_test_count = sum(
+            item["dependency_usage"]["focused_test_validation_status"] == "failed"
+            for item in advisory_clusters
+        )
+        unobserved_test_count = sum(
+            bool(item["dependency_usage"]["unobserved_recommended_test_files"])
+            for item in advisory_clusters
+        )
+        dependency_path_count = sum(
+            bool(item["dependency_usage"]["dependency_paths"])
+            for item in advisory_clusters
+        )
+        dependency_environment_gap_count = sum(
+            item["dependency_usage"]["dependency_environment_warning"]
+            for item in advisory_clusters
+        )
+        missing_transitive_path_count = sum(
+            item["dependency_usage"]["source_relationship"] == "transitive"
+            and not item["dependency_usage"]["dependency_paths"]
+            for item in advisory_clusters
+        )
         owner_count = sum(
             bool(item["dependency_usage"]["import_path_owners"])
             for item in advisory_clusters
@@ -851,6 +937,38 @@ def _sdk_dependency_contexts(
         if focused_test_count:
             reasons.append(
                 f"{focused_test_count} distinct advisory risk(s) have graph-selected focused tests"
+            )
+        if passing_test_count:
+            reasons.append(
+                f"{passing_test_count} distinct advisory risk(s) have retained passing cases for every graph-selected focused test file"
+            )
+        if failing_test_count:
+            reasons.append(
+                f"{failing_test_count} distinct advisory risk(s) have retained failures or errors in graph-selected focused tests"
+            )
+        if unobserved_test_count:
+            reasons.append(
+                f"{unobserved_test_count} distinct advisory risk(s) have graph-selected focused test files absent from retained case-level evidence"
+            )
+        if dependency_path_count:
+            roots = sorted(
+                {
+                    root
+                    for item in advisory_clusters
+                    for root in item["dependency_usage"]["introducing_packages"]
+                }
+            )
+            reasons.append(
+                f"{dependency_path_count} distinct advisory risk(s) have bounded CycloneDX introducing paths"
+                + (f" via {', '.join(roots[:5])}" if roots else "")
+            )
+        if dependency_environment_gap_count:
+            reasons.append(
+                f"{dependency_environment_gap_count} distinct advisory risk(s) are qualified by pipdeptree environment health gaps"
+            )
+        if missing_transitive_path_count:
+            reasons.append(
+                f"{missing_transitive_path_count} transitive advisory risk(s) lack a bounded introducing path"
             )
         if owner_count:
             reasons.append(
@@ -1090,6 +1208,29 @@ def _sdk_remediation_context(value: Any) -> dict[str, Any]:
             in {"high", "medium", "low", "not-available"}
             else "not-available"
         ),
+        "focused_test_validation_status": (
+            str(raw.get("focused_test_validation_status"))
+            if str(raw.get("focused_test_validation_status"))
+            in {
+                "passed",
+                "failed",
+                "incomplete",
+                "not-observed",
+                "not-available",
+                "not-selected",
+            }
+            else "not-available"
+        ),
+        "introducing_packages": _bounded_strings(
+            raw.get("introducing_packages"), 25
+        ),
+        "dependency_paths": _sdk_dependency_paths(raw.get("dependency_paths")),
+        "dependency_path_confidence": (
+            str(raw.get("dependency_path_confidence"))
+            if str(raw.get("dependency_path_confidence"))
+            in {"high", "qualified", "not-available"}
+            else "not-available"
+        ),
         "recommended_action": str(
             raw.get("recommended_action")
             or "Review and remediate the native advisory evidence."
@@ -1130,6 +1271,32 @@ def _sdk_dependency_usage(value: Any) -> dict[str, Any]:
             else "unknown"
         ),
         "relationship_evidence_available": raw.get("relationship_evidence_available")
+        is True,
+        "dependency_path_evidence_available": raw.get(
+            "dependency_path_evidence_available"
+        )
+        is True,
+        "dependency_paths": _sdk_dependency_paths(raw.get("dependency_paths")),
+        "dependency_paths_truncated": raw.get("dependency_paths_truncated") is True,
+        "introducing_packages": _bounded_strings(
+            raw.get("introducing_packages"), 25
+        ),
+        "dependency_path_confidence": (
+            str(raw.get("dependency_path_confidence"))
+            if str(raw.get("dependency_path_confidence"))
+            in {"high", "qualified", "not-available"}
+            else "not-available"
+        ),
+        "environment_health_evidence_available": raw.get(
+            "environment_health_evidence_available"
+        )
+        is True,
+        "dependency_environment_health": _sdk_dependency_environment_health(
+            raw.get("dependency_environment_health")
+        ),
+        "dependency_environment_warning": raw.get(
+            "dependency_environment_warning"
+        )
         is True,
         "import_evidence_available": raw.get("import_evidence_available") is True,
         "import_observed": (
@@ -1173,6 +1340,39 @@ def _sdk_dependency_usage(value: Any) -> dict[str, Any]:
             in {"high", "medium", "low", "not-available"}
             else "not-available"
         ),
+        "test_execution_evidence_available": raw.get(
+            "test_execution_evidence_available"
+        )
+        is True,
+        "test_case_inventory_available": raw.get("test_case_inventory_available")
+        is True,
+        "test_case_inventory_complete": (
+            raw.get("test_case_inventory_complete")
+            if isinstance(raw.get("test_case_inventory_complete"), bool)
+            else None
+        ),
+        "test_execution_sources": _bounded_strings(
+            raw.get("test_execution_sources"), 10
+        ),
+        "focused_test_execution": _sdk_focused_test_execution(
+            raw.get("focused_test_execution")
+        ),
+        "focused_test_validation_status": (
+            str(raw.get("focused_test_validation_status"))
+            if str(raw.get("focused_test_validation_status"))
+            in {
+                "passed",
+                "failed",
+                "incomplete",
+                "not-observed",
+                "not-available",
+                "not-selected",
+            }
+            else "not-available"
+        ),
+        "unobserved_recommended_test_files": _bounded_strings(
+            raw.get("unobserved_recommended_test_files"), 50
+        ),
         "ownership_evidence_available": raw.get("ownership_evidence_available")
         is True,
         "import_path_owners": _bounded_strings(raw.get("import_path_owners"), 20),
@@ -1204,6 +1404,86 @@ def _sdk_import_path_coverage(value: Any) -> list[dict[str, Any]]:
         for item in raw[:50]
         if isinstance(item, dict) and item.get("path")
     ]
+
+
+def _sdk_dependency_paths(value: Any) -> list[dict[str, Any]]:
+    raw = value if isinstance(value, list) else []
+    return [
+        {
+            "introducing_package": str(item.get("introducing_package") or "")[:300],
+            "path": _bounded_strings(item.get("path"), 12),
+            "depth": _bounded_nonnegative_integer(item.get("depth")),
+        }
+        for item in raw[:25]
+        if isinstance(item, dict) and item.get("introducing_package")
+    ]
+
+
+def _sdk_dependency_environment_health(value: Any) -> dict[str, Any]:
+    raw = value if isinstance(value, dict) else {}
+    if not raw:
+        return {}
+    return {
+        "total_packages": _bounded_nonnegative_integer(raw.get("total_packages")),
+        "direct_dependencies": _bounded_nonnegative_integer(
+            raw.get("direct_dependencies")
+        ),
+        "transitive_dependencies": _bounded_nonnegative_integer(
+            raw.get("transitive_dependencies")
+        ),
+        "max_depth": _bounded_nonnegative_integer(raw.get("max_depth")),
+        "missing_dependencies": _bounded_nonnegative_integer(
+            raw.get("missing_dependencies")
+        ),
+        "cyclic_dependencies": _bounded_nonnegative_integer(
+            raw.get("cyclic_dependencies")
+        ),
+        "conflicting_dependency_packages": _bounded_nonnegative_integer(
+            raw.get("conflicting_dependency_packages")
+        ),
+        "conflicting_dependency_edges": _bounded_nonnegative_integer(
+            raw.get("conflicting_dependency_edges")
+        ),
+        "healthy": raw.get("healthy") is True,
+    }
+
+
+def _sdk_focused_test_execution(value: Any) -> list[dict[str, Any]]:
+    raw = value if isinstance(value, list) else []
+    allowed_statuses = {"passed", "failed", "partial", "skipped", "not-observed"}
+    return [
+        {
+            "path": str(item.get("path") or "")[:4096],
+            "status": (
+                str(item.get("status"))
+                if str(item.get("status")) in allowed_statuses
+                else "not-observed"
+            ),
+            "tests": _bounded_nonnegative_integer(item.get("tests")),
+            "passed": _bounded_nonnegative_integer(item.get("passed")),
+            "failures": _bounded_nonnegative_integer(item.get("failures")),
+            "errors": _bounded_nonnegative_integer(item.get("errors")),
+            "skipped": _bounded_nonnegative_integer(item.get("skipped")),
+            "sources": _bounded_strings(item.get("sources"), 10),
+            "path_attributions": [
+                attribution
+                for attribution in _bounded_strings(
+                    item.get("path_attributions"), 2
+                )
+                if attribution in {"producer", "classname-module"}
+            ],
+        }
+        for item in raw[:50]
+        if isinstance(item, dict) and item.get("path")
+    ]
+
+
+def _bounded_nonnegative_integer(value: Any) -> int:
+    return (
+        min(value, 1_000_000)
+        if isinstance(value, int) and not isinstance(value, bool) and value >= 0
+        else 0
+    )
 
 
 def _sdk_package_finding_index(

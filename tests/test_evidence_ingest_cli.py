@@ -127,6 +127,12 @@ class EvidenceIngestCliTests(unittest.TestCase):
         self.assertEqual(document["totals"]["errors"], 1)
         self.assertEqual(document["totals"]["skipped"], 1)
         self.assertEqual(len(document["failures"]), 2)
+        self.assertTrue(document["test_case_inventory_complete"])
+        self.assertEqual(
+            [item["result"] for item in document["test_cases"]],
+            ["failure", "error", "skipped"],
+        )
+        self.assertEqual(document["test_cases"][0]["file"], "t.py")
 
     def test_junit_rejects_missing_empty_and_symlink_paths(self) -> None:
         missing = self.root / "missing"

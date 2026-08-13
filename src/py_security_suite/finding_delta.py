@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import fnmatch
 import hashlib
 import json
 from dataclasses import dataclass, field
@@ -9,6 +8,7 @@ from typing import Any
 
 from .execution import resolve_executable, run_command
 from .models import Finding, FindingStatus
+from .ownership import owners_for_path, ownership_rule_records
 from .path_safety import resolve_regular_file
 
 _MAX_BASELINE_BYTES = 64 * 1024 * 1024
@@ -37,7 +37,7 @@ def apply_finding_delta(
     ownership = _apply_ownership(findings, target)
 
     if baseline_path is None:
-        return DeltaResult(
+        return _attach_ownership_evidence(DeltaResult(
             artifact={
                 "schema_version": "1.0",
                 "configured": False,
@@ -50,20 +50,20 @@ def apply_finding_delta(
                 "resolved": [],
                 "ownership_rules": len(ownership),
             }
-        )
+        ), ownership)
     try:
         previous, metadata = _load_baseline(
             baseline_path, baseline_sha256, expected_target=target.name
         )
     except (OSError, TypeError, ValueError, UnicodeError, json.JSONDecodeError) as exc:
-        return DeltaResult(
+        return _attach_ownership_evidence(DeltaResult(
             errors=[f"finding baseline is invalid: {exc}"],
             artifact={
                 "schema_version": "1.0",
                 "configured": True,
                 "errors": [str(exc)],
             },
-        )
+        ), ownership)
 
     comparable, reasons, comparison = _comparison_context(
         target=target,
@@ -74,20 +74,20 @@ def apply_finding_delta(
         current_vcs_revision=current_vcs_revision,
     )
     if not comparable:
-        return _incomparable_result(
+        return _attach_ownership_evidence(_incomparable_result(
             findings,
             reasons=reasons,
             comparison=comparison,
             metadata=metadata,
             ownership_rules=len(ownership),
-        )
-    return _classify_comparable_findings(
+        ), ownership)
+    return _attach_ownership_evidence(_classify_comparable_findings(
         findings,
         previous=previous,
         comparison=comparison,
         metadata=metadata,
         ownership_rules=len(ownership),
-    )
+    ), ownership)
 
 
 def _apply_ownership(
@@ -99,6 +99,14 @@ def _apply_ownership(
         if owners:
             finding.evidence = {**finding.evidence, "owners": owners}
     return ownership
+
+
+def _attach_ownership_evidence(
+    result: DeltaResult, rules: list[tuple[str, list[str]]]
+) -> DeltaResult:
+    result.artifact["ownership_rules"] = len(rules)
+    result.artifact["ownership_rule_details"] = ownership_rule_records(rules)
+    return result
 
 
 def _comparison_context(
@@ -450,19 +458,4 @@ def _owners_for_finding(
 ) -> list[str]:
     if not finding.locations:
         return []
-    path = finding.locations[0].path.replace("\\", "/").lstrip("/")
-    if not path or path.startswith("<"):
-        return []
-    owners: list[str] = []
-    for pattern, candidates in rules:
-        normalized = pattern.rstrip("/")
-        matched = fnmatch.fnmatchcase(path, normalized)
-        if not matched and "/" not in normalized:
-            matched = any(
-                fnmatch.fnmatchcase(part, normalized) for part in path.split("/")
-            )
-        if not matched and pattern.endswith("/"):
-            matched = path.startswith(normalized + "/")
-        if matched:
-            owners = candidates
-    return owners
+    return owners_for_path(finding.locations[0].path, rules)

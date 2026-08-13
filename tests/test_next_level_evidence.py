@@ -210,6 +210,10 @@ class FindingDeltaTests(unittest.TestCase):
         )
         self.assertEqual(current_exact.evidence["owners"], ["@security-team"])
         self.assertEqual(result.artifact["counts"]["resolved"], 1)
+        self.assertEqual(
+            result.artifact["ownership_rule_details"],
+            [{"pattern": "src/*.py", "owners": ["@security-team"]}],
+        )
 
     def test_invalid_baseline_digest_is_an_explicit_error(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

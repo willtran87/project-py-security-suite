@@ -284,7 +284,13 @@ Configure `tools.coverage.artifacts_path`,
 The bundled `pysec-evidence` helper validates and normalizes those files using
 bounded standard-library I/O and the hardened `defusedxml` parser. It never
 imports the target, invokes a test runner, retains captured process output, or
-expands XML entities. Missing
+expands XML entities. The normalized JUnit artifact retains at most 100,000
+case identities, repository-relative files, result states, and durations so
+Graphify-selected tests can be matched to actual execution evidence. A green
+aggregate without an exact case/file ledger does not prove a selected test ran.
+When xUnit2 omits `file`, the adapter maps a dotted classname only to an existing,
+non-linked repository module and labels the attribution. Current passing
+evidence must still be regenerated after remediation. Missing
 evidence is visibly `not applicable` outside organization policies that make
 the companion test lane mandatory.
 

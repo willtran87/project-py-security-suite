@@ -403,6 +403,12 @@ def _render_fusion_summary(value: dict[str, Any] | None) -> list[str]:
         f"| P0 dependency advisories | {int(summary.get('p0_advisories', 0))} |",
         f"| Dependency advisories requiring VEX validation | {int(summary.get('advisories_requiring_vex_validation', 0))} |",
         f"| Dependency advisories with graph-selected focused tests | {int(summary.get('advisories_with_focused_tests', 0))} |",
+        f"| Dependency advisories with passing focused-test evidence | {int(summary.get('advisories_with_passing_focused_test_evidence', 0))} |",
+        f"| Dependency advisories with failing focused-test evidence | {int(summary.get('advisories_with_failing_focused_test_evidence', 0))} |",
+        f"| Dependency advisories with selected tests not observed | {int(summary.get('advisories_with_unobserved_focused_tests', 0))} |",
+        f"| Dependency advisories with introducing-root paths | {int(summary.get('advisories_with_introducing_dependency_paths', 0))} |",
+        f"| Dependency advisories qualified by environment-health gaps | {int(summary.get('advisories_with_dependency_environment_gaps', 0))} |",
+        f"| Transitive advisories without an introducing path | {int(summary.get('transitive_advisories_without_dependency_paths', 0))} |",
         f"| Dependency advisories with import-path owners | {int(summary.get('advisories_with_import_path_owners', 0))} |",
         f"| Dependency advisories on import paths below 80% coverage | {int(summary.get('advisories_with_uncovered_import_paths', 0))} |",
         f"| Compound structural hotspots | {int(summary.get('compound_hotspots', 0))} |",
@@ -660,6 +666,12 @@ def _render_data_exposure_summary(value: dict[str, Any] | None) -> list[str]:
         f"| P0 SDK advisories | {int(summary.get('sdk_p0_advisories', 0))} |",
         f"| SDK advisories requiring VEX validation | {int(summary.get('sdk_advisories_requiring_vex_validation', 0))} |",
         f"| SDK advisories with graph-selected focused tests | {int(summary.get('sdk_advisories_with_focused_tests', 0))} |",
+        f"| SDK advisories with passing focused-test evidence | {int(summary.get('sdk_advisories_with_passing_focused_test_evidence', 0))} |",
+        f"| SDK advisories with failing focused-test evidence | {int(summary.get('sdk_advisories_with_failing_focused_test_evidence', 0))} |",
+        f"| SDK advisories with selected tests not observed | {int(summary.get('sdk_advisories_with_unobserved_focused_tests', 0))} |",
+        f"| SDK advisories with introducing-root paths | {int(summary.get('sdk_advisories_with_introducing_dependency_paths', 0))} |",
+        f"| SDK advisories qualified by environment-health gaps | {int(summary.get('sdk_advisories_with_dependency_environment_gaps', 0))} |",
+        f"| Transitive SDK advisories without an introducing path | {int(summary.get('sdk_transitive_advisories_without_dependency_paths', 0))} |",
         f"| SDK advisories with import-path owners | {int(summary.get('sdk_advisories_with_import_path_owners', 0))} |",
         f"| SDK advisories on import paths below 80% coverage | {int(summary.get('sdk_advisories_with_uncovered_import_paths', 0))} |",
         f"| Logging, telemetry, analytics, and egress SDK families | {int(summary.get('sdk_families_observed', 0))} |",
@@ -957,6 +969,26 @@ def _dependency_usage_summary(value: Any) -> str:
     signals = [assessment]
     if relationship != "unknown":
         signals.append(relationship + " dependency")
+    dependency_paths = value.get("dependency_paths")
+    if isinstance(dependency_paths, list) and dependency_paths:
+        first = dependency_paths[0] if isinstance(dependency_paths[0], dict) else {}
+        path = first.get("path") if isinstance(first, dict) else []
+        if isinstance(path, list) and path:
+            signals.append(
+                "introduced by "
+                + " -> ".join(str(item) for item in path[:5])
+                + f" ({value.get('dependency_path_confidence', 'unknown')})"
+            )
+    elif relationship == "transitive":
+        signals.append(
+            "no introducing path"
+            if value.get("dependency_path_evidence_available") is True
+            else "dependency-path evidence unavailable"
+        )
+    if value.get("dependency_environment_warning") is True:
+        signals.append("installed dependency environment has health gaps")
+    elif value.get("environment_health_evidence_available") is not True:
+        signals.append("installed-environment health unavailable")
     if isinstance(paths, list) and paths:
         signals.append("imports " + ", ".join(str(item) for item in paths[:2]))
     if (
@@ -975,6 +1007,15 @@ def _dependency_usage_summary(value: Any) -> str:
             + ", ".join(str(item) for item in tests[:2])
             + f" ({value.get('test_selection_confidence', 'unknown')})"
         )
+        execution_status = str(
+            value.get("focused_test_validation_status") or "not-available"
+        )
+        signals.append("scanned-state focused-test evidence " + execution_status)
+        unobserved = value.get("unobserved_recommended_test_files")
+        if isinstance(unobserved, list) and unobserved:
+            signals.append(
+                "not observed " + ", ".join(str(item) for item in unobserved[:2])
+            )
     elif value.get("import_observed") is True:
         signals.append(
             "no focused test mapping"
@@ -1018,6 +1059,13 @@ def _remediation_context_summary(value: Any) -> str:
     tests = value.get("recommended_test_files")
     if isinstance(tests, list) and tests:
         parts.append("tests " + ", ".join(str(item) for item in tests[:2]))
+        parts.append(
+            "scanned-state focused-test evidence "
+            + str(value.get("focused_test_validation_status") or "not-available")
+        )
+    roots = value.get("introducing_packages")
+    if isinstance(roots, list) and roots:
+        parts.append("introduced by " + ", ".join(str(item) for item in roots[:3]))
     return ", ".join(parts)
 
 

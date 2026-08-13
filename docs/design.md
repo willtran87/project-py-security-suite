@@ -213,7 +213,7 @@ flowchart TD
     subgraph Adapters["Scanner adapter boundary"]
         Fast["Fast Python security<br/>Bandit | Semgrep | Ruff S"]
         Quality["Code quality and architecture<br/>Ruff | Pylint | mypy | Pyright | deptry | Vulture | Radon | Tach | Reachability | Graphify"]
-        Tests["Passive test evidence<br/>coverage.py | diff-cover | JUnit XML"]
+        Tests["Passive test evidence<br/>coverage.py | diff-cover | bounded JUnit cases"]
         Secrets["Secrets<br/>detect-secrets | Gitleaks | TruffleHog"]
         Supply["Supply chain<br/>OSV | CycloneDX | GuardDog"]
         Pipeline["Repository controls<br/>zizmor | actionlint | Hadolint | Checkov | Trivy | PSScriptAnalyzer | ShellCheck"]
@@ -354,6 +354,11 @@ tests, while retained coverage and CODEOWNERS-derived finding ownership provide
 validation gaps and responsible teams. The closure plan keys work by advisory
 cluster, consolidating alias-equivalent observations without dropping native
 finding IDs or scanner attribution.
+Evidence-fusion 1.2 also joins those graph-selected test files to exact,
+repository-normalized case records from JUnit, Hypothesis, and Schemathesis.
+It reports current passing, failing, incomplete, unobserved, unavailable, or
+unselected evidence while preserving the requirement to rerun after remediation.
+Aggregate totals cannot establish that any particular selected file executed.
 CWE/OWASP/OpenTelemetry-backed actions remain
 independent of native scanner severity and no sensitive values are retained.
 
@@ -545,7 +550,7 @@ report/
 |-- data-exposure.json               # sensitive-data paths and SDK/sink review surfaces
 |-- evidence-fusion.json             # semantic and cross-stage evidence joins
 |-- coverage-summary.json           # validated pre-generated coverage
-|-- junit-summary.json              # validated test result metadata
+|-- junit-summary.json              # bounded output-free test case/file/result ledger
 |-- reuse-compliance.json           # when REUSE opt-in is present
 `-- evidence/
     |-- bandit.json

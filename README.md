@@ -14,9 +14,9 @@ creates a GitHub-friendly report artifact.
 | Supply chain | Source and artifact SBOMs, package checks, provenance findings, and a locally verifiable Security Passport |
 | Reachability | Offline three-state executable/load-only/disconnected graph with explained dispatch paths, ranked islands, and optional coverage corroboration |
 | Graph context | Graphify code-only topology joined to findings for blast radius, structural hotspots, and cross-tool neighborhoods |
-| Evidence fusion | Source-to-artifact package lineage, semantic finding links, changed-line/test/graph context, digest-bound provenance joins, and feedback into owned exposure and SDK-package verification plans |
+| Evidence fusion | Source-to-artifact package lineage, semantic finding links, changed-line/test/graph context, exact selected-test execution, digest-bound provenance joins, and feedback into owned exposure and SDK-package verification plans |
 | Structural synthesis | Cross-validated dead code, island boundaries, structural orphans, import-cycle hotspots, change-risk scoring, and graph-guided test targets |
-| Advisory fusion | Package-scoped CVE/GHSA/PYSEC/OSV alias clustering across source and artifact scanners, with distinct-risk/observation counts plus CycloneDX directness, Graphify imports, reachability/runtime state, and deptry-use context |
+| Advisory fusion | Package-scoped CVE/GHSA/PYSEC/OSV alias clustering across source and artifact scanners, with distinct-risk/observation counts plus CycloneDX introducing-root paths, pipdeptree environment health, Graphify imports, reachability/runtime state, and deptry-use context |
 | Data exposure | CWE-grounded flows into logs, telemetry, URL queries, client errors, runtime-state dumps, and process streams; monorepo SDK/configuration inventory; owner-, graph-, change-risk-, runtime-, test-, and SDK-package-aware disclosure triage |
 | Runtime | Python 3.11+; scanners are installed separately from approved offline bundles |
 
@@ -228,9 +228,12 @@ known-exploited findings are P0 and qualifying high-EPSS findings are P1. Within
 a priority, blocking and new or regressed work appears first. Terminal actions
 show the same decision context, summary, and impact before cited evidence.
 Alias-aware dependency work also joins scanner fix candidates, KEV/EPSS/VEX,
-exact import paths, Graphify-selected tests, coverage, and CODEOWNERS-derived
-owners. `closure-plan.json` emits one stable owned item per distinct advisory
-while retaining every native scanner observation and citation.
+exact import paths, CycloneDX introducing-root paths, pipdeptree environment
+health, Graphify-selected tests, bounded case-level execution, coverage, and
+CODEOWNERS-derived owners. `closure-plan.json` emits one stable
+owned item per distinct advisory while retaining every native scanner
+observation and citation. Current passing test evidence is never substituted
+for the required post-remediation rerun.
 The optional output is published atomically, refuses accidental replacement
 unless `--overwrite` is explicit, and must remain outside the report's exact
 checksum boundary. Exported entry points and finding-detail links are artifact-
@@ -627,7 +630,7 @@ python-security-report/
 |-- data-exposure.json               # prioritized disclosure paths joined with graph, coverage, reachability, and fusion
 |-- evidence-fusion.json             # cross-scanner, advisory-alias, and source/artifact evidence joins
 |-- coverage-summary.json           # validated pre-generated test coverage
-|-- junit-summary.json              # validated test outcome metadata
+|-- junit-summary.json              # bounded output-free test case/file/result ledger
 |-- reuse-compliance.json           # when a REUSE marker opts the repo in
 |-- deptry-dependencies.json        # normalized dependency hygiene evidence
 |-- diff-coverage.json              # coverage of changed executable lines
