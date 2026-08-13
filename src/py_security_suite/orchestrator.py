@@ -15,7 +15,7 @@ from .adapters.base import AdapterResult, ScannerAdapter
 from .config import SuiteConfig
 from .closure_plan import closure_plan_artifact
 from .correlation import correlate_findings
-from .data_exposure import build_data_exposure_synthesis
+from .data_exposure import apply_data_exposure_fusion, build_data_exposure_synthesis
 from .finding_delta import apply_finding_delta
 from .governance import (
     validate_intelligence_approval,
@@ -161,6 +161,9 @@ def scan_project(
         )
         fusion = build_evidence_fusion(findings, derived_artifacts, tool_runs)
         derived_artifacts["evidence-fusion.json"] = fusion
+        apply_data_exposure_fusion(
+            derived_artifacts["data-exposure.json"], findings, fusion
+        )
         context_errors.extend(
             (
                 "evidence fusion contradiction for "

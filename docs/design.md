@@ -326,9 +326,25 @@ responses and risky automatic-PII configuration; and allow Pysa/CodeQL to supply
 organization models. A bounded AST inventory identifies logging, process-output,
 observability, analytics, metrics, URL-query, client-response, header-capture,
 and egress SDK surfaces without treating presence as a finding. The synthesis
-joins exact sink and SDK evidence to Graphify, reachability, coverage, and
-changed-code context and emits CWE/OWASP/OpenTelemetry-backed actions without
-retaining sensitive values.
+joins exact sink and SDK evidence to Graphify, reachability, coverage, runtime,
+changed-code, and related-finding context. Finalized evidence-fusion results
+feed back into the exposure artifact as triage tiers and contextual verification
+plans. Inventory-only sink surfaces receive the same bounded structural/test
+context and evidence-specific verification steps for review ordering, but remain
+explicitly separate from vulnerabilities. Structural synthesis and CODEOWNERS
+also contribute accountable owners, exact graph-selected tests, change-risk
+scores, and island/import-cycle identifiers, turning triage into a bounded
+owner-and-test handoff. Finalized source/artifact lineage and normalized package
+findings add a separate SDK dependency lane with advisory citations and explicit
+matched-versus-risk semantics. Package-scoped CVE/GHSA/PYSEC/OSV alias clusters
+prevent reciprocal advisory records from overstating distinct risk while
+retaining every scanner source and enabling OSV/Grype corroboration.
+Those clusters also join CycloneDX dependency roots, exact Graphify import
+edges, importing-file reachability/runtime state, and deptry findings. The
+result is actionable dependency-use context with explicit incomplete and
+conflicting states, never an exploitability verdict or severity override.
+CWE/OWASP/OpenTelemetry-backed actions remain
+independent of native scanner severity and no sensitive values are retained.
 
 ## Scan sequence
 

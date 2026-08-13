@@ -5,6 +5,36 @@ for published releases.
 
 ## Unreleased
 
+- Version evidence fusion at 1.1 with package-scoped, transitive advisory-alias
+  clustering. CVE, GHSA, PYSEC, and OSV identifiers can now converge across
+  OSV-Scanner, Grype, and other normalized package findings while retaining
+  every native scanner source. Reports distinguish distinct actionable
+  advisories from alias-equivalent observations and feed that cleaner count,
+  canonical identifiers, tools, versions, and citations into SDK disclosure
+  review. Retain the evidence-fusion 1.0 schema for existing consumers.
+- Cross-reference distinct package advisories with CycloneDX direct/transitive
+  relationships, exact Graphify external-import edges, importing-file
+  reachability/runtime state, and deptry declaration findings. Report
+  executable, load-only, disconnected, incomplete, unused, and contradictory
+  use evidence without changing severity or claiming vulnerable-function
+  exploitability.
+- Treat OSV-Scanner exit code `1` as a completed scan with vulnerabilities,
+  preserving its valid offline JSON findings for normalization, policy, and
+  SDK/data-exposure correlation instead of misreporting the required scanner as
+  failed.
+- Version sensitive-data exposure synthesis at 1.3 and close the evidence loop:
+  finalized fusion tiers, corroboration, changed-line coverage, runtime and
+  reachability state, graph blast radius, and related findings now flow back
+  into exposure assessments and portable reports. Cross-reference inventory-only
+  sink surfaces with changed-line, coverage, reachability, runtime, graph, and
+  nearby-finding evidence so reviewers can prioritize unconfirmed disclosure
+  controls without treating them as vulnerabilities. Join CODEOWNERS-derived
+  ownership, graph-selected tests, structural hotspot IDs, and change-risk
+  scores into both confirmed findings and review surfaces. Correlate disclosure
+  SDKs with normalized package findings and finalized source/artifact lineage,
+  retaining advisory citations and distinguishing matched lineage from package
+  risk. Generate bounded contextual verification plans without changing scanner
+  severity; retain schemas 1.2, 1.1, and 1.0 for existing consumers.
 - Version sensitive-data exposure synthesis at 1.2 with local alias propagation,
   credential/personal/financial/health/request-content context, trust-boundary
   and risk-factor evidence, explicit protection kinds, and prioritized review

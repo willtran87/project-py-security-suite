@@ -531,6 +531,9 @@ are not traversed.
 The project needs a supported lockfile, manifest with resolved versions, or
 SBOM for useful dependency evidence. `--no-resolve` is deliberate: the scanner
 must not contact package indexes during an isolated scan.
+The suite recognizes OSV-Scanner exit code `1` as a successful scan containing
+vulnerabilities; those findings remain available to policy and cross-tool
+correlation. Exit codes outside `0` and `1` remain scanner failures.
 
 ### Native bundle preparation rejects the OSV snapshot checksum
 

@@ -7,8 +7,13 @@ from pathlib import Path
 
 from jsonschema import Draft202012Validator
 
-from py_security_suite.data_exposure import build_data_exposure_synthesis
+from py_security_suite.data_exposure import (
+    apply_data_exposure_fusion,
+    build_data_exposure_synthesis,
+)
+from py_security_suite.evidence_fusion import build_evidence_fusion
 from py_security_suite.models import (
+    Citation,
     Confidence,
     Finding,
     Location,
@@ -97,6 +102,214 @@ class DataExposureSynthesisTests(unittest.TestCase):
 
         self.assertEqual(result["summary"]["parse_errors"], 0)
         self.assertEqual(result["summary"]["production_sink_surfaces"], 1)
+
+    def test_cross_references_egress_sdk_with_package_findings_and_lineage(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "src").mkdir()
+            (root / "src" / "app.py").write_text(
+                "import os\nimport sentry_sdk\n\n"
+                "token = os.getenv('AUTH_TOKEN')\n"
+                "sentry_sdk.set_context('auth', {'token': token})\n",
+                encoding="utf-8",
+            )
+            (root / "pyproject.toml").write_text(
+                '[project]\nname = "demo"\nversion = "1"\n'
+                'dependencies = ["sentry-sdk>=2"]\n',
+                encoding="utf-8",
+            )
+            exposure = _finding(
+                line=5,
+                classifications=["CWE-201"],
+                rule_id="python.sensitive-data-to-telemetry",
+            )
+            package = Finding(
+                finding_id="PYSEC-SENTRY-ADVISORY",
+                fingerprint="sha256:sentry-advisory",
+                title="GHSA-DEMO affects sentry-sdk",
+                description="The SDK version matches an advisory.",
+                impact="The egress dependency may be vulnerable.",
+                remediation="Upgrade to an approved fixed version.",
+                severity=Severity.HIGH,
+                confidence=Confidence.HIGH,
+                area="dependencies",
+                classifications=["GHSA-DEMO"],
+                locations=[
+                    Location(
+                        path="uv.lock",
+                        package="sentry-sdk",
+                        version="2.0",
+                        ecosystem="PyPI",
+                    )
+                ],
+                sources=[
+                    Source(
+                        tool="osv-scanner",
+                        rule_id="GHSA-DEMO",
+                        message="Affected package",
+                    )
+                ],
+                citations=[
+                    Citation(
+                        kind="advisory",
+                        identifier="GHSA-DEMO",
+                        title="Demonstration SDK advisory",
+                        uri="https://example.invalid/GHSA-DEMO",
+                    ),
+                    Citation(
+                        kind="supporting_evidence",
+                        identifier="graphify-code-graph",
+                        title="Graph context",
+                        uri="https://example.invalid/graph",
+                    ),
+                ],
+            )
+            result = build_data_exposure_synthesis(root, [exposure, package], {})
+            fusion = build_evidence_fusion(
+                [package],
+                {
+                    "sbom.cdx.json": {
+                        "components": [
+                            {
+                                "bom-ref": "sentry-sdk@2.0",
+                                "name": "sentry-sdk",
+                                "version": "2.0",
+                            }
+                        ],
+                        "dependencies": [{"ref": "sentry-sdk@2.0", "dependsOn": []}],
+                    },
+                    "artifact-sbom.cdx.json": {
+                        "components": [{"name": "sentry-sdk", "version": "1.9"}]
+                    },
+                    "graphify.json": {
+                        "nodes": [
+                            {
+                                "id": "app",
+                                "kind": "code",
+                                "label": "app.py",
+                                "path": "src/app.py",
+                            },
+                            {
+                                "id": "sentry_sdk",
+                                "kind": "external",
+                                "label": "sentry_sdk",
+                                "path": ".",
+                            },
+                        ],
+                        "edges": [
+                            {
+                                "source": "app",
+                                "target": "sentry_sdk",
+                                "relation": "imports",
+                                "path": "src/app.py",
+                                "line": 2,
+                            }
+                        ],
+                    },
+                    "reachability.json": {
+                        "analysis": {"complete": True, "confidence": "high"},
+                        "nodes": [
+                            {
+                                "id": "module:app",
+                                "kind": "module",
+                                "path": "src/app.py",
+                                "state": "executable",
+                                "runtime_observation": "not-observed",
+                            }
+                        ],
+                    },
+                },
+                [],
+            )
+
+            apply_data_exposure_fusion(result, [exposure, package], fusion)
+
+        assessment = result["finding_assessments"][0]
+        dependency = assessment["sdk_dependency_context"]
+        self.assertEqual(assessment["sdk"], "Sentry SDK")
+        self.assertTrue(dependency["risk_present"])
+        self.assertEqual(dependency["risk_tier"], "high")
+        self.assertEqual(dependency["packages"], ["sentry-sdk"])
+        self.assertEqual(dependency["package_finding_ids"], ["PYSEC-SENTRY-ADVISORY"])
+        self.assertEqual(dependency["package_finding_tools"], ["osv-scanner"])
+        self.assertEqual(dependency["package_classifications"], ["GHSA-DEMO"])
+        self.assertEqual(dependency["distinct_advisory_count"], 1)
+        self.assertEqual(dependency["advisory_observation_count"], 1)
+        self.assertEqual(
+            dependency["advisory_clusters"][0]["primary_identifier"], "GHSA-DEMO"
+        )
+        usage = dependency["advisory_clusters"][0]["dependency_usage"]
+        self.assertEqual(usage["assessment"], "executable-import")
+        self.assertEqual(usage["source_relationship"], "direct")
+        self.assertEqual(usage["import_paths"], ["src/app.py"])
+        self.assertEqual(dependency["advisories_with_import_evidence"], 1)
+        self.assertEqual(dependency["advisories_in_executable_imports"], 1)
+        self.assertEqual(dependency["lineage"][0]["status"], "version-drift")
+        self.assertEqual(dependency["citations"][0]["identifier"], "GHSA-DEMO")
+        self.assertEqual(len(dependency["citations"]), 1)
+        self.assertEqual(
+            result["summary"]["exposure_findings_with_sdk_package_risk"], 1
+        )
+        self.assertEqual(result["summary"]["sink_surfaces_with_sdk_package_risk"], 1)
+        self.assertEqual(result["summary"]["sdk_packages_correlated"], 1)
+        self.assertEqual(result["summary"]["sdk_packages_with_findings"], 1)
+        self.assertEqual(result["summary"]["sdk_packages_with_version_drift"], 1)
+        self.assertEqual(result["summary"]["sdk_distinct_advisories"], 1)
+        self.assertEqual(result["summary"]["sdk_advisory_observations"], 1)
+        self.assertEqual(result["summary"]["sdk_advisories_with_import_evidence"], 1)
+        self.assertEqual(result["summary"]["sdk_advisories_in_executable_imports"], 1)
+        self.assertTrue(
+            any("GHSA-DEMO" in step for step in assessment["verification_steps"])
+        )
+        rendered = "\n".join(_render_data_exposure_summary(result))
+        detailed = "\n".join(_markdown_data_exposure_context(exposure))
+        self.assertIn("SDK packages sentry-sdk", rendered)
+        self.assertIn(
+            "1 distinct advisories / 1 observations via osv-scanner", rendered
+        )
+        self.assertIn("advisories GHSA-DEMO", rendered)
+        self.assertIn("use executable-import, direct dependency", rendered)
+        self.assertIn("SDK dependency cross-reference", detailed)
+        self.assertIn("[GHSA-DEMO](https://example.invalid/GHSA-DEMO)", detailed)
+        schema = json.loads(read_bundled_schema("data-exposure-1.3"))
+        Draft202012Validator(schema).validate(result)
+
+    def test_matched_sdk_lineage_without_package_findings_is_not_risk(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "app.py").write_text(
+                "import sentry_sdk\nsentry_sdk.capture_message('status')\n",
+                encoding="utf-8",
+            )
+            (root / "pyproject.toml").write_text(
+                '[project]\nname = "demo"\nversion = "1"\n'
+                'dependencies = ["sentry-sdk>=2"]\n',
+                encoding="utf-8",
+            )
+            result = build_data_exposure_synthesis(root, [], {})
+            apply_data_exposure_fusion(
+                result,
+                [],
+                {
+                    "package_lineage": [
+                        {
+                            "package": "sentry-sdk",
+                            "source_versions": ["2.0"],
+                            "artifact_versions": ["2.0"],
+                            "status": "matched",
+                            "finding_ids": [],
+                        }
+                    ]
+                },
+            )
+
+        dependency = result["sink_surfaces"][0]["sdk_dependency_context"]
+        self.assertTrue(dependency["context_available"])
+        self.assertFalse(dependency["risk_present"])
+        self.assertEqual(dependency["risk_tier"], "none")
+        self.assertEqual(result["summary"]["sink_surfaces_with_sdk_package_risk"], 0)
 
     def test_stdout_surface_requires_sensitive_context_hint(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -241,6 +454,144 @@ class DataExposureSynthesisTests(unittest.TestCase):
         )
         self.assertIn("full-request-content", surface["risk_factors"])
         self.assertEqual(surface["trust_boundary"], "operational-data-plane")
+        self.assertTrue(
+            any("synthetic" in step for step in surface["verification_steps"])
+        )
+
+    def test_cross_references_inventory_surface_with_structure_tests_and_findings(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "src").mkdir()
+            (root / "src" / "app.py").write_text(
+                "import logging\n\n"
+                "def report(value):\n"
+                "    value = normalize(value)\n"
+                "    logging.info('value=%s', value)\n",
+                encoding="utf-8",
+            )
+            nearby = _finding(
+                path="src/app.py",
+                line=5,
+                classifications=["CWE-78"],
+                rule_id="B602",
+            )
+            nearby.area = "injection"
+            nearby.evidence["owners"] = ["@security-team"]
+            artifacts = {
+                "coverage-summary.json": {
+                    "files": [
+                        {
+                            "path": "src/app.py",
+                            "missing_lines": [5],
+                            "summary": {"percent_covered": 40.0},
+                        }
+                    ]
+                },
+                "diff-coverage.json": {
+                    "src_stats": {
+                        "src/app.py": {
+                            "covered_lines": [],
+                            "violation_lines": [5],
+                            "percent_covered": 0.0,
+                        }
+                    }
+                },
+                "reachability.json": {
+                    "nodes": [
+                        {
+                            "path": "src/app.py",
+                            "start_line": 3,
+                            "end_line": 5,
+                            "state": "executable",
+                            "runtime_observation": "observed",
+                        }
+                    ]
+                },
+                "graphify.json": {
+                    "topology": {
+                        "file_edges": [
+                            {
+                                "source": "src/cli.py",
+                                "target": "src/app.py",
+                                "relation": "calls",
+                            },
+                            {
+                                "source": "src/api.py",
+                                "target": "src/app.py",
+                                "relation": "imports",
+                            },
+                        ]
+                    }
+                },
+                "structural-synthesis.json": {
+                    "change_impact_assessments": [
+                        {
+                            "path": "src/app.py",
+                            "priority": "high",
+                            "risk_score": 85,
+                            "classification": "changed-lines-under-tested",
+                            "direct_test_files": ["tests/test_app.py"],
+                            "transitive_test_files": [],
+                            "associated_test_files": [],
+                            "test_selection_confidence": "high",
+                            "recommended_action": "Run the focused application tests.",
+                        }
+                    ],
+                    "island_assessments": [],
+                    "import_cycles": [
+                        {
+                            "cycle_id": "cycle-app",
+                            "paths": ["src/app.py", "src/dependency.py"],
+                            "priority": "high",
+                            "recommended_action": "Break the import cycle.",
+                        }
+                    ],
+                },
+            }
+
+            result = build_data_exposure_synthesis(root, [nearby], artifacts)
+
+        self.assertEqual(result["summary"]["exposure_findings"], 0)
+        self.assertEqual(result["summary"]["structurally_enriched_surfaces"], 1)
+        self.assertEqual(result["summary"]["changed_sink_surfaces"], 1)
+        self.assertEqual(result["summary"]["uncovered_sink_surfaces"], 1)
+        self.assertEqual(result["summary"]["runtime_observed_sink_surfaces"], 1)
+        self.assertEqual(result["summary"]["compound_sink_surfaces"], 1)
+        self.assertEqual(result["summary"]["owned_sink_surfaces"], 1)
+        self.assertEqual(result["summary"]["sink_surfaces_with_mapped_tests"], 1)
+        self.assertEqual(result["summary"]["high_change_risk_sink_surfaces"], 1)
+        self.assertEqual(result["summary"]["sink_surfaces_in_structural_hotspots"], 1)
+        surface = result["sink_surfaces"][0]
+        context = surface["structural_context"]
+        self.assertTrue(context["changed_line"])
+        self.assertFalse(context["line_covered"])
+        self.assertEqual(context["reachability_states"], ["executable"])
+        self.assertEqual(context["runtime_observations"], ["observed"])
+        self.assertEqual(context["graph_upstream_files"], 2)
+        self.assertEqual(context["related_finding_ids"], ["PYSEC-EXPOSURE"])
+        self.assertEqual(context["owners"], ["@security-team"])
+        self.assertEqual(context["mapped_test_files"], ["tests/test_app.py"])
+        self.assertEqual(context["change_risk_score"], 85)
+        self.assertEqual(context["change_risk_priority"], "high")
+        self.assertEqual(context["structural_risk_ids"], ["cycle-app"])
+        self.assertEqual(surface["review_priority"], "high")
+        self.assertTrue(
+            any("focused test" in step for step in surface["verification_steps"])
+        )
+        self.assertTrue(
+            any("graph-selected" in step for step in surface["verification_steps"])
+        )
+        rendered = "\n".join(_render_data_exposure_summary(result))
+        self.assertIn("Sink surfaces joined with structural/test context | 1", rendered)
+        self.assertIn("runtime observed", rendered)
+        self.assertIn("nearby PYSEC-EXPOSURE via semgrep", rendered)
+        self.assertIn("owner @security-team", rendered)
+        self.assertIn("mapped tests/test\\_app.py", rendered)
+        self.assertIn("Add a focused test", rendered)
+        schema = json.loads(read_bundled_schema("data-exposure-1.3"))
+        Draft202012Validator(schema).validate(result)
 
     def test_inventories_query_exception_and_risky_sdk_configuration(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -496,8 +847,133 @@ class DataExposureSynthesisTests(unittest.TestCase):
     def test_artifact_validates_against_bundled_schema(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             result = build_data_exposure_synthesis(Path(temporary), [], {})
-        schema = json.loads(read_bundled_schema("data-exposure-1.2"))
+        schema = json.loads(read_bundled_schema("data-exposure-1.3"))
         Draft202012Validator(schema).validate(result)
+
+    def test_joins_finalized_fusion_into_exposure_verification_plan(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "src").mkdir()
+            (root / "src" / "app.py").write_text(
+                "import logging\nimport os\n\n"
+                "token = os.getenv('AUTH_TOKEN')\n"
+                "logging.error('token=%s', token)\n",
+                encoding="utf-8",
+            )
+            finding = _finding(
+                line=5,
+                classifications=["CWE-532"],
+                rule_id="python.sensitive-data-to-log",
+            )
+            finding.evidence["owners"] = ["@privacy-team"]
+            result = build_data_exposure_synthesis(root, [finding], {})
+            finding.evidence["fusion"] = {
+                "review_tier": "urgent",
+                "corroboration": "contextual",
+                "review_reasons": [
+                    "finding is on a changed line",
+                    "finding line lacks retained test coverage",
+                ],
+                "related_finding_ids": ["PYSEC-RELATED"],
+                "related_tools": ["graphify", "reachability"],
+                "source_context": {
+                    "changed_line": True,
+                    "line_covered": False,
+                    "coverage_percent": 65.4,
+                    "diff_coverage_percent": 0.0,
+                    "reachability_states": ["executable"],
+                    "runtime_observations": ["observed"],
+                    "graph_upstream_files": 12,
+                    "graph_downstream_files": 3,
+                    "graph_degree": 8,
+                },
+                "structural_context": {
+                    "change_impact": {
+                        "priority": "high",
+                        "risk_score": 90,
+                        "classification": "changed-lines-under-tested",
+                        "direct_test_files": ["tests/test_app.py"],
+                        "transitive_test_files": [],
+                        "associated_test_files": [],
+                        "test_selection_confidence": "high",
+                        "recommended_action": "Run and extend the focused test.",
+                    },
+                    "import_cycle": {
+                        "cycle_id": "cycle-app",
+                        "priority": "high",
+                    },
+                },
+            }
+
+            apply_data_exposure_fusion(result, [finding])
+
+        assessment = result["finding_assessments"][0]
+        cross = assessment["cross_references"]
+        self.assertEqual(assessment["triage_tier"], "urgent")
+        self.assertTrue(cross["fusion_available"])
+        self.assertFalse(cross["line_covered"])
+        self.assertEqual(cross["reachability_states"], ["executable"])
+        self.assertIn("PYSEC-RELATED", cross["related_finding_ids"])
+        self.assertEqual(cross["owners"], ["@privacy-team"])
+        self.assertEqual(cross["mapped_test_files"], ["tests/test_app.py"])
+        self.assertEqual(cross["change_risk_score"], 90)
+        self.assertEqual(cross["structural_risk_ids"], ["cycle-app"])
+        self.assertEqual(cross["structural_risk_kinds"], ["import-cycle:high"])
+        self.assertTrue(
+            any(
+                "synthetic credential" in step
+                for step in assessment["verification_steps"]
+            )
+        )
+        self.assertTrue(
+            any("graph-guided" in step for step in assessment["verification_steps"])
+        )
+        self.assertEqual(result["summary"]["fusion_enriched_findings"], 1)
+        self.assertEqual(result["summary"]["urgent_cross_referenced_findings"], 1)
+        self.assertEqual(result["summary"]["uncovered_exposure_findings"], 1)
+        self.assertEqual(result["summary"]["runtime_observed_exposure_findings"], 1)
+        self.assertEqual(result["summary"]["owned_exposure_findings"], 1)
+        self.assertEqual(result["summary"]["exposure_findings_with_mapped_tests"], 1)
+        self.assertEqual(result["summary"]["high_change_risk_exposure_findings"], 1)
+        summary_markdown = "\n".join(_render_data_exposure_summary(result))
+        finding_markdown = "\n".join(_markdown_data_exposure_context(finding))
+        self.assertIn(
+            "Findings joined with finalized evidence fusion | 1", summary_markdown
+        )
+        self.assertIn("`urgent` / credentials", summary_markdown)
+        self.assertIn(
+            "owners @privacy-team; mapped tests/test\\_app.py", summary_markdown
+        )
+        self.assertIn("structural import-cycle:high", summary_markdown)
+        self.assertIn("joined evidence `fusion urgent", finding_markdown)
+        self.assertIn("owners @privacy-team", finding_markdown)
+        self.assertIn("mapped tests tests/test_app.py", finding_markdown)
+        self.assertIn("Exposure verification", finding_markdown)
+        schema = json.loads(read_bundled_schema("data-exposure-1.3"))
+        Draft202012Validator(schema).validate(result)
+
+    def test_not_observed_runtime_signal_does_not_count_as_runtime_observed(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            finding = _finding()
+            result = build_data_exposure_synthesis(root, [finding], {})
+            finding.evidence["fusion"] = {
+                "review_tier": "elevated",
+                "corroboration": "contextual",
+                "source_context": {
+                    "reachability_states": ["executable"],
+                    "runtime_observations": ["not-observed"],
+                },
+            }
+
+            apply_data_exposure_fusion(result, [finding])
+
+        self.assertEqual(result["summary"]["runtime_observed_exposure_findings"], 0)
+        steps = result["finding_assessments"][0]["verification_steps"]
+        self.assertFalse(any("observed path" in step for step in steps))
+        self.assertTrue(any("modeled entry-point" in step for step in steps))
 
     def test_portable_reports_render_exposure_context(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

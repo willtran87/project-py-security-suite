@@ -389,6 +389,14 @@ def _render_fusion_summary(value: dict[str, Any] | None) -> list[str]:
         f"| Changed-line findings | {int(summary.get('changed_line_findings', 0))} |",
         f"| Uncovered finding lines | {int(summary.get('uncovered_findings', 0))} |",
         f"| Source/artifact package version drift | {int(summary.get('version_drift_packages', 0))} |",
+        f"| Distinct dependency advisories | {int(summary.get('distinct_advisories', 0))} |",
+        f"| Retained advisory observations | {int(summary.get('advisory_observations', 0))} |",
+        f"| Alias-equivalent observations consolidated for triage | {int(summary.get('alias_collapsed_observations', 0))} |",
+        f"| Advisories with exact static import evidence | {int(summary.get('advisories_with_import_evidence', 0))} |",
+        f"| Advisories imported by executable code | {int(summary.get('advisories_in_executable_imports', 0))} |",
+        f"| Advisories with runtime-observed imports | {int(summary.get('runtime_observed_dependency_advisories', 0))} |",
+        f"| Advisories whose package declaration is flagged unused | {int(summary.get('advisories_with_unused_declarations', 0))} |",
+        f"| Import-versus-unused evidence conflicts | {int(summary.get('dependency_use_conflicts', 0))} |",
         f"| Compound structural hotspots | {int(summary.get('compound_hotspots', 0))} |",
         f"| Evidence-lane execution gaps | {gaps} |",
         f"| Evidence contradictions | {int(summary.get('contradictions', 0))} |",
@@ -599,6 +607,16 @@ def _render_data_exposure_summary(value: dict[str, Any] | None) -> list[str]:
         "| Signal | Count |",
         "|---|---:|",
         f"| Confirmed scanner findings correlated | {int(summary.get('exposure_findings', 0))} |",
+        f"| Findings joined with finalized evidence fusion | {int(summary.get('fusion_enriched_findings', 0))} |",
+        f"| Urgent cross-referenced exposure findings | {int(summary.get('urgent_cross_referenced_findings', 0))} |",
+        f"| Findings on changed lines | {int(summary.get('changed_exposure_findings', 0))} |",
+        f"| Findings on uncovered lines | {int(summary.get('uncovered_exposure_findings', 0))} |",
+        f"| Runtime-observed exposure findings | {int(summary.get('runtime_observed_exposure_findings', 0))} |",
+        f"| Broad upstream blast-radius findings | {int(summary.get('broad_blast_radius_findings', 0))} |",
+        f"| Exposure findings with an assigned owner | {int(summary.get('owned_exposure_findings', 0))} |",
+        f"| Exposure findings with graph-selected tests | {int(summary.get('exposure_findings_with_mapped_tests', 0))} |",
+        f"| Exposure findings in high-risk changes | {int(summary.get('high_change_risk_exposure_findings', 0))} |",
+        f"| Exposure findings with SDK package risk | {int(summary.get('exposure_findings_with_sdk_package_risk', 0))} |",
         f"| Sensitive logging findings | {int(summary.get('logging_findings', 0))} |",
         f"| Telemetry and analytics findings | {int(summary.get('telemetry_findings', 0))} |",
         f"| Sensitive URL-query findings | {query_findings} |",
@@ -609,6 +627,25 @@ def _render_data_exposure_summary(value: dict[str, Any] | None) -> list[str]:
         f"| High-priority production review surfaces | {int(summary.get('high_priority_review_surfaces', 0))} |",
         f"| Surfaces with sensitive-data context | {int(summary.get('sensitive_context_surfaces', 0))} |",
         f"| Surfaces with an explicit protection signal | {int(summary.get('protected_surfaces', 0))} |",
+        f"| Sink surfaces joined with structural/test context | {int(summary.get('structurally_enriched_surfaces', 0))} |",
+        f"| Changed sink surfaces | {int(summary.get('changed_sink_surfaces', 0))} |",
+        f"| Uncovered sink surfaces | {int(summary.get('uncovered_sink_surfaces', 0))} |",
+        f"| Runtime-observed sink surfaces | {int(summary.get('runtime_observed_sink_surfaces', 0))} |",
+        f"| Disconnected sink surfaces | {int(summary.get('disconnected_sink_surfaces', 0))} |",
+        f"| Sink surfaces near normalized findings | {int(summary.get('compound_sink_surfaces', 0))} |",
+        f"| Sink surfaces with an assigned owner | {int(summary.get('owned_sink_surfaces', 0))} |",
+        f"| Sink surfaces with graph-selected tests | {int(summary.get('sink_surfaces_with_mapped_tests', 0))} |",
+        f"| Sink surfaces in high-risk changes | {int(summary.get('high_change_risk_sink_surfaces', 0))} |",
+        f"| Sink surfaces in structural hotspots | {int(summary.get('sink_surfaces_in_structural_hotspots', 0))} |",
+        f"| Sink surfaces with SDK package risk | {int(summary.get('sink_surfaces_with_sdk_package_risk', 0))} |",
+        f"| SDK packages correlated | {int(summary.get('sdk_packages_correlated', 0))} |",
+        f"| SDK packages with normalized findings | {int(summary.get('sdk_packages_with_findings', 0))} |",
+        f"| SDK packages with source/artifact version drift | {int(summary.get('sdk_packages_with_version_drift', 0))} |",
+        f"| Distinct advisories affecting SDK packages | {int(summary.get('sdk_distinct_advisories', 0))} |",
+        f"| Retained SDK advisory observations | {int(summary.get('sdk_advisory_observations', 0))} |",
+        f"| SDK advisories with exact import evidence | {int(summary.get('sdk_advisories_with_import_evidence', 0))} |",
+        f"| SDK advisories imported by executable code | {int(summary.get('sdk_advisories_in_executable_imports', 0))} |",
+        f"| SDK advisories whose packages are flagged unused | {int(summary.get('sdk_advisories_flagged_unused', 0))} |",
         f"| Logging, telemetry, analytics, and egress SDK families | {int(summary.get('sdk_families_observed', 0))} |",
         "",
         "A sink surface is an inventory item, not proof of leakage. A finding requires source-to-sink scanner evidence and retains CWE/OWASP guidance.",
@@ -617,8 +654,8 @@ def _render_data_exposure_summary(value: dict[str, Any] | None) -> list[str]:
         lines.extend(
             [
                 "",
-                "| Exposure finding | Location | Priority / data class | Sink / SDK | Relevance | Action |",
-                "|---|---|---|---|---|---|",
+                "| Exposure finding | Location | Triage / data class | Sink / SDK | Relevance | Cross-reference context | Action |",
+                "|---|---|---|---|---|---|---|",
             ]
         )
         lines.extend(
@@ -628,7 +665,7 @@ def _render_data_exposure_summary(value: dict[str, Any] | None) -> list[str]:
             + _markdown_code(str(item.get("path", "unknown")))
             + (":" + str(item["line"]) if item.get("line") else "")
             + "` | `"
-            + _markdown_code(str(item.get("review_priority", "medium")))
+            + _markdown_code(str(item.get("triage_tier", "standard")))
             + "` / "
             + _markdown_text(
                 ", ".join(str(value) for value in item.get("data_classes", []))
@@ -640,17 +677,19 @@ def _render_data_exposure_summary(value: dict[str, Any] | None) -> list[str]:
             + "` | `"
             + _markdown_code(str(item.get("structural_relevance", "unknown")))
             + "` | "
+            + _markdown_text(_exposure_summary_context(item))
+            + " | "
             + _markdown_text(str(item.get("recommended_action", "Review.")))
             + " |"
             for item in assessments[:5]
             if isinstance(item, dict)
         )
-    elif production_surfaces:
+    if production_surfaces:
         lines.extend(
             [
                 "",
-                "| Top production sink surface | Family | Priority | Data class | Protection |",
-                "|---|---|---|---|---|",
+                "| Top production sink surface | Family | Priority | Data class | Protection | Cross-reference context | Next verification |",
+                "|---|---|---|---|---|---|---|",
             ]
         )
         lines.extend(
@@ -658,7 +697,9 @@ def _render_data_exposure_summary(value: dict[str, Any] | None) -> list[str]:
             + _markdown_code(str(item.get("path", "unknown")))
             + ":"
             + str(int(item.get("line", 1)))
-            + "` | `"
+            + "`<br>"
+            + _markdown_text(str(item.get("label", item.get("sink", "sink"))))
+            + " | `"
             + _markdown_code(str(item.get("sink_family", "unknown")))
             + "` | `"
             + _markdown_code(str(item.get("review_priority", "medium")))
@@ -669,7 +710,18 @@ def _render_data_exposure_summary(value: dict[str, Any] | None) -> list[str]:
             )
             + " | `"
             + _markdown_code(str(item.get("protection_status", "not-observed")))
-            + "`"
+            + "` | "
+            + _markdown_text(_surface_summary_context(item))
+            + " | "
+            + _markdown_text(
+                "; ".join(
+                    str(step).rstrip(".")
+                    for step in (
+                        item.get("verification_steps") or ["Review the sink context."]
+                    )[:2]
+                )
+                + "."
+            )
             + " |"
             for item in sorted(
                 production_surfaces,
@@ -677,12 +729,216 @@ def _render_data_exposure_summary(value: dict[str, Any] | None) -> list[str]:
                     {"high": 0, "medium": 1, "low": 2}.get(
                         str(surface.get("review_priority")), 3
                     ),
+                    {"high": 0, "medium": 1, "none": 2}.get(
+                        str(surface.get("sdk_dependency_context", {}).get("risk_tier")),
+                        3,
+                    ),
                     str(surface.get("path")),
                     int(surface.get("line") or 0),
                 ),
             )[:5]
         )
     return lines
+
+
+def _surface_context_summary(value: Any) -> str:
+    if not isinstance(value, dict) or not value.get("context_available"):
+        return "not available"
+    signals: list[str] = []
+    if value.get("changed_line") is True:
+        signals.append("changed")
+    if value.get("line_covered") is False:
+        signals.append("uncovered")
+    elif value.get("line_covered") is True:
+        signals.append("covered")
+    states = value.get("reachability_states")
+    if isinstance(states, list) and states:
+        signals.append("reachability " + "/".join(str(item) for item in states[:2]))
+    observations = value.get("runtime_observations")
+    if isinstance(observations, list) and "observed" in observations:
+        signals.append("runtime observed")
+    upstream = value.get("graph_upstream_files")
+    if isinstance(upstream, int):
+        signals.append(f"{upstream} upstream")
+    related = value.get("related_finding_ids")
+    if isinstance(related, list) and related:
+        identifiers = ", ".join(str(item) for item in related[:2])
+        tools = value.get("related_tools")
+        attribution = (
+            " via " + ", ".join(str(item) for item in tools[:3])
+            if isinstance(tools, list) and tools
+            else ""
+        )
+        signals.append(f"nearby {identifiers}{attribution}")
+    owners = value.get("owners")
+    if isinstance(owners, list) and owners:
+        signals.append("owner " + ", ".join(str(item) for item in owners[:2]))
+    mapped = value.get("mapped_test_files")
+    if isinstance(mapped, list) and mapped:
+        signals.append("mapped " + ", ".join(str(item) for item in mapped[:2]))
+    change_priority = value.get("change_risk_priority")
+    change_score = value.get("change_risk_score")
+    if isinstance(change_priority, str):
+        signals.append(
+            f"change risk {change_priority}"
+            + (f"/{change_score}" if isinstance(change_score, int) else "")
+        )
+    risks = value.get("structural_risk_kinds")
+    if isinstance(risks, list) and risks:
+        signals.append("structural " + ", ".join(str(item) for item in risks[:2]))
+    return "; ".join(signals) or "context available"
+
+
+def _exposure_accountability_summary(value: Any) -> str:
+    if not isinstance(value, dict):
+        return "unassigned; no mapped tests"
+    owners = value.get("owners")
+    mapped = value.get("mapped_test_files")
+    parts = [
+        "owners " + ", ".join(str(item) for item in owners[:2])
+        if isinstance(owners, list) and owners
+        else "unassigned"
+    ]
+    if isinstance(mapped, list) and mapped:
+        parts.append("mapped " + ", ".join(str(item) for item in mapped[:2]))
+    else:
+        parts.append("no mapped tests")
+    priority = value.get("change_risk_priority")
+    score = value.get("change_risk_score")
+    if isinstance(priority, str):
+        parts.append(
+            f"change risk {priority}" + (f"/{score}" if isinstance(score, int) else "")
+        )
+    risks = value.get("structural_risk_kinds")
+    if isinstance(risks, list) and risks:
+        parts.append("structural " + ", ".join(str(item) for item in risks[:2]))
+    return "; ".join(parts)
+
+
+def _exposure_summary_context(item: dict[str, Any]) -> str:
+    values = [
+        _exposure_accountability_summary(item.get("cross_references")),
+        _sdk_dependency_context_summary(item.get("sdk_dependency_context")),
+    ]
+    return "; ".join(value for value in values if value)
+
+
+def _surface_summary_context(item: dict[str, Any]) -> str:
+    values = [
+        _surface_context_summary(item.get("structural_context")),
+        _sdk_dependency_context_summary(item.get("sdk_dependency_context")),
+    ]
+    return "; ".join(value for value in values if value)
+
+
+def _sdk_dependency_context_summary(value: Any) -> str:
+    if not isinstance(value, dict) or not value.get("context_available"):
+        return ""
+    packages = value.get("packages")
+    package_text = (
+        ", ".join(str(item) for item in packages[:3])
+        if isinstance(packages, list) and packages
+        else "unknown"
+    )
+    signals = [f"SDK packages {package_text}"]
+    if value.get("risk_present"):
+        signals.append(f"package risk {value.get('risk_tier', 'medium')}")
+        clusters = value.get("advisory_clusters")
+        tools = value.get("package_finding_tools")
+        if isinstance(clusters, list) and clusters:
+            distinct = int(value.get("distinct_advisory_count") or len(clusters))
+            observations = int(value.get("advisory_observation_count") or 0)
+            attribution = (
+                " via " + ", ".join(str(item) for item in tools[:3])
+                if isinstance(tools, list) and tools
+                else ""
+            )
+            primary = [
+                str(item.get("primary_identifier"))
+                for item in clusters[:3]
+                if isinstance(item, dict) and item.get("primary_identifier")
+            ]
+            signals.append(
+                f"{distinct} distinct advisories / {observations} observations"
+                + attribution
+            )
+            if primary:
+                signals.append("advisories " + ", ".join(primary))
+            usage_summaries = sorted(
+                {
+                    summary
+                    for item in clusters
+                    if isinstance(item, dict)
+                    and (
+                        summary := _dependency_usage_summary(
+                            item.get("dependency_usage")
+                        )
+                    )
+                }
+            )
+            if usage_summaries:
+                signals.append("use " + " / ".join(usage_summaries[:3]))
+        else:
+            finding_ids = value.get("package_finding_ids")
+            if isinstance(finding_ids, list) and finding_ids:
+                attribution = (
+                    " via " + ", ".join(str(item) for item in tools[:3])
+                    if isinstance(tools, list) and tools
+                    else ""
+                )
+                signals.append(
+                    "findings "
+                    + ", ".join(str(item) for item in finding_ids[:3])
+                    + attribution
+                )
+    else:
+        signals.append("no joined package-risk finding")
+    lineage = value.get("lineage")
+    exceptional = (
+        [
+            f"{item.get('package')}:{item.get('status')}"
+            for item in lineage
+            if isinstance(item, dict)
+            and item.get("status") in {"version-drift", "artifact-only"}
+        ]
+        if isinstance(lineage, list)
+        else []
+    )
+    if exceptional:
+        signals.append("lineage " + ", ".join(exceptional[:3]))
+    return "; ".join(signals)
+
+
+def _dependency_usage_summary(value: Any) -> str:
+    if not isinstance(value, dict):
+        return ""
+    assessment = str(value.get("assessment") or "unknown")
+    relationship = str(value.get("source_relationship") or "unknown")
+    paths = value.get("import_paths")
+    statuses = value.get("deptry_statuses")
+    if (
+        assessment == "unknown"
+        and relationship == "unknown"
+        and not paths
+        and not statuses
+        and value.get("signals_conflict") is not True
+    ):
+        return ""
+    signals = [assessment]
+    if relationship != "unknown":
+        signals.append(relationship + " dependency")
+    if isinstance(paths, list) and paths:
+        signals.append("imports " + ", ".join(str(item) for item in paths[:2]))
+    if (
+        value.get("import_observed") is True
+        and value.get("reachability_complete") is False
+    ):
+        signals.append("reachability incomplete")
+    if isinstance(statuses, list) and statuses:
+        signals.append("deptry " + ", ".join(str(item) for item in statuses[:2]))
+    if value.get("signals_conflict") is True:
+        signals.append("evidence conflict")
+    return ", ".join(signals)
 
 
 def _render_admission_decisions(
@@ -2611,6 +2867,16 @@ def _markdown_fusion_context(finding: Finding) -> list[str]:
         details.append(reason_text)
     if related_text:
         details.append(f"related findings {related_text}")
+    advisory = fusion.get("advisory_context")
+    if isinstance(advisory, dict) and advisory.get("cluster_id"):
+        primary = str(advisory.get("primary_identifier") or advisory["cluster_id"])
+        usage = _dependency_usage_summary(advisory.get("dependency_usage"))
+        details.append(
+            "advisory `"
+            + _markdown_code(primary)
+            + "`"
+            + ("; dependency use " + _markdown_text(usage) if usage else "")
+        )
     suffix = " — " + "; ".join(details) if details else ""
     return [
         "- **Evidence fusion:** "
@@ -2642,7 +2908,10 @@ def _markdown_data_exposure_context(finding: Finding) -> list[str]:
         ", ".join(str(value) for value in context.get("risk_factors", [])[:5])
         or "none recorded"
     )
-    return [
+    cross = context.get("cross_references")
+    cross = cross if isinstance(cross, dict) else {}
+    cross_signals = _exposure_cross_reference_signals(cross)
+    result = [
         "- **Sensitive-data path:** concern `"
         + _markdown_code(str(context.get("concern", "review")))
         + "`; sink `"
@@ -2656,6 +2925,8 @@ def _markdown_data_exposure_context(finding: Finding) -> list[str]:
         + _markdown_code(str(context.get("structural_relevance", "unknown")))
         + "`; priority `"
         + _markdown_code(str(context.get("review_priority", "medium")))
+        + "`; cross-tool triage `"
+        + _markdown_code(str(context.get("triage_tier", "standard")))
         + "`; data classes `"
         + _markdown_code(data_classes)
         + "`; trust boundary `"
@@ -2664,9 +2935,90 @@ def _markdown_data_exposure_context(finding: Finding) -> list[str]:
         + _markdown_code(risk_factors)
         + "`; sanitizer `"
         + _markdown_code(sanitizer_text)
+        + "`; joined evidence `"
+        + _markdown_code(cross_signals)
         + "` - "
         + _markdown_text(str(context.get("recommended_action", "Review the path.")))
     ]
+    result.extend(
+        _markdown_sdk_dependency_context(context.get("sdk_dependency_context"))
+    )
+    steps = context.get("verification_steps")
+    if isinstance(steps, list) and steps:
+        result.append(
+            "- **Exposure verification:** "
+            + " ".join(
+                f"{index}. {_markdown_text(str(step))}"
+                for index, step in enumerate(steps, start=1)
+            )
+        )
+    return result
+
+
+def _markdown_sdk_dependency_context(value: Any) -> list[str]:
+    summary = _sdk_dependency_context_summary(value)
+    if not summary:
+        return []
+    citations = value.get("citations") if isinstance(value, dict) else None
+    links: list[str] = []
+    if isinstance(citations, list):
+        for item in citations[:5]:
+            if not isinstance(item, dict):
+                continue
+            identifier = _markdown_text(str(item.get("identifier") or "reference"))
+            uri = item.get("uri")
+            links.append(
+                f"[{identifier}]({uri})"
+                if isinstance(uri, str) and uri.startswith(("https://", "http://"))
+                else f"`{_markdown_code(identifier)}`"
+            )
+    suffix = "; citations " + ", ".join(links) if links else ""
+    return [
+        "- **SDK dependency cross-reference:** "
+        + _markdown_text(summary)
+        + suffix
+        + ". This context raises review priority but does not prove SDK-mediated disclosure."
+    ]
+
+
+def _exposure_cross_reference_signals(context: dict[str, Any]) -> str:
+    if not context.get("fusion_available"):
+        return "fusion unavailable"
+    signals = [
+        "fusion " + str(context.get("fusion_review_tier") or "standard"),
+        "corroboration " + str(context.get("corroboration") or "single-tool"),
+    ]
+    if context.get("changed_line") is True:
+        signals.append("changed line")
+    if context.get("line_covered") is False:
+        signals.append("uncovered line")
+    elif context.get("line_covered") is True:
+        signals.append("covered line")
+    states = context.get("reachability_states")
+    if isinstance(states, list) and states:
+        signals.append("reachability " + "/".join(str(value) for value in states[:3]))
+    observations = context.get("runtime_observations")
+    if isinstance(observations, list) and observations:
+        signals.append("runtime " + "/".join(str(value) for value in observations[:3]))
+    upstream = context.get("graph_upstream_files")
+    if isinstance(upstream, int):
+        signals.append(f"{upstream} upstream files")
+    owners = context.get("owners")
+    if isinstance(owners, list) and owners:
+        signals.append("owners " + ", ".join(str(value) for value in owners[:3]))
+    mapped = context.get("mapped_test_files")
+    if isinstance(mapped, list) and mapped:
+        signals.append("mapped tests " + ", ".join(str(value) for value in mapped[:3]))
+    priority = context.get("change_risk_priority")
+    score = context.get("change_risk_score")
+    if isinstance(priority, str):
+        signals.append(
+            f"change risk {priority}" + (f"/{score}" if isinstance(score, int) else "")
+        )
+    risks = context.get("structural_risk_kinds")
+    if isinstance(risks, list) and risks:
+        signals.append("structural " + ", ".join(str(value) for value in risks[:3]))
+    return "; ".join(signals)
 
 
 def _markdown_structural_context(finding: Finding) -> list[str]:
@@ -2767,11 +3119,23 @@ def _html_fusion_context(finding: Finding) -> str:
     corroboration = html.escape(str(fusion.get("corroboration", "single-tool")))
     reasons = fusion.get("review_reasons", [])
     reason_text = "; ".join(str(value) for value in reasons[:5])
+    advisory = fusion.get("advisory_context")
+    advisory_text = ""
+    if isinstance(advisory, dict) and advisory.get("cluster_id"):
+        primary = str(advisory.get("primary_identifier") or advisory["cluster_id"])
+        usage = _dependency_usage_summary(advisory.get("dependency_usage"))
+        advisory_text = (
+            " Advisory "
+            + primary
+            + ("; dependency use " + usage if usage else "")
+            + "."
+        )
     reason_html = f" {html.escape(reason_text)}." if reason_text else ""
     return (
         "<section class='source-context'><h4>Cross-referenced evidence</h4>"
         f"<p>Review tier <strong>{tier}</strong>; corroboration "
-        f"<strong>{corroboration}</strong>.{reason_html}</p></section>"
+        f"<strong>{corroboration}</strong>.{reason_html}"
+        f"{html.escape(advisory_text)}</p></section>"
     )
 
 
@@ -2794,6 +3158,47 @@ def _html_data_exposure_context(finding: Finding) -> str:
         ", ".join(str(value) for value in context.get("risk_factors", [])[:5])
         or "none recorded"
     )
+    cross = context.get("cross_references")
+    cross = cross if isinstance(cross, dict) else {}
+    cross_signals = html.escape(_exposure_cross_reference_signals(cross))
+    dependency = context.get("sdk_dependency_context")
+    dependency_summary = _sdk_dependency_context_summary(dependency)
+    dependency_html = ""
+    if dependency_summary:
+        citation_links: list[str] = []
+        citations = (
+            dependency.get("citations") if isinstance(dependency, dict) else None
+        )
+        if isinstance(citations, list):
+            for item in citations[:5]:
+                if not isinstance(item, dict):
+                    continue
+                identifier = html.escape(str(item.get("identifier") or "reference"))
+                uri = item.get("uri")
+                citation_links.append(
+                    f"<a href='{html.escape(uri, quote=True)}' rel='noreferrer'>{identifier}</a>"
+                    if isinstance(uri, str) and uri.startswith(("https://", "http://"))
+                    else identifier
+                )
+        citations_html = (
+            " Citations: " + ", ".join(citation_links) + "." if citation_links else ""
+        )
+        dependency_html = (
+            "<h5>SDK dependency cross-reference</h5><p>"
+            + html.escape(dependency_summary)
+            + "."
+            + citations_html
+            + " This context raises review priority but does not prove SDK-mediated disclosure.</p>"
+        )
+    triage_tier = html.escape(str(context.get("triage_tier", "standard")))
+    steps = context.get("verification_steps")
+    steps_html = ""
+    if isinstance(steps, list) and steps:
+        steps_html = (
+            "<h5>Verification plan</h5><ol>"
+            + "".join(f"<li>{html.escape(str(step))}</li>" for step in steps)
+            + "</ol>"
+        )
     action = html.escape(str(context.get("recommended_action", "Review the path.")))
     return (
         "<section class='source-context'><h4>Sensitive-data exposure path</h4>"
@@ -2801,9 +3206,11 @@ def _html_data_exposure_context(finding: Finding) -> str:
         f"(family <strong>{family}</strong>); "
         f"SDK <strong>{sdk}</strong>; structural relevance "
         f"<strong>{relevance}</strong>; priority <strong>{priority}</strong>; "
+        f"cross-tool triage <strong>{triage_tier}</strong>; "
         f"data classes <strong>{data_classes}</strong>; trust boundary "
         f"<strong>{trust_boundary}</strong>; risk factors "
-        f"<strong>{risk_factors}</strong>. {action}</p></section>"
+        f"<strong>{risk_factors}</strong>; joined evidence "
+        f"<strong>{cross_signals}</strong>. {action}</p>{dependency_html}{steps_html}</section>"
     )
 
 

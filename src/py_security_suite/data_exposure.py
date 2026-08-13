@@ -7,6 +7,7 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
+from .advisory_fusion import build_advisory_clusters
 from .models import Citation, Finding
 
 
@@ -203,6 +204,7 @@ def build_data_exposure_synthesis(
     data-exposure rule classification.
     """
     inventory = _inventory(target)
+    _enrich_sink_surfaces(inventory["sink_surfaces"], artifacts, findings)
     assessments: list[dict[str, Any]] = []
     for finding in findings:
         if not _is_exposure_finding(finding):
@@ -225,8 +227,8 @@ def build_data_exposure_synthesis(
         }
     )
     return {
-        "schema_version": "1.2",
-        "schema_id": "urn:project-py-security-suite:data-exposure:1.2",
+        "schema_version": "1.3",
+        "schema_id": "urn:project-py-security-suite:data-exposure:1.3",
         "authoritative": False,
         "purpose": (
             "bounded sensitive-data disclosure analysis across normalized taint "
@@ -269,6 +271,67 @@ def build_data_exposure_synthesis(
                 item.get("protection_status") != "not-observed"
                 for item in inventory["sink_surfaces"]
             ),
+            "fusion_enriched_findings": 0,
+            "urgent_cross_referenced_findings": 0,
+            "changed_exposure_findings": 0,
+            "uncovered_exposure_findings": 0,
+            "runtime_observed_exposure_findings": 0,
+            "broad_blast_radius_findings": 0,
+            "owned_exposure_findings": 0,
+            "exposure_findings_with_mapped_tests": 0,
+            "high_change_risk_exposure_findings": 0,
+            "exposure_findings_with_sdk_package_risk": 0,
+            "structurally_enriched_surfaces": sum(
+                bool(item.get("structural_context", {}).get("context_available"))
+                for item in inventory["sink_surfaces"]
+            ),
+            "changed_sink_surfaces": sum(
+                item.get("structural_context", {}).get("changed_line") is True
+                for item in inventory["sink_surfaces"]
+            ),
+            "uncovered_sink_surfaces": sum(
+                item.get("structural_context", {}).get("line_covered") is False
+                for item in inventory["sink_surfaces"]
+            ),
+            "runtime_observed_sink_surfaces": sum(
+                "observed"
+                in item.get("structural_context", {}).get("runtime_observations", [])
+                for item in inventory["sink_surfaces"]
+            ),
+            "disconnected_sink_surfaces": sum(
+                "disconnected"
+                in item.get("structural_context", {}).get("reachability_states", [])
+                for item in inventory["sink_surfaces"]
+            ),
+            "compound_sink_surfaces": sum(
+                bool(item.get("structural_context", {}).get("related_finding_ids"))
+                for item in inventory["sink_surfaces"]
+            ),
+            "owned_sink_surfaces": sum(
+                bool(item.get("structural_context", {}).get("owners"))
+                for item in inventory["sink_surfaces"]
+            ),
+            "sink_surfaces_with_mapped_tests": sum(
+                bool(item.get("structural_context", {}).get("mapped_test_files"))
+                for item in inventory["sink_surfaces"]
+            ),
+            "high_change_risk_sink_surfaces": sum(
+                item.get("structural_context", {}).get("change_risk_priority") == "high"
+                for item in inventory["sink_surfaces"]
+            ),
+            "sink_surfaces_in_structural_hotspots": sum(
+                bool(item.get("structural_context", {}).get("structural_risk_ids"))
+                for item in inventory["sink_surfaces"]
+            ),
+            "sink_surfaces_with_sdk_package_risk": 0,
+            "sdk_packages_correlated": 0,
+            "sdk_packages_with_findings": 0,
+            "sdk_packages_with_version_drift": 0,
+            "sdk_distinct_advisories": 0,
+            "sdk_advisory_observations": 0,
+            "sdk_advisories_with_import_evidence": 0,
+            "sdk_advisories_in_executable_imports": 0,
+            "sdk_advisories_flagged_unused": 0,
             "sdk_families_observed": len(observed_sdk_families),
             "files_analyzed": inventory["files_analyzed"],
             "parse_errors": inventory["parse_errors"],
@@ -336,6 +399,1126 @@ def build_data_exposure_synthesis(
             "Hashing, masking, and redaction must be reviewed for data type, reversibility, and organizational policy.",
             "Absence of findings does not prove logs or telemetry are free of sensitive data.",
         ],
+    }
+
+
+def apply_data_exposure_fusion(
+    document: dict[str, Any],
+    findings: list[Finding],
+    fusion: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Join finalized fusion context back into exposure assessments in place."""
+    assessments = document.get("finding_assessments")
+    summary = document.get("summary")
+    if not isinstance(assessments, list) or not isinstance(summary, dict):
+        return document
+    dependency_contexts = _sdk_dependency_contexts(document, findings, fusion)
+    _apply_sdk_dependency_context(document, dependency_contexts)
+    by_id = {
+        str(item.get("finding_id")): item
+        for item in assessments
+        if isinstance(item, dict) and item.get("finding_id")
+    }
+    fusion_enriched = 0
+    urgent = 0
+    changed = 0
+    uncovered = 0
+    runtime_observed = 0
+    broad_blast_radius = 0
+    owned = 0
+    mapped_tests = 0
+    high_change_risk = 0
+    for finding in findings:
+        assessment = by_id.get(finding.finding_id)
+        if assessment is None:
+            continue
+        cross_references = _fusion_cross_references(finding)
+        assessment["cross_references"] = cross_references
+        assessment["triage_tier"] = _exposure_triage_tier(assessment, cross_references)
+        dependency_context = assessment["sdk_dependency_context"]
+        if dependency_context["context_available"]:
+            evidence_artifacts = assessment.get("evidence_artifacts")
+            if not isinstance(evidence_artifacts, list):
+                evidence_artifacts = []
+            assessment["evidence_artifacts"] = sorted(
+                set(evidence_artifacts)
+                | {"findings.json"}
+                | ({"evidence-fusion.json"} if isinstance(fusion, dict) else set())
+            )
+        assessment["verification_steps"] = _exposure_verification_steps(
+            assessment, cross_references
+        )
+        exposure = finding.evidence.get("data_exposure")
+        if isinstance(exposure, dict):
+            exposure["cross_references"] = cross_references
+            exposure["triage_tier"] = assessment["triage_tier"]
+            exposure["verification_steps"] = assessment["verification_steps"]
+            exposure["sdk_dependency_context"] = assessment["sdk_dependency_context"]
+            exposure["evidence_artifacts"] = assessment["evidence_artifacts"]
+        if cross_references["fusion_available"]:
+            fusion_enriched += 1
+        urgent += assessment["triage_tier"] == "urgent"
+        changed += cross_references["changed_line"] is True
+        uncovered += cross_references["line_covered"] is False
+        runtime_observed += _runtime_observed(cross_references)
+        broad_blast_radius += int(cross_references["graph_upstream_files"] or 0) >= 10
+        owned += bool(cross_references["owners"])
+        mapped_tests += bool(cross_references["mapped_test_files"])
+        high_change_risk += cross_references["change_risk_priority"] == "high"
+    summary.update(
+        {
+            "fusion_enriched_findings": fusion_enriched,
+            "urgent_cross_referenced_findings": urgent,
+            "changed_exposure_findings": changed,
+            "uncovered_exposure_findings": uncovered,
+            "runtime_observed_exposure_findings": runtime_observed,
+            "broad_blast_radius_findings": broad_blast_radius,
+            "owned_exposure_findings": owned,
+            "exposure_findings_with_mapped_tests": mapped_tests,
+            "high_change_risk_exposure_findings": high_change_risk,
+            "exposure_findings_with_sdk_package_risk": sum(
+                bool(item.get("sdk_dependency_context", {}).get("risk_present"))
+                for item in assessments
+                if isinstance(item, dict)
+            ),
+            "sink_surfaces_with_sdk_package_risk": sum(
+                bool(item.get("sdk_dependency_context", {}).get("risk_present"))
+                for item in document.get("sink_surfaces", [])
+                if isinstance(item, dict)
+            ),
+            "sdk_packages_correlated": len(
+                {
+                    package
+                    for context in dependency_contexts.values()
+                    for package in context["packages"]
+                }
+            ),
+            "sdk_packages_with_findings": len(
+                {
+                    package
+                    for context in dependency_contexts.values()
+                    for package in context["packages_with_findings"]
+                }
+            ),
+            "sdk_packages_with_version_drift": len(
+                {
+                    str(item["package"])
+                    for context in dependency_contexts.values()
+                    for item in context["lineage"]
+                    if item["status"] == "version-drift"
+                }
+            ),
+            "sdk_distinct_advisories": len(
+                {
+                    str(item["cluster_id"])
+                    for context in dependency_contexts.values()
+                    for item in context["advisory_clusters"]
+                }
+            ),
+            "sdk_advisory_observations": sum(
+                int(item["observation_count"])
+                for item in {
+                    str(cluster["cluster_id"]): cluster
+                    for context in dependency_contexts.values()
+                    for cluster in context["advisory_clusters"]
+                }.values()
+            ),
+            "sdk_advisories_with_import_evidence": sum(
+                cluster["dependency_usage"]["import_observed"] is True
+                for cluster in {
+                    str(cluster["cluster_id"]): cluster
+                    for context in dependency_contexts.values()
+                    for cluster in context["advisory_clusters"]
+                }.values()
+            ),
+            "sdk_advisories_in_executable_imports": sum(
+                cluster["dependency_usage"]["assessment"]
+                in {"runtime-observed-import", "executable-import"}
+                for cluster in {
+                    str(cluster["cluster_id"]): cluster
+                    for context in dependency_contexts.values()
+                    for cluster in context["advisory_clusters"]
+                }.values()
+            ),
+            "sdk_advisories_flagged_unused": sum(
+                "unused-declaration" in cluster["dependency_usage"]["deptry_statuses"]
+                for cluster in {
+                    str(cluster["cluster_id"]): cluster
+                    for context in dependency_contexts.values()
+                    for cluster in context["advisory_clusters"]
+                }.values()
+            ),
+        }
+    )
+    assessments.sort(
+        key=lambda item: (
+            {"urgent": 0, "elevated": 1, "standard": 2}.get(
+                str(item.get("triage_tier")), 3
+            ),
+            {"high": 0, "medium": 1, "none": 2}.get(
+                str(item.get("sdk_dependency_context", {}).get("risk_tier")), 3
+            ),
+            {"high": 0, "medium": 1, "low": 2}.get(str(item.get("review_priority")), 3),
+            str(item.get("finding_id")),
+        )
+    )
+    return document
+
+
+def _empty_sdk_dependency_context() -> dict[str, Any]:
+    return {
+        "context_available": False,
+        "risk_present": False,
+        "risk_tier": "none",
+        "packages": [],
+        "packages_with_findings": [],
+        "package_finding_ids": [],
+        "package_finding_tools": [],
+        "package_classifications": [],
+        "distinct_advisory_count": 0,
+        "advisory_observation_count": 0,
+        "advisory_clusters": [],
+        "advisories_with_import_evidence": 0,
+        "advisories_in_executable_imports": 0,
+        "advisories_flagged_unused": 0,
+        "highest_severity": None,
+        "lineage": [],
+        "risk_reasons": [],
+        "citations": [],
+    }
+
+
+def _sdk_dependency_contexts(
+    document: dict[str, Any],
+    findings: list[Finding],
+    fusion: dict[str, Any] | None,
+) -> dict[str, dict[str, Any]]:
+    packages_by_sdk: dict[str, set[str]] = {}
+    observations = document.get("sdk_observations")
+    if isinstance(observations, list):
+        for item in observations:
+            if not isinstance(item, dict) or not isinstance(item.get("sdk"), str):
+                continue
+            package = _normalized_package(item.get("package"))
+            packages_by_sdk.setdefault(item["sdk"], set())
+            if package:
+                packages_by_sdk[item["sdk"]].add(package)
+
+    raw_lineage = fusion.get("package_lineage") if isinstance(fusion, dict) else None
+    lineage_by_package: dict[str, dict[str, Any]] = {}
+    if isinstance(raw_lineage, list):
+        for item in raw_lineage:
+            if not isinstance(item, dict):
+                continue
+            package = _normalized_package(item.get("package"))
+            status = str(item.get("status") or "")
+            if not package or status not in {
+                "matched",
+                "version-drift",
+                "source-only",
+                "artifact-only",
+            }:
+                continue
+            lineage_by_package[package] = {
+                "package": package,
+                "status": status,
+                "source_versions": _bounded_strings(item.get("source_versions"), 20),
+                "artifact_versions": _bounded_strings(
+                    item.get("artifact_versions"), 20
+                ),
+            }
+            module = _DEPENDENCY_TO_IMPORT.get(package)
+            catalog = _SDK_CATALOG.get(module or "")
+            if catalog:
+                packages_by_sdk.setdefault(catalog[0], set()).add(package)
+
+    package_findings = _sdk_package_finding_index(findings)
+    raw_clusters = fusion.get("advisory_clusters") if isinstance(fusion, dict) else None
+    if not isinstance(raw_clusters, list):
+        raw_clusters = build_advisory_clusters(findings)
+    clusters_by_package: dict[str, list[dict[str, Any]]] = {}
+    for raw_cluster in raw_clusters:
+        cluster = _sdk_advisory_cluster(raw_cluster)
+        if cluster is not None:
+            clusters_by_package.setdefault(cluster["package"], []).append(cluster)
+    contexts: dict[str, dict[str, Any]] = {}
+    for sdk, package_values in sorted(packages_by_sdk.items()):
+        packages = sorted(package_values)[:50]
+        records = [
+            record
+            for package in packages
+            for record in package_findings.get(package, [])
+        ]
+        finding_ids = sorted({str(item["finding_id"]) for item in records})[:50]
+        packages_with_findings = sorted(
+            {package for package in packages if package_findings.get(package)}
+        )
+        advisory_clusters = sorted(
+            {
+                str(cluster["cluster_id"]): cluster
+                for package in packages
+                for cluster in clusters_by_package.get(package, [])
+            }.values(),
+            key=lambda item: (str(item["package"]), str(item["primary_identifier"])),
+        )[:50]
+        lineage = [
+            lineage_by_package[pkg] for pkg in packages if pkg in lineage_by_package
+        ]
+        risky_lineage = [
+            item
+            for item in lineage
+            if item["status"] in {"version-drift", "artifact-only"}
+        ]
+        highest_severity = _highest_sdk_package_severity(records)
+        risk_present = bool(finding_ids or risky_lineage)
+        risk_tier = (
+            "high"
+            if highest_severity in {"critical", "high"} or risky_lineage
+            else "medium"
+            if risk_present
+            else "none"
+        )
+        reasons = []
+        for package in packages_with_findings:
+            package_clusters = clusters_by_package.get(package, [])
+            if package_clusters:
+                observations = sum(
+                    int(item["observation_count"]) for item in package_clusters
+                )
+                reasons.append(
+                    f"{package} has {len(package_clusters)} distinct advisory risk(s) "
+                    f"across {observations} retained scanner observation(s)"
+                )
+            else:
+                observations = len(package_findings[package])
+                reasons.append(
+                    f"{package} has {observations} normalized package finding(s)"
+                )
+        reasons.extend(
+            f"{item['package']} has {item['status']} source/artifact lineage"
+            for item in risky_lineage
+        )
+        import_count = sum(
+            item["dependency_usage"]["import_observed"] is True
+            for item in advisory_clusters
+        )
+        executable_count = sum(
+            item["dependency_usage"]["assessment"]
+            in {"runtime-observed-import", "executable-import"}
+            for item in advisory_clusters
+        )
+        unused_count = sum(
+            "unused-declaration" in item["dependency_usage"]["deptry_statuses"]
+            for item in advisory_clusters
+        )
+        if import_count:
+            reasons.append(
+                f"{import_count} distinct advisory risk(s) have exact static import evidence"
+            )
+        if executable_count:
+            reasons.append(
+                f"{executable_count} distinct advisory risk(s) map to executable or runtime-observed imports"
+            )
+        if unused_count:
+            reasons.append(
+                f"deptry flags the declaration for {unused_count} distinct advisory risk(s) as unused"
+            )
+        citation_sources = advisory_clusters if advisory_clusters else records
+        citations = {
+            (str(citation["identifier"]), str(citation.get("uri") or "")): citation
+            for source in citation_sources
+            for citation in source["citations"]
+        }
+        contexts[sdk] = {
+            "context_available": bool(packages),
+            "risk_present": risk_present,
+            "risk_tier": risk_tier,
+            "packages": packages,
+            "packages_with_findings": packages_with_findings,
+            "package_finding_ids": finding_ids,
+            "package_finding_tools": sorted(
+                {tool for item in records for tool in item["tools"]}
+            )[:20],
+            "package_classifications": sorted(
+                {
+                    classification
+                    for item in records
+                    for raw_classification in item["classifications"]
+                    if (
+                        classification := _normalized_package_classification(
+                            raw_classification
+                        )
+                    )
+                }
+            )[:50],
+            "distinct_advisory_count": len(advisory_clusters),
+            "advisory_observation_count": sum(
+                int(item["observation_count"]) for item in advisory_clusters
+            ),
+            "advisory_clusters": advisory_clusters,
+            "advisories_with_import_evidence": import_count,
+            "advisories_in_executable_imports": executable_count,
+            "advisories_flagged_unused": unused_count,
+            "highest_severity": highest_severity,
+            "lineage": lineage[:50],
+            "risk_reasons": reasons[:20],
+            "citations": [citations[key] for key in sorted(citations)[:25]],
+        }
+    return contexts
+
+
+def _sdk_advisory_cluster(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, dict):
+        return None
+    package = _normalized_package(value.get("package"))
+    cluster_id = str(value.get("cluster_id") or "")[:100]
+    primary = str(value.get("primary_identifier") or "")[:100]
+    if not package or not cluster_id or not primary:
+        return None
+    observation_count = value.get("observation_count")
+    alias_count = value.get("alias_count")
+    raw_citations = value.get("citations")
+    citations = raw_citations if isinstance(raw_citations, list) else []
+    highest_severity = str(value.get("highest_severity") or "unknown")
+    if highest_severity not in {
+        "critical",
+        "high",
+        "medium",
+        "low",
+        "informational",
+        "unknown",
+    }:
+        highest_severity = "unknown"
+    return {
+        "cluster_id": cluster_id,
+        "package": package,
+        "versions": _bounded_strings(value.get("versions"), 50),
+        "primary_identifier": primary,
+        "identifiers": _bounded_strings(value.get("identifiers"), 100),
+        "finding_ids": _bounded_strings(value.get("finding_ids"), 100),
+        "tools": _bounded_strings(value.get("tools"), 25),
+        "highest_severity": highest_severity,
+        "observation_count": (
+            observation_count
+            if isinstance(observation_count, int) and observation_count > 0
+            else 1
+        ),
+        "alias_count": (
+            alias_count if isinstance(alias_count, int) and alias_count >= 0 else 0
+        ),
+        "cross_tool": value.get("cross_tool") is True,
+        "dependency_usage": _sdk_dependency_usage(value.get("dependency_usage")),
+        "citations": [
+            {
+                "identifier": str(item.get("identifier") or "")[:200],
+                "title": str(item.get("title") or "")[:500],
+                "uri": item.get("uri") if isinstance(item.get("uri"), str) else None,
+            }
+            for item in citations[:25]
+            if isinstance(item, dict) and item.get("identifier") and item.get("title")
+        ],
+    }
+
+
+def _sdk_dependency_usage(value: Any) -> dict[str, Any]:
+    raw = value if isinstance(value, dict) else {}
+    assessment = str(raw.get("assessment") or "unknown")
+    allowed_assessments = {
+        "runtime-observed-import",
+        "executable-import",
+        "load-only-import",
+        "disconnected-import",
+        "imported-reachability-incomplete",
+        "import-observed",
+        "declared-unused",
+        "import-not-observed",
+        "import-vs-unused-conflict",
+        "unknown",
+    }
+    relationship = str(raw.get("source_relationship") or "unknown")
+    return {
+        "assessment": assessment if assessment in allowed_assessments else "unknown",
+        "source_relationship": (
+            relationship
+            if relationship in {"direct", "transitive", "unknown"}
+            else "unknown"
+        ),
+        "relationship_evidence_available": raw.get("relationship_evidence_available")
+        is True,
+        "import_evidence_available": raw.get("import_evidence_available") is True,
+        "import_observed": (
+            raw.get("import_observed")
+            if isinstance(raw.get("import_observed"), bool)
+            else None
+        ),
+        "import_modules": _bounded_strings(raw.get("import_modules"), 50),
+        "import_paths": _bounded_strings(raw.get("import_paths"), 50),
+        "reachability_evidence_available": raw.get("reachability_evidence_available")
+        is True,
+        "reachability_complete": (
+            raw.get("reachability_complete")
+            if isinstance(raw.get("reachability_complete"), bool)
+            else None
+        ),
+        "reachability_confidence": (
+            str(raw["reachability_confidence"])[:50]
+            if raw.get("reachability_confidence")
+            else None
+        ),
+        "reachability_states": _bounded_strings(raw.get("reachability_states"), 10),
+        "runtime_observations": _bounded_strings(raw.get("runtime_observations"), 10),
+        "deptry_statuses": _bounded_strings(raw.get("deptry_statuses"), 10),
+        "deptry_finding_ids": _bounded_strings(raw.get("deptry_finding_ids"), 50),
+        "signals_conflict": raw.get("signals_conflict") is True,
+        "evidence_artifacts": _bounded_strings(raw.get("evidence_artifacts"), 10),
+    }
+
+
+def _sdk_package_finding_index(
+    findings: list[Finding],
+) -> dict[str, list[dict[str, Any]]]:
+    result: dict[str, list[dict[str, Any]]] = {}
+    for finding in findings:
+        packages = {
+            package
+            for location in finding.locations
+            if (package := _normalized_package(location.package))
+        }
+        if not packages:
+            continue
+        record = {
+            "finding_id": finding.finding_id,
+            "severity": finding.severity.value,
+            "tools": sorted({source.tool for source in finding.sources}),
+            "classifications": sorted(set(finding.classifications)),
+            "citations": [
+                {
+                    "identifier": citation.identifier,
+                    "title": citation.title,
+                    "uri": citation.uri,
+                }
+                for citation in finding.citations[:10]
+                if citation.kind != "supporting_evidence"
+            ],
+        }
+        for package in packages:
+            result.setdefault(package, []).append(record)
+    return result
+
+
+def _highest_sdk_package_severity(records: list[dict[str, Any]]) -> str | None:
+    order = {
+        "critical": 5,
+        "high": 4,
+        "medium": 3,
+        "low": 2,
+        "informational": 1,
+        "unknown": 0,
+    }
+    values = [str(item.get("severity") or "unknown") for item in records]
+    return max(values, key=lambda item: order.get(item, 0), default=None)
+
+
+def _apply_sdk_dependency_context(
+    document: dict[str, Any], contexts: dict[str, dict[str, Any]]
+) -> None:
+    assessments = document.get("finding_assessments")
+    if isinstance(assessments, list):
+        for item in assessments:
+            if isinstance(item, dict):
+                item["sdk_dependency_context"] = _sdk_context_for(
+                    item.get("sdk"), contexts
+                )
+    surfaces = document.get("sink_surfaces")
+    if isinstance(surfaces, list):
+        for item in surfaces:
+            if not isinstance(item, dict):
+                continue
+            context = _sdk_context_for(item.get("sdk"), contexts)
+            item["sdk_dependency_context"] = context
+            if context["risk_tier"] == "high" and item.get("scope") == "production":
+                item["review_priority"] = "high"
+            steps = _sdk_dependency_verification_steps(context)
+            existing = item.get("verification_steps")
+            if not isinstance(existing, list):
+                existing = []
+            item["verification_steps"] = list(
+                dict.fromkeys([*steps, *(str(value) for value in existing)])
+            )[:6]
+
+
+def _sdk_context_for(sdk: Any, contexts: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    raw = contexts.get(str(sdk)) if isinstance(sdk, str) else None
+    if raw is None:
+        return _empty_sdk_dependency_context()
+    return {
+        key: [dict(item) if isinstance(item, dict) else item for item in value]
+        if isinstance(value, list)
+        else value
+        for key, value in raw.items()
+    }
+
+
+def _sdk_dependency_verification_steps(context: Any) -> list[str]:
+    if not isinstance(context, dict) or not context.get("risk_present"):
+        return []
+    steps: list[str] = []
+    advisory_clusters = context.get("advisory_clusters")
+    tools = context.get("package_finding_tools")
+    if isinstance(advisory_clusters, list) and advisory_clusters:
+        primary_identifiers = [
+            str(item.get("primary_identifier"))
+            for item in advisory_clusters
+            if isinstance(item, dict) and item.get("primary_identifier")
+        ]
+        attribution = (
+            " from " + ", ".join(str(item) for item in tools[:5])
+            if isinstance(tools, list) and tools
+            else ""
+        )
+        steps.append(
+            "Review distinct SDK advisories "
+            + ", ".join(primary_identifiers[:5])
+            + attribution
+            + "; upgrade, replace, or govern the affected package before approving this data path."
+        )
+        usage: list[dict[str, Any]] = []
+        for item in advisory_clusters:
+            if not isinstance(item, dict):
+                continue
+            raw_usage = item.get("dependency_usage")
+            if isinstance(raw_usage, dict):
+                usage.append(raw_usage)
+        if any(item.get("signals_conflict") is True for item in usage):
+            steps.append(
+                "Resolve the Graphify-import versus deptry-unused contradiction before disposition; confirm dependency-to-import mapping and dynamic/plugin loading."
+            )
+        elif any(item.get("assessment") == "declared-unused" for item in usage):
+            steps.append(
+                "Confirm deptry's unused-declaration evidence against dynamic and plugin loading; remove the package when unused, otherwise upgrade and document the hidden load path."
+            )
+        elif any(item.get("import_observed") is True for item in usage):
+            import_paths = sorted(
+                {
+                    str(path)
+                    for item in usage
+                    for path in item.get("import_paths", [])[:10]
+                }
+            )
+            steps.append(
+                "Trace vulnerable API use from the exact importing files"
+                + (": " + ", ".join(import_paths[:5]) if import_paths else "")
+                + "; static import evidence alone does not establish vulnerable-function reachability."
+            )
+    finding_ids = context.get("package_finding_ids")
+    if not advisory_clusters and isinstance(finding_ids, list) and finding_ids:
+        attribution = (
+            " from " + ", ".join(str(item) for item in tools[:5])
+            if isinstance(tools, list) and tools
+            else ""
+        )
+        steps.append(
+            "Review SDK package findings "
+            + ", ".join(str(item) for item in finding_ids[:5])
+            + attribution
+            + "; upgrade, replace, or govern the affected package before approving this data path."
+        )
+    lineage = context.get("lineage")
+    if isinstance(lineage, list):
+        drift = [
+            str(item.get("package"))
+            for item in lineage
+            if isinstance(item, dict) and item.get("status") == "version-drift"
+        ]
+        artifact_only = [
+            str(item.get("package"))
+            for item in lineage
+            if isinstance(item, dict) and item.get("status") == "artifact-only"
+        ]
+        if drift:
+            steps.append(
+                "Reconcile source and built-artifact versions for "
+                + ", ".join(drift[:5])
+                + " before release."
+            )
+        if artifact_only:
+            steps.append(
+                "Explain or remove artifact-only SDK packages: "
+                + ", ".join(artifact_only[:5])
+                + "."
+            )
+    return steps[:3]
+
+
+def _normalized_package(value: Any) -> str:
+    if not isinstance(value, str):
+        return ""
+    return re.sub(r"[-_.]+", "-", value.strip()).casefold()[:300]
+
+
+def _normalized_package_classification(value: Any) -> str:
+    if not isinstance(value, str):
+        return ""
+    result = value.strip()[:300]
+    return (
+        result.upper()
+        if re.match(r"^(?:CVE|GHSA|OSV|PYSEC)-", result, re.IGNORECASE)
+        else result
+    )
+
+
+def _enrich_sink_surfaces(
+    surfaces: list[dict[str, Any]],
+    artifacts: dict[str, Any],
+    findings: list[Finding],
+) -> None:
+    coverage = _surface_coverage_index(artifacts.get("coverage-summary.json"))
+    changes = _surface_change_index(artifacts.get("diff-coverage.json"))
+    reachability = _surface_reachability_index(artifacts.get("reachability.json"))
+    graph = _surface_graph_index(artifacts.get("graphify.json"))
+    structural = _surface_structural_index(artifacts.get("structural-synthesis.json"))
+    findings_by_path = _surface_finding_index(findings)
+    for surface in surfaces:
+        path = str(surface.get("path") or "").replace("\\", "/")
+        line = int(surface.get("line") or 0)
+        coverage_record = coverage.get(path, {})
+        change_record = changes.get(path, {})
+        reachability_record = _surface_reachability_record(
+            reachability.get(path, []), line
+        )
+        graph_record = graph.get(path, {})
+        structural_record = structural.get(path, {})
+        path_findings = findings_by_path.get(path, [])
+        related = _surface_related_findings(path_findings, line)
+        line_covered = _surface_line_covered(coverage_record, change_record, line)
+        changed_line = (
+            line in change_record.get("changed_lines", set()) if change_record else None
+        )
+        context = {
+            "context_available": bool(
+                coverage_record
+                or change_record
+                or reachability_record["states"]
+                or graph_record
+                or structural_record
+                or related
+            ),
+            "changed_line": changed_line,
+            "line_covered": line_covered,
+            "coverage_percent": coverage_record.get("percent"),
+            "diff_coverage_percent": change_record.get("percent"),
+            "reachability_states": reachability_record["states"],
+            "runtime_observations": reachability_record["observations"],
+            "graph_upstream_files": graph_record.get("upstream"),
+            "graph_downstream_files": graph_record.get("downstream"),
+            "graph_degree": graph_record.get("degree"),
+            "related_finding_ids": [item["finding_id"] for item in related],
+            "related_tools": sorted(
+                {tool for item in related for tool in item["tools"]}
+            ),
+            "owners": sorted(
+                {owner for item in path_findings for owner in item["owners"]}
+                | set(structural_record.get("owners", []))
+            )[:20],
+            "change_risk_score": structural_record.get("change_risk_score"),
+            "change_risk_priority": structural_record.get("change_risk_priority"),
+            "change_classification": structural_record.get("change_classification"),
+            "mapped_test_files": structural_record.get("mapped_test_files", []),
+            "test_selection_confidence": structural_record.get(
+                "test_selection_confidence"
+            ),
+            "structural_risk_ids": structural_record.get("risk_ids", []),
+            "structural_risk_kinds": structural_record.get("risk_kinds", []),
+            "structural_recommendation": structural_record.get("recommendation"),
+        }
+        surface["structural_context"] = context
+        surface["sdk_dependency_context"] = _empty_sdk_dependency_context()
+        surface["review_priority"] = _surface_context_priority(surface, context)
+        surface["verification_steps"] = _surface_verification_steps(surface, context)
+
+
+def _surface_coverage_index(value: Any) -> dict[str, dict[str, Any]]:
+    if not isinstance(value, dict) or not isinstance(value.get("files"), list):
+        return {}
+    result: dict[str, dict[str, Any]] = {}
+    for item in value["files"]:
+        if not isinstance(item, dict) or not isinstance(item.get("path"), str):
+            continue
+        summary = item.get("summary")
+        percent = summary.get("percent_covered") if isinstance(summary, dict) else None
+        result[item["path"].replace("\\", "/")] = {
+            "percent": _optional_number(percent),
+            "missing_lines": _integer_set(item.get("missing_lines")),
+            "covered_lines": _integer_set(
+                item.get("covered_lines") or item.get("executed_lines")
+            ),
+        }
+    return result
+
+
+def _surface_change_index(value: Any) -> dict[str, dict[str, Any]]:
+    if not isinstance(value, dict) or not isinstance(value.get("src_stats"), dict):
+        return {}
+    result: dict[str, dict[str, Any]] = {}
+    for path, item in value["src_stats"].items():
+        if not isinstance(item, dict):
+            continue
+        covered = _integer_set(item.get("covered_lines"))
+        violations = _integer_set(item.get("violation_lines"))
+        result[str(path).replace("\\", "/")] = {
+            "changed_lines": covered | violations,
+            "covered_lines": covered,
+            "violation_lines": violations,
+            "percent": _optional_number(item.get("percent_covered")),
+        }
+    return result
+
+
+def _surface_reachability_index(value: Any) -> dict[str, list[dict[str, Any]]]:
+    result: dict[str, list[dict[str, Any]]] = {}
+    if not isinstance(value, dict) or not isinstance(value.get("nodes"), list):
+        return result
+    for item in value["nodes"]:
+        if not isinstance(item, dict) or not isinstance(item.get("path"), str):
+            continue
+        path = item["path"].replace("\\", "/")
+        result.setdefault(path, []).append(item)
+    return result
+
+
+def _surface_reachability_record(
+    nodes: list[dict[str, Any]], line: int
+) -> dict[str, list[str]]:
+    containing = [
+        item
+        for item in nodes
+        if isinstance(item.get("start_line"), int)
+        and isinstance(item.get("end_line"), int)
+        and int(item["start_line"]) <= line <= int(item["end_line"])
+    ]
+    selected = containing or [
+        item
+        for item in nodes
+        if not isinstance(item.get("start_line"), int)
+        or not isinstance(item.get("end_line"), int)
+    ]
+    return {
+        "states": sorted(
+            {
+                str(item["state"])
+                for item in selected
+                if isinstance(item.get("state"), str)
+            }
+        ),
+        "observations": sorted(
+            {
+                str(item["runtime_observation"])
+                for item in selected
+                if isinstance(item.get("runtime_observation"), str)
+            }
+        ),
+    }
+
+
+def _surface_graph_index(value: Any) -> dict[str, dict[str, int]]:
+    if not isinstance(value, dict):
+        return {}
+    topology = value.get("topology")
+    if not isinstance(topology, dict) or not isinstance(
+        topology.get("file_edges"), list
+    ):
+        return {}
+    incoming: dict[str, set[str]] = {}
+    outgoing: dict[str, set[str]] = {}
+    for item in topology["file_edges"]:
+        if not isinstance(item, dict):
+            continue
+        source = item.get("source")
+        target = item.get("target")
+        if not isinstance(source, str) or not isinstance(target, str):
+            continue
+        source = source.replace("\\", "/")
+        target = target.replace("\\", "/")
+        outgoing.setdefault(source, set()).add(target)
+        incoming.setdefault(target, set()).add(source)
+    paths = set(incoming) | set(outgoing)
+    return {
+        path: {
+            "upstream": len(_surface_walk(incoming, path)),
+            "downstream": len(_surface_walk(outgoing, path)),
+            "degree": len(incoming.get(path, set()) | outgoing.get(path, set())),
+        }
+        for path in paths
+    }
+
+
+def _surface_structural_index(value: Any) -> dict[str, dict[str, Any]]:
+    if not isinstance(value, dict):
+        return {}
+    result: dict[str, dict[str, Any]] = {}
+    changes = value.get("change_impact_assessments")
+    if isinstance(changes, list):
+        for item in changes:
+            if not isinstance(item, dict) or not isinstance(item.get("path"), str):
+                continue
+            path = item["path"].replace("\\", "/")
+            tests: set[str] = set()
+            for key in (
+                "direct_test_files",
+                "transitive_test_files",
+                "associated_test_files",
+            ):
+                values = item.get(key)
+                if isinstance(values, list):
+                    tests.update(
+                        str(test).replace("\\", "/")
+                        for test in values
+                        if isinstance(test, str) and test
+                    )
+            record = result.setdefault(path, {"risk_ids": [], "risk_kinds": []})
+            record.update(
+                {
+                    "change_risk_score": _optional_count(item.get("risk_score")),
+                    "change_risk_priority": _optional_string(
+                        item.get("priority"), {"high", "medium", "low"}
+                    ),
+                    "change_classification": _optional_string(
+                        item.get("classification")
+                    ),
+                    "mapped_test_files": sorted(tests)[:25],
+                    "test_selection_confidence": _optional_string(
+                        item.get("test_selection_confidence"),
+                        {"high", "medium", "low"},
+                    ),
+                    "recommendation": _optional_string(item.get("recommended_action")),
+                }
+            )
+    islands = value.get("island_assessments")
+    if isinstance(islands, list):
+        for item in islands:
+            if not isinstance(item, dict) or not isinstance(item.get("paths"), list):
+                continue
+            island_id = _optional_string(item.get("island_id"))
+            classification = _optional_string(item.get("classification"))
+            priority = _optional_string(item.get("priority"))
+            for raw_path in item["paths"]:
+                if not isinstance(raw_path, str):
+                    continue
+                record = result.setdefault(
+                    raw_path.replace("\\", "/"),
+                    {"risk_ids": [], "risk_kinds": []},
+                )
+                if island_id:
+                    record["risk_ids"].append(island_id)
+                if classification:
+                    record["risk_kinds"].append(
+                        f"island:{classification}"
+                        + (f":{priority}" if priority else "")
+                    )
+                owners = item.get("owners")
+                if isinstance(owners, list):
+                    record.setdefault("owners", []).extend(
+                        str(owner)
+                        for owner in owners
+                        if isinstance(owner, str) and owner
+                    )
+                if not record.get("recommendation"):
+                    record["recommendation"] = _optional_string(
+                        item.get("recommended_action")
+                    )
+    cycles = value.get("import_cycles")
+    if isinstance(cycles, list):
+        for item in cycles:
+            if not isinstance(item, dict) or not isinstance(item.get("paths"), list):
+                continue
+            cycle_id = _optional_string(item.get("cycle_id"))
+            priority = _optional_string(item.get("priority"))
+            for raw_path in item["paths"]:
+                if not isinstance(raw_path, str):
+                    continue
+                record = result.setdefault(
+                    raw_path.replace("\\", "/"),
+                    {"risk_ids": [], "risk_kinds": []},
+                )
+                if cycle_id:
+                    record["risk_ids"].append(cycle_id)
+                record["risk_kinds"].append(
+                    "import-cycle" + (f":{priority}" if priority else "")
+                )
+                if not record.get("recommendation"):
+                    record["recommendation"] = _optional_string(
+                        item.get("recommended_action")
+                    )
+    for record in result.values():
+        record["risk_ids"] = sorted(set(record.get("risk_ids", [])))[:20]
+        record["risk_kinds"] = sorted(set(record.get("risk_kinds", [])))[:20]
+        record["owners"] = sorted(set(record.get("owners", [])))[:20]
+        record.setdefault("mapped_test_files", [])
+        record.setdefault("change_risk_score", None)
+        record.setdefault("change_risk_priority", None)
+        record.setdefault("change_classification", None)
+        record.setdefault("test_selection_confidence", None)
+        record.setdefault("recommendation", None)
+    return result
+
+
+def _surface_walk(edges: dict[str, set[str]], start: str) -> set[str]:
+    seen: set[str] = set()
+    pending = list(edges.get(start, set()))
+    while pending and len(seen) < 10000:
+        current = pending.pop()
+        if current in seen or current == start:
+            continue
+        seen.add(current)
+        pending.extend(edges.get(current, set()) - seen)
+    return seen
+
+
+def _surface_finding_index(findings: list[Finding]) -> dict[str, list[dict[str, Any]]]:
+    result: dict[str, list[dict[str, Any]]] = {}
+    for finding in findings:
+        for location in finding.locations[:5]:
+            path = location.path.replace("\\", "/")
+            result.setdefault(path, []).append(
+                {
+                    "finding_id": finding.finding_id,
+                    "line": location.start_line,
+                    "tools": sorted({source.tool for source in finding.sources}),
+                    "owners": _bounded_strings(finding.evidence.get("owners"), 20),
+                }
+            )
+    return result
+
+
+def _surface_related_findings(
+    candidates: list[dict[str, Any]], line: int
+) -> list[dict[str, Any]]:
+    return sorted(
+        (
+            item
+            for item in candidates
+            if item.get("line") is None or abs(int(item["line"]) - line) <= 10
+        ),
+        key=lambda item: (
+            abs(int(item.get("line") or line) - line),
+            item["finding_id"],
+        ),
+    )[:20]
+
+
+def _surface_line_covered(
+    coverage: dict[str, Any], change: dict[str, Any], line: int
+) -> bool | None:
+    if line in change.get("violation_lines", set()):
+        return False
+    if line in change.get("covered_lines", set()):
+        return True
+    if line in coverage.get("missing_lines", set()):
+        return False
+    if line in coverage.get("covered_lines", set()):
+        return True
+    return None
+
+
+def _surface_context_priority(surface: dict[str, Any], context: dict[str, Any]) -> str:
+    current = str(surface.get("review_priority") or "medium")
+    if current == "high":
+        return current
+    if context["changed_line"] is True and context["line_covered"] is False:
+        return "high"
+    if "observed" in context["runtime_observations"] and surface.get("data_classes"):
+        return "high"
+    if int(context.get("graph_upstream_files") or 0) >= 10:
+        return "high"
+    if context.get("change_risk_priority") == "high":
+        return "high"
+    if any(
+        str(kind).startswith(("island:latent-attack-surface", "import-cycle:high"))
+        for kind in context.get("structural_risk_kinds", [])
+    ):
+        return "high"
+    if context["related_finding_ids"] or context["context_available"]:
+        return "medium"
+    return current
+
+
+def _surface_verification_steps(
+    surface: dict[str, Any], context: dict[str, Any]
+) -> list[str]:
+    steps: list[str] = []
+    if context["changed_line"] is True:
+        steps.append("Review the change that introduced or modified this sink surface.")
+    if context["line_covered"] is False:
+        steps.append(
+            "Add a focused test that exercises the sink with synthetic sensitive-data canaries."
+        )
+    if "observed" in context["runtime_observations"]:
+        steps.append(
+            "Inspect locally captured runtime output and assert that canary values are absent."
+        )
+    if "disconnected" in context["reachability_states"]:
+        steps.append(
+            "Validate dynamic registration and configured entry points; remove the sink if the path is truly disconnected."
+        )
+    if int(context.get("graph_upstream_files") or 0) >= 10:
+        steps.append(
+            "Run graph-guided tests for upstream dependents before changing the sink."
+        )
+    mapped_tests = context.get("mapped_test_files")
+    if isinstance(mapped_tests, list) and mapped_tests:
+        steps.append(
+            "Run the graph-selected tests for this sink: "
+            + ", ".join(str(item) for item in mapped_tests[:5])
+            + "."
+        )
+    recommendation = context.get("structural_recommendation")
+    if isinstance(recommendation, str) and recommendation:
+        steps.append(recommendation)
+    if context["related_finding_ids"]:
+        steps.append(
+            "Review nearby normalized findings together with this surface before disposition."
+        )
+    owners = context.get("owners")
+    if isinstance(owners, list) and owners:
+        steps.append(
+            "Route disposition and closure evidence to "
+            + ", ".join(str(item) for item in owners[:5])
+            + "."
+        )
+    data_classes = [str(item) for item in surface.get("data_classes", [])]
+    if data_classes:
+        steps.append(
+            "Exercise this sink with synthetic "
+            + ", ".join(data_classes)
+            + " canaries and assert raw values are absent from captured output."
+        )
+    protection = str(surface.get("protection_status") or "not-observed")
+    if protection != "not-observed":
+        steps.append(
+            f"Test the visible {protection} control and verify the emitted value cannot reconstruct the source data."
+        )
+    elif surface.get("trust_boundary") in {
+        "client-response",
+        "external-observability",
+        "external-service",
+    }:
+        steps.append(
+            "Confirm the destination, approved field allowlist, access controls, and retention for this trust-boundary crossing."
+        )
+    if not steps:
+        steps.append(
+            "Document the approved fields for this sink and test that unexpected sensitive fields are excluded."
+        )
+    return steps[:6]
+
+
+def _integer_set(value: Any) -> set[int]:
+    if not isinstance(value, list):
+        return set()
+    return {
+        int(item)
+        for item in value
+        if isinstance(item, int) and not isinstance(item, bool) and item > 0
     }
 
 
@@ -642,6 +1825,7 @@ class _ExposureVisitor(ast.NodeVisitor):
                 "sdk": sdk,
                 "family": family,
                 "module": matched,
+                "package": None,
                 "evidence": evidence,
                 "path": self.path,
                 "line": line,
@@ -712,6 +1896,7 @@ def _declared_sdk_observations(target: Path) -> list[dict[str, Any]]:
                 "sdk": sdk,
                 "family": family,
                 "module": module,
+                "package": normalized,
                 "evidence": "declared-dependency",
                 "path": declaration_path,
                 "line": line,
@@ -897,7 +2082,7 @@ def _assessment(
     )
     if "scanner-confirmed-source-to-sink" not in risk_factors:
         risk_factors.append("scanner-confirmed-source-to-sink")
-    return {
+    assessment = {
         "finding_id": finding.finding_id,
         "concern": _concern(finding, sink_family),
         "sink_family": sink_family,
@@ -918,6 +2103,7 @@ def _assessment(
         ),
         "risk_factors": sorted(set(risk_factors)),
         "review_priority": _assessment_priority(finding, nearest, relevance),
+        "sdk_dependency_context": _empty_sdk_dependency_context(),
         "evidence_basis": "normalized-scanner-source-to-sink",
         "classifications": sorted(set(finding.classifications)),
         "source_tools": sorted({source.tool for source in finding.sources}),
@@ -933,6 +2119,13 @@ def _assessment(
             if name in artifacts
         ),
     }
+    cross_references = _fusion_cross_references(finding)
+    assessment["cross_references"] = cross_references
+    assessment["triage_tier"] = _exposure_triage_tier(assessment, cross_references)
+    assessment["verification_steps"] = _exposure_verification_steps(
+        assessment, cross_references
+    )
+    return assessment
 
 
 def _finding_data_classes(finding: Finding) -> list[str]:
@@ -968,6 +2161,204 @@ def _assessment_priority(
     if relevance == "disconnected-review":
         return "low"
     return "medium"
+
+
+def _fusion_cross_references(finding: Finding) -> dict[str, Any]:
+    fusion = finding.evidence.get("fusion")
+    if not isinstance(fusion, dict):
+        fusion = {}
+    source = fusion.get("source_context")
+    if not isinstance(source, dict):
+        source = {}
+    structural = fusion.get("structural_context")
+    if not isinstance(structural, dict):
+        structural = {}
+    change = structural.get("change_impact")
+    if not isinstance(change, dict):
+        change = {}
+    mapped_tests = _mapped_tests_from_change(change)
+    structural_ids: list[str] = []
+    structural_kinds: list[str] = []
+    island = structural.get("island")
+    if isinstance(island, dict):
+        if island.get("island_id"):
+            structural_ids.append(str(island["island_id"]))
+        if island.get("classification"):
+            structural_kinds.append(f"island:{island['classification']}")
+    cycle = structural.get("import_cycle")
+    if isinstance(cycle, dict):
+        if cycle.get("cycle_id"):
+            structural_ids.append(str(cycle["cycle_id"]))
+        structural_kinds.append(
+            "import-cycle" + (f":{cycle['priority']}" if cycle.get("priority") else "")
+        )
+    boundary = structural.get("island_boundary")
+    if isinstance(boundary, dict) and boundary.get("boundary_classification"):
+        structural_kinds.append(f"boundary:{boundary['boundary_classification']}")
+    return {
+        "fusion_available": bool(fusion),
+        "fusion_review_tier": str(fusion.get("review_tier") or "not-available"),
+        "corroboration": str(fusion.get("corroboration") or "not-available"),
+        "review_reasons": _bounded_strings(fusion.get("review_reasons"), 10),
+        "related_finding_ids": _bounded_strings(fusion.get("related_finding_ids"), 20),
+        "related_tools": _bounded_strings(fusion.get("related_tools"), 20),
+        "changed_line": _optional_bool(source.get("changed_line")),
+        "line_covered": _optional_bool(source.get("line_covered")),
+        "coverage_percent": _optional_number(source.get("coverage_percent")),
+        "diff_coverage_percent": _optional_number(source.get("diff_coverage_percent")),
+        "reachability_states": _bounded_strings(source.get("reachability_states"), 10),
+        "runtime_observations": _bounded_strings(
+            source.get("runtime_observations"), 10
+        ),
+        "graph_upstream_files": _optional_count(source.get("graph_upstream_files")),
+        "graph_downstream_files": _optional_count(source.get("graph_downstream_files")),
+        "graph_degree": _optional_count(source.get("graph_degree")),
+        "owners": _bounded_strings(finding.evidence.get("owners"), 20),
+        "change_risk_score": _optional_count(change.get("risk_score")),
+        "change_risk_priority": _optional_string(
+            change.get("priority"), {"high", "medium", "low"}
+        ),
+        "change_classification": _optional_string(change.get("classification")),
+        "mapped_test_files": mapped_tests,
+        "test_selection_confidence": _optional_string(
+            change.get("test_selection_confidence"), {"high", "medium", "low"}
+        ),
+        "structural_risk_ids": sorted(set(structural_ids))[:20],
+        "structural_risk_kinds": sorted(set(structural_kinds))[:20],
+        "structural_recommendation": _optional_string(change.get("recommended_action")),
+    }
+
+
+def _exposure_triage_tier(
+    assessment: dict[str, Any], cross_references: dict[str, Any]
+) -> str:
+    fusion_tier = str(cross_references.get("fusion_review_tier") or "")
+    if fusion_tier == "urgent":
+        return "urgent"
+    dependency = assessment.get("sdk_dependency_context")
+    dependency_tier = (
+        str(dependency.get("risk_tier")) if isinstance(dependency, dict) else "none"
+    )
+    if (
+        fusion_tier == "elevated"
+        or assessment.get("review_priority") == "high"
+        or dependency_tier == "high"
+    ):
+        return "elevated"
+    return "standard"
+
+
+def _exposure_verification_steps(
+    assessment: dict[str, Any], cross_references: dict[str, Any]
+) -> list[str]:
+    steps = [
+        "Confirm the scanner source-to-sink trace and the field's authoritative data classification."
+    ]
+    steps.extend(
+        _sdk_dependency_verification_steps(assessment.get("sdk_dependency_context"))
+    )
+    if cross_references.get("changed_line") is True:
+        steps.append(
+            "Review the introducing change and require a focused regression test before merge or release."
+        )
+    if cross_references.get("line_covered") is False:
+        steps.append(
+            "Add a test that exercises the finding line with synthetic credential and privacy canaries."
+        )
+    mapped_tests = cross_references.get("mapped_test_files")
+    if isinstance(mapped_tests, list) and mapped_tests:
+        steps.append(
+            "Run the graph-selected tests: "
+            + ", ".join(str(item) for item in mapped_tests[:5])
+            + "."
+        )
+    observations = set(cross_references.get("runtime_observations") or [])
+    states = set(cross_references.get("reachability_states") or [])
+    if "observed" in observations:
+        steps.append(
+            "Exercise the observed path against a local capture exporter and assert that canary values are absent."
+        )
+    elif "executable" in states or "load-only" in states:
+        steps.append(
+            "Exercise the modeled entry-point path with a local capture exporter and inspect serialized output."
+        )
+    elif "disconnected" in states:
+        steps.append(
+            "Validate configured entry points and dynamic registration; if truly disconnected, remove or disable the sink path."
+        )
+    if int(cross_references.get("graph_upstream_files") or 0) >= 10:
+        steps.append(
+            "Run graph-guided regression tests for upstream dependents before changing the shared sink path."
+        )
+    recommendation = cross_references.get("structural_recommendation")
+    if isinstance(recommendation, str) and recommendation:
+        steps.append(recommendation)
+    owners = cross_references.get("owners")
+    if isinstance(owners, list) and owners:
+        steps.append(
+            "Route disposition and closure evidence to "
+            + ", ".join(str(item) for item in owners[:5])
+            + "."
+        )
+    if assessment.get("protection_status") not in {"not-observed", "unknown"}:
+        steps.append(
+            "Verify the visible protection with data-class-specific canaries; do not accept its name as proof of effectiveness."
+        )
+    if assessment.get("trust_boundary") in {
+        "external-network",
+        "external-observability",
+        "untrusted-client",
+    }:
+        steps.append(
+            "Verify recipient, exporter, region, access, retention, and deletion controls at the identified trust boundary."
+        )
+    return steps[:6]
+
+
+def _bounded_strings(value: Any, limit: int) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return sorted({str(item)[:500] for item in value if str(item)})[:limit]
+
+
+def _mapped_tests_from_change(change: dict[str, Any]) -> list[str]:
+    values: list[str] = []
+    for key in (
+        "direct_test_files",
+        "transitive_test_files",
+        "associated_test_files",
+    ):
+        candidates = change.get(key)
+        if isinstance(candidates, list):
+            values.extend(str(item) for item in candidates if isinstance(item, str))
+    return _bounded_strings(values, 25)
+
+
+def _optional_bool(value: Any) -> bool | None:
+    return value if isinstance(value, bool) else None
+
+
+def _optional_number(value: Any) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return round(float(value), 2)
+
+
+def _optional_string(value: Any, allowed: set[str] | None = None) -> str | None:
+    if not isinstance(value, str) or not value:
+        return None
+    result = value[:500]
+    return result if allowed is None or result in allowed else None
+
+
+def _optional_count(value: Any) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return None
+    return value
+
+
+def _runtime_observed(cross_references: dict[str, Any]) -> bool:
+    return "observed" in set(cross_references.get("runtime_observations") or [])
 
 
 def _is_exposure_finding(finding: Finding) -> bool:

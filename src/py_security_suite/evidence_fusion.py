@@ -4,6 +4,7 @@ import re
 from collections import defaultdict
 from typing import Any
 
+from .advisory_fusion import build_advisory_clusters
 from .models import Finding, ToolRun, ToolStatus
 
 
@@ -44,6 +45,14 @@ def build_evidence_fusion(
     classification_index = _classification_index(findings)
     package_findings = _package_finding_index(findings)
     findings_by_id = {finding.finding_id: finding for finding in findings}
+    advisory_clusters = _enrich_advisory_clusters(
+        build_advisory_clusters(findings), artifacts, findings
+    )
+    advisory_clusters_by_finding = {
+        finding_id: cluster
+        for cluster in advisory_clusters
+        for finding_id in cluster["finding_ids"]
+    }
 
     finding_contexts: list[dict[str, Any]] = []
     for finding in findings:
@@ -58,6 +67,7 @@ def build_evidence_fusion(
             coverage=coverage,
             artifact_files=artifact_files,
             findings_by_id=findings_by_id,
+            advisory_clusters_by_finding=advisory_clusters_by_finding,
         )
         finding.evidence["fusion"] = context
         finding_contexts.append({"finding_id": finding.finding_id, **context})
@@ -108,10 +118,36 @@ def build_evidence_fusion(
         ),
         "compound_hotspots": len(hotspots),
         "contradictions": len(contradictions),
+        "distinct_advisories": len(advisory_clusters),
+        "advisory_observations": sum(
+            int(item["observation_count"]) for item in advisory_clusters
+        ),
+        "alias_collapsed_observations": sum(
+            max(0, int(item["observation_count"]) - 1) for item in advisory_clusters
+        ),
+        "advisories_with_import_evidence": sum(
+            item["dependency_usage"]["import_observed"] is True
+            for item in advisory_clusters
+        ),
+        "advisories_in_executable_imports": sum(
+            item["dependency_usage"]["assessment"] == "executable-import"
+            for item in advisory_clusters
+        ),
+        "runtime_observed_dependency_advisories": sum(
+            item["dependency_usage"]["assessment"] == "runtime-observed-import"
+            for item in advisory_clusters
+        ),
+        "advisories_with_unused_declarations": sum(
+            "unused-declaration" in item["dependency_usage"]["deptry_statuses"]
+            for item in advisory_clusters
+        ),
+        "dependency_use_conflicts": sum(
+            item["dependency_usage"]["signals_conflict"] for item in advisory_clusters
+        ),
     }
     return {
-        "schema_version": "1.0",
-        "schema_id": "urn:project-py-security-suite:evidence-fusion:1.0",
+        "schema_version": "1.1",
+        "schema_id": "urn:project-py-security-suite:evidence-fusion:1.1",
         "authoritative": False,
         "purpose": (
             "bounded cross-reference and triage evidence; does not infer absence, "
@@ -127,11 +163,14 @@ def build_evidence_fusion(
             ),
         ),
         "package_lineage": package_lineage,
+        "advisory_clusters": advisory_clusters,
         "compound_hotspots": hotspots,
         "contradictions": contradictions,
         "limitations": [
             "Completed tools with no finding are not treated as proof of safety.",
             "Package name matching uses normalized Python distribution names and exact versions.",
+            "Advisory aliases are clustered for triage; every native scanner observation remains retained as a finding.",
+            "Dependency-use context is static triage evidence and never proves that a vulnerable function is or is not exploitable.",
             "Static graph and reachability evidence do not prove runtime exploitability.",
             "Fusion review tiers guide triage and never replace scanner severity or policy.",
         ],
@@ -150,6 +189,7 @@ def _finding_context(
     coverage: dict[str, dict[str, Any]],
     artifact_files: dict[str, dict[str, Any]],
     findings_by_id: dict[str, Finding],
+    advisory_clusters_by_finding: dict[str, dict[str, Any]],
 ) -> dict[str, Any]:
     location = finding.locations[0] if finding.locations else None
     path = _path(location.path) if location else ""
@@ -166,6 +206,10 @@ def _finding_context(
                 shared.append(key)
     if package:
         related.update(package_findings.get(package, set()) - {finding.finding_id})
+    advisory_context = _advisory_context(
+        advisory_clusters_by_finding.get(finding.finding_id)
+    )
+    related.update(set(advisory_context["finding_ids"]) - {finding.finding_id})
 
     graph = finding.evidence.get("graph_context")
     graph = graph if isinstance(graph, dict) else {}
@@ -205,6 +249,7 @@ def _finding_context(
         "shared_classifications": sorted(set(shared)),
         "source_context": source_context,
         "package_context": package_context,
+        "advisory_context": advisory_context,
         "artifact_context": artifact_context,
         "structural_context": structural,
     }
@@ -370,10 +415,18 @@ def _review_reasons(
     if isinstance(exposure, dict):
         family = str(exposure.get("sink_family") or "external-disclosure")
         relevance = str(exposure.get("structural_relevance") or "unknown")
+        priority = str(exposure.get("review_priority") or "medium")
+        protection = str(exposure.get("protection_status") or "unknown")
         article = "an" if family[:1].casefold() in {"a", "e", "i", "o", "u"} else "a"
         reasons.append(f"sensitive-data flow reaches {article} {family} sink")
         if relevance in {"runtime-observed", "changed-code", "statically-connected"}:
             reasons.append(f"sensitive-data path is {relevance}")
+        if priority == "high":
+            reasons.append("sensitive-data analysis assigns high review priority")
+        if protection == "not-observed":
+            reasons.append("no explicit protection boundary was observed at the sink")
+        elif protection == "pseudonymized":
+            reasons.append("pseudonymized data remains linkable and requires review")
     if artifact_context.get("finding_sha256_matches_manifest") is False:
         reasons.append("finding artifact digest conflicts with the artifact manifest")
     return reasons
@@ -407,6 +460,322 @@ def _components(value: Any) -> dict[str, set[str]]:
         if name:
             result[name].add(version)
     return dict(result)
+
+
+def _enrich_advisory_clusters(
+    clusters: list[dict[str, Any]],
+    artifacts: dict[str, Any],
+    findings: list[Finding],
+) -> list[dict[str, Any]]:
+    relationships, relationship_evidence = _source_dependency_relationships(
+        artifacts.get("sbom.cdx.json")
+    )
+    imports, import_evidence = _external_imports(artifacts.get("graphify.json"))
+    reachability, reachability_evidence = _reachability_by_path(
+        artifacts.get("reachability.json")
+    )
+    deptry = _deptry_package_signals(findings)
+    for cluster in clusters:
+        package = str(cluster["package"])
+        import_records = imports.get(package, [])
+        import_paths = sorted(
+            {str(item["path"]) for item in import_records if item.get("path")}
+        )[:50]
+        path_reachability = [
+            reachability[path] for path in import_paths if path in reachability
+        ]
+        states = sorted(
+            {str(state) for item in path_reachability for state in item["states"]}
+        )
+        runtime_observations = sorted(
+            {
+                str(observation)
+                for item in path_reachability
+                for observation in item["runtime_observations"]
+            }
+        )
+        deptry_records = deptry.get(package, [])
+        deptry_statuses = sorted({str(item["status"]) for item in deptry_records})
+        import_observed = bool(import_records) if import_evidence else None
+        reachability_complete = (
+            reachability_evidence.get("complete")
+            if isinstance(reachability_evidence.get("complete"), bool)
+            else None
+        )
+        signals_conflict = bool(
+            import_observed is True and "unused-declaration" in deptry_statuses
+        )
+        assessment = _dependency_use_assessment(
+            import_observed=import_observed,
+            states=states,
+            runtime_observations=runtime_observations,
+            reachability_complete=reachability_complete,
+            deptry_statuses=deptry_statuses,
+            signals_conflict=signals_conflict,
+        )
+        cluster["dependency_usage"] = {
+            "assessment": assessment,
+            "source_relationship": relationships.get(package, "unknown"),
+            "relationship_evidence_available": relationship_evidence,
+            "import_evidence_available": import_evidence,
+            "import_observed": import_observed,
+            "import_modules": sorted(
+                {str(item["module"]) for item in import_records if item.get("module")}
+            )[:50],
+            "import_paths": import_paths,
+            "reachability_evidence_available": bool(reachability_evidence),
+            "reachability_complete": reachability_complete,
+            "reachability_confidence": (
+                str(reachability_evidence.get("confidence"))[:50]
+                if reachability_evidence.get("confidence")
+                else None
+            ),
+            "reachability_states": states,
+            "runtime_observations": runtime_observations,
+            "deptry_statuses": deptry_statuses,
+            "deptry_finding_ids": sorted(
+                {str(item["finding_id"]) for item in deptry_records}
+            )[:50],
+            "signals_conflict": signals_conflict,
+            "evidence_artifacts": sorted(
+                name
+                for name, available in (
+                    ("sbom.cdx.json", relationship_evidence),
+                    ("graphify.json", import_evidence),
+                    ("reachability.json", bool(reachability_evidence)),
+                    ("findings.json", bool(deptry_records)),
+                )
+                if available
+            ),
+        }
+    return clusters
+
+
+def _source_dependency_relationships(value: Any) -> tuple[dict[str, str], bool]:
+    if not isinstance(value, dict):
+        return {}, False
+    raw_components = value.get("components")
+    raw_dependencies = value.get("dependencies")
+    if not isinstance(raw_components, list) or not isinstance(raw_dependencies, list):
+        return {}, False
+    if not raw_dependencies:
+        return {}, True
+    packages_by_ref: dict[str, str] = {}
+    for item in raw_components:
+        if not isinstance(item, dict):
+            continue
+        reference = item.get("bom-ref")
+        package = _package_name(item.get("name"))
+        if isinstance(reference, str) and reference and package:
+            packages_by_ref[reference] = package
+    if not packages_by_ref:
+        return {}, True
+    adjacency: dict[str, set[str]] = defaultdict(set)
+    incoming: dict[str, int] = {reference: 0 for reference in packages_by_ref}
+    for item in raw_dependencies:
+        if not isinstance(item, dict) or not isinstance(item.get("ref"), str):
+            continue
+        source = str(item["ref"])
+        depends_on = item.get("dependsOn")
+        if not isinstance(depends_on, list):
+            depends_on = []
+        for raw_target in depends_on[:10_000]:
+            if not isinstance(raw_target, str):
+                continue
+            adjacency[source].add(raw_target)
+            if raw_target in incoming:
+                incoming[raw_target] += 1
+    metadata = value.get("metadata")
+    metadata_component = (
+        metadata.get("component") if isinstance(metadata, dict) else None
+    )
+    root_ref = (
+        metadata_component.get("bom-ref")
+        if isinstance(metadata_component, dict)
+        and isinstance(metadata_component.get("bom-ref"), str)
+        else None
+    )
+    if root_ref and root_ref in adjacency:
+        direct_refs = adjacency.get(root_ref, set()) & packages_by_ref.keys()
+    else:
+        direct_refs = {reference for reference, count in incoming.items() if count == 0}
+    relationships: dict[str, str] = {}
+    for reference, package in packages_by_ref.items():
+        relationship = "direct" if reference in direct_refs else "transitive"
+        if relationships.get(package) != "direct":
+            relationships[package] = relationship
+    return relationships, True
+
+
+def _external_imports(value: Any) -> tuple[dict[str, list[dict[str, Any]]], bool]:
+    if not isinstance(value, dict):
+        return {}, False
+    nodes = value.get("nodes")
+    edges = value.get("edges")
+    if not isinstance(nodes, list) or not isinstance(edges, list):
+        return {}, False
+    by_id = {
+        str(item["id"]): item
+        for item in nodes
+        if isinstance(item, dict) and item.get("id")
+    }
+    result: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for edge in edges:
+        if not isinstance(edge, dict) or edge.get("relation") != "imports":
+            continue
+        target = by_id.get(str(edge.get("target") or ""))
+        source = by_id.get(str(edge.get("source") or ""))
+        if not isinstance(target, dict) or target.get("kind") != "external":
+            continue
+        external_name = str(target.get("label") or target.get("id") or "")
+        package = _package_name(external_name.split(".", 1)[0])
+        if not package:
+            continue
+        result[package].append(
+            {
+                "module": str(edge.get("source") or "")[:500],
+                "path": _path(str(source.get("path") or edge.get("path") or ""))
+                if isinstance(source, dict)
+                else _path(str(edge.get("path") or "")),
+                "line": edge.get("line") if isinstance(edge.get("line"), int) else None,
+            }
+        )
+    return dict(result), True
+
+
+def _reachability_by_path(
+    value: Any,
+) -> tuple[dict[str, dict[str, set[str]]], dict[str, Any]]:
+    if not isinstance(value, dict) or not isinstance(value.get("nodes"), list):
+        return {}, {}
+    analysis = value.get("analysis")
+    analysis = analysis if isinstance(analysis, dict) else {}
+    result: dict[str, dict[str, set[str]]] = {}
+    for node in value["nodes"]:
+        if not isinstance(node, dict) or not isinstance(node.get("path"), str):
+            continue
+        path = _path(node["path"])
+        record = result.setdefault(
+            path, {"states": set(), "runtime_observations": set()}
+        )
+        state = node.get("state")
+        if isinstance(state, str) and state:
+            record["states"].add(state)
+        observation = node.get("runtime_observation")
+        if isinstance(observation, str) and observation:
+            record["runtime_observations"].add(observation)
+    return result, {
+        "complete": analysis.get("complete"),
+        "confidence": analysis.get("confidence"),
+    }
+
+
+def _deptry_package_signals(
+    findings: list[Finding],
+) -> dict[str, list[dict[str, str]]]:
+    statuses = {
+        "DEP001": "undeclared-import",
+        "DEP002": "unused-declaration",
+        "DEP003": "transitive-import",
+        "DEP004": "development-only-import",
+    }
+    result: dict[str, list[dict[str, str]]] = defaultdict(list)
+    for finding in findings:
+        rules = {
+            source.rule_id: statuses[source.rule_id]
+            for source in finding.sources
+            if source.tool == "deptry" and source.rule_id in statuses
+        }
+        package = _package_name(finding.evidence.get("module"))
+        if not package:
+            continue
+        for status in rules.values():
+            result[package].append({"finding_id": finding.finding_id, "status": status})
+    return dict(result)
+
+
+def _dependency_use_assessment(
+    *,
+    import_observed: bool | None,
+    states: list[str],
+    runtime_observations: list[str],
+    reachability_complete: bool | None,
+    deptry_statuses: list[str],
+    signals_conflict: bool,
+) -> str:
+    if signals_conflict:
+        return "import-vs-unused-conflict"
+    if import_observed is True:
+        if "observed" in runtime_observations:
+            return "runtime-observed-import"
+        if reachability_complete is not True:
+            return "imported-reachability-incomplete"
+        if "executable" in states:
+            return "executable-import"
+        if "load-only" in states:
+            return "load-only-import"
+        if "disconnected" in states:
+            return "disconnected-import"
+        return "import-observed"
+    if "unused-declaration" in deptry_statuses:
+        return "declared-unused"
+    if import_observed is False:
+        return "import-not-observed"
+    return "unknown"
+
+
+def _advisory_context(cluster: dict[str, Any] | None) -> dict[str, Any]:
+    if cluster is None:
+        return {
+            "cluster_id": None,
+            "primary_identifier": None,
+            "identifiers": [],
+            "package": None,
+            "versions": [],
+            "finding_ids": [],
+            "tools": [],
+            "observation_count": 0,
+            "alias_count": 0,
+            "cross_tool": False,
+            "dependency_usage": _empty_dependency_usage(),
+        }
+    return {
+        key: cluster[key]
+        for key in (
+            "cluster_id",
+            "primary_identifier",
+            "identifiers",
+            "package",
+            "versions",
+            "finding_ids",
+            "tools",
+            "observation_count",
+            "alias_count",
+            "cross_tool",
+            "dependency_usage",
+        )
+    }
+
+
+def _empty_dependency_usage() -> dict[str, Any]:
+    return {
+        "assessment": "unknown",
+        "source_relationship": "unknown",
+        "relationship_evidence_available": False,
+        "import_evidence_available": False,
+        "import_observed": None,
+        "import_modules": [],
+        "import_paths": [],
+        "reachability_evidence_available": False,
+        "reachability_complete": None,
+        "reachability_confidence": None,
+        "reachability_states": [],
+        "runtime_observations": [],
+        "deptry_statuses": [],
+        "deptry_finding_ids": [],
+        "signals_conflict": False,
+        "evidence_artifacts": [],
+    }
 
 
 def _package_lineage(

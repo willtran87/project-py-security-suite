@@ -14,9 +14,10 @@ creates a GitHub-friendly report artifact.
 | Supply chain | Source and artifact SBOMs, package checks, provenance findings, and a locally verifiable Security Passport |
 | Reachability | Offline three-state executable/load-only/disconnected graph with explained dispatch paths, ranked islands, and optional coverage corroboration |
 | Graph context | Graphify code-only topology joined to findings for blast radius, structural hotspots, and cross-tool neighborhoods |
-| Evidence fusion | Source-to-artifact package lineage, semantic finding links, changed-line/test/graph context, and digest-bound provenance joins |
+| Evidence fusion | Source-to-artifact package lineage, semantic finding links, changed-line/test/graph context, digest-bound provenance joins, and feedback into owned exposure and SDK-package verification plans |
 | Structural synthesis | Cross-validated dead code, island boundaries, structural orphans, import-cycle hotspots, change-risk scoring, and graph-guided test targets |
-| Data exposure | CWE-grounded flows into logs, telemetry, URL queries, client errors, runtime-state dumps, and process streams; monorepo SDK/configuration inventory; graph-aware disclosure context |
+| Advisory fusion | Package-scoped CVE/GHSA/PYSEC/OSV alias clustering across source and artifact scanners, with distinct-risk/observation counts plus CycloneDX directness, Graphify imports, reachability/runtime state, and deptry-use context |
+| Data exposure | CWE-grounded flows into logs, telemetry, URL queries, client errors, runtime-state dumps, and process streams; monorepo SDK/configuration inventory; owner-, graph-, change-risk-, runtime-, test-, and SDK-package-aware disclosure triage |
 | Runtime | Python 3.11+; scanners are installed separately from approved offline bundles |
 
 Key trust properties:
@@ -619,8 +620,8 @@ python-security-report/
 |-- graphify.json                    # validated code-only nodes, edges, and file topology
 |-- graph-analysis.json              # graph-aware finding context and hotspots
 |-- structural-synthesis.json        # dead code, island boundaries, change risk, and graph-guided tests
-|-- data-exposure.json               # prioritized sinks, data classes, SDKs, and correlated disclosure paths
-|-- evidence-fusion.json             # cross-scanner and source/artifact evidence joins
+|-- data-exposure.json               # prioritized disclosure paths joined with graph, coverage, reachability, and fusion
+|-- evidence-fusion.json             # cross-scanner, advisory-alias, and source/artifact evidence joins
 |-- coverage-summary.json           # validated pre-generated test coverage
 |-- junit-summary.json              # validated test outcome metadata
 |-- reuse-compliance.json           # when a REUSE marker opts the repo in

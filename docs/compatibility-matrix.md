@@ -76,7 +76,7 @@ closed instead of hiding findings.
 | External isolation receipt | Yes | Digest-bound, time-bounded evidence authorized in organization policy and tied to target/source digest | Separates structural validation, organization authorization, and the operator isolation assertion |
 | Intelligence approval receipt | Yes | Organization-policy-bound approval listing the exact KEV/EPSS/VEX digests consumed | Prevents an unapproved snapshot refresh from inheriting an earlier approval |
 | Reachability regression gate | Yes | Two schema-1.1/1.2 graphs, each bound to an explicit SHA-256 | New disconnected code, new reportable islands, state regressions, and lost observations |
-| Cross-tool evidence fusion | Yes | Normalized findings, tool status, source/artifact SBOMs, graph, reachability, coverage, complexity, source inventory, and artifact manifest | Per-finding review reasons, semantic/cross-stage corroboration, package lineage drift, digest agreement, compound hotspots, and evidence-lane gaps |
+| Cross-tool evidence fusion | Yes | Normalized findings, tool status, source/artifact SBOMs, graph, reachability, coverage, complexity, structural synthesis, CODEOWNERS, source inventory, and artifact manifest | Per-finding review reasons, semantic/cross-stage corroboration, package lineage drift, digest agreement, compound hotspots, exposure ownership/test/change-risk feedback, SDK-package disclosure-boundary joins, and evidence-lane gaps |
 | Structural synthesis | Yes | Graphify node/file topology, reachability states and islands, Vulture, runtime and diff coverage, Radon, Tach, CODEOWNERS, and normalized findings | Dead-code disposition with counter-evidence, structural orphans, concrete island boundaries, test-only versus missing-root classification, import-cycle hotspots, change-risk scoring, and direct/transitive test targets |
 | Unified release readiness | Yes | Verified report plus optional digest-bound effectiveness and Passport verification receipts | Strict control-by-control `approved` or `not_approved` CI decision |
 
@@ -90,7 +90,7 @@ performed.
 | Bandit | Python AST security patterns | Local source only | quick, standard, all broader profiles | Yes |
 | Semgrep CE | Organization-defined structural and taint rules, including credential fields, private fields, precise request collections, runtime/environment-state dumps, logs, telemetry, direct URL interpolation and query parameters, raw client errors, and risky SDK/configuration capture | Local immutable rules; generic configuration and Python analysis; metrics and version checks disabled | standard and broader | Yes |
 | detect-secrets | Credential-shaped and high-entropy values | Online verification disabled; values never retained | quick, standard, broader | Yes |
-| OSV-Scanner | Known vulnerable dependencies | Local OSV snapshot, offline mode, no resolution | standard and broader | Yes |
+| OSV-Scanner | Known vulnerable dependencies and advisory aliases | Local OSV snapshot, offline mode, no resolution; exit 1 is retained as findings-present success | standard and broader | Yes |
 | CycloneDX Python | Reproducible Python SBOM evidence | Reads Poetry/Pipenv/pinned requirements directly; `uv.lock` uses hash-verified `uv export --frozen --offline` before CycloneDX conversion | extended and broader | Yes |
 | Ruff `S` | Independent, fast Python security AST checks | `--isolated`, no cache, local source only | extended and broader | Yes |
 | Ruff quality | Python correctness, bug, complexity, performance, and upgrade checks | Same Ruff binary; isolated and cacheless | quality, repo, comprehensive, release | Yes |
@@ -98,7 +98,7 @@ performed.
 | Pylint | Independent Python correctness, exception, logging, and design analysis | Suite policy; one worker; temporary source mirror | quality, repo, comprehensive, production, release | Yes |
 | mypy | Static type-contract analysis | Suite-owned configuration; imports and site packages are not followed | quality, repo, comprehensive, release | Yes |
 | Pyright | Independent type inference and contract analysis | Pinned Node runtime and staged JavaScript CLI; stable suite `basic` baseline over `src/` and `tests/` | quality, repo, comprehensive, production, release | Yes |
-| deptry | Python dependency declaration correctness | Local source and dependency metadata; JSON output written outside the target | quality, repo, comprehensive, production, release | Yes |
+| deptry | Python dependency declaration correctness; unused/transitive signals join package advisories as non-exploitability use context | Local source and dependency metadata; JSON output written outside the target | quality, repo, comprehensive, production, release | Yes |
 | Vulture | High-confidence unreachable and unused Python code | Reports only 100% confidence; generated roots excluded | quality, repo, comprehensive, release | Yes |
 | Radon | Cyclomatic-complexity measurement | Local source; C+ retained as evidence and E/F normalized as findings | quality, repo, comprehensive, production, release | Yes |
 | Tach | Declared Python module boundaries, dependency direction, cycles, and public interfaces | Reads local source and repository-owned `tach.toml`; no target imports or execution | quality, repo, comprehensive, production, release | Yes |

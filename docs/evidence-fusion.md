@@ -1,6 +1,6 @@
 # Cross-tool evidence fusion
 
-Last reviewed: 2026-08-12
+Last reviewed: 2026-08-13
 
 The suite cross-references independent scanner and evidence outputs into
 `evidence-fusion.json`. Fusion improves review order and explanatory context;
@@ -14,11 +14,13 @@ empty scanner result as proof of safety.
 | Bandit, Semgrep, Pysa, CodeQL, Ruff, Pylint | Graphify, reachability, coverage, diff-cover, Radon, source inventory, CODEOWNERS | Shows whether the exact finding line changed, is covered, was observed, is complex, is central, and has a broad caller/dependency neighborhood |
 | OSV-Scanner source finding | Source CycloneDX SBOM and Syft artifact SBOM | Establishes whether the exact normalized package version declared in source is also present in the built distribution |
 | Grype artifact finding | Source and artifact SBOMs plus OSV findings | Links artifact exposure back to the source dependency and related advisory observations |
+| OSV/Grype package advisories | Exact normalized package plus transitive CVE/GHSA/PYSEC/OSV alias overlap | Preserves native findings and sources while presenting one distinct actionable advisory, canonical identifier, versions, tools, and citations instead of double-counting aliases |
+| Distinct package advisory | CycloneDX dependency roots, exact Graphify external imports, importing-file reachability/runtime state, and deptry findings | Distinguishes direct/transitive, imported, executable, load-only, disconnected, reachability-incomplete, apparently unused, and conflicting evidence without asserting exploitability |
 | Trivy and ScanCode license evidence | Source/artifact component inventories | Connects license policy findings to the component and lifecycle stage where it appears |
 | Cosign, attestations, reproducible-build evidence | Artifact manifest | Binds provenance conclusions to the exact artifact SHA-256 and detects digest disagreement |
 | Any normalized finding | High-value classification and package indexes | Links CVE, GHSA, CWE, license, SLSA, and package observations even when tools report different paths or lifecycle stages |
 | Vulture, reachability islands, changed files, and Graphify | Runtime/diff coverage, Radon, Tach, ownership, mapped tests, and normalized findings | Imports [structural synthesis](structural-synthesis.md) into finding review reasons so dead-code, latent attack-surface, import-cycle, missing-root, and high-risk change evidence affects triage without changing severity |
-| Semgrep/Pysa/CodeQL exposure findings | [Sensitive-data exposure](data-exposure.md), SDK imports/dependencies/configuration, Graphify, reachability, coverage, and changed code | Distinguishes confirmed traces/configuration findings from sink review surfaces and adds exact sink, SDK, transformation evidence, structural relevance, CWE/OWASP/OpenTelemetry citations, and disclosure-specific action |
+| Semgrep/Pysa/CodeQL exposure findings and inventory sinks | [Sensitive-data exposure](data-exposure.md), SDK imports/dependencies/configuration, source/artifact package lineage, normalized package findings, Graphify, structural synthesis, CODEOWNERS, reachability, coverage, and changed code | Distinguishes confirmed traces/configuration findings from sink review surfaces; feeds finalized fusion evidence back into confirmed assessments and independently ranks inventory surfaces with owners, exact mapped tests, change risk, structural hotspots, SDK advisories/version drift, nearby findings, citations, and contextual verification without inventing vulnerabilities |
 | Applicable tool status | Evidence-lane matrix | Separates completed perspectives, not-applicable controls, and real execution gaps without inferring a clean result |
 
 ## Flow
@@ -54,7 +56,15 @@ flowchart LR
     Manifest --> Fusion
     Provenance --> Fusion
     Fusion --> Finding["Per-finding review tier, reasons, and related evidence"]
+    Finding --> Verify["Exposure feedback<br/>triage and contextual verification plan"]
+    Verify --> Exposure
     Fusion --> Lineage["Source-to-artifact package lineage and drift"]
+    Fusion --> Advisory["Alias-aware distinct advisory clusters<br/>native observations retained"]
+    SourceSBOM --> Use["Dependency-use context<br/>direct or transitive"]
+    Graph --> Use
+    Reach --> Use
+    Use --> Advisory
+    Advisory --> Verify
     Fusion --> Hotspots["Compound structural and test-risk hotspots"]
     Fusion --> Lanes["Evidence coverage and execution gaps"]
 ```
@@ -72,7 +82,12 @@ Each finding receives `evidence.fusion` containing:
 - related finding IDs, tools, and shared high-value classifications;
 - exact source file digest and size when available;
 - coverage, changed-line, reachability, runtime, graph, and complexity context;
-- package versions in source and artifact SBOMs; and
+- package versions in source and artifact SBOMs;
+- package-scoped advisory cluster, canonical identifier, aliases, native
+  observation count, contributing tools, and cross-tool status; and
+- dependency-use assessment with source relationship, exact importing files,
+  reachability completeness/state, runtime observations, deptry signals, and
+  explicit import-versus-unused conflicts; and
 - artifact-manifest digest agreement.
 
 An artifact digest contradiction is stronger than ordinary triage context: it
@@ -84,6 +99,25 @@ The report also records package lineage as `matched`, `version-drift`,
 `source-only`, or `artifact-only`. These states are diagnostic: development
 dependencies and packaging helpers can legitimately be source-only, while an
 artifact-only component requires investigation before it is considered drift.
+
+Evidence-fusion schema 1.1 records `advisory_clusters`. A cluster is created
+only when exact normalized package names match and advisory identifiers overlap,
+including transitive alias chains. CVE is preferred as the display identifier,
+followed by GHSA, PYSEC, and OSV, but no native scanner source is discarded. The
+report therefore presents both the number of distinct risks and the number of
+retained scanner observations. Cross-tool clustering is corroboration, not
+proof of reachability or exploitation. The frozen 1.0 schema remains
+installable.
+
+Dependency-use assessment is deliberately conservative. An exact Graphify
+external import can establish that a module name appears in a file, and
+CycloneDX can establish direct/transitive composition, but neither proves that
+the vulnerable API executes. A disconnected state is used only when the
+reachability analysis is complete; otherwise the report says
+`imported-reachability-incomplete`. A deptry `DEP002` signal becomes
+`declared-unused`, while an exact import plus `DEP002` becomes an evidence
+conflict that requires mapping and dynamic/plugin review. None of these states
+suppresses or lowers the package scanner finding.
 
 ## Trust and limits
 

@@ -1,19 +1,114 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:project-py-security-suite:schema:evidence-fusion:1.0",
+  "$id": "urn:project-py-security-suite:schema:evidence-fusion:1.1",
+  "title": "Python Security Suite evidence fusion",
   "type": "object",
-  "required": ["schema_version", "schema_id", "authoritative", "purpose", "summary", "evidence_lanes", "finding_contexts", "package_lineage", "compound_hotspots", "contradictions", "limitations"],
+  "additionalProperties": false,
+  "required": ["schema_version", "schema_id", "authoritative", "purpose", "summary", "evidence_lanes", "finding_contexts", "package_lineage", "advisory_clusters", "compound_hotspots", "contradictions", "limitations"],
   "properties": {
-    "schema_version": {"const": "1.0"},
-    "schema_id": {"const": "urn:project-py-security-suite:evidence-fusion:1.0"},
+    "schema_version": {"const": "1.1"},
+    "schema_id": {"const": "urn:project-py-security-suite:evidence-fusion:1.1"},
     "authoritative": {"const": false},
     "purpose": {"type": "string", "minLength": 1},
-    "summary": {"type": "object", "required": ["findings_enriched", "independently_corroborated", "cross_stage_findings", "changed_line_findings", "uncovered_findings", "package_lineages", "source_only_packages", "artifact_only_packages", "version_drift_packages", "compound_hotspots"], "additionalProperties": {"type": "integer", "minimum": 0}},
+    "summary": {
+      "type": "object",
+      "required": ["findings_enriched", "independently_corroborated", "cross_stage_findings", "changed_line_findings", "uncovered_findings", "package_lineages", "source_only_packages", "artifact_only_packages", "version_drift_packages", "compound_hotspots", "contradictions", "distinct_advisories", "advisory_observations", "alias_collapsed_observations", "advisories_with_import_evidence", "advisories_in_executable_imports", "runtime_observed_dependency_advisories", "advisories_with_unused_declarations", "dependency_use_conflicts"],
+      "additionalProperties": {"type": "integer", "minimum": 0}
+    },
     "evidence_lanes": {"type": "array", "maxItems": 20, "items": {"type": "object", "required": ["lane", "selected_tools", "completed_tools", "execution_gaps", "available_artifacts"]}},
-    "finding_contexts": {"type": "array", "maxItems": 1000000, "items": {"type": "object", "required": ["finding_id", "review_tier", "review_reasons", "corroboration", "related_finding_ids", "related_tools", "shared_classifications", "source_context", "package_context", "artifact_context", "structural_context"], "properties": {"review_tier": {"enum": ["urgent", "elevated", "standard"]}, "corroboration": {"enum": ["single-tool", "contextual", "independent", "cross-stage"]}, "structural_context": {"type": "object"}}}},
+    "finding_contexts": {
+      "type": "array",
+      "maxItems": 1000000,
+      "items": {
+        "type": "object",
+        "required": ["finding_id", "review_tier", "review_reasons", "corroboration", "related_finding_ids", "related_tools", "shared_classifications", "source_context", "package_context", "advisory_context", "artifact_context", "structural_context"],
+        "properties": {
+          "review_tier": {"enum": ["urgent", "elevated", "standard"]},
+          "corroboration": {"enum": ["single-tool", "contextual", "independent", "cross-stage"]},
+          "advisory_context": {"$ref": "#/$defs/advisoryContext"},
+          "structural_context": {"type": "object"}
+        }
+      }
+    },
     "package_lineage": {"type": "array", "maxItems": 10000, "items": {"type": "object", "required": ["package", "source_versions", "artifact_versions", "status", "finding_ids"], "properties": {"status": {"enum": ["matched", "version-drift", "source-only", "artifact-only"]}}}},
+    "advisory_clusters": {"type": "array", "maxItems": 10000, "items": {"$ref": "#/$defs/advisoryCluster"}},
     "compound_hotspots": {"type": "array", "maxItems": 25},
     "contradictions": {"type": "array", "maxItems": 1000000, "items": {"type": "object", "required": ["finding_id", "kind", "message"]}},
-    "limitations": {"type": "array", "minItems": 1, "items": {"type": "string"}}
+    "limitations": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}
+  },
+  "$defs": {
+    "strings": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "citation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["identifier", "title", "uri"],
+      "properties": {
+        "identifier": {"type": "string", "minLength": 1},
+        "title": {"type": "string", "minLength": 1},
+        "uri": {"type": ["string", "null"], "format": "uri"}
+      }
+    },
+    "advisoryContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cluster_id", "primary_identifier", "identifiers", "package", "versions", "finding_ids", "tools", "observation_count", "alias_count", "cross_tool", "dependency_usage"],
+      "properties": {
+        "cluster_id": {"type": ["string", "null"]},
+        "primary_identifier": {"type": ["string", "null"]},
+        "identifiers": {"$ref": "#/$defs/strings"},
+        "package": {"type": ["string", "null"]},
+        "versions": {"$ref": "#/$defs/strings"},
+        "finding_ids": {"$ref": "#/$defs/strings"},
+        "tools": {"$ref": "#/$defs/strings"},
+        "observation_count": {"type": "integer", "minimum": 0},
+        "alias_count": {"type": "integer", "minimum": 0},
+        "cross_tool": {"type": "boolean"},
+        "dependency_usage": {"$ref": "#/$defs/dependencyUsage"}
+      }
+    },
+    "advisoryCluster": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cluster_id", "package", "versions", "primary_identifier", "identifiers", "finding_ids", "tools", "source_paths", "highest_severity", "observation_count", "alias_count", "cross_tool", "citations", "dependency_usage"],
+      "properties": {
+        "cluster_id": {"type": "string", "pattern": "^ADV-[A-F0-9]{12}$"},
+        "package": {"type": "string", "minLength": 1},
+        "versions": {"$ref": "#/$defs/strings"},
+        "primary_identifier": {"type": "string", "minLength": 1},
+        "identifiers": {"$ref": "#/$defs/strings"},
+        "finding_ids": {"$ref": "#/$defs/strings"},
+        "tools": {"$ref": "#/$defs/strings"},
+        "source_paths": {"$ref": "#/$defs/strings"},
+        "highest_severity": {"enum": ["critical", "high", "medium", "low", "informational", "unknown"]},
+        "observation_count": {"type": "integer", "minimum": 1},
+        "alias_count": {"type": "integer", "minimum": 0},
+        "cross_tool": {"type": "boolean"},
+        "citations": {"type": "array", "maxItems": 25, "items": {"$ref": "#/$defs/citation"}},
+        "dependency_usage": {"$ref": "#/$defs/dependencyUsage"}
+      }
+    },
+    "dependencyUsage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["assessment", "source_relationship", "relationship_evidence_available", "import_evidence_available", "import_observed", "import_modules", "import_paths", "reachability_evidence_available", "reachability_complete", "reachability_confidence", "reachability_states", "runtime_observations", "deptry_statuses", "deptry_finding_ids", "signals_conflict", "evidence_artifacts"],
+      "properties": {
+        "assessment": {"enum": ["runtime-observed-import", "executable-import", "load-only-import", "disconnected-import", "imported-reachability-incomplete", "import-observed", "declared-unused", "import-not-observed", "import-vs-unused-conflict", "unknown"]},
+        "source_relationship": {"enum": ["direct", "transitive", "unknown"]},
+        "relationship_evidence_available": {"type": "boolean"},
+        "import_evidence_available": {"type": "boolean"},
+        "import_observed": {"type": ["boolean", "null"]},
+        "import_modules": {"$ref": "#/$defs/strings"},
+        "import_paths": {"$ref": "#/$defs/strings"},
+        "reachability_evidence_available": {"type": "boolean"},
+        "reachability_complete": {"type": ["boolean", "null"]},
+        "reachability_confidence": {"type": ["string", "null"]},
+        "reachability_states": {"$ref": "#/$defs/strings"},
+        "runtime_observations": {"$ref": "#/$defs/strings"},
+        "deptry_statuses": {"$ref": "#/$defs/strings"},
+        "deptry_finding_ids": {"$ref": "#/$defs/strings"},
+        "signals_conflict": {"type": "boolean"},
+        "evidence_artifacts": {"$ref": "#/$defs/strings"}
+      }
+    }
   }
 }

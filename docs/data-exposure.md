@@ -47,12 +47,25 @@ flowchart LR
     Triage["Bounded triage context<br/>data class, trust boundary, protection, priority"]
     Graph["Graphify and reachability<br/>structural relevance"]
     Tests["Coverage and diff-cover<br/>runtime and change context"]
+    Structure["Structural synthesis and CODEOWNERS<br/>risk, mapped tests, accountable teams"]
+    Supply["SBOM lineage and package findings<br/>SDK version drift, advisories, citations"]
+    Fusion["Evidence fusion<br/>corroboration, coverage, graph impact, related findings"]
+    Surface["Inventory review surface<br/>structural/test priority and verification"]
     Finding["Normalized exposure finding<br/>source, sink, SDK, CWE, action"]
 
     Sources --> Taint --> Sinks --> Finding
     SDK --> Triage --> Finding
-    Graph --> Finding
-    Tests --> Finding
+    Graph --> Fusion
+    Tests --> Fusion
+    Structure --> Fusion
+    Supply --> Fusion
+    Finding --> Fusion --> Triage
+    SDK --> Surface
+    Graph --> Surface
+    Tests --> Surface
+    Structure --> Surface
+    Supply --> Surface
+    Fusion --> Surface
 ```
 
 The bundled Semgrep rules identify credential-bearing values obtained from:
@@ -135,6 +148,42 @@ reviewers do not mistake a hash or token for removal. High/medium/low review
 priority only orders inventory work—it is not a vulnerability severity or a
 regulatory classification.
 
+Each inventory surface is also cross-referenced by file and line with available
+diff coverage, full coverage, reachability/runtime observations, Graphify
+upstream and downstream structure, and nearby normalized findings. The report
+raises review priority for compound evidence such as a changed but uncovered
+sink or a sensitive runtime-observed sink, and generates evidence-specific
+verification steps. These joins improve review order only: an inventory surface
+remains unconfirmed until source-to-sink or exact configuration evidence exists.
+
+When structural synthesis is available, the same record contributes its
+change-risk score and classification, exact graph-selected test files, test
+selection confidence, and island or import-cycle identifiers. CODEOWNERS-derived
+owners from normalized findings and structural islands are carried into the
+surface context. The report therefore answers who should review, which tests to
+run, and which structural hotspot explains the priority without guessing at
+runtime exploitability.
+
+After evidence fusion finalizes package lineage, each curated disclosure SDK is
+also matched to its exact normalized declared package names. The suite joins
+those packages to source/artifact SBOM versions and normalized dependency
+findings from tools such as OSV-Scanner, Grype, Trivy, or GuardDog. The context
+retains finding IDs, tools, classifications, highest severity, lineage status,
+and advisory citations. Alias-aware evidence fusion also separates distinct
+CVE/GHSA/PYSEC/OSV advisory risks from retained native scanner observations, so
+reciprocal aliases do not inflate the actionable count. Version drift,
+artifact-only presence, or a package
+finding raises review priority and produces upgrade/reconciliation steps;
+matched lineage without a package finding remains context and is not labeled
+risk.
+
+Each distinct SDK advisory also carries dependency-use context from CycloneDX,
+Graphify, reachability/runtime evidence, and deptry. Reports name exact importing
+files and whether the package is direct or transitive. Incomplete entry-point
+modeling remains explicit, and “unused” or “disconnected” never proves that the
+vulnerable function is unreachable. Conflicting Graphify-import and
+deptry-unused evidence produces a dedicated reconciliation action.
+
 An inventory item is **not a finding**. It tells reviewers where disclosure
 controls should exist and activates SDK-specific context when a scanner reports
 a supported flow. Vendored SDK code remains visible to source scanners; a
@@ -152,9 +201,30 @@ For supported findings, the suite adds:
 - visible sanitizer evidence without claiming sanitizer correctness;
 - bounded data classes, trust boundary, protection kind, risk factors, and
   review priority;
+- finalized evidence-fusion tier and corroboration, related tools/findings,
+  changed-line and line-coverage state, reachability and runtime observations,
+  and bounded graph blast radius;
+- CODEOWNERS-derived owners, graph-selected direct/transitive/associated tests,
+  change-risk score and classification, and structural hotspot identifiers;
+- curated SDK package names, normalized package-finding IDs/tools/
+  classifications, distinct advisory clusters and observation counts,
+  source/artifact version lineage, and advisory citations;
+- a contextual verification plan that calls for targeted tests, local canary
+  capture, entry-point validation, graph-guided regression, protection testing,
+  or trust-boundary control review only when the corresponding evidence exists;
 - source scanner attribution and CWE/OWASP citations; and
 - a remediation specific to logging, telemetry, URL propagation, exception
   responses, or external disclosure.
+
+For inventory-only surfaces, the suite reports the changed/covered state,
+reachability and runtime state, graph neighborhood size, nearby finding IDs and
+tools, and a bounded verification plan. Summary counters expose changed,
+uncovered, runtime-observed, disconnected, compound, and structurally enriched
+surfaces, plus ownership, mapped-test, high-change-risk, and structural-hotspot
+coverage. Separate counters show SDK package correlation, normalized package
+findings, version drift, and disclosure paths carrying package risk.
+They also distinguish distinct SDK advisories from the number of native
+observations retained for auditability.
 
 The context is retained in normalized JSON, Markdown, HTML, SARIF, SonarQube,
 and evidence-fusion review reasons. Raw sensitive values are never added to the
@@ -191,12 +261,17 @@ For every confirmed path:
 - The suite inventories generic HTTP egress but does not flag it without
   source-to-sink evidence; sending credentials to an approved endpoint can be
   intentional.
+- An SDK package finding does not prove that the SDK disclosed data or that the
+  vulnerable function is reachable. It creates a compound review lane because
+  sensitive data crosses that dependency boundary; exploitability remains with
+  the package scanner, reachability evidence, and risk owner.
 
 ## Artifact contract
 
 The current contract is bundled as
-[`data-exposure-1.2.schema.json`](../src/py_security_suite/schemas/data-exposure-1.2.schema.json);
-[1.1](../src/py_security_suite/schemas/data-exposure-1.1.schema.json) and
+[`data-exposure-1.3.schema.json`](../src/py_security_suite/schemas/data-exposure-1.3.schema.json);
+[1.2](../src/py_security_suite/schemas/data-exposure-1.2.schema.json),
+[1.1](../src/py_security_suite/schemas/data-exposure-1.1.schema.json), and
 [1.0](../src/py_security_suite/schemas/data-exposure-1.0.schema.json) remain
 available for existing consumers. Analysis is bounded to 5,000 Python files,
 1,000 configuration files of at most 2 MiB each, 500 sink surfaces, and 500 SDK

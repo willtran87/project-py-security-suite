@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -19,8 +20,14 @@ from .base import ScannerAdapter
 from .common import database_freshness_error, map_severity
 
 
+_ADVISORY_IDENTIFIER = re.compile(r"^(?:CVE|GHSA|OSV|PYSEC)-[A-Z0-9._-]+$")
+
+
 class OsvScannerAdapter(ScannerAdapter):
     name = "osv-scanner"
+    # OSV-Scanner exits 1 when vulnerabilities are found. The JSON payload is
+    # still a successful scan result and must be parsed instead of discarded.
+    accepted_exit_codes = frozenset({0, 1})
 
     def prerequisite_error(self) -> str | None:
         database = self.config.database_path
@@ -99,6 +106,7 @@ class OsvScannerAdapter(ScannerAdapter):
             if not isinstance(vulnerability, dict):
                 continue
             advisory = str(vulnerability.get("id") or "OSV-UNKNOWN")
+            aliases = _advisory_aliases(vulnerability, advisory)
             summary = str(
                 vulnerability.get("summary") or vulnerability.get("details") or advisory
             )
@@ -128,7 +136,7 @@ class OsvScannerAdapter(ScannerAdapter):
                     severity=severity,
                     confidence=Confidence.HIGH,
                     area="dependencies",
-                    classifications=[advisory],
+                    classifications=sorted({advisory, *aliases}),
                     locations=[
                         Location(
                             path=path,
@@ -152,10 +160,36 @@ class OsvScannerAdapter(ScannerAdapter):
                             title=summary[:200],
                             uri=f"https://osv.dev/vulnerability/{advisory}",
                         )
+                    ]
+                    + [
+                        Citation(
+                            kind="advisory_alias",
+                            identifier=alias,
+                            title=f"{alias} (alias of {advisory})",
+                            uri=f"https://osv.dev/vulnerability/{alias}",
+                        )
+                        for alias in aliases[:10]
                     ],
+                    evidence={"advisory_aliases": aliases},
                 )
             )
         return findings
+
+
+def _advisory_aliases(vulnerability: dict[str, Any], primary: str) -> list[str]:
+    raw = vulnerability.get("aliases")
+    if not isinstance(raw, list):
+        return []
+    normalized_primary = primary.upper()
+    return sorted(
+        {
+            value
+            for item in raw[:100]
+            if isinstance(item, str)
+            and (value := item.strip().upper()) != normalized_primary
+            and _ADVISORY_IDENTIFIER.fullmatch(value)
+        }
+    )[:50]
 
 
 def _native_severity(vulnerability: dict[str, Any]) -> str:
