@@ -841,6 +841,11 @@ def _render_risk_path_summary(value: dict[str, Any] | None) -> list[str]:
         f"| Security routes reached by multiple entry points | {int(summary.get('security_routes_with_multiple_entry_points', 0))} |",
         f"| Maximum entry points for one route | {int(summary.get('maximum_entry_points_per_route', 0))} |",
         f"| Routes with entry-point exposure truncation | {int(summary.get('routes_with_entry_point_exposure_truncation', 0))} |",
+        f"| Routes with assured scanner evidence | {int(summary.get('assured_evidence_routes', 0))} |",
+        f"| Single-perspective routes | {int(summary.get('single_perspective_routes', 0))} |",
+        f"| Independently corroborated routes | {int(summary.get('independently_corroborated_routes', 0))} |",
+        f"| Routes with scanner trust / execution gaps | {int(summary.get('routes_with_tool_trust_gaps', 0))} / {int(summary.get('routes_with_tool_execution_gaps', 0))} |",
+        f"| Routes without direct tool assurance | {int(summary.get('routes_without_tool_assurance', 0))} |",
         f"| Unrouted dependency-advisory importers | {int(summary.get('unrouted_dependency_advisory_imports', 0))} |",
         f"| Distinct routed dependency advisories | {int(summary.get('distinct_routed_dependency_advisories', 0))} |",
         f"| Known-exploited / high-EPSS dependency routes | {int(summary.get('known_exploited_dependency_routes', 0))} / {int(summary.get('high_epss_dependency_routes', 0))} |",
@@ -907,6 +912,7 @@ def _render_risk_path_summary(value: dict[str, Any] | None) -> list[str]:
             entry = route.get("entry_point")
             validation = route.get("validation")
             runtime = route.get("runtime_context")
+            assurance = route.get("evidence_assurance")
             target = target if isinstance(target, dict) else {}
             entry = entry if isinstance(entry, dict) else {}
             validation = validation if isinstance(validation, dict) else {}
@@ -945,6 +951,8 @@ def _render_risk_path_summary(value: dict[str, Any] | None) -> list[str]:
                 + _markdown_text(_entry_point_exposure_text(route))
                 + " | "
                 + _markdown_text(signals)
+                + "<br>evidence "
+                + _markdown_text(_evidence_assurance_text(assurance))
                 + " | **"
                 + _markdown_text(owner_text)
                 + "**<br>"
@@ -1198,6 +1206,10 @@ def _render_risk_path_summary(value: dict[str, Any] | None) -> list[str]:
                 + _markdown_code(str(target.get("path") or "unknown"))
                 + "`: "
                 + _markdown_text(str(item.get("reason") or "route unavailable"))
+                + "; evidence "
+                + _markdown_text(
+                    _evidence_assurance_text(item.get("evidence_assurance"))
+                )
             )
     return lines
 
@@ -1239,6 +1251,10 @@ def _render_exposure_advisory_intersections(values: list[Any]) -> list[str]:
             continue
         statuses = value.get("validation_statuses")
         statuses = statuses if isinstance(statuses, dict) else {}
+        assurance_statuses = value.get("evidence_assurance_statuses")
+        assurance_statuses = (
+            assurance_statuses if isinstance(assurance_statuses, dict) else {}
+        )
         owners = value.get("owners")
         owner_text = (
             ", ".join(str(item) for item in owners[:3])
@@ -1289,6 +1305,12 @@ def _render_exposure_advisory_intersections(values: list[Any]) -> list[str]:
             + _markdown_code(str(statuses.get("sink") or "not-assessed"))
             + "/"
             + _markdown_code(str(statuses.get("dependency") or "not-assessed"))
+            + "`<br>evidence `"
+            + _markdown_code(str(assurance_statuses.get("sink") or "not-assessed"))
+            + "/"
+            + _markdown_code(
+                str(assurance_statuses.get("dependency") or "not-assessed")
+            )
             + "` | **"
             + _markdown_text(owner_text)
             + "**<br>"
@@ -1315,6 +1337,8 @@ def _render_risk_owner_queues(queues: list[Any]) -> list[str]:
             continue
         validation = queue.get("validation_statuses")
         validation = validation if isinstance(validation, dict) else {}
+        assurance = queue.get("evidence_assurance_statuses")
+        assurance = assurance if isinstance(assurance, dict) else {}
         lines.append(
             "| **"
             + _markdown_text(str(queue.get("owner") or "Unassigned"))
@@ -1342,6 +1366,21 @@ def _render_risk_owner_queues(queues: list[Any]) -> list[str]:
             )
             + " | "
             + _markdown_text(_validation_count_summary(validation))
+            + "<br>evidence assured/perspective/trust/execution/unassessed/derived `"
+            + _markdown_code(
+                "/".join(
+                    str(int(assurance.get(status) or 0))
+                    for status in (
+                        "assured",
+                        "perspective-gap",
+                        "trust-gap",
+                        "execution-gap",
+                        "not-assessed",
+                        "derived-analysis",
+                    )
+                )
+            )
+            + "`"
             + "<br>highest campaign score `"
             + _markdown_code(str(int(queue.get("highest_campaign_review_score") or 0)))
             + "`; mismatch/unbound `"
@@ -1460,6 +1499,8 @@ def _render_dependency_route_row(route: dict[str, Any]) -> str:
         + _markdown_text(lifecycle_text)
         + " | "
         + _markdown_text(_risk_path_validation_signals(validation, runtime))
+        + "<br>evidence "
+        + _markdown_text(_evidence_assurance_text(route.get("evidence_assurance")))
         + ("<br>" + _markdown_text("; ".join(change_signals)) if change_signals else "")
         + " | "
         + (citations + "<br>" if citations else "")
@@ -1550,6 +1591,33 @@ def _entry_runtime_status_text(value: Any) -> str:
         f"{int(counts.get('observed') or 0)}/"
         f"{int(counts.get('not-observed') or 0)}/"
         f"{int(counts.get('not-available') or 0)}"
+    )
+
+
+def _evidence_assurance_text(value: Any) -> str:
+    assurance = value if isinstance(value, dict) else {}
+    status = str(assurance.get("review_status") or "not-assessed")
+    perspective = str(assurance.get("perspective_assessment") or "not-established")
+    contributing = assurance.get("contributing_tools")
+    tools = contributing if isinstance(contributing, list) else []
+    completed = assurance.get("completed_tools")
+    completed_tools = completed if isinstance(completed, list) else []
+    approved = assurance.get("approved_tools")
+    approved_tools = approved if isinstance(approved, list) else []
+    gaps = []
+    for label, key in (
+        ("trust", "trust_gap_tools"),
+        ("execution", "execution_gap_tools"),
+        ("unassessed", "unassessed_tools"),
+    ):
+        raw = assurance.get(key)
+        values = raw if isinstance(raw, list) else []
+        if values:
+            gaps.append(label + " " + ", ".join(str(item) for item in values[:5]))
+    return (
+        f"{status}; perspective {perspective}; tools {', '.join(str(item) for item in tools[:5]) or 'suite-derived'}; "
+        f"completed/approved {len(completed_tools)}/{len(approved_tools)}"
+        + ("; gaps " + "; ".join(gaps) if gaps else "")
     )
 
 
@@ -3885,6 +3953,10 @@ def _markdown_risk_path_context(finding: Finding) -> list[str]:
         return [
             "- **Static risk route:** no bounded declared-entry-point route; "
             + _markdown_text(str(context.get("reason") or "review model coverage"))
+            + ". **Evidence assurance:** "
+            + _markdown_text(
+                _evidence_assurance_text(context.get("evidence_assurance"))
+            )
             + ". This is an evidence gap, not proof that the code is unreachable."
         ]
     entry = context.get("entry_point")
@@ -4058,6 +4130,8 @@ def _markdown_risk_path_context(finding: Finding) -> list[str]:
         + _markdown_text(_entry_point_exposure_text(context))
         + ". **Validation:** "
         + _markdown_text(_risk_path_validation_signals(validation, runtime))
+        + ". **Evidence assurance:** "
+        + _markdown_text(_evidence_assurance_text(context.get("evidence_assurance")))
         + "."
         + hotspot_text
         + test_hotspot_text
@@ -4374,9 +4448,13 @@ def _html_risk_path_context(finding: Finding) -> str:
         return ""
     if context.get("status") != "routed":
         reason = html.escape(str(context.get("reason") or "review model coverage"))
+        assurance = html.escape(
+            _evidence_assurance_text(context.get("evidence_assurance"))
+        )
         return (
             "<section class='source-context'><h4>Static risk route</h4>"
-            f"<p>No bounded declared-entry-point route: {reason}. This is an "
+            f"<p>No bounded declared-entry-point route: {reason}. "
+            f"<strong>Evidence assurance:</strong> {assurance}. This is an "
             "evidence gap, not proof that the code is unreachable.</p></section>"
         )
     entry = context.get("entry_point")
@@ -4546,6 +4624,8 @@ def _html_risk_path_context(finding: Finding) -> str:
         + html.escape(_entry_point_exposure_text(context))
         + ". <strong>Validation:</strong> "
         + html.escape(_risk_path_validation_signals(validation, runtime))
+        + ". <strong>Evidence assurance:</strong> "
+        + html.escape(_evidence_assurance_text(context.get("evidence_assurance")))
         + "."
         + hotspot_html
         + test_hotspot_html

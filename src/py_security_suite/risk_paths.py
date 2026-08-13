@@ -45,6 +45,19 @@ _MAX_ADVISORY_IMPORT_PATHS = 50
 _MAX_FINDING_ADVISORY_ROUTES = 25
 _MAX_EXPOSURE_ADVISORY_INTERSECTIONS = 100
 _MAX_ENTRY_POINT_EXPOSURES = 25
+_TOOL_RUN_STATUSES = frozenset(
+    {"completed", "unavailable", "failed", "timed_out", "parse_error", "skipped"}
+)
+_TOOL_ASSURANCE_STATUSES = frozenset(
+    {
+        "approved",
+        "approval-gap",
+        "integrity-gap",
+        "not-established",
+        "execution-gap",
+        "not-applicable",
+    }
+)
 
 
 def build_risk_paths(
@@ -64,6 +77,7 @@ def build_risk_paths(
     entry_points = _entry_points(reachability)
     entry_point_runtime = _entry_point_runtime_index(reachability)
     path_context = _campaign_control_context_index(structural, reachability)
+    tool_posture = _tool_posture_index(artifacts.get("effectiveness.json"))
     dependency_targets, dependency_targets_omitted = _dependency_advisory_targets(
         fusion, path_context
     )
@@ -75,6 +89,7 @@ def build_risk_paths(
     targets = sorted(candidate_targets, key=_candidate_order)[:_MAX_TARGETS]
     for target in targets:
         target["validation"] = _assess_validation(target["validation"], artifacts)
+        target["evidence_assurance"] = _target_evidence_assurance(target, tool_posture)
     routed, unrouted = _route_targets(
         entry_points,
         targets,
@@ -274,6 +289,32 @@ def build_risk_paths(
             "routes_with_entry_point_exposure_truncation": sum(
                 int(route["entry_point_exposures_omitted"]) > 0
                 for route in retained_routes
+            ),
+            "assured_evidence_routes": sum(
+                route["evidence_assurance"]["review_status"] == "assured"
+                for route in routed
+            ),
+            "single_perspective_routes": sum(
+                route["evidence_assurance"]["perspective_assessment"] == "single-tool"
+                for route in routed
+            ),
+            "independently_corroborated_routes": sum(
+                route["evidence_assurance"]["perspective_assessment"]
+                == "independent-corroboration"
+                for route in routed
+            ),
+            "routes_with_tool_trust_gaps": sum(
+                route["evidence_assurance"]["review_status"] == "trust-gap"
+                for route in routed
+            ),
+            "routes_with_tool_execution_gaps": sum(
+                route["evidence_assurance"]["review_status"] == "execution-gap"
+                for route in routed
+            ),
+            "routes_without_tool_assurance": sum(
+                route["evidence_assurance"]["review_status"]
+                in {"not-assessed", "derived-analysis"}
+                for route in routed
             ),
             "unrouted_dependency_advisory_imports": sum(
                 target["target"]["kind"] == "dependency-advisory-import"
@@ -534,6 +575,7 @@ def build_risk_paths(
             "structural_synthesis": isinstance(
                 artifacts.get("structural-synthesis.json"), dict
             ),
+            "tool_effectiveness_and_trust": bool(tool_posture),
             "data_exposure": isinstance(exposure, dict),
             "dependency_advisory_imports": isinstance(fusion, dict)
             and isinstance(fusion.get("advisory_clusters"), list),
@@ -581,6 +623,7 @@ def build_risk_paths(
             "A static route is a review path, not proof of attacker-controlled input, vulnerable-function reachability, exploitability, or sensitive-data flow.",
             "Multiple declared entry-point routes establish bounded static interface breadth only; they do not prove distinct runtime interfaces, external exposure, attacker control, or execution.",
             "Entry-point runtime observation proves only that the exact retained reachability node executed during supplied tests; non-observation or missing node evidence does not prove an interface is dead or inaccessible.",
+            "Route evidence assurance reports scanner completion, executable integrity continuity, organization approval, and perspective breadth separately; a gap does not invalidate a finding, and approval does not prove correctness.",
             "No bounded route may indicate reflection, registries, dependency injection, generated code, framework dispatch, or an incomplete entry-point model.",
             "Runtime observation proves only that code executed during retained tests; absence of observation does not prove dead code.",
             "Sensitive-data sink surfaces are inventory signals unless a normalized scanner finding establishes a source-to-sink concern.",
@@ -1501,6 +1544,16 @@ def _exposure_advisory_intersections(
                             or "not-assessed"
                         ),
                     },
+                    "evidence_assurance_statuses": {
+                        "sink": str(
+                            sink_route["evidence_assurance"].get("review_status")
+                            or "not-assessed"
+                        ),
+                        "dependency": str(
+                            dependency_route["evidence_assurance"].get("review_status")
+                            or "not-assessed"
+                        ),
+                    },
                     "advisory_citations": list(
                         dependency_route["correlations"].get("advisory_citations") or []
                     )[:25],
@@ -1583,6 +1636,7 @@ def _route_targets(
                 "owners": target["owners"],
                 "runtime_context": target["runtime_context"],
                 "validation": target["validation"],
+                "evidence_assurance": target["evidence_assurance"],
                 "correlations": target["correlations"],
                 "recommended_action": target["recommended_action"],
                 "evidence_artifacts": sorted(
@@ -1594,6 +1648,7 @@ def _route_targets(
                             else set()
                         ),
                         *target["evidence_artifacts"],
+                        *target["evidence_assurance"]["evidence_artifacts"],
                     }
                 ),
             }
@@ -2913,6 +2968,26 @@ def _owner_work_queues(
                 if exposure["runtime_context"]["assessment"] == "not-available"
             }
         )
+        assurance_counts = {
+            status: sum(
+                route["evidence_assurance"]["review_status"] == status
+                for route in owned_routes
+            )
+            for status in (
+                "assured",
+                "perspective-gap",
+                "trust-gap",
+                "execution-gap",
+                "not-assessed",
+                "derived-analysis",
+            )
+        }
+        trust_gap_routes = assurance_counts["trust-gap"]
+        execution_gap_routes = assurance_counts["execution-gap"]
+        perspective_gap_routes = assurance_counts["perspective-gap"]
+        unassessed_assurance_routes = (
+            assurance_counts["not-assessed"] + assurance_counts["derived-analysis"]
+        )
         result.append(
             {
                 "queue_id": queue_id,
@@ -2959,6 +3034,11 @@ def _owner_work_queues(
                 "entry_point_runtime_statuses": entry_runtime_counts,
                 "unobserved_entry_point_ids": unobserved_entry_ids,
                 "entry_points_without_runtime_evidence": unavailable_entry_ids,
+                "evidence_assurance_statuses": assurance_counts,
+                "tool_trust_gap_routes": trust_gap_routes,
+                "tool_execution_gap_routes": execution_gap_routes,
+                "single_perspective_routes": perspective_gap_routes,
+                "unassessed_tool_evidence_routes": unassessed_assurance_routes,
                 "shared_validation_test_files": len(
                     {
                         str(hotspot_id)
@@ -3007,6 +3087,10 @@ def _owner_work_queues(
                     multi_entry_routes,
                     len(unobserved_entry_ids),
                     len(unavailable_entry_ids),
+                    trust_gap_routes,
+                    execution_gap_routes,
+                    perspective_gap_routes,
+                    unassessed_assurance_routes,
                 ),
             }
         )
@@ -3028,6 +3112,10 @@ def _owner_queue_action(
     multi_entry_routes: int,
     unobserved_entry_points: int,
     unavailable_entry_points: int,
+    trust_gap_routes: int,
+    execution_gap_routes: int,
+    perspective_gap_routes: int,
+    unassessed_assurance_routes: int,
 ) -> str:
     mismatched = sum(
         campaign["source_snapshot"]["evidence_revision_binding"] == "mismatch"
@@ -3080,6 +3168,27 @@ def _owner_queue_action(
         shared_suffix += (
             f" Model exact reachability nodes for {unavailable_entry_points} "
             "declared interface(s) without runtime evidence."
+        )
+    if execution_gap_routes:
+        shared_suffix += (
+            f" Complete contributing scanners for {execution_gap_routes} route(s) "
+            "with execution-evidence gaps."
+        )
+    if trust_gap_routes:
+        shared_suffix += (
+            f" Obtain integrity verification and organization approval for "
+            f"contributing scanners on {trust_gap_routes} route(s)."
+        )
+    if perspective_gap_routes:
+        shared_suffix += (
+            f" Add an independent applicable validation perspective for "
+            f"{perspective_gap_routes} single-perspective route(s), or record a "
+            "governed sufficiency rationale."
+        )
+    if unassessed_assurance_routes:
+        shared_suffix += (
+            f" Review source evidence and establish tool assurance for "
+            f"{unassessed_assurance_routes} unassessed or suite-derived route(s)."
         )
     if mismatched:
         return (
@@ -3185,6 +3294,7 @@ def _attach_finding_routes(
                 "files": route["files"],
                 "runtime_context": route["runtime_context"],
                 "validation": route["validation"],
+                "evidence_assurance": route["evidence_assurance"],
                 "convergence_hotspot_ids": route["convergence_hotspot_ids"],
                 "validation_campaign_ids": route["validation_campaign_ids"],
                 "validation_test_hotspot_ids": route["validation_test_hotspot_ids"],
@@ -3260,6 +3370,7 @@ def _attach_finding_routes(
             finding.evidence["risk_path"] = {
                 "status": "unrouted",
                 "reason": record["reason"],
+                "evidence_assurance": record["evidence_assurance"],
                 "evidence_artifact": "risk-paths.json",
             }
             _add_route_citations(finding)
@@ -3295,6 +3406,7 @@ def _compact_dependency_advisory_route(
         "files": list(route["files"]),
         "runtime_context": route["runtime_context"],
         "validation": route["validation"],
+        "evidence_assurance": route["evidence_assurance"],
         "validation_campaign_ids": list(route["validation_campaign_ids"]),
         "exposure_advisory_intersection_ids": list(
             route.get("exposure_advisory_intersection_ids") or []
@@ -3345,6 +3457,7 @@ def _compact_exposure_advisory_intersection(
             "entry_point_exposure_count",
             "entry_point_exposures_omitted",
             "entry_point_runtime_statuses",
+            "evidence_assurance_statuses",
             "validation_statuses",
             "advisory_citations",
             "recommended_action",
@@ -3497,6 +3610,205 @@ def _runtime_context(
     }
 
 
+def _tool_posture_index(value: Any) -> dict[str, dict[str, Any]]:
+    raw = value.get("tool_posture") if isinstance(value, dict) else None
+    records = raw if isinstance(raw, list) else []
+    result: dict[str, dict[str, Any]] = {}
+    for item in records[:500]:
+        if not isinstance(item, dict):
+            continue
+        tool = _optional_string(item.get("tool"))
+        status = _optional_string(item.get("status"))
+        assurance = _optional_string(item.get("assurance_status"))
+        if (
+            not tool
+            or status not in _TOOL_RUN_STATUSES
+            or assurance not in _TOOL_ASSURANCE_STATUSES
+        ):
+            continue
+        result[tool] = {
+            "tool": tool,
+            "status": status,
+            "applicable": item.get("applicable") is True,
+            "evidence_lane": str(item.get("evidence_lane") or "other")[:100],
+            "normalized_findings": _nonnegative_integer(item.get("normalized_findings"))
+            or 0,
+            "unique_normalized_findings": _nonnegative_integer(
+                item.get("unique_normalized_findings")
+            )
+            or 0,
+            "executable_integrity_verified": _optional_boolean(
+                item.get("executable_integrity_verified")
+            ),
+            "executable_organization_approved": (
+                item.get("executable_organization_approved") is True
+            ),
+            "executable_unchanged": _optional_boolean(item.get("executable_unchanged")),
+            "auxiliary_executable_present": (
+                item.get("auxiliary_executable_present") is True
+            ),
+            "auxiliary_executable_integrity_verified": _optional_boolean(
+                item.get("auxiliary_executable_integrity_verified")
+            ),
+            "auxiliary_executable_organization_approved": _optional_boolean(
+                item.get("auxiliary_executable_organization_approved")
+            ),
+            "auxiliary_executable_unchanged": _optional_boolean(
+                item.get("auxiliary_executable_unchanged")
+            ),
+            "assurance_status": assurance,
+        }
+    return result
+
+
+def _target_evidence_assurance(
+    target: dict[str, Any], posture: dict[str, dict[str, Any]]
+) -> dict[str, Any]:
+    origin = {
+        "finding": "scanner-finding",
+        "dependency-advisory-import": "dependency-advisory-fusion",
+        "sink-surface": "derived-analysis",
+    }.get(str(target.get("kind")), "derived-analysis")
+    contributing = sorted(set(_strings(target.get("tools"), 25)))
+    correlations = _object(target.get("correlations"))
+    supporting = sorted(
+        set(_strings(correlations.get("related_tools"), 25)) - set(contributing)
+    )
+    external_contributors = [
+        tool for tool in contributing if not tool.startswith("pysec-")
+    ]
+    assessed_tools = (
+        sorted(set(supporting)) if origin == "derived-analysis" else contributing
+    )
+    records = [posture[tool] for tool in assessed_tools if tool in posture]
+    unassessed = sorted(set(assessed_tools) - set(posture))
+    completed = sorted(
+        str(record["tool"]) for record in records if record["status"] == "completed"
+    )
+    approved = sorted(
+        str(record["tool"])
+        for record in records
+        if record["assurance_status"] == "approved"
+    )
+    execution_gaps = sorted(
+        str(record["tool"])
+        for record in records
+        if record["assurance_status"] in {"execution-gap", "not-applicable"}
+    )
+    trust_gaps = sorted(
+        str(record["tool"])
+        for record in records
+        if record["assurance_status"]
+        in {"approval-gap", "integrity-gap", "not-established"}
+    )
+    corroboration = _optional_string(correlations.get("corroboration"))
+    perspective = _perspective_assessment(origin, external_contributors, corroboration)
+    review_status = _evidence_review_status(
+        origin=origin,
+        perspective=perspective,
+        assessed_tools=assessed_tools,
+        unassessed=unassessed,
+        execution_gaps=execution_gaps,
+        trust_gaps=trust_gaps,
+    )
+    return {
+        "review_status": review_status,
+        "origin": origin,
+        "perspective_assessment": perspective,
+        "corroboration": corroboration,
+        "contributing_tools": contributing,
+        "supporting_tools": supporting,
+        "evidence_lanes": sorted({str(record["evidence_lane"]) for record in records}),
+        "tool_records": records,
+        "completed_tools": completed,
+        "approved_tools": approved,
+        "trust_gap_tools": trust_gaps,
+        "execution_gap_tools": execution_gaps,
+        "unassessed_tools": unassessed,
+        "recommended_action": _evidence_assurance_action(
+            review_status, trust_gaps, execution_gaps, unassessed
+        ),
+        "evidence_artifacts": (
+            ["effectiveness.json", "scanner-trust.json"] if records else []
+        ),
+    }
+
+
+def _perspective_assessment(
+    origin: str, contributing_tools: list[str], corroboration: str | None
+) -> str:
+    if corroboration in {"independent", "cross-stage"}:
+        return "independent-corroboration"
+    if len(contributing_tools) > 1:
+        return "multi-tool"
+    if len(contributing_tools) == 1:
+        return "single-tool"
+    if origin == "derived-analysis":
+        return "derived-analysis"
+    return "not-established"
+
+
+def _evidence_review_status(
+    *,
+    origin: str,
+    perspective: str,
+    assessed_tools: list[str],
+    unassessed: list[str],
+    execution_gaps: list[str],
+    trust_gaps: list[str],
+) -> str:
+    if unassessed or (origin != "derived-analysis" and not assessed_tools):
+        return "not-assessed"
+    if execution_gaps:
+        return "execution-gap"
+    if trust_gaps:
+        return "trust-gap"
+    if origin == "derived-analysis":
+        return "derived-analysis"
+    if perspective in {"single-tool", "not-established"}:
+        return "perspective-gap"
+    return "assured"
+
+
+def _evidence_assurance_action(
+    status: str,
+    trust_gaps: list[str],
+    execution_gaps: list[str],
+    unassessed: list[str],
+) -> str:
+    if status == "execution-gap":
+        return (
+            "Complete the contributing scanner run(s) and retain normalized evidence: "
+            + ", ".join(execution_gaps[:10])
+            + "."
+        )
+    if status == "trust-gap":
+        return (
+            "Verify executable integrity and obtain organization approval for the "
+            "contributing scanner binding(s): " + ", ".join(trust_gaps[:10]) + "."
+        )
+    if status == "not-assessed":
+        return (
+            "Retain completion and scanner-identity evidence for the contributing "
+            "tool(s): " + ", ".join(unassessed[:10] or ["unknown"]) + "."
+        )
+    if status == "perspective-gap":
+        return (
+            "Validate the target with an independent applicable technique or record "
+            "why the single retained scanner perspective is sufficient."
+        )
+    if status == "derived-analysis":
+        return (
+            "Review the suite-derived correlation against its cited source evidence; "
+            "do not treat derived analysis as an independent scanner observation."
+        )
+    return "Preserve the approved multi-perspective evidence and rerun it after remediation."
+
+
+def _empty_evidence_assurance(target: dict[str, Any]) -> dict[str, Any]:
+    return _target_evidence_assurance(target, {})
+
+
 def _finding_correlations(
     finding: Finding,
     fusion: dict[str, Any],
@@ -3510,6 +3822,7 @@ def _finding_correlations(
         "related_tools": _strings(fusion.get("related_tools"), 25),
         "review_tier": _optional_string(fusion.get("review_tier")),
         "review_reasons": _strings(fusion.get("review_reasons"), 20),
+        "corroboration": _optional_string(fusion.get("corroboration")),
         "island_id": _optional_string(island.get("island_id")),
         "import_cycle_id": _optional_string(cycle.get("cycle_id")),
         "advisory_cluster_id": _optional_string(advisory.get("cluster_id")),
@@ -3612,6 +3925,9 @@ def _unrouted(target: dict[str, Any], reason: str) -> dict[str, Any]:
         "priority": target["priority"],
         "target": _public_target(target),
         "owners": target["owners"],
+        "evidence_assurance": target.get(
+            "evidence_assurance", _empty_evidence_assurance(target)
+        ),
         "reason": reason,
         "recommended_action": (
             "Confirm framework, plugin, registry, generated-code, or external entry "

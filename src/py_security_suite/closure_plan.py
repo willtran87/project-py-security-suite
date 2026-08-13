@@ -518,7 +518,15 @@ def _risk_path_closure_context(
         return [], [], {}
     status = str(risk_path.get("status") or "unknown")
     refs = ["risk-paths.json"]
-    details: dict[str, Any] = {"status": status}
+    evidence_assurance = _closure_evidence_assurance(
+        risk_path.get("evidence_assurance")
+    )
+    details: dict[str, Any] = {
+        "status": status,
+        "evidence_assurance": evidence_assurance,
+    }
+    if evidence_assurance["tool_records"]:
+        refs.extend(["effectiveness.json", "scanner-trust.json"])
     if status == "routed":
         route_id = str(risk_path.get("route_id") or "unknown")
         files = _string_values(risk_path.get("files"), 9)
@@ -654,6 +662,9 @@ def _risk_path_closure_context(
                     "files": _string_values(item.get("files"), 9),
                     "runtime_context": _as_object(item.get("runtime_context")),
                     "validation": _as_object(item.get("validation")),
+                    "evidence_assurance": _closure_evidence_assurance(
+                        item.get("evidence_assurance")
+                    ),
                     "validation_campaign_ids": _string_values(
                         item.get("validation_campaign_ids"), 50
                     ),
@@ -739,6 +750,9 @@ def _risk_path_closure_context(
                         item.get("entry_point_runtime_statuses")
                     ),
                     "validation_statuses": _as_object(item.get("validation_statuses")),
+                    "evidence_assurance_statuses": _as_object(
+                        item.get("evidence_assurance_statuses")
+                    ),
                     "advisory_citations": [
                         _as_object(citation)
                         for citation in _object_list(
@@ -821,6 +835,7 @@ def _risk_path_closure_context(
                 "The route has retained change-scope, line-coverage, and focused-test evidence sufficient for an aligned or explicit-gap assessment."
             )
         acceptance.extend(_entry_point_exposure_acceptance(risk_path))
+        acceptance.extend(_evidence_assurance_acceptance(evidence_assurance))
         campaign_gaps = [
             campaign
             for campaign in campaigns
@@ -891,7 +906,8 @@ def _risk_path_closure_context(
     return (
         refs,
         [
-            "The target has a governed entry-point route or a documented dynamic/external-entry rationale in the replacement report."
+            "The target has a governed entry-point route or a documented dynamic/external-entry rationale in the replacement report.",
+            *_evidence_assurance_acceptance(evidence_assurance),
         ],
         details,
     )
@@ -971,6 +987,87 @@ def _entry_point_exposure_acceptance(value: dict[str, Any]) -> list[str]:
     return result
 
 
+def _closure_evidence_assurance(value: Any) -> dict[str, Any]:
+    assurance = _as_object(value)
+    records = [
+        {
+            "tool": str(item.get("tool") or "unknown"),
+            "status": str(item.get("status") or "unknown"),
+            "evidence_lane": str(item.get("evidence_lane") or "other"),
+            "normalized_findings": item.get("normalized_findings"),
+            "unique_normalized_findings": item.get("unique_normalized_findings"),
+            "executable_integrity_verified": item.get("executable_integrity_verified"),
+            "executable_organization_approved": item.get(
+                "executable_organization_approved"
+            )
+            is True,
+            "executable_unchanged": item.get("executable_unchanged"),
+            "auxiliary_executable_present": item.get("auxiliary_executable_present")
+            is True,
+            "auxiliary_executable_integrity_verified": item.get(
+                "auxiliary_executable_integrity_verified"
+            ),
+            "auxiliary_executable_organization_approved": item.get(
+                "auxiliary_executable_organization_approved"
+            ),
+            "auxiliary_executable_unchanged": item.get(
+                "auxiliary_executable_unchanged"
+            ),
+            "assurance_status": str(item.get("assurance_status") or "unknown"),
+        }
+        for item in _object_list(
+            assurance.get("tool_records"), "route tool evidence records"
+        )[:25]
+    ]
+    return {
+        "review_status": str(assurance.get("review_status") or "not-assessed"),
+        "origin": str(assurance.get("origin") or "derived-analysis"),
+        "perspective_assessment": str(
+            assurance.get("perspective_assessment") or "not-established"
+        ),
+        "corroboration": assurance.get("corroboration"),
+        "contributing_tools": _string_values(assurance.get("contributing_tools"), 25),
+        "supporting_tools": _string_values(assurance.get("supporting_tools"), 25),
+        "evidence_lanes": _string_values(assurance.get("evidence_lanes"), 25),
+        "tool_records": records,
+        "completed_tools": _string_values(assurance.get("completed_tools"), 25),
+        "approved_tools": _string_values(assurance.get("approved_tools"), 25),
+        "trust_gap_tools": _string_values(assurance.get("trust_gap_tools"), 25),
+        "execution_gap_tools": _string_values(assurance.get("execution_gap_tools"), 25),
+        "unassessed_tools": _string_values(assurance.get("unassessed_tools"), 25),
+        "recommended_action": str(
+            assurance.get("recommended_action") or "Establish route evidence assurance."
+        ),
+    }
+
+
+def _evidence_assurance_acceptance(value: dict[str, Any]) -> list[str]:
+    status = str(value.get("review_status") or "not-assessed")
+    if status == "execution-gap":
+        return [
+            "Every contributing scanner completes and its normalized evidence is retained in the replacement report."
+        ]
+    if status == "trust-gap":
+        return [
+            "Every contributing scanner entry point and required helper is integrity-verified, unchanged during execution, and organization-approved in the replacement report."
+        ]
+    if status == "perspective-gap":
+        return [
+            "An independent applicable analysis validates the target, or a governed rationale records why the retained single perspective is sufficient."
+        ]
+    if status == "not-assessed":
+        return [
+            "The replacement report retains completion, integrity, continuity, and organization-approval posture for every contributing tool."
+        ]
+    if status == "derived-analysis":
+        return [
+            "The suite-derived correlation is reviewed against its cited source evidence and is not counted as an independent scanner observation."
+        ]
+    return [
+        "Approved contributing scanner perspectives are rerun after remediation and remain bound to the replacement report."
+    ]
+
+
 def _dependency_route_acceptance(
     dependency_routes: list[dict[str, Any]],
 ) -> list[str]:
@@ -987,6 +1084,13 @@ def _dependency_route_acceptance(
             "Focused importer validation covers every retained uncovered changed line, or the replacement report records an approved coverage disposition."
         )
     result.extend(_package_lifecycle_acceptance(dependency_routes))
+    assurance_statuses = {
+        str(_as_object(item.get("evidence_assurance")).get("review_status") or "")
+        for item in dependency_routes
+    }
+    for status in sorted(assurance_statuses):
+        if status:
+            result.extend(_evidence_assurance_acceptance({"review_status": status}))
     if any(
         _nonnegative_integer(item.get("entry_point_exposure_count")) > 1
         for item in dependency_routes

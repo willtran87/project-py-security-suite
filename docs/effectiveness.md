@@ -1,6 +1,6 @@
 # Detection effectiveness and operational coverage
 
-Last reviewed: 2026-08-10
+Last reviewed: 2026-08-13
 
 The suite separates five questions that are often incorrectly collapsed into
 one score:
@@ -12,8 +12,9 @@ one score:
 - **Is the evidence decision-ready?** Its evidence grade accounts for incomplete
   execution, changed entry points, policy gaps, and external scanner approval;
   the release disposition remains a separate field.
-- **Did the report preserve useful evidence?** `effectiveness.json` measures
-  attribution, citations, actionability, corroboration, and tool contribution.
+- **Did the report preserve useful evidence?** `effectiveness.json` 1.1
+  measures attribution, citations, actionability, corroboration, tool
+  contribution, and per-tool completion/integrity/continuity/approval posture.
 - **Did the portfolio detect known positive and negative cases?** `pysec
   benchmark` measures a verified report against a separately reviewed,
   digest-bound labeled corpus.
@@ -24,9 +25,30 @@ flowchart LR
     Run --> Health["portfolio-health.json<br/>execution | risk | evidence | release"]
     Run --> Normalize["Normalized and cited findings"]
     Normalize --> Quality["effectiveness.json<br/>report quality and contribution"]
+    Run --> Posture["Exact tool posture<br/>completion | integrity | approval | lane"]
+    Posture --> Quality
     Corpus["Approved labeled corpus<br/>SHA-256 bound"] --> Benchmark["pysec benchmark"]
     Normalize --> Benchmark
     Benchmark --> Metrics["TP | TN | FP | FN<br/>precision | recall | specificity | F1"]
+```
+
+## Per-tool evidence posture
+
+`tool_posture` retains one bounded record per selected control. It reports the
+tool's lane, applicability and completion, normalized and unique findings,
+primary and auxiliary executable integrity, organization approval, and
+before/after continuity. The status is one of `approved`, `approval-gap`,
+`integrity-gap`, `not-established`, `execution-gap`, or `not-applicable`.
+
+`risk-paths.json` consumes these records by exact contributing-tool name. This
+lets a route distinguish a technically important finding from the separate work
+needed to establish scanner authority or an independent perspective. The join
+does not alter scanner severity, infer finding truth, or grant release approval.
+
+Export the offline contract with:
+
+```text
+pysec schema effectiveness-1.1 --output effectiveness.schema.json
 ```
 
 ## Labeled corpus

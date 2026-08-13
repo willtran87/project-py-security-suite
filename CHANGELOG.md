@@ -5,6 +5,18 @@ for published releases.
 
 ## Unreleased
 
+- Cross-reference every routed and unrouted target with the exact contributing
+  scanner's execution, evidence lane, normalized/unique contribution, primary
+  and helper integrity, before/after continuity, and organization approval.
+  `effectiveness.json` 1.1 and its bundled schema now expose per-tool posture;
+  risk routes separately report perspective, trust, execution, unassessed, and
+  suite-derived states through findings, SARIF, Markdown/HTML, boundary/advisory
+  intersections, owner queues, and closure criteria. The join does not alter
+  native severity or treat tool approval as finding correctness.
+- Clarify that every configured output from one test lane—including Cobertura
+  XML used by diff-cover—must participate in the same source-binding operation,
+  preventing an excluded evidence payload from creating a false revision
+  mismatch between coverage, JUnit, and the sealed scan inventory.
 - Add `risk-paths.json`, a bounded offline synthesis of declared reachability
   entry points, Graphify file relations, normalized findings, review-worthy
   sensitive-data sinks, runtime state, coverage, focused tests, structural

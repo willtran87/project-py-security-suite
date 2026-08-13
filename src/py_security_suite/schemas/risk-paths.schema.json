@@ -30,6 +30,9 @@
         "multi_entry_routes_with_runtime_evidence_gaps",
         "security_routes_with_multiple_entry_points", "maximum_entry_points_per_route",
         "routes_with_entry_point_exposure_truncation",
+        "assured_evidence_routes", "single_perspective_routes",
+        "independently_corroborated_routes", "routes_with_tool_trust_gaps",
+        "routes_with_tool_execution_gaps", "routes_without_tool_assurance",
         "unrouted_dependency_advisory_imports", "distinct_routed_dependency_advisories",
         "known_exploited_dependency_routes", "high_epss_dependency_routes",
         "dependency_routes_with_fixed_versions", "dependency_routes_with_validation_gaps",
@@ -87,6 +90,12 @@
         "security_routes_with_multiple_entry_points": {"$ref": "#/$defs/count"},
         "maximum_entry_points_per_route": {"$ref": "#/$defs/count"},
         "routes_with_entry_point_exposure_truncation": {"$ref": "#/$defs/count"},
+        "assured_evidence_routes": {"$ref": "#/$defs/count"},
+        "single_perspective_routes": {"$ref": "#/$defs/count"},
+        "independently_corroborated_routes": {"$ref": "#/$defs/count"},
+        "routes_with_tool_trust_gaps": {"$ref": "#/$defs/count"},
+        "routes_with_tool_execution_gaps": {"$ref": "#/$defs/count"},
+        "routes_without_tool_assurance": {"$ref": "#/$defs/count"},
         "unrouted_dependency_advisory_imports": {"$ref": "#/$defs/count"},
         "distinct_routed_dependency_advisories": {"$ref": "#/$defs/count"},
         "known_exploited_dependency_routes": {"$ref": "#/$defs/count"},
@@ -286,6 +295,76 @@
         "not-available": {"$ref": "#/$defs/count"}
       }
     },
+    "toolEvidenceRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tool", "status", "applicable", "evidence_lane",
+        "normalized_findings", "unique_normalized_findings",
+        "executable_integrity_verified", "executable_organization_approved",
+        "executable_unchanged", "auxiliary_executable_present",
+        "auxiliary_executable_integrity_verified",
+        "auxiliary_executable_organization_approved",
+        "auxiliary_executable_unchanged", "assurance_status"
+      ],
+      "properties": {
+        "tool": {"type": "string", "minLength": 1},
+        "status": {"type": "string", "minLength": 1},
+        "applicable": {"type": "boolean"},
+        "evidence_lane": {"type": "string", "minLength": 1},
+        "normalized_findings": {"$ref": "#/$defs/count"},
+        "unique_normalized_findings": {"$ref": "#/$defs/count"},
+        "executable_integrity_verified": {"type": ["boolean", "null"]},
+        "executable_organization_approved": {"type": "boolean"},
+        "executable_unchanged": {"type": ["boolean", "null"]},
+        "auxiliary_executable_present": {"type": "boolean"},
+        "auxiliary_executable_integrity_verified": {"type": ["boolean", "null"]},
+        "auxiliary_executable_organization_approved": {"type": ["boolean", "null"]},
+        "auxiliary_executable_unchanged": {"type": ["boolean", "null"]},
+        "assurance_status": {"enum": ["approved", "approval-gap", "integrity-gap", "not-established", "execution-gap", "not-applicable"]}
+      }
+    },
+    "evidenceAssurance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "review_status", "origin", "perspective_assessment", "corroboration",
+        "contributing_tools", "supporting_tools", "evidence_lanes", "tool_records",
+        "completed_tools", "approved_tools", "trust_gap_tools",
+        "execution_gap_tools", "unassessed_tools", "recommended_action",
+        "evidence_artifacts"
+      ],
+      "properties": {
+        "review_status": {"enum": ["assured", "perspective-gap", "trust-gap", "execution-gap", "not-assessed", "derived-analysis"]},
+        "origin": {"enum": ["scanner-finding", "dependency-advisory-fusion", "derived-analysis"]},
+        "perspective_assessment": {"enum": ["independent-corroboration", "multi-tool", "single-tool", "derived-analysis", "not-established"]},
+        "corroboration": {"$ref": "#/$defs/nullableString"},
+        "contributing_tools": {"$ref": "#/$defs/strings"},
+        "supporting_tools": {"$ref": "#/$defs/strings"},
+        "evidence_lanes": {"$ref": "#/$defs/strings"},
+        "tool_records": {"type": "array", "maxItems": 25, "items": {"$ref": "#/$defs/toolEvidenceRecord"}},
+        "completed_tools": {"$ref": "#/$defs/strings"},
+        "approved_tools": {"$ref": "#/$defs/strings"},
+        "trust_gap_tools": {"$ref": "#/$defs/strings"},
+        "execution_gap_tools": {"$ref": "#/$defs/strings"},
+        "unassessed_tools": {"$ref": "#/$defs/strings"},
+        "recommended_action": {"type": "string", "minLength": 1},
+        "evidence_artifacts": {"$ref": "#/$defs/strings"}
+      }
+    },
+    "evidenceAssuranceCounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["assured", "perspective-gap", "trust-gap", "execution-gap", "not-assessed", "derived-analysis"],
+      "properties": {
+        "assured": {"$ref": "#/$defs/count"},
+        "perspective-gap": {"$ref": "#/$defs/count"},
+        "trust-gap": {"$ref": "#/$defs/count"},
+        "execution-gap": {"$ref": "#/$defs/count"},
+        "not-assessed": {"$ref": "#/$defs/count"},
+        "derived-analysis": {"$ref": "#/$defs/count"}
+      }
+    },
     "target": {
       "type": "object",
       "additionalProperties": false,
@@ -365,7 +444,7 @@
         "route_id", "priority", "entry_point", "entry_point_exposure_count",
         "entry_point_exposures", "entry_point_exposures_omitted", "entry_point_kinds",
         "target", "hop_count",
-        "files", "edges", "owners", "runtime_context", "validation",
+        "files", "edges", "owners", "runtime_context", "validation", "evidence_assurance",
         "correlations", "convergence_hotspot_ids", "validation_campaign_ids",
         "validation_test_hotspot_ids", "exposure_advisory_intersection_ids", "recommended_action",
         "evidence_artifacts"
@@ -385,6 +464,7 @@
         "owners": {"$ref": "#/$defs/strings"},
         "runtime_context": {"$ref": "#/$defs/runtime"},
         "validation": {"$ref": "#/$defs/validation"},
+        "evidence_assurance": {"$ref": "#/$defs/evidenceAssurance"},
         "correlations": {"type": "object"},
         "validation_test_hotspot_ids": {"$ref": "#/$defs/strings"},
         "exposure_advisory_intersection_ids": {"$ref": "#/$defs/strings"},
@@ -403,7 +483,7 @@
         "advisory_cluster_id", "primary_identifier", "package", "sdk", "sink_family",
         "trust_boundary", "data_classes", "protection_status", "finding_ids", "tools",
         "owners", "known_exploited", "epss_high", "fix_available", "package_lifecycle",
-        "entry_point_exposure_ids", "entry_point_ids", "entry_point_exposure_count", "entry_point_exposures_omitted", "entry_point_runtime_statuses", "validation_statuses",
+        "entry_point_exposure_ids", "entry_point_ids", "entry_point_exposure_count", "entry_point_exposures_omitted", "entry_point_runtime_statuses", "validation_statuses", "evidence_assurance_statuses",
         "advisory_citations", "evidence_artifacts", "recommended_action"
       ],
       "properties": {
@@ -443,6 +523,15 @@
           "properties": {
             "sink": {"enum": ["aligned", "gap", "partial", "not-assessed"]},
             "dependency": {"enum": ["aligned", "gap", "partial", "not-assessed"]}
+          }
+        },
+        "evidence_assurance_statuses": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["sink", "dependency"],
+          "properties": {
+            "sink": {"enum": ["assured", "perspective-gap", "trust-gap", "execution-gap", "not-assessed", "derived-analysis"]},
+            "dependency": {"enum": ["assured", "perspective-gap", "trust-gap", "execution-gap", "not-assessed", "derived-analysis"]}
           }
         },
         "advisory_citations": {"type": "array", "maxItems": 25, "items": {"type": "object"}},
@@ -753,6 +842,9 @@
         "validation_test_hotspot_ids", "shared_validation_test_files", "exposure_advisory_intersection_ids", "exposure_advisory_intersections",
         "multi_entry_routes", "retained_entry_point_ids", "entry_point_exposures_omitted",
         "entry_point_runtime_statuses", "unobserved_entry_point_ids", "entry_points_without_runtime_evidence",
+        "evidence_assurance_statuses", "tool_trust_gap_routes",
+        "tool_execution_gap_routes", "single_perspective_routes",
+        "unassessed_tool_evidence_routes",
         "campaigns_by_review_tier", "campaigns_revision_mismatched",
         "campaigns_revision_unbound", "campaigns_with_uncovered_changed_lines",
         "campaigns_with_runtime_observation_gaps", "highest_campaign_review_score", "routes_by_priority",
@@ -778,6 +870,11 @@
         "entry_point_runtime_statuses": {"$ref": "#/$defs/entryPointRuntimeCounts"},
         "unobserved_entry_point_ids": {"$ref": "#/$defs/strings"},
         "entry_points_without_runtime_evidence": {"$ref": "#/$defs/strings"},
+        "evidence_assurance_statuses": {"$ref": "#/$defs/evidenceAssuranceCounts"},
+        "tool_trust_gap_routes": {"$ref": "#/$defs/count"},
+        "tool_execution_gap_routes": {"$ref": "#/$defs/count"},
+        "single_perspective_routes": {"$ref": "#/$defs/count"},
+        "unassessed_tool_evidence_routes": {"$ref": "#/$defs/count"},
         "campaigns_by_review_tier": {"$ref": "#/$defs/reviewTierCounts"},
         "campaigns_revision_mismatched": {"$ref": "#/$defs/count"},
         "campaigns_revision_unbound": {"$ref": "#/$defs/count"},
@@ -792,11 +889,12 @@
     "unrouted": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["priority", "target", "owners", "reason", "recommended_action"],
+      "required": ["priority", "target", "owners", "evidence_assurance", "reason", "recommended_action"],
       "properties": {
         "priority": {"enum": ["P0", "P1", "P2", "P3", "P4"]},
         "target": {"$ref": "#/$defs/target"},
         "owners": {"$ref": "#/$defs/strings"},
+        "evidence_assurance": {"$ref": "#/$defs/evidenceAssurance"},
         "reason": {"type": "string", "minLength": 1},
         "recommended_action": {"type": "string", "minLength": 1}
       }

@@ -1,9 +1,15 @@
 from __future__ import annotations
 
+import json
 import unittest
 from typing import Any
 
-from py_security_suite.effectiveness import assurance_claims_artifact
+from jsonschema import Draft202012Validator
+
+from py_security_suite.effectiveness import (
+    assurance_claims_artifact,
+    effectiveness_artifact,
+)
 from py_security_suite.models import (
     Confidence,
     Finding,
@@ -11,6 +17,7 @@ from py_security_suite.models import (
     ToolRun,
     ToolStatus,
 )
+from py_security_suite.report_inspection import read_bundled_schema
 
 
 def _completed(tool: str) -> ToolRun:
@@ -98,6 +105,60 @@ class AssuranceClaimsTests(unittest.TestCase):
                 for claim in document["claims"]
             )
         )
+
+
+class EffectivenessPostureTests(unittest.TestCase):
+    def test_tool_posture_keeps_execution_integrity_and_approval_distinct(
+        self,
+    ) -> None:
+        approved = _completed("semgrep")
+        approved.executable_integrity_verified = True
+        approved.executable_organization_approved = True
+        approved.executable_unchanged = True
+        approval_gap = _completed("bandit")
+        approval_gap.executable_integrity_verified = True
+        approval_gap.executable_organization_approved = False
+        approval_gap.executable_unchanged = True
+        integrity_gap = _completed("codeql")
+        integrity_gap.executable_integrity_verified = False
+        integrity_gap.executable_organization_approved = True
+        integrity_gap.executable_unchanged = True
+        unavailable = ToolRun(
+            tool="pysa",
+            status=ToolStatus.UNAVAILABLE,
+            command=["pysa"],
+            duration_seconds=0.0,
+        )
+
+        document = effectiveness_artifact(
+            [], [approved, approval_gap, integrity_gap, unavailable]
+        )
+        by_tool = {item["tool"]: item for item in document["tool_posture"]}
+
+        self.assertEqual(document["schema_version"], "1.1")
+        self.assertEqual(by_tool["semgrep"]["assurance_status"], "approved")
+        self.assertEqual(by_tool["bandit"]["assurance_status"], "approval-gap")
+        self.assertEqual(by_tool["codeql"]["assurance_status"], "integrity-gap")
+        self.assertEqual(by_tool["pysa"]["assurance_status"], "execution-gap")
+        self.assertEqual(by_tool["semgrep"]["evidence_lane"], "source-security")
+        Draft202012Validator(
+            json.loads(read_bundled_schema("effectiveness-1.1"))
+        ).validate(document)
+
+    def test_auxiliary_entry_point_is_part_of_assurance(self) -> None:
+        run = _completed("codeql")
+        run.executable_integrity_verified = True
+        run.executable_organization_approved = True
+        run.executable_unchanged = True
+        run.auxiliary_executable_sha256 = "a" * 64
+        run.auxiliary_executable_integrity_verified = True
+        run.auxiliary_executable_organization_approved = False
+        run.auxiliary_executable_unchanged = True
+
+        posture = effectiveness_artifact([], [run])["tool_posture"][0]
+
+        self.assertTrue(posture["auxiliary_executable_present"])
+        self.assertEqual(posture["assurance_status"], "approval-gap")
 
 
 if __name__ == "__main__":

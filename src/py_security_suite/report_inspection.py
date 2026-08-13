@@ -57,6 +57,7 @@ BUNDLED_SCHEMA_RESOURCES = {
     "baseline-candidate-1.0": "baseline-candidate.schema.json",
     "effectiveness-corpus-1.0": "effectiveness-corpus.schema.json",
     "effectiveness-evaluation-1.0": "effectiveness-evaluation.schema.json",
+    "effectiveness-1.1": "effectiveness-1.1.schema.json",
     "scanner-trust-catalog-1.0": "scanner-trust-catalog.schema.json",
     "portfolio-health-1.0": "portfolio-health.schema.json",
     "portfolio-health-1.1": "portfolio-health-1.1.schema.json",

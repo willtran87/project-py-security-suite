@@ -335,7 +335,13 @@ walks deterministic Graphify file relations to normalized findings,
 review-worthy sensitive-data sinks, and evidence-fusion advisory importer
 paths. Each route carries runtime state, changed-
 line and coverage evidence, focused tests, validation gaps, owners, related
-findings, and exact supporting artifacts. Unrouted targets remain explicit
+findings, and exact supporting artifacts. It also joins each target's exact
+contributing scanners to effectiveness 1.1 and scanner-trust evidence, keeping
+completion, primary/helper integrity, before/after continuity, organization
+approval, normalized/unique contribution, and perspective breadth separate.
+Suite-derived correlations remain labeled as derived and never manufacture an
+independent scanner perspective. Unrouted targets retain the same assurance
+context and remain explicit
 model gaps; neither a route nor its absence is treated as an exploitability or
 safety verdict. Routes converging on the same non-entry file become bounded
 shared control points with one cross-target validation action. Exact route and
@@ -388,6 +394,9 @@ flowchart LR
     Importers --> ExactJoin
     ExactJoin --> Targets
     Targets --> Search
+    Effectiveness["Tool completion + contribution"] --> Assurance["Exact contributing-tool assurance"]
+    Trust["Primary/helper integrity<br/>continuity + approval"] --> Assurance
+    Assurance --> Routed
     Search --> Matrix["Per-target multi-entry exposure matrix"]
     Matrix --> Routed
     Ownership["CODEOWNERS"] --> Routed["Bounded risk routes"]

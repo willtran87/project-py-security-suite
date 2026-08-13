@@ -6,6 +6,41 @@ from typing import Any
 from .models import Finding, ToolRun, ToolStatus
 
 
+_EVIDENCE_LANES: dict[str, str] = {
+    **dict.fromkeys(
+        ("bandit", "semgrep", "pysa", "codeql", "devskim", "flawfinder"),
+        "source-security",
+    ),
+    **dict.fromkeys(
+        ("graphify", "reachability", "tach", "vulture", "radon", "deptry"),
+        "structure-and-reachability",
+    ),
+    **dict.fromkeys(
+        ("coverage", "diff-cover", "junit", "hypothesis"), "test-assurance"
+    ),
+    **dict.fromkeys(
+        ("cyclonedx-py", "osv-scanner", "pipdeptree", "guarddog"),
+        "source-composition",
+    ),
+    **dict.fromkeys(("syft", "grype", "trivy", "scancode"), "artifact-composition"),
+    **dict.fromkeys(
+        ("cosign", "in-toto", "reproducible-build", "pypi-attestations"),
+        "provenance",
+    ),
+    **dict.fromkeys(
+        (
+            "ruff-quality",
+            "pylint",
+            "mypy",
+            "pyright",
+            "ruff-format",
+            "validate-pyproject",
+        ),
+        "quality",
+    ),
+}
+
+
 def effectiveness_artifact(
     findings: list[Finding], tool_runs: list[ToolRun]
 ) -> dict[str, Any]:
@@ -32,7 +67,7 @@ def effectiveness_artifact(
     total = len(findings)
     corroborated = min(total, exact_corroborated + semantic_corroborated)
     return {
-        "schema_version": "1.0",
+        "schema_version": "1.1",
         "scope": (
             "observed scan normalization and tool contribution; precision and "
             "recall require a separately labeled detection corpus"
@@ -66,7 +101,76 @@ def effectiveness_artifact(
                 by_tool.items(), key=lambda item: (-item[1], item[0])
             )
         ],
+        "tool_posture": [
+            _tool_posture(run, by_tool[run.tool], unique_by_tool[run.tool])
+            for run in sorted(tool_runs, key=lambda item: item.tool)
+        ],
     }
+
+
+def _tool_posture(
+    run: ToolRun, normalized_findings: int, unique_findings: int
+) -> dict[str, Any]:
+    auxiliary_present = run.auxiliary_executable_sha256 is not None
+    return {
+        "tool": run.tool,
+        "status": run.status.value,
+        "applicable": run.applicable,
+        "evidence_lane": _EVIDENCE_LANES.get(run.tool, "other"),
+        "normalized_findings": normalized_findings,
+        "unique_normalized_findings": unique_findings,
+        "executable_integrity_verified": run.executable_integrity_verified,
+        "executable_organization_approved": run.executable_organization_approved,
+        "executable_unchanged": run.executable_unchanged,
+        "auxiliary_executable_present": auxiliary_present,
+        "auxiliary_executable_integrity_verified": (
+            run.auxiliary_executable_integrity_verified if auxiliary_present else None
+        ),
+        "auxiliary_executable_organization_approved": (
+            run.auxiliary_executable_organization_approved
+            if auxiliary_present
+            else None
+        ),
+        "auxiliary_executable_unchanged": (
+            run.auxiliary_executable_unchanged if auxiliary_present else None
+        ),
+        "assurance_status": _tool_assurance_status(run),
+    }
+
+
+def _tool_assurance_status(run: ToolRun) -> str:
+    if not run.applicable:
+        return "not-applicable"
+    if run.status is not ToolStatus.COMPLETED:
+        return "execution-gap"
+    if (
+        run.executable_integrity_verified is False
+        or run.executable_unchanged is False
+        or (
+            run.auxiliary_executable_sha256 is not None
+            and (
+                run.auxiliary_executable_integrity_verified is False
+                or run.auxiliary_executable_unchanged is False
+            )
+        )
+    ):
+        return "integrity-gap"
+    if not run.executable_organization_approved or (
+        run.auxiliary_executable_sha256 is not None
+        and not run.auxiliary_executable_organization_approved
+    ):
+        return "approval-gap"
+    if run.executable_integrity_verified is not True or (
+        run.auxiliary_executable_sha256 is not None
+        and run.auxiliary_executable_integrity_verified is not True
+    ):
+        return "not-established"
+    if run.executable_unchanged is not True or (
+        run.auxiliary_executable_sha256 is not None
+        and run.auxiliary_executable_unchanged is not True
+    ):
+        return "not-established"
+    return "approved"
 
 
 def assurance_claims_artifact(

@@ -125,6 +125,7 @@ def scan_project(
             selected=selected,
             adapter_types=adapter_types or ADAPTER_TYPES,
         )
+        _annotate_tool_authority(tool_runs, diagnostics, config)
         derived_artifacts.update(adapter_artifacts)
         findings = correlate_findings(findings)
         intelligence = enrich_findings(findings, config.intelligence)
@@ -166,6 +167,9 @@ def scan_project(
         apply_data_exposure_fusion(
             derived_artifacts["data-exposure.json"], findings, fusion
         )
+        derived_artifacts["effectiveness.json"] = effectiveness_artifact(
+            findings, tool_runs
+        )
         derived_artifacts["risk-paths.json"] = build_risk_paths(
             findings, derived_artifacts
         )
@@ -177,7 +181,11 @@ def scan_project(
             for contradiction in fusion["contradictions"]
         )
 
-    _annotate_tool_authority(tool_runs, diagnostics, config)
+    if "effectiveness.json" not in derived_artifacts:
+        _annotate_tool_authority(tool_runs, diagnostics, config)
+        derived_artifacts["effectiveness.json"] = effectiveness_artifact(
+            findings, tool_runs
+        )
 
     (
         inventory.source_sha256_after,
@@ -197,9 +205,6 @@ def scan_project(
         network_isolation_attested=network_isolation_attested,
         inventory=inventory,
         context_errors=context_errors,
-    )
-    derived_artifacts["effectiveness.json"] = effectiveness_artifact(
-        findings, tool_runs
     )
     derived_artifacts["assurance-claims.json"] = assurance_claims_artifact(
         findings,

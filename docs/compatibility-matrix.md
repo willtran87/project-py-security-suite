@@ -67,7 +67,7 @@ closed instead of hiding findings.
 | CycloneDX VEX | Yes | Bounded CycloneDX JSON, mandatory approved SHA-256, maximum age, state validation | Product-context state without automatic suppression |
 | Finding lifecycle | Yes | Bounded prior `findings.json` and mandatory approved SHA-256 | New, existing, regressed, and resolved evidence |
 | CODEOWNERS routing | Yes | Repository-local bounded file | Owner metadata in reports and SARIF |
-| Effectiveness summary | Yes | Current normalized findings and tool health | Attribution, actionability, corroboration, and tool contribution; not a precision/recall claim |
+| Effectiveness summary | Yes | Current normalized findings, tool runs, primary/helper executable identities, trust approval, and continuity | Attribution, actionability, corroboration, tool contribution, and exact per-tool evidence posture consumed by risk routes; not a precision/recall or finding-truth claim |
 | Labeled effectiveness benchmark | Yes | Verified report plus reviewed corpus bound by approved SHA-256 | TP/TN/FP/FN, precision, recall, specificity, F1, and exact failed labels |
 | Operational domain scorecard | Yes | Applicable tool status, normalized findings, policy reasons, and executable identity | Separate A-F execution, observed-risk, and evidence grades across 12 domains; release disposition and N/A remain distinct |
 | Conditional-control activation | Yes | Not-applicable reason and selected adapter identity | Owner, activation trigger, concrete action, required closure evidence, and tool reference |

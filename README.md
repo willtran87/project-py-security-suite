@@ -280,8 +280,14 @@ the Markdown and self-contained HTML reports. `portfolio-health.json` adds a
 12-domain scorecard with separate execution, observed-risk, and evidence grades;
 it never lets a clean execution grade disguise active findings or missing approval.
 Every conditional control also carries an owner, activation trigger, required
-action, and required evidence. `effectiveness.json` measures attribution and
-actionability without pretending to measure detection accuracy. Measure actual
+action, and required evidence. `effectiveness.json` 1.1 measures attribution,
+actionability, corroboration, normalized/unique tool contribution, and exact
+per-tool completion, evidence lane, executable integrity/continuity, and
+organization approval. Risk routes join those records to the exact contributing
+tools and report assured, perspective-gap, trust-gap, execution-gap,
+not-assessed, or explicitly suite-derived evidence without changing native
+severity or treating scanner approval as finding truth.
+This observed posture does not measure detection accuracy. Measure actual
 precision and recall with a separately reviewed labeled corpus:
 
 ```text
@@ -290,8 +296,8 @@ pysec benchmark REPORT --corpus CORPUS.json \
   --output effectiveness-evaluation.json
 ```
 
-The strict contracts are exported offline with `pysec schema
-effectiveness-corpus-1.0` and `effectiveness-evaluation-1.0`.
+The strict contracts are exported offline with `pysec schema effectiveness-1.1`,
+`effectiveness-corpus-1.0`, and `effectiveness-evaluation-1.0`.
 
 Turn the sealed scan, organization-authorized isolation and intelligence
 receipts, scanner trust, optional effectiveness benchmark, and signed Passport

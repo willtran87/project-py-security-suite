@@ -111,6 +111,12 @@ class RiskPathTests(unittest.TestCase):
             result["summary"]["multi_entry_routes_with_runtime_evidence_gaps"], 2
         )
         self.assertEqual(result["summary"]["routes_with_multiple_entry_points"], 2)
+        self.assertEqual(result["summary"]["assured_evidence_routes"], 0)
+        self.assertEqual(result["summary"]["single_perspective_routes"], 1)
+        self.assertEqual(result["summary"]["independently_corroborated_routes"], 0)
+        self.assertEqual(result["summary"]["routes_with_tool_trust_gaps"], 0)
+        self.assertEqual(result["summary"]["routes_with_tool_execution_gaps"], 0)
+        self.assertEqual(result["summary"]["routes_without_tool_assurance"], 1)
         self.assertEqual(
             result["summary"]["security_routes_with_multiple_entry_points"], 2
         )
@@ -134,6 +140,18 @@ class RiskPathTests(unittest.TestCase):
         self.assertEqual(
             queue["entry_points_without_runtime_evidence"], ["entry:cli-module"]
         )
+        self.assertEqual(
+            queue["evidence_assurance_statuses"],
+            {
+                "assured": 0,
+                "perspective-gap": 1,
+                "trust-gap": 0,
+                "execution-gap": 0,
+                "not-assessed": 0,
+                "derived-analysis": 1,
+            },
+        )
+        self.assertEqual(queue["single_perspective_routes"], 1)
         self.assertIn("representative runtime evidence", queue["recommended_action"])
         self.assertIn("Model exact reachability nodes", queue["recommended_action"])
         finding_route = next(
@@ -170,6 +188,17 @@ class RiskPathTests(unittest.TestCase):
             },
         )
         self.assertEqual(len(finding_route["convergence_hotspot_ids"]), 2)
+        self.assertEqual(
+            finding_route["evidence_assurance"]["review_status"],
+            "perspective-gap",
+        )
+        self.assertEqual(
+            finding_route["evidence_assurance"]["approved_tools"], ["semgrep"]
+        )
+        self.assertEqual(
+            finding_route["evidence_assurance"]["perspective_assessment"],
+            "single-tool",
+        )
         self.assertEqual(len(finding_route["validation_campaign_ids"]), 2)
         self.assertEqual(
             finding_route["validation"]["mapped_test_files"],
@@ -294,6 +323,7 @@ class RiskPathTests(unittest.TestCase):
         self.assertIn("3 declared entry-point route(s)", rendered)
         self.assertIn("src/worker.py", rendered)
         self.assertIn("runtime observed/unobserved/unavailable 1/1/1", rendered)
+        self.assertIn("evidence perspective-gap", rendered)
         html_context = _html_risk_path_context(finding)
         self.assertIn("changed-control-risk +15", html_context)
         self.assertIn("uncovered changed lines 9", html_context)
@@ -304,6 +334,10 @@ class RiskPathTests(unittest.TestCase):
         properties = sarif["runs"][0]["results"][0]["properties"]
         self.assertEqual(properties["risk_path"]["status"], "routed")
         self.assertEqual(properties["risk_path"]["entry_point_exposure_count"], 3)
+        self.assertEqual(
+            properties["risk_path"]["evidence_assurance"]["review_status"],
+            "perspective-gap",
+        )
         self.assertEqual(
             properties["risk_path"]["validation_test_hotspot_ids"],
             [test_hotspot["test_hotspot_id"]],
@@ -327,6 +361,8 @@ class RiskPathTests(unittest.TestCase):
         )
         self.assertIn("src/worker.py", closure["evidence_refs"])
         self.assertIn("tests/test_sink.py", closure["evidence_refs"])
+        self.assertIn("effectiveness.json", closure["evidence_refs"])
+        self.assertIn("scanner-trust.json", closure["evidence_refs"])
         closure_campaigns = closure["details"]["risk_path"]["validation_campaigns"]
         self.assertTrue(
             any(
@@ -383,6 +419,72 @@ class RiskPathTests(unittest.TestCase):
                 for item in closure["acceptance_criteria"]
             )
         )
+        self.assertTrue(
+            any(
+                "independent applicable analysis" in item
+                for item in closure["acceptance_criteria"]
+            )
+        )
+
+    def test_route_evidence_assurance_fails_closed_by_exact_contributing_tool(
+        self,
+    ) -> None:
+        scenarios = (
+            ("approved", "completed", True, "assured"),
+            ("approval-gap", "completed", False, "trust-gap"),
+            ("execution-gap", "unavailable", True, "execution-gap"),
+            ("not-applicable", "skipped", True, "execution-gap"),
+            (None, None, None, "not-assessed"),
+        )
+        schema = json.loads(read_bundled_schema("risk-paths-1.0"))
+        for assurance, status, approved, expected in scenarios:
+            with self.subTest(expected=expected):
+                artifacts = _artifacts()
+                finding = _finding("src/sink.py", 9)
+                finding.evidence["fusion"] = {
+                    "corroboration": "independent",
+                    "source_context": {},
+                }
+                posture = artifacts["effectiveness.json"]["tool_posture"]
+                if assurance is None:
+                    artifacts["effectiveness.json"]["tool_posture"] = [
+                        item for item in posture if item["tool"] != "semgrep"
+                    ]
+                else:
+                    record = next(item for item in posture if item["tool"] == "semgrep")
+                    record["assurance_status"] = assurance
+                    record["status"] = status
+                    record["executable_organization_approved"] = approved
+
+                result = build_risk_paths([finding], artifacts)
+                route = next(
+                    item
+                    for item in result["routes"]
+                    if item["target"]["kind"] == "finding"
+                )
+
+                self.assertEqual(route["evidence_assurance"]["review_status"], expected)
+                self.assertEqual(
+                    finding.evidence["risk_path"]["evidence_assurance"][
+                        "review_status"
+                    ],
+                    expected,
+                )
+                if expected == "assured":
+                    self.assertEqual(result["summary"]["assured_evidence_routes"], 1)
+                elif expected == "trust-gap":
+                    self.assertEqual(
+                        result["summary"]["routes_with_tool_trust_gaps"], 2
+                    )
+                elif expected == "execution-gap":
+                    self.assertEqual(
+                        result["summary"]["routes_with_tool_execution_gaps"], 2
+                    )
+                else:
+                    self.assertIn(
+                        "semgrep", route["evidence_assurance"]["unassessed_tools"]
+                    )
+                Draft202012Validator(schema).validate(result)
 
     def test_campaign_revision_binding_distinguishes_aligned_and_mismatched_evidence(
         self,
@@ -1260,6 +1362,14 @@ def _artifacts() -> dict[str, Any]:
             ]
         },
         "diff-coverage.json": {"src_stats": {}},
+        "effectiveness.json": {
+            "schema_version": "1.1",
+            "tool_posture": [
+                _tool_posture("semgrep", "source-security"),
+                _tool_posture("osv-scanner", "source-composition"),
+                _tool_posture("pip-audit", "source-composition"),
+            ],
+        },
         "junit-summary.json": {
             "summary": {"tests": 1, "failures": 0, "errors": 0, "skipped": 0},
             "test_case_inventory_complete": True,
@@ -1335,6 +1445,25 @@ def _artifacts() -> dict[str, Any]:
                 }
             ],
         },
+    }
+
+
+def _tool_posture(tool: str, lane: str) -> dict[str, Any]:
+    return {
+        "tool": tool,
+        "status": "completed",
+        "applicable": True,
+        "evidence_lane": lane,
+        "normalized_findings": 1,
+        "unique_normalized_findings": 1,
+        "executable_integrity_verified": True,
+        "executable_organization_approved": True,
+        "executable_unchanged": True,
+        "auxiliary_executable_present": False,
+        "auxiliary_executable_integrity_verified": None,
+        "auxiliary_executable_organization_approved": None,
+        "auxiliary_executable_unchanged": None,
+        "assurance_status": "approved",
     }
 
 

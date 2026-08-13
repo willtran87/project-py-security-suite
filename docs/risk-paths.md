@@ -28,10 +28,13 @@ flowchart LR
     Intersection --> Compound["Sensitive-boundary dependency review"]
     Target --> Route
     Fusion["Evidence fusion<br/>change, coverage, related tools"] --> Context["Route context"]
+    Effectiveness["Effectiveness 1.1<br/>completion + contribution"] --> Assurance["Exact contributing-tool assurance"]
+    Trust["Scanner trust + integrity continuity"] --> Assurance
     Structure["Structural synthesis<br/>tests, islands, cycles"] --> Context
     Owners["CODEOWNERS"] --> Context
     Route --> Routed["Bounded risk routes"]
     Context --> Routed
+    Assurance --> Routed
     Routed --> Converge["Convergence hotspots<br/>shared control points"]
     Graph --> Campaign["Validation campaigns<br/>direct + transitive tests"]
     Converge --> Campaign
@@ -64,6 +67,9 @@ Each retained route includes:
   next validation action;
 - owners, related findings/tools, structural risk IDs, advisory identity, and
   supporting artifact names; and
+- exact contributing-tool completion, evidence lane, normalized/unique yield,
+  primary and helper integrity/continuity, organization approval, and
+  independent-perspective posture; and
 - an explicit recommended action.
 
 Routes are also cross-referenced with one another. A convergence hotspot is a
@@ -80,6 +86,48 @@ campaign IDs. A route can appear in multiple queues
 when ownership overlaps; this preserves accountability rather than selecting an
 arbitrary owner. These groups coordinate work and tests but do not merge or
 inflate the underlying scanner findings.
+
+## Scanner evidence assurance
+
+Every routed and unrouted target joins its exact contributing tools to
+`effectiveness.json` 1.1. The join keeps four questions separate:
+
+- did the contributing scanner complete;
+- was its primary executable—and any required helper—integrity-verified and
+  unchanged during the run;
+- did the organization approve those exact entry-point bindings; and
+- is the conclusion independently corroborated, multi-tool, single-tool, or
+  suite-derived?
+
+The route emits `assured`, `perspective-gap`, `trust-gap`, `execution-gap`,
+`not-assessed`, or `derived-analysis`. Tool records retain evidence lane,
+normalized and unique contribution, completion, integrity, continuity, and
+approval without collapsing them into a confidence score. An unapproved tool
+does not make its finding false, and an approved tool does not make a finding
+correct. A suite-derived sink correlation is never counted as an independent
+scanner perspective.
+
+```mermaid
+flowchart LR
+    Target["Finding, advisory importer, or derived sink"] --> Exact["Exact contributing tools"]
+    Runs["Tool completion + normalized contribution"] --> Exact
+    Identity["Primary/helper integrity + continuity + approval"] --> Exact
+    Fusion["Independent or cross-stage corroboration"] --> Exact
+    Exact --> Status{"Route evidence status"}
+    Status --> Assured["Assured"]
+    Status --> Perspective["Perspective gap"]
+    Status --> TrustGap["Trust or execution gap"]
+    Status --> Derived["Explicit derived analysis"]
+    Perspective --> Work["Owner queue + closure acceptance"]
+    TrustGap --> Work
+    Derived --> Work
+```
+
+Statuses and exact tool names flow into route JSON, finding/SARIF evidence,
+Markdown/HTML, sensitive-boundary dependency intersections, owner queues, and
+closure criteria. A single perspective calls for an independent applicable
+technique or governed sufficiency rationale; trust and execution gaps require
+replacement-report evidence for the exact contributing bindings.
 
 ## Multi-entry exposure matrix
 
@@ -208,6 +256,8 @@ families only when all three identities agree:
 The bounded record links the sink and importer route IDs and retains the sink
 line/family, SDK, trust boundary, data classes, protection status, advisory
 identifier/citations, KEV/EPSS/fix signals, owners, and both validation states.
+It also retains the evidence-assurance status of each side so an approved
+dependency observation cannot mask an unassessed derived sink, or vice versa.
 Stable IDs flow into related findings, Markdown/HTML, SARIF, and closure work.
 Missing or aggregate-only importer evidence fails closed and produces no
 intersection.
@@ -313,7 +363,9 @@ selection examines at most 500 graph neighbors per
 campaign and retains at most 100 missing lines. At most 50 normalized importer
 paths are promoted per advisory, inside the existing 10,000-target global bound.
 At most 100 exact-path exposure/advisory intersections are retained. Omitted
-counts are explicit.
+counts are explicit. At most 500 bounded tool-posture records are accepted from
+the local effectiveness artifact; each route retains at most 25 exact
+contributing-tool records.
 
 The current JSON Schema is
 [`risk-paths.schema.json`](../src/py_security_suite/schemas/risk-paths.schema.json).
@@ -334,5 +386,7 @@ to be closed in the replacement report.
   a security property.
 - Route priority guides review; native scanner severity and policy remain
   authoritative.
+- Scanner approval and perspective breadth are evidence-quality facts, not
+  finding truth, exploitability, or release approval.
 - Dependency importer reachability is not vulnerable-function reachability or
   exploitability evidence.
