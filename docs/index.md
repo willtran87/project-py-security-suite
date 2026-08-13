@@ -18,6 +18,7 @@ verification happen inside an enterprise-controlled isolated boundary.
 | Trace entry points and investigate disconnected code | [Python reachability](reachability.md) |
 | Add graph-aware blast radius and cross-tool context | [Graphify integration](graphify.md) |
 | Cross-validate dead code, islands, and import cycles | [Structural synthesis](structural-synthesis.md) |
+| Trace sensitive data into logs, telemetry, and SDKs | [Sensitive-data exposure](data-exposure.md) |
 | Understand source-to-artifact and cross-scanner joins | [Cross-tool evidence fusion](evidence-fusion.md) |
 | Measure scanner execution and labeled detection effectiveness | [Effectiveness](effectiveness.md) |
 | Make one fail-closed promotion decision | [Governed release readiness](release-readiness.md) |
@@ -72,6 +73,7 @@ sandbox. The VM, container, runner, or network policy must enforce isolation.
 |---|---|---|
 | Python source security | AST patterns, structural rules, data flow, native extensions | Bandit, Semgrep, CodeQL, Pysa, Ruff, DevSkim, Flawfinder |
 | Secrets | Working tree, history, detector diversity | detect-secrets, Gitleaks, TruffleHog |
+| Sensitive-data disclosure | Logs, telemetry, analytics, metrics, error monitoring, and SDK surfaces | Semgrep taint, Pysa, CodeQL, Graphify, reachability |
 | Dependencies and components | Vulnerabilities, malicious packages, SBOMs, licenses | OSV-Scanner, Grype, GuardDog, CycloneDX, Syft, Trivy, ScanCode |
 | Architecture and quality | Boundaries, cycles, types, correctness, complexity, code-graph impact, three-state reachability, explained entry-point paths, disconnected islands, runtime corroboration, changed-line coverage | Tach, Graphify, reachability, mypy, Pyright, Pylint, deptry, Radon, Vulture, coverage, diff-cover |
 | Delivery configuration | GitHub Actions, containers, IaC, shell and PowerShell | zizmor, actionlint, Hadolint, Checkov, ShellCheck, PSScriptAnalyzer |
@@ -98,10 +100,11 @@ platform support, and acquisition requirements.
 | Evidence fusion | 2 findings enriched, 103 package lineages, 3 compound hotspots, 0 contradictions or version drift |
 | Latest deep source validation | Zero normalized findings; CodeQL, Bandit, Semgrep, detect-secrets, OSV-Scanner, CycloneDX, and Ruff completed (`maturity-source-deep-v68`) |
 | Latest structural validation | Verified, schema-valid synthesis over 10,408 Graphify nodes and 19,343 edges: 53 changed Python files mapped to 59 focused tests, 0 unmapped changes, 13 boundary-traced runtime-model gaps, 0 supported orphan/dead-code candidates, 0 cycles, and no truncation (`maturity-structural-quality-v73`) |
+| Latest data-exposure validation | Behavioral corpus correlated 12 exposure findings across logs, bound logger context, request collections, Sentry, URL queries, raw client errors, risky PII configuration, and weak pseudonymization; all 10 exposure rules executed and safe controls produced 0 findings (`detection-validation-exposure-v14`). The 181-file diagnostic self-scan produced 0 exposure findings, 0 sink surfaces, and 0 parse errors; Bandit, Semgrep, and detect-secrets completed cleanly while the 10.2-day OSV snapshot correctly remained unavailable against its 10-day policy (`maturity-data-exposure-standard-v8`). |
 | Reachability graph | Schema 1.2; per-island confidence and explained edges |
 | Reachability states | 1,350 executable; 123 load-only; 0 disconnected; 0 reportable islands |
 | Runtime corroboration | Refreshed branch-aware coverage from every unit/property test; static states are not reclassified by runtime evidence |
-| Tests | 508 collected: 507 passed and 1 platform-limited skip; 244 subtests passed |
+| Tests | 528 collected: 527 passed and 1 platform-limited skip; 244 subtests passed |
 | Combined line and branch coverage | 90.07% across 13,486 statements and 4,558 branches; 92.98% statement and 81.48% branch coverage |
 | Changed-line coverage | Recomputed on every scan; uncovered changed executable lines remain explicit in `diff-coverage.json` |
 | Operational portfolio | Execution A; observed risk D; evidence F; the stale Grype database remains an explicit supply-chain evidence gap |
@@ -192,6 +195,7 @@ and zero findings on the safe negative control.
 | Graph analysis | [1.0](../src/py_security_suite/schemas/graph-analysis.schema.json) | Finding neighborhoods, cross-tool clusters, and structural hotspots |
 | Evidence fusion | [1.0](../src/py_security_suite/schemas/evidence-fusion.schema.json) | Semantic, test, graph, package-lineage, and provenance cross-references |
 | Structural synthesis | [1.1](../src/py_security_suite/schemas/structural-synthesis-1.1.schema.json) | Dead-code dispositions, island boundaries, structural orphans, import cycles, change-risk scoring, and graph-guided test selection; 1.0 remains bundled |
+| Sensitive-data exposure | [1.0](../src/py_security_suite/schemas/data-exposure-1.0.schema.json) | CWE-grounded source-to-sink findings, SDK and sink inventory, sanitizer evidence, and structural relevance |
 | Inspection | [1.3](../src/py_security_suite/schemas/report-inspection-1.3.schema.json) | Verified machine-readable decision, health, action completeness, and prioritized findings |
 | Inspection verification | [1.3](../src/py_security_suite/schemas/report-inspection-verification-1.3.schema.json) | Binds the inspection digest, report checksum, action limit, and omission summary |
 | Report verification | [1.0](../src/py_security_suite/schemas/report-verification.schema.json) | Portable receipt for report integrity and semantic verification |

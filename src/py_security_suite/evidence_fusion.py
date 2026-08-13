@@ -366,6 +366,14 @@ def _review_reasons(
         and boundary.get("boundary_classification") == "candidate-missing-entry-point"
     ):
         reasons.append("island has concrete inbound paths but no modeled entry point")
+    exposure = finding.evidence.get("data_exposure")
+    if isinstance(exposure, dict):
+        family = str(exposure.get("sink_family") or "external-disclosure")
+        relevance = str(exposure.get("structural_relevance") or "unknown")
+        article = "an" if family[:1].casefold() in {"a", "e", "i", "o", "u"} else "a"
+        reasons.append(f"sensitive-data flow reaches {article} {family} sink")
+        if relevance in {"runtime-observed", "changed-code", "statically-connected"}:
+            reasons.append(f"sensitive-data path is {relevance}")
     if artifact_context.get("finding_sha256_matches_manifest") is False:
         reasons.append("finding artifact digest conflicts with the artifact manifest")
     return reasons

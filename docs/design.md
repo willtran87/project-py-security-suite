@@ -224,6 +224,7 @@ flowchart TD
 
     Normalize["Normalized findings<br/>stable ID + source + citations"]
     Correlate["Correlation<br/>path + line + logical rule"]
+    Exposure["Sensitive-data synthesis<br/>taint + configuration + SDK/sink + graph context"]
     Policy["Policy evaluation"]
     Report["Report writers"]
 
@@ -247,7 +248,7 @@ flowchart TD
     Governance --> Normalize
     Deep --> Normalize
     Artifact --> Normalize
-    Normalize --> Correlate --> FinalSnapshot --> Policy --> Report
+    Normalize --> Correlate --> Exposure --> FinalSnapshot --> Policy --> Report
 ```
 
 The orchestrator runs only scanners selected by the active profile. Each
@@ -317,6 +318,17 @@ also joins diff coverage to reverse Graphify paths for direct/transitive test
 selection and compound change-risk scoring, discovers conservative structural
 orphans, and retains concrete island boundary evidence for missing-root versus
 test-only triage.
+
+[Sensitive-data exposure synthesis](data-exposure.md) adds a distinct disclosure
+view. Bundled Semgrep rules establish credential, private-field, and request
+collection paths into logs, telemetry, and URL queries; detect raw exception
+responses and risky automatic-PII configuration; and allow Pysa/CodeQL to supply
+organization models. A bounded AST inventory identifies logging, process-output,
+observability, analytics, metrics, URL-query, client-response, header-capture,
+and egress SDK surfaces without treating presence as a finding. The synthesis
+joins exact sink and SDK evidence to Graphify, reachability, coverage, and
+changed-code context and emits CWE/OWASP/OpenTelemetry-backed actions without
+retaining sensitive values.
 
 ## Scan sequence
 
@@ -503,6 +515,7 @@ report/
 |-- graphify.json                    # validated code-only topology
 |-- graph-analysis.json              # graph-aware finding neighborhoods
 |-- structural-synthesis.json        # dead code, island boundaries, change risk, and test targets
+|-- data-exposure.json               # sensitive-data paths and SDK/sink review surfaces
 |-- evidence-fusion.json             # semantic and cross-stage evidence joins
 |-- coverage-summary.json           # validated pre-generated coverage
 |-- junit-summary.json              # validated test result metadata

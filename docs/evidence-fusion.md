@@ -18,6 +18,7 @@ empty scanner result as proof of safety.
 | Cosign, attestations, reproducible-build evidence | Artifact manifest | Binds provenance conclusions to the exact artifact SHA-256 and detects digest disagreement |
 | Any normalized finding | High-value classification and package indexes | Links CVE, GHSA, CWE, license, SLSA, and package observations even when tools report different paths or lifecycle stages |
 | Vulture, reachability islands, changed files, and Graphify | Runtime/diff coverage, Radon, Tach, ownership, mapped tests, and normalized findings | Imports [structural synthesis](structural-synthesis.md) into finding review reasons so dead-code, latent attack-surface, import-cycle, missing-root, and high-risk change evidence affects triage without changing severity |
+| Semgrep/Pysa/CodeQL exposure findings | [Sensitive-data exposure](data-exposure.md), SDK imports/dependencies/configuration, Graphify, reachability, coverage, and changed code | Distinguishes confirmed traces/configuration findings from sink review surfaces and adds exact sink, SDK, transformation evidence, structural relevance, CWE/OWASP/OpenTelemetry citations, and disclosure-specific action |
 | Applicable tool status | Evidence-lane matrix | Separates completed perspectives, not-applicable controls, and real execution gaps without inferring a clean result |
 
 ## Flow
@@ -33,6 +34,7 @@ flowchart LR
         Graph["Graphify topology"]
         Reach["Reachability and runtime observations"]
         Complexity["Radon complexity"]
+        Exposure["Sensitive-data and SDK/sink synthesis"]
     end
     subgraph Artifact["Artifact stage"]
         ArtifactSBOM["Syft artifact SBOM"]
@@ -46,6 +48,7 @@ flowchart LR
     Graph --> Fusion
     Reach --> Fusion
     Complexity --> Fusion
+    Exposure --> Fusion
     ArtifactSBOM --> Fusion
     Vuln --> Fusion
     Manifest --> Fusion

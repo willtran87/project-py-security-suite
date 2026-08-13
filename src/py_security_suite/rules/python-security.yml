@@ -33,3 +33,536 @@ rules:
     pattern-either:
       - pattern: eval(...)
       - pattern: exec(...)
+
+  - id: python.sensitive-data-to-log
+    languages: [python]
+    mode: taint
+    message: Sensitive data from a credential-bearing source may reach a log sink.
+    severity: ERROR
+    metadata:
+      cwe:
+        - "CWE-532: Insertion of Sensitive Information into Log File"
+        - "CWE-200: Exposure of Sensitive Information to an Unauthorized Actor"
+      category: data-exposure
+      confidence: HIGH
+      impact: Logs commonly have broader access, replication, retention, and third-party transport than the source data; credential disclosure can enable account or service compromise.
+      remediation: Remove the field or apply an approved redaction, masking, or tokenization boundary before logging; test exception and structured-log serialization with synthetic canary values.
+      source: https://cwe.mitre.org/data/definitions/532.html
+    pattern-sources:
+      - patterns:
+          - pattern: os.getenv($KEY, ...)
+          - metavariable-regex:
+              metavariable: $KEY
+              regex: (?i).*(?:api.?key|auth(?:entication|orization|[_-]?(?:header|token))|connection.?string|cookie|credential|database.?url|dsn|encryption.?key|otp|passcode|password|passwd|pin|private.?key|secret|session|token).*
+      - patterns:
+          - pattern: os.environ[$KEY]
+          - metavariable-regex:
+              metavariable: $KEY
+              regex: (?i).*(?:api.?key|auth(?:entication|orization|[_-]?(?:header|token))|connection.?string|cookie|credential|database.?url|dsn|encryption.?key|otp|passcode|password|passwd|pin|private.?key|secret|session|token).*
+      - patterns:
+          - pattern: $REQUEST.headers.get($KEY, ...)
+          - metavariable-regex:
+              metavariable: $KEY
+              regex: (?i).*(?:authorization|cookie|credential|password|secret|session|token).*
+      - pattern: $REQUEST.cookies.get(...)
+      - pattern: $CLIENT.get_secret_value(...)
+      - pattern: $CLIENT.access_secret_version(...)
+    pattern-propagators:
+      - pattern: $TO = $FROM
+        from: $FROM
+        to: $TO
+    pattern-sanitizers:
+      - patterns:
+          - pattern: $SANITIZER(...)
+          - metavariable-regex:
+              metavariable: $SANITIZER
+              regex: (?i).*(?:allowlist|drop_sensitive|minimize|redact|remove_sensitive|sanitize|scrub).*
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: logging.$LEVEL(..., $DATA, ...)
+              - pattern: logger.$LEVEL(..., $DATA, ...)
+              - pattern: log.$LEVEL(..., $DATA, ...)
+              - pattern: loguru.logger.$LEVEL(..., $DATA, ...)
+              - pattern: structlog.get_logger(...).$LEVEL(..., $DATA, ...)
+          - focus-metavariable: $DATA
+          - metavariable-regex:
+              metavariable: $LEVEL
+              regex: (?:critical|debug|error|exception|info|log|warn|warning)
+      - patterns:
+          - pattern: print(..., $DATA, ...)
+          - focus-metavariable: $DATA
+      - patterns:
+          - pattern-either:
+              - pattern: logging.LoggerAdapter(..., $DATA, ...)
+              - pattern: $LOGGER.bind(..., $DATA, ...)
+              - pattern: sys.stdout.write($DATA)
+              - pattern: sys.stderr.write($DATA)
+          - focus-metavariable: $DATA
+
+  - id: python.sensitive-data-to-telemetry
+    languages: [python]
+    mode: taint
+    message: Sensitive data from a credential-bearing source may reach telemetry or analytics.
+    severity: ERROR
+    metadata:
+      cwe:
+        - "CWE-201: Insertion of Sensitive Information Into Sent Data"
+        - "CWE-200: Exposure of Sensitive Information to an Unauthorized Actor"
+      category: data-exposure
+      confidence: HIGH
+      impact: Telemetry is often exported across trust boundaries and retained by multiple systems; secrets or personal data may become accessible to unintended operators or vendors.
+      remediation: Minimize telemetry, allowlist attributes, disable default PII collection, and redact or tokenize sensitive fields before the SDK boundary; verify exporters with synthetic canary data.
+      source: https://cwe.mitre.org/data/definitions/201.html
+    pattern-sources:
+      - patterns:
+          - pattern: os.getenv($KEY, ...)
+          - metavariable-regex:
+              metavariable: $KEY
+              regex: (?i).*(?:api.?key|auth(?:entication|orization|[_-]?(?:header|token))|connection.?string|cookie|credential|database.?url|dsn|encryption.?key|otp|passcode|password|passwd|pin|private.?key|secret|session|token).*
+      - patterns:
+          - pattern: os.environ[$KEY]
+          - metavariable-regex:
+              metavariable: $KEY
+              regex: (?i).*(?:api.?key|auth(?:entication|orization|[_-]?(?:header|token))|connection.?string|cookie|credential|database.?url|dsn|encryption.?key|otp|passcode|password|passwd|pin|private.?key|secret|session|token).*
+      - patterns:
+          - pattern: $REQUEST.headers.get($KEY, ...)
+          - metavariable-regex:
+              metavariable: $KEY
+              regex: (?i).*(?:authorization|cookie|credential|password|secret|session|token).*
+      - pattern: $REQUEST.cookies.get(...)
+      - pattern: $CLIENT.get_secret_value(...)
+      - pattern: $CLIENT.access_secret_version(...)
+    pattern-propagators:
+      - pattern: $TO = $FROM
+        from: $FROM
+        to: $TO
+    pattern-sanitizers:
+      - patterns:
+          - pattern: $SANITIZER(...)
+          - metavariable-regex:
+              metavariable: $SANITIZER
+              regex: (?i).*(?:allowlist|drop_sensitive|minimize|redact|remove_sensitive|sanitize|scrub).*
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: sentry_sdk.capture_message($DATA, ...)
+              - pattern: sentry_sdk.capture_event($DATA, ...)
+              - pattern: sentry_sdk.set_user($DATA, ...)
+              - pattern: sentry_sdk.set_context(..., $DATA, ...)
+              - pattern: sentry_sdk.set_extra(..., $DATA, ...)
+              - pattern: sentry_sdk.add_breadcrumb(..., data=$DATA, ...)
+              - pattern: $SCOPE.set_context(..., $DATA, ...)
+              - pattern: $SCOPE.set_extra(..., $DATA, ...)
+              - pattern: $SPAN.set_attribute(..., $DATA, ...)
+              - pattern: $SPAN.set_attributes($DATA, ...)
+              - pattern: $SPAN.add_event(..., attributes=$DATA, ...)
+              - pattern: $SPAN.set_tag(..., $DATA, ...)
+              - pattern: $METRIC.labels(..., $DATA, ...)
+              - pattern: analytics.identify(..., $DATA, ...)
+              - pattern: analytics.track(..., $DATA, ...)
+              - pattern: mixpanel.track(..., $DATA, ...)
+              - pattern: posthog.capture(..., properties=$DATA, ...)
+              - pattern: newrelic.agent.record_custom_event(..., $DATA, ...)
+              - pattern: rollbar.report_message(..., extra_data=$DATA, ...)
+              - pattern: bugsnag.notify(..., metadata=$DATA, ...)
+          - focus-metavariable: $DATA
+
+  - id: python.private-data-to-log
+    languages: [python]
+    mode: taint
+    message: A field commonly associated with personal or regulated data may reach a log sink.
+    severity: WARNING
+    metadata:
+      cwe:
+        - "CWE-532: Insertion of Sensitive Information into Log File"
+        - "CWE-359: Exposure of Private Personal Information to an Unauthorized Actor"
+      category: data-exposure
+      confidence: MEDIUM
+      impact: Personal or regulated data in logs can bypass the access, purpose, retention, and deletion controls applied to the system of record.
+      remediation: Remove the field or apply an approved data-class-specific minimization, redaction, tokenization, or non-reversible transformation before logging.
+      source: https://cwe.mitre.org/data/definitions/359.html
+    pattern-sources:
+      - patterns:
+          - pattern: $OBJECT.$FIELD
+          - metavariable-regex:
+              metavariable: $FIELD
+              regex: (?i)^(?:account_id|address|birth_date|card_number|credit_card|cvv|date_of_birth|diagnosis|dob|email|health_record|ip_address|medical_record|national_id|patient_id|phone|social_security|ssn|user_id|username)$
+      - patterns:
+          - pattern: $OBJECT[$KEY]
+          - metavariable-regex:
+              metavariable: $KEY
+              regex: (?i).*(?:account.?id|address|birth.?date|card.?number|credit.?card|cvv|diagnosis|dob|email|health.?record|ip.?address|medical.?record|national.?id|patient.?id|phone|social.?security|ssn|user.?id|username).*
+      - patterns:
+          - pattern: $OBJECT.get($KEY, ...)
+          - metavariable-regex:
+              metavariable: $KEY
+              regex: (?i).*(?:account.?id|address|birth.?date|card.?number|credit.?card|cvv|diagnosis|dob|email|health.?record|ip.?address|medical.?record|national.?id|patient.?id|phone|social.?security|ssn|user.?id|username).*
+    pattern-propagators:
+      - pattern: $TO = $FROM
+        from: $FROM
+        to: $TO
+    pattern-sanitizers:
+      - patterns:
+          - pattern: $SANITIZER(...)
+          - metavariable-regex:
+              metavariable: $SANITIZER
+              regex: (?i).*(?:allowlist|drop_sensitive|minimize|redact|remove_sensitive|sanitize|scrub).*
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: logging.$LEVEL(..., $DATA, ...)
+              - pattern: logger.$LEVEL(..., $DATA, ...)
+              - pattern: log.$LEVEL(..., $DATA, ...)
+              - pattern: loguru.logger.$LEVEL(..., $DATA, ...)
+              - pattern: structlog.get_logger(...).$LEVEL(..., $DATA, ...)
+          - focus-metavariable: $DATA
+          - metavariable-regex:
+              metavariable: $LEVEL
+              regex: (?:critical|debug|error|exception|info|log|warn|warning)
+      - patterns:
+          - pattern: print(..., $DATA, ...)
+          - focus-metavariable: $DATA
+      - patterns:
+          - pattern-either:
+              - pattern: logging.LoggerAdapter(..., $DATA, ...)
+              - pattern: $LOGGER.bind(..., $DATA, ...)
+              - pattern: sys.stdout.write($DATA)
+              - pattern: sys.stderr.write($DATA)
+          - focus-metavariable: $DATA
+
+  - id: python.private-data-to-telemetry
+    languages: [python]
+    mode: taint
+    message: A field commonly associated with personal or regulated data may reach telemetry or analytics.
+    severity: WARNING
+    metadata:
+      cwe:
+        - "CWE-201: Insertion of Sensitive Information Into Sent Data"
+        - "CWE-359: Exposure of Private Personal Information to an Unauthorized Actor"
+      category: data-exposure
+      confidence: MEDIUM
+      impact: Personal or regulated data sent to observability or analytics systems can cross third-party, regional, purpose, access, and retention boundaries.
+      remediation: Minimize and allowlist SDK attributes, disable automatic PII collection, and apply an approved data-class-specific transformation before export.
+      source: https://cwe.mitre.org/data/definitions/359.html
+    pattern-sources:
+      - patterns:
+          - pattern: $OBJECT.$FIELD
+          - metavariable-regex:
+              metavariable: $FIELD
+              regex: (?i)^(?:account_id|address|birth_date|card_number|credit_card|cvv|date_of_birth|diagnosis|dob|email|health_record|ip_address|medical_record|national_id|patient_id|phone|social_security|ssn|user_id|username)$
+      - patterns:
+          - pattern: $OBJECT[$KEY]
+          - metavariable-regex:
+              metavariable: $KEY
+              regex: (?i).*(?:account.?id|address|birth.?date|card.?number|credit.?card|cvv|diagnosis|dob|email|health.?record|ip.?address|medical.?record|national.?id|patient.?id|phone|social.?security|ssn|user.?id|username).*
+      - patterns:
+          - pattern: $OBJECT.get($KEY, ...)
+          - metavariable-regex:
+              metavariable: $KEY
+              regex: (?i).*(?:account.?id|address|birth.?date|card.?number|credit.?card|cvv|diagnosis|dob|email|health.?record|ip.?address|medical.?record|national.?id|patient.?id|phone|social.?security|ssn|user.?id|username).*
+    pattern-propagators:
+      - pattern: $TO = $FROM
+        from: $FROM
+        to: $TO
+    pattern-sanitizers:
+      - patterns:
+          - pattern: $SANITIZER(...)
+          - metavariable-regex:
+              metavariable: $SANITIZER
+              regex: (?i).*(?:allowlist|drop_sensitive|minimize|redact|remove_sensitive|sanitize|scrub).*
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: sentry_sdk.capture_message($DATA, ...)
+              - pattern: sentry_sdk.capture_event($DATA, ...)
+              - pattern: sentry_sdk.set_user($DATA, ...)
+              - pattern: sentry_sdk.set_context(..., $DATA, ...)
+              - pattern: sentry_sdk.set_extra(..., $DATA, ...)
+              - pattern: sentry_sdk.add_breadcrumb(..., data=$DATA, ...)
+              - pattern: $SCOPE.set_context(..., $DATA, ...)
+              - pattern: $SCOPE.set_extra(..., $DATA, ...)
+              - pattern: $SPAN.set_attribute(..., $DATA, ...)
+              - pattern: $SPAN.set_attributes($DATA, ...)
+              - pattern: $SPAN.add_event(..., attributes=$DATA, ...)
+              - pattern: $SPAN.set_tag(..., $DATA, ...)
+              - pattern: $METRIC.labels(..., $DATA, ...)
+              - pattern: analytics.identify(..., $DATA, ...)
+              - pattern: analytics.track(..., $DATA, ...)
+              - pattern: mixpanel.track(..., $DATA, ...)
+              - pattern: posthog.capture(..., properties=$DATA, ...)
+              - pattern: newrelic.agent.record_custom_event(..., $DATA, ...)
+              - pattern: rollbar.report_message(..., extra_data=$DATA, ...)
+              - pattern: bugsnag.notify(..., metadata=$DATA, ...)
+          - focus-metavariable: $DATA
+
+  - id: python.request-data-to-log
+    languages: [python]
+    mode: taint
+    message: An HTTP request payload or collection may reach a log sink without an explicit data-minimization boundary.
+    severity: WARNING
+    metadata:
+      cwe:
+        - "CWE-532: Insertion of Sensitive Information into Log File"
+      category: data-exposure
+      confidence: MEDIUM
+      impact: Request bodies, forms, and parameter collections commonly contain credentials, tokens, personal data, and uploaded content; logging the collection can copy it into lower-trust, long-retained systems.
+      remediation: Log an allowlisted event model instead of the request object or payload; exclude authentication material and apply tested, data-class-aware redaction before serialization.
+      source: https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html
+    pattern-sources:
+      - pattern: await $REQUEST.json(...)
+      - pattern: $REQUEST.json(...)
+      - pattern: $REQUEST.get_json(...)
+      - pattern: $REQUEST.body
+      - pattern: $REQUEST.data
+      - pattern: $REQUEST.form
+      - pattern: $REQUEST.POST
+      - pattern: $REQUEST.GET
+      - pattern: $REQUEST.query_params
+    pattern-propagators:
+      - pattern: $TO = $FROM
+        from: $FROM
+        to: $TO
+    pattern-sanitizers:
+      - patterns:
+          - pattern: $SANITIZER(...)
+          - metavariable-regex:
+              metavariable: $SANITIZER
+              regex: (?i).*(?:allowlist|drop_sensitive|minimize|redact|remove_sensitive|sanitize|scrub).*
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: logging.$LEVEL(..., $DATA, ...)
+              - pattern: logger.$LEVEL(..., $DATA, ...)
+              - pattern: log.$LEVEL(..., $DATA, ...)
+              - pattern: loguru.logger.$LEVEL(..., $DATA, ...)
+              - pattern: structlog.get_logger(...).$LEVEL(..., $DATA, ...)
+          - focus-metavariable: $DATA
+          - metavariable-regex:
+              metavariable: $LEVEL
+              regex: (?:critical|debug|error|exception|info|log|warn|warning)
+      - patterns:
+          - pattern-either:
+              - pattern: logging.LoggerAdapter(..., $DATA, ...)
+              - pattern: $LOGGER.bind(..., $DATA, ...)
+              - pattern: sys.stdout.write($DATA)
+              - pattern: sys.stderr.write($DATA)
+          - focus-metavariable: $DATA
+      - patterns:
+          - pattern: print(..., $DATA, ...)
+          - focus-metavariable: $DATA
+
+  - id: python.request-data-to-telemetry
+    languages: [python]
+    mode: taint
+    message: An HTTP request payload or collection may reach telemetry, error monitoring, or analytics without an explicit data-minimization boundary.
+    severity: WARNING
+    metadata:
+      cwe:
+        - "CWE-201: Insertion of Sensitive Information Into Sent Data"
+      category: data-exposure
+      confidence: MEDIUM
+      impact: Whole request payloads can silently cross vendor, region, purpose, access, and retention boundaries when attached to traces, errors, metrics, or analytics events.
+      remediation: Construct an allowlisted telemetry model, disable automatic PII capture, and redact sensitive headers, query parameters, and body fields before the SDK boundary.
+      source: https://opentelemetry.io/docs/security/handling-sensitive-data/
+    pattern-sources:
+      - pattern: await $REQUEST.json(...)
+      - pattern: $REQUEST.json(...)
+      - pattern: $REQUEST.get_json(...)
+      - pattern: $REQUEST.body
+      - pattern: $REQUEST.data
+      - pattern: $REQUEST.form
+      - pattern: $REQUEST.POST
+      - pattern: $REQUEST.GET
+      - pattern: $REQUEST.query_params
+    pattern-propagators:
+      - pattern: $TO = $FROM
+        from: $FROM
+        to: $TO
+    pattern-sanitizers:
+      - patterns:
+          - pattern: $SANITIZER(...)
+          - metavariable-regex:
+              metavariable: $SANITIZER
+              regex: (?i).*(?:allowlist|drop_sensitive|minimize|redact|remove_sensitive|sanitize|scrub).*
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: sentry_sdk.capture_message($DATA, ...)
+              - pattern: sentry_sdk.capture_event($DATA, ...)
+              - pattern: sentry_sdk.set_user($DATA, ...)
+              - pattern: sentry_sdk.set_context(..., $DATA, ...)
+              - pattern: sentry_sdk.set_extra(..., $DATA, ...)
+              - pattern: sentry_sdk.add_breadcrumb(..., data=$DATA, ...)
+              - pattern: $SCOPE.set_context(..., $DATA, ...)
+              - pattern: $SCOPE.set_extra(..., $DATA, ...)
+              - pattern: $SPAN.set_attribute(..., $DATA, ...)
+              - pattern: $SPAN.set_attributes($DATA, ...)
+              - pattern: $SPAN.add_event(..., attributes=$DATA, ...)
+              - pattern: $SPAN.set_tag(..., $DATA, ...)
+              - pattern: $METRIC.labels(..., $DATA, ...)
+              - pattern: analytics.identify(..., $DATA, ...)
+              - pattern: analytics.track(..., $DATA, ...)
+              - pattern: mixpanel.track(..., $DATA, ...)
+              - pattern: posthog.capture(..., properties=$DATA, ...)
+              - pattern: newrelic.agent.record_custom_event(..., $DATA, ...)
+              - pattern: rollbar.report_message(..., extra_data=$DATA, ...)
+              - pattern: bugsnag.notify(..., metadata=$DATA, ...)
+          - focus-metavariable: $DATA
+
+  - id: python.sensitive-data-in-url-query
+    languages: [python]
+    mode: taint
+    message: Credential-bearing data may be placed in an HTTP URL query string.
+    severity: ERROR
+    metadata:
+      cwe:
+        - "CWE-598: Use of HTTP Request With Sensitive Query String"
+        - "CWE-200: Exposure of Sensitive Information to an Unauthorized Actor"
+      category: data-exposure
+      confidence: HIGH
+      impact: URLs are routinely retained in browser history, access logs, proxies, monitoring systems, caches, and Referer headers; a query credential can therefore leak far beyond the intended recipient.
+      remediation: Send credentials in an appropriate protected header or request body, never in the URL; rotate any exposed credential and review downstream logs and telemetry.
+      source: https://cwe.mitre.org/data/definitions/598.html
+    pattern-sources:
+      - patterns:
+          - pattern: os.getenv($KEY, ...)
+          - metavariable-regex:
+              metavariable: $KEY
+              regex: (?i).*(?:api.?key|auth(?:entication|orization|[_-]?(?:header|token))|connection.?string|cookie|credential|database.?url|dsn|encryption.?key|otp|passcode|password|passwd|pin|private.?key|secret|session|token).*
+      - patterns:
+          - pattern: os.environ[$KEY]
+          - metavariable-regex:
+              metavariable: $KEY
+              regex: (?i).*(?:api.?key|auth(?:entication|orization|[_-]?(?:header|token))|connection.?string|cookie|credential|database.?url|dsn|encryption.?key|otp|passcode|password|passwd|pin|private.?key|secret|session|token).*
+      - patterns:
+          - pattern: $REQUEST.headers.get($KEY, ...)
+          - metavariable-regex:
+              metavariable: $KEY
+              regex: (?i).*(?:authorization|cookie|credential|password|secret|session|token).*
+      - pattern: $REQUEST.cookies.get(...)
+      - pattern: $CLIENT.get_secret_value(...)
+      - pattern: $CLIENT.access_secret_version(...)
+    pattern-propagators:
+      - pattern: $TO = $FROM
+        from: $FROM
+        to: $TO
+    pattern-sanitizers:
+      - patterns:
+          - pattern: $SANITIZER(...)
+          - metavariable-regex:
+              metavariable: $SANITIZER
+              regex: (?i).*(?:allowlist|drop_sensitive|minimize|redact|remove_sensitive|sanitize|scrub).*
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: requests.$METHOD(..., params=$DATA, ...)
+              - pattern: httpx.$METHOD(..., params=$DATA, ...)
+              - pattern: $CLIENT.$METHOD(..., params=$DATA, ...)
+          - focus-metavariable: $DATA
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: (?:delete|get|head|options|patch|post|put|request)
+      - patterns:
+          - pattern-either:
+              - pattern: urllib.parse.urlencode($DATA, ...)
+              - pattern: urlencode($DATA, ...)
+          - focus-metavariable: $DATA
+
+  - id: python.private-data-in-url-query
+    languages: [python]
+    mode: taint
+    message: A field commonly associated with personal or regulated data may be placed in an HTTP URL query string.
+    severity: WARNING
+    metadata:
+      cwe:
+        - "CWE-598: Use of HTTP Request With Sensitive Query String"
+        - "CWE-359: Exposure of Private Personal Information to an Unauthorized Actor"
+      category: data-exposure
+      confidence: MEDIUM
+      impact: Query strings propagate into histories, access logs, proxies, caches, monitoring systems, and Referer headers, creating copies that can evade privacy controls and deletion obligations.
+      remediation: Use a protected request body or an opaque reference, minimize the field, and review downstream URL logging and telemetry retention.
+      source: https://cwe.mitre.org/data/definitions/598.html
+    pattern-sources:
+      - patterns:
+          - pattern: $OBJECT.$FIELD
+          - metavariable-regex:
+              metavariable: $FIELD
+              regex: (?i)^(?:account_id|address|birth_date|card_number|credit_card|cvv|date_of_birth|diagnosis|dob|email|health_record|ip_address|medical_record|national_id|patient_id|phone|social_security|ssn|user_id|username)$
+      - patterns:
+          - pattern: $OBJECT[$KEY]
+          - metavariable-regex:
+              metavariable: $KEY
+              regex: (?i).*(?:account.?id|address|birth.?date|card.?number|credit.?card|cvv|diagnosis|dob|email|health.?record|ip.?address|medical.?record|national.?id|patient.?id|phone|social.?security|ssn|user.?id|username).*
+      - patterns:
+          - pattern: $OBJECT.get($KEY, ...)
+          - metavariable-regex:
+              metavariable: $KEY
+              regex: (?i).*(?:account.?id|address|birth.?date|card.?number|credit.?card|cvv|diagnosis|dob|email|health.?record|ip.?address|medical.?record|national.?id|patient.?id|phone|social.?security|ssn|user.?id|username).*
+    pattern-propagators:
+      - pattern: $TO = $FROM
+        from: $FROM
+        to: $TO
+    pattern-sanitizers:
+      - patterns:
+          - pattern: $SANITIZER(...)
+          - metavariable-regex:
+              metavariable: $SANITIZER
+              regex: (?i).*(?:allowlist|drop_sensitive|minimize|redact|remove_sensitive|sanitize|scrub).*
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: requests.$METHOD(..., params=$DATA, ...)
+              - pattern: httpx.$METHOD(..., params=$DATA, ...)
+              - pattern: $CLIENT.$METHOD(..., params=$DATA, ...)
+          - focus-metavariable: $DATA
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: (?:delete|get|head|options|patch|post|put|request)
+      - patterns:
+          - pattern-either:
+              - pattern: urllib.parse.urlencode($DATA, ...)
+              - pattern: urlencode($DATA, ...)
+          - focus-metavariable: $DATA
+
+  - id: python.exception-detail-to-http-response
+    languages: [python]
+    message: A raw exception is exposed in an HTTP response and may disclose implementation or sensitive details.
+    severity: ERROR
+    metadata:
+      cwe:
+        - "CWE-209: Generation of Error Message Containing Sensitive Information"
+      category: data-exposure
+      confidence: HIGH
+      impact: Exception text can reveal queries, filesystem paths, credentials, upstream responses, internal hostnames, or implementation details to an untrusted client.
+      remediation: Return a stable public error code and generic message; retain the exception only in protected server-side diagnostics after redaction.
+      source: https://cwe.mitre.org/data/definitions/209.html
+    patterns:
+      - pattern-inside: |
+          try:
+            ...
+          except $TYPE as $ERROR:
+            ...
+      - pattern-either:
+          - pattern: raise HTTPException(..., detail=str($ERROR), ...)
+          - pattern: HTTPException(..., detail=str($ERROR), ...)
+          - pattern: abort(..., description=str($ERROR), ...)
+          - pattern: JsonResponse(..., str($ERROR), ...)
+          - pattern: HttpResponse(str($ERROR), ...)
+          - pattern: 'JSONResponse(..., content={..., "error": str($ERROR), ...}, ...)'
+          - pattern: 'JSONResponse(..., content={..., "detail": str($ERROR), ...}, ...)'
+
+  - id: python.sentry-default-pii-enabled
+    languages: [python]
+    message: Sentry automatic PII collection is enabled; verify approval, minimization, and scrubbing controls.
+    severity: WARNING
+    metadata:
+      cwe:
+        - "CWE-359: Exposure of Private Personal Information to an Unauthorized Actor"
+      category: data-exposure
+      confidence: HIGH
+      impact: Automatic collection can transmit user-identifying request data to error-monitoring infrastructure and can expand the data set beyond explicitly reviewed event fields.
+      remediation: Keep send_default_pii disabled unless the data is necessary and approved; configure before_send or an event scrubber, enforce server-side scrubbing, and test with synthetic canaries.
+      source: https://docs.sentry.io/platforms/python/configuration/options/#send-default-pii
+    patterns:
+      - pattern: sentry_sdk.init(..., send_default_pii=True, ...)

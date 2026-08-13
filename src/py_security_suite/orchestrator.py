@@ -15,6 +15,7 @@ from .adapters.base import AdapterResult, ScannerAdapter
 from .config import SuiteConfig
 from .closure_plan import closure_plan_artifact
 from .correlation import correlate_findings
+from .data_exposure import build_data_exposure_synthesis
 from .finding_delta import apply_finding_delta
 from .governance import (
     validate_intelligence_approval,
@@ -155,6 +156,9 @@ def scan_project(
         structural_synthesis = build_structural_synthesis(findings, derived_artifacts)
         if structural_synthesis is not None:
             derived_artifacts["structural-synthesis.json"] = structural_synthesis
+        derived_artifacts["data-exposure.json"] = build_data_exposure_synthesis(
+            target, findings, derived_artifacts
+        )
         fusion = build_evidence_fusion(findings, derived_artifacts, tool_runs)
         derived_artifacts["evidence-fusion.json"] = fusion
         context_errors.extend(

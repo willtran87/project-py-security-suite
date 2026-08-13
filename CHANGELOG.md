@@ -5,6 +5,13 @@ for published releases.
 
 ## Unreleased
 
+- Add CWE-532/200/201/209/359/598 sensitive-data rules for logging, telemetry,
+  request collections, URL queries, raw client errors, and risky Sentry PII
+  configuration. Expand the non-executing SDK/sink inventory with custom and
+  bound loggers, process streams, OpenTelemetry header capture, and additional
+  observability SDKs; strengthen transformation handling so generic hashes,
+  masks, filters, HMACs, and tokens no longer suppress taint by name alone.
+
 - Add pinned Graphify code-only scanning, strict AST/token/path validation,
   normalized graph evidence, and graph-aware finding blast radius, structural
   hotspots, and cross-tool neighborhoods.

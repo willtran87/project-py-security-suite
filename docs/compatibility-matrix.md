@@ -88,7 +88,7 @@ performed.
 | Tool | Primary perspective | Isolation behavior | Profile placement | Adapter |
 |---|---|---|---|---:|
 | Bandit | Python AST security patterns | Local source only | quick, standard, all broader profiles | Yes |
-| Semgrep CE | Organization-defined structural Python rules | Local immutable rules; metrics and version checks disabled | standard and broader | Yes |
+| Semgrep CE | Organization-defined structural and taint rules, including credentials, private fields, request collections, logs, telemetry, URL queries, raw client errors, and risky SDK configuration | Local immutable rules; metrics and version checks disabled | standard and broader | Yes |
 | detect-secrets | Credential-shaped and high-entropy values | Online verification disabled; values never retained | quick, standard, broader | Yes |
 | OSV-Scanner | Known vulnerable dependencies | Local OSV snapshot, offline mode, no resolution | standard and broader | Yes |
 | CycloneDX Python | Reproducible Python SBOM evidence | Reads Poetry/Pipenv/pinned requirements directly; `uv.lock` uses hash-verified `uv export --frozen --offline` before CycloneDX conversion | extended and broader | Yes |
@@ -162,6 +162,7 @@ conditional, and `-` not intended.
 | Python AST patterns | P | S | - | - | - | S | - | - | - | S | - | - | - | S |
 | Custom enterprise rules | C | P | C | - | - | C | C | P | C | C | C | C | C | P |
 | Cross-file data flow | - | C | - | - | - | - | - | P | - | - | - | - | - | P |
+| Sensitive data to logs/telemetry | - | P | - | - | - | - | - | P | - | C | - | - | - | P |
 | Working-tree secrets | S | C | P | - | - | S | - | - | - | - | - | P | P | C |
 | Git-history secrets | - | - | - | - | - | - | - | - | - | - | - | P | C | - |
 | Vulnerable dependencies | - | - | - | P | E | - | - | - | - | - | C | - | - | C |

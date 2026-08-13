@@ -258,6 +258,7 @@ def _write_primary_report_files(
 ) -> None:
     fusion = (derived_artifacts or {}).get("evidence-fusion.json")
     structural = (derived_artifacts or {}).get("structural-synthesis.json")
+    data_exposure = (derived_artifacts or {}).get("data-exposure.json")
     _write_text(
         output / "summary.md",
         render_summary(
@@ -265,6 +266,7 @@ def _write_primary_report_files(
             findings,
             evidence_fusion=fusion if isinstance(fusion, dict) else None,
             structural_synthesis=structural if isinstance(structural, dict) else None,
+            data_exposure=data_exposure if isinstance(data_exposure, dict) else None,
         ),
     )
     _write_text(
@@ -323,6 +325,7 @@ def render_summary(
     findings: list[Finding],
     evidence_fusion: dict[str, Any] | None = None,
     structural_synthesis: dict[str, Any] | None = None,
+    data_exposure: dict[str, Any] | None = None,
 ) -> str:
     active_findings = [
         finding
@@ -346,6 +349,7 @@ def render_summary(
     lines.extend(["", closure_backlog])
     lines.extend(_render_fusion_summary(evidence_fusion))
     lines.extend(_render_structural_summary(structural_synthesis))
+    lines.extend(_render_data_exposure_summary(data_exposure))
     lines.extend(["", "## Decision", ""])
     lines.extend(f"- {reason}" for reason in manifest.policy_reasons)
     lines.extend(_render_admission_decisions(manifest, active_findings))
@@ -560,6 +564,99 @@ def _render_structural_summary(value: dict[str, Any] | None) -> list[str]:
             + _markdown_text(str(item.get("recommended_action", "Review.")))
             + " |"
             for item in actionable_boundaries[:5]
+        )
+    return lines
+
+
+def _render_data_exposure_summary(value: dict[str, Any] | None) -> list[str]:
+    if not isinstance(value, dict) or not isinstance(value.get("summary"), dict):
+        return []
+    summary = value["summary"]
+    assessments = value.get("finding_assessments", [])
+    surfaces = value.get("sink_surfaces", [])
+    production_surfaces = (
+        [
+            item
+            for item in surfaces
+            if isinstance(item, dict) and item.get("scope") == "production"
+        ]
+        if isinstance(surfaces, list)
+        else []
+    )
+    query_findings = sum(
+        isinstance(item, dict) and item.get("sink_family") == "url-query"
+        for item in assessments
+    )
+    response_findings = sum(
+        isinstance(item, dict)
+        and item.get("sink_family") in {"client-response", "exception"}
+        for item in assessments
+    )
+    lines = [
+        "",
+        "## Sensitive-data exposure",
+        "",
+        "| Signal | Count |",
+        "|---|---:|",
+        f"| Confirmed scanner findings correlated | {int(summary.get('exposure_findings', 0))} |",
+        f"| Sensitive logging findings | {int(summary.get('logging_findings', 0))} |",
+        f"| Telemetry and analytics findings | {int(summary.get('telemetry_findings', 0))} |",
+        f"| Sensitive URL-query findings | {query_findings} |",
+        f"| Raw exception response findings | {response_findings} |",
+        f"| Production sink review surfaces | {int(summary.get('production_sink_surfaces', 0))} |",
+        f"| Test sink review surfaces | {int(summary.get('test_sink_surfaces', 0))} |",
+        f"| Logging, telemetry, analytics, and egress SDK families | {int(summary.get('sdk_families_observed', 0))} |",
+        "",
+        "A sink surface is an inventory item, not proof of leakage. A finding requires source-to-sink scanner evidence and retains CWE/OWASP guidance.",
+    ]
+    if isinstance(assessments, list) and assessments:
+        lines.extend(
+            [
+                "",
+                "| Exposure finding | Location | Concern | Sink / SDK | Relevance | Action |",
+                "|---|---|---|---|---|---|",
+            ]
+        )
+        lines.extend(
+            "| `"
+            + _markdown_code(str(item.get("finding_id", "unknown")))
+            + "` | `"
+            + _markdown_code(str(item.get("path", "unknown")))
+            + (":" + str(item["line"]) if item.get("line") else "")
+            + "` | `"
+            + _markdown_code(str(item.get("concern", "review")))
+            + "` | `"
+            + _markdown_code(str(item.get("sink_family", "unknown")))
+            + (" / " + _markdown_code(str(item["sdk"])) if item.get("sdk") else "")
+            + "` | `"
+            + _markdown_code(str(item.get("structural_relevance", "unknown")))
+            + "` | "
+            + _markdown_text(str(item.get("recommended_action", "Review.")))
+            + " |"
+            for item in assessments[:5]
+            if isinstance(item, dict)
+        )
+    elif production_surfaces:
+        lines.extend(
+            [
+                "",
+                "| Top production sink surface | Family | SDK | Sanitizer visible |",
+                "|---|---|---|---:|",
+            ]
+        )
+        lines.extend(
+            "| `"
+            + _markdown_code(str(item.get("path", "unknown")))
+            + ":"
+            + str(int(item.get("line", 1)))
+            + "` | `"
+            + _markdown_code(str(item.get("sink_family", "unknown")))
+            + "` | "
+            + _markdown_text(str(item.get("sdk") or "-"))
+            + " | "
+            + ("yes" if item.get("sanitizer_visible") else "no")
+            + " |"
+            for item in production_surfaces[:5]
         )
     return lines
 
@@ -932,6 +1029,7 @@ def _render_markdown_findings(
                 f"- **References:** {references}",
                 *_markdown_graph_context(finding),
                 *_markdown_structural_context(finding),
+                *_markdown_data_exposure_context(finding),
                 *_markdown_fusion_context(finding),
                 "",
                 f"**What was detected:** {_markdown_text(finding.description)}",
@@ -2139,6 +2237,9 @@ def render_sarif(findings: list[Finding]) -> dict[str, Any]:
         structural = finding.evidence.get("structural_synthesis")
         if isinstance(structural, dict):
             result["properties"]["structural_synthesis"] = json_ready(structural)
+        data_exposure = finding.evidence.get("data_exposure")
+        if isinstance(data_exposure, dict):
+            result["properties"]["data_exposure"] = json_ready(data_exposure)
         fusion = finding.evidence.get("fusion")
         if isinstance(fusion, dict):
             result["properties"]["evidence_fusion"] = json_ready(fusion)
@@ -2253,6 +2354,19 @@ def render_sonarqube_external_issues(findings: list[Finding]) -> dict[str, Any]:
                 issue["primaryLocation"]["message"] += (
                     " Structural synthesis: " + "; ".join(labels) + "."
                 )
+        data_exposure = finding.evidence.get("data_exposure")
+        if isinstance(data_exposure, dict):
+            issue["primaryLocation"]["message"] += (
+                " Sensitive-data path: "
+                f"{data_exposure.get('concern', 'review')} to "
+                f"{data_exposure.get('sink_family', 'unknown')}"
+                + (
+                    f" through {data_exposure['sdk']}"
+                    if data_exposure.get("sdk")
+                    else ""
+                )
+                + "."
+            )
         fusion = finding.evidence.get("fusion")
         if isinstance(fusion, dict):
             issue["primaryLocation"]["message"] += (
@@ -2386,6 +2500,7 @@ def _render_html_finding(finding: Finding, tool_versions: dict[str, str]) -> str
     source_context = _html_source_excerpt(finding)
     graph_context = _html_graph_context(finding)
     structural_context = _html_structural_context(finding)
+    data_exposure_context = _html_data_exposure_context(finding)
     fusion_context = _html_fusion_context(finding)
     return (
         f"<article class='finding {severity}' "
@@ -2413,6 +2528,7 @@ def _render_html_finding(finding: Finding, tool_versions: dict[str, str]) -> str
         f"{source_context}"
         f"{graph_context}"
         f"{structural_context}"
+        f"{data_exposure_context}"
         f"{fusion_context}"
         "<div class='detail-grid'>"
         "<section class='detail'><h4>What was detected</h4>"
@@ -2477,6 +2593,39 @@ def _markdown_fusion_context(finding: Finding) -> list[str]:
         f"review tier `{_markdown_code(str(fusion.get('review_tier', 'standard')))}`; "
         f"corroboration `{_markdown_code(str(fusion.get('corroboration', 'single-tool')))}`"
         f"{suffix}"
+    ]
+
+
+def _markdown_data_exposure_context(finding: Finding) -> list[str]:
+    context = finding.evidence.get("data_exposure")
+    if not isinstance(context, dict):
+        return []
+    sdk = str(context.get("sdk") or "none identified")
+    exact_sink = str(context.get("sink") or context.get("sink_family") or "unknown")
+    sanitizer = context.get("sanitizer_visible")
+    sanitizer_text = (
+        "visible; verify effectiveness"
+        if sanitizer is True
+        else "not visible"
+        if sanitizer is False
+        else "unknown"
+    )
+    return [
+        "- **Sensitive-data path:** concern `"
+        + _markdown_code(str(context.get("concern", "review")))
+        + "`; sink `"
+        + _markdown_code(exact_sink)
+        + "` (family `"
+        + _markdown_code(str(context.get("sink_family", "unknown")))
+        + "`)"
+        + "; SDK `"
+        + _markdown_code(sdk)
+        + "`; structural relevance `"
+        + _markdown_code(str(context.get("structural_relevance", "unknown")))
+        + "`; sanitizer `"
+        + _markdown_code(sanitizer_text)
+        + "` - "
+        + _markdown_text(str(context.get("recommended_action", "Review the path.")))
     ]
 
 
@@ -2583,6 +2732,25 @@ def _html_fusion_context(finding: Finding) -> str:
         "<section class='source-context'><h4>Cross-referenced evidence</h4>"
         f"<p>Review tier <strong>{tier}</strong>; corroboration "
         f"<strong>{corroboration}</strong>.{reason_html}</p></section>"
+    )
+
+
+def _html_data_exposure_context(finding: Finding) -> str:
+    context = finding.evidence.get("data_exposure")
+    if not isinstance(context, dict):
+        return ""
+    concern = html.escape(str(context.get("concern", "review")))
+    family = html.escape(str(context.get("sink_family", "unknown")))
+    exact_sink = html.escape(str(context.get("sink") or family))
+    sdk = html.escape(str(context.get("sdk") or "none identified"))
+    relevance = html.escape(str(context.get("structural_relevance", "unknown")))
+    action = html.escape(str(context.get("recommended_action", "Review the path.")))
+    return (
+        "<section class='source-context'><h4>Sensitive-data exposure path</h4>"
+        f"<p>Concern <strong>{concern}</strong>; sink <strong>{exact_sink}</strong> "
+        f"(family <strong>{family}</strong>); "
+        f"SDK <strong>{sdk}</strong>; structural relevance "
+        f"<strong>{relevance}</strong>. {action}</p></section>"
     )
 
 

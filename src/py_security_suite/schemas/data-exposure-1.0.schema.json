@@ -1,0 +1,113 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:data-exposure:1.0",
+  "title": "Python Security Suite data exposure synthesis",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "schema_id", "authoritative", "purpose", "summary", "finding_assessments", "sink_surfaces", "sdk_observations", "standards", "limits", "limitations"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "schema_id": {"const": "urn:project-py-security-suite:data-exposure:1.0"},
+    "authoritative": {"const": false},
+    "purpose": {"type": "string", "minLength": 1},
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["exposure_findings", "logging_findings", "telemetry_findings", "production_sink_surfaces", "test_sink_surfaces", "sdk_families_observed", "files_analyzed", "parse_errors"],
+      "properties": {
+        "exposure_findings": {"$ref": "#/$defs/count"},
+        "logging_findings": {"$ref": "#/$defs/count"},
+        "telemetry_findings": {"$ref": "#/$defs/count"},
+        "production_sink_surfaces": {"$ref": "#/$defs/count"},
+        "test_sink_surfaces": {"$ref": "#/$defs/count"},
+        "sdk_families_observed": {"$ref": "#/$defs/count"},
+        "files_analyzed": {"$ref": "#/$defs/count"},
+        "parse_errors": {"$ref": "#/$defs/count"}
+      }
+    },
+    "finding_assessments": {"type": "array", "items": {"$ref": "#/$defs/assessment"}},
+    "sink_surfaces": {"type": "array", "maxItems": 500, "items": {"$ref": "#/$defs/surface"}},
+    "sdk_observations": {"type": "array", "maxItems": 500, "items": {"$ref": "#/$defs/sdk"}},
+    "standards": {"type": "array", "items": {"$ref": "#/$defs/reference"}},
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["maximum_python_files", "maximum_sink_surfaces", "maximum_sdk_observations", "files_omitted", "sink_surfaces_omitted", "sdk_observations_omitted"],
+      "properties": {
+        "maximum_python_files": {"$ref": "#/$defs/count"},
+        "maximum_sink_surfaces": {"$ref": "#/$defs/count"},
+        "maximum_sdk_observations": {"$ref": "#/$defs/count"},
+        "files_omitted": {"$ref": "#/$defs/count"},
+        "sink_surfaces_omitted": {"$ref": "#/$defs/count"},
+        "sdk_observations_omitted": {"$ref": "#/$defs/count"}
+      }
+    },
+    "limitations": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}
+  },
+  "$defs": {
+    "count": {"type": "integer", "minimum": 0},
+    "nullableString": {"type": ["string", "null"]},
+    "strings": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "assessment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["finding_id", "concern", "sink_family", "sink", "sdk", "path", "line", "scope", "confidence", "structural_relevance", "sanitizer_visible", "classifications", "source_tools", "recommended_action", "evidence_artifacts"],
+      "properties": {
+        "finding_id": {"type": "string", "minLength": 1},
+        "concern": {"type": "string", "minLength": 1},
+        "sink_family": {"type": "string", "minLength": 1},
+        "sink": {"$ref": "#/$defs/nullableString"},
+        "sdk": {"$ref": "#/$defs/nullableString"},
+        "path": {"type": "string", "minLength": 1},
+        "line": {"type": ["integer", "null"], "minimum": 1},
+        "scope": {"enum": ["production", "test"]},
+        "confidence": {"enum": ["high", "medium", "low"]},
+        "structural_relevance": {"enum": ["runtime-observed", "disconnected-review", "changed-code", "statically-connected", "unknown"]},
+        "sanitizer_visible": {"type": ["boolean", "null"]},
+        "classifications": {"$ref": "#/$defs/strings"},
+        "source_tools": {"$ref": "#/$defs/strings"},
+        "recommended_action": {"type": "string", "minLength": 1},
+        "evidence_artifacts": {"$ref": "#/$defs/strings"}
+      }
+    },
+    "surface": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "line", "scope", "sink_family", "sink", "label", "sdk", "sanitizer_visible"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "line": {"type": "integer", "minimum": 1},
+        "scope": {"enum": ["production", "test"]},
+        "sink_family": {"type": "string", "minLength": 1},
+        "sink": {"type": "string", "minLength": 1},
+        "label": {"type": "string", "minLength": 1},
+        "sdk": {"$ref": "#/$defs/nullableString"},
+        "sanitizer_visible": {"type": "boolean"}
+      }
+    },
+    "sdk": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sdk", "family", "module", "evidence", "path", "line", "scope"],
+      "properties": {
+        "sdk": {"type": "string", "minLength": 1},
+        "family": {"type": "string", "minLength": 1},
+        "module": {"type": "string", "minLength": 1},
+        "evidence": {"enum": ["import", "declared-dependency"]},
+        "path": {"type": "string", "minLength": 1},
+        "line": {"type": ["integer", "null"], "minimum": 1},
+        "scope": {"enum": ["production", "test", "repository"]}
+      }
+    },
+    "reference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["identifier", "title", "uri"],
+      "properties": {
+        "identifier": {"type": "string", "minLength": 1},
+        "title": {"type": "string", "minLength": 1},
+        "uri": {"type": "string", "format": "uri"}
+      }
+    }
+  }
+}
