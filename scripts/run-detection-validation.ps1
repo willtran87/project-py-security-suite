@@ -119,9 +119,14 @@ def intentionally_expose_runtime_state() -> None:
     logging.debug("runtime=%s", locals())
 
 
+def intentionally_export_runtime_state(settings) -> None:
+    sentry_sdk.set_context("runtime", vars(settings))
+
+
 def intentionally_expose_url_data(user) -> None:
     token = os.getenv("API_KEY")
     requests.get("https://service.invalid/check", params={"access_token": token})
+    requests.get(f"https://service.invalid/check?access_token={token}")
     requests.get("https://service.invalid/profile", params={"email": user.email})
 
 
@@ -282,6 +287,8 @@ OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true
         "python.exception-detail-to-http-response",
         "python.sentry-default-pii-enabled",
         "python.runtime-state-to-log",
+        "python.runtime-state-to-telemetry",
+        "python.sensitive-data-in-url",
         "config.opentelemetry-genai-content-capture-enabled",
         "config.opentelemetry-genai-content-capture-invalid-mode",
         "config.opentelemetry-broad-http-header-capture"

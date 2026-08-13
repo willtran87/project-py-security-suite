@@ -5,6 +5,12 @@ for published releases.
 
 ## Unreleased
 
+- Version sensitive-data exposure synthesis at 1.2 with local alias propagation,
+  credential/personal/financial/health/request-content context, trust-boundary
+  and risk-factor evidence, explicit protection kinds, and prioritized review
+  surfaces. Add scanner-backed detection for secrets interpolated into outbound
+  URLs and broad runtime or environment state exported to telemetry; retain 1.1
+  and 1.0 schemas for existing consumers.
 - Add CWE-532/200/201/209/359/598 sensitive-data rules for logging, telemetry,
   request collections, URL queries, raw client errors, and risky Sentry PII
   configuration. Expand the non-executing SDK/sink inventory with custom and

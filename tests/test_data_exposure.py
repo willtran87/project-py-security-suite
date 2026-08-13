@@ -163,6 +163,85 @@ class DataExposureSynthesisTests(unittest.TestCase):
             result["sink_surfaces"][0]["label"], "request data in structured log"
         )
 
+    def test_propagates_data_classes_and_distinguishes_protection_kind(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "app.py").write_text(
+                "import logging\nimport os\n\n"
+                "secret = os.getenv('PAYMENT_API_TOKEN')\n"
+                "copied = secret\n"
+                "logging.error('credential=%s', copied)\n"
+                "safe = redact(copied)\n"
+                "logging.info('credential=%s', safe)\n",
+                encoding="utf-8",
+            )
+
+            result = build_data_exposure_synthesis(root, [], {})
+
+        unsafe, protected = result["sink_surfaces"]
+        self.assertEqual(unsafe["data_classes"], ["credentials", "financial"])
+        self.assertEqual(unsafe["review_priority"], "high")
+        self.assertEqual(unsafe["protection_status"], "not-observed")
+        self.assertIn("no-protection-observed", unsafe["risk_factors"])
+        self.assertEqual(protected["protection_status"], "redacted-or-masked")
+        self.assertEqual(protected["review_priority"], "medium")
+
+    def test_prioritizes_broad_runtime_state_without_claiming_a_finding(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "app.py").write_text(
+                "import logging\n\n"
+                "def diagnose(settings):\n"
+                "    logging.warning('state=%r', vars(settings))\n",
+                encoding="utf-8",
+            )
+
+            result = build_data_exposure_synthesis(root, [], {})
+
+        surface = result["sink_surfaces"][0]
+        self.assertIn("broad-runtime-state", surface["risk_factors"])
+        self.assertEqual(surface["review_priority"], "high")
+        self.assertEqual(result["summary"]["exposure_findings"], 0)
+
+    def test_local_alias_context_does_not_leak_between_functions(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "app.py").write_text(
+                "import logging\nimport os\n\n"
+                "def load():\n"
+                "    value = os.getenv('AUTH_TOKEN')\n"
+                "    return value\n\n"
+                "def report(value):\n"
+                "    logging.info('value=%s', value)\n",
+                encoding="utf-8",
+            )
+
+            result = build_data_exposure_synthesis(root, [], {})
+
+        surface = result["sink_surfaces"][0]
+        self.assertEqual(surface["data_classes"], [])
+        self.assertEqual(surface["review_priority"], "medium")
+
+    def test_classifies_request_health_and_personal_context(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "app.py").write_text(
+                "import logging\n\n"
+                "def audit(request):\n"
+                "    patient_email = request.json()\n"
+                "    logging.info('diagnosis=%s', patient_email)\n",
+                encoding="utf-8",
+            )
+
+            result = build_data_exposure_synthesis(root, [], {})
+
+        surface = result["sink_surfaces"][0]
+        self.assertEqual(
+            surface["data_classes"], ["health", "personal", "request-content"]
+        )
+        self.assertIn("full-request-content", surface["risk_factors"])
+        self.assertEqual(surface["trust_boundary"], "operational-data-plane")
+
     def test_inventories_query_exception_and_risky_sdk_configuration(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -345,11 +424,12 @@ class DataExposureSynthesisTests(unittest.TestCase):
                 rule_id="python.private-data-to-telemetry",
             )
 
-            build_data_exposure_synthesis(root, [finding], {})
+            result = build_data_exposure_synthesis(root, [finding], {})
 
         self.assertEqual(
             finding.evidence["data_exposure"]["concern"], "private-data-exposure"
         )
+        self.assertEqual(result["finding_assessments"][0]["data_classes"], ["personal"])
         self.assertIn(
             "CWE-359", {citation.identifier for citation in finding.citations}
         )
@@ -380,6 +460,28 @@ class DataExposureSynthesisTests(unittest.TestCase):
             "CWE-598", {citation.identifier for citation in finding.citations}
         )
 
+    def test_inventories_dynamic_sensitive_url_without_static_name_false_positive(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "app.py").write_text(
+                "import os\nimport requests\n\n"
+                "token = os.getenv('API_TOKEN')\n"
+                "requests.get(f'https://example.invalid/check?token={token}')\n"
+                "requests.get('https://example.invalid/tokenize')\n",
+                encoding="utf-8",
+            )
+
+            result = build_data_exposure_synthesis(root, [], {})
+
+        dynamic, static = result["sink_surfaces"]
+        self.assertEqual(dynamic["sink_family"], "url")
+        self.assertEqual(dynamic["review_priority"], "high")
+        self.assertIn("url-propagation", dynamic["risk_factors"])
+        self.assertEqual(static["sink_family"], "network-egress")
+        self.assertEqual(static["data_classes"], [])
+
     def test_ignores_unrelated_quality_finding(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -394,7 +496,7 @@ class DataExposureSynthesisTests(unittest.TestCase):
     def test_artifact_validates_against_bundled_schema(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             result = build_data_exposure_synthesis(Path(temporary), [], {})
-        schema = json.loads(read_bundled_schema("data-exposure-1.1"))
+        schema = json.loads(read_bundled_schema("data-exposure-1.2"))
         Draft202012Validator(schema).validate(result)
 
     def test_portable_reports_render_exposure_context(self) -> None:

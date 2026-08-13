@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import json
 import re
 import tomllib
 from pathlib import Path
@@ -142,8 +143,13 @@ _NETWORK_METHODS = frozenset(
     {"delete", "get", "head", "options", "patch", "post", "put", "request"}
 )
 _SANITIZER_HINT = re.compile(r"(?i)(?:hash|hmac|mask|redact|sanitize|scrub|tokenize)")
+_MINIMIZER_HINT = re.compile(
+    r"(?i)(?:allowlist|drop_sensitive|minimize|remove_sensitive|select_safe)"
+)
+_REDACTOR_HINT = re.compile(r"(?i)(?:mask|redact|sanitize|scrub)")
+_PSEUDONYMIZER_HINT = re.compile(r"(?i)(?:hash|hmac|tokenize)")
 _SENSITIVE_HINT = re.compile(
-    r"(?i)(?:account.?id|address|api.?key|auth(?:entication|orization|_?(?:header|token))|birth|card|connection.?string|cookie|credential|cvv|database.?url|diagnosis|dsn|email|health|ip.?address|medical|national.?id|otp|passw(?:or)?d|patient|phone|pin|private.?key|secret|session|social.?security|ssn|token|user.?id|username)"
+    r"(?i)(?:account.?id|address|api.?key|auth(?:entication|orization|_?(?:header|token))|birth|card|connection.?string|cookie|credential|cvv|database.?url|diagnosis|dsn|email|health|ip.?address|medical|national.?id|otp|passw(?:or)?d|patient|phone|pin|private.?key|secret|session|social.?security|ssn|token(?!ize|ization)|user.?id|username)"
 )
 _REQUEST_DATA_HINT = re.compile(
     r"(?i)(?:body|form|json|payload|post|query_params|request|request_data)"
@@ -152,6 +158,23 @@ _REQUEST_OBJECT_HINT = re.compile(
     r"(?i)^(?!.*response)(?:[a-z][a-z0-9]*_)*(?:req|request)$"
 )
 _EXCEPTION_HINT = re.compile(r"(?i)(?:error|exception|exc|traceback)")
+_DATA_CLASS_HINTS: dict[str, re.Pattern[str]] = {
+    "credentials": re.compile(
+        r"(?i)(?:api.?key|auth(?:entication|orization|_?(?:header|token))|connection.?string|cookie|credential|database.?url|dsn|encryption.?key|otp|passcode|passw(?:or)?d|pin|private.?key|secret|session|token(?!ize|ization))"
+    ),
+    "financial": re.compile(
+        r"(?i)(?:bank|card.?number|credit.?card|cvv|iban|payment|routing.?number)"
+    ),
+    "health": re.compile(
+        r"(?i)(?:diagnosis|health|medical|patient|prescription|treatment)"
+    ),
+    "personal": re.compile(
+        r"(?i)(?:account.?id|address|birth|date.?of.?birth|dob|email|ip.?address|national.?id|phone|social.?security|ssn|user.?id|username)"
+    ),
+    "request-content": re.compile(
+        r"(?i)(?:body|form|json|payload|post|query_params|request_data)"
+    ),
+}
 _RESPONSE_SINKS = frozenset(
     {"abort", "HTTPException", "HttpResponse", "JSONResponse", "JsonResponse"}
 )
@@ -202,8 +225,8 @@ def build_data_exposure_synthesis(
         }
     )
     return {
-        "schema_version": "1.1",
-        "schema_id": "urn:project-py-security-suite:data-exposure:1.1",
+        "schema_version": "1.2",
+        "schema_id": "urn:project-py-security-suite:data-exposure:1.2",
         "authoritative": False,
         "purpose": (
             "bounded sensitive-data disclosure analysis across normalized taint "
@@ -232,6 +255,18 @@ def build_data_exposure_synthesis(
                 str(item.get("label") or "").startswith(
                     ("GenAI ", "invalid GenAI ", "broad OpenTelemetry ")
                 )
+                for item in inventory["sink_surfaces"]
+            ),
+            "high_priority_review_surfaces": sum(
+                item.get("scope") == "production"
+                and item.get("review_priority") == "high"
+                for item in inventory["sink_surfaces"]
+            ),
+            "sensitive_context_surfaces": sum(
+                bool(item.get("data_classes")) for item in inventory["sink_surfaces"]
+            ),
+            "protected_surfaces": sum(
+                item.get("protection_status") != "not-observed"
                 for item in inventory["sink_surfaces"]
             ),
             "sdk_families_observed": len(observed_sdk_families),
@@ -296,6 +331,7 @@ def build_data_exposure_synthesis(
         "limitations": [
             "A sink surface is an inventory item, not proof of sensitive-data flow.",
             "Confirmed assessments require scanner evidence; naming alone does not classify data as sensitive.",
+            "Data classes and review priorities are heuristic context for triage, not regulatory classification or proof of disclosure.",
             "Static analysis may miss reflection, generated code, dynamic SDK wrappers, and runtime serialization.",
             "Hashing, masking, and redaction must be reviewed for data type, reversibility, and organizational policy.",
             "Absence of findings does not prove logs or telemetry are free of sensitive data.",
@@ -347,6 +383,8 @@ class _ExposureVisitor(ast.NodeVisitor):
         self.scope = "test" if _is_test_path(path) else "production"
         self.aliases: dict[str, str] = {}
         self.sdk_families: set[str] = set()
+        self.value_classes: dict[str, set[str]] = {}
+        self.value_protection: dict[str, str] = {}
         self.sinks: list[dict[str, Any]] = []
         self.sdks: list[dict[str, Any]] = []
 
@@ -366,14 +404,28 @@ class _ExposureVisitor(ast.NodeVisitor):
                 self._sdk(imported, node.lineno, "import")
         self.generic_visit(node)
 
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        self._visit_lexical_scope(node)
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        self._visit_lexical_scope(node)
+
+    def visit_Lambda(self, node: ast.Lambda) -> None:
+        self._visit_lexical_scope(node)
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        self._visit_lexical_scope(node)
+
     def visit_Assign(self, node: ast.Assign) -> None:
         self._remember_assignment(node.targets, node.value)
+        self._remember_value_context(node.targets, node.value)
         self._configuration_assignment(node.targets, node.value, node.lineno)
         self.generic_visit(node)
 
     def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
         if node.value is not None:
             self._remember_assignment([node.target], node.value)
+            self._remember_value_context([node.target], node.value)
             self._configuration_assignment([node.target], node.value, node.lineno)
         self.generic_visit(node)
 
@@ -410,9 +462,11 @@ class _ExposureVisitor(ast.NodeVisitor):
                 if _has_broad_header_capture_configuration(node)
                 else "OpenTelemetry HTTP header capture"
             )
-        elif (mode := _genai_capture_call_mode(qualified, node)) is not None:
+        elif (mode := _genai_capture_call_mode(qualified, node)) is not None and (
+            capture_label := _genai_capture_label(mode)
+        ) is not None:
             family = "telemetry"
-            label = _genai_capture_label(mode)
+            label = capture_label
         elif method in _TELEMETRY_METHODS and self.sdk_families & {
             "analytics",
             "error-monitoring",
@@ -426,6 +480,13 @@ class _ExposureVisitor(ast.NodeVisitor):
         elif (
             method in _NETWORK_METHODS
             and _looks_like_network(qualified)
+            and node.args
+            and self._has_dynamic_sensitive_context(node.args[0])
+        ):
+            family, label = "url", "sensitive data in outbound URL"
+        elif (
+            method in _NETWORK_METHODS
+            and _looks_like_network(qualified)
             and (params := _call_keyword(node, "params")) is not None
             and (
                 _node_has_sensitive_hint(params) or _node_has_private_data_hint(params)
@@ -435,6 +496,9 @@ class _ExposureVisitor(ast.NodeVisitor):
         elif method in _NETWORK_METHODS and _looks_like_network(qualified):
             family, label = "network-egress", f"HTTP {method}"
         if family:
+            data_classes = self._classes_for_node(node)
+            protection = self._protection_for_node(node)
+            risk_factors = _surface_risk_factors(node, family, data_classes, protection)
             self.sinks.append(
                 {
                     "path": self.path,
@@ -444,13 +508,17 @@ class _ExposureVisitor(ast.NodeVisitor):
                     "sink": qualified[:300],
                     "label": label,
                     "sdk": _sdk_for_qualified_name(qualified),
-                    "sanitizer_visible": _call_has_protective_configuration(node)
-                    or any(
-                        _SANITIZER_HINT.search(
-                            _qualified_name(item, self.aliases) or ""
-                        )
-                        for item in ast.walk(node)
-                        if isinstance(item, ast.Call)
+                    "sanitizer_visible": protection != "not-observed",
+                    "protection_status": protection,
+                    "data_classes": sorted(data_classes),
+                    "trust_boundary": _trust_boundary(family),
+                    "risk_factors": risk_factors,
+                    "review_priority": _surface_priority(
+                        self.scope,
+                        family,
+                        data_classes,
+                        protection,
+                        risk_factors,
                     ),
                 }
             )
@@ -466,6 +534,68 @@ class _ExposureVisitor(ast.NodeVisitor):
         for target in targets:
             if isinstance(target, ast.Name):
                 self.aliases[target.id] = "logger"
+
+    def _visit_lexical_scope(
+        self, node: ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda | ast.ClassDef
+    ) -> None:
+        outer_aliases = self.aliases
+        outer_classes = self.value_classes
+        outer_protection = self.value_protection
+        self.aliases = dict(outer_aliases)
+        self.value_classes = {
+            name: set(classes) for name, classes in outer_classes.items()
+        }
+        self.value_protection = dict(outer_protection)
+        try:
+            self.generic_visit(node)
+        finally:
+            self.aliases = outer_aliases
+            self.value_classes = outer_classes
+            self.value_protection = outer_protection
+
+    def _remember_value_context(self, targets: list[ast.expr], value: ast.expr) -> None:
+        classes = self._classes_for_node(value)
+        protection = self._protection_for_node(value)
+        for name in _target_names(targets):
+            if classes:
+                self.value_classes[name] = classes
+            else:
+                self.value_classes.pop(name, None)
+            if protection != "not-observed":
+                self.value_protection[name] = protection
+            else:
+                self.value_protection.pop(name, None)
+
+    def _classes_for_node(self, node: ast.AST) -> set[str]:
+        classes = _data_classes(node)
+        for item in ast.walk(node):
+            if isinstance(item, ast.Name):
+                classes.update(self.value_classes.get(item.id, set()))
+        return classes
+
+    def _protection_for_node(self, node: ast.AST) -> str:
+        kinds = {
+            self.value_protection[item.id]
+            for item in ast.walk(node)
+            if isinstance(item, ast.Name) and item.id in self.value_protection
+        }
+        for item in ast.walk(node):
+            if isinstance(item, ast.Call):
+                kind = _protective_call_kind(item, self.aliases)
+                if kind != "not-observed":
+                    kinds.add(kind)
+        if isinstance(node, ast.Call) and _call_has_protective_configuration(node):
+            kinds.add("configured-hook")
+        return _strongest_protection(kinds)
+
+    def _has_dynamic_sensitive_context(self, node: ast.AST) -> bool:
+        for item in ast.walk(node):
+            if isinstance(item, ast.Name):
+                if self.value_classes.get(item.id) or _SENSITIVE_HINT.search(item.id):
+                    return True
+            elif isinstance(item, ast.Attribute) and _SENSITIVE_HINT.search(item.attr):
+                return True
+        return False
 
     def _configuration_assignment(
         self, targets: list[ast.expr], value: ast.expr, line: int
@@ -570,7 +700,7 @@ def _declared_sdk_observations(target: Path) -> list[dict[str, Any]]:
         )
 
     result: list[dict[str, Any]] = []
-    for dependency, path, line in declarations:
+    for dependency, declaration_path, line in declarations:
         name = re.split(r"[<>=!~;\[\s]", dependency, maxsplit=1)[0]
         normalized = re.sub(r"[-_.]+", "-", name).casefold()
         module = _DEPENDENCY_TO_IMPORT.get(normalized)
@@ -583,7 +713,7 @@ def _declared_sdk_observations(target: Path) -> list[dict[str, Any]]:
                 "family": family,
                 "module": module,
                 "evidence": "declared-dependency",
-                "path": path,
+                "path": declaration_path,
                 "line": line,
                 "scope": "repository",
             }
@@ -690,6 +820,13 @@ def _is_configuration_path(path: Path) -> bool:
 def _configuration_surface(
     *, path: str, line: int, name: str, label: str, scope: str
 ) -> dict[str, Any]:
+    risk_factors = ["external-trust-boundary", "capture-configuration"]
+    if "broad" in label.casefold():
+        risk_factors.append("broad-data-capture")
+    if "content capture enabled" in label.casefold():
+        risk_factors.extend(["full-content-capture", "long-lived-operational-copy"])
+    if "invalid" in label.casefold():
+        risk_factors.append("ambiguous-protection-configuration")
     return {
         "path": path,
         "line": line,
@@ -699,6 +836,11 @@ def _configuration_surface(
         "label": label,
         "sdk": "OpenTelemetry",
         "sanitizer_visible": False,
+        "protection_status": "not-observed",
+        "data_classes": ["credentials", "personal", "request-content"],
+        "trust_boundary": "external-observability",
+        "risk_factors": sorted(set(risk_factors)),
+        "review_priority": "high" if scope == "production" else "low",
     }
 
 
@@ -715,9 +857,13 @@ def _assessment(
         for item in inventory["sink_surfaces"]
         if item["path"] == path and (line is None or abs(int(item["line"]) - line) <= 5)
     ]
+    expected_family = _finding_sink_family(finding)
     nearest = min(
         candidates,
-        key=lambda item: abs(int(item["line"]) - int(line or item["line"])),
+        key=lambda item: (
+            0 if _sink_families_match(str(item["sink_family"]), expected_family) else 1,
+            abs(int(item["line"]) - int(line or item["line"])),
+        ),
         default=None,
     )
     sink_family = (
@@ -736,6 +882,21 @@ def _assessment(
     graph = finding.evidence.get("graph_context")
     relevance = _relevance(structural, graph)
     confidence = _assessment_confidence(finding, nearest, relevance)
+    data_classes = set(_finding_data_classes(finding))
+    if nearest:
+        data_classes.update(str(value) for value in nearest.get("data_classes") or [])
+    protection = (
+        str(nearest.get("protection_status") or "not-observed")
+        if nearest
+        else "unknown"
+    )
+    risk_factors = (
+        list(nearest.get("risk_factors") or [])
+        if nearest
+        else ["scanner-confirmed-source-to-sink"]
+    )
+    if "scanner-confirmed-source-to-sink" not in risk_factors:
+        risk_factors.append("scanner-confirmed-source-to-sink")
     return {
         "finding_id": finding.finding_id,
         "concern": _concern(finding, sink_family),
@@ -748,6 +909,16 @@ def _assessment(
         "confidence": confidence,
         "structural_relevance": relevance,
         "sanitizer_visible": nearest.get("sanitizer_visible") if nearest else None,
+        "protection_status": protection,
+        "data_classes": sorted(data_classes),
+        "trust_boundary": (
+            str(nearest.get("trust_boundary"))
+            if nearest
+            else _trust_boundary(sink_family)
+        ),
+        "risk_factors": sorted(set(risk_factors)),
+        "review_priority": _assessment_priority(finding, nearest, relevance),
+        "evidence_basis": "normalized-scanner-source-to-sink",
         "classifications": sorted(set(finding.classifications)),
         "source_tools": sorted({source.tool for source in finding.sources}),
         "recommended_action": _recommended_action(sink_family, sdk),
@@ -762,6 +933,41 @@ def _assessment(
             if name in artifacts
         ),
     }
+
+
+def _finding_data_classes(finding: Finding) -> list[str]:
+    rule_value = " ".join(source.rule_id for source in finding.sources).casefold()
+    value = " ".join(
+        [finding.title, finding.description] + finding.classifications
+    ).casefold()
+    result: set[str] = set()
+    if "sensitive-data" in rule_value or (
+        "credential" in value
+        and "private-data" not in rule_value
+        and "request-data" not in rule_value
+    ):
+        result.add("credentials")
+    if "private-data" in rule_value or "cwe-359" in value:
+        result.add("personal")
+    if "request-data" in rule_value or "request payload" in value:
+        result.add("request-content")
+    if "runtime-state" in rule_value:
+        result.add("unclassified-sensitive")
+    return sorted(result)
+
+
+def _assessment_priority(
+    finding: Finding, nearest: dict[str, Any] | None, relevance: str
+) -> str:
+    if nearest and nearest.get("scope") == "test":
+        return "low"
+    if finding.severity.value in {"critical", "high"}:
+        return "high"
+    if nearest and nearest.get("review_priority") == "high":
+        return "high"
+    if relevance == "disconnected-review":
+        return "low"
+    return "medium"
 
 
 def _is_exposure_finding(finding: Finding) -> bool:
@@ -785,6 +991,8 @@ def _finding_sink_family(finding: Finding) -> str:
     ).casefold()
     if "url-query" in value or "query string" in value or "url query" in value:
         return "url-query"
+    if "sensitive-data-in-url" in value or "outbound url" in value:
+        return "url"
     if "http-response" in value or "http response" in value:
         return "client-response"
     if "telemetry" in value or "sentry" in value or "trace" in value:
@@ -798,7 +1006,7 @@ def _finding_sink_family(finding: Finding) -> str:
 
 def _concern(finding: Finding, family: str) -> str:
     classes = {value.upper().split(":", 1)[0] for value in finding.classifications}
-    if "CWE-598" in classes or family == "url-query":
+    if "CWE-598" in classes or family in {"url", "url-query"}:
         return (
             "private-data-in-url-query"
             if "CWE-359" in classes
@@ -844,7 +1052,7 @@ def _assessment_confidence(
 
 def _recommended_action(family: str, sdk: str) -> str:
     target = f" through {sdk}" if sdk else ""
-    if family == "url-query":
+    if family in {"url", "url-query"}:
         return (
             "Remove sensitive values from the URL and send them in an appropriate "
             "protected header or body; rotate exposed credentials and review access "
@@ -1043,6 +1251,171 @@ def _call_has_protective_configuration(node: ast.Call) -> bool:
     )
 
 
+def _target_names(targets: list[ast.expr]) -> set[str]:
+    names: set[str] = set()
+    for target in targets:
+        for item in ast.walk(target):
+            if isinstance(item, ast.Name):
+                names.add(item.id)
+    return names
+
+
+def _data_classes(node: ast.AST) -> set[str]:
+    values = _node_text(node)
+    result = {
+        label
+        for label, hint in _DATA_CLASS_HINTS.items()
+        if any(hint.search(value) for value in values)
+    }
+    if any(
+        isinstance(item, ast.Attribute)
+        and item.attr in {"body", "data", "form", "GET", "POST", "query_params"}
+        and _request_receiver(item.value)
+        for item in ast.walk(node)
+    ):
+        result.add("request-content")
+    if any(
+        isinstance(item, ast.Call)
+        and _qualified_name(item.func, {}).rsplit(".", 1)[-1] in {"get_json", "json"}
+        and isinstance(item.func, ast.Attribute)
+        and _request_receiver(item.func.value)
+        for item in ast.walk(node)
+    ):
+        result.add("request-content")
+    return result
+
+
+def _protective_call_kind(node: ast.Call, aliases: dict[str, str]) -> str:
+    name = _qualified_name(node.func, aliases)
+    if _MINIMIZER_HINT.search(name):
+        return "minimized-or-allowlisted"
+    if _REDACTOR_HINT.search(name):
+        return "redacted-or-masked"
+    if _PSEUDONYMIZER_HINT.search(name):
+        return "pseudonymized"
+    return "not-observed"
+
+
+def _strongest_protection(kinds: set[str]) -> str:
+    for value in (
+        "minimized-or-allowlisted",
+        "redacted-or-masked",
+        "configured-hook",
+        "pseudonymized",
+    ):
+        if value in kinds:
+            return value
+    return "not-observed"
+
+
+def _trust_boundary(family: str) -> str:
+    if family in {"analytics", "error-monitoring", "observability", "telemetry"}:
+        return "external-observability"
+    if family in {"network-egress", "url", "url-query"}:
+        return "external-network"
+    if family == "client-response":
+        return "untrusted-client"
+    if family in {"logging", "metrics"}:
+        return "operational-data-plane"
+    return "unknown"
+
+
+def _surface_risk_factors(
+    node: ast.Call,
+    family: str,
+    data_classes: set[str],
+    protection: str,
+) -> list[str]:
+    factors: set[str] = set()
+    if data_classes:
+        factors.add("sensitive-context")
+    if "request-content" in data_classes:
+        factors.add("full-request-content")
+    if family in {
+        "analytics",
+        "error-monitoring",
+        "network-egress",
+        "observability",
+        "telemetry",
+        "url",
+        "url-query",
+    }:
+        factors.add("external-trust-boundary")
+    if family in {
+        "analytics",
+        "error-monitoring",
+        "logging",
+        "metrics",
+        "observability",
+        "telemetry",
+        "url",
+        "url-query",
+    }:
+        factors.add("long-lived-operational-copy")
+    if family in {"url", "url-query"}:
+        factors.add("url-propagation")
+    if family == "client-response":
+        factors.add("untrusted-client-disclosure")
+    if family == "metrics" and data_classes:
+        factors.add("high-cardinality-label-disclosure")
+    if _call_has_exception_data(node):
+        factors.add("exception-details")
+    call_names = {
+        _qualified_name(item.func, {}).casefold()
+        for item in ast.walk(node)
+        if isinstance(item, ast.Call)
+    }
+    text = {value.casefold() for value in _node_text(node)}
+    has_environment = any(
+        isinstance(item, ast.Attribute)
+        and _qualified_name(item, {}).casefold() == "os.environ"
+        for item in ast.walk(node)
+    )
+    if call_names & {"locals", "vars"} or "__dict__" in text or has_environment:
+        factors.add("broad-runtime-state")
+    if data_classes and any(
+        value.rsplit(".", 1)[-1]
+        in {"asdict", "dict", "json", "model_dump", "model_dump_json"}
+        for value in call_names
+    ):
+        factors.add("full-object-serialization")
+    if protection == "not-observed" and data_classes:
+        factors.add("no-protection-observed")
+    if protection == "pseudonymized":
+        factors.add("pseudonymized-data-remains-sensitive")
+    return sorted(factors)
+
+
+def _surface_priority(
+    scope: str,
+    family: str,
+    data_classes: set[str],
+    protection: str,
+    risk_factors: list[str],
+) -> str:
+    if scope == "test":
+        return "low"
+    if family in {"client-response", "url", "url-query"} and data_classes:
+        return "high"
+    if (
+        data_classes
+        and protection == "not-observed"
+        and family
+        in {
+            "analytics",
+            "error-monitoring",
+            "logging",
+            "metrics",
+            "observability",
+            "telemetry",
+        }
+    ):
+        return "high"
+    if "broad-runtime-state" in risk_factors or "full-request-content" in risk_factors:
+        return "high"
+    return "medium"
+
+
 def _is_broad_capture(node: ast.AST) -> bool:
     return any(
         isinstance(item, ast.Constant)
@@ -1141,8 +1514,23 @@ def _sdk_family_matches_sink(sdk_family: str, sink_family: str) -> bool:
     return sdk_family in telemetry and sink_family in telemetry
 
 
+def _sink_families_match(observed: str, expected: str) -> bool:
+    if observed == expected:
+        return True
+    if {observed, expected} <= {"url", "url-query"}:
+        return True
+    telemetry = {
+        "analytics",
+        "error-monitoring",
+        "metrics",
+        "observability",
+        "telemetry",
+    }
+    return observed in telemetry and expected in telemetry
+
+
 def _deduplicate(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    seen: set[tuple[Any, ...]] = set()
+    seen: set[str] = set()
     result: list[dict[str, Any]] = []
     for item in sorted(
         items,
@@ -1153,7 +1541,7 @@ def _deduplicate(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
             str(value.get("sink")),
         ),
     ):
-        key = tuple(sorted(item.items()))
+        key = json.dumps(item, sort_keys=True, separators=(",", ":"))
         if key not in seen:
             seen.add(key)
             result.append(item)

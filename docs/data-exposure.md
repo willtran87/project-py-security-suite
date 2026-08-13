@@ -43,13 +43,14 @@ flowchart LR
     Sources["Sensitive sources<br/>credentials, private fields, request collections"]
     Taint["Semgrep, Pysa, and CodeQL<br/>source-to-sink evidence"]
     Sinks["Logs, telemetry, URL queries,<br/>client errors, process streams"]
-    SDK["AST and dependency inventory<br/>SDK and sink surfaces"]
+    SDK["AST and dependency inventory<br/>SDK, sink, and local alias context"]
+    Triage["Bounded triage context<br/>data class, trust boundary, protection, priority"]
     Graph["Graphify and reachability<br/>structural relevance"]
     Tests["Coverage and diff-cover<br/>runtime and change context"]
     Finding["Normalized exposure finding<br/>source, sink, SDK, CWE, action"]
 
     Sources --> Taint --> Sinks --> Finding
-    SDK --> Finding
+    SDK --> Triage --> Finding
     Graph --> Finding
     Tests --> Finding
 ```
@@ -76,11 +77,13 @@ and common analytics calls. Additional rules detect:
 
 - whole request bodies, JSON, forms, POST/GET collections, and query-parameter
   mappings sent to logs or telemetry;
-- credentials or private fields serialized into HTTP query strings;
+- credentials or private fields serialized into HTTP query strings, plus
+  credential-bearing values interpolated directly into outbound URLs;
 - raw exception text returned through FastAPI, Starlette, Flask, or Django
   response primitives; and
 - Sentry `send_default_pii=True` as a high-confidence configuration review;
-- broad `locals()`, `vars(...)`, or `__dict__` state snapshots written to logs;
+- broad `locals()`, `vars(...)`, `__dict__`, or process-environment snapshots
+  written to logs or exported to telemetry;
 - OpenTelemetry GenAI message-content capture in `.env`, TOML, YAML, INI,
   properties, and Python environment assignments; and
 - wildcard OpenTelemetry request/response header capture in those configuration
@@ -122,6 +125,16 @@ capture, sensitive query parameters, and exception-bearing client responses.
 These remain review surfaces until a scanner supplies source-to-sink or exact
 configuration evidence.
 
+Within each file, the AST inventory conservatively propagates named data-class
+context through simple assignments. Surfaces record credential, personal,
+financial, health, and request-content hints; operational, client, or external
+trust boundaries; broad-state, serialization, URL-retention, and exception
+risk factors; and the visible protection kind. Minimization/allowlisting,
+redaction/masking, configured SDK hooks, and pseudonymization remain distinct so
+reviewers do not mistake a hash or token for removal. High/medium/low review
+priority only orders inventory work—it is not a vulnerability severity or a
+regulatory classification.
+
 An inventory item is **not a finding**. It tells reviewers where disclosure
 controls should exist and activates SDK-specific context when a scanner reports
 a supported flow. Vendored SDK code remains visible to source scanners; a
@@ -137,6 +150,8 @@ For supported findings, the suite adds:
 - structural relevance such as changed, connected, runtime-observed, or
   disconnected-review;
 - visible sanitizer evidence without claiming sanitizer correctness;
+- bounded data classes, trust boundary, protection kind, risk factors, and
+  review priority;
 - source scanner attribution and CWE/OWASP citations; and
 - a remediation specific to logging, telemetry, URL propagation, exception
   responses, or external disclosure.
@@ -180,8 +195,9 @@ For every confirmed path:
 ## Artifact contract
 
 The current contract is bundled as
-[`data-exposure-1.1.schema.json`](../src/py_security_suite/schemas/data-exposure-1.1.schema.json);
-[1.0](../src/py_security_suite/schemas/data-exposure-1.0.schema.json) remains
+[`data-exposure-1.2.schema.json`](../src/py_security_suite/schemas/data-exposure-1.2.schema.json);
+[1.1](../src/py_security_suite/schemas/data-exposure-1.1.schema.json) and
+[1.0](../src/py_security_suite/schemas/data-exposure-1.0.schema.json) remain
 available for existing consumers. Analysis is bounded to 5,000 Python files,
 1,000 configuration files of at most 2 MiB each, 500 sink surfaces, and 500 SDK
 observations. Omitted counts and parse failures remain explicit.

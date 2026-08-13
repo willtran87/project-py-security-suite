@@ -60,6 +60,11 @@ rules:
               metavariable: $KEY
               regex: (?i).*(?:api.?key|auth(?:entication|orization|[_-]?(?:header|token))|connection.?string|cookie|credential|database.?url|dsn|encryption.?key|otp|passcode|password|passwd|pin|private.?key|secret|session|token).*
       - patterns:
+          - pattern: os.environ.get($KEY, ...)
+          - metavariable-regex:
+              metavariable: $KEY
+              regex: (?i).*(?:api.?key|auth(?:entication|orization|[_-]?(?:header|token))|connection.?string|cookie|credential|database.?url|dsn|encryption.?key|otp|passcode|password|passwd|pin|private.?key|secret|session|token).*
+      - patterns:
           - pattern: $REQUEST.headers.get($KEY, ...)
           - metavariable-regex:
               metavariable: $KEY
@@ -134,6 +139,11 @@ rules:
               regex: (?i).*(?:api.?key|auth(?:entication|orization|[_-]?(?:header|token))|connection.?string|cookie|credential|database.?url|dsn|encryption.?key|otp|passcode|password|passwd|pin|private.?key|secret|session|token).*
       - patterns:
           - pattern: os.environ[$KEY]
+          - metavariable-regex:
+              metavariable: $KEY
+              regex: (?i).*(?:api.?key|auth(?:entication|orization|[_-]?(?:header|token))|connection.?string|cookie|credential|database.?url|dsn|encryption.?key|otp|passcode|password|passwd|pin|private.?key|secret|session|token).*
+      - patterns:
+          - pattern: os.environ.get($KEY, ...)
           - metavariable-regex:
               metavariable: $KEY
               regex: (?i).*(?:api.?key|auth(?:entication|orization|[_-]?(?:header|token))|connection.?string|cookie|credential|database.?url|dsn|encryption.?key|otp|passcode|password|passwd|pin|private.?key|secret|session|token).*
@@ -491,6 +501,11 @@ rules:
               metavariable: $KEY
               regex: (?i).*(?:api.?key|auth(?:entication|orization|[_-]?(?:header|token))|connection.?string|cookie|credential|database.?url|dsn|encryption.?key|otp|passcode|password|passwd|pin|private.?key|secret|session|token).*
       - patterns:
+          - pattern: os.environ.get($KEY, ...)
+          - metavariable-regex:
+              metavariable: $KEY
+              regex: (?i).*(?:api.?key|auth(?:entication|orization|[_-]?(?:header|token))|connection.?string|cookie|credential|database.?url|dsn|encryption.?key|otp|passcode|password|passwd|pin|private.?key|secret|session|token).*
+      - patterns:
           - pattern: $REQUEST.headers.get($KEY, ...)
           - metavariable-regex:
               metavariable: $KEY
@@ -651,6 +666,9 @@ rules:
       - pattern: locals()
       - pattern: vars(...)
       - pattern: $OBJECT.__dict__
+      - pattern: os.environ
+      - pattern: os.environ.copy()
+      - pattern: dict(os.environ)
     pattern-propagators:
       - pattern: $TO = $FROM
         from: $FROM
@@ -679,6 +697,127 @@ rules:
               - pattern: sys.stdout.write($DATA)
               - pattern: sys.stderr.write($DATA)
           - focus-metavariable: $DATA
+
+  - id: python.runtime-state-to-telemetry
+    languages: [python]
+    mode: taint
+    message: A broad runtime or environment snapshot may reach telemetry and disclose credentials or private fields.
+    severity: WARNING
+    metadata:
+      cwe:
+        - "CWE-201: Insertion of Sensitive Information Into Sent Data"
+        - "CWE-200: Exposure of Sensitive Information to an Unauthorized Actor"
+      category: data-exposure
+      confidence: MEDIUM
+      impact: Runtime snapshots and process environments can contain credentials, request data, personal information, internal paths, and provider responses that cross exporter, vendor, region, access, and retention boundaries.
+      remediation: Replace broad state capture with a small allowlisted event model; never export the process environment; test telemetry serialization with synthetic credential and PII canaries.
+      source: https://opentelemetry.io/docs/security/handling-sensitive-data/
+    pattern-sources:
+      - pattern: locals()
+      - pattern: vars(...)
+      - pattern: $OBJECT.__dict__
+      - pattern: os.environ
+      - pattern: os.environ.copy()
+      - pattern: dict(os.environ)
+    pattern-propagators:
+      - pattern: $TO = $FROM
+        from: $FROM
+        to: $TO
+    pattern-sanitizers:
+      - patterns:
+          - pattern: $SANITIZER(...)
+          - metavariable-regex:
+              metavariable: $SANITIZER
+              regex: (?i).*(?:allowlist|drop_sensitive|minimize|redact|remove_sensitive|sanitize|scrub).*
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: sentry_sdk.capture_event($DATA, ...)
+              - pattern: sentry_sdk.set_context(..., $DATA, ...)
+              - pattern: sentry_sdk.set_extra(..., $DATA, ...)
+              - pattern: $SCOPE.set_context(..., $DATA, ...)
+              - pattern: $SCOPE.set_extra(..., $DATA, ...)
+              - pattern: $SPAN.set_attributes($DATA, ...)
+              - pattern: $SPAN.add_event(..., attributes=$DATA, ...)
+              - pattern: analytics.track(..., $DATA, ...)
+              - pattern: mixpanel.track(..., $DATA, ...)
+              - pattern: posthog.capture(..., properties=$DATA, ...)
+              - pattern: newrelic.agent.record_custom_event(..., $DATA, ...)
+              - pattern: $CLIENT.set_custom_context($DATA, ...)
+              - pattern: $CLIENT.set_extra_context($DATA, ...)
+          - focus-metavariable: $DATA
+
+  - id: python.sensitive-data-in-url
+    languages: [python]
+    mode: taint
+    message: Credential-bearing data may be interpolated directly into an outbound URL.
+    severity: ERROR
+    metadata:
+      cwe:
+        - "CWE-598: Use of HTTP Request With Sensitive Query String"
+        - "CWE-200: Exposure of Sensitive Information to an Unauthorized Actor"
+      category: data-exposure
+      confidence: HIGH
+      impact: URLs are copied into access logs, proxies, caches, browser or client histories, telemetry, and Referer headers; direct interpolation can disclose credentials beyond the intended recipient.
+      remediation: Remove credentials from the URL and send them in an appropriate protected header or request body; rotate exposed credentials and review downstream URL logs and telemetry.
+      source: https://cwe.mitre.org/data/definitions/598.html
+    pattern-sources:
+      - patterns:
+          - pattern: os.getenv($KEY, ...)
+          - metavariable-regex:
+              metavariable: $KEY
+              regex: (?i).*(?:api.?key|auth(?:entication|orization|[_-]?(?:header|token))|connection.?string|cookie|credential|database.?url|dsn|encryption.?key|otp|passcode|password|passwd|pin|private.?key|secret|session|token).*
+      - patterns:
+          - pattern: os.environ[$KEY]
+          - metavariable-regex:
+              metavariable: $KEY
+              regex: (?i).*(?:api.?key|auth(?:entication|orization|[_-]?(?:header|token))|connection.?string|cookie|credential|database.?url|dsn|encryption.?key|otp|passcode|password|passwd|pin|private.?key|secret|session|token).*
+      - patterns:
+          - pattern: os.environ.get($KEY, ...)
+          - metavariable-regex:
+              metavariable: $KEY
+              regex: (?i).*(?:api.?key|auth(?:entication|orization|[_-]?(?:header|token))|connection.?string|cookie|credential|database.?url|dsn|encryption.?key|otp|passcode|password|passwd|pin|private.?key|secret|session|token).*
+      - patterns:
+          - pattern: $REQUEST.headers.get($KEY, ...)
+          - metavariable-regex:
+              metavariable: $KEY
+              regex: (?i).*(?:authorization|cookie|credential|password|secret|session|token).*
+      - pattern: $REQUEST.cookies.get(...)
+      - patterns:
+          - pattern: $OBJECT.$FIELD
+          - metavariable-regex:
+              metavariable: $FIELD
+              regex: (?i)^(?:api_key|auth_token|authorization|connection_string|cookie|credential|database_url|dsn|encryption_key|otp|passcode|password|passwd|pin|private_key|secret|session|token)$
+      - patterns:
+          - pattern-either:
+              - pattern: $OBJECT[$KEY]
+              - pattern: $OBJECT.get($KEY, ...)
+          - metavariable-regex:
+              metavariable: $KEY
+              regex: (?i).*(?:api.?key|auth(?:entication|orization|[_-]?(?:header|token))|connection.?string|cookie|credential|database.?url|dsn|encryption.?key|otp|passcode|password|passwd|pin|private.?key|secret|session|token).*
+      - pattern: $CLIENT.get_secret_value(...)
+      - pattern: $CLIENT.access_secret_version(...)
+    pattern-propagators:
+      - pattern: $TO = $FROM
+        from: $FROM
+        to: $TO
+    pattern-sanitizers:
+      - patterns:
+          - pattern: $SANITIZER(...)
+          - metavariable-regex:
+              metavariable: $SANITIZER
+              regex: (?i).*(?:allowlist|drop_sensitive|minimize|redact|remove_sensitive|sanitize|scrub).*
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: requests.$METHOD($URL, ...)
+              - pattern: httpx.$METHOD($URL, ...)
+              - pattern: aiohttp.request($METHOD, $URL, ...)
+              - pattern: urllib.request.urlopen($URL, ...)
+              - pattern: urlopen($URL, ...)
+              - pattern: websockets.connect($URL, ...)
+              - pattern: websocket.create_connection($URL, ...)
+          - focus-metavariable: $URL
 
   - id: config.opentelemetry-genai-content-capture-enabled
     languages: [generic]

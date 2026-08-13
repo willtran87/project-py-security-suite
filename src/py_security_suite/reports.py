@@ -584,7 +584,7 @@ def _render_data_exposure_summary(value: dict[str, Any] | None) -> list[str]:
         else []
     )
     query_findings = sum(
-        isinstance(item, dict) and item.get("sink_family") == "url-query"
+        isinstance(item, dict) and item.get("sink_family") in {"url", "url-query"}
         for item in assessments
     )
     response_findings = sum(
@@ -606,6 +606,9 @@ def _render_data_exposure_summary(value: dict[str, Any] | None) -> list[str]:
         f"| Production sink review surfaces | {int(summary.get('production_sink_surfaces', 0))} |",
         f"| Test sink review surfaces | {int(summary.get('test_sink_surfaces', 0))} |",
         f"| Explicit risky or invalid capture configurations | {int(summary.get('configuration_review_surfaces', 0))} |",
+        f"| High-priority production review surfaces | {int(summary.get('high_priority_review_surfaces', 0))} |",
+        f"| Surfaces with sensitive-data context | {int(summary.get('sensitive_context_surfaces', 0))} |",
+        f"| Surfaces with an explicit protection signal | {int(summary.get('protected_surfaces', 0))} |",
         f"| Logging, telemetry, analytics, and egress SDK families | {int(summary.get('sdk_families_observed', 0))} |",
         "",
         "A sink surface is an inventory item, not proof of leakage. A finding requires source-to-sink scanner evidence and retains CWE/OWASP guidance.",
@@ -614,7 +617,7 @@ def _render_data_exposure_summary(value: dict[str, Any] | None) -> list[str]:
         lines.extend(
             [
                 "",
-                "| Exposure finding | Location | Concern | Sink / SDK | Relevance | Action |",
+                "| Exposure finding | Location | Priority / data class | Sink / SDK | Relevance | Action |",
                 "|---|---|---|---|---|---|",
             ]
         )
@@ -625,8 +628,13 @@ def _render_data_exposure_summary(value: dict[str, Any] | None) -> list[str]:
             + _markdown_code(str(item.get("path", "unknown")))
             + (":" + str(item["line"]) if item.get("line") else "")
             + "` | `"
-            + _markdown_code(str(item.get("concern", "review")))
-            + "` | `"
+            + _markdown_code(str(item.get("review_priority", "medium")))
+            + "` / "
+            + _markdown_text(
+                ", ".join(str(value) for value in item.get("data_classes", []))
+                or "unclassified"
+            )
+            + " | `"
             + _markdown_code(str(item.get("sink_family", "unknown")))
             + (" / " + _markdown_code(str(item["sdk"])) if item.get("sdk") else "")
             + "` | `"
@@ -641,8 +649,8 @@ def _render_data_exposure_summary(value: dict[str, Any] | None) -> list[str]:
         lines.extend(
             [
                 "",
-                "| Top production sink surface | Family | SDK | Sanitizer visible |",
-                "|---|---|---|---:|",
+                "| Top production sink surface | Family | Priority | Data class | Protection |",
+                "|---|---|---|---|---|",
             ]
         )
         lines.extend(
@@ -652,12 +660,27 @@ def _render_data_exposure_summary(value: dict[str, Any] | None) -> list[str]:
             + str(int(item.get("line", 1)))
             + "` | `"
             + _markdown_code(str(item.get("sink_family", "unknown")))
+            + "` | `"
+            + _markdown_code(str(item.get("review_priority", "medium")))
             + "` | "
-            + _markdown_text(str(item.get("sdk") or "-"))
-            + " | "
-            + ("yes" if item.get("sanitizer_visible") else "no")
+            + _markdown_text(
+                ", ".join(str(value) for value in item.get("data_classes", []))
+                or "unclassified"
+            )
+            + " | `"
+            + _markdown_code(str(item.get("protection_status", "not-observed")))
+            + "`"
             + " |"
-            for item in production_surfaces[:5]
+            for item in sorted(
+                production_surfaces,
+                key=lambda surface: (
+                    {"high": 0, "medium": 1, "low": 2}.get(
+                        str(surface.get("review_priority")), 3
+                    ),
+                    str(surface.get("path")),
+                    int(surface.get("line") or 0),
+                ),
+            )[:5]
         )
     return lines
 
@@ -2611,6 +2634,14 @@ def _markdown_data_exposure_context(finding: Finding) -> list[str]:
         if sanitizer is False
         else "unknown"
     )
+    data_classes = (
+        ", ".join(str(value) for value in context.get("data_classes", []))
+        or "unclassified"
+    )
+    risk_factors = (
+        ", ".join(str(value) for value in context.get("risk_factors", [])[:5])
+        or "none recorded"
+    )
     return [
         "- **Sensitive-data path:** concern `"
         + _markdown_code(str(context.get("concern", "review")))
@@ -2623,6 +2654,14 @@ def _markdown_data_exposure_context(finding: Finding) -> list[str]:
         + _markdown_code(sdk)
         + "`; structural relevance `"
         + _markdown_code(str(context.get("structural_relevance", "unknown")))
+        + "`; priority `"
+        + _markdown_code(str(context.get("review_priority", "medium")))
+        + "`; data classes `"
+        + _markdown_code(data_classes)
+        + "`; trust boundary `"
+        + _markdown_code(str(context.get("trust_boundary", "unknown")))
+        + "`; risk factors `"
+        + _markdown_code(risk_factors)
         + "`; sanitizer `"
         + _markdown_code(sanitizer_text)
         + "` - "
@@ -2745,13 +2784,26 @@ def _html_data_exposure_context(finding: Finding) -> str:
     exact_sink = html.escape(str(context.get("sink") or family))
     sdk = html.escape(str(context.get("sdk") or "none identified"))
     relevance = html.escape(str(context.get("structural_relevance", "unknown")))
+    priority = html.escape(str(context.get("review_priority", "medium")))
+    data_classes = html.escape(
+        ", ".join(str(value) for value in context.get("data_classes", []))
+        or "unclassified"
+    )
+    trust_boundary = html.escape(str(context.get("trust_boundary", "unknown")))
+    risk_factors = html.escape(
+        ", ".join(str(value) for value in context.get("risk_factors", [])[:5])
+        or "none recorded"
+    )
     action = html.escape(str(context.get("recommended_action", "Review the path.")))
     return (
         "<section class='source-context'><h4>Sensitive-data exposure path</h4>"
         f"<p>Concern <strong>{concern}</strong>; sink <strong>{exact_sink}</strong> "
         f"(family <strong>{family}</strong>); "
         f"SDK <strong>{sdk}</strong>; structural relevance "
-        f"<strong>{relevance}</strong>. {action}</p></section>"
+        f"<strong>{relevance}</strong>; priority <strong>{priority}</strong>; "
+        f"data classes <strong>{data_classes}</strong>; trust boundary "
+        f"<strong>{trust_boundary}</strong>; risk factors "
+        f"<strong>{risk_factors}</strong>. {action}</p></section>"
     )
 
 

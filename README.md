@@ -619,7 +619,7 @@ python-security-report/
 |-- graphify.json                    # validated code-only nodes, edges, and file topology
 |-- graph-analysis.json              # graph-aware finding context and hotspots
 |-- structural-synthesis.json        # dead code, island boundaries, change risk, and graph-guided tests
-|-- data-exposure.json               # sensitive sinks, SDK surfaces, and correlated disclosure paths
+|-- data-exposure.json               # prioritized sinks, data classes, SDKs, and correlated disclosure paths
 |-- evidence-fusion.json             # cross-scanner and source/artifact evidence joins
 |-- coverage-summary.json           # validated pre-generated test coverage
 |-- junit-summary.json              # validated test outcome metadata
