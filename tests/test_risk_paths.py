@@ -15,7 +15,11 @@ from py_security_suite.models import (
     json_ready,
 )
 from py_security_suite.report_inspection import read_bundled_schema
-from py_security_suite.reports import _render_risk_path_summary, render_sarif
+from py_security_suite.reports import (
+    _html_risk_path_context,
+    _render_risk_path_summary,
+    render_sarif,
+)
 from py_security_suite.risk_paths import build_risk_paths
 
 
@@ -65,9 +69,18 @@ class RiskPathTests(unittest.TestCase):
         self.assertEqual(result["summary"]["routes_in_convergence_hotspots"], 2)
         self.assertEqual(result["summary"]["owner_work_queues"], 1)
         self.assertEqual(result["summary"]["validation_campaigns"], 2)
+        self.assertEqual(result["summary"]["shared_validation_test_hotspots"], 1)
+        self.assertEqual(result["summary"]["campaigns_using_shared_tests"], 2)
+        self.assertEqual(result["summary"]["routes_using_shared_tests"], 2)
+        self.assertEqual(result["summary"]["single_test_dependency_campaigns"], 2)
         self.assertEqual(result["summary"]["campaigns_with_selected_tests"], 2)
         self.assertEqual(result["summary"]["campaigns_with_failing_tests"], 0)
         self.assertEqual(result["summary"]["campaigns_with_coverage_gaps"], 1)
+        self.assertEqual(result["summary"]["campaigns_with_changed_controls"], 1)
+        self.assertEqual(result["summary"]["campaigns_with_uncovered_changed_lines"], 1)
+        self.assertEqual(
+            result["summary"]["campaigns_with_runtime_observation_gaps"], 1
+        )
         self.assertEqual(result["summary"]["campaigns_aligned_current_evidence"], 1)
         self.assertEqual(result["summary"]["campaigns_requiring_evidence"], 0)
         self.assertEqual(result["summary"]["unique_campaign_test_files"], 1)
@@ -80,6 +93,11 @@ class RiskPathTests(unittest.TestCase):
             result["summary"]["campaigns_with_source_bound_control_points"], 2
         )
         self.assertEqual(result["summary"]["selected_test_source_bindings"], 2)
+        queue = result["owner_work_queues"][0]
+        self.assertEqual(queue["campaigns_with_uncovered_changed_lines"], 1)
+        self.assertEqual(queue["campaigns_with_runtime_observation_gaps"], 1)
+        self.assertEqual(queue["shared_validation_test_files"], 1)
+        self.assertEqual(len(queue["validation_test_hotspot_ids"]), 1)
         finding_route = next(
             route for route in result["routes"] if route["target"]["kind"] == "finding"
         )
@@ -100,7 +118,27 @@ class RiskPathTests(unittest.TestCase):
         )
         self.assertEqual(finding.evidence["risk_path"]["status"], "routed")
         self.assertEqual(len(finding.evidence["risk_path"]["validation_campaigns"]), 2)
+        self.assertEqual(
+            len(finding.evidence["risk_path"]["validation_test_hotspot_ids"]), 1
+        )
         campaigns = result["validation_campaigns"]
+        test_hotspot = result["validation_test_hotspots"][0]
+        self.assertEqual(test_hotspot["test_path"], "tests/test_sink.py")
+        self.assertEqual(len(test_hotspot["campaign_ids"]), 2)
+        self.assertEqual(
+            test_hotspot["control_point_paths"], ["src/service.py", "src/sink.py"]
+        )
+        self.assertEqual(test_hotspot["execution_statuses"], ["passed"])
+        self.assertEqual(test_hotspot["observed_case_count"], 1)
+        self.assertTrue(test_hotspot["source_binding_consistent"])
+        self.assertEqual(test_hotspot["source_binding"]["path"], "tests/test_sink.py")
+        self.assertEqual(len(test_hotspot["single_test_dependency_campaign_ids"]), 2)
+        self.assertTrue(
+            all(
+                campaign["shared_test_hotspot_ids"] == [test_hotspot["test_hotspot_id"]]
+                for campaign in campaigns
+            )
+        )
         self.assertEqual(
             {campaign["test_selection_confidence"] for campaign in campaigns},
             {"high", "medium"},
@@ -129,11 +167,29 @@ class RiskPathTests(unittest.TestCase):
         )
         self.assertTrue(
             all(
-                campaign["review_score_model"] == "shared-control-review-v1"
+                campaign["review_score_model"] == "shared-control-review-v2"
                 for campaign in campaigns
             )
         )
         self.assertTrue(all(campaign["review_factors"] for campaign in campaigns))
+        campaigns_by_path = {campaign["path"]: campaign for campaign in campaigns}
+        sink_campaign = campaigns_by_path["src/sink.py"]
+        service_campaign = campaigns_by_path["src/service.py"]
+        self.assertEqual(
+            sink_campaign["control_point_context"]["change_risk_score"], 85
+        )
+        self.assertEqual(
+            sink_campaign["control_point_context"]["uncovered_changed_lines"], [9]
+        )
+        self.assertTrue(
+            {"changed-control-risk", "uncovered-changed-lines"}.issubset(
+                {factor["id"] for factor in sink_campaign["review_factors"]}
+            )
+        )
+        self.assertIn(
+            "runtime-observation-gap",
+            {factor["id"] for factor in service_campaign["review_factors"]},
+        )
         self.assertTrue(
             all(
                 campaign["focused_test_validation_status"] == "passed"
@@ -167,12 +223,27 @@ class RiskPathTests(unittest.TestCase):
         self.assertIn("Shared route control points", rendered)
         self.assertIn("Route owner queues", rendered)
         self.assertIn("Shared validation campaigns", rendered)
+        self.assertIn("Shared validation-test hotspots", rendered)
+        self.assertIn(test_hotspot["test_hotspot_id"], rendered)
+        self.assertIn("sole dependency `2`", rendered)
         self.assertIn("revision `not-established`", rendered)
+        self.assertIn("change risk 85 (high)", rendered)
+        self.assertIn("uncovered changed lines 9", rendered)
+        self.assertIn("runtime not-observed", rendered)
+        self.assertIn("changed-control-risk +15", rendered)
+        html_context = _html_risk_path_context(finding)
+        self.assertIn("changed-control-risk +15", html_context)
+        self.assertIn("uncovered changed lines 9", html_context)
+        self.assertIn(test_hotspot["test_hotspot_id"], html_context)
         self.assertIn("tests/test_sink.py", rendered)
         self.assertIn("src/service.py", rendered)
         sarif = render_sarif([finding])
         properties = sarif["runs"][0]["results"][0]["properties"]
         self.assertEqual(properties["risk_path"]["status"], "routed")
+        self.assertEqual(
+            properties["risk_path"]["validation_test_hotspot_ids"],
+            [test_hotspot["test_hotspot_id"]],
+        )
         closure = _finding_items([json_ready(finding)])[0]
         self.assertIn("risk-paths.json", closure["evidence_refs"])
         self.assertEqual(
@@ -188,6 +259,38 @@ class RiskPathTests(unittest.TestCase):
             finding_route["validation_campaign_ids"],
         )
         self.assertIn("tests/test_sink.py", closure["evidence_refs"])
+        closure_campaigns = closure["details"]["risk_path"]["validation_campaigns"]
+        self.assertTrue(
+            any(
+                campaign["control_point_context"].get("change_risk_score") == 85
+                for campaign in closure_campaigns
+            )
+        )
+        self.assertTrue(
+            any(
+                "Shared validation-test hotspots" in item
+                for item in closure["acceptance_criteria"]
+            )
+        )
+        self.assertTrue(
+            any(
+                "uncovered changed lines" in item
+                for item in closure["acceptance_criteria"]
+            )
+        )
+        self.assertTrue(
+            any(
+                "Runtime evidence observes" in item
+                for item in closure["acceptance_criteria"]
+            )
+        )
+        self.assertTrue(
+            any(
+                factor.get("id") == "runtime-observation-gap"
+                for campaign in closure_campaigns
+                for factor in campaign["review_factors"]
+            )
+        )
         self.assertTrue(
             any(
                 "validation assessment" in item
@@ -349,6 +452,17 @@ class RiskPathTests(unittest.TestCase):
                 for campaign in failing_result["validation_campaigns"]
             )
         )
+        self.assertTrue(
+            all(
+                next(
+                    factor
+                    for factor in campaign["review_factors"]
+                    if factor["id"] == "focused-test-state"
+                )["evidence_artifacts"]
+                == ["junit-summary.json"]
+                for campaign in failing_result["validation_campaigns"]
+            )
+        )
 
 
 def _finding(path: str, line: int) -> Finding:
@@ -419,10 +533,15 @@ def _artifacts() -> dict[str, object]:
             ],
             "nodes": [
                 {
+                    "path": "src/service.py",
+                    "state": "executable",
+                    "runtime_observation": "not-observed",
+                },
+                {
                     "path": "src/sink.py",
                     "state": "executable",
                     "runtime_observation": "observed",
-                }
+                },
             ],
         },
         "coverage-summary.json": {
@@ -468,6 +587,17 @@ def _artifacts() -> dict[str, object]:
                     "maximum_complexity_rank": "E",
                     "reachability_states": ["executable"],
                 },
+            ],
+            "change_impact_assessments": [
+                {
+                    "path": "src/sink.py",
+                    "classification": "changed-lines-under-tested",
+                    "priority": "high",
+                    "risk_score": 85,
+                    "changed_lines": 4,
+                    "uncovered_changed_lines": [9],
+                    "changed_line_coverage_percent": 75.0,
+                }
             ],
         },
         "data-exposure.json": {

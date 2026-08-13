@@ -536,6 +536,9 @@ def _risk_path_closure_context(
                     "selected_test_files": _string_values(
                         campaign.get("selected_test_files"), 50
                     ),
+                    "shared_test_hotspot_ids": _string_values(
+                        campaign.get("shared_test_hotspot_ids"), 100
+                    ),
                     "focused_test_validation_status": campaign.get(
                         "focused_test_validation_status"
                     ),
@@ -547,6 +550,16 @@ def _risk_path_closure_context(
                     "review_score_model": campaign.get("review_score_model"),
                     "review_score": campaign.get("review_score"),
                     "review_tier": campaign.get("review_tier"),
+                    "review_factors": [
+                        _as_object(factor)
+                        for factor in _object_list(
+                            campaign.get("review_factors"),
+                            "campaign review factors",
+                        )[:20]
+                    ],
+                    "control_point_context": _as_object(
+                        campaign.get("control_point_context")
+                    ),
                     "source_snapshot": {
                         "source_sha256": _as_object(
                             campaign.get("source_snapshot")
@@ -598,6 +611,9 @@ def _risk_path_closure_context(
                     risk_path.get("convergence_hotspot_ids"), 50
                 ),
                 "validation_campaign_ids": campaign_ids,
+                "validation_test_hotspot_ids": _string_values(
+                    risk_path.get("validation_test_hotspot_ids"), 100
+                ),
                 "validation_campaigns": campaigns,
                 "validation_assessment": assessment,
                 "validation_action": validation.get("action"),
@@ -638,6 +654,29 @@ def _risk_path_closure_context(
         if revision_gaps:
             acceptance.append(
                 "Every linked campaign's retained test and coverage evidence declares the replacement report's sealed source-inventory digest."
+            )
+        if any(
+            _as_object(campaign.get("control_point_context")).get(
+                "uncovered_changed_lines"
+            )
+            for campaign in campaigns
+        ):
+            acceptance.append(
+                "Every linked campaign covers its retained uncovered changed lines or records an approved risk disposition."
+            )
+        if any(
+            any(
+                factor.get("id") == "runtime-observation-gap"
+                for factor in campaign.get("review_factors", [])
+            )
+            for campaign in campaigns
+        ):
+            acceptance.append(
+                "Runtime evidence observes each linked changed control point, or the replacement report records an approved runtime-evidence gap."
+            )
+        if any(campaign["shared_test_hotspot_ids"] for campaign in campaigns):
+            acceptance.append(
+                "Shared validation-test hotspots have coordinated assertions and an independent-test or approved concentration-risk disposition."
             )
         return refs, acceptance, details
     reason = str(risk_path.get("reason") or "bounded static route unavailable")

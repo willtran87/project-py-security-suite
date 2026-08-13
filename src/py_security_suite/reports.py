@@ -803,6 +803,8 @@ def _render_risk_path_summary(value: dict[str, Any] | None) -> list[str]:
     hotspots = hotspots if isinstance(hotspots, list) else []
     campaigns = value.get("validation_campaigns")
     campaigns = campaigns if isinstance(campaigns, list) else []
+    test_hotspots = value.get("validation_test_hotspots")
+    test_hotspots = test_hotspots if isinstance(test_hotspots, list) else []
     owner_queues = value.get("owner_work_queues")
     owner_queues = owner_queues if isinstance(owner_queues, list) else []
     lines = [
@@ -834,9 +836,16 @@ def _render_risk_path_summary(value: dict[str, Any] | None) -> list[str]:
         f"| Routes benefiting from shared remediation | {int(summary.get('routes_in_convergence_hotspots', 0))} |",
         f"| Owner work queues | {int(summary.get('owner_work_queues', 0))} |",
         f"| Shared validation campaigns | {int(summary.get('validation_campaigns', 0))} |",
+        f"| Shared validation-test hotspots | {int(summary.get('shared_validation_test_hotspots', 0))} |",
+        f"| Campaigns using shared tests | {int(summary.get('campaigns_using_shared_tests', 0))} |",
+        f"| Routes using shared tests | {int(summary.get('routes_using_shared_tests', 0))} |",
+        f"| Campaigns dependent on one shared test | {int(summary.get('single_test_dependency_campaigns', 0))} |",
         f"| Campaigns with selected tests | {int(summary.get('campaigns_with_selected_tests', 0))} |",
         f"| Campaigns with failing tests | {int(summary.get('campaigns_with_failing_tests', 0))} |",
         f"| Campaigns with coverage gaps | {int(summary.get('campaigns_with_coverage_gaps', 0))} |",
+        f"| Campaigns at changed control points | {int(summary.get('campaigns_with_changed_controls', 0))} |",
+        f"| Campaigns with uncovered changed lines | {int(summary.get('campaigns_with_uncovered_changed_lines', 0))} |",
+        f"| Campaigns with runtime-observation gaps | {int(summary.get('campaigns_with_runtime_observation_gaps', 0))} |",
         f"| Campaigns aligned in current evidence | {int(summary.get('campaigns_aligned_current_evidence', 0))} |",
         f"| Campaigns requiring more evidence | {int(summary.get('campaigns_requiring_evidence', 0))} |",
         f"| Unique campaign test files | {int(summary.get('unique_campaign_test_files', 0))} |",
@@ -906,6 +915,85 @@ def _render_risk_path_summary(value: dict[str, Any] | None) -> list[str]:
                 )
                 + " |"
             )
+    if test_hotspots:
+        lines.extend(
+            [
+                "",
+                "### Shared validation-test hotspots",
+                "",
+                "These test files are selected by multiple shared-control campaigns. Concentration coordinates regression work but does not prove independent assertions or sufficient coverage.",
+                "",
+                "| Review / test | Campaigns / controls / routes | Selection / dependency | Execution / source | Owners / action |",
+                "|---|---:|---|---|---|",
+            ]
+        )
+        for hotspot in test_hotspots[:10]:
+            if not isinstance(hotspot, dict):
+                continue
+            owners = hotspot.get("owners")
+            owner_text = (
+                ", ".join(str(owner) for owner in owners[:3])
+                if isinstance(owners, list) and owners
+                else "Unassigned"
+            )
+            statuses = hotspot.get("execution_statuses")
+            status_text = (
+                ", ".join(str(status) for status in statuses[:5])
+                if isinstance(statuses, list) and statuses
+                else "not observed"
+            )
+            binding = hotspot.get("source_binding")
+            source_text = (
+                "bound"
+                if isinstance(binding, dict)
+                and hotspot.get("source_binding_consistent") is True
+                else "inconsistent"
+                if hotspot.get("source_binding_consistent") is False
+                else "not bound"
+            )
+            lines.append(
+                "| `"
+                + _markdown_code(str(hotspot.get("highest_review_tier") or "low"))
+                + "` score `"
+                + _markdown_code(str(int(hotspot.get("highest_review_score") or 0)))
+                + "`<br>`"
+                + _markdown_code(str(hotspot.get("test_path") or "unknown"))
+                + "`<br>`"
+                + _markdown_code(str(hotspot.get("test_hotspot_id") or "unknown"))
+                + "` | "
+                + str(len(hotspot.get("campaign_ids") or []))
+                + " / "
+                + str(len(hotspot.get("control_point_paths") or []))
+                + " / "
+                + str(len(hotspot.get("route_ids") or []))
+                + " | direct/transitive/context `"
+                + _markdown_code(
+                    str(int(hotspot.get("direct_campaigns") or 0))
+                    + "/"
+                    + str(int(hotspot.get("transitive_campaigns") or 0))
+                    + "/"
+                    + str(int(hotspot.get("route_mapped_campaigns") or 0))
+                )
+                + "`<br>sole dependency `"
+                + _markdown_code(
+                    str(len(hotspot.get("single_test_dependency_campaign_ids") or []))
+                )
+                + "` | status `"
+                + _markdown_code(status_text)
+                + "`; cases `"
+                + _markdown_code(str(int(hotspot.get("observed_case_count") or 0)))
+                + "`<br>source `"
+                + _markdown_code(source_text)
+                + "` | **"
+                + _markdown_text(owner_text)
+                + "**<br>"
+                + _markdown_text(
+                    str(
+                        hotspot.get("recommended_action") or "Review shared test scope."
+                    )
+                )
+                + " |"
+            )
     if campaigns:
         lines.extend(
             [
@@ -943,27 +1031,16 @@ def _render_risk_path_summary(value: dict[str, Any] | None) -> list[str]:
             revision = str(
                 snapshot.get("evidence_revision_binding") or "not-established"
             )
-            control = campaign.get("control_point_context")
-            control = control if isinstance(control, dict) else {}
-            context_parts: list[str] = []
-            if isinstance(control.get("graph_degree"), int):
-                context_parts.append(f"degree {int(control['graph_degree'])}")
-            if isinstance(control.get("maximum_complexity"), int):
-                context_parts.append(
-                    "complexity "
-                    + str(int(control["maximum_complexity"]))
-                    + (
-                        f" ({control['maximum_complexity_rank']})"
-                        if control.get("maximum_complexity_rank")
-                        else ""
-                    )
-                )
+            context_text = _risk_campaign_control_text(campaign)
+            factor_text = _risk_campaign_factor_text(campaign)
             lines.append(
                 "| `"
                 + _markdown_code(str(campaign.get("review_tier") or "low"))
                 + "` score `"
                 + _markdown_code(str(int(campaign.get("review_score") or 0)))
-                + "`<br>route priority `"
+                + "`"
+                + ("<br>factors " + _markdown_text(factor_text) if factor_text else "")
+                + "<br>route priority `"
                 + _markdown_code(str(campaign.get("priority") or "P4"))
                 + "`<br>`"
                 + _markdown_code(str(campaign.get("campaign_id") or "unknown"))
@@ -993,11 +1070,7 @@ def _render_risk_path_summary(value: dict[str, Any] | None) -> list[str]:
                     str(campaign.get("test_coverage_alignment") or "not-selected")
                 )
                 + "`"
-                + (
-                    "<br>" + _markdown_text(", ".join(context_parts))
-                    if context_parts
-                    else ""
-                )
+                + ("<br>" + _markdown_text(context_text) if context_text else "")
                 + " | revision `"
                 + _markdown_code(revision)
                 + "`<br>control bound `"
@@ -1068,7 +1141,7 @@ def _render_risk_path_summary(value: dict[str, Any] | None) -> list[str]:
                 "",
                 "### Route owner queues",
                 "",
-                "| Owner | Priority | Routes / targets | Hotspots / campaigns | Validation / campaign review | Next action |",
+                "| Owner | Priority | Routes / targets | Controls / campaigns / shared tests | Validation / campaign review | Next action |",
                 "|---|---|---:|---:|---|---|",
             ]
         )
@@ -1092,6 +1165,8 @@ def _render_risk_path_summary(value: dict[str, Any] | None) -> list[str]:
                 + str(len(queue.get("convergence_hotspot_ids") or []))
                 + " / "
                 + str(len(queue.get("validation_campaign_ids") or []))
+                + " / "
+                + str(int(queue.get("shared_validation_test_files") or 0))
                 + " | "
                 + _markdown_text(_validation_count_summary(validation))
                 + "<br>highest campaign score `"
@@ -1103,6 +1178,15 @@ def _render_risk_path_summary(value: dict[str, Any] | None) -> list[str]:
                     str(int(queue.get("campaigns_revision_mismatched") or 0))
                     + "/"
                     + str(int(queue.get("campaigns_revision_unbound") or 0))
+                )
+                + "`"
+                + "; changed/runtime gaps `"
+                + _markdown_code(
+                    str(int(queue.get("campaigns_with_uncovered_changed_lines") or 0))
+                    + "/"
+                    + str(
+                        int(queue.get("campaigns_with_runtime_observation_gaps") or 0)
+                    )
                 )
                 + "`"
                 + " | "
@@ -3455,6 +3539,14 @@ def _markdown_risk_path_context(finding: Finding) -> list[str]:
         if isinstance(hotspot_ids, list) and hotspot_ids
         else ""
     )
+    test_hotspot_ids = context.get("validation_test_hotspot_ids")
+    test_hotspot_text = (
+        " **Shared validation tests:** "
+        + ", ".join(f"`{_markdown_code(str(value))}`" for value in test_hotspot_ids[:5])
+        + "."
+        if isinstance(test_hotspot_ids, list) and test_hotspot_ids
+        else ""
+    )
     campaigns = context.get("validation_campaigns")
     campaign_values = campaigns if isinstance(campaigns, list) else []
     campaign_text = ""
@@ -3470,6 +3562,7 @@ def _markdown_risk_path_context(finding: Finding) -> list[str]:
             selected_values = selected if isinstance(selected, list) else []
             snapshot = campaign.get("source_snapshot")
             snapshot = snapshot if isinstance(snapshot, dict) else {}
+            control_text = _risk_campaign_control_text(campaign)
             campaign_text = (
                 " **Shared validation campaign(s):** "
                 + campaign_ids
@@ -3505,7 +3598,9 @@ def _markdown_risk_path_context(finding: Finding) -> list[str]:
                 + _markdown_code(
                     str(snapshot.get("evidence_revision_binding") or "not-established")
                 )
-                + "`."
+                + "`"
+                + ("; " + _markdown_text(control_text) if control_text else "")
+                + "."
             )
     return [
         "- **Static risk route:** `"
@@ -3520,6 +3615,7 @@ def _markdown_risk_path_context(finding: Finding) -> list[str]:
         + _markdown_text(_risk_path_validation_signals(validation, runtime))
         + "."
         + hotspot_text
+        + test_hotspot_text
         + campaign_text
     ]
 
@@ -3857,6 +3953,17 @@ def _html_risk_path_context(finding: Finding) -> str:
         if isinstance(hotspot_ids, list) and hotspot_ids
         else ""
     )
+    test_hotspot_ids = context.get("validation_test_hotspot_ids")
+    test_hotspot_html = (
+        " <strong>Shared validation tests:</strong> "
+        + ", ".join(
+            "<code>" + html.escape(str(value)) + "</code>"
+            for value in test_hotspot_ids[:5]
+        )
+        + "."
+        if isinstance(test_hotspot_ids, list) and test_hotspot_ids
+        else ""
+    )
     campaigns = context.get("validation_campaigns")
     campaign_values = campaigns if isinstance(campaigns, list) else []
     campaign_html = ""
@@ -3871,6 +3978,8 @@ def _html_risk_path_context(finding: Finding) -> str:
         selected_values = selected if isinstance(selected, list) else []
         snapshot = campaign.get("source_snapshot")
         snapshot = snapshot if isinstance(snapshot, dict) else {}
+        control_text = _risk_campaign_control_text(campaign)
+        factor_text = _risk_campaign_factor_text(campaign)
         tests = ", ".join(str(value) for value in selected_values[:3]) or "none mapped"
         campaign_html = (
             " <strong>Shared validation campaign(s):</strong> <code>"
@@ -3891,11 +4000,15 @@ def _html_risk_path_context(finding: Finding) -> str:
             + html.escape(str(campaign.get("review_tier") or "low"))
             + "/"
             + str(int(campaign.get("review_score") or 0))
-            + "</code>; revision <code>"
+            + "</code>"
+            + ("; factors " + html.escape(factor_text) if factor_text else "")
+            + "; revision <code>"
             + html.escape(
                 str(snapshot.get("evidence_revision_binding") or "not-established")
             )
-            + "</code>."
+            + "</code>"
+            + ("; " + html.escape(control_text) if control_text else "")
+            + "."
         )
     return (
         "<section class='source-context'><h4>Static risk route</h4><p>"
@@ -3911,9 +4024,61 @@ def _html_risk_path_context(finding: Finding) -> str:
         + html.escape(_risk_path_validation_signals(validation, runtime))
         + "."
         + hotspot_html
+        + test_hotspot_html
         + campaign_html
         + "</p></section>"
     )
+
+
+def _risk_campaign_control_text(campaign: dict[str, Any]) -> str:
+    raw = campaign.get("control_point_context")
+    control = raw if isinstance(raw, dict) else {}
+    parts: list[str] = []
+    if isinstance(control.get("graph_degree"), int):
+        parts.append(f"degree {int(control['graph_degree'])}")
+    if isinstance(control.get("maximum_complexity"), int):
+        parts.append(
+            "complexity "
+            + str(int(control["maximum_complexity"]))
+            + (
+                f" ({control['maximum_complexity_rank']})"
+                if control.get("maximum_complexity_rank")
+                else ""
+            )
+        )
+    if isinstance(control.get("change_risk_score"), int):
+        parts.append(
+            "change risk "
+            + str(int(control["change_risk_score"]))
+            + (
+                f" ({control['change_priority']})"
+                if control.get("change_priority")
+                else ""
+            )
+        )
+    uncovered = control.get("uncovered_changed_lines")
+    if isinstance(uncovered, list) and uncovered:
+        lines = ", ".join(str(line) for line in uncovered[:5])
+        if len(uncovered) > 5:
+            lines += f" (+{len(uncovered) - 5})"
+        parts.append(f"uncovered changed lines {lines}")
+    observations = control.get("runtime_observations")
+    if isinstance(observations, list) and observations:
+        parts.append("runtime " + ", ".join(str(value) for value in observations[:3]))
+    return "; ".join(parts)
+
+
+def _risk_campaign_factor_text(campaign: dict[str, Any]) -> str:
+    raw = campaign.get("review_factors")
+    factors = raw if isinstance(raw, list) else []
+    values = [
+        f"{factor.get('id')} +{int(factor.get('points') or 0)}"
+        for factor in factors[:8]
+        if isinstance(factor, dict) and factor.get("id") and factor.get("points")
+    ]
+    if len(factors) > 8:
+        values.append(f"+{len(factors) - 8} more")
+    return "; ".join(values)
 
 
 def _html_fusion_context(finding: Finding) -> str:

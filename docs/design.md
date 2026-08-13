@@ -342,7 +342,10 @@ hotspot IDs are also grouped into owner queues so teams can coordinate one
 remediation/test campaign without collapsing the underlying findings. Each
 hotspot also becomes a stable validation campaign: reverse Graphify edges select
 direct/transitive tests, bounded case inventories establish observed execution,
-and file coverage exposes unexercised shared-control code.
+file coverage exposes unexercised shared-control code, and structural synthesis
+adds changed-line risk while reachability contributes runtime observation state.
+The factorized review model cites each contributing artifact and keeps the native
+findings unchanged.
 
 ```mermaid
 flowchart LR
@@ -360,12 +363,15 @@ flowchart LR
     Coverage["Hotspot file coverage"] --> Binding
     Inventory["Sealed source inventory"] --> Binding
     Binding --> Campaigns
-    Context["Complexity + graph centrality"] --> Campaigns
+    Context["Complexity + graph centrality<br/>change risk + runtime state"] --> Campaigns
+    Campaigns --> SharedTests["Cross-campaign shared-test hotspots"]
     Routed --> Queues["Owner route queues"]
     Campaigns --> Queues
+    SharedTests --> Queues
     Routed --> Routes["risk-paths.json"]
     Hotspots --> Routes
     Campaigns --> Routes
+    SharedTests --> Routes
     Queues --> Routes
     Routes --> Report["Finding cards + summary + SARIF"]
 ```

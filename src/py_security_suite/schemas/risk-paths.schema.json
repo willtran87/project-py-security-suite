@@ -6,7 +6,7 @@
   "required": [
     "schema_version", "schema_id", "authoritative", "purpose", "summary",
     "evidence_availability", "routes", "convergence_hotspots",
-    "validation_campaigns", "owner_work_queues", "unrouted_targets", "truncation",
+    "validation_campaigns", "validation_test_hotspots", "owner_work_queues", "unrouted_targets", "truncation",
     "interpretation_limits", "references"
   ],
   "properties": {
@@ -27,7 +27,11 @@
         "convergence_hotspots", "shared_control_points",
         "routes_in_convergence_hotspots", "owner_work_queues",
         "validation_campaigns", "campaigns_with_selected_tests",
+        "shared_validation_test_hotspots", "campaigns_using_shared_tests",
+        "routes_using_shared_tests", "single_test_dependency_campaigns",
         "campaigns_with_failing_tests", "campaigns_with_coverage_gaps",
+        "campaigns_with_changed_controls", "campaigns_with_uncovered_changed_lines",
+        "campaigns_with_runtime_observation_gaps",
         "campaigns_aligned_current_evidence", "campaigns_requiring_evidence",
         "unique_campaign_test_files", "campaigns_by_review_tier",
         "campaigns_revision_aligned", "campaigns_revision_mismatched",
@@ -58,9 +62,16 @@
         "routes_in_convergence_hotspots": {"$ref": "#/$defs/count"},
         "owner_work_queues": {"$ref": "#/$defs/count"},
         "validation_campaigns": {"$ref": "#/$defs/count"},
+        "shared_validation_test_hotspots": {"$ref": "#/$defs/count"},
+        "campaigns_using_shared_tests": {"$ref": "#/$defs/count"},
+        "routes_using_shared_tests": {"$ref": "#/$defs/count"},
+        "single_test_dependency_campaigns": {"$ref": "#/$defs/count"},
         "campaigns_with_selected_tests": {"$ref": "#/$defs/count"},
         "campaigns_with_failing_tests": {"$ref": "#/$defs/count"},
         "campaigns_with_coverage_gaps": {"$ref": "#/$defs/count"},
+        "campaigns_with_changed_controls": {"$ref": "#/$defs/count"},
+        "campaigns_with_uncovered_changed_lines": {"$ref": "#/$defs/count"},
+        "campaigns_with_runtime_observation_gaps": {"$ref": "#/$defs/count"},
         "campaigns_aligned_current_evidence": {"$ref": "#/$defs/count"},
         "campaigns_requiring_evidence": {"$ref": "#/$defs/count"},
         "unique_campaign_test_files": {"$ref": "#/$defs/count"},
@@ -104,6 +115,11 @@
       "maxItems": 50,
       "items": {"$ref": "#/$defs/validationCampaign"}
     },
+    "validation_test_hotspots": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {"$ref": "#/$defs/validationTestHotspot"}
+    },
     "owner_work_queues": {
       "type": "array",
       "maxItems": 100,
@@ -120,7 +136,8 @@
       "required": [
         "graph_files_omitted", "entry_points_omitted", "targets_omitted",
         "routes_omitted", "unrouted_targets_omitted",
-        "convergence_hotspots_omitted", "owner_work_queues_omitted"
+        "convergence_hotspots_omitted", "validation_test_hotspots_omitted",
+        "owner_work_queues_omitted"
       ],
       "properties": {
         "graph_files_omitted": {"$ref": "#/$defs/count"},
@@ -129,6 +146,7 @@
         "routes_omitted": {"$ref": "#/$defs/count"},
         "unrouted_targets_omitted": {"$ref": "#/$defs/count"},
         "convergence_hotspots_omitted": {"$ref": "#/$defs/count"},
+        "validation_test_hotspots_omitted": {"$ref": "#/$defs/count"},
         "owner_work_queues_omitted": {"$ref": "#/$defs/count"}
       }
     },
@@ -238,7 +256,8 @@
       "required": [
         "route_id", "priority", "entry_point", "target", "hop_count",
         "files", "edges", "owners", "runtime_context", "validation",
-        "correlations", "convergence_hotspot_ids", "validation_campaign_ids", "recommended_action",
+        "correlations", "convergence_hotspot_ids", "validation_campaign_ids",
+        "validation_test_hotspot_ids", "recommended_action",
         "evidence_artifacts"
       ],
       "properties": {
@@ -253,6 +272,7 @@
         "runtime_context": {"$ref": "#/$defs/runtime"},
         "validation": {"$ref": "#/$defs/validation"},
         "correlations": {"type": "object"},
+        "validation_test_hotspot_ids": {"$ref": "#/$defs/strings"},
         "convergence_hotspot_ids": {"$ref": "#/$defs/strings"},
         "validation_campaign_ids": {"$ref": "#/$defs/strings"},
         "recommended_action": {"type": "string", "minLength": 1},
@@ -350,6 +370,7 @@
         "campaign_id", "hotspot_id", "path", "priority", "owners", "route_ids",
         "target_ids", "finding_ids", "direct_test_files", "transitive_test_files",
         "route_mapped_test_files", "selected_test_files", "test_selection_confidence",
+        "shared_test_hotspot_ids",
         "test_execution_evidence_available", "test_case_inventory_available",
         "test_case_inventory_complete", "test_execution_sources",
         "focused_test_execution", "focused_test_validation_status",
@@ -374,6 +395,7 @@
         "transitive_test_files": {"type": "array", "maxItems": 50, "items": {"type": "string", "minLength": 1}},
         "route_mapped_test_files": {"type": "array", "maxItems": 50, "items": {"type": "string", "minLength": 1}},
         "selected_test_files": {"type": "array", "maxItems": 50, "items": {"type": "string", "minLength": 1}},
+        "shared_test_hotspot_ids": {"type": "array", "maxItems": 100, "items": {"type": "string", "pattern": "^test-hotspot-[0-9a-f]{16}$"}},
         "test_selection_confidence": {"enum": ["high", "medium", "context-only", "not-available"]},
         "test_execution_evidence_available": {"type": "boolean"},
         "test_case_inventory_available": {"type": "boolean"},
@@ -392,10 +414,49 @@
         "validation_gap_reasons": {"$ref": "#/$defs/strings"},
         "control_point_context": {"$ref": "#/$defs/controlPointContext"},
         "source_snapshot": {"$ref": "#/$defs/sourceSnapshot"},
-        "review_score_model": {"const": "shared-control-review-v1"},
+        "review_score_model": {"enum": ["shared-control-review-v1", "shared-control-review-v2"]},
         "review_score": {"type": "integer", "minimum": 0, "maximum": 100},
         "review_tier": {"enum": ["critical", "high", "medium", "low"]},
         "review_factors": {"type": "array", "maxItems": 20, "items": {"$ref": "#/$defs/reviewFactor"}},
+        "recommended_action": {"type": "string", "minLength": 1},
+        "evidence_artifacts": {"$ref": "#/$defs/strings"},
+        "interpretation": {"type": "string", "minLength": 1}
+      }
+    },
+    "validationTestHotspot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "test_hotspot_id", "test_path", "campaign_ids", "control_point_paths",
+        "route_ids", "target_ids", "finding_ids", "owners", "highest_priority",
+        "highest_review_score", "highest_review_tier", "direct_campaigns",
+        "transitive_campaigns", "route_mapped_campaigns",
+        "single_test_dependency_campaign_ids", "execution_statuses",
+        "observed_case_count", "execution_sources", "source_binding",
+        "source_binding_consistent", "recommended_action", "evidence_artifacts",
+        "interpretation"
+      ],
+      "properties": {
+        "test_hotspot_id": {"type": "string", "pattern": "^test-hotspot-[0-9a-f]{16}$"},
+        "test_path": {"type": "string", "minLength": 1},
+        "campaign_ids": {"type": "array", "minItems": 2, "maxItems": 50, "items": {"type": "string", "pattern": "^campaign-[0-9a-f]{16}$"}},
+        "control_point_paths": {"type": "array", "minItems": 1, "maxItems": 50, "items": {"type": "string", "minLength": 1}},
+        "route_ids": {"$ref": "#/$defs/strings"},
+        "target_ids": {"$ref": "#/$defs/strings"},
+        "finding_ids": {"$ref": "#/$defs/strings"},
+        "owners": {"$ref": "#/$defs/strings"},
+        "highest_priority": {"enum": ["P0", "P1", "P2", "P3", "P4"]},
+        "highest_review_score": {"type": "integer", "minimum": 0, "maximum": 100},
+        "highest_review_tier": {"enum": ["critical", "high", "medium", "low"]},
+        "direct_campaigns": {"$ref": "#/$defs/count"},
+        "transitive_campaigns": {"$ref": "#/$defs/count"},
+        "route_mapped_campaigns": {"$ref": "#/$defs/count"},
+        "single_test_dependency_campaign_ids": {"type": "array", "maxItems": 50, "items": {"type": "string", "pattern": "^campaign-[0-9a-f]{16}$"}},
+        "execution_statuses": {"type": "array", "items": {"enum": ["failed", "partial", "passed", "skipped", "not-observed"]}},
+        "observed_case_count": {"$ref": "#/$defs/count"},
+        "execution_sources": {"$ref": "#/$defs/strings"},
+        "source_binding": {"anyOf": [{"$ref": "#/$defs/sourceFileBinding"}, {"type": "null"}]},
+        "source_binding_consistent": {"type": "boolean"},
         "recommended_action": {"type": "string", "minLength": 1},
         "evidence_artifacts": {"$ref": "#/$defs/strings"},
         "interpretation": {"type": "string", "minLength": 1}
@@ -447,12 +508,21 @@
       "additionalProperties": false,
       "required": [
         "graph_degree", "maximum_complexity", "maximum_complexity_rank",
+        "change_risk_score", "change_priority", "change_classification",
+        "changed_lines", "uncovered_changed_lines",
+        "changed_line_coverage_percent",
         "reachability_states", "runtime_observations", "evidence_artifacts"
       ],
       "properties": {
         "graph_degree": {"type": ["integer", "null"], "minimum": 0},
         "maximum_complexity": {"type": ["integer", "null"], "minimum": 0},
         "maximum_complexity_rank": {"$ref": "#/$defs/nullableString"},
+        "change_risk_score": {"type": ["integer", "null"], "minimum": 0, "maximum": 100},
+        "change_priority": {"enum": ["high", "medium", "low", null]},
+        "change_classification": {"$ref": "#/$defs/nullableString"},
+        "changed_lines": {"type": ["integer", "null"], "minimum": 0},
+        "uncovered_changed_lines": {"type": "array", "maxItems": 100, "items": {"type": "integer", "minimum": 1}},
+        "changed_line_coverage_percent": {"type": ["number", "null"], "minimum": 0, "maximum": 100},
         "reachability_states": {"$ref": "#/$defs/strings"},
         "runtime_observations": {"$ref": "#/$defs/strings"},
         "evidence_artifacts": {"$ref": "#/$defs/strings"}
@@ -475,8 +545,10 @@
       "required": [
         "queue_id", "owner", "priority", "routes", "targets", "route_ids",
         "target_ids", "convergence_hotspot_ids", "validation_campaign_ids",
+        "validation_test_hotspot_ids", "shared_validation_test_files",
         "campaigns_by_review_tier", "campaigns_revision_mismatched",
-        "campaigns_revision_unbound", "highest_campaign_review_score", "routes_by_priority",
+        "campaigns_revision_unbound", "campaigns_with_uncovered_changed_lines",
+        "campaigns_with_runtime_observation_gaps", "highest_campaign_review_score", "routes_by_priority",
         "validation_statuses", "recommended_action"
       ],
       "properties": {
@@ -489,9 +561,13 @@
         "target_ids": {"$ref": "#/$defs/strings"},
         "convergence_hotspot_ids": {"$ref": "#/$defs/strings"},
         "validation_campaign_ids": {"$ref": "#/$defs/strings"},
+        "validation_test_hotspot_ids": {"type": "array", "maxItems": 100, "items": {"type": "string", "pattern": "^test-hotspot-[0-9a-f]{16}$"}},
+        "shared_validation_test_files": {"$ref": "#/$defs/count"},
         "campaigns_by_review_tier": {"$ref": "#/$defs/reviewTierCounts"},
         "campaigns_revision_mismatched": {"$ref": "#/$defs/count"},
         "campaigns_revision_unbound": {"$ref": "#/$defs/count"},
+        "campaigns_with_uncovered_changed_lines": {"$ref": "#/$defs/count"},
+        "campaigns_with_runtime_observation_gaps": {"$ref": "#/$defs/count"},
         "highest_campaign_review_score": {"type": "integer", "minimum": 0, "maximum": 100},
         "routes_by_priority": {"$ref": "#/$defs/priorityCounts"},
         "validation_statuses": {"$ref": "#/$defs/validationCounts"},

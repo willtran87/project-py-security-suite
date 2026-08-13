@@ -91,6 +91,8 @@ by joining:
 - exact source-inventory bindings for the control point and selected tests,
   plus aligned/mismatched/unbound revision state for retained case and coverage
   evidence; and
+- structural change risk, exact uncovered changed lines, complexity, graph
+  centrality, and runtime observation state for the same control-point path; and
 - routes, targets, findings, priority, owners, evidence artifacts, a transparent
   factor-by-factor review score, and one next action.
 
@@ -102,15 +104,39 @@ queues, Markdown/HTML summaries, and closure acceptance criteria. This makes a
 shared remediation runnable without presenting static selection or a passing
 test as a security proof.
 
-`shared-control-review-v1` ranks review work from route priority and convergence,
-security-target and tool diversity, coverage/test state, complexity, graph
-centrality, ownership, and evidence-revision coherence. The report retains every
-non-zero factor and its source artifacts; the score is triage guidance, not a
-vulnerability severity or exploitability calculation. Evidence revision state
-is `aligned` only when all retained coverage/case artifacts declare the exact
-sealed source-inventory digest. `mismatch` and `not-established` generate
-explicit regeneration/binding work and flow into owner queues and closure
-acceptance criteria.
+`shared-control-review-v2` ranks review work from route priority and convergence,
+security-target and tool diversity, coverage/test state, changed-control risk,
+uncovered changed lines, runtime observation gaps, complexity, graph centrality,
+ownership, and evidence-revision coherence. The report retains every non-zero
+factor, point contribution, and exact source artifacts; Markdown/HTML campaign
+cards show a bounded factor breakdown beside the score. The score is triage guidance, not a
+vulnerability severity or exploitability calculation. The prior v1 identifier
+remains schema-readable for stored artifacts. Evidence revision state is
+`aligned` only when all retained coverage/case artifacts declare the exact sealed
+source-inventory digest. `mismatch` and `not-established` generate explicit
+regeneration/binding work and flow into owner queues and closure acceptance
+criteria. Uncovered changed lines and unobserved runtime state add their own
+closure criteria rather than being hidden inside an aggregate score.
+
+## Shared validation-test hotspots
+
+The synthesis performs one bounded cross-campaign pass after campaigns are
+built. A `test-hotspot-*` record is emitted only when the same test file is
+selected by at least two distinct campaigns. Each record joins:
+
+- campaign, shared-control, route, target, finding, and owner identities;
+- direct, transitive, and route-context selection counts;
+- campaigns that have no other selected test file;
+- exact retained execution states, case count, and producer artifacts without
+  summing the same JUnit cases once per campaign; and
+- the test file's source-inventory binding and a consistency check across every
+  contributing campaign.
+
+The report turns this into a coordination action and recommends an independent
+focused test when a campaign depends on the shared test alone. Stable hotspot
+IDs flow into routes, finding JSON, SARIF, owner queues, Markdown/HTML context,
+and closure criteria. This is concentration evidence, not proof that tests are
+independent, assertions are strong, or behavior is sufficiently covered.
 
 Targets with no route are retained in `unrouted_targets`. They are not presented
 as safe or unreachable: the action is to confirm framework, registry, plugin,
@@ -131,7 +157,8 @@ network. It retains at most 100 declared entry points, searches at most 100,000
 graph files to a depth of eight hops, analyzes the highest-priority 10,000
 targets, and emits at most 250 routed targets, 250 unrouted targets, 50
 convergence hotspots/validation campaigns, 50 tests per campaign, and 100 owner
-queues. Reverse test selection examines at most 500 graph neighbors per
+queues. It retains at most 100 shared validation-test hotspots. Reverse test
+selection examines at most 500 graph neighbors per
 campaign and retains at most 100 missing lines. Omitted counts are explicit.
 
 The current JSON Schema is

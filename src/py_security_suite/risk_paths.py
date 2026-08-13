@@ -36,6 +36,7 @@ _MAX_TARGETS = 10_000
 _MAX_ROUTES = 250
 _MAX_UNROUTED = 250
 _MAX_CONVERGENCE_HOTSPOTS = 50
+_MAX_VALIDATION_TEST_HOTSPOTS = 100
 _MAX_OWNER_QUEUES = 100
 _MAX_CAMPAIGN_TESTS = 50
 _MAX_CAMPAIGN_MISSING_LINES = 100
@@ -78,26 +79,55 @@ def build_risk_paths(
         adjacency,
         artifacts,
     )
+    all_validation_test_hotspots = _validation_test_hotspots(validation_campaigns)
+    validation_test_hotspots = all_validation_test_hotspots[
+        :_MAX_VALIDATION_TEST_HOTSPOTS
+    ]
+    test_hotspot_ids_by_campaign: dict[str, list[str]] = defaultdict(list)
+    for hotspot in validation_test_hotspots:
+        for campaign_id in hotspot["campaign_ids"]:
+            test_hotspot_ids_by_campaign[str(campaign_id)].append(
+                str(hotspot["test_hotspot_id"])
+            )
+    for campaign in validation_campaigns:
+        campaign["shared_test_hotspot_ids"] = sorted(
+            test_hotspot_ids_by_campaign.get(str(campaign["campaign_id"]), [])
+        )
     campaign_by_hotspot = {
         str(campaign["hotspot_id"]): campaign for campaign in validation_campaigns
+    }
+    campaign_by_id = {
+        str(campaign["campaign_id"]): campaign for campaign in validation_campaigns
     }
     hotspot_ids_by_route: dict[str, list[str]] = defaultdict(list)
     campaign_ids_by_route: dict[str, list[str]] = defaultdict(list)
     for hotspot in convergence_hotspots:
-        campaign = campaign_by_hotspot.get(str(hotspot["hotspot_id"]))
+        hotspot_campaign = campaign_by_hotspot.get(str(hotspot["hotspot_id"]))
         hotspot["validation_campaign_id"] = (
-            str(campaign["campaign_id"]) if campaign is not None else None
+            str(hotspot_campaign["campaign_id"])
+            if hotspot_campaign is not None
+            else None
         )
         for route_id in hotspot["route_ids"]:
             hotspot_ids_by_route[route_id].append(hotspot["hotspot_id"])
-            if campaign is not None:
-                campaign_ids_by_route[route_id].append(campaign["campaign_id"])
+            if hotspot_campaign is not None:
+                campaign_ids_by_route[route_id].append(hotspot_campaign["campaign_id"])
     for route in retained_routes:
         route["convergence_hotspot_ids"] = sorted(
             hotspot_ids_by_route.get(route["route_id"], [])
         )
         route["validation_campaign_ids"] = sorted(
             campaign_ids_by_route.get(route["route_id"], [])
+        )
+        route["validation_test_hotspot_ids"] = sorted(
+            {
+                hotspot_id
+                for campaign_id in route["validation_campaign_ids"]
+                if str(campaign_id) in campaign_by_id
+                for hotspot_id in campaign_by_id[str(campaign_id)][
+                    "shared_test_hotspot_ids"
+                ]
+            }
         )
     all_owner_work_queues = _owner_work_queues(
         retained_routes,
@@ -183,6 +213,28 @@ def build_risk_paths(
             ),
             "owner_work_queues": len(owner_work_queues),
             "validation_campaigns": len(validation_campaigns),
+            "shared_validation_test_hotspots": len(validation_test_hotspots),
+            "campaigns_using_shared_tests": len(
+                {
+                    campaign_id
+                    for hotspot in validation_test_hotspots
+                    for campaign_id in hotspot["campaign_ids"]
+                }
+            ),
+            "routes_using_shared_tests": len(
+                {
+                    route_id
+                    for hotspot in validation_test_hotspots
+                    for route_id in hotspot["route_ids"]
+                }
+            ),
+            "single_test_dependency_campaigns": len(
+                {
+                    campaign_id
+                    for hotspot in validation_test_hotspots
+                    for campaign_id in hotspot["single_test_dependency_campaign_ids"]
+                }
+            ),
             "campaigns_with_selected_tests": sum(
                 bool(campaign["selected_test_files"])
                 for campaign in validation_campaigns
@@ -193,6 +245,21 @@ def build_risk_paths(
             ),
             "campaigns_with_coverage_gaps": sum(
                 campaign["test_coverage_alignment"] == "coverage-gap"
+                for campaign in validation_campaigns
+            ),
+            "campaigns_with_changed_controls": sum(
+                isinstance(campaign["control_point_context"]["change_risk_score"], int)
+                for campaign in validation_campaigns
+            ),
+            "campaigns_with_uncovered_changed_lines": sum(
+                bool(campaign["control_point_context"]["uncovered_changed_lines"])
+                for campaign in validation_campaigns
+            ),
+            "campaigns_with_runtime_observation_gaps": sum(
+                any(
+                    factor["id"] == "runtime-observation-gap"
+                    for factor in campaign["review_factors"]
+                )
                 for campaign in validation_campaigns
             ),
             "campaigns_aligned_current_evidence": sum(
@@ -271,6 +338,7 @@ def build_risk_paths(
         "routes": retained_routes,
         "convergence_hotspots": convergence_hotspots,
         "validation_campaigns": validation_campaigns,
+        "validation_test_hotspots": validation_test_hotspots,
         "owner_work_queues": owner_work_queues,
         "unrouted_targets": unrouted[:_MAX_UNROUTED],
         "truncation": {
@@ -284,6 +352,10 @@ def build_risk_paths(
             "convergence_hotspots_omitted": max(
                 0, len(all_convergence_hotspots) - _MAX_CONVERGENCE_HOTSPOTS
             ),
+            "validation_test_hotspots_omitted": max(
+                0,
+                len(all_validation_test_hotspots) - _MAX_VALIDATION_TEST_HOTSPOTS,
+            ),
             "owner_work_queues_omitted": max(
                 0, len(all_owner_work_queues) - _MAX_OWNER_QUEUES
             ),
@@ -295,6 +367,7 @@ def build_risk_paths(
             "Sensitive-data sink surfaces are inventory signals unless a normalized scanner finding establishes a source-to-sink concern.",
             "Graph-selected tests are bounded static candidates; passing selected tests and full retained coverage improve regression confidence but do not prove security, exploitability, or complete runtime behavior.",
             "The shared-control review score is a transparent triage aid, not native scanner severity, exploitability probability, or an admission decision.",
+            "A shared validation test hotspot identifies concentrated regression responsibility; it does not prove test independence, assertion quality, or sufficient behavioral coverage.",
             "A sealed report binds its current source inventory, but pre-generated test and coverage evidence is revision-aligned only when each producer declares the same aggregate source digest.",
         ],
         "references": [
@@ -859,18 +932,14 @@ def _validation_campaigns(
         )
         context = control_context.get(
             path,
-            {
-                "graph_degree": None,
-                "maximum_complexity": None,
-                "maximum_complexity_rank": None,
-                "reachability_states": [],
-                "runtime_observations": [],
-                "evidence_artifacts": [],
-            },
+            _empty_campaign_control_context(),
         )
         review = _campaign_review_assessment(
             hotspot,
             execution_status=str(execution["focused_test_validation_status"]),
+            test_execution_sources=_strings(
+                execution.get("test_execution_sources"), 10
+            ),
             coverage_status=coverage_status,
             context=context,
             revision_binding=str(snapshot["evidence_revision_binding"]),
@@ -912,6 +981,7 @@ def _validation_campaigns(
                     selected,
                     path,
                     revision_binding=str(snapshot["evidence_revision_binding"]),
+                    context=context,
                 ),
                 "evidence_artifacts": sorted(
                     {
@@ -934,6 +1004,200 @@ def _validation_campaigns(
             }
         )
     return campaigns
+
+
+def _validation_test_hotspots(
+    campaigns: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for campaign in campaigns:
+        for path in campaign.get("selected_test_files", [])[:_MAX_CAMPAIGN_TESTS]:
+            if isinstance(path, str) and path:
+                grouped[path].append(campaign)
+    result: list[dict[str, Any]] = []
+    for test_path, selected_campaigns in grouped.items():
+        campaign_ids = sorted(
+            {str(campaign["campaign_id"]) for campaign in selected_campaigns}
+        )
+        if len(campaign_ids) < 2:
+            continue
+        execution_records = [
+            record
+            for campaign in selected_campaigns
+            for record in campaign.get("focused_test_execution", [])
+            if isinstance(record, dict) and record.get("path") == test_path
+        ]
+        bindings = [
+            binding
+            for campaign in selected_campaigns
+            for binding in campaign["source_snapshot"].get("selected_test_bindings", [])
+            if isinstance(binding, dict) and binding.get("path") == test_path
+        ]
+        unique_bindings = {
+            json.dumps(binding, sort_keys=True, separators=(",", ":")): binding
+            for binding in bindings
+        }
+        binding_consistent = len(unique_bindings) <= 1
+        source_binding = (
+            next(iter(unique_bindings.values())) if len(unique_bindings) == 1 else None
+        )
+        single_dependency_ids = sorted(
+            str(campaign["campaign_id"])
+            for campaign in selected_campaigns
+            if len(campaign.get("selected_test_files", [])) == 1
+        )
+        statuses = sorted(
+            {
+                str(record["status"])
+                for record in execution_records
+                if isinstance(record.get("status"), str)
+            }
+        )
+        highest_score = max(
+            int(campaign["review_score"]) for campaign in selected_campaigns
+        )
+        hotspot_id = (
+            "test-hotspot-"
+            + _digest({"path": test_path, "campaign_ids": campaign_ids})[:16]
+        )
+        result.append(
+            {
+                "test_hotspot_id": hotspot_id,
+                "test_path": test_path,
+                "campaign_ids": campaign_ids,
+                "control_point_paths": sorted(
+                    {str(campaign["path"]) for campaign in selected_campaigns}
+                ),
+                "route_ids": sorted(
+                    {
+                        str(route_id)
+                        for campaign in selected_campaigns
+                        for route_id in campaign["route_ids"]
+                    }
+                ),
+                "target_ids": sorted(
+                    {
+                        str(target_id)
+                        for campaign in selected_campaigns
+                        for target_id in campaign["target_ids"]
+                    }
+                ),
+                "finding_ids": sorted(
+                    {
+                        str(finding_id)
+                        for campaign in selected_campaigns
+                        for finding_id in campaign["finding_ids"]
+                    }
+                ),
+                "owners": sorted(
+                    {
+                        str(owner)
+                        for campaign in selected_campaigns
+                        for owner in campaign["owners"]
+                    }
+                ),
+                "highest_priority": min(
+                    (str(campaign["priority"]) for campaign in selected_campaigns),
+                    key=_priority_rank,
+                ),
+                "highest_review_score": highest_score,
+                "highest_review_tier": _review_tier(highest_score),
+                "direct_campaigns": sum(
+                    test_path in campaign["direct_test_files"]
+                    for campaign in selected_campaigns
+                ),
+                "transitive_campaigns": sum(
+                    test_path in campaign["transitive_test_files"]
+                    for campaign in selected_campaigns
+                ),
+                "route_mapped_campaigns": sum(
+                    test_path in campaign["route_mapped_test_files"]
+                    for campaign in selected_campaigns
+                ),
+                "single_test_dependency_campaign_ids": single_dependency_ids,
+                "execution_statuses": statuses,
+                "observed_case_count": max(
+                    (int(record.get("tests") or 0) for record in execution_records),
+                    default=0,
+                ),
+                "execution_sources": sorted(
+                    {
+                        str(source)
+                        for record in execution_records
+                        for source in record.get("sources", [])
+                        if isinstance(source, str) and source
+                    }
+                ),
+                "source_binding": source_binding,
+                "source_binding_consistent": binding_consistent,
+                "recommended_action": _validation_test_hotspot_action(
+                    test_path,
+                    statuses=statuses,
+                    campaigns=len(campaign_ids),
+                    controls=len(
+                        {str(campaign["path"]) for campaign in selected_campaigns}
+                    ),
+                    single_dependencies=len(single_dependency_ids),
+                    source_binding_consistent=binding_consistent,
+                ),
+                "evidence_artifacts": sorted(
+                    {
+                        "graphify.json",
+                        *(
+                            {"source-inventory.json"}
+                            if source_binding is not None
+                            else set()
+                        ),
+                        *(
+                            str(artifact)
+                            for campaign in selected_campaigns
+                            for artifact in campaign["evidence_artifacts"]
+                        ),
+                    }
+                ),
+                "interpretation": (
+                    "This record identifies one test file selected for multiple "
+                    "shared-control campaigns. Repeated selection supports coordinated "
+                    "validation planning but does not establish independent assertions, "
+                    "test quality, or sufficient behavioral coverage."
+                ),
+            }
+        )
+    result.sort(
+        key=lambda item: (
+            -int(item["highest_review_score"]),
+            -len(item["campaign_ids"]),
+            str(item["test_path"]),
+        )
+    )
+    return result
+
+
+def _validation_test_hotspot_action(
+    test_path: str,
+    *,
+    statuses: list[str],
+    campaigns: int,
+    controls: int,
+    single_dependencies: int,
+    source_binding_consistent: bool,
+) -> str:
+    if not source_binding_consistent:
+        return f"Regenerate and source-bind {test_path}; selected campaigns disagree on its source identity."
+    if "failed" in statuses:
+        return f"Resolve failures in {test_path} before using it across {campaigns} shared-control campaigns."
+    if "not-observed" in statuses or not statuses:
+        return f"Execute {test_path} and retain case-level evidence before relying on it across {controls} controls."
+    action = (
+        f"Coordinate assertions and fixtures in {test_path} across {campaigns} "
+        f"campaigns and {controls} shared controls."
+    )
+    if single_dependencies:
+        action += (
+            f" Add an independent focused test for {single_dependencies} campaign(s) "
+            "that currently depend on this test alone."
+        )
+    return action
 
 
 def _reverse_adjacency(
@@ -1027,28 +1291,60 @@ def _campaign_control_context_index(
                 continue
             degree = item.get("degree")
             complexity = item.get("maximum_complexity")
-            result[path] = {
-                "graph_degree": (
-                    degree
-                    if isinstance(degree, int)
-                    and not isinstance(degree, bool)
-                    and degree >= 0
-                    else None
-                ),
-                "maximum_complexity": (
-                    complexity
-                    if isinstance(complexity, int)
-                    and not isinstance(complexity, bool)
-                    and complexity >= 0
-                    else None
-                ),
-                "maximum_complexity_rank": _optional_string(
-                    item.get("maximum_complexity_rank")
-                ),
-                "reachability_states": _strings(item.get("reachability_states"), 10),
-                "runtime_observations": [],
-                "evidence_artifacts": ["structural-synthesis.json"],
-            }
+            record = result.setdefault(path, _empty_campaign_control_context())
+            record.update(
+                {
+                    "graph_degree": _nonnegative_integer(degree),
+                    "maximum_complexity": _nonnegative_integer(complexity),
+                    "maximum_complexity_rank": _optional_string(
+                        item.get("maximum_complexity_rank")
+                    ),
+                    "reachability_states": _strings(
+                        item.get("reachability_states"), 10
+                    ),
+                    "evidence_artifacts": ["structural-synthesis.json"],
+                }
+            )
+    changes = (
+        structural_value.get("change_impact_assessments")
+        if isinstance(structural_value, dict)
+        else None
+    )
+    if isinstance(changes, list):
+        for item in changes[:_MAX_GRAPH_FILES]:
+            if not isinstance(item, dict) or not (path := _path(item.get("path"))):
+                continue
+            risk_score = _nonnegative_integer(item.get("risk_score"))
+            record = result.setdefault(path, _empty_campaign_control_context())
+            current_score = record.get("change_risk_score")
+            if risk_score is None or (
+                isinstance(current_score, int) and current_score > risk_score
+            ):
+                continue
+            uncovered = sorted(
+                {
+                    line
+                    for line in item.get("uncovered_changed_lines", [])
+                    if isinstance(line, int) and not isinstance(line, bool) and line > 0
+                }
+            )[:_MAX_CAMPAIGN_MISSING_LINES]
+            record.update(
+                {
+                    "change_risk_score": risk_score,
+                    "change_priority": _optional_string(item.get("priority")),
+                    "change_classification": _optional_string(
+                        item.get("classification")
+                    ),
+                    "changed_lines": _nonnegative_integer(item.get("changed_lines")),
+                    "uncovered_changed_lines": uncovered,
+                    "changed_line_coverage_percent": _optional_number(
+                        item.get("changed_line_coverage_percent")
+                    ),
+                    "evidence_artifacts": sorted(
+                        {*record["evidence_artifacts"], "structural-synthesis.json"}
+                    ),
+                }
+            )
     nodes = (
         reachability_value.get("nodes")
         if isinstance(reachability_value, dict)
@@ -1069,14 +1365,7 @@ def _campaign_control_context_index(
     for path in sorted(set(runtime_by_path) | set(states_by_path)):
         record = result.setdefault(
             path,
-            {
-                "graph_degree": None,
-                "maximum_complexity": None,
-                "maximum_complexity_rank": None,
-                "reachability_states": [],
-                "runtime_observations": [],
-                "evidence_artifacts": [],
-            },
+            _empty_campaign_control_context(),
         )
         record["reachability_states"] = sorted(
             set(record["reachability_states"]) | states_by_path[path]
@@ -1086,6 +1375,23 @@ def _campaign_control_context_index(
             {*record["evidence_artifacts"], "reachability.json"}
         )
     return result
+
+
+def _empty_campaign_control_context() -> dict[str, Any]:
+    return {
+        "graph_degree": None,
+        "maximum_complexity": None,
+        "maximum_complexity_rank": None,
+        "change_risk_score": None,
+        "change_priority": None,
+        "change_classification": None,
+        "changed_lines": None,
+        "uncovered_changed_lines": [],
+        "changed_line_coverage_percent": None,
+        "reachability_states": [],
+        "runtime_observations": [],
+        "evidence_artifacts": [],
+    }
 
 
 def _campaign_source_index(
@@ -1187,6 +1493,7 @@ def _campaign_review_assessment(
     hotspot: dict[str, Any],
     *,
     execution_status: str,
+    test_execution_sources: list[str],
     coverage_status: str,
     context: dict[str, Any],
     revision_binding: str,
@@ -1265,7 +1572,56 @@ def _campaign_review_assessment(
         "focused-test-state",
         execution_points,
         f"Focused test execution state is {execution_status}.",
-        list(TEST_EVIDENCE_ARTIFACTS),
+        test_execution_sources,
+    )
+    change_risk = context.get("change_risk_score")
+    change_points = (
+        15
+        if isinstance(change_risk, int) and change_risk >= 75
+        else 10
+        if isinstance(change_risk, int) and change_risk >= 50
+        else 5
+        if isinstance(change_risk, int) and change_risk > 0
+        else 0
+    )
+    add(
+        "changed-control-risk",
+        change_points,
+        "Changed shared control point has structural risk score "
+        f"{change_risk} ({context.get('change_priority') or 'unclassified'}).",
+        ["diff-coverage.json", "structural-synthesis.json"],
+    )
+    uncovered_changed = context.get("uncovered_changed_lines")
+    uncovered_changed = uncovered_changed if isinstance(uncovered_changed, list) else []
+    add(
+        "uncovered-changed-lines",
+        12 if uncovered_changed else 0,
+        f"{len(uncovered_changed)} changed executable line(s) are uncovered: "
+        + ", ".join(str(line) for line in uncovered_changed[:10])
+        + ("." if len(uncovered_changed) <= 10 else ", …"),
+        ["diff-coverage.json", "structural-synthesis.json"],
+    )
+    observations = set(_strings(context.get("runtime_observations"), 10))
+    runtime_points = (
+        0
+        if "observed" in observations
+        else 6
+        if "not-observed" in observations
+        else 4
+        if observations & {"not-measured", "unknown"} or not observations
+        else 0
+    )
+    add(
+        "runtime-observation-gap",
+        runtime_points,
+        "Shared control point runtime state is "
+        + (", ".join(sorted(observations)) if observations else "not available")
+        + ".",
+        (
+            ["reachability.json"]
+            if "reachability.json" in context.get("evidence_artifacts", [])
+            else []
+        ),
     )
     complexity = context.get("maximum_complexity")
     complexity_points = (
@@ -1317,7 +1673,17 @@ def _campaign_review_assessment(
             ["source-inventory.json"],
         )
     score = min(100, sum(int(factor["points"]) for factor in factors))
-    tier = (
+    tier = _review_tier(score)
+    return {
+        "review_score_model": "shared-control-review-v2",
+        "review_score": score,
+        "review_tier": tier,
+        "review_factors": factors,
+    }
+
+
+def _review_tier(score: int) -> str:
+    return (
         "critical"
         if score >= 80
         else "high"
@@ -1326,12 +1692,6 @@ def _campaign_review_assessment(
         if score >= 35
         else "low"
     )
-    return {
-        "review_score_model": "shared-control-review-v1",
-        "review_score": score,
-        "review_tier": tier,
-        "review_factors": factors,
-    }
 
 
 def _campaign_action(
@@ -1340,6 +1700,7 @@ def _campaign_action(
     path: str,
     *,
     revision_binding: str,
+    context: dict[str, Any],
 ) -> str:
     tests = ", ".join(selected[:5])
     if alignment == "aligned-current-evidence":
@@ -1368,6 +1729,17 @@ def _campaign_action(
         action = f"Produce line coverage for {path} from the selected-test campaign."
     else:
         action = f"Add a focused test that reaches shared control point {path}, then retain execution and coverage evidence."
+    uncovered_changed = context.get("uncovered_changed_lines")
+    if isinstance(uncovered_changed, list) and uncovered_changed:
+        lines = ", ".join(str(line) for line in uncovered_changed[:10])
+        action += f" Prioritize uncovered changed line(s) {lines} in {path}."
+    observations = set(_strings(context.get("runtime_observations"), 10))
+    if "observed" not in observations and observations & {
+        "not-observed",
+        "not-measured",
+        "unknown",
+    }:
+        action += " Retain runtime coverage that exercises this control point."
     if revision_binding == "mismatch":
         return (
             "Discard mismatched test/coverage evidence and regenerate it against "
@@ -1445,6 +1817,20 @@ def _owner_work_queues(
                     }
                 ),
                 "validation_campaign_ids": campaign_ids,
+                "validation_test_hotspot_ids": sorted(
+                    {
+                        str(hotspot_id)
+                        for campaign in owned_campaigns
+                        for hotspot_id in campaign["shared_test_hotspot_ids"]
+                    }
+                ),
+                "shared_validation_test_files": len(
+                    {
+                        str(hotspot_id)
+                        for campaign in owned_campaigns
+                        for hotspot_id in campaign["shared_test_hotspot_ids"]
+                    }
+                ),
                 "campaigns_by_review_tier": {
                     tier: sum(
                         campaign["review_tier"] == tier for campaign in owned_campaigns
@@ -1459,6 +1845,17 @@ def _owner_work_queues(
                 "campaigns_revision_unbound": sum(
                     campaign["source_snapshot"]["evidence_revision_binding"]
                     == "not-established"
+                    for campaign in owned_campaigns
+                ),
+                "campaigns_with_uncovered_changed_lines": sum(
+                    bool(campaign["control_point_context"]["uncovered_changed_lines"])
+                    for campaign in owned_campaigns
+                ),
+                "campaigns_with_runtime_observation_gaps": sum(
+                    any(
+                        factor["id"] == "runtime-observation-gap"
+                        for factor in campaign["review_factors"]
+                    )
                     for campaign in owned_campaigns
                 ),
                 "highest_campaign_review_score": max(
@@ -1495,10 +1892,33 @@ def _owner_queue_action(
         campaign["source_snapshot"]["evidence_revision_binding"] == "not-established"
         for campaign in campaigns
     )
+    changed_gaps = sum(
+        bool(campaign["control_point_context"]["uncovered_changed_lines"])
+        for campaign in campaigns
+    )
+    runtime_gaps = sum(
+        any(
+            factor["id"] == "runtime-observation-gap"
+            for factor in campaign["review_factors"]
+        )
+        for campaign in campaigns
+    )
+    shared_test_hotspots = len(
+        {
+            str(hotspot_id)
+            for campaign in campaigns
+            for hotspot_id in campaign["shared_test_hotspot_ids"]
+        }
+    )
+    shared_suffix = (
+        f" Coordinate {shared_test_hotspots} shared validation-test hotspot(s)."
+        if shared_test_hotspots
+        else ""
+    )
     if mismatched:
         return (
             f"{owner}: discard and regenerate evidence for {mismatched} revision-"
-            "mismatched campaign(s) before route disposition."
+            "mismatched campaign(s) before route disposition." + shared_suffix
         )
     if assessments["gap"]:
         action = (
@@ -1510,19 +1930,34 @@ def _owner_queue_action(
                 f" Bind regenerated evidence for {unbound} campaign(s) to the "
                 "sealed source digest."
             )
-        return action
+        if changed_gaps:
+            action += f" Cover changed lines in {changed_gaps} campaign(s)."
+        if runtime_gaps:
+            action += f" Retain runtime evidence for {runtime_gaps} campaign(s)."
+        return action + shared_suffix
     incomplete = assessments["partial"] + assessments["not-assessed"]
     if unbound:
         return (
             f"{owner}: bind regenerated test/coverage evidence to the sealed source "
             f"digest for {unbound} campaign(s), then rerun the owned routes."
+            + shared_suffix
         )
     if incomplete:
         return (
             f"{owner}: produce complete change, coverage, and focused-test evidence "
-            f"for {incomplete} route(s) before disposition."
+            f"for {incomplete} route(s) before disposition." + shared_suffix
         )
-    return f"{owner}: coordinate the shared remediation and regression-test scope."
+    if changed_gaps or runtime_gaps:
+        actions = []
+        if changed_gaps:
+            actions.append(f"cover changed lines in {changed_gaps} campaign(s)")
+        if runtime_gaps:
+            actions.append(f"retain runtime evidence for {runtime_gaps} campaign(s)")
+        return f"{owner}: " + " and ".join(actions) + "." + shared_suffix
+    return (
+        f"{owner}: coordinate the shared remediation and regression-test scope."
+        + shared_suffix
+    )
 
 
 def _attach_finding_routes(
@@ -1553,6 +1988,7 @@ def _attach_finding_routes(
                 "validation": route["validation"],
                 "convergence_hotspot_ids": route["convergence_hotspot_ids"],
                 "validation_campaign_ids": route["validation_campaign_ids"],
+                "validation_test_hotspot_ids": route["validation_test_hotspot_ids"],
                 "validation_campaigns": [
                     {
                         key: campaign[key]
@@ -1561,6 +1997,7 @@ def _attach_finding_routes(
                             "hotspot_id",
                             "path",
                             "selected_test_files",
+                            "shared_test_hotspot_ids",
                             "focused_test_validation_status",
                             "coverage_status",
                             "coverage_evidence_scope",
@@ -1985,6 +2422,14 @@ def _positive_integer(value: Any) -> int | None:
     return (
         value
         if isinstance(value, int) and not isinstance(value, bool) and value > 0
+        else None
+    )
+
+
+def _nonnegative_integer(value: Any) -> int | None:
+    return (
+        value
+        if isinstance(value, int) and not isinstance(value, bool) and value >= 0
         else None
     )
 

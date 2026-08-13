@@ -19,9 +19,17 @@ for published releases.
   exact retained case execution, and hotspot file coverage. Campaigns bind
   control points and selected tests to the source inventory, distinguish
   aligned, mismatched, and unbound test/coverage revisions, and expose a
-  factor-by-factor shared-control review score. Campaign IDs, scores, revision
-  state, evidence gaps, and actions propagate through findings, SARIF, reports,
-  owner queues, and closure work. Add `pysec-evidence bind` to atomically create
+  factor-by-factor shared-control review score. Review model v2 cross-references
+  structural change risk, exact uncovered changed lines, and runtime observation
+  gaps, while failed-test factors cite only the retained execution artifacts.
+  Cross-campaign validation-test hotspots now identify one source-bound test file
+  selected for multiple shared controls, retain direct/transitive/context
+  selection modes without double-counting JUnit cases, expose sole-test
+  dependencies, and propagate stable IDs into routes, findings, SARIF, owner
+  queues, reports, and closure criteria.
+  Campaign IDs, scores, revision state, evidence gaps, and actions propagate
+  through findings, SARIF, reports, owner queues, and closure work. Add
+  `pysec-evidence bind` to atomically create
   payload-verified source-binding sidecars for coverage and JUnit evidence.
   Bundle and document the version 1.0 schema.
 - Version promotion plans at 1.2 and cross-reference sealed closure-plan 1.2

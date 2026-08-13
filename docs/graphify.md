@@ -61,7 +61,10 @@ flowchart LR
   points to findings and review-worthy sensitive sinks, then reverses the same
   graph at shared control points to select direct/transitive tests. Retained
   case execution and file coverage turn those candidates into explicit shared
-  validation campaigns. See [Static risk routes](risk-paths.md).
+  validation campaigns, where the same control-point paths are joined to
+  changed-line risk and runtime observations. Reverse-selected tests are then
+  compared across campaigns to expose shared-test bottlenecks and sole-test
+  dependencies. See [Static risk routes](risk-paths.md).
 - Static connectivity does not prove runtime reachability, exploitability, or
   safety. The built-in reachability analyzer and test evidence remain separate.
 - Graph centrality alone never raises or lowers a finding's native severity.
