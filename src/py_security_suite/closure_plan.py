@@ -8,12 +8,13 @@ from typing import Any
 
 from .execution import sanitize_terminal_text
 from .models import Finding, ScanManifest, json_ready
+from .ownership import owners_for_path, ownership_rules_from_artifact
 from .passport import verify_report
 from .path_safety import resolve_regular_file
 
 
 _MAX_JSON_BYTES = 128 * 1024 * 1024
-_SCHEMA_ID = "urn:project-py-security-suite:schema:closure-plan:1.1"
+_SCHEMA_ID = "urn:project-py-security-suite:schema:closure-plan:1.2"
 _PRIORITY_ORDER = {"P0": 0, "P1": 1, "P2": 2, "P3": 3, "P4": 4}
 _SEVERITY_PRIORITY = {
     "critical": "P0",
@@ -51,6 +52,8 @@ def build_closure_plan(
         admission=_optional_object(root / "admission-decisions.json"),
         coverage=_optional_object(root / "coverage-summary.json"),
         reachability=_optional_object(root / "reachability.json"),
+        structural=_optional_object(root / "structural-synthesis.json"),
+        finding_delta=_optional_object(root / "finding-delta.json"),
         coverage_target=coverage_target,
         hotspot_limit=hotspot_limit,
     )
@@ -80,6 +83,8 @@ def closure_plan_artifact(
         admission=_as_object(artifacts.get("admission-decisions.json")),
         coverage=_as_object(artifacts.get("coverage-summary.json")),
         reachability=_as_object(artifacts.get("reachability.json")),
+        structural=_as_object(artifacts.get("structural-synthesis.json")),
+        finding_delta=_as_object(artifacts.get("finding-delta.json")),
         coverage_target=coverage_target,
         hotspot_limit=hotspot_limit,
     )
@@ -96,6 +101,7 @@ def render_closure_plan_markdown(plan: dict[str, Any]) -> str:
         "> This plan is non-authoritative. It prepares evidence and actions but "
         + "cannot approve scanner identities, attest isolation, or authorize a release."
     )
+    items = _object_list(plan.get("items"), "closure plan items")
     lines = [
         "# Findings closure plan",
         "",
@@ -103,16 +109,22 @@ def render_closure_plan_markdown(plan: dict[str, Any]) -> str:
         f"- **Outcome:** `{_md(plan.get('outcome'))}`",
         f"- **Open work:** {int(summary.get('open_items') or 0)} item(s)",
         f"- **Distinct advisory work:** {int(summary.get('advisory_items') or 0)} item(s) from {int(summary.get('advisory_observations') or 0)} retained scanner observation(s)",
+        f"- **Changed-file validation work:** {int(summary.get('validation_alignment_items') or 0)} item(s); {int(summary.get('codeowner_backed_validation_items') or 0)} assigned by repository ownership rules",
         authority_line,
         "",
         authority_notice,
         "",
-        "## Prioritized work",
-        "",
-        "| Priority | Authority | Status | Owner | Work item | Acceptance evidence |",
-        "|---|---|---|---|---|---|",
     ]
-    for item in _object_list(plan.get("items"), "closure plan items"):
+    lines.extend(_render_validation_queues(items))
+    lines.extend(
+        [
+            "## Prioritized work",
+            "",
+            "| Priority | Category | Authority | Status | Owner | Work item | Acceptance evidence |",
+            "|---|---|---|---|---|---|---|",
+        ]
+    )
+    for item in items:
         acceptance = item.get("acceptance_criteria")
         criteria = (
             str(acceptance[0])
@@ -124,6 +136,7 @@ def render_closure_plan_markdown(plan: dict[str, Any]) -> str:
             + " | ".join(
                 (
                     f"`{_md(item.get('priority'))}`",
+                    _md(item.get("category")),
                     _md(item.get("authority")),
                     _md(item.get("status")),
                     f"`{_md(item.get('owner'))}`",
@@ -134,11 +147,7 @@ def render_closure_plan_markdown(plan: dict[str, Any]) -> str:
             + " |"
         )
     lines.extend(("", "## Safe command handoffs", ""))
-    command_items = [
-        item
-        for item in _object_list(plan.get("items"), "closure plan items")
-        if item.get("commands")
-    ]
+    command_items = [item for item in items if item.get("commands")]
     if not command_items:
         lines.append("No command handoff is required for the current plan.")
     for item in command_items:
@@ -147,6 +156,48 @@ def render_closure_plan_markdown(plan: dict[str, Any]) -> str:
             rendered = " ".join(_shell_display(value) for value in command)
             lines.extend(("```text", rendered, "```", ""))
     return "\n".join(lines).rstrip() + "\n"
+
+
+def _render_validation_queues(items: list[dict[str, Any]]) -> list[str]:
+    validation = [
+        item
+        for item in items
+        if _as_object(item.get("details")).get("validation_alignment")
+    ]
+    if not validation:
+        return []
+    counts = Counter(
+        (
+            str(item.get("owner") or "Unassigned"),
+            str(_as_object(item.get("details")).get("validation_alignment")),
+            str(item.get("priority") or "P3"),
+        )
+        for item in validation
+    )
+    actions: dict[tuple[str, str], str] = {}
+    for item in validation:
+        key = (
+            str(item.get("owner") or "Unassigned"),
+            str(_as_object(item.get("details")).get("validation_alignment")),
+        )
+        actions.setdefault(key, str(item.get("action") or "Review the work items."))
+    lines = [
+        "## Validation work queues",
+        "",
+        "File-level evidence remains in the prioritized ledger below; this rollup shows shared owner and evidence conditions.",
+        "",
+        "| Owner | Evidence condition | P1 | P2 | P3/P4 | Subjects | Shared next action |",
+        "|---|---|---:|---:|---:|---:|---|",
+    ]
+    for owner, alignment in sorted(actions):
+        p1 = counts[(owner, alignment, "P1")]
+        p2 = counts[(owner, alignment, "P2")]
+        lower = counts[(owner, alignment, "P3")] + counts[(owner, alignment, "P4")]
+        lines.append(
+            f"| `{_md(owner)}` | `{_md(alignment)}` | {p1} | {p2} | {lower} | "
+            f"{p1 + p2 + lower} | {_md(actions[(owner, alignment)])} |"
+        )
+    return [*lines, ""]
 
 
 def _build(
@@ -160,6 +211,8 @@ def _build(
     admission: dict[str, Any],
     coverage: dict[str, Any],
     reachability: dict[str, Any],
+    structural: dict[str, Any],
+    finding_delta: dict[str, Any],
     coverage_target: float,
     hotspot_limit: int,
 ) -> dict[str, Any]:
@@ -167,8 +220,17 @@ def _build(
     items.extend(_finding_items(findings))
     items.extend(_governance_items(manifest, admission))
     items.extend(_activation_items(portfolio))
-    items.extend(_coverage_items(coverage, coverage_target, hotspot_limit))
+    items.extend(
+        _test_assurance_items(
+            structural,
+            finding_delta,
+            coverage,
+            coverage_target,
+            hotspot_limit,
+        )
+    )
     items.extend(_reachability_items(reachability))
+    items = _consolidate_test_assurance(items)
     items = _deduplicate(items)
     items.sort(
         key=lambda item: (
@@ -186,8 +248,13 @@ def _build(
         for item in items
         if _as_object(item.get("details")).get("advisory_cluster_id")
     ]
+    validation_items = [
+        item
+        for item in items
+        if _as_object(item.get("details")).get("validation_alignment")
+    ]
     return {
-        "schema_version": "1.1",
+        "schema_version": "1.2",
         "schema_id": _SCHEMA_ID,
         "authoritative": False,
         "scope": (
@@ -217,6 +284,21 @@ def _build(
                 max(0, len(item.get("related_findings", [])) - 1)
                 for item in advisory_items
             ),
+            "validation_alignment_items": len(validation_items),
+            "codeowner_backed_validation_items": sum(
+                bool(_as_object(item.get("details")).get("ownership_rule_matched"))
+                for item in validation_items
+            ),
+            "validation_items_with_failing_tests": sum(
+                _as_object(item.get("details")).get("validation_alignment")
+                == "tests-failing"
+                for item in validation_items
+            ),
+            "validation_items_with_coverage_gaps": sum(
+                _as_object(item.get("details")).get("validation_alignment")
+                == "coverage-gap"
+                for item in validation_items
+            ),
             "by_priority": dict(sorted(priorities.items())),
             "by_status": dict(sorted(statuses.items())),
             "by_authority": dict(sorted(authorities.items())),
@@ -239,7 +321,9 @@ def _finding_items(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
         rules = {str(source.get("rule_id")) for source in sources}
         external = "COSIGN-BUNDLE-MISSING" in rules
         evidence = _as_object(finding.get("evidence"))
-        advisory = _as_object(_as_object(evidence.get("fusion")).get("advisory_context"))
+        advisory = _as_object(
+            _as_object(evidence.get("fusion")).get("advisory_context")
+        )
         remediation = _as_object(advisory.get("remediation_context"))
         cluster_id = str(advisory.get("cluster_id") or "")
         if cluster_id and remediation:
@@ -267,9 +351,7 @@ def _finding_items(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
             )
             evidence_basis = remediation.get("evidence_basis")
             import_paths = _string_values(usage.get("import_paths"), 50)
-            test_files = _string_values(
-                remediation.get("recommended_test_files"), 50
-            )
+            test_files = _string_values(remediation.get("recommended_test_files"), 50)
             test_execution_sources = _string_values(
                 usage.get("test_execution_sources"), 10
             )
@@ -302,7 +384,9 @@ def _finding_items(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     why=(
                         "; ".join(str(item) for item in evidence_basis[:20])
                         if isinstance(evidence_basis, list) and evidence_basis
-                        else str(finding.get("impact") or finding.get("description") or "")
+                        else str(
+                            finding.get("impact") or finding.get("description") or ""
+                        )
                     ),
                     action=str(
                         remediation.get("recommended_action")
@@ -539,32 +623,178 @@ def _activation_items(portfolio: dict[str, Any]) -> list[dict[str, Any]]:
     return items
 
 
-def _coverage_items(
-    coverage: dict[str, Any], target: float, limit: int
+def _test_assurance_items(
+    structural: dict[str, Any],
+    finding_delta: dict[str, Any],
+    coverage: dict[str, Any],
+    target: float,
+    limit: int,
 ) -> list[dict[str, Any]]:
-    candidates = []
-    for record in _object_list(coverage.get("files"), "coverage files"):
-        summary = _as_object(record.get("summary"))
-        percent = summary.get("percent_covered")
-        if not isinstance(percent, (int, float)) or isinstance(percent, bool):
+    """Join change impact, tests, coverage, and CODEOWNERS into closure work."""
+    coverage_candidates = _coverage_candidates(coverage, target)
+    coverage_by_path = {
+        path: (percent, summary) for percent, path, summary in coverage_candidates
+    }
+    rules = ownership_rules_from_artifact(finding_delta)
+    items: list[dict[str, Any]] = []
+    handled_paths: set[str] = set()
+    impacts = _object_list(
+        structural.get("change_impact_assessments"),
+        "structural change impact assessments",
+    )
+    for impact in impacts[:100]:
+        path = str(impact.get("path") or "").replace("\\", "/")
+        alignment = str(impact.get("test_coverage_alignment") or "")
+        if not path or alignment in {"", "aligned-current-evidence", "not-selected"}:
             continue
-        if float(percent) >= target:
-            continue
-        path = str(record.get("path") or "")
-        if not path.startswith(("src/", "src\\")):
-            continue
-        candidates.append((float(percent), path, summary))
-    candidates.sort(key=lambda value: (value[0], value[1]))
-    items = []
-    for percent, path, _summary in candidates[:limit]:
+        owners = owners_for_path(path, rules)
+        owner = owners[0] if owners else "quality-engineering"
+        coverage_hotspot = coverage_by_path.get(path)
+        acceptance = _validation_acceptance(alignment, path)
+        if coverage_hotspot is not None:
+            acceptance.append(
+                f"The module reaches at least {target:.2f}% combined coverage."
+            )
+        test_files = _string_values(
+            [
+                *(_string_values(impact.get("direct_test_files"), 25)),
+                *(_string_values(impact.get("transitive_test_files"), 25)),
+                *(_string_values(impact.get("associated_test_files"), 25)),
+            ],
+            50,
+        )
+        execution_sources = _string_values(impact.get("test_execution_sources"), 10)
+        uncovered = _integer_values(impact.get("uncovered_changed_lines"), 100)
+        why_parts = [
+            _validation_why(alignment),
+            f"{int(impact.get('changed_lines') or 0)} changed executable line(s) were analyzed",
+        ]
+        if uncovered:
+            why_parts.append(f"{len(uncovered)} retained changed line(s) lack coverage")
+        if coverage_hotspot is not None:
+            why_parts.append(
+                f"whole-file combined coverage is {coverage_hotspot[0]:.2f}% versus the {target:.2f}% target"
+            )
         items.append(
             _item(
-                key=f"coverage:{path}:{target:.3f}",
-                priority="P2",
+                key=f"test-assurance:{path}",
+                priority=_validation_priority(
+                    alignment, str(impact.get("priority") or "")
+                ),
+                category="test-assurance",
+                authority="repository",
+                status="open",
+                owner=owner,
+                title=_validation_title(alignment, path),
+                why="; ".join(why_parts) + ".",
+                action=str(
+                    impact.get("validation_action")
+                    or impact.get("recommended_action")
+                    or "Regenerate focused-test and changed-line coverage evidence."
+                ),
+                acceptance=acceptance,
+                evidence_refs=[
+                    "structural-synthesis.json",
+                    "diff-coverage.json",
+                    "coverage-summary.json",
+                    "finding-delta.json",
+                    path,
+                    *test_files,
+                    *execution_sources,
+                ],
+                tools=_validation_tools(execution_sources),
+                related_findings=_string_values(impact.get("finding_ids"), 25),
+                details={
+                    "path": path,
+                    "validation_alignment": alignment,
+                    "validation_gap_reasons": _string_values(
+                        impact.get("validation_gap_reasons"), 20
+                    ),
+                    "ownership_rule_matched": bool(owners),
+                    "owners": owners,
+                    "change_priority": impact.get("priority"),
+                    "change_risk_score": impact.get("risk_score"),
+                    "changed_lines": int(impact.get("changed_lines") or 0),
+                    "uncovered_changed_lines": uncovered,
+                    "changed_line_coverage_percent": impact.get(
+                        "changed_line_coverage_percent"
+                    ),
+                    "file_coverage_percent": (
+                        coverage_hotspot[0]
+                        if coverage_hotspot is not None
+                        else impact.get("file_coverage_percent")
+                    ),
+                    "focused_test_validation_status": impact.get(
+                        "focused_test_validation_status"
+                    ),
+                    "focused_test_execution": impact.get("focused_test_execution", []),
+                    "recommended_test_files": test_files,
+                    "test_selection_confidence": impact.get(
+                        "test_selection_confidence"
+                    ),
+                },
+            )
+        )
+        handled_paths.add(path)
+
+    truncation = _as_object(structural.get("truncation"))
+    omitted = int(truncation.get("change_impact_assessments_omitted") or 0)
+    if omitted > 0:
+        items.append(
+            _item(
+                key="test-assurance:omitted-change-impacts",
+                priority="P1",
                 category="test-assurance",
                 authority="repository",
                 status="open",
                 owner="quality-engineering",
+                title="Resolve omitted changed-file validation assessments",
+                why=(
+                    f"{omitted} changed-file assessment(s) exceeded the bounded "
+                    "structural detail ledger; their validation alignment cannot be "
+                    "established from this report."
+                ),
+                action=(
+                    "Split the change into reviewable units or otherwise reduce the "
+                    "changed-file set, then regenerate complete structural, focused-test, "
+                    "and changed-line coverage evidence."
+                ),
+                acceptance=[
+                    "No change impact assessments are omitted in the replacement report.",
+                    "Every retained changed file reports aligned-current-evidence.",
+                    "The replacement report independently passes pysec verify-report.",
+                ],
+                evidence_refs=[
+                    "structural-synthesis.json#truncation.change_impact_assessments_omitted"
+                ],
+                tools=["coverage", "diff-cover", "graphify", "junit"],
+                details={
+                    "validation_alignment": "assessment-truncated",
+                    "validation_gap_reasons": [
+                        "changed-file validation detail was omitted by the bounded artifact"
+                    ],
+                    "ownership_rule_matched": False,
+                    "owners": [],
+                    "omitted_change_impact_assessments": omitted,
+                },
+            )
+        )
+
+    remaining = [
+        candidate
+        for candidate in coverage_candidates
+        if candidate[1] not in handled_paths
+    ]
+    for percent, path, _summary in remaining[:limit]:
+        owners = owners_for_path(path, rules)
+        items.append(
+            _item(
+                key=f"test-assurance:{path}",
+                priority="P2",
+                category="test-assurance",
+                authority="repository",
+                status="open",
+                owner=owners[0] if owners else "quality-engineering",
                 title=f"Raise decision coverage for {path}",
                 why=(
                     f"Combined line/branch coverage is {percent:.2f}% versus the "
@@ -578,11 +808,164 @@ def _coverage_items(
                     f"The module reaches at least {target:.2f}% combined coverage.",
                     "New tests assert externally meaningful outcomes and failure behavior.",
                 ],
-                evidence_refs=["coverage-summary.json", path.replace("\\", "/")],
+                evidence_refs=[
+                    "coverage-summary.json",
+                    "finding-delta.json",
+                    path,
+                ],
                 tools=["coverage", "junit"],
+                details={
+                    "path": path,
+                    "ownership_rule_matched": bool(owners),
+                    "owners": owners,
+                    "file_coverage_percent": percent,
+                },
             )
         )
     return items
+
+
+def _consolidate_test_assurance(
+    items: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Fold native coverage observations into the richer per-file closure item."""
+    assurance_by_path = {
+        str(_as_object(item.get("details")).get("path")): item
+        for item in items
+        if item.get("category") == "test-assurance"
+        and _as_object(item.get("details")).get("path")
+    }
+    result: list[dict[str, Any]] = []
+    for item in items:
+        tools = {str(value) for value in item.get("tools", [])}
+        if item.get("category") != "finding" or not tools.intersection(
+            {"coverage", "diff-cover"}
+        ):
+            result.append(item)
+            continue
+        path = next(
+            (
+                str(value).replace("\\", "/")
+                for value in item.get("evidence_refs", [])
+                if str(value).replace("\\", "/").startswith("src/")
+                and str(value).endswith(".py")
+            ),
+            "",
+        )
+        assurance = assurance_by_path.get(path)
+        if assurance is None:
+            result.append(item)
+            continue
+        for field in (
+            "acceptance_criteria",
+            "evidence_refs",
+            "related_findings",
+            "tools",
+        ):
+            assurance[field] = _unique_values(
+                [*assurance.get(field, []), *item.get(field, [])]
+            )
+        if (
+            _PRIORITY_ORDER[str(item["priority"])]
+            < _PRIORITY_ORDER[str(assurance["priority"])]
+        ):
+            assurance["priority"] = item["priority"]
+        details = _as_object(assurance.get("details"))
+        observations = details.setdefault("consolidated_coverage_findings", [])
+        if isinstance(observations, list):
+            observations.append(
+                {
+                    "closure_item_id": item["id"],
+                    "finding_ids": item.get("related_findings", []),
+                    "title": item.get("title"),
+                    "tools": item.get("tools", []),
+                }
+            )
+    return result
+
+
+def _coverage_candidates(
+    coverage: dict[str, Any], target: float
+) -> list[tuple[float, str, dict[str, Any]]]:
+    candidates: list[tuple[float, str, dict[str, Any]]] = []
+    for record in _object_list(coverage.get("files"), "coverage files"):
+        summary = _as_object(record.get("summary"))
+        percent = summary.get("percent_covered")
+        if not isinstance(percent, (int, float)) or isinstance(percent, bool):
+            continue
+        if float(percent) >= target:
+            continue
+        path = str(record.get("path") or "").replace("\\", "/")
+        if not path.startswith(("src/", "src\\")):
+            continue
+        candidates.append((float(percent), path, summary))
+    candidates.sort(key=lambda value: (value[0], value[1]))
+    return candidates
+
+
+def _validation_priority(alignment: str, change_priority: str) -> str:
+    if alignment in {"tests-failing", "tests-incomplete"}:
+        return "P1"
+    if change_priority == "high" or alignment in {
+        "coverage-gap",
+        "test-evidence-not-available",
+        "coverage-not-available",
+    }:
+        return "P2"
+    return "P3"
+
+
+def _validation_title(alignment: str, path: str) -> str:
+    prefix = {
+        "coverage-gap": "Cover changed executable lines in",
+        "tests-failing": "Resolve failing focused tests for",
+        "tests-incomplete": "Complete focused test execution for",
+        "tests-not-observed": "Run graph-selected tests for",
+        "test-evidence-not-available": "Produce focused test evidence for",
+        "coverage-not-available": "Produce changed-line coverage for",
+        "assessment-truncated": "Restore complete validation evidence for",
+    }.get(alignment, "Align validation evidence for")
+    return f"{prefix} {path}"
+
+
+def _validation_why(alignment: str) -> str:
+    return {
+        "coverage-gap": "Focused tests passed, but changed-line coverage contradicts complete validation",
+        "tests-failing": "At least one graph-selected focused test failed",
+        "tests-incomplete": "Focused test execution did not complete cleanly",
+        "tests-not-observed": "Mapped focused tests were not observed in retained case evidence",
+        "test-evidence-not-available": "No supported case-level test artifact was retained",
+        "coverage-not-available": "Changed-line coverage evidence was unavailable",
+    }.get(alignment, "Focused-test and coverage evidence are not aligned")
+
+
+def _validation_acceptance(alignment: str, path: str) -> list[str]:
+    criteria = [
+        f"The change impact for {path} reports aligned-current-evidence in a newly sealed report.",
+        "The replacement report independently passes pysec verify-report.",
+    ]
+    if alignment in {"tests-failing", "tests-incomplete", "tests-not-observed"}:
+        criteria.insert(0, "Every graph-selected focused test completes and passes.")
+    if alignment in {"coverage-gap", "coverage-not-available"}:
+        criteria.insert(0, "Every cited changed executable line is covered.")
+    return criteria
+
+
+def _validation_tools(execution_sources: list[str]) -> list[str]:
+    tools = {"coverage", "diff-cover", "graphify"}
+    for source in execution_sources:
+        normalized = source.lower()
+        tool = (
+            "junit"
+            if "junit" in normalized
+            else "hypothesis"
+            if "hypothesis" in normalized
+            else "schemathesis"
+            if "schemathesis" in normalized
+            else source
+        )
+        tools.add(tool)
+    return sorted(tools)
 
 
 def _activation_commands(tool: str) -> list[list[str]]:
@@ -765,6 +1148,16 @@ def _string_values(value: Any, limit: int) -> list[str]:
     if not isinstance(value, list):
         return []
     return [str(item) for item in value[:limit] if isinstance(item, str) and item]
+
+
+def _integer_values(value: Any, limit: int) -> list[int]:
+    if not isinstance(value, list):
+        return []
+    return [
+        item
+        for item in value[:limit]
+        if isinstance(item, int) and not isinstance(item, bool) and item > 0
+    ]
 
 
 def _validate_options(coverage_target: float, hotspot_limit: int) -> None:

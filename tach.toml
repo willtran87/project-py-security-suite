@@ -236,6 +236,7 @@ path = "py_security_suite.closure_plan"
 depends_on = [
     "py_security_suite.execution",
     "py_security_suite.models",
+    "py_security_suite.ownership",
     "py_security_suite.passport",
     "py_security_suite.path_safety",
 ]

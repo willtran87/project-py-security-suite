@@ -920,7 +920,8 @@ after relocation. It cannot sign, approve, or admit itself.
 Optional inputs keep adjacent workflows inside the same integrity boundary:
 
 - `--previous-report` adds longitudinal scanner/performance evidence,
-  reachability changes, and an automatically chained finding register;
+  reachability changes, validation-debt and CODEOWNER queue continuity from
+  closure-plan 1.2, and an automatically chained finding register;
 - `--effectiveness-evaluation` and `--passport-verification`, each paired with
   its approved SHA-256, flow into release readiness and are retained as required
   release-manifest and audit-package evidence;
@@ -952,14 +953,28 @@ pysec closure-plan REPORT --coverage-target 90 --hotspot-limit 10 \
   --format markdown --output closure-plan.md
 pysec baseline-candidate REPORT --format json --output baseline-candidate.json
 pysec trend PREVIOUS_REPORT REPORT --format json --output operational-trend.json
+pysec trend PREVIOUS_REPORT REPORT --format markdown --output operational-trend.md
 ```
 
 Every newly sealed report also contains `closure-plan.json`. It combines active
 findings, admission integrity gaps, conditional-control activation recipes,
-coverage hotspots, and dynamic-reachability warnings into stable owned work
-items. Each item distinguishes repository, organization, and external authority;
+coverage hotspots, dynamic-reachability warnings, and changed-file validation
+mismatches into stable owned work items. Change items join Graphify-selected
+tests, exact case results, changed-line and whole-file coverage, findings, and
+CODEOWNERS ownership; overlapping coverage work is consolidated by file. Each
+item distinguishes repository, organization, and external authority;
 lists acceptance evidence; and stores commands as argument arrays. The plan is
 non-authoritative and cannot approve trust, isolation, signing, or release.
+Consolidation retains native Coverage/diff-cover finding IDs and tool names in
+the file item; the unmodified scanner observations remain in `findings.json`.
+The Markdown view adds an owner/evidence-condition queue above the detailed
+ledger. `release-check` 1.3 applies a stricter grouping key—owner, priority,
+authority, action, and blocker must all match—and publishes separate validation
+group and subject totals. Inspect the referenced closure items for exact files,
+changed lines, and focused tests.
+If the bounded structural artifact omits changed-file details, the plan emits a
+P1 completeness item and release readiness remains closed until a replacement
+report contains every assessment.
 
 Generate native reproducibility evidence from two separately produced artifact
 directories:

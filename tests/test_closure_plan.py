@@ -33,7 +33,7 @@ class ClosurePlanTests(unittest.TestCase):
 
         self.assertEqual(first, second)
         self.assertFalse(first["authoritative"])
-        self.assertGreaterEqual(first["summary"]["open_items"], 6)
+        self.assertGreaterEqual(first["summary"]["open_items"], 7)
         categories = {item["category"] for item in first["items"]}
         self.assertTrue(
             {
@@ -62,24 +62,64 @@ class ClosurePlanTests(unittest.TestCase):
         advisory = advisory_items[0]
         self.assertEqual(advisory["priority"], "P0")
         self.assertEqual(advisory["owner"], "@dependency-team")
-        self.assertEqual(
-            advisory["related_findings"], ["GRYPE-1", "OSV-1"]
-        )
+        self.assertEqual(advisory["related_findings"], ["GRYPE-1", "OSV-1"])
         self.assertEqual(advisory["tools"], ["grype", "osv-scanner"])
         self.assertIn("tests/test_client.py", advisory["evidence_refs"])
         self.assertIn("Upgrade demo-lib", advisory["action"])
         self.assertEqual(first["summary"]["advisory_items"], 1)
         self.assertEqual(first["summary"]["advisory_observations"], 2)
         self.assertEqual(first["summary"]["alias_observations_consolidated"], 1)
+        self.assertEqual(first["summary"]["validation_alignment_items"], 1)
+        self.assertEqual(first["summary"]["codeowner_backed_validation_items"], 1)
+        self.assertEqual(first["summary"]["validation_items_with_coverage_gaps"], 1)
+        validation = next(
+            item
+            for item in first["items"]
+            if item["details"].get("validation_alignment") == "coverage-gap"
+        )
+        self.assertEqual(validation["owner"], "@security-suite")
+        self.assertEqual(validation["priority"], "P2")
+        self.assertIn("tests/test_governance.py", validation["evidence_refs"])
+        self.assertIn("junit-summary.json", validation["evidence_refs"])
+        self.assertIn(
+            "Every cited changed executable line is covered.",
+            validation["acceptance_criteria"],
+        )
+        self.assertEqual(validation["details"]["uncovered_changed_lines"], [41, 44])
+        self.assertEqual(validation["details"]["file_coverage_percent"], 80.0)
+        self.assertTrue(validation["details"]["ownership_rule_matched"])
+        self.assertIn("junit", validation["tools"])
+        self.assertNotIn("junit-summary.json", validation["tools"])
+        self.assertIn("COVERAGE-1", validation["related_findings"])
+        self.assertEqual(
+            validation["details"]["consolidated_coverage_findings"][0]["finding_ids"],
+            ["COVERAGE-1"],
+        )
+        self.assertEqual(
+            len(
+                [
+                    item
+                    for item in first["items"]
+                    if "src/py_security_suite/governance.py" in item["evidence_refs"]
+                ]
+            ),
+            1,
+        )
 
-        self.assertEqual(first["schema_version"], "1.1")
-        schema = json.loads(read_bundled_schema("closure-plan-1.1"))
+        self.assertEqual(first["schema_version"], "1.2")
+        schema = json.loads(read_bundled_schema("closure-plan-1.2"))
         Draft202012Validator.check_schema(schema)
         Draft202012Validator(schema).validate(first)
 
         markdown = render_closure_plan_markdown(first)
         self.assertIn("# Findings closure plan", markdown)
         self.assertIn("Distinct advisory work:** 1 item(s) from 2", markdown)
+        self.assertIn("Changed-file validation work:** 1 item(s); 1 assigned", markdown)
+        self.assertIn("## Validation work queues", markdown)
+        self.assertIn(
+            "| `@security-suite` | `coverage-gap` | 0 | 1 | 0 | 1 |", markdown
+        )
+        self.assertIn("| `P2` | test-assurance |", markdown)
         self.assertIn("non-authoritative", markdown)
         self.assertIn("```text\npysec prepare-signing", markdown)
 
@@ -98,14 +138,50 @@ class ClosurePlanTests(unittest.TestCase):
                 coverage_target=80.0,
                 hotspot_limit=1,
             )
-        self.assertFalse(
-            any(item["category"] == "test-assurance" for item in result["items"])
+        assurance = [
+            item for item in result["items"] if item["category"] == "test-assurance"
+        ]
+        self.assertEqual(len(assurance), 1)
+        self.assertEqual(
+            assurance[0]["details"]["validation_alignment"], "coverage-gap"
+        )
+        self.assertNotIn(
+            "The module reaches at least 80.00%",
+            " ".join(assurance[0]["acceptance_criteria"]),
         )
 
         with self.assertRaisesRegex(ValueError, "between 0 and 100"):
             build_closure_plan(Path("unused"), coverage_target=101.0)
         with self.assertRaisesRegex(ValueError, "between 0 and 100"):
             build_closure_plan(Path("unused"), hotspot_limit=101)
+
+    @patch("py_security_suite.closure_plan.verify_report")
+    def test_turns_omitted_change_assessments_into_fail_closed_work(
+        self, verify_mock
+    ) -> None:
+        verify_mock.return_value = {
+            "scan_id": "scan-1",
+            "outcome": "pass",
+            "checksums_sha256": "e" * 64,
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            report = Path(directory)
+            _write_report(report)
+            structural_path = report / "structural-synthesis.json"
+            structural = json.loads(structural_path.read_text(encoding="utf-8"))
+            structural["truncation"] = {"change_impact_assessments_omitted": 3}
+            _write(structural_path, structural)
+            result = build_closure_plan(report)
+
+        truncated = next(
+            item
+            for item in result["items"]
+            if item["details"].get("validation_alignment") == "assessment-truncated"
+        )
+        self.assertEqual(truncated["priority"], "P1")
+        self.assertEqual(truncated["owner"], "quality-engineering")
+        self.assertEqual(truncated["details"]["omitted_change_impact_assessments"], 3)
+        self.assertEqual(result["summary"]["validation_alignment_items"], 2)
 
 
 def _write_report(report: Path) -> None:
@@ -139,6 +215,17 @@ def _write_report(report: Path) -> None:
                 },
                 _advisory_finding("OSV-1", "osv-scanner"),
                 _advisory_finding("GRYPE-1", "grype"),
+                {
+                    "finding_id": "COVERAGE-1",
+                    "status": "new",
+                    "severity": "medium",
+                    "title": "Changed-line coverage below target",
+                    "impact": "Changed behavior lacks observed execution.",
+                    "remediation": "Cover the cited changed lines.",
+                    "sources": [{"tool": "diff-cover", "rule_id": "DIFF-COVERAGE"}],
+                    "locations": [{"path": "src/py_security_suite/governance.py"}],
+                    "evidence": {"owners": ["@security-suite"]},
+                },
             ]
         },
     )
@@ -187,6 +274,52 @@ def _write_report(report: Path) -> None:
         {
             "warnings": ["Dynamic loading was detected."],
             "summary": {"load_only_islands": 2, "reportable_islands": 0},
+        },
+    )
+    _write(
+        report / "finding-delta.json",
+        {
+            "ownership_rule_details": [
+                {
+                    "pattern": "src/py_security_suite/*",
+                    "owners": ["@security-suite"],
+                }
+            ]
+        },
+    )
+    _write(
+        report / "structural-synthesis.json",
+        {
+            "change_impact_assessments": [
+                {
+                    "path": "src/py_security_suite/governance.py",
+                    "priority": "high",
+                    "risk_score": 71,
+                    "changed_lines": 5,
+                    "uncovered_changed_lines": [41, 44],
+                    "changed_line_coverage_percent": 60.0,
+                    "file_coverage_percent": 80.0,
+                    "direct_test_files": ["tests/test_governance.py"],
+                    "transitive_test_files": [],
+                    "associated_test_files": [],
+                    "test_selection_confidence": "high",
+                    "focused_test_validation_status": "passed",
+                    "focused_test_execution": [
+                        {
+                            "test_file": "tests/test_governance.py",
+                            "status": "passed",
+                            "source": "junit.xml",
+                        }
+                    ],
+                    "test_execution_sources": ["junit-summary.json"],
+                    "test_coverage_alignment": "coverage-gap",
+                    "validation_gap_reasons": [
+                        "focused tests passed but changed executable lines remain uncovered"
+                    ],
+                    "validation_action": "Extend the passing focused tests and regenerate evidence.",
+                    "finding_ids": ["PYSEC-1"],
+                }
+            ]
         },
     )
 

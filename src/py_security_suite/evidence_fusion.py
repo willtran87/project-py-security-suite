@@ -157,8 +157,7 @@ def build_evidence_fusion(
             item["threat_context"]["epss_high"] for item in advisory_clusters
         ),
         "advisories_with_fixed_versions": sum(
-            item["remediation_context"]["fix_available"]
-            for item in advisory_clusters
+            item["remediation_context"]["fix_available"] for item in advisory_clusters
         ),
         "p0_advisories": sum(
             item["remediation_context"]["priority"] == "P0"
@@ -554,9 +553,7 @@ def _enrich_advisory_clusters(
     coverage = _coverage(artifacts.get("coverage-summary.json"))
     coverage_evidence = isinstance(artifacts.get("coverage-summary.json"), dict)
     owners_by_path = _owners_by_path(findings)
-    ownership_rules = ownership_rules_from_artifact(
-        artifacts.get("finding-delta.json")
-    )
+    ownership_rules = ownership_rules_from_artifact(artifacts.get("finding-delta.json"))
     ownership_evidence = _ownership_evidence_available(
         artifacts.get("finding-delta.json"), owners_by_path
     )
@@ -582,8 +579,7 @@ def _enrich_advisory_clusters(
         )
         package_paths = dependency_paths.get(package, [])
         environment_warning = bool(
-            environment_health_evidence
-            and environment_health.get("healthy") is False
+            environment_health_evidence and environment_health.get("healthy") is False
         )
         path_reachability = [
             reachability[path] for path in import_paths if path in reachability
@@ -690,9 +686,7 @@ def _enrich_advisory_clusters(
 
 def _source_dependency_relationships(
     value: Any,
-) -> tuple[
-    dict[str, str], dict[str, list[dict[str, Any]]], bool, bool
-]:
+) -> tuple[dict[str, str], dict[str, list[dict[str, Any]]], bool, bool]:
     if not isinstance(value, dict):
         return {}, {}, False, False
     raw_components = value.get("components")
@@ -823,7 +817,11 @@ def _pipdeptree_health(value: Any) -> tuple[dict[str, Any], bool]:
     conflicts = conflicts if isinstance(conflicts, dict) else {}
 
     def count(raw: Any) -> int:
-        return raw if isinstance(raw, int) and not isinstance(raw, bool) and raw >= 0 else 0
+        return (
+            raw
+            if isinstance(raw, int) and not isinstance(raw, bool) and raw >= 0
+            else 0
+        )
 
     health = {
         "total_packages": count(value.get("total_packages")),
@@ -880,9 +878,7 @@ def _dependency_test_mappings(
     return result, True
 
 
-def _bounded_graph_walk(
-    adjacency: dict[str, set[str]], root: str
-) -> set[str]:
+def _bounded_graph_walk(adjacency: dict[str, set[str]], root: str) -> set[str]:
     visited: set[str] = set()
     frontier = {root}
     for _depth in range(2):

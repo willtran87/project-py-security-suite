@@ -34,12 +34,17 @@ def build_test_execution_index(
                 continue
             path = normalize_test_path(str(item.get("file") or ""))
             result = str(item.get("result") or "")
-            if not path or path in {".", "<outside-target>"} or result not in {
-                "passed",
-                "failure",
-                "error",
-                "skipped",
-            }:
+            if (
+                not path
+                or path in {".", "<outside-target>"}
+                or result
+                not in {
+                    "passed",
+                    "failure",
+                    "error",
+                    "skipped",
+                }
+            ):
                 continue
             attribution = str(item.get("file_attribution") or "producer")
             if attribution not in {"producer", "classname-module"}:
@@ -182,5 +187,3 @@ def test_coverage_alignment(
 def normalize_test_path(value: str) -> str:
     normalized = value.replace("\\", "/")
     return normalized[2:] if normalized.startswith("./") else normalized
-
-

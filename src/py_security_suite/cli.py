@@ -42,7 +42,10 @@ from .native_bundle import (
     verify_native_bundle,
 )
 from .orchestrator import scan_project
-from .operational_trend import build_operational_trend
+from .operational_trend import (
+    build_operational_trend,
+    render_operational_trend_markdown,
+)
 from .policy import exit_code
 from .policy_simulation import simulate_policy
 from .precommit_config import build_precommit_config, render_precommit_receipt
@@ -742,7 +745,7 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="TOOL=SECONDS",
         help="flag a latest scanner duration above its absolute budget (repeatable)",
     )
-    trend.add_argument("--format", choices=("text", "json"), default="text")
+    trend.add_argument("--format", choices=("text", "json", "markdown"), default="text")
     trend.add_argument("--output", type=Path, metavar="FILE")
     trend.add_argument("--overwrite", action="store_true")
 
@@ -1754,7 +1757,7 @@ def _closure_plan_command(args: argparse.Namespace) -> int:
             forbidden_root=args.report,
         )
     if args.format in {"json", "markdown"}:
-        print(rendered)
+        _print_portable(rendered)
     else:
         summary = result["summary"]
         print(
@@ -1849,7 +1852,12 @@ def _trend_command(args: argparse.Namespace) -> int:
         maximum_total_seconds=args.maximum_total_seconds,
         tool_budgets=dict(_parse_tool_budget(value) for value in args.tool_budget),
     )
-    rendered = json.dumps(result, indent=2, sort_keys=True)
+    rendered_json = json.dumps(result, indent=2, sort_keys=True)
+    rendered = (
+        render_operational_trend_markdown(result)
+        if args.format == "markdown"
+        else rendered_json
+    )
     if args.output:
         _write_atomic_output(
             output=args.output,
@@ -1858,8 +1866,8 @@ def _trend_command(args: argparse.Namespace) -> int:
             label="operational trend output",
             forbidden_root=args.reports[0],
         )
-    if args.format == "json":
-        print(rendered)
+    if args.format in {"json", "markdown"}:
+        _print_portable(rendered)
     else:
         summary = result["summary"]
         print(

@@ -199,13 +199,13 @@ and zero findings on the safe negative control.
 | Inspection | [1.3](../src/py_security_suite/schemas/report-inspection-1.3.schema.json) | Verified machine-readable decision, health, action completeness, and prioritized findings |
 | Inspection verification | [1.3](../src/py_security_suite/schemas/report-inspection-verification-1.3.schema.json) | Binds the inspection digest, report checksum, action limit, and omission summary |
 | Report verification | [1.0](../src/py_security_suite/schemas/report-verification.schema.json) | Portable receipt for report integrity and semantic verification |
-| Release readiness | [1.2](../src/py_security_suite/schemas/release-readiness-1.2.schema.json) | Causal root/derived blockers, owners, authority, and remediation |
+| Release readiness | [1.3](../src/py_security_suite/schemas/release-readiness-1.3.schema.json) | Causal root/derived blockers, owner/authority remediation, and stable validation groups with explicit underlying subject totals; [1.2](../src/py_security_suite/schemas/release-readiness-1.2.schema.json) remains bundled |
 | Promotion plan | [1.1](../src/py_security_suite/schemas/promotion-plan-1.1.schema.json) | Lifecycle, freshness, configuration provenance, SLA, annotations, and audience views |
-| Closure plan | [1.1](../src/py_security_suite/schemas/closure-plan.schema.json) | Stable owned backlog across findings, alias-consolidated advisory remediation, governance, conditional controls, coverage, and reachability; [1.0](../src/py_security_suite/schemas/closure-plan-1.0.schema.json) remains bundled |
+| Closure plan | [1.2](../src/py_security_suite/schemas/closure-plan.schema.json) | Stable owned backlog across findings, alias-consolidated advisories, governance, conditional controls, reachability, and CODEOWNERS-routed changed-file test/coverage alignment; [1.0](../src/py_security_suite/schemas/closure-plan-1.0.schema.json) and [1.1](../src/py_security_suite/schemas/closure-plan-1.1.schema.json) remain bundled |
 | Reproducible build | [1.0](../src/py_security_suite/schemas/reproducible-build.schema.json) | Exact-set byte comparison for two independently supplied artifact directories |
 | Sdist normalization | [1.0](../src/py_security_suite/schemas/sdist-normalization.schema.json) | Deterministic safe tar/gzip metadata receipt for Python source distributions |
 | Baseline candidate | [1.0](../src/py_security_suite/schemas/baseline-candidate.schema.json) | Revision-bound baseline approval handoff |
-| Operational trend | [1.1](../src/py_security_suite/schemas/operational-trend-1.1.schema.json) | Findings churn, scanner reliability, versions, applicability, and performance anomalies |
+| Operational trend | [1.2](../src/py_security_suite/schemas/operational-trend-1.2.schema.json) | Findings churn, scanner reliability/performance, stable validation-debt churn and state transitions, CODEOWNER queue history, ownership regressions, and explicit evidence comparability; [1.1](../src/py_security_suite/schemas/operational-trend-1.1.schema.json) remains bundled |
 | Release evidence verification | [1.0](../src/py_security_suite/schemas/release-evidence-manifest-verification.schema.json) | Independent report/evidence/manifest integrity receipt |
 | Policy simulation | [1.0](../src/py_security_suite/schemas/policy-simulation.schema.json) | Non-authoritative severity, confidence, and required-tool what-if gate |
 | Release evidence manifest | [1.0](../src/py_security_suite/schemas/release-evidence-manifest.schema.json) | Closed, digest-bound evidence index |
@@ -238,9 +238,11 @@ pysec schema report-inspection-1.3 --output contracts/report-inspection.schema.j
 pysec schema report-inspection-verification-1.3 --output contracts/report-inspection-verification.schema.json
 pysec schema report-verification-1.0 --output contracts/report-verification.schema.json
 pysec schema release-readiness-1.2 --output contracts/release-readiness.schema.json
+pysec schema release-readiness-1.3 --output contracts/release-readiness-1.3.schema.json
 pysec schema promotion-plan-1.1 --output contracts/promotion-plan.schema.json
 pysec schema baseline-candidate-1.0 --output contracts/baseline-candidate.schema.json
 pysec schema operational-trend-1.1 --output contracts/operational-trend.schema.json
+pysec schema operational-trend-1.2 --output contracts/operational-trend-1.2.schema.json
 pysec schema evidence-pack-1.0 --output contracts/evidence-pack.schema.json
 pysec schema evidence-pack-verification-1.0 --output contracts/evidence-pack-verification.schema.json
 pysec schema release-evidence-manifest-1.0 --output contracts/release-evidence-manifest.schema.json

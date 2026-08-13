@@ -234,6 +234,16 @@ CODEOWNERS-derived owners. `closure-plan.json` emits one stable
 owned item per distinct advisory while retaining every native scanner
 observation and citation. Current passing test evidence is never substituted
 for the required post-remediation rerun.
+Changed-file validation mismatches receive the same treatment: structural
+change risk, Graphify-selected tests, exact case results, changed-line and
+whole-file coverage, and CODEOWNERS routing become one stable closure item per
+file. Production `release-check` consumes this backlog as a causal gate, so
+passing focused tests cannot hide uncovered changed behavior.
+The Markdown closure view summarizes those subjects by owner and evidence
+condition before the exact file ledger. Release readiness 1.3 consolidates only
+operationally identical subjects and reports both group and subject counts, so
+large changes remain auditable without producing one repetitive release action
+per file.
 The optional output is published atomically, refuses accidental replacement
 unless `--overwrite` is explicit, and must remain outside the report's exact
 checksum boundary. Exported entry points and finding-detail links are artifact-
@@ -365,6 +375,8 @@ pysec closure-plan REPORT --coverage-target 90 --hotspot-limit 10 \
 pysec baseline-candidate REPORT --format json --output baseline-candidate.json
 pysec trend PREVIOUS_REPORT CURRENT_REPORT --format json \
   --output operational-trend.json
+pysec trend PREVIOUS_REPORT CURRENT_REPORT --format markdown \
+  --output operational-trend.md
 
 pysec prepare-signing REPORT dist --output signing-request.json
 pysec verify-signing-request signing-request.json dist \
@@ -418,7 +430,7 @@ pysec portfolio REPORT_ONE REPORT_TWO --format json --output portfolio.json
 ```
 
 A report `PASS` is necessary but does not itself authorize promotion. See
-[Governed release readiness](docs/release-readiness.md). Release-readiness 1.2
+[Governed release readiness](docs/release-readiness.md). Release-readiness 1.3
 separates causal root blockers from derived policy outcomes and includes owner-,
 authority-, and command-bearing remediation actions. The draft
 collects exact observed digests for independent review but is deliberately
@@ -428,8 +440,11 @@ release, and auditor views without granting approval; Markdown and HTML formats
 are dependency-free GitHub artifacts. Equivalent work is consolidated without
 dropping finding or artifact references; each rendered action shows priority,
 owner, required authority, SLA target, evidence subjects, and safe suggested
-commands. `trend` compares only checksum-verified
-reports. The release manifest closes the evidence set but cannot approve it;
+commands. `trend` compares only checksum-verified reports. Operational trend
+1.2 adds validation-debt churn, state and ownership transitions, CODEOWNER queue
+history, and explicit comparability gaps from each report's closure-plan 1.2
+ledger; missing evidence is not treated as zero debt. The release manifest
+closes the evidence set but cannot approve it;
 `verify-release-manifest` independently rechecks the report and every evidence
 digest after transfer (`--evidence-location NAME=PATH` safely remaps relocated
 files). `policy-simulate` previews stricter policy without rewriting evidence.

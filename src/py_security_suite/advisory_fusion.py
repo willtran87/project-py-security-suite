@@ -112,29 +112,25 @@ def build_advisory_clusters(findings: list[Finding]) -> list[dict[str, Any]]:
         }
         observation_count = len(scanner_observations) or len(finding_ids)
         cluster = {
-                "cluster_id": "ADV-"
-                + hashlib.sha256(cluster_material).hexdigest()[:12].upper(),
-                "package": package,
-                "versions": sorted(
-                    {
-                        str(version)
-                        for record in grouped
-                        for version in record["versions"]
-                    }
-                )[:50],
-                "primary_identifier": primary,
-                "identifiers": cluster_identifiers[:100],
-                "finding_ids": finding_ids[:100],
-                "tools": tools[:25],
-                "source_paths": sorted(
-                    {str(path) for record in grouped for path in record["paths"]}
-                )[:50],
-                "highest_severity": severities[0] if severities else "unknown",
-                "observation_count": observation_count,
-                "alias_count": max(0, len(cluster_identifiers) - 1),
-                "cross_tool": len(tools) > 1,
-                "citations": [citations[key] for key in sorted(citations)[:25]],
-            }
+            "cluster_id": "ADV-"
+            + hashlib.sha256(cluster_material).hexdigest()[:12].upper(),
+            "package": package,
+            "versions": sorted(
+                {str(version) for record in grouped for version in record["versions"]}
+            )[:50],
+            "primary_identifier": primary,
+            "identifiers": cluster_identifiers[:100],
+            "finding_ids": finding_ids[:100],
+            "tools": tools[:25],
+            "source_paths": sorted(
+                {str(path) for record in grouped for path in record["paths"]}
+            )[:50],
+            "highest_severity": severities[0] if severities else "unknown",
+            "observation_count": observation_count,
+            "alias_count": max(0, len(cluster_identifiers) - 1),
+            "cross_tool": len(tools) > 1,
+            "citations": [citations[key] for key in sorted(citations)[:25]],
+        }
         refresh_advisory_decision(cluster, findings_by_id)
         clusters.append(cluster)
     return sorted(
@@ -160,14 +156,10 @@ def refresh_advisory_decision(
     ]
     threat = _threat_context(cluster, selected)
     cluster["threat_context"] = threat
-    cluster["remediation_context"] = _remediation_context(
-        cluster, selected, threat
-    )
+    cluster["remediation_context"] = _remediation_context(cluster, selected, threat)
 
 
-def _threat_context(
-    cluster: dict[str, Any], findings: list[Finding]
-) -> dict[str, Any]:
+def _threat_context(cluster: dict[str, Any], findings: list[Finding]) -> dict[str, Any]:
     cves = {
         str(item).upper()
         for item in cluster.get("identifiers", [])
@@ -205,9 +197,7 @@ def _threat_context(
                     "known_ransomware_campaign_use": _bounded_text(
                         item.get("known_ransomware_campaign_use"), 30
                     ),
-                    "required_action": _bounded_text(
-                        item.get("required_action"), 500
-                    ),
+                    "required_action": _bounded_text(item.get("required_action"), 500),
                 }
         raw_epss = intelligence.get("epss")
         if isinstance(raw_epss, list) and raw_epss:
@@ -276,9 +266,7 @@ def _threat_context(
         "epss_probability": round(max(probabilities), 6) if probabilities else None,
         "epss_percentile": round(max(percentiles), 6) if percentiles else None,
         "epss_high": epss_high,
-        "epss_records": [
-            epss_records[key] for key in sorted(epss_records)[:100]
-        ],
+        "epss_records": [epss_records[key] for key in sorted(epss_records)[:100]],
         "vex_states": sorted(vex_states)[:20],
         "vex_disposition": _vex_disposition(vex_states),
         "vex_records": [vex_records[key] for key in sorted(vex_records)[:100]],
@@ -373,9 +361,7 @@ def _remediation_context(
     test_confidence = str(usage.get("test_selection_confidence") or "not-available")
     if test_confidence not in {"high", "medium", "low", "not-available"}:
         test_confidence = "not-available"
-    test_validation = str(
-        usage.get("focused_test_validation_status") or "not-selected"
-    )
+    test_validation = str(usage.get("focused_test_validation_status") or "not-selected")
     if test_validation not in {
         "passed",
         "failed",
@@ -448,18 +434,28 @@ def _advisory_action(
         return (
             "resolve-evidence-conflict",
             f"Resolve the exact-import versus unused-declaration conflict for {package}; if retained, upgrade from {affected}"
-            + (f" using an approved scanner-reported candidate ({candidates})" if candidates else " or apply a documented mitigation")
+            + (
+                f" using an approved scanner-reported candidate ({candidates})"
+                if candidates
+                else " or apply a documented mitigation"
+            )
             + ", then rebuild and rescan.",
         )
     if assessment == "declared-unused":
         return (
             "remove-or-upgrade",
             f"Confirm dynamic and plugin loading, then remove unused {package}; if retained, upgrade from {affected}"
-            + (f" using an approved scanner-reported candidate ({candidates})" if candidates else " and document compensating controls")
+            + (
+                f" using an approved scanner-reported candidate ({candidates})"
+                if candidates
+                else " and document compensating controls"
+            )
             + ", rebuild, and rescan.",
         )
     if fixed_versions:
-        lead = "Immediately upgrade" if known_exploited or priority == "P0" else "Upgrade"
+        lead = (
+            "Immediately upgrade" if known_exploited or priority == "P0" else "Upgrade"
+        )
         if source_relationship == "transitive" and introducing_packages:
             roots = ", ".join(introducing_packages[:8])
             return (
@@ -472,8 +468,7 @@ def _advisory_action(
         )
     lead = "Immediately assess" if known_exploited or priority == "P0" else "Assess"
     root_context = (
-        " through introducing dependency root(s) "
-        + ", ".join(introducing_packages[:8])
+        " through introducing dependency root(s) " + ", ".join(introducing_packages[:8])
         if source_relationship == "transitive" and introducing_packages
         else ""
     )
@@ -556,10 +551,15 @@ def _remediation_basis(
             )
     owners = usage.get("import_path_owners")
     if isinstance(owners, list) and owners:
-        basis.append("import-path owner(s): " + ", ".join(str(item) for item in owners[:10]))
+        basis.append(
+            "import-path owner(s): " + ", ".join(str(item) for item in owners[:10])
+        )
     uncovered = usage.get("uncovered_import_paths")
     if isinstance(uncovered, list) and uncovered:
-        basis.append("import path(s) below 80% coverage: " + ", ".join(str(item) for item in uncovered[:10]))
+        basis.append(
+            "import path(s) below 80% coverage: "
+            + ", ".join(str(item) for item in uncovered[:10])
+        )
     return basis[:20]
 
 
@@ -570,13 +570,22 @@ def _remediation_uncertainties(
     if not fixed_versions:
         values.append("No completed scanner reported a fixed-version candidate.")
     if not threat.get("intelligence_available"):
-        values.append("No matching offline KEV, EPSS, or VEX intelligence was available.")
+        values.append(
+            "No matching offline KEV, EPSS, or VEX intelligence was available."
+        )
     if usage.get("import_evidence_available") is not True:
         values.append("Exact static import evidence was unavailable.")
-    elif usage.get("import_observed") is True and usage.get("reachability_complete") is not True:
-        values.append("Import evidence exists, but reachability analysis is incomplete.")
+    elif (
+        usage.get("import_observed") is True
+        and usage.get("reachability_complete") is not True
+    ):
+        values.append(
+            "Import evidence exists, but reachability analysis is incomplete."
+        )
     if usage.get("signals_conflict") is True:
-        values.append("Graphify import evidence conflicts with deptry unused-declaration evidence.")
+        values.append(
+            "Graphify import evidence conflicts with deptry unused-declaration evidence."
+        )
     relationship = str(usage.get("source_relationship") or "unknown")
     if relationship == "transitive":
         if usage.get("dependency_path_evidence_available") is not True:
@@ -597,9 +606,13 @@ def _remediation_uncertainties(
         )
     if usage.get("import_observed") is True:
         if usage.get("test_mapping_evidence_available") is not True:
-            values.append("Graphify file-topology evidence was unavailable for focused test selection.")
+            values.append(
+                "Graphify file-topology evidence was unavailable for focused test selection."
+            )
         elif not usage.get("recommended_test_files"):
-            values.append("No direct or transitive test file was mapped to the exact importing path.")
+            values.append(
+                "No direct or transitive test file was mapped to the exact importing path."
+            )
         else:
             validation = str(
                 usage.get("focused_test_validation_status") or "not-available"
@@ -631,12 +644,20 @@ def _remediation_uncertainties(
         if usage.get("ownership_evidence_available") is not True:
             values.append("CODEOWNERS-derived ownership evidence was unavailable.")
         elif not usage.get("import_path_owners"):
-            values.append("No retained CODEOWNERS-derived owner matched the exact importing path.")
+            values.append(
+                "No retained CODEOWNERS-derived owner matched the exact importing path."
+            )
         if usage.get("coverage_evidence_available") is not True:
-            values.append("Retained file-coverage evidence was unavailable for the importing path.")
+            values.append(
+                "Retained file-coverage evidence was unavailable for the importing path."
+            )
     if threat.get("vex_disposition") in {"bounded-or-resolved-claim", "mixed"}:
-        values.append("VEX scope and justification require independent validation before disposition.")
-    values.append("Package-level use evidence does not establish vulnerable-function exploitability.")
+        values.append(
+            "VEX scope and justification require independent validation before disposition."
+        )
+    values.append(
+        "Package-level use evidence does not establish vulnerable-function exploitability."
+    )
     return list(dict.fromkeys(values))[:20]
 
 
@@ -646,12 +667,16 @@ def _advisory_verification_steps(
     usage: dict[str, Any],
     fixed_versions: list[str],
 ) -> list[str]:
-    primary = str(cluster.get("primary_identifier") or cluster.get("cluster_id") or "the advisory")
+    primary = str(
+        cluster.get("primary_identifier") or cluster.get("cluster_id") or "the advisory"
+    )
     steps = [
         f"Review the cited native evidence for {primary}; confirm the package and affected version match the release candidate."
     ]
     if threat.get("vex_states"):
-        steps.append("Validate VEX product/component/version scope, justification, and approval provenance; do not use VEX presence alone to suppress the finding.")
+        steps.append(
+            "Validate VEX product/component/version scope, justification, and approval provenance; do not use VEX presence alone to suppress the finding."
+        )
     kev_records = threat.get("known_exploited_records")
     if isinstance(kev_records, list) and kev_records:
         actions = [
@@ -671,12 +696,22 @@ def _advisory_verification_steps(
             + "."
         )
     if usage.get("signals_conflict") is True:
-        steps.append("Resolve the Graphify-versus-deptry conflict by checking exact imports plus dynamic, plugin, and reflection-based loading.")
+        steps.append(
+            "Resolve the Graphify-versus-deptry conflict by checking exact imports plus dynamic, plugin, and reflection-based loading."
+        )
     elif usage.get("import_observed") is True:
-        paths = [str(item) for item in usage.get("import_paths", []) if isinstance(item, str)]
-        steps.append("Trace vulnerable API use from the exact importing file(s)" + (": " + ", ".join(paths[:5]) if paths else "") + ".")
+        paths = [
+            str(item) for item in usage.get("import_paths", []) if isinstance(item, str)
+        ]
+        steps.append(
+            "Trace vulnerable API use from the exact importing file(s)"
+            + (": " + ", ".join(paths[:5]) if paths else "")
+            + "."
+        )
     elif usage.get("assessment") == "declared-unused":
-        steps.append("Confirm the package is not loaded dynamically or through plugins before removing it.")
+        steps.append(
+            "Confirm the package is not loaded dynamically or through plugins before removing it."
+        )
     dependency_paths = usage.get("dependency_paths")
     if isinstance(dependency_paths, list) and dependency_paths:
         paths = [
@@ -692,11 +727,19 @@ def _advisory_verification_steps(
             )
     owners = usage.get("import_path_owners")
     if isinstance(owners, list) and owners:
-        steps.append("Route implementation review to import-path owner(s): " + ", ".join(str(item) for item in owners[:10]) + ".")
+        steps.append(
+            "Route implementation review to import-path owner(s): "
+            + ", ".join(str(item) for item in owners[:10])
+            + "."
+        )
     if fixed_versions:
-        steps.append("Select an organization-approved candidate after reviewing release notes and compatibility; regenerate source locks and the built-artifact SBOM.")
+        steps.append(
+            "Select an organization-approved candidate after reviewing release notes and compatibility; regenerate source locks and the built-artifact SBOM."
+        )
     else:
-        steps.append("Record removal, substitution, or compensating controls and an owner/date for rechecking fix availability.")
+        steps.append(
+            "Record removal, substitution, or compensating controls and an owner/date for rechecking fix availability."
+        )
     tests = usage.get("recommended_test_files")
     if usage.get("test_coverage_alignment") == "coverage-gap":
         steps.append(
@@ -704,7 +747,11 @@ def _advisory_verification_steps(
         )
     steps.append(
         "Run focused regression/security tests"
-        + (": " + ", ".join(str(item) for item in tests[:10]) if isinstance(tests, list) and tests else "")
+        + (
+            ": " + ", ".join(str(item) for item in tests[:10])
+            if isinstance(tests, list) and tests
+            else ""
+        )
         + "; rescan source and built artifacts, and verify the advisory is absent or explicitly governed."
     )
     return steps if len(steps) <= 6 else [*steps[:5], steps[-1]]
@@ -728,9 +775,7 @@ def _bounded_dependency_paths(value: Any) -> list[dict[str, Any]]:
     raw = value if isinstance(value, list) else []
     return [
         {
-            "introducing_package": _bounded_text(
-                item.get("introducing_package"), 300
-            ),
+            "introducing_package": _bounded_text(item.get("introducing_package"), 300),
             "path": _bounded_text_list(item.get("path"), 12, 500),
             "depth": (
                 int(item["depth"])
@@ -754,9 +799,7 @@ def _bounded_text_list(value: Any, limit: int, maximum: int) -> list[str]:
         return []
     return list(
         dict.fromkeys(
-            text
-            for item in value[:limit]
-            if (text := _bounded_text(item, maximum))
+            text for item in value[:limit] if (text := _bounded_text(item, maximum))
         )
     )
 

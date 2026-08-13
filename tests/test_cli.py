@@ -813,6 +813,40 @@ class CliSafetyTests(unittest.TestCase):
                     self.assertEqual(main(arguments), 0)
                     self.assertEqual(json.loads(output.call_args.args[0]), expected)
 
+            markdown_path = root / "trend.md"
+            with (
+                patch(
+                    "py_security_suite.cli.build_operational_trend",
+                    return_value=trend,
+                ),
+                patch(
+                    "py_security_suite.cli.render_operational_trend_markdown",
+                    return_value="# Operational assurance trend\n",
+                ),
+                patch("builtins.print") as output,
+            ):
+                self.assertEqual(
+                    main(
+                        [
+                            "trend",
+                            "before",
+                            "after",
+                            "--format",
+                            "markdown",
+                            "--output",
+                            str(markdown_path),
+                        ]
+                    ),
+                    0,
+                )
+            self.assertEqual(
+                markdown_path.read_text(encoding="utf-8").strip(),
+                "# Operational assurance trend",
+            )
+            self.assertEqual(
+                output.call_args.args[0], "# Operational assurance trend\n"
+            )
+
         with patch("builtins.print") as output:
             self.assertEqual(
                 main(

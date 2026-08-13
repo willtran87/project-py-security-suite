@@ -11,7 +11,10 @@ from unittest.mock import patch
 from jsonschema import Draft202012Validator  # pylint: disable=import-error
 
 from py_security_suite.baseline_candidate import build_baseline_candidate
-from py_security_suite.operational_trend import build_operational_trend
+from py_security_suite.operational_trend import (
+    build_operational_trend,
+    render_operational_trend_markdown,
+)
 from py_security_suite.release_manifest import (
     build_release_evidence_manifest,
     verify_release_evidence_manifest,
@@ -45,8 +48,8 @@ class ProductClosureTests(unittest.TestCase):
             first, last = root / "first", root / "last"
             first.mkdir()
             last.mkdir()
-            _write_trend_report(first, "2026-01-01T00:00:00Z", findings=2)
-            _write_trend_report(last, "2026-02-01T00:00:00Z", findings=1)
+            _write_trend_report(first, "2026-01-01T00:00:00Z", findings=2, validation=2)
+            _write_trend_report(last, "2026-02-01T00:00:00Z", findings=1, validation=1)
             verify_mock.side_effect = lambda path: (
                 _verification("scan-1", "a")
                 if Path(path).name == "first"
@@ -56,9 +59,22 @@ class ProductClosureTests(unittest.TestCase):
         self.assertEqual(result["summary"]["reports"], 2)
         self.assertEqual(result["delta"]["active_findings"], -1)
         self.assertEqual(result["timeline"][0]["scan_id"], "scan-1")
-        self.assertEqual(result["schema_version"], "1.1")
+        self.assertEqual(result["schema_version"], "1.2")
         self.assertEqual(result["scanner_history"][0]["completion_percent"], 100.0)
-        _validate(result, "operational-trend-1.1.schema.json")
+        self.assertEqual(result["delta"]["validation_alignment_items"], -1)
+        self.assertTrue(result["comparison"]["validation_evidence_comparable"])
+        self.assertEqual(
+            result["comparison"]["resolved_validation_subject_ids"],
+            ["PYSEC-ACT-VALIDATION-1"],
+        )
+        self.assertEqual(result["validation_owner_history"][0]["delta"], -1)
+        markdown = render_operational_trend_markdown(result)
+        self.assertIn("# Operational assurance trend", markdown)
+        self.assertIn("## Validation continuity", markdown)
+        self.assertIn("### Validation owner queues", markdown)
+        self.assertIn("`@runtime-team`", markdown)
+        self.assertIn("## Scanner reliability", markdown)
+        _validate(result, "operational-trend-1.2.schema.json")
 
         with self.assertRaisesRegex(ValueError, "between 2 and 100"):
             build_operational_trend([Path("one")])
@@ -84,6 +100,73 @@ class ProductClosureTests(unittest.TestCase):
         kinds = {item["kind"] for item in result["anomalies"]}
         self.assertIn("scan-performance-budget-exceeded", kinds)
         self.assertIn("scanner-performance-budget-exceeded", kinds)
+
+    @patch("py_security_suite.operational_trend.verify_report")
+    def test_trend_reports_validation_state_and_ownership_regressions(
+        self, verify_mock
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            first, last = root / "first", root / "last"
+            first.mkdir()
+            last.mkdir()
+            _write_trend_report(
+                first,
+                "2026-01-01T00:00:00Z",
+                findings=0,
+                validation=1,
+                validation_state="coverage-gap",
+                validation_owner="@runtime-team",
+            )
+            _write_trend_report(
+                last,
+                "2026-02-01T00:00:00Z",
+                findings=0,
+                validation=1,
+                validation_state="tests-failing",
+                validation_owner="quality-engineering",
+                ownership_rule_matched=False,
+            )
+            verify_mock.side_effect = [
+                _verification("scan-1", "a"),
+                _verification("scan-2", "b"),
+            ]
+            result = build_operational_trend([first, last])
+
+        transitions = result["comparison"]["validation_state_transitions"]
+        self.assertEqual(len(transitions), 1)
+        self.assertEqual(transitions[0]["alignment_before"], "coverage-gap")
+        self.assertEqual(transitions[0]["alignment_after"], "tests-failing")
+        self.assertEqual(transitions[0]["owner_before"], "@runtime-team")
+        self.assertEqual(transitions[0]["owner_after"], "quality-engineering")
+        kinds = {item["kind"] for item in result["anomalies"]}
+        self.assertIn("validation-state-regression", kinds)
+        self.assertIn("validation-ownership-regression", kinds)
+
+    @patch("py_security_suite.operational_trend.verify_report")
+    def test_trend_does_not_treat_missing_validation_evidence_as_zero_debt(
+        self, verify_mock
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            first, last = root / "first", root / "last"
+            first.mkdir()
+            last.mkdir()
+            _write_trend_report(first, "2026-01-01T00:00:00Z", findings=0)
+            _write_trend_report(last, "2026-02-01T00:00:00Z", findings=0)
+            (first / "closure-plan.json").unlink()
+            verify_mock.side_effect = [
+                _verification("scan-1", "a"),
+                _verification("scan-2", "b"),
+            ]
+            result = build_operational_trend([first, last])
+
+        self.assertFalse(result["comparison"]["validation_evidence_comparable"])
+        self.assertEqual(result["comparison"]["new_validation_subject_ids"], [])
+        self.assertIn(
+            "validation-evidence-comparability-gap",
+            {item["kind"] for item in result["anomalies"]},
+        )
 
     @patch("py_security_suite.release_manifest.verify_report")
     def test_release_manifest_binds_every_digest_to_report(self, verify_mock) -> None:
@@ -192,7 +275,16 @@ def _findings(revision: str) -> dict[str, object]:
     }
 
 
-def _write_trend_report(report: Path, finished_at: str, *, findings: int) -> None:
+def _write_trend_report(
+    report: Path,
+    finished_at: str,
+    *,
+    findings: int,
+    validation: int = 0,
+    validation_state: str = "coverage-gap",
+    validation_owner: str = "@runtime-team",
+    ownership_rule_matched: bool = True,
+) -> None:
     _write(
         report / "scan-manifest.json",
         {
@@ -223,6 +315,40 @@ def _write_trend_report(report: Path, finished_at: str, *, findings: int) -> Non
     _write(
         report / "portfolio-health.json",
         {"overall": {"domains_with_execution_gaps": 0}},
+    )
+    _write(
+        report / "closure-plan.json",
+        {
+            "schema_version": "1.2",
+            "summary": {
+                "validation_alignment_items": validation,
+                "codeowner_backed_validation_items": (
+                    validation if ownership_rule_matched else 0
+                ),
+                "validation_items_with_failing_tests": (
+                    validation if validation_state == "tests-failing" else 0
+                ),
+                "validation_items_with_coverage_gaps": (
+                    validation if validation_state == "coverage-gap" else 0
+                ),
+            },
+            "items": [
+                {
+                    "id": f"PYSEC-ACT-VALIDATION-{index}",
+                    "priority": "P1" if validation_state == "tests-failing" else "P2",
+                    "owner": validation_owner,
+                    "details": {
+                        "path": f"src/component_{index}.py",
+                        "owners": (
+                            [validation_owner] if ownership_rule_matched else []
+                        ),
+                        "ownership_rule_matched": ownership_rule_matched,
+                        "validation_alignment": validation_state,
+                    },
+                }
+                for index in range(validation)
+            ],
+        },
     )
 
 

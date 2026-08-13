@@ -83,20 +83,17 @@ def build_structural_leverage(
             ),
             "recommended_test_files": len(unique_tests),
             "changed_files_with_passing_focused_tests": sum(
-                item["focused_test_validation_status"] == "passed"
-                for item in changes
+                item["focused_test_validation_status"] == "passed" for item in changes
             ),
             "changed_files_with_failing_focused_tests": sum(
-                item["focused_test_validation_status"] == "failed"
-                for item in changes
+                item["focused_test_validation_status"] == "failed" for item in changes
             ),
             "changed_files_with_unobserved_focused_tests": sum(
                 item["focused_test_validation_status"] == "not-observed"
                 for item in changes
             ),
             "passing_focused_tests_with_coverage_gaps": sum(
-                item["test_coverage_alignment"] == "coverage-gap"
-                for item in changes
+                item["test_coverage_alignment"] == "coverage-gap" for item in changes
             ),
             "validation_aligned_changed_files": sum(
                 item["test_coverage_alignment"] == "aligned-current-evidence"
@@ -176,9 +173,8 @@ def _validation_action(alignment: str, selected: list[str]) -> str:
     if alignment == "tests-failing":
         return "Resolve the failing graph-selected tests before approving the change."
     if alignment == "tests-not-observed":
-        return (
-            "Run the graph-selected tests and retain case-level evidence"
-            + (f": {tests}." if tests else ".")
+        return "Run the graph-selected tests and retain case-level evidence" + (
+            f": {tests}." if tests else "."
         )
     if alignment == "tests-incomplete":
         return (

@@ -542,9 +542,7 @@ def _render_structural_summary(value: dict[str, Any] | None) -> list[str]:
                 + len(item.get("associated_test_files", []))
             )
             + " | `"
-            + _markdown_code(
-                str(item.get("test_coverage_alignment", "not-available"))
-            )
+            + _markdown_code(str(item.get("test_coverage_alignment", "not-available")))
             + "` | "
             + _markdown_text(
                 str(
@@ -1063,7 +1061,9 @@ def _dependency_usage_summary(value: Any) -> str:
         )
     uncovered = value.get("uncovered_import_paths")
     if isinstance(uncovered, list) and uncovered:
-        signals.append("below 80% coverage " + ", ".join(str(item) for item in uncovered[:2]))
+        signals.append(
+            "below 80% coverage " + ", ".join(str(item) for item in uncovered[:2])
+        )
     elif (
         value.get("import_observed") is True
         and value.get("coverage_evidence_available") is not True
@@ -1080,7 +1080,9 @@ def _remediation_context_summary(value: Any) -> str:
     candidates = value.get("fixed_version_candidates")
     parts = [priority, kind]
     if isinstance(candidates, list) and candidates:
-        parts.append("fix candidates " + ", ".join(str(item) for item in candidates[:4]))
+        parts.append(
+            "fix candidates " + ", ".join(str(item) for item in candidates[:4])
+        )
     elif value.get("fix_available") is False:
         parts.append("no scanner-reported fix")
     owners = value.get("owners")
@@ -3048,8 +3050,7 @@ def _markdown_fusion_context(finding: Finding) -> list[str]:
         )
         if isinstance(remediation, dict) and remediation.get("recommended_action"):
             details.append(
-                "action "
-                + _markdown_text(str(remediation["recommended_action"]))
+                "action " + _markdown_text(str(remediation["recommended_action"]))
             )
     suffix = " — " + "; ".join(details) if details else ""
     return [
@@ -3157,7 +3158,11 @@ def _markdown_sdk_dependency_context(value: Any) -> list[str]:
     if isinstance(clusters, list):
         actions = [
             (
-                str(item.get("primary_identifier") or item.get("cluster_id") or "advisory"),
+                str(
+                    item.get("primary_identifier")
+                    or item.get("cluster_id")
+                    or "advisory"
+                ),
                 str(remediation.get("priority") or "P4"),
                 str(remediation.get("recommended_action") or ""),
             )

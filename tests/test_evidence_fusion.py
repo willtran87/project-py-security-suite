@@ -413,9 +413,7 @@ class EvidenceFusionTests(unittest.TestCase):
         self.assertEqual(remediation["action_kind"], "upgrade")
         self.assertTrue(remediation["fix_available"])
         self.assertEqual(remediation["owners"], ["@platform-security"])
-        self.assertEqual(
-            remediation["recommended_test_files"], ["tests/test_app.py"]
-        )
+        self.assertEqual(remediation["recommended_test_files"], ["tests/test_app.py"])
         self.assertEqual(remediation["test_selection_confidence"], "high")
         self.assertEqual(remediation["focused_test_validation_status"], "passed")
         self.assertEqual(remediation["test_coverage_alignment"], "coverage-gap")
@@ -456,9 +454,7 @@ class EvidenceFusionTests(unittest.TestCase):
             document["summary"]["advisories_with_failing_focused_test_evidence"],
             0,
         )
-        self.assertEqual(
-            document["summary"]["advisories_with_import_path_owners"], 1
-        )
+        self.assertEqual(document["summary"]["advisories_with_import_path_owners"], 1)
         self.assertEqual(
             document["summary"]["advisories_with_uncovered_import_paths"], 1
         )
@@ -509,7 +505,9 @@ class EvidenceFusionTests(unittest.TestCase):
         self.assertEqual(document["advisory_clusters"], [])
         self.assertIn("not treated as proof of safety", document["limitations"][0])
 
-    def test_vex_not_affected_claim_requires_validation_and_does_not_suppress(self) -> None:
+    def test_vex_not_affected_claim_requires_validation_and_does_not_suppress(
+        self,
+    ) -> None:
         advisory = _finding(
             "OSV-VEX",
             tool="osv-scanner",
@@ -543,24 +541,18 @@ class EvidenceFusionTests(unittest.TestCase):
             "vulnerable_code_not_present",
         )
         self.assertEqual(cluster["remediation_context"]["priority"], "P1")
-        self.assertEqual(
-            cluster["remediation_context"]["action_kind"], "validate-vex"
-        )
+        self.assertEqual(cluster["remediation_context"]["action_kind"], "validate-vex")
         self.assertTrue(cluster["remediation_context"]["fix_available"])
         self.assertIn(
             "preserve the native finding",
             cluster["remediation_context"]["recommended_action"],
         )
-        self.assertEqual(
-            document["summary"]["advisories_requiring_vex_validation"], 1
-        )
+        self.assertEqual(document["summary"]["advisories_requiring_vex_validation"], 1)
         self.assertEqual(
             cluster["dependency_usage"]["test_selection_confidence"],
             "not-available",
         )
-        self.assertFalse(
-            cluster["dependency_usage"]["coverage_evidence_available"]
-        )
+        self.assertFalse(cluster["dependency_usage"]["coverage_evidence_available"])
 
     def test_transitive_reverse_graph_selects_medium_confidence_focused_test(
         self,
@@ -617,12 +609,8 @@ class EvidenceFusionTests(unittest.TestCase):
 
         usage = document["advisory_clusters"][0]["dependency_usage"]
         self.assertEqual(usage["direct_test_files"], [])
-        self.assertEqual(
-            usage["transitive_test_files"], ["tests/test_service.py"]
-        )
-        self.assertEqual(
-            usage["recommended_test_files"], ["tests/test_service.py"]
-        )
+        self.assertEqual(usage["transitive_test_files"], ["tests/test_service.py"])
+        self.assertEqual(usage["recommended_test_files"], ["tests/test_service.py"])
         self.assertEqual(usage["test_selection_confidence"], "medium")
         self.assertEqual(usage["focused_test_validation_status"], "not-available")
         self.assertEqual(usage["import_path_owners"], ["@client-team"])

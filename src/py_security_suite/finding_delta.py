@@ -37,33 +37,39 @@ def apply_finding_delta(
     ownership = _apply_ownership(findings, target)
 
     if baseline_path is None:
-        return _attach_ownership_evidence(DeltaResult(
-            artifact={
-                "schema_version": "1.0",
-                "configured": False,
-                "counts": {
-                    "new": len(findings),
-                    "existing": 0,
-                    "regression": 0,
-                    "resolved": 0,
-                },
-                "resolved": [],
-                "ownership_rules": len(ownership),
-            }
-        ), ownership)
+        return _attach_ownership_evidence(
+            DeltaResult(
+                artifact={
+                    "schema_version": "1.0",
+                    "configured": False,
+                    "counts": {
+                        "new": len(findings),
+                        "existing": 0,
+                        "regression": 0,
+                        "resolved": 0,
+                    },
+                    "resolved": [],
+                    "ownership_rules": len(ownership),
+                }
+            ),
+            ownership,
+        )
     try:
         previous, metadata = _load_baseline(
             baseline_path, baseline_sha256, expected_target=target.name
         )
     except (OSError, TypeError, ValueError, UnicodeError, json.JSONDecodeError) as exc:
-        return _attach_ownership_evidence(DeltaResult(
-            errors=[f"finding baseline is invalid: {exc}"],
-            artifact={
-                "schema_version": "1.0",
-                "configured": True,
-                "errors": [str(exc)],
-            },
-        ), ownership)
+        return _attach_ownership_evidence(
+            DeltaResult(
+                errors=[f"finding baseline is invalid: {exc}"],
+                artifact={
+                    "schema_version": "1.0",
+                    "configured": True,
+                    "errors": [str(exc)],
+                },
+            ),
+            ownership,
+        )
 
     comparable, reasons, comparison = _comparison_context(
         target=target,
@@ -74,20 +80,26 @@ def apply_finding_delta(
         current_vcs_revision=current_vcs_revision,
     )
     if not comparable:
-        return _attach_ownership_evidence(_incomparable_result(
+        return _attach_ownership_evidence(
+            _incomparable_result(
+                findings,
+                reasons=reasons,
+                comparison=comparison,
+                metadata=metadata,
+                ownership_rules=len(ownership),
+            ),
+            ownership,
+        )
+    return _attach_ownership_evidence(
+        _classify_comparable_findings(
             findings,
-            reasons=reasons,
+            previous=previous,
             comparison=comparison,
             metadata=metadata,
             ownership_rules=len(ownership),
-        ), ownership)
-    return _attach_ownership_evidence(_classify_comparable_findings(
-        findings,
-        previous=previous,
-        comparison=comparison,
-        metadata=metadata,
-        ownership_rules=len(ownership),
-    ), ownership)
+        ),
+        ownership,
+    )
 
 
 def _apply_ownership(

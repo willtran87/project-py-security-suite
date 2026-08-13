@@ -1,6 +1,6 @@
 # Governed release readiness
 
-Last reviewed: 2026-08-08
+Last reviewed: 2026-08-13
 
 `pysec release-check` produces one fail-closed promotion decision from sealed,
 digest-bound evidence. It is intended for an enterprise admission job after the
@@ -17,6 +17,7 @@ flowchart TD
     Verify --> Claims["All assurance claims satisfied"]
     Verify --> Coverage["No applicable execution gaps"]
     Verify --> Trust["Approved and unchanged scanner entry points"]
+    Closure["Current closure-plan validation alignment"] --> Gate
     Isolation["Organization-authorized isolation receipt"] --> Gate["release-check"]
     Intel["Exact snapshot approval receipt"] --> Gate
     Benchmark["Digest-bound effectiveness evaluation"] --> Gate
@@ -30,7 +31,7 @@ flowchart TD
     Gate -->|Any control fails| Block["NOT_APPROVED + blocker IDs"]
 ```
 
-The 1.1 output names every control, status, reason, evidence reference, owner,
+The 1.3 output names every control, status, reason, evidence reference, owner,
 authority boundary, priority, and safe next command. Exit
 code `0` means `approved`; exit code `1` means a valid decision with failed
 controls; exit code `3` means invalid or unverifiable input.
@@ -115,6 +116,7 @@ pysec promotion-plan report --format markdown --output promotion-plan.md
 pysec promotion-plan report --format html --output promotion-plan.html
 pysec baseline-candidate report --format json --output baseline-candidate.json
 pysec trend previous-report report --format json --output operational-trend.json
+pysec trend previous-report report --format markdown --output operational-trend.md
 ```
 
 It shows built/scanned/reviewed/signed/verified/approved/published lifecycle
@@ -132,6 +134,23 @@ retains every native finding ID while inheriting the fused P0-P4 priority,
 CODEOWNERS route, affected import paths, and focused direct or transitive tests.
 Missing ownership, test mapping, or coverage remains explicit evidence—not an
 implicit pass.
+
+The `change-validation-alignment` control requires closure-plan 1.2 evidence.
+It fails closed when that evidence is absent or any changed file still has
+failing, incomplete, unobserved, unavailable, or changed-line coverage-mismatched
+validation. Each causal remediation action retains the closure item's
+CODEOWNER-derived owner, priority, exact test and source references, and required
+post-change rescan. A broad module-coverage hotspot for the same file is folded
+into that item rather than presented as duplicate work.
+Any omitted change-impact detail is itself a P1 validation gap; bounded output
+therefore cannot turn an unassessed large change into an approval.
+
+Release remediation preserves each file as an exact closure subject but groups
+operational actions only when blocker, owner, priority, authority, action, and
+commands match. `validation_remediation_groups` measures rendered release work;
+`validation_remediation_subjects` measures the underlying closure items. Stable
+group IDs are derived from sorted closure IDs, and bounded evidence retains all
+closure references before source paths and shared artifacts.
 
 After build and scan, create an exact-set handoff for the controlled signer:
 
@@ -182,6 +201,7 @@ pysec schema intelligence-approval-1.0
 pysec schema release-readiness-1.0
 pysec schema release-readiness-1.1
 pysec schema release-readiness-1.2
+pysec schema release-readiness-1.3
 pysec schema reachability-delta-1.0
 pysec schema governance-evidence-draft-1.0
 pysec schema promotion-plan-1.1
@@ -189,6 +209,7 @@ pysec schema signing-request-1.0
 pysec schema signing-request-verification-1.0
 pysec schema baseline-candidate-1.0
 pysec schema operational-trend-1.1
+pysec schema operational-trend-1.2
 pysec schema release-evidence-manifest-1.0
 ```
 

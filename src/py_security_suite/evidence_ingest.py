@@ -158,9 +158,7 @@ def _junit_document(path: Path) -> dict[str, Any]:
             )
             result_type = "passed" if result is None else _local_name(result.tag)
             if result_type != "passed":
-                total_key = (
-                    "skipped" if result_type == "skipped" else f"{result_type}s"
-                )
+                total_key = "skipped" if result_type == "skipped" else f"{result_type}s"
                 totals[total_key] += 1
             case_record = {
                 "name": _bounded_text(case.attrib.get("name") or "unnamed test", 500),

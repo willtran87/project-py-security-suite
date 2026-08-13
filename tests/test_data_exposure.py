@@ -314,9 +314,7 @@ class DataExposureSynthesisTests(unittest.TestCase):
         self.assertEqual(result["summary"]["sdk_advisories_with_import_evidence"], 1)
         self.assertEqual(result["summary"]["sdk_advisories_in_executable_imports"], 1)
         self.assertEqual(result["summary"]["sdk_advisories_with_focused_tests"], 1)
-        self.assertEqual(
-            result["summary"]["sdk_advisories_with_import_path_owners"], 1
-        )
+        self.assertEqual(result["summary"]["sdk_advisories_with_import_path_owners"], 1)
         self.assertEqual(
             result["summary"]["sdk_advisories_with_uncovered_import_paths"], 1
         )
@@ -633,9 +631,7 @@ class DataExposureSynthesisTests(unittest.TestCase):
         self.assertEqual(result["summary"]["compound_sink_surfaces"], 1)
         self.assertEqual(result["summary"]["owned_sink_surfaces"], 1)
         self.assertEqual(result["summary"]["sink_surfaces_with_mapped_tests"], 1)
-        self.assertEqual(
-            result["summary"]["sink_surfaces_with_validation_mismatch"], 1
-        )
+        self.assertEqual(result["summary"]["sink_surfaces_with_validation_mismatch"], 1)
         self.assertEqual(result["summary"]["high_change_risk_sink_surfaces"], 1)
         self.assertEqual(result["summary"]["sink_surfaces_in_structural_hotspots"], 1)
         surface = result["sink_surfaces"][0]

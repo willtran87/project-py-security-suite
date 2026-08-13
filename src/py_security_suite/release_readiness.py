@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -52,6 +53,12 @@ _CONTROL_REMEDIATION = {
         "Verify and approve a signed Passport bound to this exact report and artifact payload.",
         ["pysec verify PASSPORT --report REPORT --artifact-root PAYLOAD"],
     ),
+    "change-validation-alignment": (
+        "quality-engineering",
+        "repository",
+        "Resolve every changed-file focused-test and changed-line coverage mismatch, then regenerate the sealed report.",
+        [],
+    ),
 }
 
 
@@ -102,6 +109,7 @@ def assess_release_readiness(
     intelligence = _optional_object(root / "risk-intelligence.json")
     intelligence_approval = _optional_object(root / "intelligence-approval.json")
     trust = _entrypoint_trust(manifest)
+    closure = _optional_object(root / "closure-plan.json")
 
     findings = findings_document.get("findings")
     if not isinstance(findings, list):
@@ -135,6 +143,7 @@ def assess_release_readiness(
         trust=trust,
     )
     controls.append(_intelligence_control(intelligence, intelligence_approval))
+    controls.append(_change_validation_control(closure))
     evaluation_control = _effectiveness_control(
         effectiveness_evaluation,
         effectiveness_sha256,
@@ -163,6 +172,7 @@ def assess_release_readiness(
         blocking_findings=blocking_findings,
         findings=findings,
         trust=trust,
+        closure=closure,
     )
 
 
@@ -264,6 +274,28 @@ def _intelligence_control(
     )
 
 
+def _change_validation_control(closure: dict[str, Any]) -> dict[str, Any]:
+    summary = closure.get("summary")
+    if closure.get("schema_version") != "1.2" or not isinstance(summary, dict):
+        return _control(
+            "change-validation-alignment",
+            False,
+            "Current closure-plan validation alignment evidence is absent.",
+            ["closure-plan.json#summary.validation_alignment_items"],
+        )
+    gaps = int(summary.get("validation_alignment_items") or 0)
+    return _control(
+        "change-validation-alignment",
+        gaps == 0,
+        (
+            "No changed-file focused-test or changed-line coverage mismatch remains."
+            if gaps == 0
+            else f"{gaps} changed-file validation alignment gap(s) remain."
+        ),
+        ["closure-plan.json#summary.validation_alignment_items"],
+    )
+
+
 def _decision(
     *,
     controls: list[dict[str, Any]],
@@ -271,6 +303,7 @@ def _decision(
     blocking_findings: int,
     findings: list[Any],
     trust: dict[str, Any],
+    closure: dict[str, Any],
 ) -> dict[str, Any]:
     blockers = [control["id"] for control in controls if control["status"] == "fail"]
     root_blockers = [blocker for blocker in blockers if blocker != "scan-policy"]
@@ -286,13 +319,22 @@ def _decision(
         for blocker in root_blockers
         if derived_blockers
     ]
-    remediation = _remediation(root_blockers, findings)
+    remediation = _remediation(root_blockers, findings, closure)
     authority_counts: dict[str, int] = {}
     for action in remediation:
         authority = str(action["authority"])
         authority_counts[authority] = authority_counts.get(authority, 0) + 1
+    validation_groups = sum(
+        action.get("blocker") == "change-validation-alignment" for action in remediation
+    )
+    closure_summary = closure.get("summary")
+    validation_subjects = (
+        int(closure_summary.get("validation_alignment_items") or 0)
+        if isinstance(closure_summary, dict)
+        else 0
+    )
     return {
-        "schema_version": "1.2",
+        "schema_version": "1.3",
         "decision": "approved" if not blockers else "not_approved",
         "scope": (
             "Fail-closed aggregation of verified release evidence; approval does "
@@ -313,6 +355,8 @@ def _decision(
             "scanner_entrypoints": trust["entrypoints"],
             "scanner_trust_gaps": len(trust["gaps"]),
             "remediation_actions": len(remediation),
+            "validation_remediation_groups": validation_groups,
+            "validation_remediation_subjects": validation_subjects,
             "actions_by_authority": dict(sorted(authority_counts.items())),
         },
         "blockers": blockers,
@@ -324,7 +368,9 @@ def _decision(
     }
 
 
-def _remediation(blockers: list[str], findings: list[Any]) -> list[dict[str, Any]]:
+def _remediation(
+    blockers: list[str], findings: list[Any], closure: dict[str, Any]
+) -> list[dict[str, Any]]:
     actions: list[dict[str, Any]] = []
     if "blocking-findings" in blockers:
         for finding in findings:
@@ -465,9 +511,13 @@ def _remediation(blockers: list[str], findings: list[Any]) -> list[dict[str, Any
                     ),
                 }
             )
+    validation_actions = _change_validation_actions(blockers, closure)
+    actions.extend(validation_actions)
     for blocker in blockers:
-        if blocker == "blocking-findings" or (
-            blocker == "scan-policy" and len(blockers) > 1
+        if (
+            blocker == "blocking-findings"
+            or (blocker == "scan-policy" and len(blockers) > 1)
+            or (blocker == "change-validation-alignment" and validation_actions)
         ):
             continue
         owner, authority, action, commands = _CONTROL_REMEDIATION.get(
@@ -496,12 +546,90 @@ def _remediation(blockers: list[str], findings: list[Any]) -> list[dict[str, Any
     return sorted(consolidated, key=lambda item: (item["priority"], item["id"]))
 
 
+def _change_validation_actions(
+    blockers: list[str], closure: dict[str, Any]
+) -> list[dict[str, Any]]:
+    if "change-validation-alignment" not in blockers:
+        return []
+    items = closure.get("items")
+    if not isinstance(items, list):
+        return []
+    actions: list[dict[str, Any]] = []
+    for item in items[:10_000]:
+        if not isinstance(item, dict):
+            continue
+        details = item.get("details")
+        if not isinstance(details, dict) or not details.get("validation_alignment"):
+            continue
+        refs = _release_validation_evidence(item, details)
+        closure_id = str(item.get("id") or "unknown")
+        actions.append(
+            {
+                "id": f"validation:{closure_id}",
+                "blocker": "change-validation-alignment",
+                "priority": (
+                    str(item.get("priority"))
+                    if item.get("priority") in {"P0", "P1", "P2", "P3", "P4"}
+                    else "P2"
+                ),
+                "owner": str(item.get("owner") or "quality-engineering")[:256],
+                "authority": "repository",
+                "automatable": False,
+                "action": str(
+                    item.get("action")
+                    or "Resolve the validation mismatch and regenerate the report."
+                )[:2000],
+                "evidence": [f"closure-plan.json#{closure_id}", *refs],
+                "commands": [],
+            }
+        )
+    return actions
+
+
+def _release_validation_evidence(
+    item: dict[str, Any], details: dict[str, Any]
+) -> list[str]:
+    """Keep readiness actions concise while the closure plan retains full detail."""
+    raw_refs = item.get("evidence_refs")
+    refs = (
+        [str(value)[:2000] for value in raw_refs if value]
+        if isinstance(raw_refs, list)
+        else []
+    )
+    artifacts = [
+        value
+        for value in refs
+        if value.endswith((".json", ".xml")) or ".json#" in value
+    ][:6]
+    source_paths = [
+        value
+        for value in refs
+        if value.startswith(("src/", "src\\")) and value.endswith(".py")
+    ][:3]
+    tests = details.get("recommended_test_files")
+    test_paths = (
+        [str(value)[:2000] for value in tests[:5] if value]
+        if isinstance(tests, list)
+        else []
+    )
+    related = item.get("related_findings")
+    finding_ids = (
+        [str(value)[:2000] for value in related[:5] if value]
+        if isinstance(related, list)
+        else []
+    )
+    return list(dict.fromkeys([*artifacts, *source_paths, *test_paths, *finding_ids]))[
+        :20
+    ]
+
+
 def _consolidate_finding_remediation(
     actions: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     """Collapse equivalent finding work while retaining every evidence subject."""
     controls: list[dict[str, Any]] = []
     advisory_actions: dict[str, dict[str, Any]] = {}
+    validation_groups: dict[tuple[object, ...], list[dict[str, Any]]] = {}
     groups: dict[tuple[object, ...], list[dict[str, Any]]] = {}
     for action in actions:
         action_id = str(action.get("id") or "")
@@ -519,10 +647,22 @@ def _consolidate_finding_remediation(
                     }
                 )[:100]
             continue
+        if action_id.startswith("validation:"):
+            validation_key = (
+                action.get("blocker"),
+                action.get("priority"),
+                action.get("owner"),
+                action.get("authority"),
+                action.get("automatable"),
+                action.get("action"),
+                tuple(action.get("commands") or ()),
+            )
+            validation_groups.setdefault(validation_key, []).append(action)
+            continue
         if not action_id.startswith("finding:"):
             controls.append(action)
             continue
-        key = (
+        finding_key = (
             action.get("blocker"),
             action.get("priority"),
             action.get("owner"),
@@ -531,7 +671,7 @@ def _consolidate_finding_remediation(
             action.get("action"),
             tuple(action.get("commands") or ()),
         )
-        groups.setdefault(key, []).append(action)
+        groups.setdefault(finding_key, []).append(action)
 
     for grouped in groups.values():
         if len(grouped) == 1:
@@ -550,8 +690,63 @@ def _consolidate_finding_remediation(
             }
         )
         controls.append(value)
-    controls.extend(advisory_actions[key] for key in sorted(advisory_actions))
+    controls.extend(
+        advisory_actions[advisory_key] for advisory_key in sorted(advisory_actions)
+    )
+    for validation_group_key in sorted(validation_groups, key=str):
+        grouped = validation_groups[validation_group_key]
+        if len(grouped) == 1:
+            controls.append(grouped[0])
+            continue
+        ordered = sorted(grouped, key=lambda value: str(value["id"]))
+        subject_ids = [str(value["id"]) for value in ordered]
+        digest = hashlib.sha256("\n".join(subject_ids).encode("utf-8")).hexdigest()
+        value = dict(ordered[0])
+        value["id"] = f"validation-group:{digest[:12].upper()}"
+        value["action"] = (
+            f"Resolve {len(ordered)} validation work items with the same owner, "
+            f"priority, and evidence condition. {value['action']}"
+        )[:2000]
+        value["evidence"] = _validation_group_evidence(ordered)
+        controls.append(value)
     return controls
+
+
+def _validation_group_evidence(grouped: list[dict[str, Any]]) -> list[str]:
+    values = [
+        str(subject)
+        for item in grouped
+        for subject in item.get("evidence", [])
+        if subject
+    ]
+    closure_refs = sorted(
+        {value for value in values if value.startswith("closure-plan.json#")}
+    )
+    source_refs = sorted(
+        {
+            value
+            for value in values
+            if value.startswith(("src/", "src\\")) and value.endswith(".py")
+        }
+    )
+    artifact_refs = sorted(
+        {
+            value
+            for value in values
+            if value.endswith((".json", ".xml"))
+            and not value.startswith("closure-plan.json#")
+        }
+    )
+    test_refs = sorted(
+        {
+            value
+            for value in values
+            if value.startswith(("tests/", "tests\\")) and value.endswith(".py")
+        }
+    )
+    return list(
+        dict.fromkeys([*closure_refs, *source_refs, *artifact_refs, *test_refs])
+    )[:100]
 
 
 def _effectiveness_control(

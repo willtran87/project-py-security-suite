@@ -226,7 +226,9 @@ def _fixed_versions(vulnerability: dict[str, Any]) -> list[str]:
                 if not isinstance(value, (str, int, float)):
                     continue
                 normalized = " ".join(str(value).split())[:100]
-                if normalized and not any(ord(character) < 32 for character in normalized):
+                if normalized and not any(
+                    ord(character) < 32 for character in normalized
+                ):
                     versions.add(normalized)
     return sorted(versions)[:100]
 

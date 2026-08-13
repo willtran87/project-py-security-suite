@@ -5,6 +5,37 @@ for published releases.
 
 ## Unreleased
 
+- Cross-reference structural change impacts, graph-selected tests, case-level
+  execution, changed-line coverage, whole-file coverage, and retained
+  CODEOWNERS rules into one stable owned closure item per changed file. Closure
+  plan 1.2 consolidates overlapping coverage work, cites exact uncovered lines
+  and tests, and defines evidence-based acceptance criteria. `release-check`
+  now fails closed on missing current closure evidence or unresolved validation
+  mismatches and preserves those owners and citations in causal remediation.
+  Omitted change-impact details become an explicit P1 completeness item rather
+  than silently passing a large change at the bounded artifact limit. Release
+  actions cite the closure item plus a compact decisive evidence set while the
+  full test ledger remains available in the sealed closure plan. Native
+  Coverage/diff-cover observations for the same file are folded into that work
+  item with their finding IDs and scanner attribution, while `findings.json`
+  remains unchanged.
+- Add owner/evidence-condition rollups above the detailed closure ledger and
+  version release readiness at 1.3. File-level validation subjects remain exact
+  in `closure-plan.json`, while release remediation groups only subjects with
+  identical owner, priority, authority, action, and blocker. Stable group IDs,
+  explicit group/subject totals, and closure-item-first evidence preserve
+  causality while reducing repetitive production actions.
+- Version operational trend at 1.2 and join each independently verified
+  closure-plan 1.2 ledger into longitudinal repository health. Stable validation
+  subjects now expose new/resolved/unchanged debt, state/priority/owner/routing
+  transitions, owner-queue history, first-to-latest deltas, and adjacent-scan
+  anomalies for debt growth, ownership erosion, failing-test regression, or
+  missing comparable evidence. Missing closure evidence is never interpreted as
+  zero validation debt.
+  `pysec trend --format markdown` renders bounded GitHub tables for movement,
+  validation continuity, owner queues, state/routing transitions, anomalies,
+  scanner reliability, and the verified timeline; terminal output degrades
+  unsupported glyphs safely while the UTF-8 artifact remains intact.
 - Version evidence fusion at 1.2 and sensitive-data exposure synthesis at 1.4.
   Passive JUnit, Hypothesis, and Schemathesis ingestion now retains a bounded,
   output-free case/file/result ledger. Advisory remediation cross-references

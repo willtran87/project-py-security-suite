@@ -161,9 +161,7 @@ class StructuralLeverageTests(unittest.TestCase):
                     }
                 ]
             ),
-            "diff-coverage.json": _diff(
-                "src/core.py", covered=[10], uncovered=[]
-            ),
+            "diff-coverage.json": _diff("src/core.py", covered=[10], uncovered=[]),
         }
         aligned = build_structural_leverage(
             [],
@@ -171,9 +169,7 @@ class StructuralLeverageTests(unittest.TestCase):
                 **base,
                 "junit-summary.json": {
                     "test_case_inventory_complete": True,
-                    "test_cases": [
-                        {"file": "tests/test_core.py", "result": "passed"}
-                    ],
+                    "test_cases": [{"file": "tests/test_core.py", "result": "passed"}],
                 },
             },
             [],
@@ -185,9 +181,7 @@ class StructuralLeverageTests(unittest.TestCase):
                 **base,
                 "junit-summary.json": {
                     "test_case_inventory_complete": True,
-                    "test_cases": [
-                        {"file": "tests/test_core.py", "result": "failure"}
-                    ],
+                    "test_cases": [{"file": "tests/test_core.py", "result": "failure"}],
                 },
             },
             [],
@@ -203,7 +197,9 @@ class StructuralLeverageTests(unittest.TestCase):
             failing["change_impact_assessments"][0]["test_coverage_alignment"],
             "tests-failing",
         )
-        self.assertEqual(failing["summary"]["changed_files_with_failing_focused_tests"], 1)
+        self.assertEqual(
+            failing["summary"]["changed_files_with_failing_focused_tests"], 1
+        )
 
     def test_maps_package_surface_to_tests_of_exported_modules(self) -> None:
         result = build_structural_leverage(

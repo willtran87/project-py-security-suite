@@ -129,9 +129,11 @@ flowchart LR
     Scan --> Seal["Checksum-sealed report"]
     Seal --> Decision["release-check"]
     Seal --> Closure["closure-plan<br/>owned evidence backlog"]
+    Closure -->|"validation alignment"| Decision
     Decision --> Plan["promotion-plan"]
     Seal --> Baseline["baseline-candidate<br/>revision + exact digest"]
     Seal --> Trend["trend<br/>verified report history"]
+    Closure -->|"validation debt + owner continuity"| Trend
     Payload --> Request["prepare-signing<br/>closed artifact set"]
     Seal --> Request
     Request --> Signer["Independent controlled signer"]
@@ -146,10 +148,19 @@ flowchart LR
 
 `closure-plan.json` is generated inside the same atomic report publication. It
 joins active findings, governance integrity gaps, conditional activation,
-coverage hotspots, and reachability uncertainty without becoming an admission
-decision. Stable work IDs survive reruns when the underlying issue is unchanged;
+coverage hotspots, reachability uncertainty, and changed-file validation
+mismatches without becoming an admission decision. For each changed file it
+consolidates Graphify-selected tests, exact case results, changed-line and
+whole-file coverage, findings, and retained CODEOWNERS rules. Stable work IDs
+survive reruns when the underlying issue is unchanged;
 authority labels prevent repository automation from self-approving external
 signing, isolation, scanner trust, or release controls.
+
+Operational trend 1.2 reads that closure evidence from each independently
+verified report. Stable work IDs distinguish new, resolved, unchanged, and
+state-transitioned validation subjects; CODEOWNERS routing produces owner-queue
+history and ownership deltas. Debt growth, ownership erosion, failing-test
+regression, and missing comparable closure evidence become explicit anomalies.
 
 The evidence-pack application layer composes existing verified services; it
 does not create a second evidence model. Payload files are generated in private
@@ -355,6 +366,17 @@ tests, while retained coverage and CODEOWNERS-derived finding ownership provide
 validation gaps and responsible teams. The closure plan keys work by advisory
 cluster, consolidating alias-equivalent observations without dropping native
 finding IDs or scanner attribution.
+It separately keys changed-file validation work by repository path, merging an
+overlapping whole-file coverage hotspot into the same owned item. Release
+readiness consumes these items as a causal validation-alignment control and
+retains their owner, priority, action, and evidence references.
+Native Coverage/diff-cover findings for that path are folded into the same work
+item with their IDs and scanner attribution but remain unchanged in the finding
+ledger.
+The human closure view rolls exact subjects up by owner and validation state.
+Release readiness 1.3 then groups remediation only across identical owner,
+priority, authority, action, and causal blocker tuples. Each group retains stable
+closure-item references before bounded source and artifact citations.
 Evidence-fusion 1.3 also joins those graph-selected test files to exact,
 repository-normalized case records from JUnit, Hypothesis, and Schemathesis.
 It reports current passing, failing, incomplete, unobserved, unavailable, or

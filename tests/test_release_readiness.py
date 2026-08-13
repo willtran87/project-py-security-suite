@@ -27,7 +27,124 @@ class ReleaseReadinessTests(unittest.TestCase):
         self.assertEqual(result["root_blockers"], [])
         self.assertEqual(result["derived_blockers"], [])
         self.assertEqual(result["remediation"], [])
+        self.assertEqual(result["summary"]["validation_remediation_groups"], 0)
+        self.assertEqual(result["summary"]["validation_remediation_subjects"], 0)
         _validate_schema(result)
+
+    @patch("py_security_suite.release_readiness.verify_report")
+    def test_changed_file_validation_gaps_block_release_with_owned_actions(
+        self, verify_report_mock
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            report = Path(directory)
+            _write_release_evidence(report)
+            _write_json(
+                report / "closure-plan.json",
+                {
+                    "schema_version": "1.2",
+                    "summary": {"validation_alignment_items": 1},
+                    "items": [
+                        {
+                            "id": "PYSEC-ACT-123456789ABC",
+                            "priority": "P2",
+                            "owner": "@runtime-team",
+                            "action": "Cover changed executable lines and rerun focused tests.",
+                            "evidence_refs": [
+                                "structural-synthesis.json",
+                                "src/runtime.py",
+                                "tests/test_runtime.py",
+                            ],
+                            "details": {"validation_alignment": "coverage-gap"},
+                        }
+                    ],
+                },
+            )
+            verify_report_mock.return_value = _verification()
+            result = assess_release_readiness(report)
+
+        self.assertEqual(result["decision"], "not_approved")
+        self.assertIn("change-validation-alignment", result["root_blockers"])
+        action = next(
+            item
+            for item in result["remediation"]
+            if item["blocker"] == "change-validation-alignment"
+        )
+        self.assertEqual(action["owner"], "@runtime-team")
+        self.assertEqual(action["priority"], "P2")
+        self.assertIn("src/runtime.py", action["evidence"])
+        self.assertIn("closure-plan.json#PYSEC-ACT-123456789ABC", action["evidence"])
+        self.assertLessEqual(len(action["evidence"]), 21)
+        self.assertEqual(result["summary"]["validation_remediation_groups"], 1)
+        self.assertEqual(result["summary"]["validation_remediation_subjects"], 1)
+        _validate_schema(result)
+
+    @patch("py_security_suite.release_readiness.verify_report")
+    def test_groups_shared_validation_causes_without_losing_file_subjects(
+        self, verify_report_mock
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            report = Path(directory)
+            _write_release_evidence(report)
+            _write_json(
+                report / "closure-plan.json",
+                {
+                    "schema_version": "1.2",
+                    "summary": {"validation_alignment_items": 2},
+                    "items": [
+                        {
+                            "id": f"PYSEC-ACT-{suffix}",
+                            "priority": "P2",
+                            "owner": "@runtime-team",
+                            "action": "Cover changed executable lines and rerun focused tests.",
+                            "evidence_refs": [
+                                "structural-synthesis.json",
+                                path,
+                                test,
+                            ],
+                            "details": {
+                                "validation_alignment": "coverage-gap",
+                                "recommended_test_files": [test],
+                            },
+                        }
+                        for suffix, path, test in (
+                            (
+                                "111111111111",
+                                "src/runtime.py",
+                                "tests/test_runtime.py",
+                            ),
+                            (
+                                "222222222222",
+                                "src/worker.py",
+                                "tests/test_worker.py",
+                            ),
+                        )
+                    ],
+                },
+            )
+            verify_report_mock.return_value = _verification()
+            first = assess_release_readiness(report)
+            second = assess_release_readiness(report)
+
+        self.assertEqual(first, second)
+        actions = [
+            item
+            for item in first["remediation"]
+            if item["blocker"] == "change-validation-alignment"
+        ]
+        self.assertEqual(len(actions), 1)
+        self.assertTrue(actions[0]["id"].startswith("validation-group:"))
+        self.assertIn("Resolve 2 validation work items", actions[0]["action"])
+        self.assertIn(
+            "closure-plan.json#PYSEC-ACT-111111111111", actions[0]["evidence"]
+        )
+        self.assertIn(
+            "closure-plan.json#PYSEC-ACT-222222222222", actions[0]["evidence"]
+        )
+        self.assertIn("src/runtime.py", actions[0]["evidence"])
+        self.assertIn("src/worker.py", actions[0]["evidence"])
+        self.assertEqual(first["summary"]["validation_remediation_groups"], 1)
+        self.assertEqual(first["summary"]["validation_remediation_subjects"], 2)
+        _validate_schema(first)
 
     @patch("py_security_suite.release_readiness.verify_report")
     def test_policy_trust_isolation_and_approval_gaps_are_explicit(
@@ -518,6 +635,11 @@ def _write_release_evidence(
             "validated": intelligence_approved,
             "organization_approved": intelligence_approved,
         },
+        "closure-plan.json": {
+            "schema_version": "1.2",
+            "summary": {"validation_alignment_items": 0},
+            "items": [],
+        },
     }
     for name, document in documents.items():
         _write_json(root / name, document)
@@ -526,7 +648,7 @@ def _write_release_evidence(
 def _validate_schema(document: dict[str, object]) -> None:
     schema = json.loads(
         files("py_security_suite")
-        .joinpath("schemas", "release-readiness-1.2.schema.json")
+        .joinpath("schemas", "release-readiness-1.3.schema.json")
         .read_text("utf-8")
     )
     Draft202012Validator.check_schema(schema)

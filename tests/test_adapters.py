@@ -163,7 +163,9 @@ class AdapterParserTests(unittest.TestCase):
                                                         "type": "GIT",
                                                         "events": [
                                                             {"introduced": "0"},
-                                                            {"fixed": "c45d7c49ea75133e"},
+                                                            {
+                                                                "fixed": "c45d7c49ea75133e"
+                                                            },
                                                         ],
                                                     },
                                                 ]

@@ -642,11 +642,7 @@ def apply_data_exposure_fusion(
                 }.values()
             ),
             "sdk_advisories_with_unobserved_focused_tests": sum(
-                bool(
-                    cluster["dependency_usage"][
-                        "unobserved_recommended_test_files"
-                    ]
-                )
+                bool(cluster["dependency_usage"]["unobserved_recommended_test_files"])
                 for cluster in {
                     str(cluster["cluster_id"]): cluster
                     for context in dependency_contexts.values()
@@ -670,8 +666,7 @@ def apply_data_exposure_fusion(
                 }.values()
             ),
             "sdk_advisories_with_test_coverage_mismatch": sum(
-                cluster["dependency_usage"]["test_coverage_alignment"]
-                == "coverage-gap"
+                cluster["dependency_usage"]["test_coverage_alignment"] == "coverage-gap"
                 for cluster in {
                     str(cluster["cluster_id"]): cluster
                     for context in dependency_contexts.values()
@@ -876,15 +871,13 @@ def _sdk_dependency_contexts(
             for item in advisory_clusters
         )
         known_exploited_count = sum(
-            item["threat_context"]["known_exploited"]
-            for item in advisory_clusters
+            item["threat_context"]["known_exploited"] for item in advisory_clusters
         )
         high_epss_count = sum(
             item["threat_context"]["epss_high"] for item in advisory_clusters
         )
         fixed_count = sum(
-            item["remediation_context"]["fix_available"]
-            for item in advisory_clusters
+            item["remediation_context"]["fix_available"] for item in advisory_clusters
         )
         p0_count = sum(
             item["remediation_context"]["priority"] == "P0"
@@ -1130,17 +1123,11 @@ def _sdk_threat_context(value: Any) -> dict[str, Any]:
     }
     return {
         "intelligence_available": raw.get("intelligence_available") is True,
-        "intelligence_sources": _bounded_strings(
-            raw.get("intelligence_sources"), 10
-        ),
+        "intelligence_sources": _bounded_strings(raw.get("intelligence_sources"), 10),
         "cves": _bounded_strings(raw.get("cves"), 100),
         "known_exploited": raw.get("known_exploited") is True,
-        "known_exploited_cves": _bounded_strings(
-            raw.get("known_exploited_cves"), 100
-        ),
-        "known_exploited_records": _sdk_kev_records(
-            raw.get("known_exploited_records")
-        ),
+        "known_exploited_cves": _bounded_strings(raw.get("known_exploited_cves"), 100),
+        "known_exploited_records": _sdk_kev_records(raw.get("known_exploited_records")),
         "epss_probability": _bounded_probability(raw.get("epss_probability")),
         "epss_percentile": _bounded_probability(raw.get("epss_percentile")),
         "epss_high": raw.get("epss_high") is True,
@@ -1255,9 +1242,7 @@ def _sdk_remediation_context(value: Any) -> dict[str, Any]:
         "test_coverage_alignment": _sdk_test_coverage_alignment(
             raw.get("test_coverage_alignment")
         ),
-        "introducing_packages": _bounded_strings(
-            raw.get("introducing_packages"), 25
-        ),
+        "introducing_packages": _bounded_strings(raw.get("introducing_packages"), 25),
         "dependency_paths": _sdk_dependency_paths(raw.get("dependency_paths")),
         "dependency_path_confidence": (
             str(raw.get("dependency_path_confidence"))
@@ -1312,9 +1297,7 @@ def _sdk_dependency_usage(value: Any) -> dict[str, Any]:
         is True,
         "dependency_paths": _sdk_dependency_paths(raw.get("dependency_paths")),
         "dependency_paths_truncated": raw.get("dependency_paths_truncated") is True,
-        "introducing_packages": _bounded_strings(
-            raw.get("introducing_packages"), 25
-        ),
+        "introducing_packages": _bounded_strings(raw.get("introducing_packages"), 25),
         "dependency_path_confidence": (
             str(raw.get("dependency_path_confidence"))
             if str(raw.get("dependency_path_confidence"))
@@ -1328,9 +1311,7 @@ def _sdk_dependency_usage(value: Any) -> dict[str, Any]:
         "dependency_environment_health": _sdk_dependency_environment_health(
             raw.get("dependency_environment_health")
         ),
-        "dependency_environment_warning": raw.get(
-            "dependency_environment_warning"
-        )
+        "dependency_environment_warning": raw.get("dependency_environment_warning")
         is True,
         "import_evidence_available": raw.get("import_evidence_available") is True,
         "import_observed": (
@@ -1357,17 +1338,13 @@ def _sdk_dependency_usage(value: Any) -> dict[str, Any]:
         "deptry_statuses": _bounded_strings(raw.get("deptry_statuses"), 10),
         "deptry_finding_ids": _bounded_strings(raw.get("deptry_finding_ids"), 50),
         "signals_conflict": raw.get("signals_conflict") is True,
-        "test_mapping_evidence_available": raw.get(
-            "test_mapping_evidence_available"
-        )
+        "test_mapping_evidence_available": raw.get("test_mapping_evidence_available")
         is True,
         "recommended_test_files": _bounded_strings(
             raw.get("recommended_test_files"), 50
         ),
         "direct_test_files": _bounded_strings(raw.get("direct_test_files"), 50),
-        "transitive_test_files": _bounded_strings(
-            raw.get("transitive_test_files"), 50
-        ),
+        "transitive_test_files": _bounded_strings(raw.get("transitive_test_files"), 50),
         "test_selection_confidence": (
             str(raw.get("test_selection_confidence"))
             if str(raw.get("test_selection_confidence"))
@@ -1413,11 +1390,9 @@ def _sdk_dependency_usage(value: Any) -> dict[str, Any]:
         "validation_gap_reasons": _bounded_strings(
             raw.get("validation_gap_reasons"), 10
         ),
-        "ownership_evidence_available": raw.get("ownership_evidence_available")
-        is True,
+        "ownership_evidence_available": raw.get("ownership_evidence_available") is True,
         "import_path_owners": _bounded_strings(raw.get("import_path_owners"), 20),
-        "coverage_evidence_available": raw.get("coverage_evidence_available")
-        is True,
+        "coverage_evidence_available": raw.get("coverage_evidence_available") is True,
         "import_path_coverage": _sdk_import_path_coverage(
             raw.get("import_path_coverage")
         ),
@@ -1522,9 +1497,7 @@ def _sdk_focused_test_execution(value: Any) -> list[dict[str, Any]]:
             "sources": _bounded_strings(item.get("sources"), 10),
             "path_attributions": [
                 attribution
-                for attribution in _bounded_strings(
-                    item.get("path_attributions"), 2
-                )
+                for attribution in _bounded_strings(item.get("path_attributions"), 2)
                 if attribution in {"producer", "classname-module"}
             ],
         }
@@ -1822,9 +1795,7 @@ def _enrich_sink_surfaces(
             "focused_test_validation_status": structural_record.get(
                 "focused_test_validation_status"
             ),
-            "test_coverage_alignment": structural_record.get(
-                "test_coverage_alignment"
-            ),
+            "test_coverage_alignment": structural_record.get("test_coverage_alignment"),
             "validation_gap_reasons": structural_record.get(
                 "validation_gap_reasons", []
             ),
