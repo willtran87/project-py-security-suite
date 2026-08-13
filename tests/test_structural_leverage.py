@@ -70,6 +70,16 @@ class StructuralLeverageTests(unittest.TestCase):
                 "diff-coverage.json": _diff(
                     "src/core.py", covered=[8, 9], uncovered=[10]
                 ),
+                "junit-summary.json": {
+                    "test_case_inventory_complete": True,
+                    "test_cases": [
+                        {
+                            "file": "tests/test_core.py",
+                            "result": "passed",
+                            "file_attribution": "producer",
+                        }
+                    ],
+                },
             },
             [],
             [],
@@ -79,6 +89,12 @@ class StructuralLeverageTests(unittest.TestCase):
         self.assertEqual(impact["classification"], "changed-lines-under-tested")
         self.assertEqual(impact["direct_test_files"], ["tests/test_core.py"])
         self.assertEqual(impact["test_selection_confidence"], "high")
+        self.assertEqual(impact["focused_test_validation_status"], "passed")
+        self.assertEqual(impact["test_coverage_alignment"], "coverage-gap")
+        self.assertEqual(
+            result["summary"]["passing_focused_tests_with_coverage_gaps"], 1
+        )
+        self.assertIn("every cited changed", impact["validation_action"])
         context = finding.evidence["structural_synthesis"]["change_impact"]
         self.assertEqual(context["uncovered_changed_lines"], [10])
         self.assertIn(
@@ -130,6 +146,64 @@ class StructuralLeverageTests(unittest.TestCase):
             "changed-without-mapped-tests",
         )
         self.assertEqual(unmapped["summary"]["changed_files_without_mapped_tests"], 1)
+
+    def test_change_validation_distinguishes_aligned_and_failing_evidence(
+        self,
+    ) -> None:
+        base = {
+            "graphify.json": _graph(
+                [
+                    {
+                        "source": "tests/test_core.py",
+                        "target": "src/core.py",
+                        "relation": "calls",
+                        "count": 1,
+                    }
+                ]
+            ),
+            "diff-coverage.json": _diff(
+                "src/core.py", covered=[10], uncovered=[]
+            ),
+        }
+        aligned = build_structural_leverage(
+            [],
+            {
+                **base,
+                "junit-summary.json": {
+                    "test_case_inventory_complete": True,
+                    "test_cases": [
+                        {"file": "tests/test_core.py", "result": "passed"}
+                    ],
+                },
+            },
+            [],
+            [],
+        )
+        failing = build_structural_leverage(
+            [],
+            {
+                **base,
+                "junit-summary.json": {
+                    "test_case_inventory_complete": True,
+                    "test_cases": [
+                        {"file": "tests/test_core.py", "result": "failure"}
+                    ],
+                },
+            },
+            [],
+            [],
+        )
+
+        self.assertEqual(
+            aligned["change_impact_assessments"][0]["test_coverage_alignment"],
+            "aligned-current-evidence",
+        )
+        self.assertEqual(aligned["summary"]["validation_aligned_changed_files"], 1)
+        self.assertEqual(
+            failing["change_impact_assessments"][0]["test_coverage_alignment"],
+            "tests-failing",
+        )
+        self.assertEqual(failing["summary"]["changed_files_with_failing_focused_tests"], 1)
 
     def test_maps_package_surface_to_tests_of_exported_modules(self) -> None:
         result = build_structural_leverage(

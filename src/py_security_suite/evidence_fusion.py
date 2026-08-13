@@ -7,6 +7,11 @@ from typing import Any
 from .advisory_fusion import build_advisory_clusters, refresh_advisory_decision
 from .models import Finding, ToolRun, ToolStatus
 from .ownership import owners_for_path, ownership_rules_from_artifact
+from .validation_alignment import (
+    build_test_execution_index,
+    focused_test_execution,
+    test_coverage_alignment,
+)
 
 
 _NAME_SEPARATOR = re.compile(r"[-_.]+")
@@ -188,6 +193,10 @@ def build_evidence_fusion(
             bool(item["dependency_usage"]["uncovered_import_paths"])
             for item in advisory_clusters
         ),
+        "advisories_with_test_coverage_mismatch": sum(
+            item["dependency_usage"]["test_coverage_alignment"] == "coverage-gap"
+            for item in advisory_clusters
+        ),
         "advisories_with_introducing_dependency_paths": sum(
             bool(item["dependency_usage"]["dependency_paths"])
             for item in advisory_clusters
@@ -203,8 +212,8 @@ def build_evidence_fusion(
         ),
     }
     return {
-        "schema_version": "1.2",
-        "schema_id": "urn:project-py-security-suite:evidence-fusion:1.2",
+        "schema_version": "1.3",
+        "schema_id": "urn:project-py-security-suite:evidence-fusion:1.3",
         "authoritative": False,
         "purpose": (
             "bounded cross-reference and triage evidence; does not infer absence, "
@@ -538,7 +547,7 @@ def _enrich_advisory_clusters(
     test_mappings, test_mapping_evidence = _dependency_test_mappings(
         artifacts.get("graphify.json")
     )
-    test_executions, test_execution_evidence = _test_execution_index(artifacts)
+    test_executions, test_execution_evidence = build_test_execution_index(artifacts)
     reachability, reachability_evidence = _reachability_by_path(
         artifacts.get("reachability.json")
     )
@@ -999,10 +1008,16 @@ def _dependency_validation_handoff(
         else "not-available"
     )
     recommended = [*direct, *transitive][:50]
-    execution = _focused_test_execution(
+    execution = focused_test_execution(
         recommended,
         test_executions=test_executions,
         evidence=test_execution_evidence,
+    )
+    alignment = test_coverage_alignment(
+        execution,
+        coverage_evidence_available=coverage_evidence,
+        coverage_gap=bool(uncovered),
+        coverage_subject="the affected dependency import path(s)",
     )
     return {
         "test_mapping_evidence_available": test_mapping_evidence,
@@ -1011,133 +1026,12 @@ def _dependency_validation_handoff(
         "transitive_test_files": transitive,
         "test_selection_confidence": confidence,
         **execution,
+        **alignment,
         "ownership_evidence_available": ownership_evidence,
         "import_path_owners": owners,
         "coverage_evidence_available": coverage_evidence,
         "import_path_coverage": coverage_records,
         "uncovered_import_paths": uncovered,
-    }
-
-
-def _test_execution_index(
-    artifacts: dict[str, Any],
-) -> tuple[dict[str, list[dict[str, str]]], dict[str, Any]]:
-    by_path: dict[str, list[dict[str, str]]] = defaultdict(list)
-    sources: list[str] = []
-    inventory_sources: list[str] = []
-    inventory_complete: list[bool] = []
-    for name in (
-        "junit-summary.json",
-        "hypothesis-summary.json",
-        "schemathesis-summary.json",
-    ):
-        document = artifacts.get(name)
-        if not isinstance(document, dict):
-            continue
-        sources.append(name)
-        cases = document.get("test_cases")
-        if not isinstance(cases, list):
-            continue
-        inventory_sources.append(name)
-        inventory_complete.append(document.get("test_case_inventory_complete") is True)
-        for item in cases[:100_000]:
-            if not isinstance(item, dict):
-                continue
-            path = _path(str(item.get("file") or ""))
-            result = str(item.get("result") or "")
-            if not path or path in {".", "<outside-target>"} or result not in {
-                "passed",
-                "failure",
-                "error",
-                "skipped",
-            }:
-                continue
-            attribution = str(item.get("file_attribution") or "producer")
-            if attribution not in {"producer", "classname-module"}:
-                continue
-            by_path[path].append(
-                {
-                    "source": name,
-                    "result": result,
-                    "file_attribution": attribution,
-                }
-            )
-    return dict(by_path), {
-        "available": bool(sources),
-        "case_inventory_available": bool(inventory_sources),
-        "case_inventory_complete": (
-            all(inventory_complete) if inventory_sources else None
-        ),
-        "sources": sorted(sources),
-        "inventory_sources": sorted(inventory_sources),
-    }
-
-
-def _focused_test_execution(
-    recommended: list[str],
-    *,
-    test_executions: dict[str, list[dict[str, str]]],
-    evidence: dict[str, Any],
-) -> dict[str, Any]:
-    records: list[dict[str, Any]] = []
-    unobserved: list[str] = []
-    for path in recommended:
-        cases = test_executions.get(path, [])
-        counts = {
-            result: sum(item["result"] == result for item in cases)
-            for result in ("passed", "failure", "error", "skipped")
-        }
-        status = (
-            "failed"
-            if counts["failure"] or counts["error"]
-            else "partial"
-            if counts["passed"] and counts["skipped"]
-            else "passed"
-            if counts["passed"]
-            else "skipped"
-            if counts["skipped"]
-            else "not-observed"
-        )
-        if status == "not-observed":
-            unobserved.append(path)
-        records.append(
-            {
-                "path": path,
-                "status": status,
-                "tests": len(cases),
-                "passed": counts["passed"],
-                "failures": counts["failure"],
-                "errors": counts["error"],
-                "skipped": counts["skipped"],
-                "sources": sorted({item["source"] for item in cases}),
-                "path_attributions": sorted(
-                    {item["file_attribution"] for item in cases}
-                ),
-            }
-        )
-    statuses = {str(item["status"]) for item in records}
-    validation_status = (
-        "not-selected"
-        if not recommended
-        else "not-available"
-        if evidence.get("case_inventory_available") is not True
-        else "failed"
-        if "failed" in statuses
-        else "not-observed"
-        if statuses == {"not-observed"}
-        else "passed"
-        if statuses == {"passed"}
-        else "incomplete"
-    )
-    return {
-        "test_execution_evidence_available": evidence.get("available") is True,
-        "test_case_inventory_available": evidence.get("case_inventory_available")
-        is True,
-        "test_case_inventory_complete": evidence.get("case_inventory_complete"),
-        "test_execution_sources": list(evidence.get("sources") or [])[:10],
-        "focused_test_execution": records,
-        "focused_test_validation_status": validation_status,
-        "unobserved_recommended_test_files": unobserved,
     }
 
 
@@ -1332,6 +1226,10 @@ def _empty_dependency_usage() -> dict[str, Any]:
         "focused_test_execution": [],
         "focused_test_validation_status": "not-selected",
         "unobserved_recommended_test_files": [],
+        "test_coverage_alignment": "not-selected",
+        "validation_gap_reasons": [
+            "No graph-selected focused test file was available."
+        ],
         "ownership_evidence_available": False,
         "import_path_owners": [],
         "coverage_evidence_available": False,
@@ -1370,6 +1268,7 @@ def _empty_remediation_context() -> dict[str, Any]:
         "recommended_test_files": [],
         "test_selection_confidence": "not-available",
         "focused_test_validation_status": "not-selected",
+        "test_coverage_alignment": "not-selected",
         "introducing_packages": [],
         "dependency_paths": [],
         "dependency_path_confidence": "not-available",

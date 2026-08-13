@@ -202,6 +202,9 @@ Hypothesis, or Schemathesis evidence, and import surfaces below 80% coverage.
 Missing CODEOWNERS matches, test mappings, or exact executed-test records remain
 explicit rather than silently falling back to a guessed team or broad test
 command.
+Passing SDK-focused tests are also checked against affected import-path coverage;
+a mismatch remains a named risk reason and report counter rather than a green
+validation signal.
 
 An inventory item is **not a finding**. It tells reviewers where disclosure
 controls should exist and activates SDK-specific context when a scanner reports
@@ -291,7 +294,8 @@ For every confirmed path:
 ## Artifact contract
 
 The current contract is bundled as
-[`data-exposure-1.4.schema.json`](../src/py_security_suite/schemas/data-exposure-1.4.schema.json);
+[`data-exposure-1.5.schema.json`](../src/py_security_suite/schemas/data-exposure-1.5.schema.json);
+[1.4](../src/py_security_suite/schemas/data-exposure-1.4.schema.json),
 [1.3](../src/py_security_suite/schemas/data-exposure-1.3.schema.json),
 [1.2](../src/py_security_suite/schemas/data-exposure-1.2.schema.json),
 [1.1](../src/py_security_suite/schemas/data-exposure-1.1.schema.json), and

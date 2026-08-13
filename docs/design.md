@@ -313,11 +313,12 @@ without importing or executing target code.
 and Vulture candidates against Graphify references, runtime coverage, Radon
 complexity, Tach boundaries, ownership, and security findings. This produces
 advisory removal/dynamic-use dispositions, latent attack-surface classifications,
-and import-cycle hotspots without changing native scanner severity. Schema 1.1
+and import-cycle hotspots without changing native scanner severity. Schema 1.2
 also joins diff coverage to reverse Graphify paths for direct/transitive test
 selection and compound change-risk scoring, discovers conservative structural
-orphans, and retains concrete island boundary evidence for missing-root versus
-test-only triage.
+orphans, retains concrete island boundary evidence for missing-root versus
+test-only triage, and cross-checks selected tests against exact case execution
+and changed-line coverage.
 
 [Sensitive-data exposure synthesis](data-exposure.md) adds a distinct disclosure
 view. Bundled Semgrep rules establish credential, private-field, and request
@@ -354,11 +355,13 @@ tests, while retained coverage and CODEOWNERS-derived finding ownership provide
 validation gaps and responsible teams. The closure plan keys work by advisory
 cluster, consolidating alias-equivalent observations without dropping native
 finding IDs or scanner attribution.
-Evidence-fusion 1.2 also joins those graph-selected test files to exact,
+Evidence-fusion 1.3 also joins those graph-selected test files to exact,
 repository-normalized case records from JUnit, Hypothesis, and Schemathesis.
 It reports current passing, failing, incomplete, unobserved, unavailable, or
 unselected evidence while preserving the requirement to rerun after remediation.
 Aggregate totals cannot establish that any particular selected file executed.
+Passing selected tests whose affected dependency import paths remain uncovered
+are reported as an explicit validation mismatch.
 CWE/OWASP/OpenTelemetry-backed actions remain
 independent of native scanner severity and no sensitive values are retained.
 

@@ -97,12 +97,13 @@ def build_structural_synthesis(
         item["classification"] == "latent-attack-surface" for item in island_assessments
     )
     return {
-        "schema_version": "1.1",
-        "schema_id": "urn:project-py-security-suite:structural-synthesis:1.1",
+        "schema_version": "1.2",
+        "schema_id": "urn:project-py-security-suite:structural-synthesis:1.2",
         "authoritative": False,
         "purpose": (
             "advisory cross-reference of static topology, entry-point reachability, "
-            "runtime coverage, dead-code, complexity, architecture, and findings"
+            "runtime coverage, case-level test execution, dead-code, complexity, "
+            "architecture, and findings"
         ),
         "summary": {
             "dead_code_candidates": len(dead_assessments),
@@ -150,6 +151,7 @@ def build_structural_synthesis(
             "Runtime coverage demonstrates observed execution only; absence of coverage does not prove dead code.",
             "Graph references and import cycles indicate coupling, not exploitability or required behavior.",
             "Graph-mapped tests are prioritized targets, not a complete replacement for integration or system tests.",
+            "Passing focused tests describe the scanned state only; coverage alignment must be regenerated after the final change.",
             "A structurally orphaned symbol remains advisory because Python framework, inheritance, and plugin dispatch can be implicit.",
             "Removal requires owner review, focused tests, and a clean isolated rescan.",
         ],

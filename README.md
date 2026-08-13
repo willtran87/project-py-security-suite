@@ -15,7 +15,7 @@ creates a GitHub-friendly report artifact.
 | Reachability | Offline three-state executable/load-only/disconnected graph with explained dispatch paths, ranked islands, and optional coverage corroboration |
 | Graph context | Graphify code-only topology joined to findings for blast radius, structural hotspots, and cross-tool neighborhoods |
 | Evidence fusion | Source-to-artifact package lineage, semantic finding links, changed-line/test/graph context, exact selected-test execution, digest-bound provenance joins, and feedback into owned exposure and SDK-package verification plans |
-| Structural synthesis | Cross-validated dead code, island boundaries, structural orphans, import-cycle hotspots, change-risk scoring, and graph-guided test targets |
+| Structural synthesis | Cross-validated dead code, island boundaries, structural orphans, import-cycle hotspots, change-risk scoring, graph-guided test targets, exact execution status, and test/changed-line coverage alignment |
 | Advisory fusion | Package-scoped CVE/GHSA/PYSEC/OSV alias clustering across source and artifact scanners, with distinct-risk/observation counts plus CycloneDX introducing-root paths, pipdeptree environment health, Graphify imports, reachability/runtime state, and deptry-use context |
 | Data exposure | CWE-grounded flows into logs, telemetry, URL queries, client errors, runtime-state dumps, and process streams; monorepo SDK/configuration inventory; owner-, graph-, change-risk-, runtime-, test-, and SDK-package-aware disclosure triage |
 | Runtime | Python 3.11+; scanners are installed separately from approved offline bundles |

@@ -1,0 +1,309 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:structural-synthesis:1.2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "schema_id", "authoritative", "purpose", "summary",
+    "dead_code_assessments", "island_assessments", "import_cycles",
+    "change_impact_assessments", "orphan_symbol_candidates",
+    "island_boundary_assessments", "finding_assessments", "truncation",
+    "interpretation_limits", "references"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.2"},
+    "schema_id": {"const": "urn:project-py-security-suite:structural-synthesis:1.2"},
+    "authoritative": {"const": false},
+    "purpose": {"type": "string", "minLength": 1},
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dead_code_candidates", "likely_removable_dead_code_candidates",
+        "likely_dynamic_dead_code_candidates", "islands_analyzed",
+        "likely_removable_islands", "likely_dynamic_islands",
+        "latent_attack_surface_islands", "import_cycles", "architecture_hotspots",
+        "changed_python_files_analyzed", "changed_files_without_mapped_tests",
+        "changed_files_with_uncovered_lines", "high_priority_change_hotspots",
+        "recommended_test_files", "changed_files_with_passing_focused_tests",
+        "changed_files_with_failing_focused_tests",
+        "changed_files_with_unobserved_focused_tests",
+        "passing_focused_tests_with_coverage_gaps",
+        "validation_aligned_changed_files", "orphan_symbol_candidates",
+        "islands_with_boundary_evidence", "candidate_missing_entry_points",
+        "test_only_island_candidates"
+      ],
+      "properties": {
+        "dead_code_candidates": {"$ref": "#/$defs/count"},
+        "likely_removable_dead_code_candidates": {"$ref": "#/$defs/count"},
+        "likely_dynamic_dead_code_candidates": {"$ref": "#/$defs/count"},
+        "islands_analyzed": {"$ref": "#/$defs/count"},
+        "likely_removable_islands": {"$ref": "#/$defs/count"},
+        "likely_dynamic_islands": {"$ref": "#/$defs/count"},
+        "latent_attack_surface_islands": {"$ref": "#/$defs/count"},
+        "import_cycles": {"$ref": "#/$defs/count"},
+        "architecture_hotspots": {"$ref": "#/$defs/count"},
+        "changed_python_files_analyzed": {"$ref": "#/$defs/count"},
+        "changed_files_without_mapped_tests": {"$ref": "#/$defs/count"},
+        "changed_files_with_uncovered_lines": {"$ref": "#/$defs/count"},
+        "high_priority_change_hotspots": {"$ref": "#/$defs/count"},
+        "recommended_test_files": {"$ref": "#/$defs/count"},
+        "changed_files_with_passing_focused_tests": {"$ref": "#/$defs/count"},
+        "changed_files_with_failing_focused_tests": {"$ref": "#/$defs/count"},
+        "changed_files_with_unobserved_focused_tests": {"$ref": "#/$defs/count"},
+        "passing_focused_tests_with_coverage_gaps": {"$ref": "#/$defs/count"},
+        "validation_aligned_changed_files": {"$ref": "#/$defs/count"},
+        "orphan_symbol_candidates": {"$ref": "#/$defs/count"},
+        "islands_with_boundary_evidence": {"$ref": "#/$defs/count"},
+        "candidate_missing_entry_points": {"$ref": "#/$defs/count"},
+        "test_only_island_candidates": {"$ref": "#/$defs/count"}
+      }
+    },
+    "dead_code_assessments": {
+      "type": "array", "maxItems": 100,
+      "items": {"$ref": "#/$defs/deadCodeAssessment"}
+    },
+    "island_assessments": {
+      "type": "array", "maxItems": 100,
+      "items": {"$ref": "#/$defs/islandAssessment"}
+    },
+    "import_cycles": {
+      "type": "array", "maxItems": 50,
+      "items": {"$ref": "#/$defs/importCycle"}
+    },
+    "change_impact_assessments": {
+      "type": "array", "maxItems": 100,
+      "items": {"$ref": "#/$defs/changeImpact"}
+    },
+    "orphan_symbol_candidates": {
+      "type": "array", "maxItems": 100,
+      "items": {"$ref": "#/$defs/orphanSymbol"}
+    },
+    "island_boundary_assessments": {
+      "type": "array", "maxItems": 100,
+      "items": {"$ref": "#/$defs/islandBoundary"}
+    },
+    "finding_assessments": {
+      "type": "array", "maxItems": 250,
+      "items": {
+        "type": "object",
+        "required": ["finding_id", "kind"],
+        "properties": {
+          "finding_id": {"type": "string", "minLength": 1},
+          "kind": {"enum": ["dead-code", "island", "import-cycle"]}
+        }
+      }
+    },
+    "truncation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dead_code_assessments_omitted", "island_assessments_omitted",
+        "import_cycles_omitted", "change_impact_assessments_omitted",
+        "orphan_symbol_candidates_omitted", "island_boundary_assessments_omitted"
+      ],
+      "properties": {
+        "dead_code_assessments_omitted": {"$ref": "#/$defs/count"},
+        "island_assessments_omitted": {"$ref": "#/$defs/count"},
+        "import_cycles_omitted": {"$ref": "#/$defs/count"},
+        "change_impact_assessments_omitted": {"$ref": "#/$defs/count"},
+        "orphan_symbol_candidates_omitted": {"$ref": "#/$defs/count"},
+        "island_boundary_assessments_omitted": {"$ref": "#/$defs/count"}
+      }
+    },
+    "interpretation_limits": {
+      "type": "array", "minItems": 1,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "references": {
+      "type": "array", "items": {"type": "string", "minLength": 1}
+    }
+  },
+  "$defs": {
+    "count": {"type": "integer", "minimum": 0},
+    "paths": {
+      "type": "array", "items": {"type": "string", "minLength": 1}
+    },
+    "deadCodeAssessment": {
+      "type": "object",
+      "required": ["finding_id", "path", "disposition", "confidence", "signals", "counter_signals", "reachability_states", "runtime_observations", "coverage_state", "inbound_symbol_references", "external_file_inbound", "recommended_action"],
+      "properties": {
+        "finding_id": {"type": "string", "minLength": 1},
+        "path": {"type": "string", "minLength": 1},
+        "disposition": {"enum": ["likely-removable", "likely-dynamic", "needs-review"]},
+        "confidence": {"enum": ["high", "medium", "low"]},
+        "signals": {"type": "array", "items": {"type": "string"}},
+        "counter_signals": {"type": "array", "items": {"type": "string"}},
+        "reachability_states": {"$ref": "#/$defs/paths"},
+        "runtime_observations": {"$ref": "#/$defs/paths"},
+        "coverage_state": {"enum": ["covered", "uncovered", "unknown"]},
+        "inbound_symbol_references": {"type": "array"},
+        "external_file_inbound": {"$ref": "#/$defs/paths"},
+        "recommended_action": {"type": "string", "minLength": 1}
+      }
+    },
+    "islandAssessment": {
+      "type": "object",
+      "required": ["island_id", "classification", "priority", "impact_score", "state", "lines_of_code", "paths", "runtime_observation", "external_inbound_files", "security_finding_ids", "dead_code_finding_ids", "tach_finding_ids", "evidence", "counter_evidence", "recommended_action"],
+      "properties": {
+        "island_id": {"type": "string", "minLength": 1},
+        "classification": {"enum": ["latent-attack-surface", "missing-entry-point", "likely-dynamic", "likely-removable", "orphaned-code-review"]},
+        "priority": {"enum": ["high", "medium", "low"]},
+        "impact_score": {"type": "integer", "minimum": 0, "maximum": 100},
+        "state": {"enum": ["executable", "load-only", "disconnected"]},
+        "lines_of_code": {"$ref": "#/$defs/count"},
+        "paths": {"$ref": "#/$defs/paths"},
+        "runtime_observation": {"type": "string"},
+        "external_inbound_files": {"$ref": "#/$defs/paths"},
+        "security_finding_ids": {"$ref": "#/$defs/paths"},
+        "dead_code_finding_ids": {"$ref": "#/$defs/paths"},
+        "tach_finding_ids": {"$ref": "#/$defs/paths"},
+        "evidence": {"type": "array", "items": {"type": "string"}},
+        "counter_evidence": {"type": "array", "items": {"type": "string"}},
+        "recommended_action": {"type": "string", "minLength": 1}
+      }
+    },
+    "importCycle": {
+      "type": "object",
+      "required": ["cycle_id", "paths", "file_count", "internal_edge_count", "tach_finding_ids", "security_finding_ids", "priority", "recommended_action"],
+      "properties": {
+        "cycle_id": {"type": "string", "minLength": 1},
+        "paths": {"type": "array", "minItems": 2, "items": {"type": "string"}},
+        "file_count": {"type": "integer", "minimum": 2},
+        "internal_edge_count": {"type": "integer", "minimum": 2},
+        "tach_finding_ids": {"$ref": "#/$defs/paths"},
+        "security_finding_ids": {"$ref": "#/$defs/paths"},
+        "priority": {"enum": ["high", "medium", "low"]},
+        "recommended_action": {"type": "string", "minLength": 1}
+      }
+    },
+    "changeImpact": {
+      "type": "object",
+      "required": [
+        "path", "classification", "priority", "risk_score", "changed_lines",
+        "covered_changed_lines", "uncovered_changed_lines",
+        "changed_line_coverage_percent", "direct_test_files",
+        "transitive_test_files", "associated_test_files",
+        "test_selection_confidence", "test_execution_evidence_available",
+        "test_case_inventory_available", "test_case_inventory_complete",
+        "test_execution_sources", "focused_test_execution",
+        "focused_test_validation_status", "unobserved_recommended_test_files",
+        "test_coverage_alignment", "validation_gap_reasons", "validation_action",
+        "two_hop_upstream_files", "two_hop_downstream_files",
+        "finding_ids", "security_finding_ids", "recommended_action"
+      ],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "classification": {
+          "enum": [
+            "changed-without-mapped-tests", "changed-lines-under-tested",
+            "high-blast-radius-change", "changed-with-targeted-tests",
+            "package-surface-change"
+          ]
+        },
+        "priority": {"enum": ["high", "medium", "low"]},
+        "risk_score": {"type": "integer", "minimum": 0, "maximum": 100},
+        "changed_lines": {"$ref": "#/$defs/count"},
+        "covered_changed_lines": {"$ref": "#/$defs/count"},
+        "uncovered_changed_lines": {
+          "type": "array", "maxItems": 100,
+          "items": {"type": "integer", "minimum": 1}
+        },
+        "changed_line_coverage_percent": {"type": ["number", "null"], "minimum": 0, "maximum": 100},
+        "file_coverage_percent": {"type": ["number", "null"], "minimum": 0, "maximum": 100},
+        "direct_test_files": {"$ref": "#/$defs/paths"},
+        "transitive_test_files": {"$ref": "#/$defs/paths"},
+        "associated_test_files": {"$ref": "#/$defs/paths"},
+        "test_selection_confidence": {"enum": ["high", "medium", "low"]},
+        "test_execution_evidence_available": {"type": "boolean"},
+        "test_case_inventory_available": {"type": "boolean"},
+        "test_case_inventory_complete": {"type": ["boolean", "null"]},
+        "test_execution_sources": {"type": "array", "maxItems": 10, "items": {"type": "string", "minLength": 1}},
+        "focused_test_execution": {"type": "array", "maxItems": 50, "items": {"$ref": "#/$defs/focusedTestExecution"}},
+        "focused_test_validation_status": {"enum": ["passed", "failed", "incomplete", "not-observed", "not-available", "not-selected"]},
+        "unobserved_recommended_test_files": {"$ref": "#/$defs/paths"},
+        "test_coverage_alignment": {"enum": ["aligned-current-evidence", "coverage-gap", "coverage-not-available", "test-evidence-not-available", "tests-failing", "tests-incomplete", "tests-not-observed", "not-selected"]},
+        "validation_gap_reasons": {"type": "array", "maxItems": 10, "items": {"type": "string", "minLength": 1}},
+        "validation_action": {"type": "string", "minLength": 1},
+        "two_hop_upstream_files": {"$ref": "#/$defs/count"},
+        "two_hop_downstream_files": {"$ref": "#/$defs/count"},
+        "upstream_files": {"$ref": "#/$defs/paths"},
+        "downstream_files": {"$ref": "#/$defs/paths"},
+        "finding_ids": {"$ref": "#/$defs/paths"},
+        "security_finding_ids": {"$ref": "#/$defs/paths"},
+        "maximum_complexity": {"type": ["integer", "null"], "minimum": 0},
+        "maximum_complexity_rank": {"type": ["string", "null"]},
+        "recommended_action": {"type": "string", "minLength": 1}
+      }
+    },
+    "focusedTestExecution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "status", "tests", "passed", "failures", "errors", "skipped", "sources", "path_attributions"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "status": {"enum": ["passed", "failed", "partial", "skipped", "not-observed"]},
+        "tests": {"$ref": "#/$defs/count"},
+        "passed": {"$ref": "#/$defs/count"},
+        "failures": {"$ref": "#/$defs/count"},
+        "errors": {"$ref": "#/$defs/count"},
+        "skipped": {"$ref": "#/$defs/count"},
+        "sources": {"type": "array", "maxItems": 10, "items": {"type": "string", "minLength": 1}},
+        "path_attributions": {"type": "array", "maxItems": 2, "items": {"enum": ["producer", "classname-module"]}}
+      }
+    },
+    "orphanSymbol": {
+      "type": "object",
+      "required": [
+        "node_id", "label", "path", "line", "classification", "confidence",
+        "reachability_states", "runtime_observations", "coverage_state",
+        "external_file_inbound", "vulture_finding_id", "recommended_action"
+      ],
+      "properties": {
+        "node_id": {"type": "string", "minLength": 1},
+        "label": {"type": "string", "minLength": 1},
+        "path": {"type": "string", "minLength": 1},
+        "line": {"type": "integer", "minimum": 1},
+        "classification": {"enum": ["corroborated-dead-code", "disconnected-structural-orphan", "unobserved-load-only-orphan"]},
+        "confidence": {"enum": ["high", "medium", "low"]},
+        "reachability_states": {"$ref": "#/$defs/paths"},
+        "runtime_observations": {"$ref": "#/$defs/paths"},
+        "coverage_state": {"const": "uncovered"},
+        "external_file_inbound": {"$ref": "#/$defs/paths"},
+        "vulture_finding_id": {"type": ["string", "null"]},
+        "recommended_action": {"type": "string", "minLength": 1}
+      }
+    },
+    "boundaryEdge": {
+      "type": "object",
+      "required": ["source", "target", "relation", "count"],
+      "properties": {
+        "source": {"type": "string", "minLength": 1},
+        "target": {"type": "string", "minLength": 1},
+        "relation": {"type": "string", "minLength": 1},
+        "count": {"type": "integer", "minimum": 1}
+      }
+    },
+    "islandBoundary": {
+      "type": "object",
+      "required": [
+        "island_id", "boundary_classification", "paths", "inbound_edges",
+        "outbound_edges", "candidate_entry_paths", "direct_test_files",
+        "boundary_relation_count", "recommended_action"
+      ],
+      "properties": {
+        "island_id": {"type": "string", "minLength": 1},
+        "boundary_classification": {"enum": ["test-only-or-fixture", "candidate-missing-entry-point", "runtime-model-gap", "closed-boundary", "referenced-boundary"]},
+        "paths": {"$ref": "#/$defs/paths"},
+        "inbound_edges": {"type": "array", "maxItems": 50, "items": {"$ref": "#/$defs/boundaryEdge"}},
+        "outbound_edges": {"type": "array", "maxItems": 50, "items": {"$ref": "#/$defs/boundaryEdge"}},
+        "candidate_entry_paths": {"$ref": "#/$defs/paths"},
+        "direct_test_files": {"$ref": "#/$defs/paths"},
+        "boundary_relation_count": {"$ref": "#/$defs/count"},
+        "recommended_action": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}
+
+

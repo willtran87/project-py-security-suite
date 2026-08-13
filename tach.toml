@@ -94,11 +94,16 @@ layer = "services"
 
 [[modules]]
 path = "py_security_suite.evidence_fusion"
-depends_on = ["py_security_suite.advisory_fusion", "py_security_suite.models", "py_security_suite.ownership"]
+depends_on = ["py_security_suite.advisory_fusion", "py_security_suite.models", "py_security_suite.ownership", "py_security_suite.validation_alignment"]
 layer = "services"
 
 [[modules]]
 path = "py_security_suite.ownership"
+depends_on = []
+layer = "core"
+
+[[modules]]
+path = "py_security_suite.validation_alignment"
 depends_on = []
 layer = "core"
 
@@ -119,7 +124,7 @@ layer = "services"
 
 [[modules]]
 path = "py_security_suite.structural_leverage"
-depends_on = ["py_security_suite.models"]
+depends_on = ["py_security_suite.models", "py_security_suite.validation_alignment"]
 layer = "services"
 
 [[modules]]

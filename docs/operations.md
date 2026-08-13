@@ -293,6 +293,10 @@ non-linked repository module and labels the attribution. Current passing
 evidence must still be regenerated after remediation. Missing
 evidence is visibly `not applicable` outside organization policies that make
 the companion test lane mandatory.
+Structural and advisory synthesis also compare passing selected-test evidence
+with changed-line or affected import-path coverage. A `coverage-gap` is an
+actionable contradiction: extend the selected tests and regenerate both the
+case ledger and coverage artifact before approval.
 
 When separate API, worker, CLI, or scheduled-job lanes produce coverage, merge
 their exact artifacts before reachability analysis:

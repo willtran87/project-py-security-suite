@@ -20,6 +20,7 @@ empty scanner result as proof of safety.
 | Distinct package advisory | OSV/Grype fixed-version evidence plus digest-approved CISA KEV, FIRST EPSS, and CycloneDX VEX snapshots | Produces one P0-P4 remediation record with scanner-attributed fix candidates, action kind, evidence basis, uncertainties, and verification steps; VEX claims require validation and never suppress native findings automatically |
 | Advisory importing files | Graphify reverse dependencies, coverage, CODEOWNERS-derived finding ownership, and native findings | Routes the remediation to observed import-path owners, selects direct/transitive focused tests with explicit confidence, and highlights import paths below 80% coverage |
 | Graph-selected advisory tests | Bounded JUnit, Hypothesis, and Schemathesis case ledgers | Shows whether each selected test file has retained passing, failing, partial, skipped, or no observed cases; aggregate green totals never prove a specific test ran |
+| Selected-test execution | Import-path or changed-line coverage | Flags passing focused tests whose affected code remains uncovered instead of presenting them as adequate validation |
 | Trivy and ScanCode license evidence | Source/artifact component inventories | Connects license policy findings to the component and lifecycle stage where it appears |
 | Cosign, attestations, reproducible-build evidence | Artifact manifest | Binds provenance conclusions to the exact artifact SHA-256 and detects digest disagreement |
 | Any normalized finding | High-value classification and package indexes | Links CVE, GHSA, CWE, license, SLSA, and package observations even when tools report different paths or lifecycle stages |
@@ -127,13 +128,13 @@ The report also records package lineage as `matched`, `version-drift`,
 dependencies and packaging helpers can legitimately be source-only, while an
 artifact-only component requires investigation before it is considered drift.
 
-Evidence-fusion schema 1.2 records `advisory_clusters`. A cluster is created
+Evidence-fusion schema 1.3 records `advisory_clusters`. A cluster is created
 only when exact normalized package names match and advisory identifiers overlap,
 including transitive alias chains. CVE is preferred as the display identifier,
 followed by GHSA, PYSEC, and OSV, but no native scanner source is discarded. The
 report therefore presents both the number of distinct risks and the number of
 retained scanner observations. Cross-tool clustering is corroboration, not
-proof of reachability or exploitation. Frozen schemas 1.1 and 1.0 remain
+proof of reachability or exploitation. Frozen schemas 1.2, 1.1, and 1.0 remain
 installable.
 
 Focused-test execution is a pre-remediation evidence join. The passive JUnit
@@ -146,6 +147,10 @@ the record identifies that attribution. Fusion reports `passed`, `failed`,
 `incomplete`, `not-observed`, `not-available`, or `not-selected`. A legacy or
 aggregate-only green report is `not-available`, never `passed`. Even a current
 `passed` state must be regenerated after the dependency or build changes.
+Schema 1.3 additionally cross-checks that execution against affected import-path
+coverage. `coverage-gap` means selected tests passed but at least one import path
+remained below 80%; remediation uncertainties and verification steps then require
+extending the tests and regenerating both evidence lanes.
 
 Owner routing uses bounded CODEOWNERS rules retained in `finding-delta.json`
 with the same last-match semantics used for normalized findings. This allows an

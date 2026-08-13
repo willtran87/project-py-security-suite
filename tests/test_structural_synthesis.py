@@ -238,7 +238,7 @@ class StructuralSynthesisTests(unittest.TestCase):
     def test_output_validates_against_bundled_schema(self) -> None:
         result = build_structural_synthesis([], {"graphify.json": _graph()})
         result = cast(dict[str, Any], result)
-        schema = json.loads(read_bundled_schema("structural-synthesis-1.1"))
+        schema = json.loads(read_bundled_schema("structural-synthesis-1.2"))
         Draft202012Validator(schema).validate(result)
 
     def test_structural_context_is_portable_in_reports(self) -> None:

@@ -4,6 +4,11 @@ from collections import defaultdict, deque
 from typing import Any
 
 from .models import Citation, Finding
+from .validation_alignment import (
+    build_test_execution_index,
+    focused_test_execution,
+    test_coverage_alignment,
+)
 
 
 _IMPACT_RELATIONS = frozenset(
@@ -36,6 +41,8 @@ def build_structural_leverage(
         coverage,
         complexity,
     )
+    test_executions, test_evidence = build_test_execution_index(artifacts)
+    _attach_change_validation(changes, test_executions, test_evidence)
     orphans = _orphan_symbols(
         graph,
         reachability,
@@ -75,6 +82,26 @@ def build_structural_leverage(
                 item["priority"] == "high" for item in changes
             ),
             "recommended_test_files": len(unique_tests),
+            "changed_files_with_passing_focused_tests": sum(
+                item["focused_test_validation_status"] == "passed"
+                for item in changes
+            ),
+            "changed_files_with_failing_focused_tests": sum(
+                item["focused_test_validation_status"] == "failed"
+                for item in changes
+            ),
+            "changed_files_with_unobserved_focused_tests": sum(
+                item["focused_test_validation_status"] == "not-observed"
+                for item in changes
+            ),
+            "passing_focused_tests_with_coverage_gaps": sum(
+                item["test_coverage_alignment"] == "coverage-gap"
+                for item in changes
+            ),
+            "validation_aligned_changed_files": sum(
+                item["test_coverage_alignment"] == "aligned-current-evidence"
+                for item in changes
+            ),
             "orphan_symbol_candidates": len(orphans),
             "islands_with_boundary_evidence": sum(
                 bool(item["inbound_edges"] or item["outbound_edges"])
@@ -99,6 +126,73 @@ def build_structural_leverage(
             ),
         },
     }
+
+
+def _attach_change_validation(
+    changes: list[dict[str, Any]],
+    test_executions: dict[str, list[dict[str, str]]],
+    test_evidence: dict[str, Any],
+) -> None:
+    for item in changes:
+        selected = list(
+            dict.fromkeys(
+                [
+                    *item["direct_test_files"],
+                    *item["transitive_test_files"],
+                    *item["associated_test_files"],
+                ]
+            )
+        )[:50]
+        execution = focused_test_execution(
+            selected,
+            test_executions=test_executions,
+            evidence=test_evidence,
+        )
+        alignment = test_coverage_alignment(
+            execution,
+            coverage_evidence_available=True,
+            coverage_gap=bool(item["uncovered_changed_lines"]),
+            coverage_subject="the changed executable line(s)",
+        )
+        item.update(execution)
+        item.update(alignment)
+        item["validation_action"] = _validation_action(
+            str(alignment["test_coverage_alignment"]), selected
+        )
+
+
+def _validation_action(alignment: str, selected: list[str]) -> str:
+    tests = ", ".join(selected[:5])
+    if alignment == "aligned-current-evidence":
+        return (
+            "Retain the passing focused-test and changed-line coverage evidence; "
+            "rerun both after the change is finalized."
+        )
+    if alignment == "coverage-gap":
+        return (
+            "Extend the passing focused tests until every cited changed executable "
+            "line is covered, then regenerate case-level and coverage evidence."
+        )
+    if alignment == "tests-failing":
+        return "Resolve the failing graph-selected tests before approving the change."
+    if alignment == "tests-not-observed":
+        return (
+            "Run the graph-selected tests and retain case-level evidence"
+            + (f": {tests}." if tests else ".")
+        )
+    if alignment == "tests-incomplete":
+        return (
+            "Complete or explain skipped and unobserved graph-selected tests, then "
+            "regenerate the case-level evidence."
+        )
+    if alignment == "test-evidence-not-available":
+        return (
+            "Produce bounded JUnit, Hypothesis, or Schemathesis case-level evidence "
+            "for the graph-selected tests."
+        )
+    if alignment == "coverage-not-available":
+        return "Produce changed-line coverage for the graph-selected test run."
+    return "Identify or add a focused test for the changed behavior."
 
 
 def _change_impacts(

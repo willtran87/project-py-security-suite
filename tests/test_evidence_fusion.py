@@ -5,10 +5,7 @@ import unittest
 
 from jsonschema import Draft202012Validator  # pylint: disable=import-error
 
-from py_security_suite.evidence_fusion import (
-    _focused_test_execution,
-    build_evidence_fusion,
-)
+from py_security_suite.evidence_fusion import build_evidence_fusion
 from py_security_suite.models import (
     Citation,
     Confidence,
@@ -21,6 +18,7 @@ from py_security_suite.models import (
 )
 from py_security_suite.report_inspection import read_bundled_schema
 from py_security_suite.reports import _markdown_fusion_context, _render_fusion_summary
+from py_security_suite.validation_alignment import focused_test_execution
 
 
 def _finding(
@@ -321,7 +319,7 @@ class EvidenceFusionTests(unittest.TestCase):
         self.assertEqual(document["contradictions"][0]["finding_id"], "GRYPE-FINDING")
         self.assertEqual(document["summary"]["cross_stage_findings"], 2)
         self.assertEqual(document["summary"]["compound_hotspots"], 1)
-        self.assertEqual(document["schema_version"], "1.2")
+        self.assertEqual(document["schema_version"], "1.3")
         self.assertEqual(document["summary"]["distinct_advisories"], 1)
         self.assertEqual(document["summary"]["advisory_observations"], 2)
         self.assertEqual(document["summary"]["alias_collapsed_observations"], 1)
@@ -393,6 +391,11 @@ class EvidenceFusionTests(unittest.TestCase):
             [{"path": "src/app.py", "coverage_percent": 55.0}],
         )
         self.assertEqual(usage["uncovered_import_paths"], ["src/app.py"])
+        self.assertEqual(usage["test_coverage_alignment"], "coverage-gap")
+        self.assertIn(
+            "Focused tests passed, but retained coverage did not exercise the affected dependency import path(s).",
+            usage["validation_gap_reasons"],
+        )
         threat = advisory["threat_context"]
         self.assertTrue(threat["known_exploited"])
         self.assertEqual(threat["known_exploited_cves"], ["CVE-2026-1000"])
@@ -415,6 +418,7 @@ class EvidenceFusionTests(unittest.TestCase):
         )
         self.assertEqual(remediation["test_selection_confidence"], "high")
         self.assertEqual(remediation["focused_test_validation_status"], "passed")
+        self.assertEqual(remediation["test_coverage_alignment"], "coverage-gap")
         self.assertEqual(remediation["introducing_packages"], ["example-pkg"])
         self.assertEqual(remediation["dependency_path_confidence"], "high")
         self.assertEqual(remediation["fixed_version_candidates"], ["1.5", "2.0"])
@@ -433,6 +437,9 @@ class EvidenceFusionTests(unittest.TestCase):
         self.assertIn(
             "Package-level use evidence does not establish vulnerable-function exploitability.",
             remediation["uncertainties"],
+        )
+        self.assertTrue(
+            any("below 80%" in item for item in remediation["uncertainties"])
         )
         self.assertEqual(document["summary"]["advisories_with_import_evidence"], 1)
         self.assertEqual(document["summary"]["advisories_in_executable_imports"], 1)
@@ -456,6 +463,9 @@ class EvidenceFusionTests(unittest.TestCase):
             document["summary"]["advisories_with_uncovered_import_paths"], 1
         )
         self.assertEqual(
+            document["summary"]["advisories_with_test_coverage_mismatch"], 1
+        )
+        self.assertEqual(
             document["summary"]["advisories_with_introducing_dependency_paths"],
             1,
         )
@@ -471,6 +481,7 @@ class EvidenceFusionTests(unittest.TestCase):
         self.assertIn("Immediately upgrade", detailed)
         self.assertIn("focused tests tests/test\\_app.py", detailed)
         self.assertIn("scanned-state focused-test evidence passed", detailed)
+        self.assertIn("test/coverage alignment coverage-gap", detailed)
         self.assertIn("owners @platform-security", detailed)
         self.assertIn("imports src/app.py", detailed)
         self.assertEqual(
@@ -486,7 +497,7 @@ class EvidenceFusionTests(unittest.TestCase):
             "artifact-only",
         )
 
-        schema = json.loads(read_bundled_schema("evidence-fusion-1.2"))
+        schema = json.loads(read_bundled_schema("evidence-fusion-1.3"))
         Draft202012Validator.check_schema(schema)
         Draft202012Validator(schema).validate(document)
 
@@ -617,7 +628,7 @@ class EvidenceFusionTests(unittest.TestCase):
         self.assertEqual(usage["import_path_owners"], ["@client-team"])
 
     def test_focused_test_execution_fails_closed_per_selected_file(self) -> None:
-        result = _focused_test_execution(
+        result = focused_test_execution(
             ["tests/test_client.py", "tests/test_missing.py"],
             test_executions={
                 "tests/test_client.py": [
@@ -648,7 +659,7 @@ class EvidenceFusionTests(unittest.TestCase):
         self.assertEqual(result["focused_test_execution"][0]["tests"], 2)
         self.assertEqual(result["focused_test_execution"][0]["failures"], 1)
 
-        legacy = _focused_test_execution(
+        legacy = focused_test_execution(
             ["tests/test_client.py"],
             test_executions={},
             evidence={

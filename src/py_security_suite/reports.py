@@ -411,6 +411,7 @@ def _render_fusion_summary(value: dict[str, Any] | None) -> list[str]:
         f"| Transitive advisories without an introducing path | {int(summary.get('transitive_advisories_without_dependency_paths', 0))} |",
         f"| Dependency advisories with import-path owners | {int(summary.get('advisories_with_import_path_owners', 0))} |",
         f"| Dependency advisories on import paths below 80% coverage | {int(summary.get('advisories_with_uncovered_import_paths', 0))} |",
+        f"| Passing focused tests with dependency import-path coverage gaps | {int(summary.get('advisories_with_test_coverage_mismatch', 0))} |",
         f"| Compound structural hotspots | {int(summary.get('compound_hotspots', 0))} |",
         f"| Evidence-lane execution gaps | {gaps} |",
         f"| Evidence contradictions | {int(summary.get('contradictions', 0))} |",
@@ -462,7 +463,7 @@ def _render_structural_summary(value: dict[str, Any] | None) -> list[str]:
     )
     interpretation = " ".join(
         (
-            "Conclusions combine Graphify topology, entry-point reachability, runtime coverage, Vulture, Radon, Tach, and normalized findings.",
+            "Conclusions combine Graphify topology, entry-point reachability, runtime coverage, bounded case-level test execution, Vulture, Radon, Tach, and normalized findings.",
             "They are advisory; absence of runtime observation does not prove code is removable.",
         )
     )
@@ -486,6 +487,11 @@ def _render_structural_summary(value: dict[str, Any] | None) -> list[str]:
         f"| Changed files with uncovered lines | {int(summary.get('changed_files_with_uncovered_lines', 0))} |",
         f"| High-priority change hotspots | {int(summary.get('high_priority_change_hotspots', 0))} |",
         f"| Graph-recommended test files | {int(summary.get('recommended_test_files', 0))} |",
+        f"| Changed files with passing focused-test evidence | {int(summary.get('changed_files_with_passing_focused_tests', 0))} |",
+        f"| Changed files with failing focused-test evidence | {int(summary.get('changed_files_with_failing_focused_tests', 0))} |",
+        f"| Changed files with selected tests not observed | {int(summary.get('changed_files_with_unobserved_focused_tests', 0))} |",
+        f"| Passing focused tests with uncovered changed lines | {int(summary.get('passing_focused_tests_with_coverage_gaps', 0))} |",
+        f"| Changed files aligned across focused tests and changed-line coverage | {int(summary.get('validation_aligned_changed_files', 0))} |",
         f"| Structural orphan symbols | {int(summary.get('orphan_symbol_candidates', 0))} |",
         f"| Candidate missing entry points | {int(summary.get('candidate_missing_entry_points', 0))} |",
         f"| Test-only island candidates | {int(summary.get('test_only_island_candidates', 0))} |",
@@ -518,8 +524,8 @@ def _render_structural_summary(value: dict[str, Any] | None) -> list[str]:
         lines.extend(
             [
                 "",
-                "| Change hotspot | Classification | Risk | Mapped tests | Action |",
-                "|---|---|---:|---:|---|",
+                "| Change hotspot | Classification | Risk | Mapped tests | Validation | Validation action | Change action |",
+                "|---|---|---:|---:|---|---|---|",
             ]
         )
         lines.extend(
@@ -534,6 +540,17 @@ def _render_structural_summary(value: dict[str, Any] | None) -> list[str]:
                 len(item.get("direct_test_files", []))
                 + len(item.get("transitive_test_files", []))
                 + len(item.get("associated_test_files", []))
+            )
+            + " | `"
+            + _markdown_code(
+                str(item.get("test_coverage_alignment", "not-available"))
+            )
+            + "` | "
+            + _markdown_text(
+                str(
+                    item.get("validation_action")
+                    or item.get("recommended_action", "Review.")
+                )
             )
             + " | "
             + _markdown_text(str(item.get("recommended_action", "Review.")))
@@ -629,6 +646,7 @@ def _render_data_exposure_summary(value: dict[str, Any] | None) -> list[str]:
         f"| Broad upstream blast-radius findings | {int(summary.get('broad_blast_radius_findings', 0))} |",
         f"| Exposure findings with an assigned owner | {int(summary.get('owned_exposure_findings', 0))} |",
         f"| Exposure findings with graph-selected tests | {int(summary.get('exposure_findings_with_mapped_tests', 0))} |",
+        f"| Exposure findings with passing-test/coverage mismatch | {int(summary.get('exposure_findings_with_validation_mismatch', 0))} |",
         f"| Exposure findings in high-risk changes | {int(summary.get('high_change_risk_exposure_findings', 0))} |",
         f"| Exposure findings with SDK package risk | {int(summary.get('exposure_findings_with_sdk_package_risk', 0))} |",
         f"| Sensitive logging findings | {int(summary.get('logging_findings', 0))} |",
@@ -649,6 +667,7 @@ def _render_data_exposure_summary(value: dict[str, Any] | None) -> list[str]:
         f"| Sink surfaces near normalized findings | {int(summary.get('compound_sink_surfaces', 0))} |",
         f"| Sink surfaces with an assigned owner | {int(summary.get('owned_sink_surfaces', 0))} |",
         f"| Sink surfaces with graph-selected tests | {int(summary.get('sink_surfaces_with_mapped_tests', 0))} |",
+        f"| Sink surfaces with passing-test/coverage mismatch | {int(summary.get('sink_surfaces_with_validation_mismatch', 0))} |",
         f"| Sink surfaces in high-risk changes | {int(summary.get('high_change_risk_sink_surfaces', 0))} |",
         f"| Sink surfaces in structural hotspots | {int(summary.get('sink_surfaces_in_structural_hotspots', 0))} |",
         f"| Sink surfaces with SDK package risk | {int(summary.get('sink_surfaces_with_sdk_package_risk', 0))} |",
@@ -674,6 +693,7 @@ def _render_data_exposure_summary(value: dict[str, Any] | None) -> list[str]:
         f"| Transitive SDK advisories without an introducing path | {int(summary.get('sdk_transitive_advisories_without_dependency_paths', 0))} |",
         f"| SDK advisories with import-path owners | {int(summary.get('sdk_advisories_with_import_path_owners', 0))} |",
         f"| SDK advisories on import paths below 80% coverage | {int(summary.get('sdk_advisories_with_uncovered_import_paths', 0))} |",
+        f"| Passing SDK focused tests with import-path coverage gaps | {int(summary.get('sdk_advisories_with_test_coverage_mismatch', 0))} |",
         f"| Logging, telemetry, analytics, and egress SDK families | {int(summary.get('sdk_families_observed', 0))} |",
         "",
         "A sink surface is an inventory item, not proof of leakage. A finding requires source-to-sink scanner evidence and retains CWE/OWASP guidance.",
@@ -804,6 +824,9 @@ def _surface_context_summary(value: Any) -> str:
     mapped = value.get("mapped_test_files")
     if isinstance(mapped, list) and mapped:
         signals.append("mapped " + ", ".join(str(item) for item in mapped[:2]))
+    alignment = value.get("test_coverage_alignment")
+    if isinstance(alignment, str):
+        signals.append("validation " + alignment)
     change_priority = value.get("change_risk_priority")
     change_score = value.get("change_risk_score")
     if isinstance(change_priority, str):
@@ -831,6 +854,9 @@ def _exposure_accountability_summary(value: Any) -> str:
         parts.append("mapped " + ", ".join(str(item) for item in mapped[:2]))
     else:
         parts.append("no mapped tests")
+    alignment = value.get("test_coverage_alignment")
+    if isinstance(alignment, str):
+        parts.append("validation " + alignment)
     priority = value.get("change_risk_priority")
     score = value.get("change_risk_score")
     if isinstance(priority, str):
@@ -1011,6 +1037,10 @@ def _dependency_usage_summary(value: Any) -> str:
             value.get("focused_test_validation_status") or "not-available"
         )
         signals.append("scanned-state focused-test evidence " + execution_status)
+        signals.append(
+            "test/coverage alignment "
+            + str(value.get("test_coverage_alignment") or "not-available")
+        )
         unobserved = value.get("unobserved_recommended_test_files")
         if isinstance(unobserved, list) and unobserved:
             signals.append(
@@ -1062,6 +1092,10 @@ def _remediation_context_summary(value: Any) -> str:
         parts.append(
             "scanned-state focused-test evidence "
             + str(value.get("focused_test_validation_status") or "not-available")
+        )
+        parts.append(
+            "test/coverage alignment "
+            + str(value.get("test_coverage_alignment") or "not-available")
         )
     roots = value.get("introducing_packages")
     if isinstance(roots, list) and roots:
@@ -3171,6 +3205,9 @@ def _exposure_cross_reference_signals(context: dict[str, Any]) -> str:
     mapped = context.get("mapped_test_files")
     if isinstance(mapped, list) and mapped:
         signals.append("mapped tests " + ", ".join(str(value) for value in mapped[:3]))
+    alignment = context.get("test_coverage_alignment")
+    if isinstance(alignment, str):
+        signals.append("validation " + alignment)
     priority = context.get("change_risk_priority")
     score = context.get("change_risk_score")
     if isinstance(priority, str):
@@ -3229,6 +3266,10 @@ def _markdown_structural_context(finding: Finding) -> list[str]:
             + str(int(change.get("risk_score", 0)))
             + "`, mapped tests `"
             + str(test_count)
+            + "`, validation `"
+            + _markdown_code(
+                str(change.get("test_coverage_alignment", "not-available"))
+            )
             + "`)"
         )
     boundary = structural.get("island_boundary")

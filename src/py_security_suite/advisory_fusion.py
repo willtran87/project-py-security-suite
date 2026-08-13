@@ -385,6 +385,18 @@ def _remediation_context(
         "not-selected",
     }:
         test_validation = "not-available"
+    test_alignment = str(usage.get("test_coverage_alignment") or "not-selected")
+    if test_alignment not in {
+        "aligned-current-evidence",
+        "coverage-gap",
+        "coverage-not-available",
+        "test-evidence-not-available",
+        "tests-failing",
+        "tests-incomplete",
+        "tests-not-observed",
+        "not-selected",
+    }:
+        test_alignment = "test-evidence-not-available"
     return {
         "priority": priority,
         "action_kind": action_kind,
@@ -398,6 +410,7 @@ def _remediation_context(
         "recommended_test_files": tests,
         "test_selection_confidence": test_confidence,
         "focused_test_validation_status": test_validation,
+        "test_coverage_alignment": test_alignment,
         "introducing_packages": introducing_packages,
         "dependency_paths": _bounded_dependency_paths(usage.get("dependency_paths")),
         "dependency_path_confidence": str(
@@ -536,6 +549,11 @@ def _remediation_basis(
             )
         elif status in {"incomplete", "not-observed"}:
             basis.append(f"focused-test execution evidence is {status}")
+        alignment = str(usage.get("test_coverage_alignment") or "not-selected")
+        if alignment == "coverage-gap":
+            basis.append(
+                "focused tests passed while affected dependency import paths remained below 80% coverage"
+            )
     owners = usage.get("import_path_owners")
     if isinstance(owners, list) and owners:
         basis.append("import-path owner(s): " + ", ".join(str(item) for item in owners[:10]))
@@ -605,6 +623,10 @@ def _remediation_uncertainties(
             if validation == "passed":
                 values.append(
                     "Passing focused-test evidence describes the scanned state and must be regenerated after remediation."
+                )
+            if usage.get("test_coverage_alignment") == "coverage-gap":
+                values.append(
+                    "Focused tests passed, but retained coverage remained below 80% on an affected dependency import path."
                 )
         if usage.get("ownership_evidence_available") is not True:
             values.append("CODEOWNERS-derived ownership evidence was unavailable.")
@@ -676,6 +698,10 @@ def _advisory_verification_steps(
     else:
         steps.append("Record removal, substitution, or compensating controls and an owner/date for rechecking fix availability.")
     tests = usage.get("recommended_test_files")
+    if usage.get("test_coverage_alignment") == "coverage-gap":
+        steps.append(
+            "Extend the graph-selected focused tests until the affected dependency import paths meet the coverage threshold; regenerate both case-level and coverage evidence."
+        )
     steps.append(
         "Run focused regression/security tests"
         + (": " + ", ".join(str(item) for item in tests[:10]) if isinstance(tests, list) and tests else "")

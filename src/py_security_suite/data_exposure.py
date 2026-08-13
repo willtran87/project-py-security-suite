@@ -227,8 +227,8 @@ def build_data_exposure_synthesis(
         }
     )
     return {
-        "schema_version": "1.4",
-        "schema_id": "urn:project-py-security-suite:data-exposure:1.4",
+        "schema_version": "1.5",
+        "schema_id": "urn:project-py-security-suite:data-exposure:1.5",
         "authoritative": False,
         "purpose": (
             "bounded sensitive-data disclosure analysis across normalized taint "
@@ -279,6 +279,7 @@ def build_data_exposure_synthesis(
             "broad_blast_radius_findings": 0,
             "owned_exposure_findings": 0,
             "exposure_findings_with_mapped_tests": 0,
+            "exposure_findings_with_validation_mismatch": 0,
             "high_change_risk_exposure_findings": 0,
             "exposure_findings_with_sdk_package_risk": 0,
             "structurally_enriched_surfaces": sum(
@@ -315,6 +316,11 @@ def build_data_exposure_synthesis(
                 bool(item.get("structural_context", {}).get("mapped_test_files"))
                 for item in inventory["sink_surfaces"]
             ),
+            "sink_surfaces_with_validation_mismatch": sum(
+                item.get("structural_context", {}).get("test_coverage_alignment")
+                == "coverage-gap"
+                for item in inventory["sink_surfaces"]
+            ),
             "high_change_risk_sink_surfaces": sum(
                 item.get("structural_context", {}).get("change_risk_priority") == "high"
                 for item in inventory["sink_surfaces"]
@@ -343,6 +349,7 @@ def build_data_exposure_synthesis(
             "sdk_advisories_with_unobserved_focused_tests": 0,
             "sdk_advisories_with_import_path_owners": 0,
             "sdk_advisories_with_uncovered_import_paths": 0,
+            "sdk_advisories_with_test_coverage_mismatch": 0,
             "sdk_advisories_with_introducing_dependency_paths": 0,
             "sdk_advisories_with_dependency_environment_gaps": 0,
             "sdk_transitive_advisories_without_dependency_paths": 0,
@@ -441,6 +448,7 @@ def apply_data_exposure_fusion(
     broad_blast_radius = 0
     owned = 0
     mapped_tests = 0
+    validation_mismatch = 0
     high_change_risk = 0
     for finding in findings:
         assessment = by_id.get(finding.finding_id)
@@ -478,6 +486,9 @@ def apply_data_exposure_fusion(
         broad_blast_radius += int(cross_references["graph_upstream_files"] or 0) >= 10
         owned += bool(cross_references["owners"])
         mapped_tests += bool(cross_references["mapped_test_files"])
+        validation_mismatch += (
+            cross_references["test_coverage_alignment"] == "coverage-gap"
+        )
         high_change_risk += cross_references["change_risk_priority"] == "high"
     summary.update(
         {
@@ -489,6 +500,7 @@ def apply_data_exposure_fusion(
             "broad_blast_radius_findings": broad_blast_radius,
             "owned_exposure_findings": owned,
             "exposure_findings_with_mapped_tests": mapped_tests,
+            "exposure_findings_with_validation_mismatch": validation_mismatch,
             "high_change_risk_exposure_findings": high_change_risk,
             "exposure_findings_with_sdk_package_risk": sum(
                 bool(item.get("sdk_dependency_context", {}).get("risk_present"))
@@ -657,6 +669,15 @@ def apply_data_exposure_fusion(
                     for cluster in context["advisory_clusters"]
                 }.values()
             ),
+            "sdk_advisories_with_test_coverage_mismatch": sum(
+                cluster["dependency_usage"]["test_coverage_alignment"]
+                == "coverage-gap"
+                for cluster in {
+                    str(cluster["cluster_id"]): cluster
+                    for context in dependency_contexts.values()
+                    for cluster in context["advisory_clusters"]
+                }.values()
+            ),
             "sdk_advisories_with_introducing_dependency_paths": sum(
                 bool(cluster["dependency_usage"]["dependency_paths"])
                 for cluster in {
@@ -723,6 +744,7 @@ def _empty_sdk_dependency_context() -> dict[str, Any]:
         "advisories_with_focused_tests": 0,
         "advisories_with_import_path_owners": 0,
         "advisories_with_uncovered_import_paths": 0,
+        "advisories_with_test_coverage_mismatch": 0,
         "highest_severity": None,
         "lineage": [],
         "risk_reasons": [],
@@ -910,6 +932,10 @@ def _sdk_dependency_contexts(
             bool(item["dependency_usage"]["uncovered_import_paths"])
             for item in advisory_clusters
         )
+        test_coverage_mismatch_count = sum(
+            item["dependency_usage"]["test_coverage_alignment"] == "coverage-gap"
+            for item in advisory_clusters
+        )
         if import_count:
             reasons.append(
                 f"{import_count} distinct advisory risk(s) have exact static import evidence"
@@ -978,6 +1004,10 @@ def _sdk_dependency_contexts(
             reasons.append(
                 f"{uncovered_import_count} distinct advisory risk(s) map to import paths below 80% coverage"
             )
+        if test_coverage_mismatch_count:
+            reasons.append(
+                f"{test_coverage_mismatch_count} distinct advisory risk(s) have passing focused tests but affected import paths below 80% coverage"
+            )
         citation_sources = advisory_clusters if advisory_clusters else records
         citations = {
             (str(citation["identifier"]), str(citation.get("uri") or "")): citation
@@ -1022,6 +1052,7 @@ def _sdk_dependency_contexts(
             "advisories_with_focused_tests": focused_test_count,
             "advisories_with_import_path_owners": owner_count,
             "advisories_with_uncovered_import_paths": uncovered_import_count,
+            "advisories_with_test_coverage_mismatch": test_coverage_mismatch_count,
             "highest_severity": highest_severity,
             "lineage": lineage[:50],
             "risk_reasons": reasons[:20],
@@ -1221,6 +1252,9 @@ def _sdk_remediation_context(value: Any) -> dict[str, Any]:
             }
             else "not-available"
         ),
+        "test_coverage_alignment": _sdk_test_coverage_alignment(
+            raw.get("test_coverage_alignment")
+        ),
         "introducing_packages": _bounded_strings(
             raw.get("introducing_packages"), 25
         ),
@@ -1373,6 +1407,12 @@ def _sdk_dependency_usage(value: Any) -> dict[str, Any]:
         "unobserved_recommended_test_files": _bounded_strings(
             raw.get("unobserved_recommended_test_files"), 50
         ),
+        "test_coverage_alignment": _sdk_test_coverage_alignment(
+            raw.get("test_coverage_alignment")
+        ),
+        "validation_gap_reasons": _bounded_strings(
+            raw.get("validation_gap_reasons"), 10
+        ),
         "ownership_evidence_available": raw.get("ownership_evidence_available")
         is True,
         "import_path_owners": _bounded_strings(raw.get("import_path_owners"), 20),
@@ -1386,6 +1426,21 @@ def _sdk_dependency_usage(value: Any) -> dict[str, Any]:
         ),
         "evidence_artifacts": _bounded_strings(raw.get("evidence_artifacts"), 10),
     }
+
+
+def _sdk_test_coverage_alignment(value: Any) -> str:
+    text = str(value or "not-selected")
+    allowed = {
+        "aligned-current-evidence",
+        "coverage-gap",
+        "coverage-not-available",
+        "test-evidence-not-available",
+        "tests-failing",
+        "tests-incomplete",
+        "tests-not-observed",
+        "not-selected",
+    }
+    return text if text in allowed else "test-evidence-not-available"
 
 
 def _sdk_import_path_coverage(value: Any) -> list[dict[str, Any]]:
@@ -1764,6 +1819,16 @@ def _enrich_sink_surfaces(
             "test_selection_confidence": structural_record.get(
                 "test_selection_confidence"
             ),
+            "focused_test_validation_status": structural_record.get(
+                "focused_test_validation_status"
+            ),
+            "test_coverage_alignment": structural_record.get(
+                "test_coverage_alignment"
+            ),
+            "validation_gap_reasons": structural_record.get(
+                "validation_gap_reasons", []
+            ),
+            "validation_action": structural_record.get("validation_action"),
             "structural_risk_ids": structural_record.get("risk_ids", []),
             "structural_risk_kinds": structural_record.get("risk_kinds", []),
             "structural_recommendation": structural_record.get("recommendation"),
@@ -1927,6 +1992,18 @@ def _surface_structural_index(value: Any) -> dict[str, dict[str, Any]]:
                         item.get("test_selection_confidence"),
                         {"high", "medium", "low"},
                     ),
+                    "focused_test_validation_status": _optional_string(
+                        item.get("focused_test_validation_status")
+                    ),
+                    "test_coverage_alignment": _optional_string(
+                        item.get("test_coverage_alignment")
+                    ),
+                    "validation_gap_reasons": _bounded_strings(
+                        item.get("validation_gap_reasons"), 10
+                    ),
+                    "validation_action": _optional_string(
+                        item.get("validation_action")
+                    ),
                     "recommendation": _optional_string(item.get("recommended_action")),
                 }
             )
@@ -1995,6 +2072,10 @@ def _surface_structural_index(value: Any) -> dict[str, dict[str, Any]]:
         record.setdefault("change_risk_priority", None)
         record.setdefault("change_classification", None)
         record.setdefault("test_selection_confidence", None)
+        record.setdefault("focused_test_validation_status", None)
+        record.setdefault("test_coverage_alignment", None)
+        record.setdefault("validation_gap_reasons", [])
+        record.setdefault("validation_action", None)
         record.setdefault("recommendation", None)
     return result
 
@@ -2089,6 +2170,9 @@ def _surface_verification_steps(
         steps.append(
             "Add a focused test that exercises the sink with synthetic sensitive-data canaries."
         )
+    validation_action = context.get("validation_action")
+    if isinstance(validation_action, str) and validation_action:
+        steps.append(validation_action)
     if "observed" in context["runtime_observations"]:
         steps.append(
             "Inspect locally captured runtime output and assert that canary values are absent."
@@ -2860,6 +2944,16 @@ def _fusion_cross_references(finding: Finding) -> dict[str, Any]:
         "test_selection_confidence": _optional_string(
             change.get("test_selection_confidence"), {"high", "medium", "low"}
         ),
+        "focused_test_validation_status": _optional_string(
+            change.get("focused_test_validation_status")
+        ),
+        "test_coverage_alignment": _optional_string(
+            change.get("test_coverage_alignment")
+        ),
+        "validation_gap_reasons": _bounded_strings(
+            change.get("validation_gap_reasons"), 10
+        ),
+        "validation_action": _optional_string(change.get("validation_action")),
         "structural_risk_ids": sorted(set(structural_ids))[:20],
         "structural_risk_kinds": sorted(set(structural_kinds))[:20],
         "structural_recommendation": _optional_string(change.get("recommended_action")),
@@ -2902,10 +2996,13 @@ def _exposure_verification_steps(
         steps.append(
             "Add a test that exercises the finding line with synthetic credential and privacy canaries."
         )
+    validation_action = cross_references.get("validation_action")
+    if isinstance(validation_action, str) and validation_action:
+        steps.append(validation_action)
     mapped_tests = cross_references.get("mapped_test_files")
     if isinstance(mapped_tests, list) and mapped_tests:
         steps.append(
-            "Run the graph-selected tests: "
+            "Run the graph-guided, graph-selected tests: "
             + ", ".join(str(item) for item in mapped_tests[:5])
             + "."
         )

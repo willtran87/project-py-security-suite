@@ -18,6 +18,12 @@ for published releases.
   missing, cyclic, or conflicting installed dependencies. Bounded CODEOWNERS rule metadata now
   routes exact advisory import paths even when those files have no separate
   normalized finding; prior schemas remain bundled.
+- Cross-reference Graphify-selected tests with bounded JUnit, Hypothesis, and
+  Schemathesis case execution plus diff/file coverage. Structural synthesis 1.2
+  now distinguishes aligned, failing, incomplete, unobserved, unavailable, and
+  unselected validation evidence for changed files. Evidence fusion 1.3 and
+  data exposure 1.5 explicitly flag the contradiction where focused tests pass
+  while affected changed lines or dependency import paths remain uncovered.
 - Consolidate scanner-reported fixed versions, approved offline CISA KEV/FIRST
   EPSS/CycloneDX VEX intelligence, alias-aware advisories, source dependency
   relationship, exact imports, reachability, runtime observations, and deptry

@@ -1,6 +1,6 @@
 # Structural synthesis
 
-Last reviewed: 2026-08-12
+Last reviewed: 2026-08-13
 
 Structural synthesis combines independent repository signals so reviewers can
 act on code-island and dead-code results without treating a single static tool as
@@ -32,6 +32,7 @@ flowchart LR
     Coverage --> Change
     Radon --> Change
     Findings --> Change
+    Cases["Bounded JUnit, Hypothesis,<br/>and Schemathesis cases"] --> Change
 
     Graph --> Orphans["Structural orphan symbols"]
     Reach --> Orphans
@@ -59,6 +60,7 @@ flowchart LR
 | Disconnected island + external Graphify caller | `missing-entry-point` | Reference can still be non-executable |
 | Graphify import cycle + Tach/security finding | High-priority architecture hotspot | Cycles indicate coupling, not a vulnerability by themselves |
 | Changed lines + Graphify reverse paths + coverage | Direct and transitive test targets with a compound change-risk score | Static test dependencies cannot replace dynamic integration tests |
+| Graph-selected tests + exact case execution + changed-line coverage | Distinguishes aligned validation from failing, incomplete, unobserved, unavailable, and passing-but-uncovered evidence | Passing evidence describes the scanned state and must be regenerated after the final change |
 | Unreferenced Graphify callable + disconnected/load-only + not observed + uncovered | Conservative structural-orphan candidate | Framework, inheritance, registry, or plugin dispatch may be implicit |
 | Island boundary edges + source/test path role | Distinguishes test-only fixtures from probable missing production entry points | A file reference is not necessarily executable |
 
@@ -113,7 +115,11 @@ Change risk combines uncovered changed-line ratio, mapping confidence (direct,
 transitive, package-associated, or absent), two-hop upstream blast radius,
 local security findings, and high complexity.
 Each assessment includes the exact uncovered lines, test files, upstream and
-downstream paths, findings, risk score, priority, and a concrete test action.
+downstream paths, findings, risk score, priority, exact retained test results,
+test/coverage alignment, and a concrete validation action. A passing selected
+test with uncovered changed executable lines is reported as `coverage-gap`, not
+as adequate validation. `aligned-current-evidence` requires every selected file
+to have passing retained cases and no uncovered changed executable line.
 Findings in changed files receive the same context in Markdown, HTML, SARIF,
 SonarQube, and evidence-fusion review reasons.
 
@@ -141,8 +147,8 @@ triage without overwriting the underlying reachability state.
 
 ## Report contract and limits
 
-The current artifact uses bundled JSON Schema `structural-synthesis-1.1`; the
-1.0 schema remains bundled for existing consumers. Output is bounded to 100
+The current artifact uses bundled JSON Schema `structural-synthesis-1.2`; the
+1.1 and 1.0 schemas remain bundled for existing consumers. Output is bounded to 100
 dead-code assessments, 100 island assessments, 50 import cycles, 100 change
 impacts, 100 orphan symbols, 100 island boundaries, and 250 finding links;
 omitted counts are explicit. Relevant findings receive a

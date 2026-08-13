@@ -235,6 +235,15 @@ class DataExposureSynthesisTests(unittest.TestCase):
                             }
                         ]
                     },
+                    "junit-summary.json": {
+                        "test_case_inventory_complete": True,
+                        "test_cases": [
+                            {
+                                "file": "tests/test_app.py",
+                                "result": "passed",
+                            }
+                        ],
+                    },
                     "reachability.json": {
                         "analysis": {"complete": True, "confidence": "high"},
                         "nodes": [
@@ -279,6 +288,7 @@ class DataExposureSynthesisTests(unittest.TestCase):
         self.assertEqual(dependency["advisories_with_focused_tests"], 1)
         self.assertEqual(dependency["advisories_with_import_path_owners"], 1)
         self.assertEqual(dependency["advisories_with_uncovered_import_paths"], 1)
+        self.assertEqual(dependency["advisories_with_test_coverage_mismatch"], 1)
         cluster = dependency["advisory_clusters"][0]
         self.assertTrue(cluster["threat_context"]["known_exploited"])
         self.assertEqual(
@@ -310,6 +320,9 @@ class DataExposureSynthesisTests(unittest.TestCase):
         self.assertEqual(
             result["summary"]["sdk_advisories_with_uncovered_import_paths"], 1
         )
+        self.assertEqual(
+            result["summary"]["sdk_advisories_with_test_coverage_mismatch"], 1
+        )
         self.assertTrue(
             any("GHSA-DEMO" in step for step in assessment["verification_steps"])
         )
@@ -322,10 +335,11 @@ class DataExposureSynthesisTests(unittest.TestCase):
         self.assertIn("advisories GHSA-DEMO", rendered)
         self.assertIn("use executable-import, direct dependency", rendered)
         self.assertIn("focused tests tests/test\\_app.py", rendered)
+        self.assertIn("test/coverage alignment coverage-gap", rendered)
         self.assertIn("owners @observability", rendered)
         self.assertIn("SDK dependency cross-reference", detailed)
         self.assertIn("[GHSA-DEMO](https://example.invalid/GHSA-DEMO)", detailed)
-        schema = json.loads(read_bundled_schema("data-exposure-1.4"))
+        schema = json.loads(read_bundled_schema("data-exposure-1.5"))
         Draft202012Validator(schema).validate(result)
 
     def test_matched_sdk_lineage_without_package_findings_is_not_risk(self) -> None:
@@ -588,6 +602,12 @@ class DataExposureSynthesisTests(unittest.TestCase):
                             "transitive_test_files": [],
                             "associated_test_files": [],
                             "test_selection_confidence": "high",
+                            "focused_test_validation_status": "passed",
+                            "test_coverage_alignment": "coverage-gap",
+                            "validation_gap_reasons": [
+                                "Focused tests passed, but changed lines were uncovered."
+                            ],
+                            "validation_action": "Extend the focused application tests.",
                             "recommended_action": "Run the focused application tests.",
                         }
                     ],
@@ -613,6 +633,9 @@ class DataExposureSynthesisTests(unittest.TestCase):
         self.assertEqual(result["summary"]["compound_sink_surfaces"], 1)
         self.assertEqual(result["summary"]["owned_sink_surfaces"], 1)
         self.assertEqual(result["summary"]["sink_surfaces_with_mapped_tests"], 1)
+        self.assertEqual(
+            result["summary"]["sink_surfaces_with_validation_mismatch"], 1
+        )
         self.assertEqual(result["summary"]["high_change_risk_sink_surfaces"], 1)
         self.assertEqual(result["summary"]["sink_surfaces_in_structural_hotspots"], 1)
         surface = result["sink_surfaces"][0]
@@ -627,6 +650,8 @@ class DataExposureSynthesisTests(unittest.TestCase):
         self.assertEqual(context["mapped_test_files"], ["tests/test_app.py"])
         self.assertEqual(context["change_risk_score"], 85)
         self.assertEqual(context["change_risk_priority"], "high")
+        self.assertEqual(context["focused_test_validation_status"], "passed")
+        self.assertEqual(context["test_coverage_alignment"], "coverage-gap")
         self.assertEqual(context["structural_risk_ids"], ["cycle-app"])
         self.assertEqual(surface["review_priority"], "high")
         self.assertTrue(
@@ -641,8 +666,9 @@ class DataExposureSynthesisTests(unittest.TestCase):
         self.assertIn("nearby PYSEC-EXPOSURE via semgrep", rendered)
         self.assertIn("owner @security-team", rendered)
         self.assertIn("mapped tests/test\\_app.py", rendered)
+        self.assertIn("validation coverage-gap", rendered)
         self.assertIn("Add a focused test", rendered)
-        schema = json.loads(read_bundled_schema("data-exposure-1.4"))
+        schema = json.loads(read_bundled_schema("data-exposure-1.5"))
         Draft202012Validator(schema).validate(result)
 
     def test_inventories_query_exception_and_risky_sdk_configuration(self) -> None:
@@ -899,7 +925,7 @@ class DataExposureSynthesisTests(unittest.TestCase):
     def test_artifact_validates_against_bundled_schema(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             result = build_data_exposure_synthesis(Path(temporary), [], {})
-        schema = json.loads(read_bundled_schema("data-exposure-1.4"))
+        schema = json.loads(read_bundled_schema("data-exposure-1.5"))
         Draft202012Validator(schema).validate(result)
 
     def test_joins_finalized_fusion_into_exposure_verification_plan(self) -> None:
@@ -948,6 +974,12 @@ class DataExposureSynthesisTests(unittest.TestCase):
                         "transitive_test_files": [],
                         "associated_test_files": [],
                         "test_selection_confidence": "high",
+                        "focused_test_validation_status": "passed",
+                        "test_coverage_alignment": "coverage-gap",
+                        "validation_gap_reasons": [
+                            "Focused tests passed, but the finding line was uncovered."
+                        ],
+                        "validation_action": "Extend the focused test.",
                         "recommended_action": "Run and extend the focused test.",
                     },
                     "import_cycle": {
@@ -986,6 +1018,9 @@ class DataExposureSynthesisTests(unittest.TestCase):
         self.assertEqual(result["summary"]["runtime_observed_exposure_findings"], 1)
         self.assertEqual(result["summary"]["owned_exposure_findings"], 1)
         self.assertEqual(result["summary"]["exposure_findings_with_mapped_tests"], 1)
+        self.assertEqual(
+            result["summary"]["exposure_findings_with_validation_mismatch"], 1
+        )
         self.assertEqual(result["summary"]["high_change_risk_exposure_findings"], 1)
         summary_markdown = "\n".join(_render_data_exposure_summary(result))
         finding_markdown = "\n".join(_markdown_data_exposure_context(finding))
@@ -997,11 +1032,12 @@ class DataExposureSynthesisTests(unittest.TestCase):
             "owners @privacy-team; mapped tests/test\\_app.py", summary_markdown
         )
         self.assertIn("structural import-cycle:high", summary_markdown)
+        self.assertIn("validation coverage-gap", summary_markdown)
         self.assertIn("joined evidence `fusion urgent", finding_markdown)
         self.assertIn("owners @privacy-team", finding_markdown)
         self.assertIn("mapped tests tests/test_app.py", finding_markdown)
         self.assertIn("Exposure verification", finding_markdown)
-        schema = json.loads(read_bundled_schema("data-exposure-1.4"))
+        schema = json.loads(read_bundled_schema("data-exposure-1.5"))
         Draft202012Validator(schema).validate(result)
 
     def test_not_observed_runtime_signal_does_not_count_as_runtime_observed(
