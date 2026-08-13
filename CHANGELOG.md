@@ -36,6 +36,15 @@ for published releases.
   and explicitly do not claim vulnerable-function invocation or exploitability.
   A bounded per-importer assessment ledger prevents one importer's passing tests,
   ownership, or coverage from masking a validation gap at another importer.
+  Exact-path exposure/advisory intersections now connect a sensitive SDK sink
+  route to the same package/advisory importer route, retaining trust boundary,
+  data class, protection, threat, validation, owner, citation, report, SARIF,
+  and closure context without claiming disclosure or vulnerable-function use.
+  Advisory importer routes now cross-reference source and built-artifact SBOM
+  package lineage. Comparable inventories distinguish matched versions, drift,
+  source-only, and artifact-only components; missing inventories fail closed as
+  evidence gaps. Reports and closure work retain exact versions and exact-match
+  fixed-version evidence without inferring semantic-version safety.
   Campaign IDs, scores, revision state, evidence gaps, and actions propagate
   through findings, SARIF, reports, owner queues, and closure work. Add
   `pysec-evidence bind` to atomically create

@@ -636,12 +636,16 @@ def _risk_path_closure_context(
                     "validation_campaign_ids": _string_values(
                         item.get("validation_campaign_ids"), 50
                     ),
+                    "exposure_advisory_intersection_ids": _string_values(
+                        item.get("exposure_advisory_intersection_ids"), 100
+                    ),
                     "known_exploited": item.get("known_exploited") is True,
                     "epss_probability": item.get("epss_probability"),
                     "fix_available": item.get("fix_available") is True,
                     "fixed_version_candidates": _string_values(
                         item.get("fixed_version_candidates"), 25
                     ),
+                    "package_lifecycle": _as_object(item.get("package_lifecycle")),
                     "change_risk_score": item.get("change_risk_score"),
                     "change_priority": item.get("change_priority"),
                     "uncovered_changed_lines": [
@@ -673,6 +677,58 @@ def _risk_path_closure_context(
         if dependency_routes:
             refs.append("evidence-fusion.json")
             refs.extend(str(item["import_path"]) for item in dependency_routes)
+        raw_intersections = risk_path.get("exposure_advisory_intersections")
+        exposure_advisory_intersections = (
+            [
+                {
+                    "intersection_id": str(item.get("intersection_id") or "unknown"),
+                    "priority": str(item.get("priority") or "P4"),
+                    "path": str(item.get("path") or "unknown"),
+                    "line": item.get("line"),
+                    "sink_route_id": str(item.get("sink_route_id") or "unknown"),
+                    "dependency_route_id": str(
+                        item.get("dependency_route_id") or "unknown"
+                    ),
+                    "advisory_cluster_id": str(
+                        item.get("advisory_cluster_id") or "unknown"
+                    ),
+                    "primary_identifier": str(
+                        item.get("primary_identifier") or "unknown"
+                    ),
+                    "package": str(item.get("package") or "unknown"),
+                    "sdk": item.get("sdk"),
+                    "sink_family": str(item.get("sink_family") or "unknown"),
+                    "trust_boundary": str(item.get("trust_boundary") or "unknown"),
+                    "data_classes": _string_values(item.get("data_classes"), 25),
+                    "protection_status": str(
+                        item.get("protection_status") or "unknown"
+                    ),
+                    "known_exploited": item.get("known_exploited") is True,
+                    "epss_high": item.get("epss_high") is True,
+                    "fix_available": item.get("fix_available") is True,
+                    "package_lifecycle": _as_object(item.get("package_lifecycle")),
+                    "validation_statuses": _as_object(item.get("validation_statuses")),
+                    "advisory_citations": [
+                        _as_object(citation)
+                        for citation in _object_list(
+                            item.get("advisory_citations"),
+                            "exposure advisory citations",
+                        )[:25]
+                    ],
+                    "recommended_action": str(
+                        item.get("recommended_action")
+                        or "Review the exposure-advisory intersection."
+                    ),
+                }
+                for item in raw_intersections[:25]
+                if isinstance(item, dict)
+            ]
+            if isinstance(raw_intersections, list)
+            else []
+        )
+        if exposure_advisory_intersections:
+            refs.extend(["data-exposure.json", "evidence-fusion.json"])
+            refs.extend(str(item["path"]) for item in exposure_advisory_intersections)
         if any(
             _as_object(campaign.get("source_snapshot")).get("source_sha256")
             for campaign in campaigns
@@ -691,6 +747,10 @@ def _risk_path_closure_context(
                 "validation_test_hotspot_ids": _string_values(
                     risk_path.get("validation_test_hotspot_ids"), 100
                 ),
+                "exposure_advisory_intersection_ids": _string_values(
+                    risk_path.get("exposure_advisory_intersection_ids"), 100
+                ),
+                "exposure_advisory_intersections": exposure_advisory_intersections,
                 "validation_campaigns": campaigns,
                 "target_kind": risk_path.get("target_kind"),
                 "target_id": risk_path.get("target_id"),
@@ -782,6 +842,21 @@ def _risk_path_closure_context(
                 acceptance.append(
                     "Focused importer validation covers every retained uncovered changed line, or the replacement report records an approved coverage disposition."
                 )
+            acceptance.extend(_package_lifecycle_acceptance(dependency_routes))
+        if exposure_advisory_intersections:
+            acceptance.extend(
+                [
+                    "Every exact-path sensitive-boundary/dependency intersection is reviewed for data minimization, redaction, recipient, retention, and access controls without treating path coincidence as proof of disclosure.",
+                    "Vulnerable-function use is established or ruled out independently, the dependency remediation or governed VEX disposition is recorded, and both sink and importer validation are rerun.",
+                ]
+            )
+            if any(
+                item["protection_status"] == "not-observed"
+                for item in exposure_advisory_intersections
+            ):
+                acceptance.append(
+                    "A tested protection control is retained at every intersection that previously reported no observed minimization, masking, hashing, or redaction."
+                )
         return refs, acceptance, details
     reason = str(risk_path.get("reason") or "bounded static route unavailable")
     details["reason"] = reason
@@ -792,6 +867,54 @@ def _risk_path_closure_context(
         ],
         details,
     )
+
+
+def _package_lifecycle_acceptance(
+    dependency_routes: list[dict[str, Any]],
+) -> list[str]:
+    assessments = {
+        str(_as_object(item["package_lifecycle"]).get("assessment") or "")
+        for item in dependency_routes
+    }
+    result: list[str] = []
+    criteria = (
+        (
+            "version-drift" in assessments,
+            "Source and built-artifact package versions agree in replacement composition inventories, or an approved drift disposition verifies remediation against the exact shipped component.",
+        ),
+        (
+            "artifact-only" in assessments,
+            "Every artifact-only package introduction is identified, removed, or governed with its build and packaging origin.",
+        ),
+        (
+            "source-only" in assessments,
+            "Complete replacement artifact inventory proves each source-only package is intentionally excluded; source-only status alone is not treated as safety evidence.",
+        ),
+        (
+            bool(
+                assessments
+                & {
+                    "source-inventory-unavailable",
+                    "artifact-inventory-unavailable",
+                    "composition-inventories-unavailable",
+                    "package-not-observed",
+                }
+            ),
+            "Complete source and built-artifact composition inventories establish the affected package lifecycle before disposition.",
+        ),
+        (
+            any(
+                _as_object(item["package_lifecycle"]).get(
+                    "artifact_fixed_version_exact_match"
+                )
+                is False
+                for item in dependency_routes
+            ),
+            "The replacement built-artifact inventory contains an approved remediated version, or an explicit exception explains the retained artifact version.",
+        ),
+    )
+    result.extend(text for applies, text in criteria if applies)
+    return result
 
 
 def _governance_items(

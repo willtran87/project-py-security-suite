@@ -23,6 +23,7 @@ empty scanner result as proof of safety.
 | Selected-test execution | Import-path or changed-line coverage | Flags passing focused tests whose affected code remains uncovered instead of presenting them as adequate validation |
 | Alias-aware advisory importer | Declared entry points plus bounded Graphify file routes | Promotes the exact maintained importer into `risk-paths.json`, links the route back to every native advisory finding, and carries citations, threat/fix context, owners, focused tests, coverage, and closure criteria without claiming vulnerable-function exploitability |
 | Per-importer advisory validation | Exact import module/line, reachability/runtime, CODEOWNERS, graph-selected tests, case execution, and coverage | Emits one bounded assessment per importer so evidence from a tested or owned path cannot mask a different importer's missing tests, missing owner, or coverage gap |
+| Sensitive SDK sink | Per-importer advisory ledger plus risk routes | Requires exact path, package, and advisory identity before linking an SDK trust-boundary sink to an affected dependency importer; retains protection, data class, threat, validation, citations, and closure work without treating coincidence as disclosure proof |
 | Trivy and ScanCode license evidence | Source/artifact component inventories | Connects license policy findings to the component and lifecycle stage where it appears |
 | Cosign, attestations, reproducible-build evidence | Artifact manifest | Binds provenance conclusions to the exact artifact SHA-256 and detects digest disagreement |
 | Any normalized finding | High-value classification and package indexes | Links CVE, GHSA, CWE, license, SLSA, and package observations even when tools report different paths or lifecycle stages |
@@ -129,6 +130,11 @@ The report also records package lineage as `matched`, `version-drift`,
 `source-only`, or `artifact-only`. These states are diagnostic: development
 dependencies and packaging helpers can legitimately be source-only, while an
 artifact-only component requires investigation before it is considered drift.
+Risk-route synthesis promotes that lineage onto each exact advisory importer.
+It treats `source-only` and `artifact-only` as comparable only when both source
+and built-artifact composition inventories were retained; otherwise it emits a
+specific inventory-evidence gap. An exact fixed-version string in the artifact
+is reported as evidence, not as semantic-version or exploitability proof.
 
 Evidence-fusion schema 1.3 records `advisory_clusters`. A cluster is created
 only when exact normalized package names match and advisory identifiers overlap,

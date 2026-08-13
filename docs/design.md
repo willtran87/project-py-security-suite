@@ -356,6 +356,14 @@ scanner-attributed fixes, citations, owners, tests, coverage, and validation;
 it links back to every native cluster finding without duplicating the finding.
 This answers “which entry point reaches an affected package importer?” while
 explicitly leaving vulnerable-function invocation and exploitability unproven.
+Each importer also joins exact source and built-artifact package inventories,
+distinguishing matched versions, drift, source-only, artifact-only, and missing
+composition evidence without interpreting a version string as proof of safety.
+When data-exposure synthesis also retains an SDK sink on the same exact path,
+risk synthesis requires matching package and advisory-cluster identity before
+emitting a sensitive-boundary dependency intersection. The compound record
+coordinates boundary-control and dependency-remediation review while explicitly
+leaving disclosure, attacker control, and vulnerable-function use unproven.
 
 ```mermaid
 flowchart LR
@@ -364,8 +372,12 @@ flowchart LR
     Findings["Normalized findings"] --> Targets["Review targets"]
     Exposure["Sensitive sink surfaces"] --> Targets
     Advisories["Alias-aware advisories<br/>fix + KEV/EPSS/VEX"] --> Importers["Exact dependency importers"]
+    Lineage["Source/artifact package lineage"] --> Importers
     Graph --> Importers
     Importers --> Targets
+    Exposure --> ExactJoin["Exact path/package/advisory join"]
+    Importers --> ExactJoin
+    ExactJoin --> Targets
     Targets --> Search
     Ownership["CODEOWNERS"] --> Routed["Bounded risk routes"]
     Search --> Routed

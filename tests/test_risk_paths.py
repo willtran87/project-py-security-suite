@@ -349,6 +349,10 @@ class RiskPathTests(unittest.TestCase):
         artifacts["evidence-fusion.json"] = {
             "schema_version": "1.3",
             "advisory_clusters": [_dependency_advisory_cluster()],
+            "package_lineage": [
+                _package_lineage("version-drift", ["1.0.0"], ["1.1.0"])
+            ],
+            "evidence_lanes": _composition_lanes(),
         }
         artifacts["structural-synthesis.json"]["change_impact_assessments"].append(
             {
@@ -378,6 +382,11 @@ class RiskPathTests(unittest.TestCase):
         self.assertEqual(summary["dependency_routes_with_validation_gaps"], 1)
         self.assertEqual(summary["dependency_routes_at_changed_importers"], 1)
         self.assertEqual(summary["dependency_routes_with_uncovered_changed_lines"], 1)
+        self.assertEqual(
+            summary["dependency_routes_with_comparable_package_lifecycle"], 1
+        )
+        self.assertEqual(summary["dependency_routes_with_version_drift"], 1)
+        self.assertEqual(summary["dependency_routes_with_composition_evidence_gaps"], 0)
         route = next(
             item
             for item in result["routes"]
@@ -407,6 +416,10 @@ class RiskPathTests(unittest.TestCase):
         self.assertEqual(route["correlations"]["fixed_version_candidates"], ["2.0.0"])
         self.assertEqual(route["correlations"]["change_risk_score"], 70)
         self.assertEqual(route["correlations"]["uncovered_changed_lines"], [4])
+        self.assertEqual(
+            route["correlations"]["package_lifecycle"]["assessment"],
+            "version-drift",
+        )
         self.assertIn("evidence-fusion.json", route["evidence_artifacts"])
 
         risk_path = finding.evidence["risk_path"]
@@ -431,6 +444,7 @@ class RiskPathTests(unittest.TestCase):
         self.assertIn("vulnerable-function invocation", rendered)
         self.assertIn("uncovered changed lines 4", rendered)
         self.assertIn("import lines `7`", rendered)
+        self.assertIn("lifecycle version-drift", rendered)
         markdown_context = "\n".join(_markdown_risk_path_context(finding))
         self.assertIn("Dependency exposure routes", markdown_context)
         self.assertIn("src/service.py", markdown_context)
@@ -460,8 +474,122 @@ class RiskPathTests(unittest.TestCase):
                 for criterion in closure["acceptance_criteria"]
             )
         )
+        self.assertTrue(
+            any(
+                "Source and built-artifact package versions agree" in criterion
+                for criterion in closure["acceptance_criteria"]
+            )
+        )
         schema = json.loads(read_bundled_schema("risk-paths-1.0"))
         Draft202012Validator(schema).validate(result)
+
+    def test_dependency_package_lifecycle_fails_closed_on_inventory_gaps(
+        self,
+    ) -> None:
+        scenarios = [
+            ("matched", ["1.0.0"], ["1.0.0"], True, True, "matched", True),
+            (
+                "version-drift",
+                ["1.0.0"],
+                ["2.0.0"],
+                True,
+                True,
+                "version-drift",
+                False,
+            ),
+            ("source-only", ["1.0.0"], [], True, True, "source-only", None),
+            ("artifact-only", [], ["1.0.0"], True, True, "artifact-only", None),
+            (
+                "source-only",
+                ["1.0.0"],
+                [],
+                True,
+                False,
+                "artifact-inventory-unavailable",
+                None,
+            ),
+        ]
+        schema = json.loads(read_bundled_schema("risk-paths-1.0"))
+        for (
+            status,
+            source_versions,
+            artifact_versions,
+            source_available,
+            artifact_available,
+            expected,
+            versions_match,
+        ) in scenarios:
+            with self.subTest(expected=expected, status=status):
+                artifacts = _artifacts()
+                artifacts["evidence-fusion.json"] = {
+                    "schema_version": "1.3",
+                    "advisory_clusters": [_dependency_advisory_cluster()],
+                    "package_lineage": [
+                        _package_lineage(status, source_versions, artifact_versions)
+                    ],
+                    "evidence_lanes": _composition_lanes(
+                        source=source_available,
+                        artifact=artifact_available,
+                    ),
+                }
+
+                result = build_risk_paths([_finding("requirements.txt", 1)], artifacts)
+
+                route = next(
+                    item
+                    for item in result["routes"]
+                    if item["target"]["kind"] == "dependency-advisory-import"
+                )
+                lifecycle = route["correlations"]["package_lifecycle"]
+                self.assertEqual(lifecycle["assessment"], expected)
+                self.assertEqual(
+                    lifecycle["source_artifact_versions_match"], versions_match
+                )
+                self.assertEqual(
+                    lifecycle["comparison_available"],
+                    source_available and artifact_available,
+                )
+                if artifact_versions == ["2.0.0"]:
+                    self.assertTrue(lifecycle["artifact_fixed_version_exact_match"])
+                    self.assertEqual(
+                        result["summary"][
+                            "dependency_routes_with_exact_fixed_version_in_artifact"
+                        ],
+                        1,
+                    )
+                if expected == "artifact-inventory-unavailable":
+                    self.assertEqual(
+                        result["summary"][
+                            "dependency_routes_source_only_in_comparable_inventory"
+                        ],
+                        0,
+                    )
+                    self.assertEqual(
+                        result["summary"][
+                            "dependency_routes_with_composition_evidence_gaps"
+                        ],
+                        1,
+                    )
+                Draft202012Validator(schema).validate(result)
+
+        artifacts = _artifacts()
+        artifacts["evidence-fusion.json"] = {
+            "schema_version": "1.3",
+            "advisory_clusters": [_dependency_advisory_cluster()],
+            "package_lineage": [],
+            "evidence_lanes": _composition_lanes(),
+        }
+        absent = build_risk_paths([_finding("requirements.txt", 1)], artifacts)
+        absent_route = next(
+            item
+            for item in absent["routes"]
+            if item["target"]["kind"] == "dependency-advisory-import"
+        )
+        self.assertEqual(
+            absent_route["correlations"]["package_lifecycle"]["assessment"],
+            "package-not-observed",
+        )
+        Draft202012Validator(schema).validate(absent)
 
     def test_dependency_routes_do_not_share_importer_validation_or_owners(
         self,
@@ -491,6 +619,8 @@ class RiskPathTests(unittest.TestCase):
         artifacts["evidence-fusion.json"] = {
             "schema_version": "1.3",
             "advisory_clusters": [cluster],
+            "package_lineage": [_package_lineage("artifact-only", [], ["1.0.0"])],
+            "evidence_lanes": _composition_lanes(),
         }
 
         result = build_risk_paths([_finding("requirements.txt", 1)], artifacts)
@@ -518,6 +648,202 @@ class RiskPathTests(unittest.TestCase):
         self.assertEqual(result["summary"]["dependency_routes_with_validation_gaps"], 1)
         schema = json.loads(read_bundled_schema("risk-paths-1.0"))
         Draft202012Validator(schema).validate(result)
+
+    def test_joins_sensitive_sdk_sink_to_exact_advisory_importer(self) -> None:
+        finding = _finding("requirements.txt", 1)
+        artifacts = _artifacts()
+        cluster = _dependency_advisory_cluster()
+        usage = cluster["dependency_usage"]
+        usage["import_paths"] = ["src/sink.py"]
+        usage["import_path_assessments"] = [
+            _import_path_assessment(
+                "src/sink.py",
+                owners=["@observability"],
+                tests=["tests/test_sink.py"],
+                coverage_percent=55.5,
+                alignment="coverage-gap",
+                gap_reasons=["Exact SDK importer coverage is below 80%."],
+            )
+        ]
+        artifacts["evidence-fusion.json"] = {
+            "schema_version": "1.3",
+            "advisory_clusters": [cluster],
+            "package_lineage": [_package_lineage("artifact-only", [], ["1.0.0"])],
+            "evidence_lanes": _composition_lanes(),
+        }
+        surface = artifacts["data-exposure.json"]["sink_surfaces"][0]
+        surface["sdk"] = "Sentry SDK"
+        surface["trust_boundary"] = "external-observability"
+        surface["sdk_dependency_context"] = {
+            "risk_present": True,
+            "risk_tier": "high",
+            "advisory_clusters": [cluster],
+        }
+
+        result = build_risk_paths([finding], artifacts)
+
+        self.assertEqual(result["summary"]["exposure_advisory_intersections"], 1)
+        self.assertEqual(
+            result["summary"]["known_exploited_exposure_advisory_intersections"],
+            1,
+        )
+        self.assertEqual(
+            result["summary"]["unprotected_exposure_advisory_intersections"], 1
+        )
+        self.assertEqual(
+            result["summary"]["exposure_advisory_intersections_with_validation_gaps"],
+            1,
+        )
+        intersection = result["exposure_advisory_intersections"][0]
+        self.assertEqual(intersection["path"], "src/sink.py")
+        self.assertEqual(intersection["line"], 9)
+        self.assertEqual(intersection["package"], "demo-package")
+        self.assertEqual(intersection["sdk"], "Sentry SDK")
+        self.assertEqual(intersection["trust_boundary"], "external-observability")
+        self.assertEqual(intersection["protection_status"], "not-observed")
+        self.assertEqual(intersection["data_classes"], ["credential"])
+        self.assertTrue(intersection["known_exploited"])
+        self.assertEqual(intersection["validation_statuses"]["dependency"], "gap")
+        self.assertEqual(
+            intersection["package_lifecycle"]["assessment"], "artifact-only"
+        )
+        self.assertEqual(len(intersection["route_ids"]), 2)
+        intersecting_routes = [
+            route
+            for route in result["routes"]
+            if intersection["intersection_id"]
+            in route["exposure_advisory_intersection_ids"]
+        ]
+        self.assertEqual(
+            {route["target"]["kind"] for route in intersecting_routes},
+            {"sink-surface", "dependency-advisory-import"},
+        )
+        intersection_queues = [
+            queue
+            for queue in result["owner_work_queues"]
+            if intersection["intersection_id"]
+            in queue["exposure_advisory_intersection_ids"]
+        ]
+        self.assertEqual(
+            {queue["owner"] for queue in intersection_queues},
+            {"@observability", "@security-team"},
+        )
+        self.assertTrue(
+            all(
+                queue["exposure_advisory_intersections"] == 1
+                for queue in intersection_queues
+            )
+        )
+        self.assertEqual(
+            result["summary"]["owner_queues_with_exposure_advisory_intersections"],
+            2,
+        )
+        self.assertTrue(
+            all(
+                "boundary controls and dependency remediation"
+                in queue["recommended_action"]
+                for queue in intersection_queues
+            )
+        )
+        risk_path = finding.evidence["risk_path"]
+        self.assertEqual(
+            risk_path["exposure_advisory_intersection_ids"],
+            [intersection["intersection_id"]],
+        )
+        self.assertEqual(
+            risk_path["exposure_advisory_intersections"][0]["package"],
+            "demo-package",
+        )
+        rendered = "\n".join(_render_risk_path_summary(result))
+        self.assertIn("Sensitive-boundary dependency intersections", rendered)
+        self.assertIn("external-observability", rendered)
+        self.assertIn("not prove sensitive data reached the SDK", rendered)
+        self.assertIn("lifecycle artifact-only", rendered)
+        markdown = "\n".join(_markdown_risk_path_context(finding))
+        self.assertIn("Sensitive-boundary dependency intersection", markdown)
+        html = _html_risk_path_context(finding)
+        self.assertIn("Sensitive-boundary dependency intersection", html)
+        sarif = render_sarif([finding])
+        sarif_risk = sarif["runs"][0]["results"][0]["properties"]["risk_path"]
+        self.assertEqual(
+            sarif_risk["exposure_advisory_intersection_ids"],
+            [intersection["intersection_id"]],
+        )
+        closure = _finding_items([json_ready(finding)])[0]
+        closure_risk = closure["details"]["risk_path"]
+        self.assertEqual(
+            closure_risk["exposure_advisory_intersection_ids"],
+            [intersection["intersection_id"]],
+        )
+        self.assertTrue(
+            any(
+                "data minimization" in criterion
+                for criterion in closure["acceptance_criteria"]
+            )
+        )
+        schema = json.loads(read_bundled_schema("risk-paths-1.0"))
+        Draft202012Validator(schema).validate(result)
+
+    def test_exposure_advisory_intersection_requires_exact_path_and_package(
+        self,
+    ) -> None:
+        artifacts = _artifacts()
+        cluster = _dependency_advisory_cluster()
+        surface = artifacts["data-exposure.json"]["sink_surfaces"][0]
+        surface["sdk"] = "Sentry SDK"
+        surface["data_classes"] = []
+        surface["review_priority"] = "medium"
+        surface["structural_context"]["related_finding_ids"] = []
+        surface["sdk_dependency_context"] = {
+            "risk_present": True,
+            "risk_tier": "high",
+            "advisory_clusters": [cluster],
+        }
+        artifacts["evidence-fusion.json"] = {
+            "schema_version": "1.3",
+            "advisory_clusters": [cluster],
+        }
+
+        path_mismatch = build_risk_paths([_finding("requirements.txt", 1)], artifacts)
+
+        self.assertEqual(path_mismatch["summary"]["exposure_advisory_intersections"], 0)
+        self.assertEqual(path_mismatch["summary"]["sink_surface_targets"], 1)
+
+        usage = cluster["dependency_usage"]
+        usage["import_paths"] = ["src/sink.py"]
+        usage["import_path_assessments"] = [
+            _import_path_assessment(
+                "src/sink.py",
+                owners=[],
+                tests=[],
+                coverage_percent=55.5,
+                alignment="coverage-gap",
+                gap_reasons=["Coverage gap."],
+            )
+        ]
+        surface["sdk_dependency_context"]["risk_present"] = False
+
+        unconfirmed_risk = build_risk_paths(
+            [_finding("requirements.txt", 1)], artifacts
+        )
+
+        self.assertEqual(
+            unconfirmed_risk["summary"]["exposure_advisory_intersections"], 0
+        )
+        mismatched_cluster = json.loads(json.dumps(cluster))
+        mismatched_cluster["package"] = "different-package"
+        surface["sdk_dependency_context"]["risk_present"] = True
+        surface["sdk_dependency_context"]["advisory_clusters"] = [mismatched_cluster]
+
+        package_mismatch = build_risk_paths(
+            [_finding("requirements.txt", 1)], artifacts
+        )
+
+        self.assertEqual(
+            package_mismatch["summary"]["exposure_advisory_intersections"], 0
+        )
+        schema = json.loads(read_bundled_schema("risk-paths-1.0"))
+        Draft202012Validator(schema).validate(package_mismatch)
 
     def test_unrouted_target_is_preserved_as_an_evidence_gap(self) -> None:
         finding = _finding("src/dynamic_plugin.py", 4)
@@ -935,6 +1261,35 @@ def _dependency_advisory_cluster() -> dict[str, Any]:
             "recommended_action": "Upgrade demo-package to 2.0.0.",
         },
     }
+
+
+def _package_lineage(
+    status: str, source_versions: list[str], artifact_versions: list[str]
+) -> dict[str, Any]:
+    return {
+        "package": "demo-package",
+        "source_versions": source_versions,
+        "artifact_versions": artifact_versions,
+        "status": status,
+        "finding_ids": ["PYSEC-RISK-PATH"],
+    }
+
+
+def _composition_lanes(
+    *, source: bool = True, artifact: bool = True
+) -> list[dict[str, Any]]:
+    return [
+        {
+            "lane": "source_composition",
+            "available_artifacts": ["sbom.cdx.json"] if source else [],
+            "execution_gaps": [] if source else ["source SBOM unavailable"],
+        },
+        {
+            "lane": "artifact_composition",
+            "available_artifacts": ["artifact-sbom.cdx.json"] if artifact else [],
+            "execution_gaps": [] if artifact else ["artifact SBOM unavailable"],
+        },
+    ]
 
 
 def _import_path_assessment(

@@ -812,6 +812,8 @@ def _render_risk_path_summary(value: dict[str, Any] | None) -> list[str]:
     campaigns = campaigns if isinstance(campaigns, list) else []
     test_hotspots = value.get("validation_test_hotspots")
     test_hotspots = test_hotspots if isinstance(test_hotspots, list) else []
+    intersections = value.get("exposure_advisory_intersections")
+    intersections = intersections if isinstance(intersections, list) else []
     owner_queues = value.get("owner_work_queues")
     owner_queues = owner_queues if isinstance(owner_queues, list) else []
     lines = [
@@ -838,6 +840,15 @@ def _render_risk_path_summary(value: dict[str, Any] | None) -> list[str]:
         f"| Dependency routes with validation gaps | {int(summary.get('dependency_routes_with_validation_gaps', 0))} |",
         f"| Dependency routes at changed importers | {int(summary.get('dependency_routes_at_changed_importers', 0))} |",
         f"| Dependency routes with uncovered changed lines | {int(summary.get('dependency_routes_with_uncovered_changed_lines', 0))} |",
+        f"| Dependency routes with comparable source/artifact inventory | {int(summary.get('dependency_routes_with_comparable_package_lifecycle', 0))} |",
+        f"| Dependency routes with source/artifact version drift | {int(summary.get('dependency_routes_with_version_drift', 0))} |",
+        f"| Dependency routes source-only / artifact-only | {int(summary.get('dependency_routes_source_only_in_comparable_inventory', 0))} / {int(summary.get('dependency_routes_artifact_only_in_comparable_inventory', 0))} |",
+        f"| Dependency routes with composition evidence gaps | {int(summary.get('dependency_routes_with_composition_evidence_gaps', 0))} |",
+        f"| Dependency routes with exact fixed version in artifact | {int(summary.get('dependency_routes_with_exact_fixed_version_in_artifact', 0))} |",
+        f"| Exact-path exposure / advisory intersections | {int(summary.get('exposure_advisory_intersections', 0))} |",
+        f"| Known-exploited exposure / advisory intersections | {int(summary.get('known_exploited_exposure_advisory_intersections', 0))} |",
+        f"| Unprotected exposure / advisory intersections | {int(summary.get('unprotected_exposure_advisory_intersections', 0))} |",
+        f"| Exposure / advisory intersections with validation gaps | {int(summary.get('exposure_advisory_intersections_with_validation_gaps', 0))} |",
         f"| Targets analyzed within bound | {int(summary.get('targets_analyzed', 0))} |",
         f"| Targets with a bounded route | {int(summary.get('routed_targets', 0))} |",
         f"| Targets without a bounded route | {int(summary.get('unrouted_targets', 0))} |",
@@ -851,6 +862,7 @@ def _render_risk_path_summary(value: dict[str, Any] | None) -> list[str]:
         f"| Shared transit/control points | {int(summary.get('shared_control_points', 0))} |",
         f"| Routes benefiting from shared remediation | {int(summary.get('routes_in_convergence_hotspots', 0))} |",
         f"| Owner work queues | {int(summary.get('owner_work_queues', 0))} |",
+        f"| Owner queues with exposure / advisory intersections | {int(summary.get('owner_queues_with_exposure_advisory_intersections', 0))} |",
         f"| Shared validation campaigns | {int(summary.get('validation_campaigns', 0))} |",
         f"| Shared validation-test hotspots | {int(summary.get('shared_validation_test_hotspots', 0))} |",
         f"| Campaigns using shared tests | {int(summary.get('campaigns_using_shared_tests', 0))} |",
@@ -932,6 +944,7 @@ def _render_risk_path_summary(value: dict[str, Any] | None) -> list[str]:
                 + " |"
             )
     lines.extend(_render_dependency_route_table(dependency_routes))
+    lines.extend(_render_exposure_advisory_intersections(intersections))
     if test_hotspots:
         lines.extend(
             [
@@ -1199,6 +1212,77 @@ def _render_dependency_route_table(routes: list[Any]) -> list[str]:
     return lines
 
 
+def _render_exposure_advisory_intersections(values: list[Any]) -> list[str]:
+    if not values:
+        return []
+    lines = [
+        "",
+        "### Sensitive-boundary dependency intersections",
+        "",
+        "These records require the same exact source path, SDK package, and advisory cluster on a sensitive sink route and a dependency-importer route. They identify compound review scope; they do not prove sensitive data reached the SDK, leaked, or exercised a vulnerable function.",
+        "",
+        "| Priority / boundary | SDK advisory | Protection / threat | Validation | Owner / action |",
+        "|---|---|---|---|---|",
+    ]
+    for value in values[:10]:
+        if not isinstance(value, dict):
+            continue
+        statuses = value.get("validation_statuses")
+        statuses = statuses if isinstance(statuses, dict) else {}
+        owners = value.get("owners")
+        owner_text = (
+            ", ".join(str(item) for item in owners[:3])
+            if isinstance(owners, list) and owners
+            else "Unassigned"
+        )
+        citations = _risk_advisory_citations_text(value.get("advisory_citations"))
+        threat = []
+        if value.get("known_exploited") is True:
+            threat.append("CISA KEV")
+        if value.get("epss_high") is True:
+            threat.append("high EPSS")
+        if value.get("fix_available") is True:
+            threat.append("fix available")
+        lifecycle_text = _package_lifecycle_text(value.get("package_lifecycle"))
+        lines.append(
+            "| `"
+            + _markdown_code(str(value.get("priority") or "P4"))
+            + "` `"
+            + _markdown_code(str(value.get("path") or "unknown"))
+            + (":" + str(value["line"]) if value.get("line") else "")
+            + "`<br>boundary `"
+            + _markdown_code(str(value.get("trust_boundary") or "unknown"))
+            + "`; sink `"
+            + _markdown_code(str(value.get("sink_family") or "unknown"))
+            + "` | `"
+            + _markdown_code(str(value.get("package") or "unknown"))
+            + "` / `"
+            + _markdown_code(str(value.get("primary_identifier") or "unknown-advisory"))
+            + "`<br>SDK `"
+            + _markdown_code(str(value.get("sdk") or "unknown"))
+            + "`"
+            + ("<br>" + citations if citations else "")
+            + " | protection `"
+            + _markdown_code(str(value.get("protection_status") or "unknown"))
+            + "`<br>"
+            + _markdown_text(", ".join(threat) or "no elevated threat signal retained")
+            + "<br>"
+            + _markdown_text(lifecycle_text)
+            + " | sink / dependency `"
+            + _markdown_code(str(statuses.get("sink") or "not-assessed"))
+            + "/"
+            + _markdown_code(str(statuses.get("dependency") or "not-assessed"))
+            + "` | **"
+            + _markdown_text(owner_text)
+            + "**<br>"
+            + _markdown_text(
+                str(value.get("recommended_action") or "Review the intersection.")
+            )
+            + " |"
+        )
+    return lines
+
+
 def _render_risk_owner_queues(queues: list[Any]) -> list[str]:
     if not queues:
         return []
@@ -1206,7 +1290,7 @@ def _render_risk_owner_queues(queues: list[Any]) -> list[str]:
         "",
         "### Route owner queues",
         "",
-        "| Owner | Priority | Routes / targets | Controls / campaigns / shared tests | Validation / campaign review | Next action |",
+        "| Owner | Priority | Routes / targets | Controls / campaigns / shared tests / boundary intersections | Validation / campaign review | Next action |",
         "|---|---|---:|---:|---|---|",
     ]
     for queue in queues[:10]:
@@ -1231,6 +1315,8 @@ def _render_risk_owner_queues(queues: list[Any]) -> list[str]:
             + str(len(queue.get("validation_campaign_ids") or []))
             + " / "
             + str(int(queue.get("shared_validation_test_files") or 0))
+            + " / "
+            + str(int(queue.get("exposure_advisory_intersections") or 0))
             + " | "
             + _markdown_text(_validation_count_summary(validation))
             + "<br>highest campaign score `"
@@ -1278,6 +1364,7 @@ def _render_dependency_route_row(route: dict[str, Any]) -> str:
         else "not retained"
     )
     citations = _risk_advisory_citations_text(correlations.get("advisory_citations"))
+    lifecycle_text = _package_lifecycle_text(correlations.get("package_lifecycle"))
     threat_signals = []
     if correlations.get("known_exploited") is True:
         threat_signals.append("CISA KEV")
@@ -1344,6 +1431,8 @@ def _render_dependency_route_row(route: dict[str, Any]) -> str:
         )
         + "`: "
         + _markdown_text(fixed_text)
+        + "<br>"
+        + _markdown_text(lifecycle_text)
         + " | "
         + _markdown_text(_risk_path_validation_signals(validation, runtime))
         + ("<br>" + _markdown_text("; ".join(change_signals)) if change_signals else "")
@@ -1353,6 +1442,35 @@ def _render_dependency_route_row(route: dict[str, Any]) -> str:
             str(route.get("recommended_action") or "Review dependency use.")
         )
         + " |"
+    )
+
+
+def _package_lifecycle_text(value: Any) -> str:
+    lifecycle = value if isinstance(value, dict) else {}
+    assessment = str(lifecycle.get("assessment") or "not-available")
+    source = lifecycle.get("source_versions")
+    artifact = lifecycle.get("artifact_versions")
+    source_text = (
+        ", ".join(str(item) for item in source[:5])
+        if isinstance(source, list) and source
+        else "not observed"
+    )
+    artifact_text = (
+        ", ".join(str(item) for item in artifact[:5])
+        if isinstance(artifact, list) and artifact
+        else "not observed"
+    )
+    exact_match = lifecycle.get("artifact_fixed_version_exact_match")
+    exact_text = (
+        "yes"
+        if exact_match is True
+        else "no"
+        if exact_match is False
+        else "not established"
+    )
+    return (
+        f"lifecycle {assessment}; source {source_text}; artifact {artifact_text}; "
+        f"exact fixed version in artifact {exact_text}"
     )
 
 
@@ -3803,8 +3921,38 @@ def _markdown_risk_path_context(finding: Finding) -> list[str]:
             + ", ".join(f"`{_markdown_code(path)}`" for path in import_paths[:5])
             + ("; known exploited" if first.get("known_exploited") is True else "")
             + ("; fixed version retained" if first.get("fix_available") is True else "")
+            + "; "
+            + _markdown_text(_package_lifecycle_text(first.get("package_lifecycle")))
             + ("; citations " + citations if citations else "")
             + "."
+        )
+    raw_intersections = context.get("exposure_advisory_intersections")
+    intersections = raw_intersections if isinstance(raw_intersections, list) else []
+    intersection_text = ""
+    if intersections:
+        first_intersection = (
+            intersections[0] if isinstance(intersections[0], dict) else {}
+        )
+        intersection_text = (
+            " **Sensitive-boundary dependency intersection(s):** "
+            + str(len(intersections))
+            + "; exact path `"
+            + _markdown_code(str(first_intersection.get("path") or "unknown"))
+            + "`; SDK package `"
+            + _markdown_code(str(first_intersection.get("package") or "unknown"))
+            + "`; advisory `"
+            + _markdown_code(
+                str(first_intersection.get("primary_identifier") or "unknown")
+            )
+            + "`; protection `"
+            + _markdown_code(
+                str(first_intersection.get("protection_status") or "unknown")
+            )
+            + "`; "
+            + _markdown_text(
+                _package_lifecycle_text(first_intersection.get("package_lifecycle"))
+            )
+            + ". This is compound review context, not leakage or vulnerable-function proof."
         )
     return [
         "- **Static risk route:** `"
@@ -3822,6 +3970,7 @@ def _markdown_risk_path_context(finding: Finding) -> list[str]:
         + test_hotspot_text
         + campaign_text
         + advisory_text
+        + intersection_text
     ]
 
 
@@ -4247,8 +4396,38 @@ def _html_risk_path_context(finding: Finding) -> str:
             + "</code> through importer(s) <code>"
             + html.escape(", ".join(import_paths[:5]))
             + "</code>"
+            + "; "
+            + html.escape(
+                _package_lifecycle_text(first_advisory.get("package_lifecycle"))
+            )
             + ("; citations " + citation_html if citation_html else "")
             + "."
+        )
+    raw_intersections = context.get("exposure_advisory_intersections")
+    intersections = raw_intersections if isinstance(raw_intersections, list) else []
+    intersection_html = ""
+    if intersections:
+        first_intersection = (
+            intersections[0] if isinstance(intersections[0], dict) else {}
+        )
+        intersection_html = (
+            " <strong>Sensitive-boundary dependency intersection(s):</strong> "
+            + str(len(intersections))
+            + "; exact path <code>"
+            + html.escape(str(first_intersection.get("path") or "unknown"))
+            + "</code>; SDK package <code>"
+            + html.escape(str(first_intersection.get("package") or "unknown"))
+            + "</code>; advisory <code>"
+            + html.escape(
+                str(first_intersection.get("primary_identifier") or "unknown")
+            )
+            + "</code>; protection <code>"
+            + html.escape(str(first_intersection.get("protection_status") or "unknown"))
+            + "</code>; "
+            + html.escape(
+                _package_lifecycle_text(first_intersection.get("package_lifecycle"))
+            )
+            + ". This is compound review context, not leakage or vulnerable-function proof."
         )
     return (
         "<section class='source-context'><h4>Static risk route</h4><p>"
@@ -4267,6 +4446,7 @@ def _html_risk_path_context(finding: Finding) -> str:
         + test_hotspot_html
         + campaign_html
         + advisory_html
+        + intersection_html
         + "</p></section>"
     )
 

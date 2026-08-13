@@ -23,6 +23,9 @@ flowchart LR
     Sink["High-priority or sensitive sink surfaces"] --> Target
     Advisory["Alias-aware dependency advisories"] --> Importer["Exact Graphify importer paths"]
     Importer --> Target
+    Sink --> Intersection["Exact path + package + advisory identity"]
+    Importer --> Intersection
+    Intersection --> Compound["Sensitive-boundary dependency review"]
     Target --> Route
     Fusion["Evidence fusion<br/>change, coverage, related tools"] --> Context["Route context"]
     Structure["Structural synthesis<br/>tests, islands, cycles"] --> Context
@@ -92,7 +95,8 @@ Each importer route cross-references:
   path-specific reachability/runtime state, CODEOWNERS result, and structural
   change-risk context;
 - approved KEV/EPSS/VEX context, scanner-attributed fixed-version candidates,
-  and the advisory remediation action; and
+  source-versus-built-artifact package lineage, and the advisory remediation
+  action; and
 - graph-selected focused tests, exact retained case state, importer file
   coverage, validation alignment, and any linked shared-control campaign.
 
@@ -116,6 +120,58 @@ This is deliberately not call-level reachability. A route establishes a static
 path to a source file that imports the affected distribution; it does not prove
 that a vulnerable function executes, that input is attacker controlled, or that
 the advisory is exploitable in the application.
+
+### Package lifecycle context
+
+Each advisory importer performs a fail-closed join between `package_lineage`
+and the retained source/artifact composition lanes. When both inventories are
+available, the route distinguishes `matched`, `version-drift`, `source-only`,
+and `artifact-only`. Missing inventories and packages absent from otherwise
+comparable inventories remain explicit evidence gaps. Reports, finding context,
+intersections, SARIF, and closure work retain the exact source/artifact versions.
+
+```mermaid
+flowchart LR
+    Source["Source SBOM"] --> Compare["Exact package lifecycle comparison"]
+    Artifact["Built-artifact SBOM"] --> Compare
+    Lineage["Evidence-fusion package lineage"] --> Compare
+    Compare --> Route["Advisory importer route"]
+    Route --> Intersection["Sensitive-boundary intersection"]
+    Route --> Closure["Version-aware remediation and closure"]
+```
+
+An exact fixed-version string match in the artifact is useful verification
+evidence, but the suite does not infer version ranges, inventory completeness,
+runtime loading, vulnerable-function use, or exploitability from this join.
+
+## Sensitive-boundary dependency intersections
+
+`exposure_advisory_intersections` combines two independently useful route
+families only when all three identities agree:
+
+- the sink and importer use the same normalized source path;
+- the data-exposure SDK context and dependency route name the same package; and
+- both records name the same alias-collapsed advisory cluster.
+
+The bounded record links the sink and importer route IDs and retains the sink
+line/family, SDK, trust boundary, data classes, protection status, advisory
+identifier/citations, KEV/EPSS/fix signals, owners, and both validation states.
+Stable IDs flow into related findings, Markdown/HTML, SARIF, and closure work.
+Missing or aggregate-only importer evidence fails closed and produces no
+intersection.
+
+```mermaid
+flowchart LR
+    Sink["Sensitive SDK sink route"] --> Match{"Exact path + package + advisory?"}
+    Importer["Dependency advisory importer route"] --> Match
+    Match -->|Yes| Intersection["Exposure/advisory intersection"]
+    Match -->|No| Separate["Keep evidence separate"]
+    Intersection --> Review["Boundary controls + vulnerable-function review + remediation tests"]
+```
+
+The intersection is a compound triage signal, not a taint or exploitability
+claim. It does not prove the sensitive value reached the SDK, crossed the
+boundary, leaked, or invoked the vulnerable function.
 
 ## Shared validation campaigns
 
@@ -204,7 +260,8 @@ queues. It retains at most 100 shared validation-test hotspots. Reverse test
 selection examines at most 500 graph neighbors per
 campaign and retains at most 100 missing lines. At most 50 normalized importer
 paths are promoted per advisory, inside the existing 10,000-target global bound.
-Omitted counts are explicit.
+At most 100 exact-path exposure/advisory intersections are retained. Omitted
+counts are explicit.
 
 The current JSON Schema is
 [`risk-paths.schema.json`](../src/py_security_suite/schemas/risk-paths.schema.json).

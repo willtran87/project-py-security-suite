@@ -6,7 +6,7 @@
   "required": [
     "schema_version", "schema_id", "authoritative", "purpose", "summary",
     "evidence_availability", "routes", "convergence_hotspots",
-    "validation_campaigns", "validation_test_hotspots", "owner_work_queues", "unrouted_targets", "truncation",
+    "validation_campaigns", "validation_test_hotspots", "exposure_advisory_intersections", "owner_work_queues", "unrouted_targets", "truncation",
     "interpretation_limits", "references"
   ],
   "properties": {
@@ -28,11 +28,21 @@
         "dependency_routes_with_fixed_versions", "dependency_routes_with_validation_gaps",
         "dependency_routes_at_changed_importers",
         "dependency_routes_with_uncovered_changed_lines",
+        "dependency_routes_with_comparable_package_lifecycle",
+        "dependency_routes_with_version_drift",
+        "dependency_routes_source_only_in_comparable_inventory",
+        "dependency_routes_artifact_only_in_comparable_inventory",
+        "dependency_routes_with_composition_evidence_gaps",
+        "dependency_routes_with_exact_fixed_version_in_artifact",
+        "exposure_advisory_intersections",
+        "known_exploited_exposure_advisory_intersections",
+        "unprotected_exposure_advisory_intersections",
+        "exposure_advisory_intersections_with_validation_gaps",
         "runtime_observed_routes",
         "coverage_gap_routes", "validation_gap_routes",
         "validation_assessed_routes", "validation_unassessed_routes", "owned_routes",
         "convergence_hotspots", "shared_control_points",
-        "routes_in_convergence_hotspots", "owner_work_queues",
+        "routes_in_convergence_hotspots", "owner_work_queues", "owner_queues_with_exposure_advisory_intersections",
         "validation_campaigns", "campaigns_with_selected_tests",
         "shared_validation_test_hotspots", "campaigns_using_shared_tests",
         "routes_using_shared_tests", "single_test_dependency_campaigns",
@@ -68,6 +78,16 @@
         "dependency_routes_with_validation_gaps": {"$ref": "#/$defs/count"},
         "dependency_routes_at_changed_importers": {"$ref": "#/$defs/count"},
         "dependency_routes_with_uncovered_changed_lines": {"$ref": "#/$defs/count"},
+        "dependency_routes_with_comparable_package_lifecycle": {"$ref": "#/$defs/count"},
+        "dependency_routes_with_version_drift": {"$ref": "#/$defs/count"},
+        "dependency_routes_source_only_in_comparable_inventory": {"$ref": "#/$defs/count"},
+        "dependency_routes_artifact_only_in_comparable_inventory": {"$ref": "#/$defs/count"},
+        "dependency_routes_with_composition_evidence_gaps": {"$ref": "#/$defs/count"},
+        "dependency_routes_with_exact_fixed_version_in_artifact": {"$ref": "#/$defs/count"},
+        "exposure_advisory_intersections": {"$ref": "#/$defs/count"},
+        "known_exploited_exposure_advisory_intersections": {"$ref": "#/$defs/count"},
+        "unprotected_exposure_advisory_intersections": {"$ref": "#/$defs/count"},
+        "exposure_advisory_intersections_with_validation_gaps": {"$ref": "#/$defs/count"},
         "runtime_observed_routes": {"$ref": "#/$defs/count"},
         "coverage_gap_routes": {"$ref": "#/$defs/count"},
         "validation_gap_routes": {"$ref": "#/$defs/count"},
@@ -78,6 +98,7 @@
         "shared_control_points": {"$ref": "#/$defs/count"},
         "routes_in_convergence_hotspots": {"$ref": "#/$defs/count"},
         "owner_work_queues": {"$ref": "#/$defs/count"},
+        "owner_queues_with_exposure_advisory_intersections": {"$ref": "#/$defs/count"},
         "validation_campaigns": {"$ref": "#/$defs/count"},
         "shared_validation_test_hotspots": {"$ref": "#/$defs/count"},
         "campaigns_using_shared_tests": {"$ref": "#/$defs/count"},
@@ -137,6 +158,11 @@
       "maxItems": 100,
       "items": {"$ref": "#/$defs/validationTestHotspot"}
     },
+    "exposure_advisory_intersections": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {"$ref": "#/$defs/exposureAdvisoryIntersection"}
+    },
     "owner_work_queues": {
       "type": "array",
       "maxItems": 100,
@@ -154,7 +180,7 @@
         "graph_files_omitted", "entry_points_omitted", "targets_omitted",
         "dependency_advisory_import_targets_omitted",
         "routes_omitted", "unrouted_targets_omitted",
-        "convergence_hotspots_omitted", "validation_test_hotspots_omitted",
+        "convergence_hotspots_omitted", "validation_test_hotspots_omitted", "exposure_advisory_intersections_omitted",
         "owner_work_queues_omitted"
       ],
       "properties": {
@@ -166,6 +192,7 @@
         "unrouted_targets_omitted": {"$ref": "#/$defs/count"},
         "convergence_hotspots_omitted": {"$ref": "#/$defs/count"},
         "validation_test_hotspots_omitted": {"$ref": "#/$defs/count"},
+        "exposure_advisory_intersections_omitted": {"$ref": "#/$defs/count"},
         "owner_work_queues_omitted": {"$ref": "#/$defs/count"}
       }
     },
@@ -276,7 +303,7 @@
         "route_id", "priority", "entry_point", "target", "hop_count",
         "files", "edges", "owners", "runtime_context", "validation",
         "correlations", "convergence_hotspot_ids", "validation_campaign_ids",
-        "validation_test_hotspot_ids", "recommended_action",
+        "validation_test_hotspot_ids", "exposure_advisory_intersection_ids", "recommended_action",
         "evidence_artifacts"
       ],
       "properties": {
@@ -292,9 +319,94 @@
         "validation": {"$ref": "#/$defs/validation"},
         "correlations": {"type": "object"},
         "validation_test_hotspot_ids": {"$ref": "#/$defs/strings"},
+        "exposure_advisory_intersection_ids": {"$ref": "#/$defs/strings"},
         "convergence_hotspot_ids": {"$ref": "#/$defs/strings"},
         "validation_campaign_ids": {"$ref": "#/$defs/strings"},
         "recommended_action": {"type": "string", "minLength": 1},
+        "evidence_artifacts": {"$ref": "#/$defs/strings"}
+      }
+    },
+    "exposureAdvisoryIntersection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "intersection_id", "priority", "path", "line", "route_ids",
+        "sink_route_id", "sink_target_id", "dependency_route_id", "dependency_target_id",
+        "advisory_cluster_id", "primary_identifier", "package", "sdk", "sink_family",
+        "trust_boundary", "data_classes", "protection_status", "finding_ids", "tools",
+        "owners", "known_exploited", "epss_high", "fix_available", "package_lifecycle", "validation_statuses",
+        "advisory_citations", "evidence_artifacts", "recommended_action"
+      ],
+      "properties": {
+        "intersection_id": {"type": "string", "pattern": "^exposure-advisory-[0-9a-f]{16}$"},
+        "priority": {"enum": ["P0", "P1", "P2", "P3", "P4"]},
+        "path": {"type": "string", "minLength": 1},
+        "line": {"type": ["integer", "null"], "minimum": 1},
+        "route_ids": {"type": "array", "minItems": 2, "maxItems": 2, "uniqueItems": true, "items": {"type": "string", "pattern": "^route-[0-9a-f]{16}$"}},
+        "sink_route_id": {"type": "string", "pattern": "^route-[0-9a-f]{16}$"},
+        "sink_target_id": {"type": "string", "minLength": 1},
+        "dependency_route_id": {"type": "string", "pattern": "^route-[0-9a-f]{16}$"},
+        "dependency_target_id": {"type": "string", "minLength": 1},
+        "advisory_cluster_id": {"type": "string", "minLength": 1},
+        "primary_identifier": {"type": "string", "minLength": 1},
+        "package": {"type": "string", "minLength": 1},
+        "sdk": {"$ref": "#/$defs/nullableString"},
+        "sink_family": {"type": "string", "minLength": 1},
+        "trust_boundary": {"type": "string", "minLength": 1},
+        "data_classes": {"$ref": "#/$defs/strings"},
+        "protection_status": {"type": "string", "minLength": 1},
+        "finding_ids": {"$ref": "#/$defs/strings"},
+        "tools": {"$ref": "#/$defs/strings"},
+        "owners": {"$ref": "#/$defs/strings"},
+        "known_exploited": {"type": "boolean"},
+        "epss_high": {"type": "boolean"},
+        "fix_available": {"type": "boolean"},
+        "package_lifecycle": {"$ref": "#/$defs/packageLifecycle"},
+        "validation_statuses": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["sink", "dependency"],
+          "properties": {
+            "sink": {"enum": ["aligned", "gap", "partial", "not-assessed"]},
+            "dependency": {"enum": ["aligned", "gap", "partial", "not-assessed"]}
+          }
+        },
+        "advisory_citations": {"type": "array", "maxItems": 25, "items": {"type": "object"}},
+        "evidence_artifacts": {"$ref": "#/$defs/strings"},
+        "recommended_action": {"type": "string", "minLength": 1}
+      }
+    },
+    "packageLifecycle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "assessment", "lineage_status", "comparison_available",
+        "source_inventory_available", "artifact_inventory_available",
+        "source_versions", "artifact_versions", "source_artifact_versions_match",
+        "artifact_fixed_version_exact_match", "finding_ids",
+        "source_execution_gaps", "artifact_execution_gaps", "evidence_artifacts"
+      ],
+      "properties": {
+        "assessment": {
+          "enum": [
+            "matched", "version-drift", "source-only", "artifact-only",
+            "package-not-observed", "artifact-inventory-unavailable",
+            "source-inventory-unavailable", "composition-inventories-unavailable"
+          ]
+        },
+        "lineage_status": {
+          "enum": ["matched", "version-drift", "source-only", "artifact-only", "not-available"]
+        },
+        "comparison_available": {"type": "boolean"},
+        "source_inventory_available": {"type": "boolean"},
+        "artifact_inventory_available": {"type": "boolean"},
+        "source_versions": {"$ref": "#/$defs/strings"},
+        "artifact_versions": {"$ref": "#/$defs/strings"},
+        "source_artifact_versions_match": {"type": ["boolean", "null"]},
+        "artifact_fixed_version_exact_match": {"type": ["boolean", "null"]},
+        "finding_ids": {"$ref": "#/$defs/strings"},
+        "source_execution_gaps": {"$ref": "#/$defs/strings"},
+        "artifact_execution_gaps": {"$ref": "#/$defs/strings"},
         "evidence_artifacts": {"$ref": "#/$defs/strings"}
       }
     },
@@ -564,7 +676,7 @@
       "required": [
         "queue_id", "owner", "priority", "routes", "targets", "route_ids",
         "target_ids", "convergence_hotspot_ids", "validation_campaign_ids",
-        "validation_test_hotspot_ids", "shared_validation_test_files",
+        "validation_test_hotspot_ids", "shared_validation_test_files", "exposure_advisory_intersection_ids", "exposure_advisory_intersections",
         "campaigns_by_review_tier", "campaigns_revision_mismatched",
         "campaigns_revision_unbound", "campaigns_with_uncovered_changed_lines",
         "campaigns_with_runtime_observation_gaps", "highest_campaign_review_score", "routes_by_priority",
@@ -582,6 +694,8 @@
         "validation_campaign_ids": {"$ref": "#/$defs/strings"},
         "validation_test_hotspot_ids": {"type": "array", "maxItems": 100, "items": {"type": "string", "pattern": "^test-hotspot-[0-9a-f]{16}$"}},
         "shared_validation_test_files": {"$ref": "#/$defs/count"},
+        "exposure_advisory_intersection_ids": {"type": "array", "maxItems": 100, "items": {"type": "string", "pattern": "^exposure-advisory-[0-9a-f]{16}$"}},
+        "exposure_advisory_intersections": {"$ref": "#/$defs/count"},
         "campaigns_by_review_tier": {"$ref": "#/$defs/reviewTierCounts"},
         "campaigns_revision_mismatched": {"$ref": "#/$defs/count"},
         "campaigns_revision_unbound": {"$ref": "#/$defs/count"},
