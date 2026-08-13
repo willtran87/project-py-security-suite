@@ -5,6 +5,26 @@ for published releases.
 
 ## Unreleased
 
+- Require a valid producer-verified payload-binding receipt, not merely a
+  matching declared source digest, before validation-campaign evidence is
+  revision-aligned. Risk routes now distinguish mismatched, unverified,
+  undeclared, and unavailable source identity; retain exact evidence payload
+  digests and binding filenames; and propagate the state through review
+  factors, owner queues, reports, schemas, and closure criteria. The changed
+  factor contract is explicitly versioned as `shared-control-review-v3`.
+- Join every retained entry, transit, and target file on a risk route to the
+  bounded CODEOWNERS rule set, preserving exact path order. Reports now expose
+  stable ownership handoffs, collaborating owners, unowned route segments,
+  target-owner mismatches, owner coordination queues, and closure criteria.
+  Missing ownership evidence remains distinct from evidence proving an unowned
+  file. Alternate entry-path ordering is covered by adversarial tests.
+- Cross-reference comparable finding lifecycle with exact route change scope,
+  validation state, declared-entry runtime observations, owners, and scanner
+  assurance. Routes, finding/SARIF evidence, Markdown/HTML, owner queues, and
+  closure work now distinguish baseline-new/regressed changed-line work,
+  modified pre-existing debt, and lifecycle evidence gaps. Missing,
+  unconfigured, malformed, or incomparable baseline evidence fails closed and
+  never turns a finding's default `new` value into a change-origin claim.
 - Cross-reference every routed and unrouted target with the exact contributing
   scanner's execution, evidence lane, normalized/unique contribution, primary
   and helper integrity, before/after continuity, and organization approval.

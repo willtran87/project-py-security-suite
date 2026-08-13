@@ -510,6 +510,173 @@ def _finding_items(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return items
 
 
+def _closure_validation_campaigns(value: Any) -> list[dict[str, Any]]:
+    result: list[dict[str, Any]] = []
+    for campaign in _bounded_objects(value, 50):
+        snapshot = _as_object(campaign.get("source_snapshot"))
+        result.append(
+            {
+                "campaign_id": str(campaign.get("campaign_id") or "unknown"),
+                "hotspot_id": str(campaign.get("hotspot_id") or "unknown"),
+                "path": str(campaign.get("path") or "unknown"),
+                "selected_test_files": _string_values(
+                    campaign.get("selected_test_files"), 50
+                ),
+                "shared_test_hotspot_ids": _string_values(
+                    campaign.get("shared_test_hotspot_ids"), 100
+                ),
+                "focused_test_validation_status": campaign.get(
+                    "focused_test_validation_status"
+                ),
+                "coverage_status": campaign.get("coverage_status"),
+                "coverage_evidence_scope": campaign.get("coverage_evidence_scope"),
+                "coverage_attribution": campaign.get("coverage_attribution"),
+                "coverage_percent": campaign.get("coverage_percent"),
+                "test_coverage_alignment": campaign.get("test_coverage_alignment"),
+                "review_score_model": campaign.get("review_score_model"),
+                "review_score": campaign.get("review_score"),
+                "review_tier": campaign.get("review_tier"),
+                "review_factors": _bounded_objects(campaign.get("review_factors"), 20),
+                "control_point_context": _as_object(
+                    campaign.get("control_point_context")
+                ),
+                "source_snapshot": {
+                    "source_sha256": snapshot.get("source_sha256"),
+                    "control_point_binding": _as_object(
+                        snapshot.get("control_point_binding")
+                    ),
+                    "selected_test_files_bound": snapshot.get(
+                        "selected_test_files_bound"
+                    ),
+                    "selected_test_files_missing": _string_values(
+                        snapshot.get("selected_test_files_missing"), 50
+                    ),
+                    "evidence_revision_binding": snapshot.get(
+                        "evidence_revision_binding"
+                    ),
+                    "evidence_revision_binding_reason": snapshot.get(
+                        "evidence_revision_binding_reason"
+                    ),
+                    "evidence_source_bindings": _bounded_objects(
+                        snapshot.get("evidence_source_bindings"), 4
+                    ),
+                },
+                "recommended_action": campaign.get("recommended_action"),
+            }
+        )
+    return result
+
+
+def _closure_dependency_advisory_routes(value: Any) -> list[dict[str, Any]]:
+    return [
+        _closure_dependency_advisory_route(item) for item in _bounded_objects(value, 25)
+    ]
+
+
+def _closure_dependency_advisory_route(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "route_id": str(item.get("route_id") or "unknown"),
+        "target_id": str(item.get("target_id") or "unknown"),
+        "priority": str(item.get("priority") or "P4"),
+        "advisory_cluster_id": str(item.get("advisory_cluster_id") or "unknown"),
+        "primary_identifier": str(item.get("primary_identifier") or "unknown"),
+        "package": str(item.get("package") or "unknown"),
+        "versions": _string_values(item.get("versions"), 25),
+        "import_path": str(item.get("import_path") or "unknown"),
+        "import_modules": _string_values(item.get("import_modules"), 50),
+        "import_lines": _integer_values(item.get("import_lines"), 100),
+        "dependency_usage_assessment": item.get("dependency_usage_assessment"),
+        "import_path_assessment": _as_object(item.get("import_path_assessment")),
+        "entry_point": _as_object(item.get("entry_point")),
+        "entry_point_exposure_count": item.get("entry_point_exposure_count"),
+        "entry_point_exposures": _closure_entry_point_exposures(
+            item.get("entry_point_exposures")
+        ),
+        "entry_point_exposures_omitted": item.get("entry_point_exposures_omitted"),
+        "entry_point_runtime_statuses": _as_object(
+            item.get("entry_point_runtime_statuses")
+        ),
+        "entry_point_kinds": _string_values(item.get("entry_point_kinds"), 25),
+        "hop_count": item.get("hop_count"),
+        "files": _string_values(item.get("files"), 9),
+        "runtime_context": _as_object(item.get("runtime_context")),
+        "validation": _as_object(item.get("validation")),
+        "evidence_assurance": _closure_evidence_assurance(
+            item.get("evidence_assurance")
+        ),
+        "ownership_context": _closure_route_ownership(item.get("ownership_context")),
+        "validation_campaign_ids": _string_values(
+            item.get("validation_campaign_ids"), 50
+        ),
+        "exposure_advisory_intersection_ids": _string_values(
+            item.get("exposure_advisory_intersection_ids"), 100
+        ),
+        "known_exploited": item.get("known_exploited") is True,
+        "epss_probability": item.get("epss_probability"),
+        "fix_available": item.get("fix_available") is True,
+        "fixed_version_candidates": _string_values(
+            item.get("fixed_version_candidates"), 25
+        ),
+        "package_lifecycle": _as_object(item.get("package_lifecycle")),
+        "change_risk_score": item.get("change_risk_score"),
+        "change_priority": item.get("change_priority"),
+        "uncovered_changed_lines": _integer_values(
+            item.get("uncovered_changed_lines"), 100
+        ),
+        "advisory_citations": _bounded_objects(item.get("advisory_citations"), 25),
+        "recommended_action": str(
+            item.get("recommended_action") or "Review dependency use."
+        ),
+    }
+
+
+def _closure_exposure_advisory_intersections(value: Any) -> list[dict[str, Any]]:
+    return [
+        _closure_exposure_advisory_intersection(item)
+        for item in _bounded_objects(value, 25)
+    ]
+
+
+def _closure_exposure_advisory_intersection(
+    item: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "intersection_id": str(item.get("intersection_id") or "unknown"),
+        "priority": str(item.get("priority") or "P4"),
+        "path": str(item.get("path") or "unknown"),
+        "line": item.get("line"),
+        "sink_route_id": str(item.get("sink_route_id") or "unknown"),
+        "dependency_route_id": str(item.get("dependency_route_id") or "unknown"),
+        "advisory_cluster_id": str(item.get("advisory_cluster_id") or "unknown"),
+        "primary_identifier": str(item.get("primary_identifier") or "unknown"),
+        "package": str(item.get("package") or "unknown"),
+        "sdk": item.get("sdk"),
+        "sink_family": str(item.get("sink_family") or "unknown"),
+        "trust_boundary": str(item.get("trust_boundary") or "unknown"),
+        "data_classes": _string_values(item.get("data_classes"), 25),
+        "protection_status": str(item.get("protection_status") or "unknown"),
+        "known_exploited": item.get("known_exploited") is True,
+        "epss_high": item.get("epss_high") is True,
+        "fix_available": item.get("fix_available") is True,
+        "package_lifecycle": _as_object(item.get("package_lifecycle")),
+        "entry_point_exposure_count": item.get("entry_point_exposure_count"),
+        "entry_point_ids": _string_values(item.get("entry_point_ids"), 50),
+        "entry_point_exposures_omitted": item.get("entry_point_exposures_omitted"),
+        "entry_point_runtime_statuses": _as_object(
+            item.get("entry_point_runtime_statuses")
+        ),
+        "validation_statuses": _as_object(item.get("validation_statuses")),
+        "evidence_assurance_statuses": _as_object(
+            item.get("evidence_assurance_statuses")
+        ),
+        "advisory_citations": _bounded_objects(item.get("advisory_citations"), 25),
+        "recommended_action": str(
+            item.get("recommended_action")
+            or "Review the exposure-advisory intersection."
+        ),
+    }
+
+
 def _risk_path_closure_context(
     evidence: dict[str, Any],
 ) -> tuple[list[str], list[str], dict[str, Any]]:
@@ -521,12 +688,23 @@ def _risk_path_closure_context(
     evidence_assurance = _closure_evidence_assurance(
         risk_path.get("evidence_assurance")
     )
+    lifecycle_attribution = _closure_change_lifecycle_attribution(
+        risk_path.get("change_lifecycle_attribution")
+    )
+    ownership_context = _closure_route_ownership(risk_path.get("ownership_context"))
     details: dict[str, Any] = {
         "status": status,
         "evidence_assurance": evidence_assurance,
+        "change_lifecycle_attribution": lifecycle_attribution,
+        "ownership_context": ownership_context,
     }
     if evidence_assurance["tool_records"]:
         refs.extend(["effectiveness.json", "scanner-trust.json"])
+    if lifecycle_attribution:
+        refs.extend(_string_values(lifecycle_attribution.get("evidence_artifacts"), 10))
+    if ownership_context:
+        refs.extend(_string_values(ownership_context.get("evidence_artifacts"), 10))
+        refs.extend(_string_values(ownership_context.get("unowned_files"), 225))
     if status == "routed":
         route_id = str(risk_path.get("route_id") or "unknown")
         files = _string_values(risk_path.get("files"), 9)
@@ -540,236 +718,18 @@ def _risk_path_closure_context(
         validation = _as_object(risk_path.get("validation"))
         assessment = str(validation.get("assessment_status") or "not-assessed")
         campaign_ids = _string_values(risk_path.get("validation_campaign_ids"), 50)
-        raw_campaigns = risk_path.get("validation_campaigns")
-        campaigns: list[dict[str, Any]] = (
-            [
-                {
-                    "campaign_id": str(campaign.get("campaign_id") or "unknown"),
-                    "hotspot_id": str(campaign.get("hotspot_id") or "unknown"),
-                    "path": str(campaign.get("path") or "unknown"),
-                    "selected_test_files": _string_values(
-                        campaign.get("selected_test_files"), 50
-                    ),
-                    "shared_test_hotspot_ids": _string_values(
-                        campaign.get("shared_test_hotspot_ids"), 100
-                    ),
-                    "focused_test_validation_status": campaign.get(
-                        "focused_test_validation_status"
-                    ),
-                    "coverage_status": campaign.get("coverage_status"),
-                    "coverage_evidence_scope": campaign.get("coverage_evidence_scope"),
-                    "coverage_attribution": campaign.get("coverage_attribution"),
-                    "coverage_percent": campaign.get("coverage_percent"),
-                    "test_coverage_alignment": campaign.get("test_coverage_alignment"),
-                    "review_score_model": campaign.get("review_score_model"),
-                    "review_score": campaign.get("review_score"),
-                    "review_tier": campaign.get("review_tier"),
-                    "review_factors": [
-                        _as_object(factor)
-                        for factor in _object_list(
-                            campaign.get("review_factors"),
-                            "campaign review factors",
-                        )[:20]
-                    ],
-                    "control_point_context": _as_object(
-                        campaign.get("control_point_context")
-                    ),
-                    "source_snapshot": {
-                        "source_sha256": _as_object(
-                            campaign.get("source_snapshot")
-                        ).get("source_sha256"),
-                        "control_point_binding": _as_object(
-                            _as_object(campaign.get("source_snapshot")).get(
-                                "control_point_binding"
-                            )
-                        ),
-                        "selected_test_files_bound": _as_object(
-                            campaign.get("source_snapshot")
-                        ).get("selected_test_files_bound"),
-                        "selected_test_files_missing": _string_values(
-                            _as_object(campaign.get("source_snapshot")).get(
-                                "selected_test_files_missing"
-                            ),
-                            50,
-                        ),
-                        "evidence_revision_binding": _as_object(
-                            campaign.get("source_snapshot")
-                        ).get("evidence_revision_binding"),
-                        "evidence_revision_binding_reason": _as_object(
-                            campaign.get("source_snapshot")
-                        ).get("evidence_revision_binding_reason"),
-                    },
-                    "recommended_action": campaign.get("recommended_action"),
-                }
-                for campaign in raw_campaigns[:50]
-                if isinstance(campaign, dict)
-            ]
-            if isinstance(raw_campaigns, list)
-            else []
-        )
+        campaigns = _closure_validation_campaigns(risk_path.get("validation_campaigns"))
         refs.extend(
             test for campaign in campaigns for test in campaign["selected_test_files"]
         )
-        raw_dependency_routes = risk_path.get("dependency_advisory_routes")
-        dependency_routes = (
-            [
-                {
-                    "route_id": str(item.get("route_id") or "unknown"),
-                    "target_id": str(item.get("target_id") or "unknown"),
-                    "priority": str(item.get("priority") or "P4"),
-                    "advisory_cluster_id": str(
-                        item.get("advisory_cluster_id") or "unknown"
-                    ),
-                    "primary_identifier": str(
-                        item.get("primary_identifier") or "unknown"
-                    ),
-                    "package": str(item.get("package") or "unknown"),
-                    "versions": _string_values(item.get("versions"), 25),
-                    "import_path": str(item.get("import_path") or "unknown"),
-                    "import_modules": _string_values(item.get("import_modules"), 50),
-                    "import_lines": [
-                        line
-                        for line in item.get("import_lines", [])[:100]
-                        if isinstance(line, int)
-                        and not isinstance(line, bool)
-                        and line > 0
-                    ]
-                    if isinstance(item.get("import_lines"), list)
-                    else [],
-                    "dependency_usage_assessment": item.get(
-                        "dependency_usage_assessment"
-                    ),
-                    "import_path_assessment": _as_object(
-                        item.get("import_path_assessment")
-                    ),
-                    "entry_point": _as_object(item.get("entry_point")),
-                    "entry_point_exposure_count": item.get(
-                        "entry_point_exposure_count"
-                    ),
-                    "entry_point_exposures": _closure_entry_point_exposures(
-                        item.get("entry_point_exposures")
-                    ),
-                    "entry_point_exposures_omitted": item.get(
-                        "entry_point_exposures_omitted"
-                    ),
-                    "entry_point_runtime_statuses": _as_object(
-                        item.get("entry_point_runtime_statuses")
-                    ),
-                    "entry_point_kinds": _string_values(
-                        item.get("entry_point_kinds"), 25
-                    ),
-                    "hop_count": item.get("hop_count"),
-                    "files": _string_values(item.get("files"), 9),
-                    "runtime_context": _as_object(item.get("runtime_context")),
-                    "validation": _as_object(item.get("validation")),
-                    "evidence_assurance": _closure_evidence_assurance(
-                        item.get("evidence_assurance")
-                    ),
-                    "validation_campaign_ids": _string_values(
-                        item.get("validation_campaign_ids"), 50
-                    ),
-                    "exposure_advisory_intersection_ids": _string_values(
-                        item.get("exposure_advisory_intersection_ids"), 100
-                    ),
-                    "known_exploited": item.get("known_exploited") is True,
-                    "epss_probability": item.get("epss_probability"),
-                    "fix_available": item.get("fix_available") is True,
-                    "fixed_version_candidates": _string_values(
-                        item.get("fixed_version_candidates"), 25
-                    ),
-                    "package_lifecycle": _as_object(item.get("package_lifecycle")),
-                    "change_risk_score": item.get("change_risk_score"),
-                    "change_priority": item.get("change_priority"),
-                    "uncovered_changed_lines": [
-                        line
-                        for line in item.get("uncovered_changed_lines", [])[:100]
-                        if isinstance(line, int)
-                        and not isinstance(line, bool)
-                        and line > 0
-                    ]
-                    if isinstance(item.get("uncovered_changed_lines"), list)
-                    else [],
-                    "advisory_citations": [
-                        _as_object(citation)
-                        for citation in _object_list(
-                            item.get("advisory_citations"),
-                            "dependency advisory citations",
-                        )[:25]
-                    ],
-                    "recommended_action": str(
-                        item.get("recommended_action") or "Review dependency use."
-                    ),
-                }
-                for item in raw_dependency_routes[:25]
-                if isinstance(item, dict)
-            ]
-            if isinstance(raw_dependency_routes, list)
-            else []
+        dependency_routes = _closure_dependency_advisory_routes(
+            risk_path.get("dependency_advisory_routes")
         )
         if dependency_routes:
             refs.append("evidence-fusion.json")
             refs.extend(str(item["import_path"]) for item in dependency_routes)
-        raw_intersections = risk_path.get("exposure_advisory_intersections")
-        exposure_advisory_intersections = (
-            [
-                {
-                    "intersection_id": str(item.get("intersection_id") or "unknown"),
-                    "priority": str(item.get("priority") or "P4"),
-                    "path": str(item.get("path") or "unknown"),
-                    "line": item.get("line"),
-                    "sink_route_id": str(item.get("sink_route_id") or "unknown"),
-                    "dependency_route_id": str(
-                        item.get("dependency_route_id") or "unknown"
-                    ),
-                    "advisory_cluster_id": str(
-                        item.get("advisory_cluster_id") or "unknown"
-                    ),
-                    "primary_identifier": str(
-                        item.get("primary_identifier") or "unknown"
-                    ),
-                    "package": str(item.get("package") or "unknown"),
-                    "sdk": item.get("sdk"),
-                    "sink_family": str(item.get("sink_family") or "unknown"),
-                    "trust_boundary": str(item.get("trust_boundary") or "unknown"),
-                    "data_classes": _string_values(item.get("data_classes"), 25),
-                    "protection_status": str(
-                        item.get("protection_status") or "unknown"
-                    ),
-                    "known_exploited": item.get("known_exploited") is True,
-                    "epss_high": item.get("epss_high") is True,
-                    "fix_available": item.get("fix_available") is True,
-                    "package_lifecycle": _as_object(item.get("package_lifecycle")),
-                    "entry_point_exposure_count": item.get(
-                        "entry_point_exposure_count"
-                    ),
-                    "entry_point_ids": _string_values(item.get("entry_point_ids"), 50),
-                    "entry_point_exposures_omitted": item.get(
-                        "entry_point_exposures_omitted"
-                    ),
-                    "entry_point_runtime_statuses": _as_object(
-                        item.get("entry_point_runtime_statuses")
-                    ),
-                    "validation_statuses": _as_object(item.get("validation_statuses")),
-                    "evidence_assurance_statuses": _as_object(
-                        item.get("evidence_assurance_statuses")
-                    ),
-                    "advisory_citations": [
-                        _as_object(citation)
-                        for citation in _object_list(
-                            item.get("advisory_citations"),
-                            "exposure advisory citations",
-                        )[:25]
-                    ],
-                    "recommended_action": str(
-                        item.get("recommended_action")
-                        or "Review the exposure-advisory intersection."
-                    ),
-                }
-                for item in raw_intersections[:25]
-                if isinstance(item, dict)
-            ]
-            if isinstance(raw_intersections, list)
-            else []
+        exposure_advisory_intersections = _closure_exposure_advisory_intersections(
+            risk_path.get("exposure_advisory_intersections")
         )
         if exposure_advisory_intersections:
             refs.extend(["data-exposure.json", "evidence-fusion.json"])
@@ -823,83 +783,17 @@ def _risk_path_closure_context(
                 "validation_action": validation.get("action"),
             }
         )
-        acceptance = [
-            f"Static route {route_id} is reviewed with its owner and retained in the replacement report."
-        ]
-        if assessment == "gap":
-            acceptance.append(
-                "The route validation assessment no longer reports a coverage or focused-test gap."
-            )
-        elif assessment in {"partial", "not-assessed"}:
-            acceptance.append(
-                "The route has retained change-scope, line-coverage, and focused-test evidence sufficient for an aligned or explicit-gap assessment."
-            )
-        acceptance.extend(_entry_point_exposure_acceptance(risk_path))
-        acceptance.extend(_evidence_assurance_acceptance(evidence_assurance))
-        campaign_gaps = [
-            campaign
-            for campaign in campaigns
-            if campaign.get("test_coverage_alignment") != "aligned-current-evidence"
-        ]
-        if campaign_gaps:
-            acceptance.append(
-                "Every linked shared validation campaign has passing observed tests and retained hotspot coverage, or an approved evidence-gap disposition."
-            )
-        elif campaigns:
-            acceptance.append(
-                "Linked shared validation campaigns are rerun after remediation and retain their case-level and hotspot-coverage evidence."
-            )
-        revision_gaps = [
-            campaign
-            for campaign in campaigns
-            if _as_object(campaign.get("source_snapshot")).get(
-                "evidence_revision_binding"
-            )
-            in {"mismatch", "not-established"}
-        ]
-        if revision_gaps:
-            acceptance.append(
-                "Every linked campaign's retained test and coverage evidence declares the replacement report's sealed source-inventory digest."
-            )
-        if any(
-            _as_object(campaign.get("control_point_context")).get(
-                "uncovered_changed_lines"
-            )
-            for campaign in campaigns
-        ):
-            acceptance.append(
-                "Every linked campaign covers its retained uncovered changed lines or records an approved risk disposition."
-            )
-        if any(
-            any(
-                factor.get("id") == "runtime-observation-gap"
-                for factor in campaign.get("review_factors", [])
-            )
-            for campaign in campaigns
-        ):
-            acceptance.append(
-                "Runtime evidence observes each linked changed control point, or the replacement report records an approved runtime-evidence gap."
-            )
-        if any(campaign["shared_test_hotspot_ids"] for campaign in campaigns):
-            acceptance.append(
-                "Shared validation-test hotspots have coordinated assertions and an independent-test or approved concentration-risk disposition."
-            )
-        if dependency_routes:
-            acceptance.extend(_dependency_route_acceptance(dependency_routes))
-        if exposure_advisory_intersections:
-            acceptance.extend(
-                [
-                    "Every exact-path sensitive-boundary/dependency intersection is reviewed for data minimization, redaction, recipient, retention, and access controls without treating path coincidence as proof of disclosure.",
-                    "Vulnerable-function use is established or ruled out independently, the dependency remediation or governed VEX disposition is recorded, and both sink and importer validation are rerun.",
-                ]
-            )
-            if any(
-                item["protection_status"] == "not-observed"
-                for item in exposure_advisory_intersections
-            ):
-                acceptance.append(
-                    "A tested protection control is retained at every intersection that previously reported no observed minimization, masking, hashing, or redaction."
-                )
+        acceptance = _routed_risk_path_acceptance(
+            route_id=route_id,
+            assessment=assessment,
+            risk_path=risk_path,
+            evidence_assurance=evidence_assurance,
+            lifecycle_attribution=lifecycle_attribution,
+            ownership_context=ownership_context,
+            campaigns=campaigns,
+            dependency_routes=dependency_routes,
+            exposure_advisory_intersections=exposure_advisory_intersections,
+        )
         return refs, acceptance, details
     reason = str(risk_path.get("reason") or "bounded static route unavailable")
     details["reason"] = reason
@@ -908,9 +802,103 @@ def _risk_path_closure_context(
         [
             "The target has a governed entry-point route or a documented dynamic/external-entry rationale in the replacement report.",
             *_evidence_assurance_acceptance(evidence_assurance),
+            *_change_lifecycle_acceptance(lifecycle_attribution),
+            *_route_ownership_acceptance(ownership_context),
         ],
         details,
     )
+
+
+def _routed_risk_path_acceptance(
+    *,
+    route_id: str,
+    assessment: str,
+    risk_path: dict[str, Any],
+    evidence_assurance: dict[str, Any],
+    lifecycle_attribution: dict[str, Any],
+    ownership_context: dict[str, Any],
+    campaigns: list[dict[str, Any]],
+    dependency_routes: list[dict[str, Any]],
+    exposure_advisory_intersections: list[dict[str, Any]],
+) -> list[str]:
+    result = [
+        f"Static route {route_id} is reviewed with its owner and retained in the replacement report."
+    ]
+    if assessment == "gap":
+        result.append(
+            "The route validation assessment no longer reports a coverage or focused-test gap."
+        )
+    elif assessment in {"partial", "not-assessed"}:
+        result.append(
+            "The route has retained change-scope, line-coverage, and focused-test evidence sufficient for an aligned or explicit-gap assessment."
+        )
+    result.extend(_entry_point_exposure_acceptance(risk_path))
+    result.extend(_evidence_assurance_acceptance(evidence_assurance))
+    result.extend(_change_lifecycle_acceptance(lifecycle_attribution))
+    result.extend(_route_ownership_acceptance(ownership_context))
+    result.extend(_validation_campaign_acceptance(campaigns))
+    if dependency_routes:
+        result.extend(_dependency_route_acceptance(dependency_routes))
+    if exposure_advisory_intersections:
+        result.extend(
+            [
+                "Every exact-path sensitive-boundary/dependency intersection is reviewed for data minimization, redaction, recipient, retention, and access controls without treating path coincidence as proof of disclosure.",
+                "Vulnerable-function use is established or ruled out independently, the dependency remediation or governed VEX disposition is recorded, and both sink and importer validation are rerun.",
+            ]
+        )
+        if any(
+            item["protection_status"] == "not-observed"
+            for item in exposure_advisory_intersections
+        ):
+            result.append(
+                "A tested protection control is retained at every intersection that previously reported no observed minimization, masking, hashing, or redaction."
+            )
+    return result
+
+
+def _validation_campaign_acceptance(
+    campaigns: list[dict[str, Any]],
+) -> list[str]:
+    result: list[str] = []
+    if any(
+        campaign.get("test_coverage_alignment") != "aligned-current-evidence"
+        for campaign in campaigns
+    ):
+        result.append(
+            "Every linked shared validation campaign has passing observed tests and retained hotspot coverage, or an approved evidence-gap disposition."
+        )
+    elif campaigns:
+        result.append(
+            "Linked shared validation campaigns are rerun after remediation and retain their case-level and hotspot-coverage evidence."
+        )
+    if any(
+        _as_object(campaign.get("source_snapshot")).get("evidence_revision_binding")
+        in {"mismatch", "unverified", "not-established"}
+        for campaign in campaigns
+    ):
+        result.append(
+            "Every linked campaign's retained test and coverage evidence declares the replacement report's sealed source-inventory digest through a valid producer-verified payload-binding receipt."
+        )
+    if any(
+        _as_object(campaign.get("control_point_context")).get("uncovered_changed_lines")
+        for campaign in campaigns
+    ):
+        result.append(
+            "Every linked campaign covers its retained uncovered changed lines or records an approved risk disposition."
+        )
+    if any(
+        factor.get("id") == "runtime-observation-gap"
+        for campaign in campaigns
+        for factor in _bounded_objects(campaign.get("review_factors"), 20)
+    ):
+        result.append(
+            "Runtime evidence observes each linked changed control point, or the replacement report records an approved runtime-evidence gap."
+        )
+    if any(campaign["shared_test_hotspot_ids"] for campaign in campaigns):
+        result.append(
+            "Shared validation-test hotspots have coordinated assertions and an independent-test or approved concentration-risk disposition."
+        )
+    return result
 
 
 def _package_lifecycle_acceptance(
@@ -983,6 +971,156 @@ def _entry_point_exposure_acceptance(value: dict[str, Any]) -> list[str]:
     if "not-available" in assessments:
         result.append(
             "Every declared interface is joined to its exact reachability node and a retained runtime-observation assessment in the replacement report."
+        )
+    return result
+
+
+def _closure_route_ownership(value: Any) -> dict[str, Any]:
+    ownership = _as_object(value)
+    if not ownership:
+        return {}
+    records = [
+        {
+            "path": str(item.get("path") or "unknown"),
+            "owners": _string_values(item.get("owners"), 20),
+            "roles": _string_values(item.get("roles"), 3),
+            "entry_point_exposure_ids": _string_values(
+                item.get("entry_point_exposure_ids"), 25
+            ),
+        }
+        for item in _object_list(ownership.get("file_records"), "route owner files")[
+            :225
+        ]
+    ]
+    boundaries = [
+        {
+            "boundary_id": str(item.get("boundary_id") or "unknown"),
+            "source": str(item.get("source") or "unknown"),
+            "target": str(item.get("target") or "unknown"),
+            "source_owners": _string_values(item.get("source_owners"), 20),
+            "target_owners": _string_values(item.get("target_owners"), 20),
+            "entry_point_exposure_ids": _string_values(
+                item.get("entry_point_exposure_ids"), 25
+            ),
+        }
+        for item in _object_list(
+            ownership.get("boundaries"), "route ownership boundaries"
+        )[:200]
+    ]
+    return {
+        "evidence_available": ownership.get("evidence_available") is True,
+        "ownership_rules": _nonnegative_integer(ownership.get("ownership_rules")),
+        "file_records": records,
+        "boundaries": boundaries,
+        "boundary_count": len(boundaries),
+        "distinct_owners": _string_values(ownership.get("distinct_owners"), 100),
+        "target_owners": _string_values(ownership.get("target_owners"), 20),
+        "coordination_owners": _string_values(
+            ownership.get("coordination_owners"), 100
+        ),
+        "target_owner_alignment": str(
+            ownership.get("target_owner_alignment") or "not-established"
+        ),
+        "unowned_files": _string_values(ownership.get("unowned_files"), 225),
+        "coordination_status": str(
+            ownership.get("coordination_status") or "not-established"
+        ),
+        "recommended_action": str(
+            ownership.get("recommended_action") or "Establish route ownership evidence."
+        ),
+        "evidence_artifacts": _string_values(ownership.get("evidence_artifacts"), 10),
+    }
+
+
+def _route_ownership_acceptance(value: dict[str, Any]) -> list[str]:
+    if not value:
+        return []
+    status = str(value.get("coordination_status") or "not-established")
+    result: list[str] = []
+    if value.get("evidence_available") is not True:
+        result.append(
+            "Bounded CODEOWNERS evidence assigns every retained route file before cross-file remediation responsibility is closed."
+        )
+    if status == "unowned-segment":
+        result.append(
+            "Every previously unowned entry, transit, and target file has a retained CODEOWNERS assignment in the replacement report."
+        )
+    if status in {"cross-owner", "unowned-segment"}:
+        result.append(
+            "Every retained ownership handoff records coordinated remediation review and post-change regression evidence from the responsible route owners."
+        )
+    if value.get("target_owner_alignment") in {
+        "mismatch",
+        "target-owner-not-attributed",
+        "target-unowned",
+    }:
+        result.append(
+            "The target finding owner and exact-path CODEOWNERS assignment agree, or the replacement disposition explains and governs the mismatch."
+        )
+    return result
+
+
+def _closure_change_lifecycle_attribution(value: Any) -> dict[str, Any]:
+    attribution = _as_object(value)
+    if not attribution:
+        return {}
+    return {
+        "baseline_state": str(attribution.get("baseline_state") or "not-established"),
+        "baseline_configured": attribution.get("baseline_configured") is True,
+        "baseline_comparable": attribution.get("baseline_comparable") is True,
+        "baseline_reasons": _string_values(attribution.get("baseline_reasons"), 20),
+        "lifecycle_status": str(attribution.get("lifecycle_status") or "unclassified"),
+        "baseline_match": _as_object(attribution.get("baseline_match")),
+        "change_scope": str(attribution.get("change_scope") or "not-established"),
+        "classification": str(
+            attribution.get("classification") or "baseline-not-established"
+        ),
+        "review_signal": str(
+            attribution.get("review_signal") or "baseline-not-established"
+        ),
+        "validation_status": str(
+            attribution.get("validation_status") or "not-assessed"
+        ),
+        "evidence_assurance_status": str(
+            attribution.get("evidence_assurance_status") or "not-assessed"
+        ),
+        "entry_point_runtime_statuses": _as_object(
+            attribution.get("entry_point_runtime_statuses")
+        ),
+        "review_factors": _string_values(attribution.get("review_factors"), 20),
+        "evidence_artifacts": _string_values(attribution.get("evidence_artifacts"), 10),
+        "recommended_action": str(
+            attribution.get("recommended_action")
+            or "Establish comparable finding lifecycle evidence."
+        ),
+    }
+
+
+def _change_lifecycle_acceptance(value: dict[str, Any]) -> list[str]:
+    if not value:
+        return []
+    baseline_state = str(value.get("baseline_state") or "not-established")
+    signal = str(value.get("review_signal") or "baseline-not-established")
+    result: list[str] = []
+    if baseline_state != "comparable":
+        result.append(
+            "Any claim that this finding was introduced or regressed by the current change is backed by a digest-approved comparable findings baseline; otherwise the disposition explicitly records that change origin is not established."
+        )
+    if signal == "baseline-new-or-regressed-change-gap":
+        result.append(
+            "The exact baseline-new or regressed changed-line finding is resolved or governed, and replacement focused-test plus coverage evidence reports aligned validation."
+        )
+    elif signal == "baseline-new-or-regressed-change-aligned":
+        result.append(
+            "The exact baseline-new or regressed changed-line finding is resolved or governed, and its aligned change-specific validation is retained after remediation."
+        )
+    elif signal == "baseline-new-or-regressed-outside-change":
+        result.append(
+            "Disposition does not attribute the baseline-new or regressed finding to the retained change scope without exact changed-line evidence."
+        )
+    elif signal == "existing-change-gap":
+        result.append(
+            "The modified pre-existing finding is reviewed for risk amplification and its linked change-specific validation gap is closed or governed."
         )
     return result
 
@@ -1771,6 +1909,12 @@ def _object_list(value: Any, label: str) -> list[dict[str, Any]]:
     if not isinstance(value, list) or not all(isinstance(item, dict) for item in value):
         raise TypeError(f"{label} must be an array of objects")
     return value
+
+
+def _bounded_objects(value: Any, limit: int) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value[:limit] if isinstance(item, dict)]
 
 
 def _string_values(value: Any, limit: int) -> list[str]:

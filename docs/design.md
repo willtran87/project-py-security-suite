@@ -341,11 +341,22 @@ completion, primary/helper integrity, before/after continuity, organization
 approval, normalized/unique contribution, and perspective breadth separate.
 Suite-derived correlations remain labeled as derived and never manufacture an
 independent scanner perspective. Unrouted targets retain the same assurance
-context and remain explicit
+context. Finding targets additionally join digest-approved baseline
+comparability to exact lifecycle, changed-line scope, validation, entry-runtime,
+and scanner-assurance evidence. This identifies baseline-new or regressed work
+on changed lines and modified pre-existing debt while failing closed when a
+baseline is absent or incompatible; default `new` never becomes an unsupported
+change-origin claim. Unrouted targets remain explicit
 model gaps; neither a route nor its absence is treated as an exploitability or
 safety verdict. Routes converging on the same non-entry file become bounded
-shared control points with one cross-target validation action. Exact route and
-hotspot IDs are also grouped into owner queues so teams can coordinate one
+shared control points with one cross-target validation action. Exact primary
+and alternate-entry file order is joined to retained CODEOWNERS last-match
+rules. This creates stable owner-to-owner boundary records, identifies unowned
+segments and target-owner mismatches, and fans the route into every responsible
+coordination queue. The target finding owner remains independently attributed;
+missing CODEOWNERS evidence never becomes an unsupported unowned-file claim.
+Exact route and hotspot IDs are also grouped into owner queues so teams can
+coordinate one
 remediation/test campaign without collapsing the underlying findings. Each
 hotspot also becomes a stable validation campaign: reverse Graphify edges select
 direct/transitive tests, bounded case inventories establish observed execution,
@@ -397,14 +408,19 @@ flowchart LR
     Effectiveness["Tool completion + contribution"] --> Assurance["Exact contributing-tool assurance"]
     Trust["Primary/helper integrity<br/>continuity + approval"] --> Assurance
     Assurance --> Routed
+    Delta["Approved finding baseline + delta"] --> Lifecycle["Lifecycle/change attribution"]
+    Targets --> Lifecycle
+    Binding --> Lifecycle
+    Lifecycle --> Routed
     Search --> Matrix["Per-target multi-entry exposure matrix"]
-    Matrix --> Routed
-    Ownership["CODEOWNERS"] --> Routed["Bounded risk routes"]
+    Ownership["Retained CODEOWNERS rules"] --> OwnerPath["Ordered file ownership + handoffs"]
+    Matrix --> OwnerPath
+    OwnerPath --> Routed["Bounded risk routes"]
     Search --> Routed
     Routed --> Hotspots["Shared control points"]
     Graph --> Campaigns["Graph-selected validation campaigns"]
     Hotspots --> Campaigns
-    Tests["Case-level execution"] --> Binding["Payload-verified source binding"]
+    Tests["Case-level execution"] --> Binding["Exact source digest + producer-verified payload receipts"]
     Coverage["Hotspot file coverage"] --> Binding
     Inventory["Sealed source inventory"] --> Binding
     Binding --> Campaigns

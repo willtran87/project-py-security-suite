@@ -14,7 +14,7 @@ creates a GitHub-friendly report artifact.
 | Supply chain | Source and artifact SBOMs, package checks, provenance findings, and a locally verifiable Security Passport |
 | Reachability | Offline three-state executable/load-only/disconnected graph with explained dispatch paths, ranked islands, and optional coverage corroboration |
 | Graph context | Graphify code-only topology joined to findings for blast radius, structural hotspots, and cross-tool neighborhoods |
-| Risk routes | Bounded multi-entry exposure matrices from every retained declared interface to findings, sensitive sinks, and exact dependency-advisory importers, with exact entry-node runtime attribution, exact-path sensitive-boundary/advisory intersections, and fail-closed source/artifact package lifecycle checks; joined with advisory citations/fixes, owners, changed-line risk, shared control-point convergence, graph-selected validation campaigns, cross-campaign shared-test bottlenecks, source-revision-bound test evidence, transparent review scores, owner queues, and explicit model gaps |
+| Risk routes | Bounded multi-entry exposure matrices from every retained declared interface to findings, sensitive sinks, and exact dependency-advisory importers, with exact entry-node runtime attribution, exact-path sensitive-boundary/advisory intersections, fail-closed source/artifact package lifecycle checks, comparable-baseline finding/change attribution, and ordered CODEOWNERS handoffs; joined with advisory citations/fixes, changed-line risk, shared control-point convergence, graph-selected validation campaigns, cross-campaign shared-test bottlenecks, source-revision-bound test evidence, transparent review signals, cross-owner queues, and explicit model gaps |
 | Evidence fusion | Source-to-artifact package lineage, semantic finding links, changed-line/test/graph context, exact selected-test execution, digest-bound provenance joins, and feedback into owned exposure and SDK-package verification plans |
 | Structural synthesis | Cross-validated dead code, island boundaries, structural orphans, import-cycle hotspots, change-risk scoring, graph-guided test targets, exact execution status, and test/changed-line coverage alignment |
 | Advisory fusion | Package-scoped CVE/GHSA/PYSEC/OSV alias clustering across source and artifact scanners, with distinct-risk/observation counts plus CycloneDX introducing-root paths, pipdeptree environment health, Graphify imports, reachability/runtime state, and deptry-use context |
@@ -287,6 +287,17 @@ organization approval. Risk routes join those records to the exact contributing
 tools and report assured, perspective-gap, trust-gap, execution-gap,
 not-assessed, or explicitly suite-derived evidence without changing native
 severity or treating scanner approval as finding truth.
+They also join `finding-delta.json` lifecycle to exact changed-line, validation,
+runtime-entry, owner, and scanner-assurance context. A finding is described as
+baseline-new or regressed on a changed line only when the digest-approved
+baseline is comparable; an absent, unconfigured, or incompatible baseline
+fails closed as `baseline-not-established` instead of mislabeling default
+`new` status as change origin.
+For every retained route, CODEOWNERS is also applied to the ordered entry,
+transit, and target files. The report distinguishes missing ownership evidence
+from a proven unowned segment, identifies exact owner-to-owner handoffs and
+target-owner mismatches, and places the same route in each responsible team's
+coordination queue without replacing the finding's attributed target owner.
 This observed posture does not measure detection accuracy. Measure actual
 precision and recall with a separately reviewed labeled corpus:
 
@@ -681,6 +692,10 @@ Evidence files contain sanitized execution diagnostics, not raw scanner output
 or detected secret values. Coverage and JUnit producers can create adjacent,
 payload-verified source bindings with `pysec-evidence bind`; see the
 [native operations guide](docs/operations.md#ingest-test-evidence-without-executing-the-project).
+Risk-route campaigns accept revision alignment only when every retained test
+and coverage summary carries the exact sealed source digest and a valid
+producer-verified receipt for its own payload digest. A matching source string
+without that receipt is reported as `unverified`, never as aligned.
 
 `scan-manifest.json`, `summary.md`, and `index.html` expose target-content
 integrity and per-tool entry-point integrity. The CodeQL record separately

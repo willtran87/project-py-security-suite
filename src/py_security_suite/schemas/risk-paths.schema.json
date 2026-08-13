@@ -33,6 +33,15 @@
         "assured_evidence_routes", "single_perspective_routes",
         "independently_corroborated_routes", "routes_with_tool_trust_gaps",
         "routes_with_tool_execution_gaps", "routes_without_tool_assurance",
+        "routes_with_comparable_finding_lifecycle",
+        "routes_without_comparable_finding_lifecycle",
+        "baseline_new_or_regressed_routes",
+        "baseline_new_or_regressed_changed_routes",
+        "baseline_new_or_regressed_changed_routes_with_validation_gaps",
+        "existing_finding_routes_at_changed_lines",
+        "routes_with_ownership_evidence", "routes_crossing_ownership_boundaries",
+        "routes_with_unowned_segments", "routes_without_ownership_evidence",
+        "ownership_boundaries", "distinct_route_owners",
         "unrouted_dependency_advisory_imports", "distinct_routed_dependency_advisories",
         "known_exploited_dependency_routes", "high_epss_dependency_routes",
         "dependency_routes_with_fixed_versions", "dependency_routes_with_validation_gaps",
@@ -61,7 +70,7 @@
         "campaigns_with_runtime_observation_gaps",
         "campaigns_aligned_current_evidence", "campaigns_requiring_evidence",
         "unique_campaign_test_files", "campaigns_by_review_tier",
-        "campaigns_revision_aligned", "campaigns_revision_mismatched",
+        "campaigns_revision_aligned", "campaigns_revision_mismatched", "campaigns_revision_unverified",
         "campaigns_revision_unbound", "campaigns_with_source_bound_control_points",
         "selected_test_source_bindings",
         "routes_by_priority"
@@ -96,6 +105,18 @@
         "routes_with_tool_trust_gaps": {"$ref": "#/$defs/count"},
         "routes_with_tool_execution_gaps": {"$ref": "#/$defs/count"},
         "routes_without_tool_assurance": {"$ref": "#/$defs/count"},
+        "routes_with_comparable_finding_lifecycle": {"$ref": "#/$defs/count"},
+        "routes_without_comparable_finding_lifecycle": {"$ref": "#/$defs/count"},
+        "baseline_new_or_regressed_routes": {"$ref": "#/$defs/count"},
+        "baseline_new_or_regressed_changed_routes": {"$ref": "#/$defs/count"},
+        "baseline_new_or_regressed_changed_routes_with_validation_gaps": {"$ref": "#/$defs/count"},
+        "existing_finding_routes_at_changed_lines": {"$ref": "#/$defs/count"},
+        "routes_with_ownership_evidence": {"$ref": "#/$defs/count"},
+        "routes_crossing_ownership_boundaries": {"$ref": "#/$defs/count"},
+        "routes_with_unowned_segments": {"$ref": "#/$defs/count"},
+        "routes_without_ownership_evidence": {"$ref": "#/$defs/count"},
+        "ownership_boundaries": {"$ref": "#/$defs/count"},
+        "distinct_route_owners": {"$ref": "#/$defs/count"},
         "unrouted_dependency_advisory_imports": {"$ref": "#/$defs/count"},
         "distinct_routed_dependency_advisories": {"$ref": "#/$defs/count"},
         "known_exploited_dependency_routes": {"$ref": "#/$defs/count"},
@@ -142,6 +163,7 @@
         "campaigns_by_review_tier": {"$ref": "#/$defs/reviewTierCounts"},
         "campaigns_revision_aligned": {"$ref": "#/$defs/count"},
         "campaigns_revision_mismatched": {"$ref": "#/$defs/count"},
+        "campaigns_revision_unverified": {"$ref": "#/$defs/count"},
         "campaigns_revision_unbound": {"$ref": "#/$defs/count"},
         "campaigns_with_source_bound_control_points": {"$ref": "#/$defs/count"},
         "selected_test_source_bindings": {"$ref": "#/$defs/count"},
@@ -257,7 +279,8 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "exposure_id", "primary", "entry_point", "runtime_context", "hop_count", "files", "edges"
+        "exposure_id", "primary", "entry_point", "runtime_context", "hop_count", "files", "edges",
+        "ownership_path", "ownership_boundary_ids"
       ],
       "properties": {
         "exposure_id": {"type": "string", "pattern": "^entry-exposure-[0-9a-f]{16}$"},
@@ -266,7 +289,9 @@
         "runtime_context": {"$ref": "#/$defs/entryPointRuntimeContext"},
         "hop_count": {"type": "integer", "minimum": 0, "maximum": 8},
         "files": {"type": "array", "minItems": 1, "maxItems": 9, "items": {"type": "string", "minLength": 1}},
-        "edges": {"type": "array", "maxItems": 8, "items": {"$ref": "#/$defs/edge"}}
+        "edges": {"type": "array", "maxItems": 8, "items": {"$ref": "#/$defs/edge"}},
+        "ownership_path": {"type": "array", "minItems": 1, "maxItems": 9, "items": {"$ref": "#/$defs/ownershipFilePath"}},
+        "ownership_boundary_ids": {"type": "array", "maxItems": 8, "uniqueItems": true, "items": {"type": "string", "pattern": "^ownership-boundary-[0-9a-f]{16}$"}}
       }
     },
     "entryPointRuntimeContext": {
@@ -365,6 +390,113 @@
         "derived-analysis": {"$ref": "#/$defs/count"}
       }
     },
+    "ownershipFilePath": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "owners", "roles"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "owners": {"type": "array", "maxItems": 20, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "roles": {"type": "array", "minItems": 1, "maxItems": 2, "uniqueItems": true, "items": {"enum": ["entry", "transit", "target"]}}
+      }
+    },
+    "ownershipFileRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "owners", "roles", "entry_point_exposure_ids"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "owners": {"type": "array", "maxItems": 20, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "roles": {"type": "array", "minItems": 1, "maxItems": 2, "uniqueItems": true, "items": {"enum": ["entry", "transit", "target"]}},
+        "entry_point_exposure_ids": {"type": "array", "maxItems": 25, "uniqueItems": true, "items": {"type": "string", "pattern": "^entry-exposure-[0-9a-f]{16}$"}}
+      }
+    },
+    "ownershipBoundary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["boundary_id", "source", "target", "source_owners", "target_owners", "entry_point_exposure_ids"],
+      "properties": {
+        "boundary_id": {"type": "string", "pattern": "^ownership-boundary-[0-9a-f]{16}$"},
+        "source": {"type": "string", "minLength": 1},
+        "target": {"type": "string", "minLength": 1},
+        "source_owners": {"type": "array", "maxItems": 20, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "target_owners": {"type": "array", "maxItems": 20, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "entry_point_exposure_ids": {"type": "array", "minItems": 1, "maxItems": 25, "uniqueItems": true, "items": {"type": "string", "pattern": "^entry-exposure-[0-9a-f]{16}$"}}
+      }
+    },
+    "routeOwnership": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evidence_available", "ownership_rules", "file_records", "boundaries",
+        "boundary_count", "distinct_owners", "target_owners", "coordination_owners",
+        "target_owner_alignment", "unowned_files", "coordination_status",
+        "recommended_action", "evidence_artifacts"
+      ],
+      "properties": {
+        "evidence_available": {"type": "boolean"},
+        "ownership_rules": {"$ref": "#/$defs/count"},
+        "file_records": {"type": "array", "maxItems": 225, "items": {"$ref": "#/$defs/ownershipFileRecord"}},
+        "boundaries": {"type": "array", "maxItems": 200, "items": {"$ref": "#/$defs/ownershipBoundary"}},
+        "boundary_count": {"$ref": "#/$defs/count"},
+        "distinct_owners": {"type": "array", "maxItems": 100, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "target_owners": {"type": "array", "maxItems": 20, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "coordination_owners": {"type": "array", "maxItems": 100, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "target_owner_alignment": {"enum": ["aligned", "mismatch", "target-unowned", "target-owner-not-attributed", "not-established"]},
+        "unowned_files": {"type": "array", "maxItems": 225, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "coordination_status": {"enum": ["single-owner", "cross-owner", "unowned-segment", "not-established"]},
+        "recommended_action": {"type": "string", "minLength": 1},
+        "evidence_artifacts": {"type": "array", "maxItems": 10, "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "changeLifecycleAttribution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "baseline_state", "baseline_configured", "baseline_comparable",
+        "baseline_reasons", "lifecycle_status", "baseline_match",
+        "change_scope", "classification", "review_signal",
+        "validation_status", "evidence_assurance_status",
+        "entry_point_runtime_statuses", "review_factors",
+        "evidence_artifacts", "recommended_action"
+      ],
+      "properties": {
+        "baseline_state": {"enum": ["comparable", "not-configured", "incomparable", "not-established"]},
+        "baseline_configured": {"type": "boolean"},
+        "baseline_comparable": {"type": "boolean"},
+        "baseline_reasons": {"type": "array", "maxItems": 20, "items": {"type": "string", "minLength": 1}},
+        "lifecycle_status": {"enum": ["new", "existing", "regression", "resolved", "unclassified"]},
+        "baseline_match": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["match_strategy", "previous_finding_id", "previous_fingerprint", "previous_status"],
+          "properties": {
+            "match_strategy": {"$ref": "#/$defs/nullableString"},
+            "previous_finding_id": {"$ref": "#/$defs/nullableString"},
+            "previous_fingerprint": {"$ref": "#/$defs/nullableString"},
+            "previous_status": {"$ref": "#/$defs/nullableString"}
+          }
+        },
+        "change_scope": {"enum": ["changed-line", "outside-retained-change-scope", "not-established"]},
+        "classification": {"type": "string", "minLength": 1},
+        "review_signal": {
+          "enum": [
+            "baseline-not-established",
+            "baseline-new-or-regressed-change-gap",
+            "baseline-new-or-regressed-change-aligned",
+            "baseline-new-or-regressed-outside-change",
+            "existing-change-gap", "existing-change-aligned",
+            "existing-or-unclassified-debt"
+          ]
+        },
+        "validation_status": {"enum": ["aligned", "gap", "partial", "not-assessed"]},
+        "evidence_assurance_status": {"enum": ["assured", "perspective-gap", "trust-gap", "execution-gap", "not-assessed", "derived-analysis"]},
+        "entry_point_runtime_statuses": {"$ref": "#/$defs/entryPointRuntimeCounts"},
+        "review_factors": {"type": "array", "maxItems": 20, "items": {"type": "string", "minLength": 1}},
+        "evidence_artifacts": {"type": "array", "maxItems": 10, "items": {"type": "string", "minLength": 1}},
+        "recommended_action": {"type": "string", "minLength": 1}
+      }
+    },
     "target": {
       "type": "object",
       "additionalProperties": false,
@@ -444,7 +576,7 @@
         "route_id", "priority", "entry_point", "entry_point_exposure_count",
         "entry_point_exposures", "entry_point_exposures_omitted", "entry_point_kinds",
         "target", "hop_count",
-        "files", "edges", "owners", "runtime_context", "validation", "evidence_assurance",
+        "files", "edges", "owners", "runtime_context", "validation", "evidence_assurance", "ownership_context",
         "correlations", "convergence_hotspot_ids", "validation_campaign_ids",
         "validation_test_hotspot_ids", "exposure_advisory_intersection_ids", "recommended_action",
         "evidence_artifacts"
@@ -465,6 +597,8 @@
         "runtime_context": {"$ref": "#/$defs/runtime"},
         "validation": {"$ref": "#/$defs/validation"},
         "evidence_assurance": {"$ref": "#/$defs/evidenceAssurance"},
+        "ownership_context": {"$ref": "#/$defs/routeOwnership"},
+        "change_lifecycle_attribution": {"$ref": "#/$defs/changeLifecycleAttribution"},
         "correlations": {"type": "object"},
         "validation_test_hotspot_ids": {"$ref": "#/$defs/strings"},
         "exposure_advisory_intersection_ids": {"$ref": "#/$defs/strings"},
@@ -708,7 +842,7 @@
         "validation_gap_reasons": {"$ref": "#/$defs/strings"},
         "control_point_context": {"$ref": "#/$defs/controlPointContext"},
         "source_snapshot": {"$ref": "#/$defs/sourceSnapshot"},
-        "review_score_model": {"enum": ["shared-control-review-v1", "shared-control-review-v2"]},
+        "review_score_model": {"enum": ["shared-control-review-v1", "shared-control-review-v2", "shared-control-review-v3"]},
         "review_score": {"type": "integer", "minimum": 0, "maximum": 100},
         "review_tier": {"enum": ["critical", "high", "medium", "low"]},
         "review_factors": {"type": "array", "maxItems": 20, "items": {"$ref": "#/$defs/reviewFactor"}},
@@ -769,11 +903,14 @@
     "evidenceSourceBinding": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["artifact", "declared_source_sha256", "status"],
+      "required": ["artifact", "declared_source_sha256", "binding_verified", "evidence_sha256", "binding_file", "status"],
       "properties": {
         "artifact": {"type": "string", "minLength": 1},
         "declared_source_sha256": {"$ref": "#/$defs/nullableDigest"},
-        "status": {"enum": ["aligned", "mismatch", "not-declared", "no-source-inventory"]}
+        "binding_verified": {"type": "boolean"},
+        "evidence_sha256": {"$ref": "#/$defs/nullableDigest"},
+        "binding_file": {"$ref": "#/$defs/nullableString"},
+        "status": {"enum": ["aligned", "mismatch", "unverified", "not-declared", "no-source-inventory"]}
       }
     },
     "sourceSnapshot": {
@@ -792,7 +929,7 @@
         "selected_test_bindings": {"type": "array", "maxItems": 50, "items": {"$ref": "#/$defs/sourceFileBinding"}},
         "selected_test_files_bound": {"type": "integer", "minimum": 0, "maximum": 50},
         "selected_test_files_missing": {"type": "array", "maxItems": 50, "items": {"type": "string", "minLength": 1}},
-        "evidence_revision_binding": {"enum": ["aligned", "mismatch", "not-established", "not-applicable"]},
+        "evidence_revision_binding": {"enum": ["aligned", "mismatch", "unverified", "not-established", "not-applicable"]},
         "evidence_revision_binding_reason": {"type": "string", "minLength": 1},
         "evidence_source_bindings": {"type": "array", "maxItems": 4, "items": {"$ref": "#/$defs/evidenceSourceBinding"}}
       }
@@ -845,7 +982,14 @@
         "evidence_assurance_statuses", "tool_trust_gap_routes",
         "tool_execution_gap_routes", "single_perspective_routes",
         "unassessed_tool_evidence_routes",
-        "campaigns_by_review_tier", "campaigns_revision_mismatched",
+        "baseline_new_or_regressed_changed_routes",
+        "baseline_new_or_regressed_changed_routes_with_validation_gaps",
+        "existing_finding_routes_at_changed_lines",
+        "routes_without_comparable_finding_lifecycle",
+        "collaborating_owners", "ownership_boundary_ids", "ownership_boundaries",
+        "routes_crossing_ownership_boundaries", "routes_with_unowned_segments",
+        "routes_without_ownership_evidence", "unowned_route_files",
+        "campaigns_by_review_tier", "campaigns_revision_mismatched", "campaigns_revision_unverified",
         "campaigns_revision_unbound", "campaigns_with_uncovered_changed_lines",
         "campaigns_with_runtime_observation_gaps", "highest_campaign_review_score", "routes_by_priority",
         "validation_statuses", "recommended_action"
@@ -875,8 +1019,20 @@
         "tool_execution_gap_routes": {"$ref": "#/$defs/count"},
         "single_perspective_routes": {"$ref": "#/$defs/count"},
         "unassessed_tool_evidence_routes": {"$ref": "#/$defs/count"},
+        "baseline_new_or_regressed_changed_routes": {"$ref": "#/$defs/count"},
+        "baseline_new_or_regressed_changed_routes_with_validation_gaps": {"$ref": "#/$defs/count"},
+        "existing_finding_routes_at_changed_lines": {"$ref": "#/$defs/count"},
+        "routes_without_comparable_finding_lifecycle": {"$ref": "#/$defs/count"},
+        "collaborating_owners": {"type": "array", "maxItems": 100, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "ownership_boundary_ids": {"type": "array", "maxItems": 200, "uniqueItems": true, "items": {"type": "string", "pattern": "^ownership-boundary-[0-9a-f]{16}$"}},
+        "ownership_boundaries": {"$ref": "#/$defs/count"},
+        "routes_crossing_ownership_boundaries": {"$ref": "#/$defs/count"},
+        "routes_with_unowned_segments": {"$ref": "#/$defs/count"},
+        "routes_without_ownership_evidence": {"$ref": "#/$defs/count"},
+        "unowned_route_files": {"type": "array", "maxItems": 225, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
         "campaigns_by_review_tier": {"$ref": "#/$defs/reviewTierCounts"},
         "campaigns_revision_mismatched": {"$ref": "#/$defs/count"},
+        "campaigns_revision_unverified": {"$ref": "#/$defs/count"},
         "campaigns_revision_unbound": {"$ref": "#/$defs/count"},
         "campaigns_with_uncovered_changed_lines": {"$ref": "#/$defs/count"},
         "campaigns_with_runtime_observation_gaps": {"$ref": "#/$defs/count"},
@@ -895,6 +1051,7 @@
         "target": {"$ref": "#/$defs/target"},
         "owners": {"$ref": "#/$defs/strings"},
         "evidence_assurance": {"$ref": "#/$defs/evidenceAssurance"},
+        "change_lifecycle_attribution": {"$ref": "#/$defs/changeLifecycleAttribution"},
         "reason": {"type": "string", "minLength": 1},
         "recommended_action": {"type": "string", "minLength": 1}
       }

@@ -293,6 +293,12 @@ test-evidence payload from the binding set can make the scan's excluded-source
 inventory differ from the digest declared by the remaining evidence.
 Ingestion rejects a sidecar after its report changes. Use `--overwrite` only
 when intentionally replacing bindings for newly generated evidence.
+Downstream validation campaigns require both the matching sealed source digest
+and the producer-verified payload receipt retained by the normalized evidence.
+A hand-authored or legacy summary containing only `source_sha256` is
+`unverified`, not aligned. Regenerate it with the current trusted
+`pysec-evidence` helper and preserve its sidecar; never copy a source digest into
+a summary to satisfy revision checks.
 
 Configure `tools.coverage.artifacts_path`,
 `tools.coverage.minimum_coverage_percent`, and `tools.junit.artifacts_path`.
@@ -879,6 +885,23 @@ notes, choose an organization-approved version, regenerate source locks and
 built-artifact SBOMs, run focused tests, and rescan. A bounded/resolved VEX state
 requires product, component, version, justification, and approval-provenance
 validation before disposition.
+
+Configure `[reports] baseline_path` and `baseline_sha256` when release review
+needs change-origin context. Risk routes consume `finding-delta.json` only when
+its profile, scanner set, and revision ancestry checks establish comparability,
+then join lifecycle to exact changed-line, validation, entry-runtime, owner, and
+scanner-assurance evidence. Without that proof, reports say baseline attribution
+is not established; never interpret the default `new` label from an unbaselined
+scan as proof that the current change introduced a defect.
+
+Retain a reviewed `.github/CODEOWNERS`, `CODEOWNERS`, or
+`docs/CODEOWNERS` file to enable route ownership topology. The suite applies the
+bounded retained rules with last-match semantics to each ordered entry,
+transit, and target file. Treat `not-established` as missing ownership evidence,
+not as proof that files are unowned. When evidence is available, resolve every
+reported unowned segment, target-owner mismatch, and cross-team handoff before
+closing the route; owner queues intentionally duplicate a route across all
+teams that must coordinate its remediation and regression evidence.
 
 Scanner executable approvals follow the same connected-preparation pattern.
 Validate publisher provenance and custody outside the scan, create an approved

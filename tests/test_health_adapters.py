@@ -244,6 +244,43 @@ class HealthAdapterTests(unittest.TestCase):
         self.assertEqual(finding.sources[0].tool, "junit")
         self.assertNotIn("body", finding.evidence)
 
+    def test_test_evidence_adapters_preserve_verified_source_binding(self) -> None:
+        binding = {
+            "schema_version": "1.0",
+            "evidence_sha256": "b" * 64,
+            "binding_file": "evidence.pysec-binding.json",
+            "verified": True,
+        }
+        coverage_payload = json.dumps(
+            {
+                "kind": "coverage",
+                "source_sha256": "a" * 64,
+                "evidence_binding": binding,
+                "totals": {},
+                "files": [],
+            }
+        )
+        junit_payload = json.dumps(
+            {
+                "kind": "junit",
+                "source_sha256": "a" * 64,
+                "evidence_binding": binding,
+                "failures": [],
+                "test_cases": [],
+            }
+        )
+
+        coverage = CoverageAdapter(ToolConfig(), 1024).derived_artifacts(
+            coverage_payload, Path(".")
+        )["coverage-summary.json"]
+        junit = JUnitAdapter(ToolConfig(), 1024).derived_artifacts(
+            junit_payload, Path(".")
+        )["junit-summary.json"]
+
+        for artifact in (coverage, junit):
+            self.assertEqual(artifact["source_sha256"], "a" * 64)
+            self.assertEqual(artifact["evidence_binding"], binding)
+
     def test_junit_defaults_artifacts_and_type_guards(self) -> None:
         adapter = JUnitAdapter(ToolConfig(), 1024)
         payload = json.dumps(

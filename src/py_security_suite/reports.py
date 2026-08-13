@@ -846,6 +846,18 @@ def _render_risk_path_summary(value: dict[str, Any] | None) -> list[str]:
         f"| Independently corroborated routes | {int(summary.get('independently_corroborated_routes', 0))} |",
         f"| Routes with scanner trust / execution gaps | {int(summary.get('routes_with_tool_trust_gaps', 0))} / {int(summary.get('routes_with_tool_execution_gaps', 0))} |",
         f"| Routes without direct tool assurance | {int(summary.get('routes_without_tool_assurance', 0))} |",
+        f"| Finding routes with comparable lifecycle | {int(summary.get('routes_with_comparable_finding_lifecycle', 0))} |",
+        f"| Finding routes without comparable lifecycle | {int(summary.get('routes_without_comparable_finding_lifecycle', 0))} |",
+        f"| Baseline-new or regressed routes | {int(summary.get('baseline_new_or_regressed_routes', 0))} |",
+        f"| Baseline-new or regressed routes on changed lines | {int(summary.get('baseline_new_or_regressed_changed_routes', 0))} |",
+        f"| Baseline-new or regressed changed routes with validation gaps | {int(summary.get('baseline_new_or_regressed_changed_routes_with_validation_gaps', 0))} |",
+        f"| Pre-existing finding routes on changed lines | {int(summary.get('existing_finding_routes_at_changed_lines', 0))} |",
+        f"| Routes with ownership evidence | {int(summary.get('routes_with_ownership_evidence', 0))} |",
+        f"| Routes crossing ownership boundaries | {int(summary.get('routes_crossing_ownership_boundaries', 0))} |",
+        f"| Exact ownership handoffs | {int(summary.get('ownership_boundaries', 0))} |",
+        f"| Routes with unowned segments | {int(summary.get('routes_with_unowned_segments', 0))} |",
+        f"| Routes without ownership evidence | {int(summary.get('routes_without_ownership_evidence', 0))} |",
+        f"| Distinct route owners | {int(summary.get('distinct_route_owners', 0))} |",
         f"| Unrouted dependency-advisory importers | {int(summary.get('unrouted_dependency_advisory_imports', 0))} |",
         f"| Distinct routed dependency advisories | {int(summary.get('distinct_routed_dependency_advisories', 0))} |",
         f"| Known-exploited / high-EPSS dependency routes | {int(summary.get('known_exploited_dependency_routes', 0))} / {int(summary.get('high_epss_dependency_routes', 0))} |",
@@ -893,6 +905,7 @@ def _render_risk_path_summary(value: dict[str, Any] | None) -> list[str]:
         f"| Critical / high review campaigns | {int((summary.get('campaigns_by_review_tier') or {}).get('critical', 0))} / {int((summary.get('campaigns_by_review_tier') or {}).get('high', 0))} |",
         f"| Campaign evidence revision-aligned | {int(summary.get('campaigns_revision_aligned', 0))} |",
         f"| Campaign evidence revision-mismatched | {int(summary.get('campaigns_revision_mismatched', 0))} |",
+        f"| Campaign evidence digest-matched but binding-unverified | {int(summary.get('campaigns_revision_unverified', 0))} |",
         f"| Campaign evidence revision not established | {int(summary.get('campaigns_revision_unbound', 0))} |",
         f"| Source-bound shared control points | {int(summary.get('campaigns_with_source_bound_control_points', 0))} |",
         f"| Selected-test source bindings | {int(summary.get('selected_test_source_bindings', 0))} |",
@@ -913,6 +926,8 @@ def _render_risk_path_summary(value: dict[str, Any] | None) -> list[str]:
             validation = route.get("validation")
             runtime = route.get("runtime_context")
             assurance = route.get("evidence_assurance")
+            lifecycle = route.get("change_lifecycle_attribution")
+            ownership = route.get("ownership_context")
             target = target if isinstance(target, dict) else {}
             entry = entry if isinstance(entry, dict) else {}
             validation = validation if isinstance(validation, dict) else {}
@@ -953,6 +968,10 @@ def _render_risk_path_summary(value: dict[str, Any] | None) -> list[str]:
                 + _markdown_text(signals)
                 + "<br>evidence "
                 + _markdown_text(_evidence_assurance_text(assurance))
+                + "<br>lifecycle "
+                + _markdown_text(_change_lifecycle_text(lifecycle))
+                + "<br>ownership "
+                + _markdown_text(_route_ownership_text(ownership))
                 + " | **"
                 + _markdown_text(owner_text)
                 + "**<br>"
@@ -1381,11 +1400,51 @@ def _render_risk_owner_queues(queues: list[Any]) -> list[str]:
                 )
             )
             + "`"
+            + "<br>lifecycle changed new/regressed/gapped `"
+            + _markdown_code(
+                str(int(queue.get("baseline_new_or_regressed_changed_routes") or 0))
+                + "/"
+                + str(
+                    int(
+                        queue.get(
+                            "baseline_new_or_regressed_changed_routes_with_validation_gaps"
+                        )
+                        or 0
+                    )
+                )
+            )
+            + "`; changed existing/unassessed `"
+            + _markdown_code(
+                str(int(queue.get("existing_finding_routes_at_changed_lines") or 0))
+                + "/"
+                + str(
+                    int(queue.get("routes_without_comparable_finding_lifecycle") or 0)
+                )
+            )
+            + "`"
+            + "<br>ownership handoffs/unowned/gaps `"
+            + _markdown_code(
+                str(int(queue.get("ownership_boundaries") or 0))
+                + "/"
+                + str(len(queue.get("unowned_route_files") or []))
+                + "/"
+                + str(int(queue.get("routes_without_ownership_evidence") or 0))
+            )
+            + "`; collaborators `"
+            + _markdown_code(
+                ", ".join(
+                    str(item) for item in queue.get("collaborating_owners", [])[:5]
+                )
+                or "none"
+            )
+            + "`"
             + "<br>highest campaign score `"
             + _markdown_code(str(int(queue.get("highest_campaign_review_score") or 0)))
-            + "`; mismatch/unbound `"
+            + "`; mismatch/unverified/unbound `"
             + _markdown_code(
                 str(int(queue.get("campaigns_revision_mismatched") or 0))
+                + "/"
+                + str(int(queue.get("campaigns_revision_unverified") or 0))
                 + "/"
                 + str(int(queue.get("campaigns_revision_unbound") or 0))
             )
@@ -1618,6 +1677,39 @@ def _evidence_assurance_text(value: Any) -> str:
         f"{status}; perspective {perspective}; tools {', '.join(str(item) for item in tools[:5]) or 'suite-derived'}; "
         f"completed/approved {len(completed_tools)}/{len(approved_tools)}"
         + ("; gaps " + "; ".join(gaps) if gaps else "")
+    )
+
+
+def _change_lifecycle_text(value: Any) -> str:
+    context = value if isinstance(value, dict) else {}
+    if not context:
+        return "not applicable to derived target"
+    classification = str(context.get("classification") or "baseline-not-established")
+    signal = str(context.get("review_signal") or "baseline-not-established")
+    runtime = _entry_runtime_status_text(context.get("entry_point_runtime_statuses"))
+    reasons = context.get("baseline_reasons")
+    reason_values = reasons if isinstance(reasons, list) else []
+    return f"{classification}; review {signal}; {runtime}" + (
+        "; baseline reason " + "; ".join(str(item) for item in reason_values[:2])
+        if reason_values
+        else ""
+    )
+
+
+def _route_ownership_text(value: Any) -> str:
+    context = value if isinstance(value, dict) else {}
+    if not context or context.get("evidence_available") is not True:
+        return "not established"
+    status = str(context.get("coordination_status") or "not-established")
+    owners = context.get("coordination_owners")
+    owner_values = owners if isinstance(owners, list) else []
+    unowned = context.get("unowned_files")
+    unowned_values = unowned if isinstance(unowned, list) else []
+    return (
+        f"{status}; owners {', '.join(str(item) for item in owner_values[:5]) or 'none'}; "
+        f"handoffs {int(context.get('boundary_count') or 0)}; "
+        f"unowned files {len(unowned_values)}; target owner "
+        f"{context.get('target_owner_alignment') or 'not-established'!s}"
     )
 
 
@@ -3957,6 +4049,10 @@ def _markdown_risk_path_context(finding: Finding) -> list[str]:
             + _markdown_text(
                 _evidence_assurance_text(context.get("evidence_assurance"))
             )
+            + ". **Change/lifecycle attribution:** "
+            + _markdown_text(
+                _change_lifecycle_text(context.get("change_lifecycle_attribution"))
+            )
             + ". This is an evidence gap, not proof that the code is unreachable."
         ]
     entry = context.get("entry_point")
@@ -4132,6 +4228,12 @@ def _markdown_risk_path_context(finding: Finding) -> list[str]:
         + _markdown_text(_risk_path_validation_signals(validation, runtime))
         + ". **Evidence assurance:** "
         + _markdown_text(_evidence_assurance_text(context.get("evidence_assurance")))
+        + ". **Change/lifecycle attribution:** "
+        + _markdown_text(
+            _change_lifecycle_text(context.get("change_lifecycle_attribution"))
+        )
+        + ". **Route ownership:** "
+        + _markdown_text(_route_ownership_text(context.get("ownership_context")))
         + "."
         + hotspot_text
         + test_hotspot_text
@@ -4451,10 +4553,14 @@ def _html_risk_path_context(finding: Finding) -> str:
         assurance = html.escape(
             _evidence_assurance_text(context.get("evidence_assurance"))
         )
+        lifecycle = html.escape(
+            _change_lifecycle_text(context.get("change_lifecycle_attribution"))
+        )
         return (
             "<section class='source-context'><h4>Static risk route</h4>"
             f"<p>No bounded declared-entry-point route: {reason}. "
-            f"<strong>Evidence assurance:</strong> {assurance}. This is an "
+            f"<strong>Evidence assurance:</strong> {assurance}. "
+            f"<strong>Change/lifecycle attribution:</strong> {lifecycle}. This is an "
             "evidence gap, not proof that the code is unreachable.</p></section>"
         )
     entry = context.get("entry_point")
@@ -4626,6 +4732,12 @@ def _html_risk_path_context(finding: Finding) -> str:
         + html.escape(_risk_path_validation_signals(validation, runtime))
         + ". <strong>Evidence assurance:</strong> "
         + html.escape(_evidence_assurance_text(context.get("evidence_assurance")))
+        + ". <strong>Change/lifecycle attribution:</strong> "
+        + html.escape(
+            _change_lifecycle_text(context.get("change_lifecycle_attribution"))
+        )
+        + ". <strong>Route ownership:</strong> "
+        + html.escape(_route_ownership_text(context.get("ownership_context")))
         + "."
         + hotspot_html
         + test_hotspot_html

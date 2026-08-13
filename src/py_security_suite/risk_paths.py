@@ -3,9 +3,11 @@ from __future__ import annotations
 import hashlib
 import json
 from collections import defaultdict, deque
+from itertools import pairwise
 from typing import Any
 
 from .models import Citation, Finding, FindingStatus
+from .ownership import owners_for_path, ownership_rules_from_artifact
 from .prioritization import finding_priority
 from .validation_alignment import (
     TEST_EVIDENCE_ARTIFACTS,
@@ -78,6 +80,8 @@ def build_risk_paths(
     entry_point_runtime = _entry_point_runtime_index(reachability)
     path_context = _campaign_control_context_index(structural, reachability)
     tool_posture = _tool_posture_index(artifacts.get("effectiveness.json"))
+    baseline_context = _baseline_lifecycle_context(artifacts.get("finding-delta.json"))
+    ownership_rules = ownership_rules_from_artifact(artifacts.get("finding-delta.json"))
     dependency_targets, dependency_targets_omitted = _dependency_advisory_targets(
         fusion, path_context
     )
@@ -90,6 +94,9 @@ def build_risk_paths(
     for target in targets:
         target["validation"] = _assess_validation(target["validation"], artifacts)
         target["evidence_assurance"] = _target_evidence_assurance(target, tool_posture)
+        attribution = _change_lifecycle_attribution(target, baseline_context)
+        if attribution is not None:
+            target["change_lifecycle_attribution"] = attribution
     routed, unrouted = _route_targets(
         entry_points,
         targets,
@@ -102,6 +109,16 @@ def build_risk_paths(
     _attach_entry_point_exposures(
         retained_routes, entry_points, adjacency, entry_point_runtime
     )
+    for route in retained_routes:
+        _attach_route_ownership(route, ownership_rules)
+        attribution = route.get("change_lifecycle_attribution")
+        if isinstance(attribution, dict):
+            attribution["entry_point_runtime_statuses"] = _entry_runtime_counts(
+                route["entry_point_exposures"]
+            )
+            attribution["review_factors"] = _change_lifecycle_review_factors(
+                attribution
+            )
     all_convergence_hotspots = _convergence_hotspots(retained_routes)
     convergence_hotspots = all_convergence_hotspots[:_MAX_CONVERGENCE_HOTSPOTS]
     validation_campaigns = _validation_campaigns(
@@ -315,6 +332,86 @@ def build_risk_paths(
                 route["evidence_assurance"]["review_status"]
                 in {"not-assessed", "derived-analysis"}
                 for route in routed
+            ),
+            "routes_with_comparable_finding_lifecycle": sum(
+                _object(route.get("change_lifecycle_attribution")).get("baseline_state")
+                == "comparable"
+                for route in routed
+            ),
+            "routes_without_comparable_finding_lifecycle": sum(
+                route["target"]["kind"] == "finding"
+                and _object(route.get("change_lifecycle_attribution")).get(
+                    "baseline_state"
+                )
+                != "comparable"
+                for route in routed
+            ),
+            "baseline_new_or_regressed_routes": sum(
+                _object(route.get("change_lifecycle_attribution")).get(
+                    "lifecycle_status"
+                )
+                in {"new", "regression"}
+                and _object(route.get("change_lifecycle_attribution")).get(
+                    "baseline_state"
+                )
+                == "comparable"
+                for route in routed
+            ),
+            "baseline_new_or_regressed_changed_routes": sum(
+                _object(route.get("change_lifecycle_attribution")).get("classification")
+                in {"baseline-new-on-changed-line", "regression-on-changed-line"}
+                for route in routed
+            ),
+            "baseline_new_or_regressed_changed_routes_with_validation_gaps": sum(
+                _object(route.get("change_lifecycle_attribution")).get("review_signal")
+                == "baseline-new-or-regressed-change-gap"
+                for route in routed
+            ),
+            "existing_finding_routes_at_changed_lines": sum(
+                _object(route.get("change_lifecycle_attribution")).get("classification")
+                == "existing-on-changed-line"
+                for route in routed
+            ),
+            "routes_with_ownership_evidence": sum(
+                _object(route.get("ownership_context")).get("evidence_available")
+                is True
+                for route in retained_routes
+            ),
+            "routes_crossing_ownership_boundaries": sum(
+                (
+                    _nonnegative_integer(
+                        _object(route.get("ownership_context")).get("boundary_count")
+                    )
+                    or 0
+                )
+                > 0
+                for route in retained_routes
+            ),
+            "routes_with_unowned_segments": sum(
+                bool(_object(route.get("ownership_context")).get("unowned_files"))
+                for route in retained_routes
+            ),
+            "routes_without_ownership_evidence": sum(
+                _object(route.get("ownership_context")).get("evidence_available")
+                is not True
+                for route in retained_routes
+            ),
+            "ownership_boundaries": sum(
+                _nonnegative_integer(
+                    _object(route.get("ownership_context")).get("boundary_count")
+                )
+                or 0
+                for route in retained_routes
+            ),
+            "distinct_route_owners": len(
+                {
+                    owner
+                    for route in retained_routes
+                    for owner in _strings(
+                        _object(route.get("ownership_context")).get("distinct_owners"),
+                        100,
+                    )
+                }
             ),
             "unrouted_dependency_advisory_imports": sum(
                 target["target"]["kind"] == "dependency-advisory-import"
@@ -543,6 +640,10 @@ def build_risk_paths(
                 campaign["source_snapshot"]["evidence_revision_binding"] == "mismatch"
                 for campaign in validation_campaigns
             ),
+            "campaigns_revision_unverified": sum(
+                campaign["source_snapshot"]["evidence_revision_binding"] == "unverified"
+                for campaign in validation_campaigns
+            ),
             "campaigns_revision_unbound": sum(
                 campaign["source_snapshot"]["evidence_revision_binding"]
                 == "not-established"
@@ -576,6 +677,8 @@ def build_risk_paths(
                 artifacts.get("structural-synthesis.json"), dict
             ),
             "tool_effectiveness_and_trust": bool(tool_posture),
+            "comparable_finding_lifecycle": baseline_context["state"] == "comparable",
+            "route_ownership": bool(ownership_rules),
             "data_exposure": isinstance(exposure, dict),
             "dependency_advisory_imports": isinstance(fusion, dict)
             and isinstance(fusion.get("advisory_clusters"), list),
@@ -624,6 +727,8 @@ def build_risk_paths(
             "Multiple declared entry-point routes establish bounded static interface breadth only; they do not prove distinct runtime interfaces, external exposure, attacker control, or execution.",
             "Entry-point runtime observation proves only that the exact retained reachability node executed during supplied tests; non-observation or missing node evidence does not prove an interface is dead or inaccessible.",
             "Route evidence assurance reports scanner completion, executable integrity continuity, organization approval, and perspective breadth separately; a gap does not invalidate a finding, and approval does not prove correctness.",
+            "Finding lifecycle is attributed to a change only when finding-delta evidence proves a comparable approved baseline; default new status without that comparison is reported as not established.",
+            "Route ownership applies retained CODEOWNERS-style rules to exact static file paths; a handoff is coordination evidence, not proof of organizational approval, runtime responsibility, or access control.",
             "No bounded route may indicate reflection, registries, dependency injection, generated code, framework dispatch, or an incomplete entry-point model.",
             "Runtime observation proves only that code executed during retained tests; absence of observation does not prove dead code.",
             "Sensitive-data sink surfaces are inventory signals unless a normalized scanner finding establishes a source-to-sink concern.",
@@ -756,6 +861,10 @@ def _finding_targets(findings: list[Finding]) -> list[dict[str, Any]]:
                 "domain": finding.domain,
                 "area": finding.area,
                 "severity": finding.severity.value,
+                "lifecycle_status": finding.status.value,
+                "baseline_match": _bounded_baseline_match(
+                    finding.evidence.get("baseline")
+                ),
                 "priority": finding_priority(
                     severity=finding.severity.value,
                     classifications=finding.classifications,
@@ -776,6 +885,211 @@ def _finding_targets(findings: list[Finding]) -> list[dict[str, Any]]:
             }
         )
     return result
+
+
+def _baseline_lifecycle_context(value: Any) -> dict[str, Any]:
+    """Validate whether finding lifecycle is comparable before using it."""
+    if not isinstance(value, dict) or value.get("schema_version") not in {
+        "1.0",
+        "1.1",
+    }:
+        return {
+            "state": "not-established",
+            "configured": False,
+            "comparable": False,
+            "reasons": ["finding-delta evidence is unavailable or invalid"],
+            "evidence_artifacts": [],
+        }
+    if value.get("configured") is False:
+        return {
+            "state": "not-configured",
+            "configured": False,
+            "comparable": False,
+            "reasons": ["no approved finding baseline was configured"],
+            "evidence_artifacts": ["finding-delta.json"],
+        }
+    comparison = _object(value.get("comparison"))
+    reasons = _strings(comparison.get("reasons") or value.get("errors"), 20)
+    if value.get("configured") is True and comparison.get("comparable") is True:
+        return {
+            "state": "comparable",
+            "configured": True,
+            "comparable": True,
+            "reasons": [],
+            "evidence_artifacts": ["finding-delta.json"],
+        }
+    if value.get("configured") is True and comparison.get("comparable") is False:
+        return {
+            "state": "incomparable",
+            "configured": True,
+            "comparable": False,
+            "reasons": reasons or ["configured finding baseline is not comparable"],
+            "evidence_artifacts": ["finding-delta.json"],
+        }
+    return {
+        "state": "not-established",
+        "configured": value.get("configured") is True,
+        "comparable": False,
+        "reasons": reasons or ["finding baseline comparability was not established"],
+        "evidence_artifacts": ["finding-delta.json"],
+    }
+
+
+def _bounded_baseline_match(value: Any) -> dict[str, str | None]:
+    match = _object(value)
+    return {
+        "match_strategy": _optional_string(match.get("match_strategy")),
+        "previous_finding_id": _optional_string(match.get("previous_finding_id")),
+        "previous_fingerprint": _optional_string(match.get("previous_fingerprint")),
+        "previous_status": _optional_string(match.get("previous_status")),
+    }
+
+
+def _change_lifecycle_attribution(
+    target: dict[str, Any], baseline: dict[str, Any]
+) -> dict[str, Any] | None:
+    if target.get("kind") != "finding":
+        return None
+    lifecycle = str(target.get("lifecycle_status") or "unclassified")
+    validation = _object(target.get("validation"))
+    changed = validation.get("changed_line")
+    change_scope = (
+        "changed-line"
+        if changed is True
+        else "outside-retained-change-scope"
+        if changed is False
+        else "not-established"
+    )
+    baseline_state = str(baseline.get("state") or "not-established")
+    classification = _change_lifecycle_classification(
+        baseline_state, lifecycle, change_scope
+    )
+    validation_status = str(validation.get("assessment_status") or "not-assessed")
+    signal = _change_lifecycle_review_signal(
+        baseline_state, lifecycle, change_scope, validation_status
+    )
+    assurance = str(
+        _object(target.get("evidence_assurance")).get("review_status") or "not-assessed"
+    )
+    result: dict[str, Any] = {
+        "baseline_state": baseline_state,
+        "baseline_configured": baseline.get("configured") is True,
+        "baseline_comparable": baseline.get("comparable") is True,
+        "baseline_reasons": _strings(baseline.get("reasons"), 20),
+        "lifecycle_status": lifecycle,
+        "baseline_match": _object(target.get("baseline_match")),
+        "change_scope": change_scope,
+        "classification": classification,
+        "review_signal": signal,
+        "validation_status": validation_status,
+        "evidence_assurance_status": assurance,
+        "entry_point_runtime_statuses": {
+            "observed": 0,
+            "not-observed": 0,
+            "not-available": 0,
+        },
+        "review_factors": [],
+        "evidence_artifacts": list(baseline.get("evidence_artifacts") or []),
+        "recommended_action": _change_lifecycle_action(
+            baseline_state, lifecycle, change_scope, validation_status
+        ),
+    }
+    result["review_factors"] = _change_lifecycle_review_factors(result)
+    return result
+
+
+def _change_lifecycle_classification(
+    baseline_state: str, lifecycle: str, change_scope: str
+) -> str:
+    if baseline_state != "comparable":
+        return "baseline-" + baseline_state
+    prefix = {
+        "new": "baseline-new",
+        "regression": "regression",
+        "existing": "existing",
+    }.get(lifecycle, "lifecycle-unclassified")
+    return {
+        "changed-line": prefix + "-on-changed-line",
+        "outside-retained-change-scope": prefix + "-outside-change-scope",
+    }.get(change_scope, prefix + "-change-scope-unavailable")
+
+
+def _change_lifecycle_review_signal(
+    baseline_state: str,
+    lifecycle: str,
+    change_scope: str,
+    validation_status: str,
+) -> str:
+    if baseline_state != "comparable":
+        return "baseline-not-established"
+    validation_gap = validation_status in {"gap", "partial", "not-assessed"}
+    if lifecycle in {"new", "regression"}:
+        if change_scope == "changed-line":
+            return (
+                "baseline-new-or-regressed-change-gap"
+                if validation_gap
+                else "baseline-new-or-regressed-change-aligned"
+            )
+        return "baseline-new-or-regressed-outside-change"
+    if lifecycle == "existing" and change_scope == "changed-line":
+        return "existing-change-gap" if validation_gap else "existing-change-aligned"
+    return "existing-or-unclassified-debt"
+
+
+def _change_lifecycle_review_factors(value: dict[str, Any]) -> list[str]:
+    runtime = _object(value.get("entry_point_runtime_statuses"))
+    factors = [
+        "baseline:" + str(value.get("baseline_state") or "not-established"),
+        "lifecycle:" + str(value.get("lifecycle_status") or "unclassified"),
+        "change:" + str(value.get("change_scope") or "not-established"),
+        "validation:" + str(value.get("validation_status") or "not-assessed"),
+        "evidence:" + str(value.get("evidence_assurance_status") or "not-assessed"),
+    ]
+    for status in ("observed", "not-observed", "not-available"):
+        count = _nonnegative_integer(runtime.get(status))
+        if count:
+            factors.append(f"entry-runtime:{status}:{count}")
+    return factors
+
+
+def _change_lifecycle_action(
+    baseline_state: str,
+    lifecycle: str,
+    change_scope: str,
+    validation_status: str,
+) -> str:
+    if baseline_state != "comparable":
+        return (
+            "Do not attribute the finding's default lifecycle to the current change; "
+            "supply a digest-approved comparable findings baseline or record the "
+            "change-origin decision outside this derived route context."
+        )
+    validation_gap = validation_status in {"gap", "partial", "not-assessed"}
+    if lifecycle in {"new", "regression"} and change_scope == "changed-line":
+        action = (
+            "Review this baseline-new or regressed finding as exact changed-line "
+            "release work; remediate it or record a governed disposition."
+        )
+        if validation_gap:
+            action += " Close the linked focused-test and coverage gap before release."
+        return action
+    if lifecycle in {"new", "regression"}:
+        return (
+            "Review the baseline-new or regressed finding, but do not attribute it "
+            "to the retained change scope without exact changed-line evidence."
+        )
+    if lifecycle == "existing" and change_scope == "changed-line":
+        return (
+            "Review the modified pre-existing finding for risk amplification and "
+            + (
+                "close the linked validation gap."
+                if validation_gap
+                else "retain aligned regression evidence."
+            )
+        )
+    return (
+        "Track the finding as pre-existing debt under its owner and remediation policy."
+    )
 
 
 def _sink_surface_targets(value: Any) -> list[dict[str, Any]]:
@@ -1637,6 +1951,15 @@ def _route_targets(
                 "runtime_context": target["runtime_context"],
                 "validation": target["validation"],
                 "evidence_assurance": target["evidence_assurance"],
+                **(
+                    {
+                        "change_lifecycle_attribution": target[
+                            "change_lifecycle_attribution"
+                        ]
+                    }
+                    if "change_lifecycle_attribution" in target
+                    else {}
+                ),
                 "correlations": target["correlations"],
                 "recommended_action": target["recommended_action"],
                 "evidence_artifacts": sorted(
@@ -1649,6 +1972,12 @@ def _route_targets(
                         ),
                         *target["evidence_artifacts"],
                         *target["evidence_assurance"]["evidence_artifacts"],
+                        *_strings(
+                            _object(target.get("change_lifecycle_attribution")).get(
+                                "evidence_artifacts"
+                            ),
+                            10,
+                        ),
                     }
                 ),
             }
@@ -1723,6 +2052,211 @@ def _attach_entry_point_exposures(
         route["entry_point_kinds"] = sorted(
             {str(item["entry_point"]["kind"]) for item in values}
         )
+
+
+def _attach_route_ownership(
+    route: dict[str, Any], rules: list[tuple[str, list[str]]]
+) -> None:
+    """Join exact retained route files to bounded CODEOWNERS-style evidence."""
+    exposures = route.get("entry_point_exposures")
+    retained = exposures if isinstance(exposures, list) else []
+    file_index: dict[str, dict[str, Any]] = {}
+    boundary_index: dict[str, dict[str, Any]] = {}
+    for exposure in retained[:_MAX_ENTRY_POINT_EXPOSURES]:
+        if not isinstance(exposure, dict):
+            continue
+        exposure_id = str(exposure.get("exposure_id") or "unknown")
+        files = _ordered_strings(exposure.get("files"), _MAX_ROUTE_HOPS + 1)
+        ownership_path = _ownership_path_records(
+            files,
+            rules,
+            entry_path=_path(_object(exposure.get("entry_point")).get("path")),
+            target_path=_path(_object(route.get("target")).get("path")),
+        )
+        exposure["ownership_path"] = ownership_path
+        exposure["ownership_boundary_ids"] = []
+        for record in ownership_path:
+            path = str(record["path"])
+            aggregate = file_index.setdefault(
+                path,
+                {
+                    "path": path,
+                    "owners": list(record["owners"]),
+                    "roles": set(),
+                    "entry_point_exposure_ids": set(),
+                },
+            )
+            aggregate["roles"].update(record["roles"])
+            aggregate["entry_point_exposure_ids"].add(exposure_id)
+        for source, target in pairwise(ownership_path):
+            if source["owners"] == target["owners"]:
+                continue
+            boundary_id = (
+                "ownership-boundary-"
+                + _digest(
+                    {
+                        "source": source["path"],
+                        "target": target["path"],
+                        "source_owners": source["owners"],
+                        "target_owners": target["owners"],
+                    }
+                )[:16]
+            )
+            boundary = boundary_index.setdefault(
+                boundary_id,
+                {
+                    "boundary_id": boundary_id,
+                    "source": source["path"],
+                    "target": target["path"],
+                    "source_owners": list(source["owners"]),
+                    "target_owners": list(target["owners"]),
+                    "entry_point_exposure_ids": set(),
+                },
+            )
+            boundary["entry_point_exposure_ids"].add(exposure_id)
+            exposure["ownership_boundary_ids"].append(boundary_id)
+    file_records = [
+        {
+            **record,
+            "roles": sorted(record["roles"]),
+            "entry_point_exposure_ids": sorted(record["entry_point_exposure_ids"]),
+        }
+        for _path_value, record in sorted(file_index.items())
+    ]
+    boundaries = [
+        {
+            **record,
+            "entry_point_exposure_ids": sorted(record["entry_point_exposure_ids"]),
+        }
+        for _identifier, record in sorted(boundary_index.items())
+    ]
+    evidence_available = bool(rules)
+    unowned = (
+        sorted(record["path"] for record in file_records if not record["owners"])
+        if evidence_available
+        else []
+    )
+    path_owners = sorted(
+        {
+            owner
+            for record in file_records
+            for owner in _strings(record.get("owners"), 20)
+        }
+    )
+    target_owners = _strings(route.get("owners"), 20)
+    coordination_owners = sorted({*path_owners, *target_owners})
+    route["ownership_context"] = {
+        "evidence_available": evidence_available,
+        "ownership_rules": len(rules),
+        "file_records": file_records,
+        "boundaries": boundaries,
+        "boundary_count": len(boundaries),
+        "distinct_owners": path_owners,
+        "target_owners": target_owners,
+        "coordination_owners": coordination_owners,
+        "target_owner_alignment": _target_owner_alignment(
+            file_records,
+            _path(_object(route.get("target")).get("path")),
+            target_owners,
+            evidence_available,
+        ),
+        "unowned_files": unowned,
+        "coordination_status": _ownership_coordination_status(
+            evidence_available, boundaries, unowned, coordination_owners
+        ),
+        "recommended_action": _ownership_coordination_action(
+            evidence_available, boundaries, unowned, coordination_owners
+        ),
+        "evidence_artifacts": ["finding-delta.json"] if evidence_available else [],
+    }
+
+
+def _ownership_path_records(
+    files: list[str],
+    rules: list[tuple[str, list[str]]],
+    *,
+    entry_path: str | None,
+    target_path: str | None,
+) -> list[dict[str, Any]]:
+    result: list[dict[str, Any]] = []
+    for path in files:
+        roles = []
+        if path == entry_path:
+            roles.append("entry")
+        if path == target_path:
+            roles.append("target")
+        if not roles:
+            roles.append("transit")
+        result.append(
+            {
+                "path": path,
+                "owners": owners_for_path(path, rules) if rules else [],
+                "roles": roles,
+            }
+        )
+    return result
+
+
+def _target_owner_alignment(
+    records: list[dict[str, Any]],
+    target_path: str | None,
+    target_owners: list[str],
+    evidence_available: bool,
+) -> str:
+    if not evidence_available or not target_path:
+        return "not-established"
+    path_owners = next(
+        (
+            _strings(record.get("owners"), 20)
+            for record in records
+            if record.get("path") == target_path
+        ),
+        [],
+    )
+    if not path_owners:
+        return "target-unowned"
+    if not target_owners:
+        return "target-owner-not-attributed"
+    return "aligned" if set(path_owners) == set(target_owners) else "mismatch"
+
+
+def _ownership_coordination_status(
+    evidence_available: bool,
+    boundaries: list[dict[str, Any]],
+    unowned: list[str],
+    owners: list[str],
+) -> str:
+    if not evidence_available:
+        return "not-established"
+    if unowned:
+        return "unowned-segment"
+    if boundaries or len(owners) > 1:
+        return "cross-owner"
+    return "single-owner"
+
+
+def _ownership_coordination_action(
+    evidence_available: bool,
+    boundaries: list[dict[str, Any]],
+    unowned: list[str],
+    owners: list[str],
+) -> str:
+    if not evidence_available:
+        return (
+            "Retain bounded CODEOWNERS evidence and rerun route synthesis before "
+            "assigning cross-file remediation responsibility."
+        )
+    if unowned:
+        return (
+            "Assign CODEOWNERS responsibility for every unowned route file, then "
+            "coordinate remediation and validation across the retained handoffs."
+        )
+    if boundaries or len(owners) > 1:
+        return (
+            "Coordinate remediation, review, and regression evidence across every "
+            "retained ownership handoff before route disposition."
+        )
+    return "Keep remediation and regression evidence with the retained route owner."
 
 
 def _entry_runtime_context(
@@ -2580,31 +3114,20 @@ def _campaign_source_snapshot(
     ]
     evidence_bindings: list[dict[str, Any]] = []
     for name in evidence_names:
-        document = artifacts.get(name)
-        declared = document.get("source_sha256") if isinstance(document, dict) else None
-        status = (
-            "no-source-inventory"
-            if source_sha256 is None
-            else "not-declared"
-            if not _is_digest(declared)
-            else "aligned"
-            if declared == source_sha256
-            else "mismatch"
-        )
         evidence_bindings.append(
-            {
-                "artifact": name,
-                "declared_source_sha256": str(declared)
-                if _is_digest(declared)
-                else None,
-                "status": status,
-            }
+            _campaign_evidence_source_binding(
+                name,
+                artifacts.get(name),
+                source_sha256=source_sha256,
+            )
         )
     revision_binding = (
         "not-applicable"
         if not evidence_bindings
         else "mismatch"
         if any(item["status"] == "mismatch" for item in evidence_bindings)
+        else "unverified"
+        if any(item["status"] == "unverified" for item in evidence_bindings)
         else "aligned"
         if evidence_bindings
         and all(item["status"] == "aligned" for item in evidence_bindings)
@@ -2613,6 +3136,7 @@ def _campaign_source_snapshot(
     reason = {
         "not-applicable": "No retained case or coverage evidence requires a source-revision binding.",
         "mismatch": "At least one retained case or coverage artifact declares a different source snapshot.",
+        "unverified": "At least one retained case or coverage artifact declares the sealed source digest without a valid producer-verified payload-binding receipt.",
         "aligned": "Every retained case and coverage artifact declares the sealed source-inventory digest.",
         "not-established": "Retained case or coverage evidence does not completely declare the sealed source-inventory digest.",
     }[revision_binding]
@@ -2626,6 +3150,51 @@ def _campaign_source_snapshot(
         "evidence_revision_binding": revision_binding,
         "evidence_revision_binding_reason": reason,
         "evidence_source_bindings": evidence_bindings,
+    }
+
+
+def _campaign_evidence_source_binding(
+    name: str,
+    value: Any,
+    *,
+    source_sha256: str | None,
+) -> dict[str, Any]:
+    document = _object(value)
+    declared = document.get("source_sha256")
+    binding = _object(document.get("evidence_binding"))
+    evidence_sha256 = binding.get("evidence_sha256")
+    binding_file = binding.get("binding_file")
+    binding_verified = (
+        binding.get("verified") is True
+        and binding.get("schema_version") == "1.0"
+        and _is_digest(evidence_sha256)
+        and isinstance(binding_file, str)
+        and bool(binding_file.strip())
+    )
+    status = (
+        "no-source-inventory"
+        if source_sha256 is None
+        else "not-declared"
+        if not _is_digest(declared)
+        else "mismatch"
+        if declared != source_sha256
+        else "aligned"
+        if binding_verified
+        else "unverified"
+    )
+    return {
+        "artifact": name,
+        "declared_source_sha256": str(declared) if _is_digest(declared) else None,
+        "binding_verified": binding_verified,
+        "evidence_sha256": (
+            str(evidence_sha256) if _is_digest(evidence_sha256) else None
+        ),
+        "binding_file": (
+            str(binding_file)[:1000]
+            if isinstance(binding_file, str) and binding_file.strip()
+            else None
+        ),
+        "status": status,
     }
 
 
@@ -2805,6 +3374,13 @@ def _campaign_review_assessment(
             "Retained test or coverage evidence declares a different source snapshot.",
             ["source-inventory.json"],
         )
+    elif revision_binding == "unverified":
+        add(
+            "evidence-binding-unverified",
+            15,
+            "Retained test or coverage evidence declares the sealed source digest without a valid producer-verified payload-binding receipt.",
+            ["source-inventory.json"],
+        )
     elif revision_binding == "not-established":
         add(
             "evidence-revision-unbound",
@@ -2815,7 +3391,7 @@ def _campaign_review_assessment(
     score = min(100, sum(int(factor["points"]) for factor in factors))
     tier = _review_tier(score)
     return {
-        "review_score_model": "shared-control-review-v2",
+        "review_score_model": "shared-control-review-v3",
         "review_score": score,
         "review_tier": tier,
         "review_factors": factors,
@@ -2880,10 +3456,11 @@ def _campaign_action(
         "unknown",
     }:
         action += " Retain runtime coverage that exercises this control point."
-    if revision_binding == "mismatch":
+    if revision_binding in {"mismatch", "unverified"}:
         return (
-            "Discard mismatched test/coverage evidence and regenerate it against "
-            "the sealed source snapshot. " + action
+            "Discard mismatched or unverified test/coverage evidence and regenerate "
+            "it with a verified payload binding against the sealed source snapshot. "
+            + action
         )
     if revision_binding == "not-established":
         return (
@@ -2905,7 +3482,11 @@ def _owner_work_queues(
             hotspot_by_route[route_id].add(hotspot["hotspot_id"])
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for route in routes:
-        owners = route["owners"] or ["Unassigned"]
+        ownership = _object(route.get("ownership_context"))
+        owners = _strings(ownership.get("coordination_owners"), 100)
+        if ownership.get("unowned_files"):
+            owners.append("Unassigned")
+        owners = sorted(set(owners or route["owners"] or ["Unassigned"]))
         for owner in owners:
             grouped[str(owner)].append(route)
     result: list[dict[str, Any]] = []
@@ -2988,6 +3569,28 @@ def _owner_work_queues(
         unassessed_assurance_routes = (
             assurance_counts["not-assessed"] + assurance_counts["derived-analysis"]
         )
+        changed_lifecycle_routes = sum(
+            _object(route.get("change_lifecycle_attribution")).get("classification")
+            in {"baseline-new-on-changed-line", "regression-on-changed-line"}
+            for route in owned_routes
+        )
+        changed_lifecycle_gap_routes = sum(
+            _object(route.get("change_lifecycle_attribution")).get("review_signal")
+            == "baseline-new-or-regressed-change-gap"
+            for route in owned_routes
+        )
+        existing_changed_routes = sum(
+            _object(route.get("change_lifecycle_attribution")).get("classification")
+            == "existing-on-changed-line"
+            for route in owned_routes
+        )
+        lifecycle_unassessed_routes = sum(
+            route["target"]["kind"] == "finding"
+            and _object(route.get("change_lifecycle_attribution")).get("baseline_state")
+            != "comparable"
+            for route in owned_routes
+        )
+        ownership_summary = _owner_queue_ownership_summary(owner, owned_routes)
         result.append(
             {
                 "queue_id": queue_id,
@@ -3039,6 +3642,11 @@ def _owner_work_queues(
                 "tool_execution_gap_routes": execution_gap_routes,
                 "single_perspective_routes": perspective_gap_routes,
                 "unassessed_tool_evidence_routes": unassessed_assurance_routes,
+                "baseline_new_or_regressed_changed_routes": changed_lifecycle_routes,
+                "baseline_new_or_regressed_changed_routes_with_validation_gaps": changed_lifecycle_gap_routes,
+                "existing_finding_routes_at_changed_lines": existing_changed_routes,
+                "routes_without_comparable_finding_lifecycle": lifecycle_unassessed_routes,
+                **ownership_summary,
                 "shared_validation_test_files": len(
                     {
                         str(hotspot_id)
@@ -3055,6 +3663,11 @@ def _owner_work_queues(
                 "campaigns_revision_mismatched": sum(
                     campaign["source_snapshot"]["evidence_revision_binding"]
                     == "mismatch"
+                    for campaign in owned_campaigns
+                ),
+                "campaigns_revision_unverified": sum(
+                    campaign["source_snapshot"]["evidence_revision_binding"]
+                    == "unverified"
                     for campaign in owned_campaigns
                 ),
                 "campaigns_revision_unbound": sum(
@@ -3091,6 +3704,11 @@ def _owner_work_queues(
                     execution_gap_routes,
                     perspective_gap_routes,
                     unassessed_assurance_routes,
+                    changed_lifecycle_routes,
+                    changed_lifecycle_gap_routes,
+                    existing_changed_routes,
+                    lifecycle_unassessed_routes,
+                    ownership_summary,
                 ),
             }
         )
@@ -3116,9 +3734,18 @@ def _owner_queue_action(
     execution_gap_routes: int,
     perspective_gap_routes: int,
     unassessed_assurance_routes: int,
+    changed_lifecycle_routes: int,
+    changed_lifecycle_gap_routes: int,
+    existing_changed_routes: int,
+    lifecycle_unassessed_routes: int,
+    ownership_summary: dict[str, Any],
 ) -> str:
     mismatched = sum(
         campaign["source_snapshot"]["evidence_revision_binding"] == "mismatch"
+        for campaign in campaigns
+    )
+    unverified = sum(
+        campaign["source_snapshot"]["evidence_revision_binding"] == "unverified"
         for campaign in campaigns
     )
     unbound = sum(
@@ -3136,64 +3763,32 @@ def _owner_queue_action(
         )
         for campaign in campaigns
     )
-    shared_test_hotspots = len(
-        {
-            str(hotspot_id)
-            for campaign in campaigns
-            for hotspot_id in campaign["shared_test_hotspot_ids"]
-        }
+    shared_suffix = _owner_queue_context_suffix(
+        campaigns,
+        exposure_advisory_intersections,
+        multi_entry_routes,
+        unobserved_entry_points,
+        unavailable_entry_points,
+        trust_gap_routes,
+        execution_gap_routes,
+        perspective_gap_routes,
+        unassessed_assurance_routes,
+        changed_lifecycle_routes,
+        changed_lifecycle_gap_routes,
+        existing_changed_routes,
+        lifecycle_unassessed_routes,
+        ownership_summary,
     )
-    shared_suffix = (
-        f" Coordinate {shared_test_hotspots} shared validation-test hotspot(s)."
-        if shared_test_hotspots
-        else ""
-    )
-    if exposure_advisory_intersections:
-        shared_suffix += (
-            f" Coordinate boundary controls and dependency remediation for "
-            f"{exposure_advisory_intersections} exact-path exposure/advisory "
-            "intersection(s)."
-        )
-    if multi_entry_routes:
-        shared_suffix += (
-            f" Coordinate interface-specific validation for {multi_entry_routes} "
-            "route(s) reached from multiple declared entry points."
-        )
-    if unobserved_entry_points:
-        shared_suffix += (
-            f" Retain representative runtime evidence for {unobserved_entry_points} "
-            "unobserved declared interface(s)."
-        )
-    if unavailable_entry_points:
-        shared_suffix += (
-            f" Model exact reachability nodes for {unavailable_entry_points} "
-            "declared interface(s) without runtime evidence."
-        )
-    if execution_gap_routes:
-        shared_suffix += (
-            f" Complete contributing scanners for {execution_gap_routes} route(s) "
-            "with execution-evidence gaps."
-        )
-    if trust_gap_routes:
-        shared_suffix += (
-            f" Obtain integrity verification and organization approval for "
-            f"contributing scanners on {trust_gap_routes} route(s)."
-        )
-    if perspective_gap_routes:
-        shared_suffix += (
-            f" Add an independent applicable validation perspective for "
-            f"{perspective_gap_routes} single-perspective route(s), or record a "
-            "governed sufficiency rationale."
-        )
-    if unassessed_assurance_routes:
-        shared_suffix += (
-            f" Review source evidence and establish tool assurance for "
-            f"{unassessed_assurance_routes} unassessed or suite-derived route(s)."
-        )
     if mismatched:
         return (
             f"{owner}: discard and regenerate evidence for {mismatched} revision-"
             "mismatched campaign(s) before route disposition." + shared_suffix
+        )
+    if unverified:
+        return (
+            f"{owner}: discard and regenerate evidence for {unverified} campaign(s) "
+            "whose source digest lacks a verified payload-binding receipt before "
+            "route disposition." + shared_suffix
         )
     if assessments["gap"]:
         action = (
@@ -3233,6 +3828,173 @@ def _owner_queue_action(
         f"{owner}: coordinate the shared remediation and regression-test scope."
         + shared_suffix
     )
+
+
+def _owner_queue_context_suffix(
+    campaigns: list[dict[str, Any]],
+    exposure_advisory_intersections: int,
+    multi_entry_routes: int,
+    unobserved_entry_points: int,
+    unavailable_entry_points: int,
+    trust_gap_routes: int,
+    execution_gap_routes: int,
+    perspective_gap_routes: int,
+    unassessed_assurance_routes: int,
+    changed_lifecycle_routes: int,
+    changed_lifecycle_gap_routes: int,
+    existing_changed_routes: int,
+    lifecycle_unassessed_routes: int,
+    ownership_summary: dict[str, Any],
+) -> str:
+    shared_test_hotspots = len(
+        {
+            str(hotspot_id)
+            for campaign in campaigns
+            for hotspot_id in campaign["shared_test_hotspot_ids"]
+        }
+    )
+    parts = [
+        (
+            shared_test_hotspots,
+            f"Coordinate {shared_test_hotspots} shared validation-test hotspot(s).",
+        ),
+        (
+            exposure_advisory_intersections,
+            "Coordinate boundary controls and dependency remediation for "
+            f"{exposure_advisory_intersections} exact-path exposure/advisory "
+            "intersection(s).",
+        ),
+        (
+            multi_entry_routes,
+            f"Coordinate interface-specific validation for {multi_entry_routes} "
+            "route(s) reached from multiple declared entry points.",
+        ),
+        (
+            unobserved_entry_points,
+            f"Retain representative runtime evidence for {unobserved_entry_points} "
+            "unobserved declared interface(s).",
+        ),
+        (
+            unavailable_entry_points,
+            f"Model exact reachability nodes for {unavailable_entry_points} "
+            "declared interface(s) without runtime evidence.",
+        ),
+        (
+            execution_gap_routes,
+            f"Complete contributing scanners for {execution_gap_routes} route(s) "
+            "with execution-evidence gaps.",
+        ),
+        (
+            trust_gap_routes,
+            "Obtain integrity verification and organization approval for "
+            f"contributing scanners on {trust_gap_routes} route(s).",
+        ),
+        (
+            perspective_gap_routes,
+            "Add an independent applicable validation perspective for "
+            f"{perspective_gap_routes} single-perspective route(s), or record a "
+            "governed sufficiency rationale.",
+        ),
+        (
+            unassessed_assurance_routes,
+            "Review source evidence and establish tool assurance for "
+            f"{unassessed_assurance_routes} unassessed or suite-derived route(s).",
+        ),
+        (
+            existing_changed_routes,
+            f"Check {existing_changed_routes} modified pre-existing finding "
+            "route(s) for risk amplification.",
+        ),
+        (
+            lifecycle_unassessed_routes,
+            "Establish comparable lifecycle evidence for "
+            f"{lifecycle_unassessed_routes} finding route(s) before making "
+            "change-origin claims.",
+        ),
+    ]
+    lifecycle_part = (
+        "Prioritize "
+        f"{changed_lifecycle_gap_routes} baseline-new or regressed changed-line "
+        "route(s) with validation gaps before release."
+        if changed_lifecycle_gap_routes
+        else "Review "
+        f"{changed_lifecycle_routes} baseline-new or regressed changed-line route(s) "
+        "against the exact change."
+    )
+    if changed_lifecycle_routes:
+        parts.append((changed_lifecycle_routes, lifecycle_part))
+    ownership_boundaries = (
+        _nonnegative_integer(ownership_summary.get("ownership_boundaries")) or 0
+    )
+    unowned_files = _strings(ownership_summary.get("unowned_route_files"), 225)
+    ownership_gaps = (
+        _nonnegative_integer(ownership_summary.get("routes_without_ownership_evidence"))
+        or 0
+    )
+    parts.extend(
+        [
+            (
+                ownership_boundaries,
+                f"Coordinate {ownership_boundaries} exact ownership handoff(s) "
+                "across the owned routes.",
+            ),
+            (
+                len(unowned_files),
+                f"Assign CODEOWNERS responsibility for {len(unowned_files)} "
+                "unowned route file(s).",
+            ),
+            (
+                ownership_gaps,
+                f"Establish route ownership evidence for {ownership_gaps} route(s).",
+            ),
+        ]
+    )
+    return "".join(f" {text}" for count, text in parts if count)
+
+
+def _owner_queue_ownership_summary(
+    owner: str, routes: list[dict[str, Any]]
+) -> dict[str, Any]:
+    contexts = [_object(route.get("ownership_context")) for route in routes]
+    all_owners = sorted(
+        {
+            candidate
+            for context in contexts
+            for candidate in _strings(context.get("coordination_owners"), 100)
+        }
+    )
+    collaborators = [candidate for candidate in all_owners if candidate != owner]
+    boundary_ids = sorted(
+        {
+            str(boundary.get("boundary_id"))
+            for context in contexts
+            for boundary in _objects(context.get("boundaries"), 200)
+            if isinstance(boundary, dict) and boundary.get("boundary_id")
+        }
+    )
+    unowned = sorted(
+        {
+            path
+            for context in contexts
+            for path in _strings(context.get("unowned_files"), 225)
+        }
+    )
+    return {
+        "collaborating_owners": collaborators,
+        "ownership_boundary_ids": boundary_ids,
+        "ownership_boundaries": len(boundary_ids),
+        "routes_crossing_ownership_boundaries": sum(
+            (_nonnegative_integer(context.get("boundary_count")) or 0) > 0
+            for context in contexts
+        ),
+        "routes_with_unowned_segments": sum(
+            bool(context.get("unowned_files")) for context in contexts
+        ),
+        "routes_without_ownership_evidence": sum(
+            context.get("evidence_available") is not True for context in contexts
+        ),
+        "unowned_route_files": unowned,
+    }
 
 
 def _attach_finding_routes(
@@ -3279,6 +4041,13 @@ def _attach_finding_routes(
             ),
         )[:25]
         if route is not None:
+            lifecycle_attribution = _object(
+                route.get("change_lifecycle_attribution")
+            ) or _object(
+                _object(unrouted_by_id.get(finding.finding_id)).get(
+                    "change_lifecycle_attribution"
+                )
+            )
             context = {
                 "status": "routed",
                 "route_id": route["route_id"],
@@ -3295,6 +4064,8 @@ def _attach_finding_routes(
                 "runtime_context": route["runtime_context"],
                 "validation": route["validation"],
                 "evidence_assurance": route["evidence_assurance"],
+                "ownership_context": route["ownership_context"],
+                "change_lifecycle_attribution": lifecycle_attribution,
                 "convergence_hotspot_ids": route["convergence_hotspot_ids"],
                 "validation_campaign_ids": route["validation_campaign_ids"],
                 "validation_test_hotspot_ids": route["validation_test_hotspot_ids"],
@@ -3371,6 +4142,9 @@ def _attach_finding_routes(
                 "status": "unrouted",
                 "reason": record["reason"],
                 "evidence_assurance": record["evidence_assurance"],
+                "change_lifecycle_attribution": _object(
+                    record.get("change_lifecycle_attribution")
+                ),
                 "evidence_artifact": "risk-paths.json",
             }
             _add_route_citations(finding)
@@ -3407,6 +4181,7 @@ def _compact_dependency_advisory_route(
         "runtime_context": route["runtime_context"],
         "validation": route["validation"],
         "evidence_assurance": route["evidence_assurance"],
+        "ownership_context": route["ownership_context"],
         "validation_campaign_ids": list(route["validation_campaign_ids"]),
         "exposure_advisory_intersection_ids": list(
             route.get("exposure_advisory_intersection_ids") or []
@@ -3928,6 +4703,11 @@ def _unrouted(target: dict[str, Any], reason: str) -> dict[str, Any]:
         "evidence_assurance": target.get(
             "evidence_assurance", _empty_evidence_assurance(target)
         ),
+        **(
+            {"change_lifecycle_attribution": target["change_lifecycle_attribution"]}
+            if "change_lifecycle_attribution" in target
+            else {}
+        ),
         "reason": reason,
         "recommended_action": (
             "Confirm framework, plugin, registry, generated-code, or external entry "
@@ -4039,6 +4819,12 @@ def _object(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def _objects(value: Any, limit: int) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value[:limit] if isinstance(item, dict)]
+
+
 def _strings(value: Any, limit: int) -> list[str]:
     if isinstance(value, str):
         candidates = [value]
@@ -4047,6 +4833,26 @@ def _strings(value: Any, limit: int) -> list[str]:
     else:
         candidates = []
     return sorted({item.strip()[:1000] for item in candidates if item.strip()})[:limit]
+
+
+def _ordered_strings(value: Any, limit: int) -> list[str]:
+    """Retain bounded string order for route and other sequence evidence."""
+    if isinstance(value, str):
+        candidates = [value]
+    elif isinstance(value, list):
+        candidates = [str(item) for item in value if isinstance(item, (str, int))]
+    else:
+        candidates = []
+    result: list[str] = []
+    seen: set[str] = set()
+    for item in candidates:
+        normalized = item.strip()[:1000]
+        if normalized and normalized not in seen:
+            result.append(normalized)
+            seen.add(normalized)
+        if len(result) >= limit:
+            break
+    return result
 
 
 def _positive_integers(value: Any, limit: int) -> list[int]:

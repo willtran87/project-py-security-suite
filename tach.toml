@@ -84,7 +84,7 @@ layer = "services"
 
 [[modules]]
 path = "py_security_suite.risk_paths"
-depends_on = ["py_security_suite.models", "py_security_suite.prioritization", "py_security_suite.validation_alignment"]
+depends_on = ["py_security_suite.models", "py_security_suite.ownership", "py_security_suite.prioritization", "py_security_suite.validation_alignment"]
 layer = "services"
 
 [[modules]]

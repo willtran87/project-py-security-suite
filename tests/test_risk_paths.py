@@ -11,6 +11,7 @@ from py_security_suite.closure_plan import _finding_items
 from py_security_suite.models import (
     Confidence,
     Finding,
+    FindingStatus,
     Location,
     Severity,
     Source,
@@ -117,6 +118,8 @@ class RiskPathTests(unittest.TestCase):
         self.assertEqual(result["summary"]["routes_with_tool_trust_gaps"], 0)
         self.assertEqual(result["summary"]["routes_with_tool_execution_gaps"], 0)
         self.assertEqual(result["summary"]["routes_without_tool_assurance"], 1)
+        self.assertEqual(result["summary"]["routes_with_ownership_evidence"], 0)
+        self.assertEqual(result["summary"]["routes_without_ownership_evidence"], 2)
         self.assertEqual(
             result["summary"]["security_routes_with_multiple_entry_points"], 2
         )
@@ -152,6 +155,7 @@ class RiskPathTests(unittest.TestCase):
             },
         )
         self.assertEqual(queue["single_perspective_routes"], 1)
+        self.assertEqual(queue["routes_without_ownership_evidence"], 2)
         self.assertIn("representative runtime evidence", queue["recommended_action"])
         self.assertIn("Model exact reachability nodes", queue["recommended_action"])
         finding_route = next(
@@ -166,6 +170,10 @@ class RiskPathTests(unittest.TestCase):
             ["calls", "calls"],
         )
         self.assertEqual(finding_route["owners"], ["@security-team"])
+        self.assertEqual(
+            finding_route["ownership_context"]["coordination_status"],
+            "not-established",
+        )
         self.assertEqual(finding_route["entry_point_exposure_count"], 3)
         self.assertTrue(finding_route["entry_point_exposures"][0]["primary"])
         self.assertEqual(
@@ -256,7 +264,7 @@ class RiskPathTests(unittest.TestCase):
         )
         self.assertTrue(
             all(
-                campaign["review_score_model"] == "shared-control-review-v2"
+                campaign["review_score_model"] == "shared-control-review-v3"
                 for campaign in campaigns
             )
         )
@@ -426,6 +434,376 @@ class RiskPathTests(unittest.TestCase):
             )
         )
 
+    def test_cross_references_route_files_to_ownership_handoffs(self) -> None:
+        artifacts = _artifacts()
+        _add_multi_entry_paths(artifacts)
+        artifacts["finding-delta.json"] = {
+            "schema_version": "1.1",
+            "configured": False,
+            "ownership_rule_details": [
+                {"pattern": "src/cli.py", "owners": ["@platform-team"]},
+                {"pattern": "src/service.py", "owners": ["@service-team"]},
+                {"pattern": "src/sink.py", "owners": ["@security-team"]},
+            ],
+        }
+        finding = _finding("src/sink.py", 9)
+        finding.evidence["owners"] = ["@security-team"]
+
+        result = build_risk_paths([finding], artifacts)
+
+        route = next(
+            item for item in result["routes"] if item["target"]["kind"] == "finding"
+        )
+        ownership = route["ownership_context"]
+        self.assertTrue(ownership["evidence_available"])
+        self.assertEqual(ownership["ownership_rules"], 3)
+        self.assertEqual(ownership["coordination_status"], "unowned-segment")
+        self.assertEqual(
+            ownership["distinct_owners"],
+            ["@platform-team", "@security-team", "@service-team"],
+        )
+        self.assertEqual(ownership["target_owner_alignment"], "aligned")
+        self.assertEqual(ownership["unowned_files"], ["src/worker.py"])
+        self.assertEqual(ownership["boundary_count"], 3)
+        handoffs = {
+            (
+                boundary["source"],
+                boundary["target"],
+                tuple(boundary["source_owners"]),
+                tuple(boundary["target_owners"]),
+            )
+            for boundary in ownership["boundaries"]
+        }
+        self.assertEqual(
+            handoffs,
+            {
+                (
+                    "src/cli.py",
+                    "src/service.py",
+                    ("@platform-team",),
+                    ("@service-team",),
+                ),
+                (
+                    "src/service.py",
+                    "src/sink.py",
+                    ("@service-team",),
+                    ("@security-team",),
+                ),
+                (
+                    "src/worker.py",
+                    "src/service.py",
+                    (),
+                    ("@service-team",),
+                ),
+            },
+        )
+        exposures = {
+            item["entry_point"]["id"]: item for item in route["entry_point_exposures"]
+        }
+        self.assertEqual(
+            [record["owners"] for record in exposures["entry:cli"]["ownership_path"]],
+            [["@platform-team"], ["@service-team"], ["@security-team"]],
+        )
+        self.assertEqual(exposures["entry:worker"]["ownership_path"][0]["owners"], [])
+        self.assertEqual(len(exposures["entry:worker"]["ownership_boundary_ids"]), 2)
+        self.assertEqual(result["summary"]["routes_with_ownership_evidence"], 2)
+        self.assertEqual(result["summary"]["routes_crossing_ownership_boundaries"], 2)
+        self.assertEqual(result["summary"]["routes_with_unowned_segments"], 2)
+        self.assertEqual(result["summary"]["ownership_boundaries"], 6)
+        self.assertEqual(result["summary"]["distinct_route_owners"], 3)
+        queues = {item["owner"]: item for item in result["owner_work_queues"]}
+        self.assertEqual(
+            set(queues),
+            {"@platform-team", "@security-team", "@service-team", "Unassigned"},
+        )
+        security_queue = queues["@security-team"]
+        self.assertEqual(
+            security_queue["collaborating_owners"],
+            ["@platform-team", "@service-team"],
+        )
+        self.assertEqual(security_queue["ownership_boundaries"], 3)
+        self.assertEqual(security_queue["unowned_route_files"], ["src/worker.py"])
+        self.assertIn("exact ownership handoff", security_queue["recommended_action"])
+        self.assertIn("Assign CODEOWNERS", security_queue["recommended_action"])
+        finding_context = finding.evidence["risk_path"]["ownership_context"]
+        self.assertEqual(finding_context["coordination_status"], "unowned-segment")
+        rendered = "\n".join(_render_risk_path_summary(result))
+        self.assertIn("ownership unowned-segment", rendered)
+        self.assertIn("unowned-segment", rendered)
+        self.assertIn("@platform-team", rendered)
+        markdown_context = "\n".join(_markdown_risk_path_context(finding))
+        self.assertIn("Route ownership", markdown_context)
+        self.assertIn("handoffs 3", markdown_context)
+        self.assertIn("unowned files 1", _html_risk_path_context(finding))
+        sarif = render_sarif([finding])
+        sarif_ownership = sarif["runs"][0]["results"][0]["properties"]["risk_path"][
+            "ownership_context"
+        ]
+        self.assertEqual(sarif_ownership["target_owner_alignment"], "aligned")
+        closure = _finding_items([json_ready(finding)])[0]
+        self.assertIn("finding-delta.json", closure["evidence_refs"])
+        self.assertIn("src/worker.py", closure["evidence_refs"])
+        self.assertEqual(
+            closure["details"]["risk_path"]["ownership_context"]["boundary_count"],
+            3,
+        )
+        self.assertTrue(
+            any(
+                "previously unowned" in criterion
+                for criterion in closure["acceptance_criteria"]
+            )
+        )
+        self.assertTrue(
+            any(
+                "ownership handoff" in criterion
+                for criterion in closure["acceptance_criteria"]
+            )
+        )
+        schema = json.loads(read_bundled_schema("risk-paths-1.0"))
+        Draft202012Validator(schema).validate(result)
+
+    def test_route_ownership_detects_target_owner_mismatch(self) -> None:
+        artifacts = _artifacts()
+        artifacts["finding-delta.json"] = {
+            "schema_version": "1.1",
+            "configured": False,
+            "ownership_rule_details": [
+                {"pattern": "src/*.py", "owners": ["@application-team"]},
+            ],
+        }
+        finding = _finding("src/sink.py", 9)
+        finding.evidence["owners"] = ["@security-team"]
+
+        result = build_risk_paths([finding], artifacts)
+
+        route = next(
+            item for item in result["routes"] if item["target"]["kind"] == "finding"
+        )
+        self.assertEqual(
+            route["ownership_context"]["target_owner_alignment"], "mismatch"
+        )
+        closure = _finding_items([json_ready(finding)])[0]
+        self.assertTrue(
+            any(
+                "CODEOWNERS assignment agree" in criterion
+                for criterion in closure["acceptance_criteria"]
+            )
+        )
+
+    def test_cross_references_comparable_lifecycle_change_and_validation(self) -> None:
+        artifacts = _artifacts()
+        artifacts["finding-delta.json"] = {
+            "schema_version": "1.1",
+            "configured": True,
+            "comparison": {"comparable": True, "reasons": []},
+            "counts": {"new": 1, "existing": 0, "regression": 0, "resolved": 0},
+        }
+        finding = _finding("src/sink.py", 9)
+        finding.evidence["owners"] = ["@security-team"]
+        finding.evidence["fusion"] = {
+            "corroboration": "independent",
+            "source_context": {
+                "changed_line": True,
+                "line_covered": False,
+                "coverage_percent": 55.5,
+                "reachability_states": ["executable"],
+                "runtime_observations": ["observed"],
+            },
+        }
+
+        result = build_risk_paths([finding], artifacts)
+
+        route = next(
+            item for item in result["routes"] if item["target"]["kind"] == "finding"
+        )
+        attribution = route["change_lifecycle_attribution"]
+        self.assertEqual(attribution["baseline_state"], "comparable")
+        self.assertEqual(attribution["lifecycle_status"], "new")
+        self.assertEqual(attribution["classification"], "baseline-new-on-changed-line")
+        self.assertEqual(
+            attribution["review_signal"],
+            "baseline-new-or-regressed-change-gap",
+        )
+        self.assertEqual(
+            attribution["entry_point_runtime_statuses"],
+            {"observed": 1, "not-observed": 0, "not-available": 0},
+        )
+        self.assertIn("entry-runtime:observed:1", attribution["review_factors"])
+        self.assertEqual(
+            result["summary"]["routes_with_comparable_finding_lifecycle"], 1
+        )
+        self.assertEqual(result["summary"]["baseline_new_or_regressed_routes"], 1)
+        self.assertEqual(
+            result["summary"]["baseline_new_or_regressed_changed_routes"], 1
+        )
+        self.assertEqual(
+            result["summary"][
+                "baseline_new_or_regressed_changed_routes_with_validation_gaps"
+            ],
+            1,
+        )
+        queue = next(
+            item
+            for item in result["owner_work_queues"]
+            if item["owner"] == "@security-team"
+        )
+        self.assertEqual(queue["baseline_new_or_regressed_changed_routes"], 1)
+        self.assertEqual(
+            queue["baseline_new_or_regressed_changed_routes_with_validation_gaps"],
+            1,
+        )
+        self.assertIn("before release", queue["recommended_action"])
+        self.assertEqual(
+            finding.evidence["risk_path"]["change_lifecycle_attribution"][
+                "classification"
+            ],
+            "baseline-new-on-changed-line",
+        )
+        rendered = "\n".join(_render_risk_path_summary(result))
+        self.assertIn("Baseline-new or regressed routes on changed lines", rendered)
+        self.assertIn("baseline-new-on-changed-line", rendered)
+        markdown_context = "\n".join(_markdown_risk_path_context(finding))
+        self.assertIn("Change/lifecycle attribution", markdown_context)
+        self.assertIn("baseline-new-on-changed-line", markdown_context)
+        self.assertIn("baseline-new-on-changed-line", _html_risk_path_context(finding))
+        sarif = render_sarif([finding])
+        sarif_attribution = sarif["runs"][0]["results"][0]["properties"]["risk_path"][
+            "change_lifecycle_attribution"
+        ]
+        self.assertEqual(
+            sarif_attribution["review_signal"],
+            "baseline-new-or-regressed-change-gap",
+        )
+        closure = _finding_items([json_ready(finding)])[0]
+        self.assertIn("finding-delta.json", closure["evidence_refs"])
+        self.assertEqual(
+            closure["details"]["risk_path"]["change_lifecycle_attribution"][
+                "classification"
+            ],
+            "baseline-new-on-changed-line",
+        )
+        self.assertTrue(
+            any(
+                "baseline-new or regressed changed-line finding" in criterion
+                for criterion in closure["acceptance_criteria"]
+            )
+        )
+        schema = json.loads(read_bundled_schema("risk-paths-1.0"))
+        Draft202012Validator(schema).validate(result)
+
+    def test_change_lifecycle_attribution_fails_closed_without_comparison(self) -> None:
+        scenarios = (
+            (None, "not-established"),
+            (
+                {"schema_version": "1.0", "configured": False},
+                "not-configured",
+            ),
+            (
+                {
+                    "schema_version": "1.1",
+                    "configured": True,
+                    "comparison": {
+                        "comparable": False,
+                        "reasons": ["scanner set differs"],
+                    },
+                },
+                "incomparable",
+            ),
+        )
+        for delta, expected in scenarios:
+            with self.subTest(expected=expected):
+                artifacts = _artifacts()
+                if delta is not None:
+                    artifacts["finding-delta.json"] = delta
+                finding = _finding("src/sink.py", 9)
+                finding.status = FindingStatus.NEW
+                finding.evidence["fusion"] = {
+                    "source_context": {"changed_line": True, "line_covered": False}
+                }
+
+                result = build_risk_paths([finding], artifacts)
+
+                route = next(
+                    item
+                    for item in result["routes"]
+                    if item["target"]["kind"] == "finding"
+                )
+                attribution = route["change_lifecycle_attribution"]
+                self.assertEqual(attribution["baseline_state"], expected)
+                self.assertEqual(
+                    attribution["review_signal"], "baseline-not-established"
+                )
+                self.assertNotEqual(
+                    attribution["classification"], "baseline-new-on-changed-line"
+                )
+                self.assertEqual(
+                    result["summary"]["baseline_new_or_regressed_routes"], 0
+                )
+                self.assertEqual(
+                    result["summary"]["routes_without_comparable_finding_lifecycle"],
+                    1,
+                )
+
+    def test_distinguishes_regressed_and_modified_existing_finding_routes(self) -> None:
+        scenarios = (
+            (
+                FindingStatus.REGRESSION,
+                "regression-on-changed-line",
+                "baseline-new-or-regressed-change-gap",
+            ),
+            (
+                FindingStatus.EXISTING,
+                "existing-on-changed-line",
+                "existing-change-gap",
+            ),
+        )
+        for status, classification, signal in scenarios:
+            with self.subTest(status=status.value):
+                artifacts = _artifacts()
+                artifacts["finding-delta.json"] = {
+                    "schema_version": "1.1",
+                    "configured": True,
+                    "comparison": {"comparable": True, "reasons": []},
+                }
+                finding = _finding("src/sink.py", 9)
+                finding.status = status
+                finding.evidence["baseline"] = {
+                    "match_strategy": "exact",
+                    "previous_finding_id": "PYSEC-PREVIOUS",
+                    "previous_fingerprint": "f" * 64,
+                    "previous_status": (
+                        "resolved" if status is FindingStatus.REGRESSION else "new"
+                    ),
+                }
+                finding.evidence["fusion"] = {
+                    "source_context": {"changed_line": True, "line_covered": False}
+                }
+
+                result = build_risk_paths([finding], artifacts)
+
+                route = next(
+                    item
+                    for item in result["routes"]
+                    if item["target"]["kind"] == "finding"
+                )
+                attribution = route["change_lifecycle_attribution"]
+                self.assertEqual(attribution["classification"], classification)
+                self.assertEqual(attribution["review_signal"], signal)
+                self.assertEqual(
+                    attribution["baseline_match"]["previous_finding_id"],
+                    "PYSEC-PREVIOUS",
+                )
+                if status is FindingStatus.EXISTING:
+                    self.assertEqual(
+                        result["summary"]["existing_finding_routes_at_changed_lines"],
+                        1,
+                    )
+                else:
+                    self.assertEqual(
+                        result["summary"]["baseline_new_or_regressed_changed_routes"],
+                        1,
+                    )
+
     def test_route_evidence_assurance_fails_closed_by_exact_contributing_tool(
         self,
     ) -> None:
@@ -491,8 +869,7 @@ class RiskPathTests(unittest.TestCase):
     ) -> None:
         aligned_artifacts = _artifacts()
         aggregate = aligned_artifacts["source-inventory.json"]["source_sha256"]
-        aligned_artifacts["coverage-summary.json"]["source_sha256"] = aggregate
-        aligned_artifacts["junit-summary.json"]["source_sha256"] = aggregate
+        _bind_test_evidence(aligned_artifacts, aggregate)
 
         aligned = build_risk_paths([_finding("src/sink.py", 9)], aligned_artifacts)
 
@@ -504,10 +881,19 @@ class RiskPathTests(unittest.TestCase):
                 for campaign in aligned["validation_campaigns"]
             )
         )
+        self.assertTrue(
+            all(
+                binding["binding_verified"]
+                and binding["status"] == "aligned"
+                and binding["evidence_sha256"]
+                and binding["binding_file"]
+                for campaign in aligned["validation_campaigns"]
+                for binding in campaign["source_snapshot"]["evidence_source_bindings"]
+            )
+        )
 
         mismatched_artifacts = _artifacts()
-        mismatched_artifacts["coverage-summary.json"]["source_sha256"] = "f" * 64
-        mismatched_artifacts["junit-summary.json"]["source_sha256"] = "e" * 64
+        _bind_test_evidence(mismatched_artifacts, "f" * 64)
 
         mismatched = build_risk_paths(
             [_finding("src/sink.py", 9)], mismatched_artifacts
@@ -527,6 +913,81 @@ class RiskPathTests(unittest.TestCase):
         )
         schema = json.loads(read_bundled_schema("risk-paths-1.0"))
         Draft202012Validator(schema).validate(mismatched)
+
+    def test_campaign_revision_binding_rejects_unverified_matching_digest(
+        self,
+    ) -> None:
+        artifacts = _artifacts()
+        aggregate = artifacts["source-inventory.json"]["source_sha256"]
+        artifacts["coverage-summary.json"]["source_sha256"] = aggregate
+        _bind_test_evidence_artifact(
+            artifacts["junit-summary.json"],
+            aggregate,
+            evidence_sha256="e" * 64,
+        )
+
+        finding = _finding("src/sink.py", 9)
+        result = build_risk_paths([finding], artifacts)
+
+        self.assertEqual(result["summary"]["campaigns_revision_aligned"], 0)
+        self.assertEqual(result["summary"]["campaigns_revision_mismatched"], 0)
+        self.assertEqual(result["summary"]["campaigns_revision_unverified"], 2)
+        self.assertEqual(result["summary"]["campaigns_revision_unbound"], 0)
+        for campaign in result["validation_campaigns"]:
+            snapshot = campaign["source_snapshot"]
+            self.assertEqual(snapshot["evidence_revision_binding"], "unverified")
+            coverage_binding = next(
+                item
+                for item in snapshot["evidence_source_bindings"]
+                if item["artifact"] == "coverage-summary.json"
+            )
+            self.assertEqual(coverage_binding["status"], "unverified")
+            self.assertFalse(coverage_binding["binding_verified"])
+            self.assertIsNone(coverage_binding["evidence_sha256"])
+            self.assertTrue(
+                any(
+                    factor["id"] == "evidence-binding-unverified"
+                    for factor in campaign["review_factors"]
+                )
+            )
+            self.assertIn("verified payload binding", campaign["recommended_action"])
+        queue = result["owner_work_queues"][0]
+        self.assertEqual(queue["campaigns_revision_unverified"], 2)
+        self.assertIn(
+            "lacks a verified payload-binding receipt", queue["recommended_action"]
+        )
+        rendered = "\n".join(_render_risk_path_summary(result))
+        self.assertIn(
+            "Campaign evidence digest-matched but binding-unverified", rendered
+        )
+        self.assertIn("mismatch/unverified/unbound `0/2/0`", rendered)
+        self.assertIn("revision `unverified`", rendered)
+        sarif = render_sarif([finding])
+        sarif_campaigns = sarif["runs"][0]["results"][0]["properties"]["risk_path"][
+            "validation_campaigns"
+        ]
+        self.assertTrue(
+            all(
+                campaign["source_snapshot"]["evidence_revision_binding"] == "unverified"
+                for campaign in sarif_campaigns
+            )
+        )
+        closure = _finding_items([json_ready(finding)])[0]
+        closure_campaigns = closure["details"]["risk_path"]["validation_campaigns"]
+        self.assertTrue(
+            all(
+                campaign["source_snapshot"]["evidence_source_bindings"]
+                for campaign in closure_campaigns
+            )
+        )
+        self.assertTrue(
+            any(
+                "producer-verified payload-binding receipt" in criterion
+                for criterion in closure["acceptance_criteria"]
+            )
+        )
+        schema = json.loads(read_bundled_schema("risk-paths-1.0"))
+        Draft202012Validator(schema).validate(result)
 
     def test_entry_point_exposure_is_exact_and_bounded(self) -> None:
         artifacts = _artifacts()
@@ -1464,6 +1925,34 @@ def _tool_posture(tool: str, lane: str) -> dict[str, Any]:
         "auxiliary_executable_organization_approved": None,
         "auxiliary_executable_unchanged": None,
         "assurance_status": "approved",
+    }
+
+
+def _bind_test_evidence(artifacts: dict[str, Any], source_sha256: str) -> None:
+    _bind_test_evidence_artifact(
+        artifacts["coverage-summary.json"],
+        source_sha256,
+        evidence_sha256="c" * 64,
+    )
+    _bind_test_evidence_artifact(
+        artifacts["junit-summary.json"],
+        source_sha256,
+        evidence_sha256="d" * 64,
+    )
+
+
+def _bind_test_evidence_artifact(
+    document: dict[str, Any],
+    source_sha256: str,
+    *,
+    evidence_sha256: str,
+) -> None:
+    document["source_sha256"] = source_sha256
+    document["evidence_binding"] = {
+        "schema_version": "1.0",
+        "evidence_sha256": evidence_sha256,
+        "binding_file": "evidence.pysec-binding.json",
+        "verified": True,
     }
 
 

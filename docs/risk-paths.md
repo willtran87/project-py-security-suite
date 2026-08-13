@@ -30,8 +30,13 @@ flowchart LR
     Fusion["Evidence fusion<br/>change, coverage, related tools"] --> Context["Route context"]
     Effectiveness["Effectiveness 1.1<br/>completion + contribution"] --> Assurance["Exact contributing-tool assurance"]
     Trust["Scanner trust + integrity continuity"] --> Assurance
+    Delta["Finding delta<br/>approved comparable baseline"] --> Lifecycle["Fail-closed lifecycle/change attribution"]
+    Fusion --> Lifecycle
+    Lifecycle --> Routed
     Structure["Structural synthesis<br/>tests, islands, cycles"] --> Context
-    Owners["CODEOWNERS"] --> Context
+    Owners["Retained CODEOWNERS rules"] --> OwnerPath["Ordered ownership paths + handoffs"]
+    Route --> OwnerPath
+    OwnerPath --> Context
     Route --> Routed["Bounded risk routes"]
     Context --> Routed
     Assurance --> Routed
@@ -69,7 +74,11 @@ Each retained route includes:
   supporting artifact names; and
 - exact contributing-tool completion, evidence lane, normalized/unique yield,
   primary and helper integrity/continuity, organization approval, and
-  independent-perspective posture; and
+  independent-perspective posture;
+- comparable-baseline lifecycle joined to exact changed-line, validation,
+  declared-entry runtime, and scanner-assurance context; and
+- ordered CODEOWNERS assignments, exact cross-owner handoffs, unowned segments,
+  collaborating owners, and target-owner alignment; and
 - an explicit recommended action.
 
 Routes are also cross-referenced with one another. A convergence hotspot is a
@@ -128,6 +137,95 @@ Markdown/HTML, sensitive-boundary dependency intersections, owner queues, and
 closure criteria. A single perspective calls for an independent applicable
 technique or governed sufficiency rationale; trust and execution gaps require
 replacement-report evidence for the exact contributing bindings.
+
+## Finding lifecycle and change attribution
+
+A scanner finding's `new`, `existing`, or `regression` value is useful only
+when its baseline is comparable. Risk synthesis therefore joins
+`finding-delta.json` with the route's exact changed-line state, validation
+assessment, declared-entry runtime matrix, owner, and contributing-tool
+assurance. It emits a bounded `change_lifecycle_attribution` containing:
+
+- baseline state (`comparable`, `not-configured`, `incomparable`, or
+  `not-established`) and bounded comparison reasons;
+- lifecycle plus any exact previous-finding match evidence;
+- changed-line, outside-change-scope, or unavailable change context;
+- an explicit classification and review signal rather than a confidence score;
+- validation, entry-runtime, and scanner-assurance factors; and
+- one conservative next action.
+
+Only a digest-approved comparable baseline can produce
+`baseline-new-on-changed-line` or `regression-on-changed-line`. Default `new`
+status from a scan with no baseline is reported as `baseline-not-configured` or
+`baseline-not-established`; an incompatible profile, scanner set, or ancestry
+is `baseline-incomparable`. None of those states is silently treated as code
+introduced by the current change.
+
+```mermaid
+flowchart LR
+    Delta["finding-delta.json"] --> Comparable{"Approved baseline comparable?"}
+    Finding["Finding lifecycle"] --> Join["Exact route attribution"]
+    Change["Changed line + coverage"] --> Join
+    Runtime["Per-entry runtime state"] --> Join
+    Assurance["Scanner assurance"] --> Join
+    Comparable -->|Yes| Join
+    Comparable -->|No| Gap["Change origin not established"]
+    Join --> NewGap["Baseline-new/regressed + changed + validation gap"]
+    Join --> Existing["Modified pre-existing debt"]
+    NewGap --> Queue["Owner queue + closure criteria"]
+    Existing --> Queue
+    Gap --> Queue
+```
+
+Summary counters distinguish comparable lifecycle routes, routes without
+comparable lifecycle, baseline-new/regressed changed-line routes, validation
+gaps among those routes, and modified pre-existing findings. The same context
+flows through finding JSON and SARIF, Markdown/HTML detail, owner queues, and
+closure acceptance criteria. This attribution supports review ordering; it
+does not prove when a defect was authored, why a scanner first detected it, or
+whether a finding is exploitable.
+
+## Route ownership topology
+
+For each retained primary and alternate entry path, the suite applies bounded
+CODEOWNERS rules to files in exact route order. The resulting
+`ownership_context` retains:
+
+- owners and entry/transit/target roles for each exact file;
+- stable boundary IDs for every adjacent owner-set transition;
+- the entry exposures that traverse each boundary;
+- distinct and coordinating owners plus exact unowned files;
+- target finding-owner versus target-file CODEOWNERS alignment; and
+- evidence availability, coordination status, artifacts, and next action.
+
+```mermaid
+flowchart LR
+    Entry["Declared entry file<br/>@platform"] --> Transit["Shared service<br/>@service"]
+    Transit --> Target["Finding target<br/>@security"]
+    Rules["Retained CODEOWNERS<br/>last match wins"] --> Entry
+    Rules --> Transit
+    Rules --> Target
+    Entry --> H1["Stable handoff 1"]
+    Transit --> H1
+    Transit --> H2["Stable handoff 2"]
+    Target --> H2
+    H1 --> Queues["Collaborating owner queues"]
+    H2 --> Queues
+    Queues --> Closure["Coordinated remediation + regression evidence"]
+```
+
+`not-established` means no retained ownership rules were available. It is
+different from `unowned-segment`, which requires ownership evidence and an
+exact route file with no matching rule. A target-owner mismatch is retained as
+a review condition rather than silently replacing either source. Routes appear
+in every coordinating owner's queue; an additional `Unassigned` queue makes
+unowned segments visible. The same context flows into finding JSON/SARIF,
+Markdown/HTML, dependency route context, closure evidence, and acceptance
+criteria.
+
+Ownership topology identifies responsibility boundaries. It does not prove
+code authorship, approval, runtime control, exploitability, or security review
+completion.
 
 ## Multi-entry exposure matrix
 
@@ -290,8 +388,8 @@ by joining:
   point, explicitly labeled as aggregate retained file evidence rather than
   coverage attributable solely to the selected tests; and
 - exact source-inventory bindings for the control point and selected tests,
-  plus aligned/mismatched/unbound revision state for retained case and coverage
-  evidence; and
+  plus aligned/mismatched/unverified/unbound revision state and exact payload
+  receipt identity for retained case and coverage evidence; and
 - structural change risk, exact uncovered changed lines, complexity, graph
   centrality, and runtime observation state for the same control-point path; and
 - routes, targets, findings, priority, owners, evidence artifacts, a transparent
@@ -305,10 +403,34 @@ queues, Markdown/HTML summaries, and closure acceptance criteria. This makes a
 shared remediation runnable without presenting static selection or a passing
 test as a security proof.
 
-`shared-control-review-v2` ranks review work from route priority and convergence,
+Revision alignment is deliberately fail-closed. Each retained evidence summary
+must declare the sealed `source_sha256` and carry a schema-1.0 binding receipt
+whose producer verified the exact evidence payload digest. The campaign keeps
+the artifact name, declared source digest, binding status, evidence digest, and
+binding filename. A matching source digest without a complete verified receipt
+is `unverified`; a different digest is `mismatch`; missing declarations remain
+`not-established`. Mismatch takes precedence over other gaps when several
+evidence producers are combined.
+
+```mermaid
+flowchart LR
+    Source["Sealed source inventory digest"] --> Join{"All evidence revisions coherent?"}
+    Coverage["Coverage payload + verified receipt"] --> Join
+    Cases["JUnit/property/API cases + verified receipts"] --> Join
+    Join -->|"Exact digest + verified payload receipts"| Aligned["aligned"]
+    Join -->|"Different source digest"| Mismatch["mismatch"]
+    Join -->|"Digest matches; receipt invalid/missing"| Unverified["unverified"]
+    Join -->|"Source declaration absent"| Unbound["not-established"]
+    Mismatch --> Queue["Owner queue + closure"]
+    Unverified --> Queue
+    Unbound --> Queue
+```
+
+`shared-control-review-v3` ranks review work from route priority and convergence,
 security-target and tool diversity, coverage/test state, changed-control risk,
 uncovered changed lines, runtime observation gaps, complexity, graph centrality,
-ownership, and evidence-revision coherence. The report retains every non-zero
+ownership, evidence-revision coherence, and producer-verified payload-binding
+state. The report retains every non-zero
 factor, point contribution, and exact source artifacts; Markdown/HTML campaign
 cards show a bounded factor breakdown beside the score. The score is triage guidance, not a
 vulnerability severity or exploitability calculation. The prior v1 identifier
