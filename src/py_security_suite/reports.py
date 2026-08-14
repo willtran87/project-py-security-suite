@@ -893,12 +893,20 @@ def _render_risk_path_summary(value: dict[str, Any] | None) -> list[str]:
         f"| Campaigns using shared tests | {int(summary.get('campaigns_using_shared_tests', 0))} |",
         f"| Routes using shared tests | {int(summary.get('routes_using_shared_tests', 0))} |",
         f"| Campaigns dependent on one shared test | {int(summary.get('single_test_dependency_campaigns', 0))} |",
+        f"| Shared-test evidence strong / qualified / weak / not established | {int(summary.get('shared_test_hotspots_strong', 0))} / {int(summary.get('shared_test_hotspots_qualified', 0))} / {int(summary.get('shared_test_hotspots_weak', 0))} / {int(summary.get('shared_test_hotspots_not_established', 0))} |",
+        f"| Shared test files with findings / high-severity findings | {int(summary.get('shared_test_files_with_findings', 0))} / {int(summary.get('shared_test_files_with_high_severity_findings', 0))} |",
+        f"| Cross-owner / unowned shared test files | {int(summary.get('cross_owner_shared_test_files', 0))} / {int(summary.get('unowned_shared_test_files', 0))} |",
         f"| Campaigns with selected tests | {int(summary.get('campaigns_with_selected_tests', 0))} |",
         f"| Campaigns with failing tests | {int(summary.get('campaigns_with_failing_tests', 0))} |",
         f"| Campaigns with coverage gaps | {int(summary.get('campaigns_with_coverage_gaps', 0))} |",
         f"| Campaigns at changed control points | {int(summary.get('campaigns_with_changed_controls', 0))} |",
         f"| Campaigns with uncovered changed lines | {int(summary.get('campaigns_with_uncovered_changed_lines', 0))} |",
         f"| Campaigns with runtime-observation gaps | {int(summary.get('campaigns_with_runtime_observation_gaps', 0))} |",
+        f"| Campaigns with route tool-assurance prerequisite met | {int(summary.get('campaigns_with_assured_route_evidence', 0))} |",
+        f"| Campaigns blocked by route tool assurance | {int(summary.get('campaigns_blocked_by_route_assurance', 0))} |",
+        f"| Campaigns with route trust / execution / unassessed gaps | {int(summary.get('campaigns_with_route_trust_gaps', 0))} / {int(summary.get('campaigns_with_route_execution_gaps', 0))} / {int(summary.get('campaigns_with_unassessed_route_evidence', 0))} |",
+        f"| Campaigns with single-perspective routes | {int(summary.get('campaigns_with_route_perspective_gaps', 0))} |",
+        f"| Campaigns with qualified / weak shared-test evidence | {int(summary.get('campaigns_with_qualified_shared_test_evidence', 0))} / {int(summary.get('campaigns_with_weak_shared_test_evidence', 0))} |",
         f"| Campaigns aligned in current evidence | {int(summary.get('campaigns_aligned_current_evidence', 0))} |",
         f"| Campaigns requiring more evidence | {int(summary.get('campaigns_requiring_evidence', 0))} |",
         f"| Unique campaign test files | {int(summary.get('unique_campaign_test_files', 0))} |",
@@ -1003,6 +1011,12 @@ def _render_risk_path_summary(value: dict[str, Any] | None) -> list[str]:
                 if isinstance(owners, list) and owners
                 else "Unassigned"
             )
+            test_owners = hotspot.get("test_file_owners")
+            test_owner_text = (
+                ", ".join(str(owner) for owner in test_owners[:3])
+                if isinstance(test_owners, list) and test_owners
+                else "Unassigned"
+            )
             statuses = hotspot.get("execution_statuses")
             status_text = (
                 ", ".join(str(status) for status in statuses[:5])
@@ -1051,9 +1065,24 @@ def _render_risk_path_summary(value: dict[str, Any] | None) -> list[str]:
                 + _markdown_code(str(int(hotspot.get("observed_case_count") or 0)))
                 + "`<br>source `"
                 + _markdown_code(source_text)
+                + "`<br>quality `"
+                + _markdown_code(
+                    str(
+                        hotspot.get("validation_quality_assessment")
+                        or "not-established"
+                    )
+                )
+                + "`; test findings `"
+                + _markdown_code(str(len(hotspot.get("test_file_finding_ids") or [])))
                 + "` | **"
                 + _markdown_text(owner_text)
-                + "**<br>"
+                + "** campaign<br>**"
+                + _markdown_text(test_owner_text)
+                + "** test (`"
+                + _markdown_code(
+                    str(hotspot.get("test_owner_alignment") or "not-established")
+                )
+                + "`)<br>"
                 + _markdown_text(
                     str(
                         hotspot.get("recommended_action") or "Review shared test scope."
@@ -1069,7 +1098,7 @@ def _render_risk_path_summary(value: dict[str, Any] | None) -> list[str]:
                 "",
                 "Each campaign converts one shared control point into a bounded regression plan. Test selection is static context; even passing tests with complete retained coverage do not prove security or exploitability.",
                 "",
-                "| Review / campaign | Selected tests | Execution / coverage | Revision coherence | Owners / action |",
+                "| Review / campaign | Selected tests | Execution / coverage | Evidence coherence | Owners / action |",
                 "|---|---|---|---|---|",
             ]
         )
@@ -1098,6 +1127,7 @@ def _render_risk_path_summary(value: dict[str, Any] | None) -> list[str]:
             revision = str(
                 snapshot.get("evidence_revision_binding") or "not-established"
             )
+            route_assurance_text = _campaign_route_assurance_text(campaign)
             context_text = _risk_campaign_control_text(campaign)
             factor_text = _risk_campaign_factor_text(campaign)
             lines.append(
@@ -1148,7 +1178,11 @@ def _render_risk_path_summary(value: dict[str, Any] | None) -> list[str]:
                 + _markdown_code(
                     str(int(snapshot.get("selected_test_files_bound") or 0))
                 )
-                + "` | **"
+                + "`<br>route evidence "
+                + _markdown_text(route_assurance_text)
+                + "<br>shared tests "
+                + _markdown_text(_campaign_shared_test_quality_text(campaign))
+                + " | **"
                 + _markdown_text(owner_text)
                 + "**<br>"
                 + _markdown_text(
@@ -1447,6 +1481,24 @@ def _render_risk_owner_queues(queues: list[Any]) -> list[str]:
                 + str(int(queue.get("campaigns_revision_unverified") or 0))
                 + "/"
                 + str(int(queue.get("campaigns_revision_unbound") or 0))
+            )
+            + "`; route-assurance blocked/trust/execution `"
+            + _markdown_code(
+                str(int(queue.get("campaigns_blocked_by_route_assurance") or 0))
+                + "/"
+                + str(int(queue.get("campaigns_with_route_trust_gaps") or 0))
+                + "/"
+                + str(int(queue.get("campaigns_with_route_execution_gaps") or 0))
+            )
+            + "`; shared-test qualified/weak/findings `"
+            + _markdown_code(
+                str(
+                    int(queue.get("campaigns_with_qualified_shared_test_evidence") or 0)
+                )
+                + "/"
+                + str(int(queue.get("campaigns_with_weak_shared_test_evidence") or 0))
+                + "/"
+                + str(len(queue.get("shared_test_file_finding_ids") or []))
             )
             + "`; changed/runtime gaps `"
             + _markdown_code(
@@ -1843,6 +1895,37 @@ def _exposure_accountability_summary(value: Any) -> str:
     if isinstance(risks, list) and risks:
         parts.append("structural " + ", ".join(str(item) for item in risks[:2]))
     return "; ".join(parts)
+
+
+def _campaign_route_assurance_text(campaign: dict[str, Any]) -> str:
+    assurance = campaign.get("route_evidence_assurance")
+    assurance = assurance if isinstance(assurance, dict) else {}
+    statuses = assurance.get("route_statuses")
+    statuses = statuses if isinstance(statuses, dict) else {}
+    assessment = str(assurance.get("assessment") or "not-assessed")
+    expected = int(assurance.get("routes_expected") or 0)
+    assessed = int(assurance.get("routes_assessed") or 0)
+    gaps = "/".join(
+        str(int(statuses.get(status) or 0))
+        for status in ("trust-gap", "execution-gap", "not-assessed")
+    )
+    return (
+        f"{assessment}; routes {assessed}/{expected}; trust/execution/unassessed {gaps}"
+    )
+
+
+def _campaign_shared_test_quality_text(campaign: dict[str, Any]) -> str:
+    quality = campaign.get("shared_test_evidence_quality")
+    quality = quality if isinstance(quality, dict) else {}
+    return (
+        str(quality.get("assessment") or "not-applicable")
+        + "; findings "
+        + str(len(quality.get("test_file_finding_ids") or []))
+        + "; cross-owner/unowned "
+        + str(len(quality.get("cross_owner_test_files") or []))
+        + "/"
+        + str(len(quality.get("unowned_test_files") or []))
+    )
 
 
 def _risk_advisory_citations_text(value: Any) -> str:
@@ -4134,6 +4217,10 @@ def _markdown_risk_path_context(finding: Finding) -> list[str]:
                     str(snapshot.get("evidence_revision_binding") or "not-established")
                 )
                 + "`"
+                + "; route evidence "
+                + _markdown_text(_campaign_route_assurance_text(campaign))
+                + "; shared tests "
+                + _markdown_text(_campaign_shared_test_quality_text(campaign))
                 + ("; " + _markdown_text(control_text) if control_text else "")
                 + "."
             )
@@ -4637,7 +4724,10 @@ def _html_risk_path_context(finding: Finding) -> str:
             + html.escape(
                 str(snapshot.get("evidence_revision_binding") or "not-established")
             )
-            + "</code>"
+            + "</code>; route evidence "
+            + html.escape(_campaign_route_assurance_text(campaign))
+            + "; shared tests "
+            + html.escape(_campaign_shared_test_quality_text(campaign))
             + ("; " + html.escape(control_text) if control_text else "")
             + "."
         )

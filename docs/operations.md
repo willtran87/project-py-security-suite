@@ -300,6 +300,16 @@ A hand-authored or legacy summary containing only `source_sha256` is
 `pysec-evidence` helper and preserve its sidecar; never copy a source digest into
 a summary to satisfy revision checks.
 
+Campaign acceptance has a separate route-evidence prerequisite. The suite
+resolves every campaign route ID and aggregates the execution, integrity, and
+organization-approval posture of each exact contributing scanner. Passing tests
+and complete coverage do not satisfy closure while that aggregate reports a
+trust, execution, unassessed, or missing-route gap. Complete or approve the
+named scanner bindings, regenerate the scan, and retain `effectiveness.json`,
+`scanner-trust.json`, and `risk-paths.json` with the test evidence. A
+single-perspective state requires an independent applicable scan or a governed
+concentration-risk disposition.
+
 Configure `tools.coverage.artifacts_path`,
 `tools.coverage.minimum_coverage_percent`, and `tools.junit.artifacts_path`.
 The bundled `pysec-evidence` helper validates and normalizes those files using

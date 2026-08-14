@@ -391,7 +391,10 @@ by joining:
   plus aligned/mismatched/unverified/unbound revision state and exact payload
   receipt identity for retained case and coverage evidence; and
 - structural change risk, exact uncovered changed lines, complexity, graph
-  centrality, and runtime observation state for the same control-point path; and
+  centrality, and runtime observation state for the same control-point path;
+- the exact contributing-tool assurance of every retained route, including
+  completed, approved, trust-gap, execution-gap, unassessed, derived, and
+  single-perspective counts plus unresolved route references; and
 - routes, targets, findings, priority, owners, evidence artifacts, a transparent
   factor-by-factor review score, and one next action.
 
@@ -402,6 +405,27 @@ files and campaign IDs flow into finding evidence, SARIF properties, owner
 queues, Markdown/HTML summaries, and closure acceptance criteria. This makes a
 shared remediation runnable without presenting static selection or a passing
 test as a security proof.
+
+Route assurance is a campaign prerequisite, not a test result. Trust,
+execution, unassessed, or unresolved-route gaps fail closed even when every
+selected test passes and coverage is complete. A single-perspective route
+remains usable as retained evidence only with an explicit action to add an
+independent applicable perspective or approve the concentration risk. Derived
+suite observations remain labeled separately and cannot promote scanner
+evidence to assured.
+
+```mermaid
+flowchart LR
+    Routes["Exact converging route IDs"] --> Join{"Every route resolved?"}
+    Posture["Effectiveness tool posture"] --> Assurance["Contributing-tool assurance"]
+    Trust["Integrity + approval evidence"] --> Assurance
+    Join --> Campaign["Validation campaign"]
+    Assurance --> Campaign
+    Tests["Source-bound tests + coverage"] --> Campaign
+    Campaign -->|"Trust/execution/unassessed gap"| Blocked["Closure blocked + owner action"]
+    Campaign -->|"Assured; tests aligned"| Retain["Retain closure evidence"]
+    Campaign -->|"Single perspective"| Disposition["Independent scan or approved disposition"]
+```
 
 Revision alignment is deliberately fail-closed. Each retained evidence summary
 must declare the sealed `source_sha256` and carry a schema-1.0 binding receipt
@@ -426,15 +450,15 @@ flowchart LR
     Unbound --> Queue
 ```
 
-`shared-control-review-v3` ranks review work from route priority and convergence,
+`shared-control-review-v4` ranks review work from route priority and convergence,
 security-target and tool diversity, coverage/test state, changed-control risk,
 uncovered changed lines, runtime observation gaps, complexity, graph centrality,
-ownership, evidence-revision coherence, and producer-verified payload-binding
-state. The report retains every non-zero
+ownership, route scanner execution/trust/perspective assurance, evidence-revision
+coherence, and producer-verified payload-binding state. The report retains every non-zero
 factor, point contribution, and exact source artifacts; Markdown/HTML campaign
 cards show a bounded factor breakdown beside the score. The score is triage guidance, not a
 vulnerability severity or exploitability calculation. The prior v1 identifier
-remains schema-readable for stored artifacts. Evidence revision state is
+through v3 identifiers remain schema-readable for stored artifacts. Evidence revision state is
 `aligned` only when all retained coverage/case artifacts declare the exact sealed
 source-inventory digest. `mismatch` and `not-established` generate explicit
 regeneration/binding work and flow into owner queues and closure acceptance

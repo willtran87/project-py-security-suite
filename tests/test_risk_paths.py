@@ -91,8 +91,11 @@ class RiskPathTests(unittest.TestCase):
         self.assertEqual(result["summary"]["unique_campaign_test_files"], 1)
         self.assertEqual(
             result["summary"]["campaigns_by_review_tier"],
-            {"critical": 1, "high": 1, "medium": 0, "low": 0},
+            {"critical": 2, "high": 0, "medium": 0, "low": 0},
         )
+        self.assertEqual(result["summary"]["campaigns_with_assured_route_evidence"], 2)
+        self.assertEqual(result["summary"]["campaigns_blocked_by_route_assurance"], 0)
+        self.assertEqual(result["summary"]["campaigns_with_route_perspective_gaps"], 2)
         self.assertEqual(result["summary"]["campaigns_revision_unbound"], 2)
         self.assertEqual(
             result["summary"]["campaigns_with_source_bound_control_points"], 2
@@ -260,11 +263,39 @@ class RiskPathTests(unittest.TestCase):
             )
         )
         self.assertEqual(
-            {campaign["review_tier"] for campaign in campaigns}, {"critical", "high"}
+            {campaign["review_tier"] for campaign in campaigns}, {"critical"}
         )
         self.assertTrue(
             all(
-                campaign["review_score_model"] == "shared-control-review-v3"
+                campaign["review_score_model"] == "shared-control-review-v5"
+                for campaign in campaigns
+            )
+        )
+        self.assertEqual(test_hotspot["validation_quality_assessment"], "qualified")
+        self.assertEqual(test_hotspot["test_owner_alignment"], "not-established")
+        self.assertEqual(test_hotspot["test_file_finding_ids"], [])
+        self.assertEqual(result["summary"]["shared_test_hotspots_qualified"], 1)
+        self.assertEqual(
+            result["summary"]["campaigns_with_qualified_shared_test_evidence"], 2
+        )
+        self.assertTrue(
+            all(
+                campaign["shared_test_evidence_quality"]["assessment"] == "qualified"
+                for campaign in campaigns
+            )
+        )
+        self.assertTrue(
+            all(
+                campaign["route_evidence_assurance"]["tool_assurance_prerequisite_met"]
+                for campaign in campaigns
+            )
+        )
+        self.assertTrue(
+            all(
+                campaign["route_evidence_assurance"]["route_statuses"][
+                    "perspective-gap"
+                ]
+                == 1
                 for campaign in campaigns
             )
         )
@@ -324,6 +355,7 @@ class RiskPathTests(unittest.TestCase):
         self.assertIn(test_hotspot["test_hotspot_id"], rendered)
         self.assertIn("sole dependency `2`", rendered)
         self.assertIn("revision `not-established`", rendered)
+        self.assertIn("route evidence perspective-gap", rendered)
         self.assertIn("change risk 85 (high)", rendered)
         self.assertIn("uncovered changed lines 9", rendered)
         self.assertIn("runtime not-observed", rendered)
@@ -430,6 +462,12 @@ class RiskPathTests(unittest.TestCase):
         self.assertTrue(
             any(
                 "independent applicable analysis" in item
+                for item in closure["acceptance_criteria"]
+            )
+        )
+        self.assertTrue(
+            any(
+                "single-perspective routes" in item
                 for item in closure["acceptance_criteria"]
             )
         )
@@ -913,6 +951,107 @@ class RiskPathTests(unittest.TestCase):
         )
         schema = json.loads(read_bundled_schema("risk-paths-1.0"))
         Draft202012Validator(schema).validate(mismatched)
+
+    def test_campaigns_fail_closed_when_route_scanner_assurance_is_not_met(
+        self,
+    ) -> None:
+        artifacts = _artifacts()
+        record = next(
+            item
+            for item in artifacts["effectiveness.json"]["tool_posture"]
+            if item["tool"] == "semgrep"
+        )
+        record["assurance_status"] = "approval-gap"
+        record["executable_organization_approved"] = False
+        finding = _finding("src/sink.py", 9)
+
+        result = build_risk_paths([finding], artifacts)
+
+        self.assertEqual(result["summary"]["campaigns_with_assured_route_evidence"], 0)
+        self.assertEqual(result["summary"]["campaigns_blocked_by_route_assurance"], 2)
+        self.assertEqual(result["summary"]["campaigns_with_route_trust_gaps"], 2)
+        for campaign in result["validation_campaigns"]:
+            assurance = campaign["route_evidence_assurance"]
+            self.assertEqual(assurance["assessment"], "trust-gap")
+            self.assertFalse(assurance["tool_assurance_prerequisite_met"])
+            self.assertEqual(assurance["trust_gap_tools"], ["semgrep"])
+            self.assertEqual(assurance["routes_expected"], assurance["routes_assessed"])
+            self.assertIn(
+                "route-tool-trust-gap",
+                {factor["id"] for factor in campaign["review_factors"]},
+            )
+            self.assertTrue(
+                campaign["recommended_action"].startswith(
+                    "Verify executable integrity and obtain organization approval"
+                )
+            )
+        queue = result["owner_work_queues"][0]
+        self.assertEqual(queue["campaigns_blocked_by_route_assurance"], 2)
+        closure = _finding_items([json_ready(finding)])[0]
+        closure_campaigns = closure["details"]["risk_path"]["validation_campaigns"]
+        self.assertTrue(
+            all(
+                campaign["route_evidence_assurance"]["tool_assurance_prerequisite_met"]
+                is False
+                for campaign in closure_campaigns
+            )
+        )
+        self.assertTrue(
+            any(
+                "organization-approved evidence" in criterion
+                for criterion in closure["acceptance_criteria"]
+            )
+        )
+        rendered = "\n".join(_render_risk_path_summary(result))
+        self.assertIn("route evidence trust-gap", rendered)
+        Draft202012Validator(
+            json.loads(read_bundled_schema("risk-paths-1.0"))
+        ).validate(result)
+
+    def test_campaigns_distinguish_route_execution_and_unassessed_gaps(self) -> None:
+        scenarios = (
+            (
+                "execution-gap",
+                "route-tool-execution-gap",
+                "execution_gap_tools",
+                "Complete the exact contributing scanner runs",
+            ),
+            (
+                "not-assessed",
+                "route-tool-assurance-unassessed",
+                "unassessed_tools",
+                "Establish execution and trust posture",
+            ),
+        )
+        for expected, factor_id, tool_key, action_start in scenarios:
+            with self.subTest(expected=expected):
+                artifacts = _artifacts()
+                posture = artifacts["effectiveness.json"]["tool_posture"]
+                record = next(item for item in posture if item["tool"] == "semgrep")
+                if expected == "execution-gap":
+                    record["status"] = "unavailable"
+                    record["assurance_status"] = "execution-gap"
+                else:
+                    artifacts["effectiveness.json"]["tool_posture"] = [
+                        item for item in posture if item["tool"] != "semgrep"
+                    ]
+
+                result = build_risk_paths([_finding("src/sink.py", 9)], artifacts)
+
+                self.assertEqual(
+                    result["summary"]["campaigns_blocked_by_route_assurance"], 2
+                )
+                for campaign in result["validation_campaigns"]:
+                    assurance = campaign["route_evidence_assurance"]
+                    self.assertEqual(assurance["assessment"], expected)
+                    self.assertEqual(assurance[tool_key], ["semgrep"])
+                    self.assertIn(
+                        factor_id,
+                        {factor["id"] for factor in campaign["review_factors"]},
+                    )
+                    self.assertTrue(
+                        campaign["recommended_action"].startswith(action_start)
+                    )
 
     def test_campaign_revision_binding_rejects_unverified_matching_digest(
         self,

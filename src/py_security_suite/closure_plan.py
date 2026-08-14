@@ -540,6 +540,12 @@ def _closure_validation_campaigns(value: Any) -> list[dict[str, Any]]:
                 "control_point_context": _as_object(
                     campaign.get("control_point_context")
                 ),
+                "route_evidence_assurance": _as_object(
+                    campaign.get("route_evidence_assurance")
+                ),
+                "shared_test_evidence_quality": _as_object(
+                    campaign.get("shared_test_evidence_quality")
+                ),
                 "source_snapshot": {
                     "source_sha256": snapshot.get("source_sha256"),
                     "control_point_binding": _as_object(
@@ -722,6 +728,26 @@ def _risk_path_closure_context(
         refs.extend(
             test for campaign in campaigns for test in campaign["selected_test_files"]
         )
+        refs.extend(
+            artifact
+            for campaign in campaigns
+            for artifact in _string_values(
+                _as_object(campaign.get("route_evidence_assurance")).get(
+                    "evidence_artifacts"
+                ),
+                10,
+            )
+        )
+        refs.extend(
+            artifact
+            for campaign in campaigns
+            for artifact in _string_values(
+                _as_object(campaign.get("shared_test_evidence_quality")).get(
+                    "evidence_artifacts"
+                ),
+                10,
+            )
+        )
         dependency_routes = _closure_dependency_advisory_routes(
             risk_path.get("dependency_advisory_routes")
         )
@@ -880,6 +906,31 @@ def _validation_campaign_acceptance(
             "Every linked campaign's retained test and coverage evidence declares the replacement report's sealed source-inventory digest through a valid producer-verified payload-binding receipt."
         )
     if any(
+        _as_object(campaign.get("route_evidence_assurance")).get(
+            "tool_assurance_prerequisite_met"
+        )
+        is not True
+        for campaign in campaigns
+    ):
+        result.append(
+            "Every linked campaign resolves every retained route and carries completed, integrity-verified, organization-approved evidence for each exact contributing scanner before test results are accepted as closure evidence."
+        )
+    if any(
+        int(
+            _as_object(
+                _as_object(campaign.get("route_evidence_assurance")).get(
+                    "route_statuses"
+                )
+            ).get("perspective-gap")
+            or 0
+        )
+        > 0
+        for campaign in campaigns
+    ):
+        result.append(
+            "Every linked campaign with single-perspective routes adds an independent applicable scanner perspective or retains an approved single-perspective disposition."
+        )
+    if any(
         _as_object(campaign.get("control_point_context")).get("uncovered_changed_lines")
         for campaign in campaigns
     ):
@@ -897,6 +948,38 @@ def _validation_campaign_acceptance(
     if any(campaign["shared_test_hotspot_ids"] for campaign in campaigns):
         result.append(
             "Shared validation-test hotspots have coordinated assertions and an independent-test or approved concentration-risk disposition."
+        )
+    if any(
+        _as_object(campaign.get("shared_test_evidence_quality")).get("assessment")
+        in {"weak", "not-established"}
+        for campaign in campaigns
+    ):
+        result.append(
+            "Every linked shared test has consistent source-bound passing execution before it is accepted as validation evidence."
+        )
+    if any(
+        _as_object(campaign.get("shared_test_evidence_quality")).get(
+            "test_file_finding_ids"
+        )
+        for campaign in campaigns
+    ):
+        result.append(
+            "Active findings in linked shared-test files are resolved or governed, with reviewer confirmation that fixtures, assertions, and failure handling remain trustworthy."
+        )
+    if any(
+        _as_object(campaign.get("shared_test_evidence_quality")).get(
+            "cross_owner_test_files"
+        )
+        or _as_object(campaign.get("shared_test_evidence_quality")).get(
+            "unowned_test_files"
+        )
+        or _as_object(campaign.get("shared_test_evidence_quality")).get(
+            "ownership_not_established_test_files"
+        )
+        for campaign in campaigns
+    ):
+        result.append(
+            "Every linked shared-test file has accountable CODEOWNERS coverage and coordinated campaign/test ownership before remediation changes are accepted."
         )
     return result
 

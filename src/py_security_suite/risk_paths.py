@@ -123,10 +123,15 @@ def build_risk_paths(
     convergence_hotspots = all_convergence_hotspots[:_MAX_CONVERGENCE_HOTSPOTS]
     validation_campaigns = _validation_campaigns(
         convergence_hotspots,
+        retained_routes,
         adjacency,
         artifacts,
     )
-    all_validation_test_hotspots = _validation_test_hotspots(validation_campaigns)
+    all_validation_test_hotspots = _validation_test_hotspots(
+        validation_campaigns,
+        findings,
+        ownership_rules,
+    )
     validation_test_hotspots = all_validation_test_hotspots[
         :_MAX_VALIDATION_TEST_HOTSPOTS
     ]
@@ -140,6 +145,12 @@ def build_risk_paths(
         campaign["shared_test_hotspot_ids"] = sorted(
             test_hotspot_ids_by_campaign.get(str(campaign["campaign_id"]), [])
         )
+    _attach_shared_test_evidence_quality(
+        validation_campaigns, all_validation_test_hotspots
+    )
+    _refresh_validation_test_hotspot_review(
+        all_validation_test_hotspots, validation_campaigns
+    )
     campaign_by_hotspot = {
         str(campaign["hotspot_id"]): campaign for campaign in validation_campaigns
     }
@@ -577,6 +588,38 @@ def build_risk_paths(
                     for campaign_id in hotspot["single_test_dependency_campaign_ids"]
                 }
             ),
+            "shared_test_hotspots_strong": sum(
+                hotspot["validation_quality_assessment"] == "strong"
+                for hotspot in validation_test_hotspots
+            ),
+            "shared_test_hotspots_qualified": sum(
+                hotspot["validation_quality_assessment"] == "qualified"
+                for hotspot in validation_test_hotspots
+            ),
+            "shared_test_hotspots_weak": sum(
+                hotspot["validation_quality_assessment"] == "weak"
+                for hotspot in validation_test_hotspots
+            ),
+            "shared_test_hotspots_not_established": sum(
+                hotspot["validation_quality_assessment"] == "not-established"
+                for hotspot in validation_test_hotspots
+            ),
+            "shared_test_files_with_findings": sum(
+                bool(hotspot["test_file_finding_ids"])
+                for hotspot in validation_test_hotspots
+            ),
+            "shared_test_files_with_high_severity_findings": sum(
+                hotspot["test_file_highest_severity"] in {"critical", "high"}
+                for hotspot in validation_test_hotspots
+            ),
+            "cross_owner_shared_test_files": sum(
+                hotspot["test_owner_alignment"] == "coordination-needed"
+                for hotspot in validation_test_hotspots
+            ),
+            "unowned_shared_test_files": sum(
+                hotspot["test_owner_alignment"] == "unowned"
+                for hotspot in validation_test_hotspots
+            ),
             "campaigns_with_selected_tests": sum(
                 bool(campaign["selected_test_files"])
                 for campaign in validation_campaigns
@@ -602,6 +645,58 @@ def build_risk_paths(
                     factor["id"] == "runtime-observation-gap"
                     for factor in campaign["review_factors"]
                 )
+                for campaign in validation_campaigns
+            ),
+            "campaigns_with_assured_route_evidence": sum(
+                campaign["route_evidence_assurance"]["tool_assurance_prerequisite_met"]
+                is True
+                for campaign in validation_campaigns
+            ),
+            "campaigns_blocked_by_route_assurance": sum(
+                campaign["route_evidence_assurance"]["tool_assurance_prerequisite_met"]
+                is not True
+                for campaign in validation_campaigns
+            ),
+            "campaigns_with_route_trust_gaps": sum(
+                int(campaign["route_evidence_assurance"]["route_statuses"]["trust-gap"])
+                > 0
+                for campaign in validation_campaigns
+            ),
+            "campaigns_with_route_execution_gaps": sum(
+                int(
+                    campaign["route_evidence_assurance"]["route_statuses"][
+                        "execution-gap"
+                    ]
+                )
+                > 0
+                for campaign in validation_campaigns
+            ),
+            "campaigns_with_unassessed_route_evidence": sum(
+                bool(campaign["route_evidence_assurance"]["route_ids_missing"])
+                or int(
+                    campaign["route_evidence_assurance"]["route_statuses"][
+                        "not-assessed"
+                    ]
+                )
+                > 0
+                for campaign in validation_campaigns
+            ),
+            "campaigns_with_route_perspective_gaps": sum(
+                int(
+                    campaign["route_evidence_assurance"]["route_statuses"][
+                        "perspective-gap"
+                    ]
+                )
+                > 0
+                for campaign in validation_campaigns
+            ),
+            "campaigns_with_qualified_shared_test_evidence": sum(
+                campaign["shared_test_evidence_quality"]["assessment"] == "qualified"
+                for campaign in validation_campaigns
+            ),
+            "campaigns_with_weak_shared_test_evidence": sum(
+                campaign["shared_test_evidence_quality"]["assessment"]
+                in {"weak", "not-established"}
                 for campaign in validation_campaigns
             ),
             "campaigns_aligned_current_evidence": sum(
@@ -2506,6 +2601,7 @@ def _hotspot_action(
 
 def _validation_campaigns(
     hotspots: list[dict[str, Any]],
+    routes: list[dict[str, Any]],
     adjacency: dict[str, dict[str, str]],
     artifacts: dict[str, Any],
 ) -> list[dict[str, Any]]:
@@ -2519,6 +2615,7 @@ def _validation_campaigns(
         artifacts.get("source-inventory.json")
     )
     test_executions, test_evidence = build_test_execution_index(artifacts)
+    routes_by_id = {str(route["route_id"]): route for route in routes}
     campaigns: list[dict[str, Any]] = []
     for hotspot in hotspots:
         path = str(hotspot["path"])
@@ -2603,6 +2700,7 @@ def _validation_campaigns(
             path,
             _empty_campaign_control_context(),
         )
+        route_assurance = _campaign_route_assurance(hotspot, routes_by_id)
         review = _campaign_review_assessment(
             hotspot,
             execution_status=str(execution["focused_test_validation_status"]),
@@ -2612,6 +2710,7 @@ def _validation_campaigns(
             coverage_status=coverage_status,
             context=context,
             revision_binding=str(snapshot["evidence_revision_binding"]),
+            route_assurance=route_assurance,
         )
         campaigns.append(
             {
@@ -2643,6 +2742,7 @@ def _validation_campaigns(
                 "missing_lines": missing_lines[:_MAX_CAMPAIGN_MISSING_LINES],
                 **alignment,
                 "control_point_context": context,
+                "route_evidence_assurance": route_assurance,
                 "source_snapshot": snapshot,
                 **review,
                 "recommended_action": _campaign_action(
@@ -2651,11 +2751,13 @@ def _validation_campaigns(
                     path,
                     revision_binding=str(snapshot["evidence_revision_binding"]),
                     context=context,
+                    route_assurance=route_assurance,
                 ),
                 "evidence_artifacts": sorted(
                     {
                         *evidence_artifacts,
                         *context["evidence_artifacts"],
+                        *route_assurance["evidence_artifacts"],
                         *(
                             {"source-inventory.json"}
                             if snapshot["source_inventory_available"]
@@ -2668,7 +2770,8 @@ def _validation_campaigns(
                     "evidence supports a shared regression plan. Coverage is "
                     "aggregate file evidence and is not attributed solely to the "
                     "selected tests; neither lane proves security, exploitability, "
-                    "or complete runtime behavior."
+                    "complete runtime behavior, or the assurance of the scanner "
+                    "evidence that selected the routes."
                 ),
             }
         )
@@ -2677,163 +2780,24 @@ def _validation_campaigns(
 
 def _validation_test_hotspots(
     campaigns: list[dict[str, Any]],
+    findings: list[Finding],
+    ownership_rules: list[tuple[str, list[str]]],
 ) -> list[dict[str, Any]]:
-    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    for campaign in campaigns:
-        for path in campaign.get("selected_test_files", [])[:_MAX_CAMPAIGN_TESTS]:
-            if isinstance(path, str) and path:
-                grouped[path].append(campaign)
-    result: list[dict[str, Any]] = []
-    for test_path, selected_campaigns in grouped.items():
-        campaign_ids = sorted(
-            {str(campaign["campaign_id"]) for campaign in selected_campaigns}
+    findings_by_path = _test_file_findings_index(findings)
+    grouped = _campaigns_by_selected_test(campaigns)
+    result = [
+        record
+        for test_path, selected_campaigns in grouped.items()
+        if (
+            record := _validation_test_hotspot_record(
+                test_path,
+                selected_campaigns,
+                findings_by_path=findings_by_path,
+                ownership_rules=ownership_rules,
+            )
         )
-        if len(campaign_ids) < 2:
-            continue
-        execution_records = [
-            record
-            for campaign in selected_campaigns
-            for record in campaign.get("focused_test_execution", [])
-            if isinstance(record, dict) and record.get("path") == test_path
-        ]
-        bindings = [
-            binding
-            for campaign in selected_campaigns
-            for binding in campaign["source_snapshot"].get("selected_test_bindings", [])
-            if isinstance(binding, dict) and binding.get("path") == test_path
-        ]
-        unique_bindings = {
-            json.dumps(binding, sort_keys=True, separators=(",", ":")): binding
-            for binding in bindings
-        }
-        binding_consistent = (
-            len(bindings) == len(selected_campaigns) and len(unique_bindings) == 1
-        )
-        source_binding = (
-            next(iter(unique_bindings.values())) if len(unique_bindings) == 1 else None
-        )
-        single_dependency_ids = sorted(
-            str(campaign["campaign_id"])
-            for campaign in selected_campaigns
-            if len(campaign.get("selected_test_files", [])) == 1
-        )
-        statuses = sorted(
-            {
-                str(record["status"])
-                for record in execution_records
-                if isinstance(record.get("status"), str)
-            }
-        )
-        highest_score = max(
-            int(campaign["review_score"]) for campaign in selected_campaigns
-        )
-        hotspot_id = (
-            "test-hotspot-"
-            + _digest({"path": test_path, "campaign_ids": campaign_ids})[:16]
-        )
-        result.append(
-            {
-                "test_hotspot_id": hotspot_id,
-                "test_path": test_path,
-                "campaign_ids": campaign_ids,
-                "control_point_paths": sorted(
-                    {str(campaign["path"]) for campaign in selected_campaigns}
-                ),
-                "route_ids": sorted(
-                    {
-                        str(route_id)
-                        for campaign in selected_campaigns
-                        for route_id in campaign["route_ids"]
-                    }
-                ),
-                "target_ids": sorted(
-                    {
-                        str(target_id)
-                        for campaign in selected_campaigns
-                        for target_id in campaign["target_ids"]
-                    }
-                ),
-                "finding_ids": sorted(
-                    {
-                        str(finding_id)
-                        for campaign in selected_campaigns
-                        for finding_id in campaign["finding_ids"]
-                    }
-                ),
-                "owners": sorted(
-                    {
-                        str(owner)
-                        for campaign in selected_campaigns
-                        for owner in campaign["owners"]
-                    }
-                ),
-                "highest_priority": min(
-                    (str(campaign["priority"]) for campaign in selected_campaigns),
-                    key=_priority_rank,
-                ),
-                "highest_review_score": highest_score,
-                "highest_review_tier": _review_tier(highest_score),
-                "direct_campaigns": sum(
-                    test_path in campaign["direct_test_files"]
-                    for campaign in selected_campaigns
-                ),
-                "transitive_campaigns": sum(
-                    test_path in campaign["transitive_test_files"]
-                    for campaign in selected_campaigns
-                ),
-                "route_mapped_campaigns": sum(
-                    test_path in campaign["route_mapped_test_files"]
-                    for campaign in selected_campaigns
-                ),
-                "single_test_dependency_campaign_ids": single_dependency_ids,
-                "execution_statuses": statuses,
-                "observed_case_count": max(
-                    (int(record.get("tests") or 0) for record in execution_records),
-                    default=0,
-                ),
-                "execution_sources": sorted(
-                    {
-                        str(source)
-                        for record in execution_records
-                        for source in record.get("sources", [])
-                        if isinstance(source, str) and source
-                    }
-                ),
-                "source_binding": source_binding,
-                "source_binding_consistent": binding_consistent,
-                "recommended_action": _validation_test_hotspot_action(
-                    test_path,
-                    statuses=statuses,
-                    campaigns=len(campaign_ids),
-                    controls=len(
-                        {str(campaign["path"]) for campaign in selected_campaigns}
-                    ),
-                    single_dependencies=len(single_dependency_ids),
-                    source_binding_consistent=binding_consistent,
-                ),
-                "evidence_artifacts": sorted(
-                    {
-                        "graphify.json",
-                        *(
-                            {"source-inventory.json"}
-                            if source_binding is not None
-                            else set()
-                        ),
-                        *(
-                            str(artifact)
-                            for campaign in selected_campaigns
-                            for artifact in campaign["evidence_artifacts"]
-                        ),
-                    }
-                ),
-                "interpretation": (
-                    "This record identifies one test file selected for multiple "
-                    "shared-control campaigns. Repeated selection supports coordinated "
-                    "validation planning but does not establish independent assertions, "
-                    "test quality, or sufficient behavioral coverage."
-                ),
-            }
-        )
+        is not None
+    ]
     result.sort(
         key=lambda item: (
             -int(item["highest_review_score"]),
@@ -2844,6 +2808,372 @@ def _validation_test_hotspots(
     return result
 
 
+def _campaigns_by_selected_test(
+    campaigns: list[dict[str, Any]],
+) -> dict[str, list[dict[str, Any]]]:
+    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for campaign in campaigns:
+        for path in campaign.get("selected_test_files", [])[:_MAX_CAMPAIGN_TESTS]:
+            if isinstance(path, str) and path:
+                grouped[path].append(campaign)
+    return grouped
+
+
+def _validation_test_hotspot_record(
+    test_path: str,
+    campaigns: list[dict[str, Any]],
+    *,
+    findings_by_path: dict[str, list[dict[str, Any]]],
+    ownership_rules: list[tuple[str, list[str]]],
+) -> dict[str, Any] | None:
+    campaign_ids = sorted({str(campaign["campaign_id"]) for campaign in campaigns})
+    if len(campaign_ids) < 2:
+        return None
+    execution = _shared_test_execution_context(test_path, campaigns)
+    ownership = _shared_test_ownership_context(
+        test_path,
+        campaigns,
+        findings_by_path=findings_by_path,
+        ownership_rules=ownership_rules,
+    )
+    single_dependency_ids = sorted(
+        str(campaign["campaign_id"])
+        for campaign in campaigns
+        if len(campaign.get("selected_test_files", [])) == 1
+    )
+    highest_score = max(int(campaign["review_score"]) for campaign in campaigns)
+    test_findings = ownership["test_findings"]
+    quality = _shared_test_quality(
+        statuses=execution["statuses"],
+        source_binding=execution["source_binding"],
+        source_binding_consistent=execution["binding_consistent"],
+        test_findings=test_findings,
+        owner_alignment=ownership["owner_alignment"],
+        single_dependencies=len(single_dependency_ids),
+    )
+    return {
+        "test_hotspot_id": "test-hotspot-"
+        + _digest({"path": test_path, "campaign_ids": campaign_ids})[:16],
+        "test_path": test_path,
+        "campaign_ids": campaign_ids,
+        "control_point_paths": _campaign_values(campaigns, "path"),
+        "route_ids": _campaign_values(campaigns, "route_ids"),
+        "target_ids": _campaign_values(campaigns, "target_ids"),
+        "finding_ids": _campaign_values(campaigns, "finding_ids"),
+        "owners": ownership["campaign_owners"],
+        "test_file_owners": ownership["test_owners"],
+        "ownership_evidence_available": bool(ownership_rules),
+        "test_owner_alignment": ownership["owner_alignment"],
+        "test_file_findings": test_findings,
+        "test_file_finding_ids": [
+            str(finding["finding_id"]) for finding in test_findings
+        ],
+        "test_file_finding_tools": sorted(
+            {str(tool) for finding in test_findings for tool in finding["tools"]}
+        ),
+        "test_file_highest_severity": _highest_severity(
+            [str(finding["severity"]) for finding in test_findings]
+        ),
+        **quality,
+        "highest_priority": min(
+            (str(campaign["priority"]) for campaign in campaigns),
+            key=_priority_rank,
+        ),
+        "highest_review_score": highest_score,
+        "highest_review_tier": _review_tier(highest_score),
+        "direct_campaigns": _campaigns_selecting_test(
+            test_path, campaigns, "direct_test_files"
+        ),
+        "transitive_campaigns": _campaigns_selecting_test(
+            test_path, campaigns, "transitive_test_files"
+        ),
+        "route_mapped_campaigns": _campaigns_selecting_test(
+            test_path, campaigns, "route_mapped_test_files"
+        ),
+        "single_test_dependency_campaign_ids": single_dependency_ids,
+        "execution_statuses": execution["statuses"],
+        "observed_case_count": execution["observed_case_count"],
+        "execution_sources": execution["sources"],
+        "source_binding": execution["source_binding"],
+        "source_binding_consistent": execution["binding_consistent"],
+        "recommended_action": _validation_test_hotspot_action(
+            test_path,
+            statuses=execution["statuses"],
+            campaigns=len(campaign_ids),
+            controls=len(_campaign_values(campaigns, "path")),
+            single_dependencies=len(single_dependency_ids),
+            source_binding_consistent=execution["binding_consistent"],
+            test_findings=test_findings,
+            test_owners=ownership["test_owners"],
+            owner_alignment=ownership["owner_alignment"],
+        ),
+        "evidence_artifacts": _shared_test_evidence_artifacts(
+            campaigns,
+            source_binding=execution["source_binding"],
+            has_findings=bool(test_findings),
+            has_ownership=bool(ownership_rules),
+        ),
+        "interpretation": (
+            "This record identifies one test file selected for multiple shared-control "
+            "campaigns. Repeated selection supports coordinated validation planning but "
+            "does not establish independent assertions, finding correctness, test "
+            "quality, or sufficient behavioral coverage."
+        ),
+    }
+
+
+def _shared_test_execution_context(
+    test_path: str, campaigns: list[dict[str, Any]]
+) -> dict[str, Any]:
+    records = [
+        record
+        for campaign in campaigns
+        for record in campaign.get("focused_test_execution", [])
+        if isinstance(record, dict) and record.get("path") == test_path
+    ]
+    bindings = [
+        binding
+        for campaign in campaigns
+        for binding in campaign["source_snapshot"].get("selected_test_bindings", [])
+        if isinstance(binding, dict) and binding.get("path") == test_path
+    ]
+    unique_bindings = {
+        json.dumps(binding, sort_keys=True, separators=(",", ":")): binding
+        for binding in bindings
+    }
+    return {
+        "statuses": sorted(
+            {
+                str(record["status"])
+                for record in records
+                if isinstance(record.get("status"), str)
+            }
+        ),
+        "observed_case_count": max(
+            (int(record.get("tests") or 0) for record in records), default=0
+        ),
+        "sources": sorted(
+            {
+                str(source)
+                for record in records
+                for source in record.get("sources", [])
+                if isinstance(source, str) and source
+            }
+        ),
+        "source_binding": next(iter(unique_bindings.values()))
+        if len(unique_bindings) == 1
+        else None,
+        "binding_consistent": len(bindings) == len(campaigns)
+        and len(unique_bindings) == 1,
+    }
+
+
+def _shared_test_ownership_context(
+    test_path: str,
+    campaigns: list[dict[str, Any]],
+    *,
+    findings_by_path: dict[str, list[dict[str, Any]]],
+    ownership_rules: list[tuple[str, list[str]]],
+) -> dict[str, Any]:
+    campaign_owners = _campaign_values(campaigns, "owners")
+    test_owners = owners_for_path(test_path, ownership_rules) if ownership_rules else []
+    return {
+        "campaign_owners": campaign_owners,
+        "test_owners": test_owners,
+        "test_findings": findings_by_path.get(test_path, [])[:25],
+        "owner_alignment": _test_owner_alignment(
+            campaign_owners,
+            test_owners,
+            ownership_evidence_available=bool(ownership_rules),
+        ),
+    }
+
+
+def _campaign_values(campaigns: list[dict[str, Any]], key: str) -> list[str]:
+    values: set[str] = set()
+    for campaign in campaigns:
+        value = campaign[key]
+        values.update(str(item) for item in value if isinstance(value, list))
+        if not isinstance(value, list):
+            values.add(str(value))
+    return sorted(values)
+
+
+def _campaigns_selecting_test(
+    test_path: str, campaigns: list[dict[str, Any]], key: str
+) -> int:
+    return sum(test_path in campaign[key] for campaign in campaigns)
+
+
+def _shared_test_evidence_artifacts(
+    campaigns: list[dict[str, Any]],
+    *,
+    source_binding: Any,
+    has_findings: bool,
+    has_ownership: bool,
+) -> list[str]:
+    artifacts = {
+        "graphify.json",
+        *({"source-inventory.json"} if source_binding is not None else set()),
+        *({"findings.json"} if has_findings else set()),
+        *({"finding-delta.json"} if has_ownership else set()),
+        *(
+            str(artifact)
+            for campaign in campaigns
+            for artifact in campaign["evidence_artifacts"]
+        ),
+    }
+    return sorted(artifacts)
+
+
+def _attach_shared_test_evidence_quality(
+    campaigns: list[dict[str, Any]], hotspots: list[dict[str, Any]]
+) -> None:
+    hotspots_by_campaign: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for hotspot in hotspots:
+        for campaign_id in hotspot["campaign_ids"]:
+            hotspots_by_campaign[str(campaign_id)].append(hotspot)
+    assessment_rank = {"not-established": 0, "weak": 1, "qualified": 2, "strong": 3}
+    for campaign in campaigns:
+        selected = hotspots_by_campaign.get(str(campaign["campaign_id"]), [])
+        assessments = [
+            str(hotspot["validation_quality_assessment"]) for hotspot in selected
+        ]
+        assessment = (
+            min(assessments, key=lambda item: assessment_rank.get(item, -1))
+            if assessments
+            else "not-applicable"
+        )
+        finding_ids = sorted(
+            {
+                str(finding_id)
+                for hotspot in selected
+                for finding_id in hotspot["test_file_finding_ids"]
+            }
+        )
+        cross_owner_files = sorted(
+            str(hotspot["test_path"])
+            for hotspot in selected
+            if hotspot["test_owner_alignment"] == "coordination-needed"
+        )
+        unowned_files = sorted(
+            str(hotspot["test_path"])
+            for hotspot in selected
+            if hotspot["test_owner_alignment"] == "unowned"
+        )
+        evidence: dict[str, Any] = {
+            "assessment": assessment,
+            "shared_test_files": [str(hotspot["test_path"]) for hotspot in selected],
+            "hotspot_ids": [str(hotspot["test_hotspot_id"]) for hotspot in selected],
+            "quality_counts": {
+                state: sum(
+                    hotspot["validation_quality_assessment"] == state
+                    for hotspot in selected
+                )
+                for state in ("strong", "qualified", "weak", "not-established")
+            },
+            "test_file_finding_ids": finding_ids,
+            "test_files_with_findings": sorted(
+                str(hotspot["test_path"])
+                for hotspot in selected
+                if hotspot["test_file_finding_ids"]
+            ),
+            "cross_owner_test_files": cross_owner_files,
+            "unowned_test_files": unowned_files,
+            "ownership_not_established_test_files": sorted(
+                str(hotspot["test_path"])
+                for hotspot in selected
+                if hotspot["test_owner_alignment"] == "not-established"
+            ),
+            "recommended_action": _shared_test_quality_action(
+                assessment,
+                finding_ids=len(finding_ids),
+                cross_owner_files=len(cross_owner_files),
+                unowned_files=len(unowned_files),
+            ),
+            "evidence_artifacts": sorted(
+                {
+                    artifact
+                    for hotspot in selected
+                    for artifact in hotspot["evidence_artifacts"]
+                }
+            ),
+        }
+        campaign["shared_test_evidence_quality"] = evidence
+        if assessment in {"not-established", "weak", "qualified"}:
+            points = 10 if assessment in {"not-established", "weak"} else 5
+            campaign["review_factors"].append(
+                {
+                    "id": "shared-test-evidence-" + assessment,
+                    "points": points,
+                    "evidence": (
+                        f"Shared-test validation evidence is {assessment}; "
+                        f"{len(finding_ids)} active test-file finding(s), "
+                        f"{len(cross_owner_files)} cross-owner test file(s), and "
+                        f"{len(unowned_files)} unowned test file(s)."
+                    ),
+                    "evidence_artifacts": evidence["evidence_artifacts"],
+                }
+            )
+            campaign["review_score"] = min(
+                100,
+                sum(int(factor["points"]) for factor in campaign["review_factors"]),
+            )
+            campaign["review_tier"] = _review_tier(campaign["review_score"])
+            campaign["recommended_action"] += " " + evidence["recommended_action"]
+        campaign["evidence_artifacts"] = sorted(
+            {*campaign["evidence_artifacts"], *evidence["evidence_artifacts"]}
+        )
+
+
+def _shared_test_quality_action(
+    assessment: str,
+    *,
+    finding_ids: int,
+    cross_owner_files: int,
+    unowned_files: int,
+) -> str:
+    if assessment == "not-applicable":
+        return "No cross-campaign shared-test quality action is required."
+    parts = [
+        "Review shared-test fixtures and assertions before accepting campaign closure."
+    ]
+    if assessment in {"not-established", "weak"}:
+        parts.insert(
+            0,
+            "Restore consistent source-bound passing execution for every shared test.",
+        )
+    if finding_ids:
+        parts.append(
+            f"Resolve or govern {finding_ids} active test-file finding(s) and confirm they do not weaken validation."
+        )
+    if cross_owner_files:
+        parts.append(
+            f"Coordinate campaign owners with the owners of {cross_owner_files} shared test file(s)."
+        )
+    if unowned_files:
+        parts.append(
+            f"Assign CODEOWNERS responsibility for {unowned_files} shared test file(s)."
+        )
+    return " ".join(parts)
+
+
+def _refresh_validation_test_hotspot_review(
+    hotspots: list[dict[str, Any]], campaigns: list[dict[str, Any]]
+) -> None:
+    campaigns_by_id = {str(campaign["campaign_id"]): campaign for campaign in campaigns}
+    for hotspot in hotspots:
+        scores = [
+            int(campaigns_by_id[campaign_id]["review_score"])
+            for campaign_id in hotspot["campaign_ids"]
+            if campaign_id in campaigns_by_id
+        ]
+        hotspot["highest_review_score"] = max(scores, default=0)
+        hotspot["highest_review_tier"] = _review_tier(
+            int(hotspot["highest_review_score"])
+        )
+
+
 def _validation_test_hotspot_action(
     test_path: str,
     *,
@@ -2852,6 +3182,9 @@ def _validation_test_hotspot_action(
     controls: int,
     single_dependencies: int,
     source_binding_consistent: bool,
+    test_findings: list[dict[str, Any]],
+    test_owners: list[str],
+    owner_alignment: str,
 ) -> str:
     if not source_binding_consistent:
         return (
@@ -2871,7 +3204,131 @@ def _validation_test_hotspot_action(
             f" Add an independent focused test for {single_dependencies} campaign(s) "
             "that currently depend on this test alone."
         )
+    if test_findings:
+        action += (
+            f" Review {len(test_findings)} active finding(s) in the test file, "
+            "and confirm they do not weaken fixtures, assertions, or failure handling."
+        )
+    if owner_alignment == "coordination-needed":
+        action += (
+            " Coordinate campaign and test-file owners before changing this shared "
+            "validation dependency."
+        )
+    elif owner_alignment == "unowned":
+        action += " Assign CODEOWNERS responsibility for the shared test file."
+    elif owner_alignment == "not-established":
+        action += " Establish test-file ownership evidence."
+    if test_owners:
+        action += " Test-file owner(s): " + ", ".join(test_owners[:5]) + "."
     return action
+
+
+def _test_file_findings_index(
+    findings: list[Finding],
+) -> dict[str, list[dict[str, Any]]]:
+    result: dict[str, dict[str, dict[str, Any]]] = defaultdict(dict)
+    for finding in findings:
+        if finding.status in {FindingStatus.RESOLVED, FindingStatus.SUPPRESSED}:
+            continue
+        for location in finding.locations:
+            path = _path(location.path)
+            if not _is_test_path(path):
+                continue
+            result[path][finding.finding_id] = {
+                "finding_id": finding.finding_id,
+                "title": finding.title,
+                "severity": finding.severity.value,
+                "domain": finding.domain,
+                "area": finding.area,
+                "line": location.start_line,
+                "tools": sorted({source.tool for source in finding.sources}),
+                "classifications": sorted(set(finding.classifications))[:25],
+            }
+    return {
+        path: sorted(
+            records.values(),
+            key=lambda item: (
+                _severity_rank(str(item["severity"])),
+                int(item["line"] or 0),
+                str(item["finding_id"]),
+            ),
+        )
+        for path, records in result.items()
+    }
+
+
+def _test_owner_alignment(
+    campaign_owners: list[str],
+    test_owners: list[str],
+    *,
+    ownership_evidence_available: bool,
+) -> str:
+    if not ownership_evidence_available:
+        return "not-established"
+    if not test_owners:
+        return "unowned"
+    if set(campaign_owners) & set(test_owners):
+        return "aligned"
+    return "coordination-needed"
+
+
+def _shared_test_quality(
+    *,
+    statuses: list[str],
+    source_binding: dict[str, Any] | None,
+    source_binding_consistent: bool,
+    test_findings: list[dict[str, Any]],
+    owner_alignment: str,
+    single_dependencies: int,
+) -> dict[str, Any]:
+    reasons: list[str] = []
+    if source_binding is None or not source_binding_consistent:
+        reasons.append("consistent source binding is not established")
+    if not statuses:
+        reasons.append("case-level execution is not observed")
+    elif set(statuses) & {"failed", "partial", "not-observed"}:
+        reasons.append("retained execution is failing, partial, or unobserved")
+    if test_findings:
+        highest = _highest_severity(
+            [str(finding["severity"]) for finding in test_findings]
+        )
+        reasons.append(
+            f"test file has {len(test_findings)} active finding(s), highest {highest}"
+        )
+    if owner_alignment != "aligned":
+        reasons.append(f"test ownership is {owner_alignment}")
+    if single_dependencies:
+        reasons.append(
+            f"{single_dependencies} campaign(s) depend solely on this shared test"
+        )
+    assessment = (
+        "not-established"
+        if source_binding is None or not source_binding_consistent or not statuses
+        else "weak"
+        if set(statuses) & {"failed", "partial", "not-observed"}
+        else "qualified"
+        if test_findings or owner_alignment != "aligned" or single_dependencies
+        else "strong"
+    )
+    return {
+        "validation_quality_assessment": assessment,
+        "validation_quality_reasons": reasons,
+    }
+
+
+def _highest_severity(values: list[str]) -> str | None:
+    return min(values, key=_severity_rank) if values else None
+
+
+def _severity_rank(value: str) -> int:
+    return {
+        "critical": 0,
+        "high": 1,
+        "medium": 2,
+        "low": 3,
+        "informational": 4,
+        "unknown": 5,
+    }.get(value, 6)
 
 
 def _reverse_adjacency(
@@ -3112,15 +3569,14 @@ def _campaign_source_snapshot(
         for name in evidence_artifacts
         if name == "coverage-summary.json" or name in TEST_EVIDENCE_ARTIFACTS
     ]
-    evidence_bindings: list[dict[str, Any]] = []
-    for name in evidence_names:
-        evidence_bindings.append(
-            _campaign_evidence_source_binding(
-                name,
-                artifacts.get(name),
-                source_sha256=source_sha256,
-            )
+    evidence_bindings = [
+        _campaign_evidence_source_binding(
+            name,
+            artifacts.get(name),
+            source_sha256=source_sha256,
         )
+        for name in evidence_names
+    ]
     revision_binding = (
         "not-applicable"
         if not evidence_bindings
@@ -3198,6 +3654,127 @@ def _campaign_evidence_source_binding(
     }
 
 
+def _campaign_route_assurance(
+    hotspot: dict[str, Any], routes_by_id: dict[str, dict[str, Any]]
+) -> dict[str, Any]:
+    """Aggregate exact route evidence posture without letting tests mask trust gaps."""
+    expected_ids = _strings(hotspot.get("route_ids"), _MAX_ROUTES)
+    routes = [
+        routes_by_id[route_id] for route_id in expected_ids if route_id in routes_by_id
+    ]
+    missing = sorted(set(expected_ids) - routes_by_id.keys())
+    statuses = {
+        status: sum(
+            str(_object(route.get("evidence_assurance")).get("review_status")) == status
+            for route in routes
+        )
+        for status in (
+            "assured",
+            "perspective-gap",
+            "trust-gap",
+            "execution-gap",
+            "not-assessed",
+            "derived-analysis",
+        )
+    }
+
+    def tools(key: str) -> list[str]:
+        return sorted(
+            {
+                tool
+                for route in routes
+                for tool in _strings(
+                    _object(route.get("evidence_assurance")).get(key), 25
+                )
+            }
+        )
+
+    blocking = bool(
+        missing
+        or statuses["trust-gap"]
+        or statuses["execution-gap"]
+        or statuses["not-assessed"]
+    )
+    assessment = (
+        "route-reference-gap"
+        if missing
+        else "execution-gap"
+        if statuses["execution-gap"]
+        else "trust-gap"
+        if statuses["trust-gap"]
+        else "not-assessed"
+        if statuses["not-assessed"]
+        else "perspective-gap"
+        if statuses["perspective-gap"]
+        else "derived-analysis"
+        if statuses["derived-analysis"] and not statuses["assured"]
+        else "assured"
+    )
+    trust_gap_tools = tools("trust_gap_tools")
+    execution_gap_tools = tools("execution_gap_tools")
+    unassessed_tools = tools("unassessed_tools")
+    if missing:
+        action = (
+            "Regenerate the risk-path graph so every campaign route reference resolves "
+            "before using the campaign as closure evidence."
+        )
+    elif execution_gap_tools or statuses["execution-gap"]:
+        action = (
+            "Complete the exact contributing scanner runs and regenerate normalized "
+            "route evidence before accepting campaign test results."
+        )
+    elif trust_gap_tools or statuses["trust-gap"]:
+        named = ", ".join(trust_gap_tools) or "the exact contributing scanners"
+        action = (
+            "Verify executable integrity and obtain organization approval for "
+            f"{named} before accepting campaign test results."
+        )
+    elif unassessed_tools or statuses["not-assessed"]:
+        action = (
+            "Establish execution and trust posture for every exact contributing "
+            "scanner before accepting campaign test results."
+        )
+    elif statuses["perspective-gap"]:
+        action = (
+            "Retain the trusted route evidence and add an independent applicable "
+            "scanner perspective or approve a single-perspective disposition."
+        )
+    else:
+        action = (
+            "Retain the exact contributing-tool execution and trust evidence with "
+            "the campaign."
+        )
+    evidence_artifacts = sorted(
+        {
+            "risk-paths.json",
+            *(
+                {"effectiveness.json", "scanner-trust.json"}
+                if any(
+                    _object(route.get("evidence_assurance")).get("tool_records")
+                    for route in routes
+                )
+                else set()
+            ),
+        }
+    )
+    return {
+        "assessment": assessment,
+        "tool_assurance_prerequisite_met": not blocking,
+        "routes_expected": len(expected_ids),
+        "routes_assessed": len(routes),
+        "route_ids_missing": missing,
+        "route_statuses": statuses,
+        "contributing_tools": tools("contributing_tools"),
+        "approved_tools": tools("approved_tools"),
+        "trust_gap_tools": trust_gap_tools,
+        "execution_gap_tools": execution_gap_tools,
+        "unassessed_tools": unassessed_tools,
+        "evidence_lanes": tools("evidence_lanes"),
+        "recommended_action": action,
+        "evidence_artifacts": evidence_artifacts,
+    }
+
+
 def _campaign_review_assessment(
     hotspot: dict[str, Any],
     *,
@@ -3206,6 +3783,7 @@ def _campaign_review_assessment(
     coverage_status: str,
     context: dict[str, Any],
     revision_binding: str,
+    route_assurance: dict[str, Any],
 ) -> dict[str, Any]:
     factors: list[dict[str, Any]] = []
 
@@ -3367,35 +3945,90 @@ def _campaign_review_assessment(
             "No owner is assigned to the shared control point.",
             ["finding-delta.json"],
         )
-    if revision_binding == "mismatch":
-        add(
-            "evidence-revision-mismatch",
-            20,
-            "Retained test or coverage evidence declares a different source snapshot.",
-            ["source-inventory.json"],
-        )
-    elif revision_binding == "unverified":
-        add(
-            "evidence-binding-unverified",
-            15,
-            "Retained test or coverage evidence declares the sealed source digest without a valid producer-verified payload-binding receipt.",
-            ["source-inventory.json"],
-        )
-    elif revision_binding == "not-established":
-        add(
-            "evidence-revision-unbound",
-            5,
-            "Retained test or coverage evidence is not fully bound to the sealed source snapshot.",
-            ["source-inventory.json"],
-        )
+    factors.extend(
+        _campaign_assurance_review_factors(route_assurance, revision_binding)
+    )
     score = min(100, sum(int(factor["points"]) for factor in factors))
     tier = _review_tier(score)
     return {
-        "review_score_model": "shared-control-review-v3",
+        "review_score_model": "shared-control-review-v5",
         "review_score": score,
         "review_tier": tier,
         "review_factors": factors,
     }
+
+
+def _campaign_assurance_review_factors(
+    route_assurance: dict[str, Any], revision_binding: str
+) -> list[dict[str, Any]]:
+    statuses = _object(route_assurance.get("route_statuses"))
+    values = {
+        "execution": int(statuses.get("execution-gap") or 0),
+        "trust": int(statuses.get("trust-gap") or 0),
+        "unassessed": int(statuses.get("not-assessed") or 0),
+        "perspective": int(statuses.get("perspective-gap") or 0),
+        "missing": len(_strings(route_assurance.get("route_ids_missing"), 250)),
+    }
+    factors: list[dict[str, Any]] = []
+
+    def add(identifier: str, points: int, evidence: str, artifacts: list[str]) -> None:
+        factors.append(
+            {
+                "id": identifier,
+                "points": points,
+                "evidence": evidence,
+                "evidence_artifacts": artifacts,
+            }
+        )
+
+    if values["execution"]:
+        add(
+            "route-tool-execution-gap",
+            20,
+            f"{values['execution']} converging route(s) depend on scanner evidence that did not complete successfully.",
+            ["effectiveness.json", "risk-paths.json"],
+        )
+    if values["trust"]:
+        add(
+            "route-tool-trust-gap",
+            15,
+            f"{values['trust']} converging route(s) depend on scanner evidence without complete integrity and organization approval.",
+            ["scanner-trust.json", "risk-paths.json"],
+        )
+    if values["unassessed"] or values["missing"]:
+        add(
+            "route-tool-assurance-unassessed",
+            10,
+            f"{values['unassessed']} route(s) lack a tool-assurance assessment and {values['missing']} retained route reference(s) could not be resolved.",
+            ["effectiveness.json", "scanner-trust.json", "risk-paths.json"],
+        )
+    if values["perspective"]:
+        add(
+            "route-perspective-gap",
+            5,
+            f"{values['perspective']} converging route(s) rely on a single scanner perspective.",
+            ["effectiveness.json", "risk-paths.json"],
+        )
+    revision = {
+        "mismatch": (
+            "evidence-revision-mismatch",
+            20,
+            "Retained test or coverage evidence declares a different source snapshot.",
+        ),
+        "unverified": (
+            "evidence-binding-unverified",
+            15,
+            "Retained test or coverage evidence declares the sealed source digest without a valid producer-verified payload-binding receipt.",
+        ),
+        "not-established": (
+            "evidence-revision-unbound",
+            5,
+            "Retained test or coverage evidence is not fully bound to the sealed source snapshot.",
+        ),
+    }.get(revision_binding)
+    if revision is not None:
+        add(*revision, ["source-inventory.json"])
+    return factors
 
 
 def _review_tier(score: int) -> str:
@@ -3417,6 +4050,7 @@ def _campaign_action(
     *,
     revision_binding: str,
     context: dict[str, Any],
+    route_assurance: dict[str, Any],
 ) -> str:
     tests = ", ".join(selected[:5])
     if alignment == "aligned-current-evidence":
@@ -3457,15 +4091,28 @@ def _campaign_action(
     }:
         action += " Retain runtime coverage that exercises this control point."
     if revision_binding in {"mismatch", "unverified"}:
-        return (
+        action = (
             "Discard mismatched or unverified test/coverage evidence and regenerate "
             "it with a verified payload binding against the sealed source snapshot. "
             + action
         )
     if revision_binding == "not-established":
+        action += (
+            " Bind the regenerated evidence to the sealed source-inventory digest."
+        )
+    if route_assurance.get("tool_assurance_prerequisite_met") is not True:
         return (
-            action
-            + " Bind the regenerated evidence to the sealed source-inventory digest."
+            str(
+                route_assurance.get("recommended_action")
+                or "Establish route evidence assurance."
+            )
+            + " "
+            + action
+        )
+    if int(_object(route_assurance.get("route_statuses")).get("perspective-gap") or 0):
+        action += (
+            " Add an independent applicable scanner perspective or retain an approved "
+            "single-perspective disposition."
         )
     return action
 
@@ -3675,6 +4322,68 @@ def _owner_work_queues(
                     == "not-established"
                     for campaign in owned_campaigns
                 ),
+                "campaigns_blocked_by_route_assurance": sum(
+                    campaign["route_evidence_assurance"][
+                        "tool_assurance_prerequisite_met"
+                    ]
+                    is not True
+                    for campaign in owned_campaigns
+                ),
+                "campaigns_with_route_trust_gaps": sum(
+                    int(
+                        campaign["route_evidence_assurance"]["route_statuses"][
+                            "trust-gap"
+                        ]
+                    )
+                    > 0
+                    for campaign in owned_campaigns
+                ),
+                "campaigns_with_route_execution_gaps": sum(
+                    int(
+                        campaign["route_evidence_assurance"]["route_statuses"][
+                            "execution-gap"
+                        ]
+                    )
+                    > 0
+                    for campaign in owned_campaigns
+                ),
+                "campaigns_with_qualified_shared_test_evidence": sum(
+                    campaign["shared_test_evidence_quality"]["assessment"]
+                    == "qualified"
+                    for campaign in owned_campaigns
+                ),
+                "campaigns_with_weak_shared_test_evidence": sum(
+                    campaign["shared_test_evidence_quality"]["assessment"]
+                    in {"weak", "not-established"}
+                    for campaign in owned_campaigns
+                ),
+                "shared_test_file_finding_ids": sorted(
+                    {
+                        str(finding_id)
+                        for campaign in owned_campaigns
+                        for finding_id in campaign["shared_test_evidence_quality"][
+                            "test_file_finding_ids"
+                        ]
+                    }
+                ),
+                "cross_owner_shared_test_files": sorted(
+                    {
+                        str(path)
+                        for campaign in owned_campaigns
+                        for path in campaign["shared_test_evidence_quality"][
+                            "cross_owner_test_files"
+                        ]
+                    }
+                ),
+                "unowned_shared_test_files": sorted(
+                    {
+                        str(path)
+                        for campaign in owned_campaigns
+                        for path in campaign["shared_test_evidence_quality"][
+                            "unowned_test_files"
+                        ]
+                    }
+                ),
                 "campaigns_with_uncovered_changed_lines": sum(
                     bool(campaign["control_point_context"]["uncovered_changed_lines"])
                     for campaign in owned_campaigns
@@ -3853,10 +4562,40 @@ def _owner_queue_context_suffix(
             for hotspot_id in campaign["shared_test_hotspot_ids"]
         }
     )
+    weak_shared_test_campaigns = sum(
+        campaign["shared_test_evidence_quality"]["assessment"]
+        in {"weak", "not-established"}
+        for campaign in campaigns
+    )
+    qualified_shared_test_campaigns = sum(
+        campaign["shared_test_evidence_quality"]["assessment"] == "qualified"
+        for campaign in campaigns
+    )
+    shared_test_findings = len(
+        {
+            str(finding_id)
+            for campaign in campaigns
+            for finding_id in campaign["shared_test_evidence_quality"][
+                "test_file_finding_ids"
+            ]
+        }
+    )
     parts = [
         (
             shared_test_hotspots,
             f"Coordinate {shared_test_hotspots} shared validation-test hotspot(s).",
+        ),
+        (
+            weak_shared_test_campaigns,
+            f"Restore strong shared-test evidence for {weak_shared_test_campaigns} campaign(s).",
+        ),
+        (
+            qualified_shared_test_campaigns,
+            f"Review qualified shared-test evidence for {qualified_shared_test_campaigns} campaign(s).",
+        ),
+        (
+            shared_test_findings,
+            f"Resolve or govern {shared_test_findings} finding(s) in shared test files.",
         ),
         (
             exposure_advisory_intersections,
@@ -4099,6 +4838,8 @@ def _attach_finding_routes(
                             "test_coverage_alignment",
                             "validation_gap_reasons",
                             "control_point_context",
+                            "route_evidence_assurance",
+                            "shared_test_evidence_quality",
                             "source_snapshot",
                             "review_score_model",
                             "review_score",

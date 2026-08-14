@@ -5,6 +5,14 @@ for published releases.
 
 ## Unreleased
 
+- Cross-reference each shared validation campaign with the exact contributing
+  scanner posture of every retained route. Campaigns now retain assessed and
+  missing route counts, trust/execution/perspective states, contributing and
+  approved tools, evidence lanes, and a fail-closed prerequisite. Scanner trust,
+  execution, or unresolved-route gaps raise transparent review factors, flow to
+  owner queues and reports, and prevent passing tests from serving as closure
+  evidence until the underlying route evidence is assured. The expanded factor
+  contract is versioned as `shared-control-review-v4`.
 - Require a valid producer-verified payload-binding receipt, not merely a
   matching declared source digest, before validation-campaign evidence is
   revision-aligned. Risk routes now distinguish mismatched, unverified,

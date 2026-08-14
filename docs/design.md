@@ -362,6 +362,10 @@ hotspot also becomes a stable validation campaign: reverse Graphify edges select
 direct/transitive tests, bounded case inventories establish observed execution,
 file coverage exposes unexercised shared-control code, and structural synthesis
 adds changed-line risk while reachability contributes runtime observation state.
+Each campaign also resolves its exact route IDs back to contributing-tool
+posture. Scanner execution, integrity, approval, and perspective state therefore
+travel with the tests they selected; passing tests cannot erase a trust or
+execution gap in the route evidence.
 The factorized review model cites each contributing artifact and keeps the native
 findings unchanged.
 
@@ -420,6 +424,9 @@ flowchart LR
     Routed --> Hotspots["Shared control points"]
     Graph --> Campaigns["Graph-selected validation campaigns"]
     Hotspots --> Campaigns
+    Routed --> CampaignAssurance["Per-campaign route assurance"]
+    Assurance --> CampaignAssurance
+    CampaignAssurance --> Campaigns
     Tests["Case-level execution"] --> Binding["Exact source digest + producer-verified payload receipts"]
     Coverage["Hotspot file coverage"] --> Binding
     Inventory["Sealed source inventory"] --> Binding
