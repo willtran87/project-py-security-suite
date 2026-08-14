@@ -92,6 +92,36 @@ prevents an artifact-provenance failure, generated JUnit file, or test-quality
 finding from being mislabeled as a missing production entry point while keeping
 real Python graph and entry-model gaps fail-visible.
 
+### Typed cross-evidence leverage
+
+After risk-route synthesis, the suite creates `advanced-analysis.json`. This
+bounded relationship layer uses stable subject identities and keeps structural
+inference distinct from native scanner confirmation.
+
+```mermaid
+flowchart TB
+    Routes["Risk routes + Graphify"] --> Dominators["File dominators + alternate paths"]
+    SARIF["Native SARIF codeFlows"] --> Taint["Confirmed taint sequences"]
+    Artifact["Wheel metadata + RECORD"] --> Parity["Published activation parity"]
+    Assurance["pytm + mutmut + tests"] --> Trace["Threat/control/test traceability"]
+    Exposure["Sensitive-data routes"] --> Privacy["Telemetry protection topology"]
+    Advisory["SBOM + KEV/EPSS + final artifact"] --> Trust["Dependency trust routes"]
+    Dominators --> Evidence["Typed evidence graph"]
+    Taint --> Evidence
+    Parity --> Evidence
+    Trace --> Evidence
+    Privacy --> Evidence
+    Trust --> Evidence
+    Evidence --> Reports["Markdown + HTML + JSON"]
+    Evidence --> Delta["Digest-bound advanced-diff"]
+```
+
+Control dominance is a file-graph property only. The report calls the subject a
+candidate control until implementation, scanner, and test evidence establish
+its behavior. `advanced-diff` compares approved SHA-256-bound artifacts and
+fails on retained attack-surface regressions without treating a clean delta as
+proof of safety. See [Advanced cross-evidence analysis](advanced-analysis.md).
+
 The scan lane emits an unsigned in-toto Statement using the SLSA Verification
 Summary Attestation predicate. A separate approval lane verifies the report and
 signs that exact statement with an external Cosign key. Deployment consumers

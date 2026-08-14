@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:advanced-analysis-delta:1.0",
+  "title": "Cross-evidence attack-surface delta",
+  "type": "object",
+  "required": ["schema_version", "schema_id", "authoritative", "verdict", "scope", "baseline", "current", "summary", "changes", "omitted"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "schema_id": {"const": "urn:project-py-security-suite:advanced-analysis-delta:1.0"},
+    "authoritative": {"const": false},
+    "verdict": {"enum": ["pass", "regression"]},
+    "scope": {"type": "string", "minLength": 1, "maxLength": 2000},
+    "baseline": {"$ref": "#/$defs/identity"},
+    "current": {"$ref": "#/$defs/identity"},
+    "summary": {
+      "type": "object",
+      "additionalProperties": {"type": "integer", "minimum": 0},
+      "minProperties": 10
+    },
+    "changes": {
+      "type": "object",
+      "additionalProperties": {"type": "array", "maxItems": 500, "items": {"type": "object", "additionalProperties": true}},
+      "minProperties": 9
+    },
+    "omitted": {
+      "type": "object",
+      "required": ["regressions", "change_limit"],
+      "additionalProperties": false,
+      "properties": {
+        "regressions": {"type": "integer", "minimum": 0},
+        "change_limit": {"const": 500}
+      }
+    }
+  },
+  "$defs": {
+    "identity": {
+      "type": "object",
+      "required": ["path", "sha256", "source_sha256", "graph_source_sha256", "artifact_sha256"],
+      "additionalProperties": false,
+      "properties": {
+        "path": {"type": "string", "minLength": 1, "maxLength": 4096},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "source_sha256": {"type": "string", "pattern": "^([0-9a-f]{64})?$"},
+        "graph_source_sha256": {"type": "string", "pattern": "^([0-9a-f]{64})?$"},
+        "artifact_sha256": {"type": "array", "maxItems": 500, "uniqueItems": true, "items": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}
+      }
+    }
+  }
+}

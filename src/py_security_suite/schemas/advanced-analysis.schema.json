@@ -1,0 +1,190 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:advanced-analysis:1.0",
+  "title": "Advanced cross-evidence analysis",
+  "type": "object",
+  "required": [
+    "schema_version", "schema_id", "authoritative", "purpose", "analysis_identity", "summary",
+    "evidence_graph", "control_topology", "taint_paths", "artifact_route_parity",
+    "threat_control_test_traceability", "security_mutation_leverage",
+    "telemetry_privacy_topology", "dependency_trust_routes", "truncation", "limitations"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "schema_id": {"const": "urn:project-py-security-suite:advanced-analysis:1.0"},
+    "authoritative": {"const": false},
+    "purpose": {"type": "string", "minLength": 1, "maxLength": 2000},
+    "analysis_identity": {
+      "type": "object",
+      "required": ["source_sha256", "graph_source_sha256", "artifact_sha256"],
+      "additionalProperties": false,
+      "properties": {
+        "source_sha256": {"type": "string", "pattern": "^([0-9a-f]{64})?$"},
+        "graph_source_sha256": {"type": "string", "pattern": "^([0-9a-f]{64})?$"},
+        "artifact_sha256": {"type": "array", "maxItems": 500, "uniqueItems": true, "items": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": [
+        "relationship_nodes", "relationship_edges", "control_points",
+        "mandatory_control_points", "bypass_capable_control_points",
+        "shared_mandatory_security_route_points", "scanner_confirmed_taint_paths",
+        "retained_taint_steps", "distribution_artifacts", "published_entry_points",
+        "unmodeled_published_entry_points", "wheel_record_integrity_gaps",
+        "threat_control_test_records", "threats_without_control_evidence",
+        "threats_without_test_evidence", "security_control_mutations",
+        "security_control_mutations_without_test_evidence", "telemetry_privacy_routes",
+        "telemetry_routes_without_observed_protection",
+        "telemetry_routes_with_redaction_order_risk", "dependency_trust_routes",
+        "elevated_dependency_trust_routes"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "relationship_nodes": {"$ref": "#/$defs/count"},
+        "relationship_edges": {"$ref": "#/$defs/count"},
+        "control_points": {"$ref": "#/$defs/count"},
+        "mandatory_control_points": {"$ref": "#/$defs/count"},
+        "bypass_capable_control_points": {"$ref": "#/$defs/count"},
+        "shared_mandatory_security_route_points": {"$ref": "#/$defs/count"},
+        "scanner_confirmed_taint_paths": {"$ref": "#/$defs/count"},
+        "retained_taint_steps": {"$ref": "#/$defs/count"},
+        "distribution_artifacts": {"$ref": "#/$defs/count"},
+        "published_entry_points": {"$ref": "#/$defs/count"},
+        "unmodeled_published_entry_points": {"$ref": "#/$defs/count"},
+        "wheel_record_integrity_gaps": {"$ref": "#/$defs/count"},
+        "threat_control_test_records": {"$ref": "#/$defs/count"},
+        "threats_without_control_evidence": {"$ref": "#/$defs/count"},
+        "threats_without_test_evidence": {"$ref": "#/$defs/count"},
+        "security_control_mutations": {"$ref": "#/$defs/count"},
+        "security_control_mutations_without_test_evidence": {"$ref": "#/$defs/count"},
+        "telemetry_privacy_routes": {"$ref": "#/$defs/count"},
+        "telemetry_routes_without_observed_protection": {"$ref": "#/$defs/count"},
+        "telemetry_routes_with_redaction_order_risk": {"$ref": "#/$defs/count"},
+        "dependency_trust_routes": {"$ref": "#/$defs/count"},
+        "elevated_dependency_trust_routes": {"$ref": "#/$defs/count"}
+      }
+    },
+    "evidence_graph": {
+      "type": "object",
+      "required": ["nodes", "edges"],
+      "additionalProperties": false,
+      "properties": {
+        "nodes": {"type": "array", "maxItems": 20000, "items": {"$ref": "#/$defs/node"}},
+        "edges": {"type": "array", "maxItems": 20000, "items": {"$ref": "#/$defs/edge"}}
+      }
+    },
+    "control_topology": {"type": "array", "maxItems": 500, "items": {"$ref": "#/$defs/control"}},
+    "taint_paths": {"type": "array", "maxItems": 500, "items": {"$ref": "#/$defs/taint"}},
+    "artifact_route_parity": {"type": "array", "maxItems": 500, "items": {"$ref": "#/$defs/artifact"}},
+    "threat_control_test_traceability": {"type": "array", "maxItems": 500, "items": {"$ref": "#/$defs/openRecord"}},
+    "security_mutation_leverage": {"type": "array", "maxItems": 500, "items": {"$ref": "#/$defs/openRecord"}},
+    "telemetry_privacy_topology": {"type": "array", "maxItems": 500, "items": {"$ref": "#/$defs/openRecord"}},
+    "dependency_trust_routes": {"type": "array", "maxItems": 500, "items": {"$ref": "#/$defs/openRecord"}},
+    "truncation": {
+      "type": "object",
+      "required": ["relationship_items_omitted", "analysis_record_limit"],
+      "additionalProperties": false,
+      "properties": {
+        "relationship_items_omitted": {"$ref": "#/$defs/count"},
+        "analysis_record_limit": {"type": "integer", "const": 500}
+      }
+    },
+    "limitations": {"type": "array", "minItems": 1, "maxItems": 20, "items": {"type": "string", "minLength": 1, "maxLength": 2000}}
+  },
+  "$defs": {
+    "count": {"type": "integer", "minimum": 0},
+    "strings": {"type": "array", "maxItems": 500, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 1000}},
+    "openRecord": {"type": "object", "minProperties": 1, "additionalProperties": true},
+    "node": {
+      "type": "object",
+      "required": ["node_id", "kind", "subject_id", "label", "evidence_artifacts"],
+      "additionalProperties": false,
+      "properties": {
+        "node_id": {"type": "string", "minLength": 1, "maxLength": 2000},
+        "kind": {"type": "string", "minLength": 1, "maxLength": 100},
+        "subject_id": {"type": "string", "minLength": 1, "maxLength": 1000},
+        "label": {"type": "string", "minLength": 1, "maxLength": 1000},
+        "evidence_artifacts": {"$ref": "#/$defs/strings"}
+      }
+    },
+    "edge": {
+      "type": "object",
+      "required": ["edge_id", "source", "target", "relationship", "evidence_artifacts"],
+      "additionalProperties": false,
+      "properties": {
+        "edge_id": {"type": "string", "minLength": 1, "maxLength": 100},
+        "source": {"type": "string", "minLength": 1, "maxLength": 2000},
+        "target": {"type": "string", "minLength": 1, "maxLength": 2000},
+        "relationship": {"type": "string", "minLength": 1, "maxLength": 100},
+        "evidence_artifacts": {"$ref": "#/$defs/strings"}
+      }
+    },
+    "control": {
+      "type": "object",
+      "required": [
+        "control_point_id", "path", "topology_status", "candidate_bases",
+        "route_ids", "target_ids", "target_paths", "entry_point_ids", "campaign_ids",
+        "hotspot_ids", "security_target_ids", "shared_mandatory_security_route_point", "test_files",
+        "owners", "recommended_action", "evidence_artifacts", "interpretation"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "control_point_id": {"type": "string", "pattern": "^control-[0-9a-f]{16}$"},
+        "path": {"type": "string", "minLength": 1, "maxLength": 1000},
+        "topology_status": {"enum": ["mandatory", "bypass-capable", "not-on-retained-route"]},
+        "candidate_bases": {"$ref": "#/$defs/strings"},
+        "route_ids": {"$ref": "#/$defs/strings"},
+        "target_ids": {"$ref": "#/$defs/strings"},
+        "target_paths": {"$ref": "#/$defs/strings"},
+        "entry_point_ids": {"$ref": "#/$defs/strings"},
+        "campaign_ids": {"$ref": "#/$defs/strings"},
+        "hotspot_ids": {"$ref": "#/$defs/strings"},
+        "security_target_ids": {"$ref": "#/$defs/strings"},
+        "shared_mandatory_security_route_point": {"type": "boolean"},
+        "test_files": {"$ref": "#/$defs/strings"},
+        "owners": {"$ref": "#/$defs/strings"},
+        "recommended_action": {"type": "string", "minLength": 1, "maxLength": 2000},
+        "evidence_artifacts": {"$ref": "#/$defs/strings"},
+        "interpretation": {"type": "string", "minLength": 1, "maxLength": 2000}
+      }
+    },
+    "taint": {
+      "type": "object",
+      "required": ["taint_path_id", "finding_id", "tool", "rule_ids", "classification", "route_id", "route_alignment", "source", "sink", "steps", "steps_omitted", "citations", "recommended_action", "evidence_artifacts"],
+      "additionalProperties": false,
+      "properties": {
+        "taint_path_id": {"type": "string", "pattern": "^taint-[0-9a-f]{16}$"},
+        "finding_id": {"type": "string", "minLength": 1, "maxLength": 100},
+        "tool": {"type": "string", "minLength": 1, "maxLength": 100},
+        "rule_ids": {"$ref": "#/$defs/strings"},
+        "classification": {"const": "scanner-confirmed-source-to-sink"},
+        "route_id": {"type": ["string", "null"], "maxLength": 100},
+        "route_alignment": {"enum": ["aligned", "not-established"]},
+        "source": {"$ref": "#/$defs/openRecord"},
+        "sink": {"$ref": "#/$defs/openRecord"},
+        "steps": {"type": "array", "minItems": 2, "maxItems": 100, "items": {"$ref": "#/$defs/openRecord"}},
+        "steps_omitted": {"$ref": "#/$defs/count"},
+        "citations": {"type": "array", "maxItems": 10, "items": {"$ref": "#/$defs/openRecord"}},
+        "recommended_action": {"type": "string", "minLength": 1, "maxLength": 2000},
+        "evidence_artifacts": {"$ref": "#/$defs/strings"}
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "required": ["artifact", "artifact_sha256", "analysis_status", "published_entry_points", "record_gaps", "summary", "recommended_action", "evidence_artifacts"],
+      "additionalProperties": true,
+      "properties": {
+        "artifact": {"type": "string", "minLength": 1, "maxLength": 1000},
+        "artifact_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "analysis_status": {"enum": ["complete", "invalid-or-unreadable"]},
+        "published_entry_points": {"type": "array", "maxItems": 500, "items": {"$ref": "#/$defs/openRecord"}},
+        "record_gaps": {"type": "array", "maxItems": 500, "items": {"$ref": "#/$defs/openRecord"}},
+        "summary": {"$ref": "#/$defs/openRecord"},
+        "recommended_action": {"type": "string", "minLength": 1, "maxLength": 2000},
+        "evidence_artifacts": {"$ref": "#/$defs/strings"}
+      }
+    }
+  }
+}

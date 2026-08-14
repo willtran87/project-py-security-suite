@@ -95,6 +95,7 @@ def _finding(
     classifications = _classifications(properties, rule_properties) or [
         _rule_classification(tool_name, rule_id)
     ]
+    code_flows = _code_flows(result, target, tool_name)
     return Finding(
         finding_id=finding_id,
         fingerprint=fingerprint,
@@ -133,7 +134,67 @@ def _finding(
                 uri=help_uri,
             )
         ],
+        evidence={"sarif_code_flows": code_flows} if code_flows else {},
     )
+
+
+def _code_flows(
+    result: dict[str, Any], target: Path, tool_name: str
+) -> list[dict[str, Any]]:
+    """Retain bounded SARIF path steps without snippets or sensitive state."""
+    raw_code_flows = result.get("codeFlows") or []
+    if not isinstance(raw_code_flows, list):
+        raise TypeError("SARIF codeFlows must be a list")
+    flows: list[dict[str, Any]] = []
+    for code_flow in raw_code_flows[:5]:
+        if not isinstance(code_flow, dict):
+            raise TypeError("SARIF codeFlow must be an object")
+        thread_flows = code_flow.get("threadFlows") or []
+        if not isinstance(thread_flows, list):
+            raise TypeError("SARIF threadFlows must be a list")
+        for thread_flow in thread_flows[:5]:
+            if not isinstance(thread_flow, dict):
+                raise TypeError("SARIF threadFlow must be an object")
+            raw_locations = thread_flow.get("locations") or []
+            if not isinstance(raw_locations, list):
+                raise TypeError("SARIF threadFlow locations must be a list")
+            steps: list[dict[str, Any]] = []
+            for raw in raw_locations[:100]:
+                if not isinstance(raw, dict):
+                    raise TypeError("SARIF threadFlow location must be an object")
+                nested = raw.get("location")
+                location = nested if isinstance(nested, dict) else raw
+                physical = location.get("physicalLocation")
+                physical = physical if isinstance(physical, dict) else {}
+                artifact = physical.get("artifactLocation")
+                artifact = artifact if isinstance(artifact, dict) else {}
+                region = physical.get("region")
+                region = region if isinstance(region, dict) else {}
+                message = _message(location.get("message")) or _message(
+                    raw.get("message")
+                )
+                steps.append(
+                    {
+                        "path": normalize_repo_path(
+                            target,
+                            _uri_path(str(artifact.get("uri") or "<repository>")),
+                        ),
+                        "line": _integer(region.get("startLine")),
+                        "message": message[:500],
+                    }
+                )
+            if steps:
+                flows.append(
+                    {
+                        "tool": tool_name,
+                        "steps": steps,
+                        "step_count": len(raw_locations),
+                        "steps_omitted": max(0, len(raw_locations) - len(steps)),
+                    }
+                )
+            if len(flows) >= 10:
+                return flows
+    return flows
 
 
 def _object(value: Any) -> dict[str, Any]:

@@ -105,6 +105,37 @@ class ClosurePlanTests(unittest.TestCase):
             ),
             1,
         )
+        advanced_items = [
+            item for item in first["items"] if item["details"].get("advanced_analysis")
+        ]
+        self.assertEqual(len(advanced_items), 7)
+        self.assertTrue(
+            all(item["category"] == "architecture" for item in advanced_items)
+        )
+        self.assertTrue(
+            all(
+                "advanced-analysis.json" in item["evidence_refs"]
+                for item in advanced_items
+            )
+        )
+        self.assertEqual(
+            next(
+                item
+                for item in advanced_items
+                if item["details"].get("closure_status")
+                == "threat-without-control-evidence"
+            )["priority"],
+            "P1",
+        )
+        self.assertEqual(
+            next(
+                item
+                for item in advanced_items
+                if item["details"].get("validation_signal")
+                == "surviving-security-control-mutation"
+            )["priority"],
+            "P1",
+        )
 
         self.assertEqual(first["schema_version"], "1.2")
         schema = json.loads(read_bundled_schema("closure-plan-1.2"))
@@ -320,6 +351,75 @@ def _write_report(report: Path) -> None:
                     "finding_ids": ["PYSEC-1"],
                 }
             ]
+        },
+    )
+    _write(
+        report / "advanced-analysis.json",
+        {
+            "schema_id": "urn:project-py-security-suite:advanced-analysis:1.0",
+            "control_topology": [
+                {
+                    "control_point_id": "control-1",
+                    "path": "src/security.py",
+                    "topology_status": "bypass-capable",
+                    "owners": ["@security"],
+                    "recommended_action": "Protect the alternate route.",
+                }
+            ],
+            "artifact_route_parity": [
+                {
+                    "artifact": "dist/demo.whl",
+                    "published_entry_points": [
+                        {
+                            "group": "console_scripts",
+                            "name": "demo",
+                            "target": "demo.cli:main",
+                            "parity_status": "unmodeled-entry-point",
+                        }
+                    ],
+                    "record_gaps": [{"kind": "digest-mismatch", "path": "demo/cli.py"}],
+                }
+            ],
+            "telemetry_privacy_topology": [
+                {
+                    "privacy_route_id": "privacy-1",
+                    "path": "src/telemetry.py",
+                    "line": 42,
+                    "review_status": "protection-gap",
+                    "protection_status": "unprotected",
+                    "owners": ["@privacy"],
+                }
+            ],
+            "dependency_trust_routes": [
+                {
+                    "dependency_trust_route_id": "dependency-1",
+                    "package": "demo-lib",
+                    "review_tier": "critical",
+                    "risk_factors": ["known-exploited-vulnerability"],
+                    "owners": ["@dependency-team"],
+                }
+            ],
+            "threat_control_test_traceability": [
+                {
+                    "traceability_id": "trace-1",
+                    "threat_finding_id": "PYTM-1",
+                    "path": "src/auth.py",
+                    "line": 20,
+                    "closure_status": "threat-without-control-evidence",
+                    "owners": ["@security"],
+                }
+            ],
+            "security_mutation_leverage": [
+                {
+                    "mutation_leverage_id": "mutation-1",
+                    "finding_id": "MUTMUT-1",
+                    "path": "src/security.py",
+                    "line": 51,
+                    "validation_signal": "surviving-security-control-mutation",
+                    "test_files": [],
+                    "owners": ["@security"],
+                }
+            ],
         },
     )
 

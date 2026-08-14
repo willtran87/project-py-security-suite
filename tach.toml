@@ -88,6 +88,16 @@ depends_on = ["py_security_suite.models", "py_security_suite.ownership", "py_sec
 layer = "services"
 
 [[modules]]
+path = "py_security_suite.advanced_analysis"
+depends_on = ["py_security_suite.models", "py_security_suite.path_safety"]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.advanced_delta"
+depends_on = ["py_security_suite.execution", "py_security_suite.path_safety"]
+layer = "services"
+
+[[modules]]
 path = "py_security_suite.source_context"
 depends_on = ["py_security_suite.models"]
 layer = "services"
@@ -437,6 +447,7 @@ layer = "services"
 path = "py_security_suite.orchestrator"
 depends_on = [
     "py_security_suite",
+    "py_security_suite.advanced_analysis",
     "py_security_suite.admission",
     "py_security_suite.adapters",
     "py_security_suite.closure_plan",
@@ -482,6 +493,7 @@ layer = "application"
 path = "py_security_suite.cli"
 depends_on = [
     "py_security_suite",
+    "py_security_suite.advanced_delta",
     "py_security_suite.baseline_candidate",
     "py_security_suite.bundle_qualification",
     "py_security_suite.audit_package",

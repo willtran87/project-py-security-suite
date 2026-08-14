@@ -12,6 +12,7 @@ from .adapter_conformance import (
     assess_adapter_conformance,
     render_adapter_conformance,
 )
+from .advanced_delta import compare_advanced_analysis, render_advanced_delta_markdown
 from .baseline_candidate import build_baseline_candidate
 from .bundle_qualification import (
     qualify_bundle,
@@ -1020,6 +1021,19 @@ def build_parser() -> argparse.ArgumentParser:
     reachability_diff.add_argument("--format", choices=("text", "json"), default="text")
     reachability_diff.add_argument("--output", type=Path, metavar="FILE")
     reachability_diff.add_argument("--overwrite", action="store_true")
+    advanced_diff = subparsers.add_parser(
+        "advanced-diff",
+        help="compare two digest-bound cross-evidence attack-surface analyses",
+    )
+    advanced_diff.add_argument("baseline", type=Path)
+    advanced_diff.add_argument("current", type=Path)
+    advanced_diff.add_argument("--baseline-sha256", required=True)
+    advanced_diff.add_argument("--current-sha256", required=True)
+    advanced_diff.add_argument(
+        "--format", choices=("text", "json", "markdown"), default="text"
+    )
+    advanced_diff.add_argument("--output", type=Path, metavar="FILE")
+    advanced_diff.add_argument("--overwrite", action="store_true")
     return parser
 
 
@@ -1071,6 +1085,7 @@ def _dispatch_command(args: argparse.Namespace) -> int:
         "verify-signing-request": _verify_signing_request_command,
         "reachability": _reachability_command,
         "reachability-diff": _reachability_diff_command,
+        "advanced-diff": _advanced_diff_command,
         "init": _init_command,
         "doctor": _doctor_command,
         "provision-plan": _provision_plan_command,
@@ -1216,6 +1231,39 @@ def _reachability_diff_command(args: argparse.Namespace) -> int:
             f"{counts['state_regressions']} state regression(s), "
             f"{counts['new_disconnected_nodes']} new disconnected node(s), "
             f"{counts['new_reportable_islands']} new reportable island(s)"
+        )
+    return 0 if result["verdict"] == "pass" else 1
+
+
+def _advanced_diff_command(args: argparse.Namespace) -> int:
+    if args.overwrite and not args.output:
+        raise ValueError("advanced-diff --overwrite requires --output")
+    result = compare_advanced_analysis(
+        args.baseline,
+        args.current,
+        baseline_sha256=args.baseline_sha256,
+        current_sha256=args.current_sha256,
+    )
+    rendered_json = json.dumps(result, indent=2, sort_keys=True)
+    rendered_markdown = render_advanced_delta_markdown(result)
+    rendered = rendered_json if args.format == "json" else rendered_markdown
+    if args.output:
+        _write_atomic_output(
+            output=args.output,
+            content=rendered,
+            overwrite=args.overwrite,
+            label="advanced analysis delta output",
+        )
+    if args.format in {"json", "markdown"}:
+        print(rendered)
+    else:
+        summary = result["summary"]
+        print(
+            f"{str(result['verdict']).upper()}: "
+            f"{summary['regressions']} attack-surface regression(s), "
+            f"{summary['control_regressions']} control regression(s), "
+            f"{summary['privacy_regressions']} privacy regression(s), "
+            f"{summary['new_unmodeled_published_entry_points']} new unmodeled artifact entry point(s)"
         )
     return 0 if result["verdict"] == "pass" else 1
 

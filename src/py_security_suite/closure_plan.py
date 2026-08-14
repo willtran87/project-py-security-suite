@@ -53,6 +53,7 @@ def build_closure_plan(
         coverage=_optional_object(root / "coverage-summary.json"),
         reachability=_optional_object(root / "reachability.json"),
         structural=_optional_object(root / "structural-synthesis.json"),
+        advanced=_optional_object(root / "advanced-analysis.json"),
         finding_delta=_optional_object(root / "finding-delta.json"),
         coverage_target=coverage_target,
         hotspot_limit=hotspot_limit,
@@ -84,6 +85,7 @@ def closure_plan_artifact(
         coverage=_as_object(artifacts.get("coverage-summary.json")),
         reachability=_as_object(artifacts.get("reachability.json")),
         structural=_as_object(artifacts.get("structural-synthesis.json")),
+        advanced=_as_object(artifacts.get("advanced-analysis.json")),
         finding_delta=_as_object(artifacts.get("finding-delta.json")),
         coverage_target=coverage_target,
         hotspot_limit=hotspot_limit,
@@ -212,6 +214,7 @@ def _build(
     coverage: dict[str, Any],
     reachability: dict[str, Any],
     structural: dict[str, Any],
+    advanced: dict[str, Any],
     finding_delta: dict[str, Any],
     coverage_target: float,
     hotspot_limit: int,
@@ -230,6 +233,7 @@ def _build(
         )
     )
     items.extend(_reachability_items(reachability))
+    items.extend(_advanced_analysis_items(advanced))
     items = _consolidate_test_assurance(items)
     items = _deduplicate(items)
     items.sort(
@@ -2568,6 +2572,275 @@ def _activation_commands(tool: str) -> list[list[str]]:
             ],
         ]
     return []
+
+
+def _advanced_analysis_items(advanced: dict[str, Any]) -> list[dict[str, Any]]:
+    if (
+        advanced.get("schema_id")
+        != "urn:project-py-security-suite:advanced-analysis:1.0"
+    ):
+        return []
+    items: list[dict[str, Any]] = []
+    for control in _bounded_objects(advanced.get("control_topology"), 500):
+        if control.get("topology_status") != "bypass-capable":
+            continue
+        identifier = str(control.get("control_point_id") or "unknown")
+        items.append(
+            _advanced_item(
+                key=f"advanced:control:{identifier}",
+                priority="P1",
+                owner=_advanced_owner(control),
+                title=f"Resolve bypass-capable candidate control at {control.get('path') or 'unknown'}",
+                why=(
+                    "An alternate retained Graphify path reaches one or more review "
+                    "targets without crossing the candidate control point."
+                ),
+                action=str(
+                    control.get("recommended_action") or "Review alternate paths."
+                ),
+                acceptance=[
+                    "The replacement advanced analysis classifies the point as mandatory, or every alternate path has an equivalent reviewed control and focused negative test.",
+                    "The decision retains exact route, target, owner, and test evidence without claiming exploitability from topology alone.",
+                ],
+                details={
+                    "control_point_id": identifier,
+                    "path": control.get("path"),
+                    "topology_status": "bypass-capable",
+                },
+            )
+        )
+    for artifact in _bounded_objects(advanced.get("artifact_route_parity"), 500):
+        artifact_name = str(artifact.get("artifact") or "unknown")
+        for entry in _bounded_objects(artifact.get("published_entry_points"), 500):
+            if entry.get("parity_status") == "modeled-entry-point":
+                continue
+            subject = (
+                f"{entry.get('group') or 'entry'}:{entry.get('name') or 'unknown'}"
+            )
+            items.append(
+                _advanced_item(
+                    key=f"advanced:artifact-entry:{artifact_name}:{subject}",
+                    priority="P1",
+                    owner="release-engineering",
+                    title=f"Model published artifact entry point {subject}",
+                    why=f"{artifact_name} publishes {entry.get('target') or 'an unknown target'} with parity status {entry.get('parity_status') or 'unknown'}.",
+                    action=str(
+                        entry.get("recommended_action")
+                        or artifact.get("recommended_action")
+                        or "Model the activation surface."
+                    ),
+                    acceptance=[
+                        "The rebuilt digest-bound artifact publishes only reviewed entry points.",
+                        "Every production command or plugin is present in the source graph and declared reachability model.",
+                    ],
+                    details={"artifact": artifact_name, "entry_point": entry},
+                )
+            )
+        items.extend(_advanced_wheel_record_items(artifact_name, artifact))
+    items.extend(_advanced_privacy_items(advanced))
+    items.extend(_advanced_dependency_items(advanced))
+    items.extend(_advanced_traceability_items(advanced))
+    items.extend(_advanced_mutation_items(advanced))
+    return items[:500]
+
+
+def _advanced_wheel_record_items(
+    artifact_name: str, artifact: dict[str, Any]
+) -> list[dict[str, Any]]:
+    return [
+        _advanced_item(
+            key=f"advanced:wheel-record:{artifact_name}:{gap.get('kind')}:{gap.get('path') or gap.get('detail')}",
+            priority="P1",
+            owner="release-engineering",
+            title=f"Resolve wheel RECORD gap in {artifact_name}",
+            why=f"{gap.get('kind') or 'identity-gap'}: {gap.get('path') or gap.get('detail') or 'unspecified member'}",
+            action=str(
+                artifact.get("recommended_action") or "Rebuild and verify the wheel."
+            ),
+            acceptance=[
+                "The rebuilt wheel has exactly one RECORD and every required member has matching size and SHA-256 identity.",
+                "The replacement artifact manifest binds the exact wheel digest.",
+            ],
+            details={"artifact": artifact_name, "record_gap": gap},
+        )
+        for gap in _bounded_objects(artifact.get("record_gaps"), 500)
+    ]
+
+
+def _advanced_privacy_items(advanced: dict[str, Any]) -> list[dict[str, Any]]:
+    result: list[dict[str, Any]] = []
+    for route in _bounded_objects(advanced.get("telemetry_privacy_topology"), 500):
+        status = str(route.get("review_status") or "unknown")
+        if status == "protected-static-route":
+            continue
+        identifier = str(route.get("privacy_route_id") or "unknown")
+        result.append(
+            _advanced_item(
+                key=f"advanced:privacy:{identifier}:{status}",
+                priority="P1"
+                if status in {"redaction-order-risk", "protection-gap"}
+                else "P2",
+                owner=_advanced_owner(route),
+                title=f"Resolve telemetry privacy route at {route.get('path') or 'unknown'}",
+                why=f"Telemetry privacy review status is {status}; protection is {route.get('protection_status') or 'unknown'} and redaction ordering is {route.get('redaction_order') or 'not-established'}.",
+                action=str(
+                    route.get("recommended_action") or "Protect and validate the route."
+                ),
+                acceptance=[
+                    "Minimization and redaction occur before every applicable exporter branch.",
+                    "A source-bound synthetic sensitive-data canary test proves the replacement exporter output omits protected values.",
+                ],
+                details={
+                    "privacy_route_id": identifier,
+                    "review_status": status,
+                    "path": route.get("path"),
+                    "line": route.get("line"),
+                },
+            )
+        )
+    return result
+
+
+def _advanced_dependency_items(advanced: dict[str, Any]) -> list[dict[str, Any]]:
+    result: list[dict[str, Any]] = []
+    for route in _bounded_objects(advanced.get("dependency_trust_routes"), 500):
+        tier = str(route.get("review_tier") or "low")
+        if tier not in {"critical", "high"}:
+            continue
+        identifier = str(route.get("dependency_trust_route_id") or "unknown")
+        result.append(
+            _advanced_item(
+                key=f"advanced:dependency:{identifier}:{tier}",
+                priority="P0" if tier == "critical" else "P1",
+                owner=_advanced_owner(route),
+                title=f"Resolve elevated dependency trust route for {route.get('package') or 'unknown'}",
+                why="Risk factors: "
+                + ", ".join(_string_values(route.get("risk_factors"), 50)),
+                action=str(
+                    route.get("recommended_action")
+                    or "Upgrade and rebuild the artifact."
+                ),
+                acceptance=[
+                    "The exact importer and final artifact contain an approved fixed package version or an independently reviewed contextual disposition.",
+                    "Replacement route, SBOM, advisory, provenance, scanner-assurance, and validation evidence are complete and digest-bound.",
+                ],
+                details={
+                    "dependency_trust_route_id": identifier,
+                    "package": route.get("package"),
+                    "review_tier": tier,
+                    "risk_factors": route.get("risk_factors"),
+                },
+            )
+        )
+    return result
+
+
+def _advanced_traceability_items(advanced: dict[str, Any]) -> list[dict[str, Any]]:
+    result: list[dict[str, Any]] = []
+    for trace in _bounded_objects(
+        advanced.get("threat_control_test_traceability"), 500
+    ):
+        status = str(trace.get("closure_status") or "unknown")
+        if status == "mapped-control-and-test":
+            continue
+        identifier = str(trace.get("traceability_id") or "unknown")
+        result.append(
+            _advanced_item(
+                key=f"advanced:threat-trace:{identifier}:{status}",
+                priority=(
+                    "P1" if status == "threat-without-control-evidence" else "P2"
+                ),
+                owner=_advanced_owner(trace),
+                title=f"Close threat traceability gap for {trace.get('threat_finding_id') or 'unknown'}",
+                why=(
+                    f"Threat-control-test traceability is {status} at "
+                    f"{trace.get('path') or 'the repository boundary'}."
+                ),
+                action=str(
+                    trace.get("recommended_action")
+                    or "Map the threat to an enforcing control and abuse-case test."
+                ),
+                acceptance=[
+                    "The threat is mapped to an exact enforcing control and focused abuse-case or negative test.",
+                    "The replacement advanced analysis reports mapped-control-and-test with retained source evidence.",
+                ],
+                details={
+                    "traceability_id": identifier,
+                    "threat_finding_id": trace.get("threat_finding_id"),
+                    "closure_status": status,
+                    "path": trace.get("path"),
+                    "line": trace.get("line"),
+                },
+            )
+        )
+    return result
+
+
+def _advanced_mutation_items(advanced: dict[str, Any]) -> list[dict[str, Any]]:
+    result: list[dict[str, Any]] = []
+    for mutation in _bounded_objects(advanced.get("security_mutation_leverage"), 500):
+        identifier = str(mutation.get("mutation_leverage_id") or "unknown")
+        result.append(
+            _advanced_item(
+                key=f"advanced:security-mutation:{identifier}",
+                priority="P1",
+                owner=_advanced_owner(mutation),
+                title=f"Kill surviving security mutation at {mutation.get('path') or 'unknown'}",
+                why=(
+                    "A mutation in security-relevant control code survived the retained "
+                    "test run, so expected failure behavior is not demonstrated."
+                ),
+                action=str(
+                    mutation.get("recommended_action")
+                    or "Add a focused negative test and rerun mutation analysis."
+                ),
+                acceptance=[
+                    "A focused negative test fails when the cited control mutation is present.",
+                    "The replacement mutation report no longer lists the mutation as surviving and remains digest-bound to the scanned source.",
+                ],
+                details={
+                    "mutation_leverage_id": identifier,
+                    "finding_id": mutation.get("finding_id"),
+                    "validation_signal": mutation.get("validation_signal"),
+                    "path": mutation.get("path"),
+                    "line": mutation.get("line"),
+                    "test_files": mutation.get("test_files"),
+                },
+            )
+        )
+    return result
+
+
+def _advanced_item(
+    *,
+    key: str,
+    priority: str,
+    owner: str,
+    title: str,
+    why: str,
+    action: str,
+    acceptance: list[str],
+    details: dict[str, Any],
+) -> dict[str, Any]:
+    return _item(
+        key=key,
+        priority=priority,
+        category="architecture",
+        authority="repository",
+        status="review",
+        owner=owner,
+        title=title,
+        why=why,
+        action=action,
+        acceptance=acceptance,
+        evidence_refs=["advanced-analysis.json", "risk-paths.json"],
+        details={"advanced_analysis": True, **details},
+    )
+
+
+def _advanced_owner(value: dict[str, Any]) -> str:
+    owners = _string_values(value.get("owners"), 100)
+    return owners[0] if owners else "repository-maintainers"
 
 
 def _reachability_items(reachability: dict[str, Any]) -> list[dict[str, Any]]:

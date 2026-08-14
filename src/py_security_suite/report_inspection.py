@@ -25,6 +25,8 @@ _REPORT_VERIFICATION_SCHEMA_ID = (
     "urn:project-py-security-suite:schema:report-verification:1.0"
 )
 BUNDLED_SCHEMA_RESOURCES = {
+    "advanced-analysis-1.0": "advanced-analysis.schema.json",
+    "advanced-analysis-delta-1.0": "advanced-analysis-delta.schema.json",
     "data-exposure-1.0": "data-exposure-1.0.schema.json",
     "data-exposure-1.1": "data-exposure-1.1.schema.json",
     "data-exposure-1.2": "data-exposure-1.2.schema.json",

@@ -14,6 +14,7 @@ creates a GitHub-friendly report artifact.
 | Supply chain | Source and artifact SBOMs, package checks, provenance findings, and a locally verifiable Security Passport |
 | Reachability | Offline three-state executable/load-only/disconnected graph with explained dispatch paths, ranked islands, and optional coverage corroboration |
 | Graph context | Graphify code-only topology joined to findings for blast radius, structural hotspots, and cross-tool neighborhoods |
+| Advanced analysis | Typed evidence graph with control dominance and bypass detection, scanner-confirmed SARIF taint paths, artifact activation parity, threat-control-test traceability, security mutation leverage, telemetry privacy topology, dependency trust routes, and digest-bound attack-surface regression comparison |
 | Risk routes | Bounded multi-entry exposure matrices from every retained declared interface to findings, sensitive sinks, and exact dependency-advisory importers. End-to-end sensitive-data route records join scanner-confirmed or inventory-only sink evidence to data classes, trust boundaries, protections, entry/runtime breadth, validation, scanner assurance, lifecycle, ownership, and applicable bounded citations. A separate secret-provenance ledger joins redacted credential candidates to source/graph/artifact membership, current-tree or history origin, verification, scanner trust, lifecycle, and owners. Exact-file and bounded Graphify-route intersections then highlight production secret candidates co-located with logging, telemetry, URL, or network sinks while explicitly remaining non-taint review evidence. Their validation handoff names candidate tests and joins retained execution, coverage, source binding, assurance, shared-test quality, findings, and ownership without claiming that a synthetic canary assertion already exists. When that same retained sensitive route also has an exact SDK-advisory intersection, a bounded compound ledger coordinates credential, boundary-protection, and dependency-remediation review without claiming disclosure or vulnerable-function execution. Routes also retain fail-closed source/artifact package lifecycle checks, comparable-baseline finding/change attribution, ordered CODEOWNERS handoffs, shared validation campaigns, shared-test quality, and explicit model gaps. Graph/source/artifact applicability fusion separates genuine Python route gaps from artifact, generated-evidence, test, and non-Python controls without dropping findings; exact structural-island joins then distinguish missing entry models, runtime conflicts, test-only scope, and dormant-capability retirement review without declaring code dead. |
 | Evidence fusion | Source-to-artifact package lineage, semantic finding links, changed-line/test/graph context, exact selected-test execution, digest-bound provenance joins, and feedback into owned exposure and SDK-package verification plans |
 | Structural synthesis | Cross-validated dead code, island boundaries, structural orphans, import-cycle hotspots, change-risk scoring, graph-guided test targets, exact execution status, and test/changed-line coverage alignment |
@@ -47,6 +48,7 @@ Markdown is the canonical documentation format:
 - [Python reachability and code-island analysis](docs/reachability.md)
 - [Graphify code-graph integration](docs/graphify.md)
 - [Static risk-route synthesis](docs/risk-paths.md)
+- [Advanced cross-evidence analysis and release regression](docs/advanced-analysis.md)
 - [Cross-tool evidence fusion](docs/evidence-fusion.md)
 - [Structural synthesis for dead code and islands](docs/structural-synthesis.md)
 - [Sensitive-data exposure analysis](docs/data-exposure.md)
@@ -672,6 +674,7 @@ python-security-report/
 |-- graphify.json                    # validated code-only nodes, edges, and file topology
 |-- graph-analysis.json              # graph-aware finding context and hotspots
 |-- risk-paths.json                  # entry-to-risk routes, shared controls, campaigns, owners, and validation gaps
+|-- advanced-analysis.json           # typed controls, taint, artifact, threat, privacy, and dependency relationships
 |-- structural-synthesis.json        # dead code, island boundaries, change risk, and graph-guided tests
 |-- data-exposure.json               # prioritized disclosure paths joined with graph, coverage, reachability, and fusion
 |-- evidence-fusion.json             # cross-scanner, advisory-alias, and source/artifact evidence joins

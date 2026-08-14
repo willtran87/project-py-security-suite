@@ -37,6 +37,7 @@ from .models import (
 )
 from .policy import evaluate_policy
 from .admission import admission_decisions
+from .advanced_analysis import build_advanced_analysis
 from .portfolio_health import portfolio_health_artifact
 from .path_safety import resolve_regular_directory, resolve_unlinked_path
 from .reports import write_reports
@@ -172,6 +173,9 @@ def scan_project(
         )
         derived_artifacts["risk-paths.json"] = build_risk_paths(
             findings, derived_artifacts
+        )
+        derived_artifacts["advanced-analysis.json"] = build_advanced_analysis(
+            target, findings, derived_artifacts
         )
         context_errors.extend(
             (

@@ -647,6 +647,26 @@ Rendering or self-verification failures remove staging and never leave a partial
 report at the requested destination. A destination that appears during
 generation is not overwritten.
 
+## Compare cross-evidence attack surfaces
+
+Every scan emits `advanced-analysis.json`. Before promotion, compare the
+approved baseline and candidate by exact SHA-256 identity:
+
+```text
+pysec advanced-diff previous/advanced-analysis.json current/advanced-analysis.json \
+  --baseline-sha256 BASELINE_SHA256 \
+  --current-sha256 CURRENT_SHA256 \
+  --format markdown --output advanced-delta.md
+```
+
+Exit code `1` means the retained attack surface regressed: a candidate control
+became bypass-capable, telemetry protection weakened, dependency trust rose, or
+a new confirmed taint path, unmodeled published entry point, or wheel identity
+gap appeared. Exit code `0` means no retained regression; it is not a safety or
+exploitability claim. Both inputs are bounded regular files and are rejected
+unless their supplied digests match. See
+[Advanced cross-evidence analysis](advanced-analysis.md).
+
 ## Verification
 
 Run unit tests:

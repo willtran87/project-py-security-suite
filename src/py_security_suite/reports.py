@@ -260,6 +260,7 @@ def _write_primary_report_files(
     structural = (derived_artifacts or {}).get("structural-synthesis.json")
     data_exposure = (derived_artifacts or {}).get("data-exposure.json")
     risk_paths = (derived_artifacts or {}).get("risk-paths.json")
+    advanced = (derived_artifacts or {}).get("advanced-analysis.json")
     _write_text(
         output / "summary.md",
         render_summary(
@@ -269,6 +270,7 @@ def _write_primary_report_files(
             structural_synthesis=structural if isinstance(structural, dict) else None,
             data_exposure=data_exposure if isinstance(data_exposure, dict) else None,
             risk_paths=risk_paths if isinstance(risk_paths, dict) else None,
+            advanced_analysis=advanced if isinstance(advanced, dict) else None,
         ),
     )
     _write_text(
@@ -284,6 +286,7 @@ def _write_primary_report_files(
             manifest,
             findings,
             risk_paths=risk_paths if isinstance(risk_paths, dict) else None,
+            advanced_analysis=advanced if isinstance(advanced, dict) else None,
         ),
     )
     _write_json(output / "results.sarif", render_sarif(active_findings))
@@ -336,6 +339,7 @@ def render_summary(
     structural_synthesis: dict[str, Any] | None = None,
     data_exposure: dict[str, Any] | None = None,
     risk_paths: dict[str, Any] | None = None,
+    advanced_analysis: dict[str, Any] | None = None,
 ) -> str:
     active_findings = [
         finding
@@ -360,6 +364,7 @@ def render_summary(
     lines.extend(_render_fusion_summary(evidence_fusion))
     lines.extend(_render_structural_summary(structural_synthesis))
     lines.extend(_render_data_exposure_summary(data_exposure))
+    lines.extend(_render_advanced_analysis_summary(advanced_analysis))
     lines.extend(_render_risk_path_summary(risk_paths))
     lines.extend(["", "## Decision", ""])
     lines.extend(f"- {reason}" for reason in manifest.policy_reasons)
@@ -794,6 +799,180 @@ def _render_data_exposure_summary(value: dict[str, Any] | None) -> list[str]:
                     int(surface.get("line") or 0),
                 ),
             )[:5]
+        )
+    return lines
+
+
+def _render_advanced_analysis_summary(value: dict[str, Any] | None) -> list[str]:
+    if not isinstance(value, dict) or not isinstance(value.get("summary"), dict):
+        return []
+    summary = value["summary"]
+    controls = value.get("control_topology")
+    controls = controls if isinstance(controls, list) else []
+    privacy = value.get("telemetry_privacy_topology")
+    privacy = privacy if isinstance(privacy, list) else []
+    dependencies = value.get("dependency_trust_routes")
+    dependencies = dependencies if isinstance(dependencies, list) else []
+    lines = [
+        "",
+        "## Cross-evidence security leverage",
+        "",
+        (
+            "This section connects route topology, scanner-confirmed flows, release "
+            "metadata, threats, tests, mutations, telemetry, and dependency evidence. "
+            "Structural relationships are review evidence, not proof of exploitability "
+            "or control effectiveness."
+        ),
+        "",
+        "| Decision signal | Count |",
+        "|---|---:|",
+        f"| Typed evidence nodes / relationships | {int(summary.get('relationship_nodes', 0))} / {int(summary.get('relationship_edges', 0))} |",
+        f"| Mandatory / bypass-capable candidate controls | {int(summary.get('mandatory_control_points', 0))} / {int(summary.get('bypass_capable_control_points', 0))} |",
+        f"| Shared mandatory security-route points | {int(summary.get('shared_mandatory_security_route_points', 0))} |",
+        f"| Scanner-confirmed taint paths / retained steps | {int(summary.get('scanner_confirmed_taint_paths', 0))} / {int(summary.get('retained_taint_steps', 0))} |",
+        f"| Published / unmodeled artifact entry points | {int(summary.get('published_entry_points', 0))} / {int(summary.get('unmodeled_published_entry_points', 0))} |",
+        f"| Wheel RECORD integrity gaps | {int(summary.get('wheel_record_integrity_gaps', 0))} |",
+        f"| Threats without control / test evidence | {int(summary.get('threats_without_control_evidence', 0))} / {int(summary.get('threats_without_test_evidence', 0))} |",
+        f"| Security-control mutations without focused tests | {int(summary.get('security_control_mutations_without_test_evidence', 0))} |",
+        f"| Telemetry routes without observed protection / with ordering risk | {int(summary.get('telemetry_routes_without_observed_protection', 0))} / {int(summary.get('telemetry_routes_with_redaction_order_risk', 0))} |",
+        f"| Elevated dependency trust routes | {int(summary.get('elevated_dependency_trust_routes', 0))} |",
+    ]
+    lines.extend(_render_advanced_controls(controls))
+    lines.extend(_render_advanced_privacy(privacy))
+    lines.extend(_render_advanced_dependencies(dependencies))
+    lines.extend(
+        [
+            "",
+            "The complete, machine-readable evidence graph and every retained record are in `advanced-analysis.json`.",
+        ]
+    )
+    return lines
+
+
+def _render_advanced_controls(values: list[Any]) -> list[str]:
+    review = [
+        item
+        for item in values
+        if isinstance(item, dict)
+        and (
+            item.get("topology_status") == "bypass-capable"
+            or item.get("shared_mandatory_security_route_point") is True
+        )
+    ]
+    if not review:
+        return []
+    lines = [
+        "",
+        "### Control topology decisions",
+        "",
+        "| Status | Candidate control | Scope | Owner / action |",
+        "|---|---|---:|---|",
+    ]
+    for item in review[:10]:
+        owners = item.get("owners")
+        owner_text = (
+            ", ".join(str(owner) for owner in owners[:5])
+            if isinstance(owners, list)
+            else ""
+        )
+        lines.append(
+            "| `"
+            + _markdown_code(str(item.get("topology_status") or "unknown"))
+            + "`"
+            + (
+                "<br>shared mandatory security-route point"
+                if item.get("shared_mandatory_security_route_point")
+                else ""
+            )
+            + " | `"
+            + _markdown_code(str(item.get("path") or "unknown"))
+            + "` | "
+            + str(len(item.get("entry_point_ids") or []))
+            + " entries / "
+            + str(len(item.get("target_ids") or []))
+            + " targets | "
+            + _markdown_text(owner_text or "Unassigned")
+            + "<br>"
+            + _markdown_text(str(item.get("recommended_action") or "Review."))
+            + " |"
+        )
+    return lines
+
+
+def _render_advanced_privacy(values: list[Any]) -> list[str]:
+    review = [
+        item
+        for item in values
+        if isinstance(item, dict)
+        and item.get("review_status") != "protected-static-route"
+    ]
+    if not review:
+        return []
+    lines = [
+        "",
+        "### Telemetry privacy decisions",
+        "",
+        "| Status | Route / boundary | Protection | Action |",
+        "|---|---|---|---|",
+    ]
+    for item in review[:10]:
+        path = str(item.get("path") or "unknown")
+        if isinstance(item.get("line"), int):
+            path += f":{item['line']}"
+        lines.append(
+            "| `"
+            + _markdown_code(str(item.get("review_status") or "review"))
+            + "` | `"
+            + _markdown_code(path)
+            + "`<br>boundary `"
+            + _markdown_code(str(item.get("trust_boundary") or "unknown"))
+            + "` | `"
+            + _markdown_code(str(item.get("protection_status") or "unknown"))
+            + "`<br>redaction `"
+            + _markdown_code(str(item.get("redaction_order") or "not-established"))
+            + "` | "
+            + _markdown_text(str(item.get("recommended_action") or "Review."))
+            + " |"
+        )
+    return lines
+
+
+def _render_advanced_dependencies(values: list[Any]) -> list[str]:
+    elevated = [
+        item
+        for item in values
+        if isinstance(item, dict) and item.get("review_tier") in {"critical", "high"}
+    ]
+    if not elevated:
+        return []
+    lines = [
+        "",
+        "### Elevated dependency trust routes",
+        "",
+        "| Tier | Package / importer | Evidence factors | Action |",
+        "|---|---|---|---|",
+    ]
+    for item in elevated[:10]:
+        factors = item.get("risk_factors")
+        factor_text = (
+            ", ".join(str(value) for value in factors)
+            if isinstance(factors, list)
+            else ""
+        )
+        lines.append(
+            "| `"
+            + _markdown_code(str(item.get("review_tier") or "unknown"))
+            + "` score `"
+            + _markdown_code(str(item.get("review_score") or 0))
+            + "` | `"
+            + _markdown_code(str(item.get("package") or "unknown"))
+            + "`<br>`"
+            + _markdown_code(str(item.get("path") or "unknown"))
+            + "` | "
+            + _markdown_text(factor_text or "No elevated factors retained")
+            + " | "
+            + _markdown_text(str(item.get("recommended_action") or "Review."))
+            + " |"
         )
     return lines
 
@@ -4252,11 +4431,81 @@ def _html_unrouted_structural_summary(value: dict[str, Any] | None) -> str:
     )
 
 
+def _html_advanced_analysis_summary(value: dict[str, Any] | None) -> str:
+    if not isinstance(value, dict) or not isinstance(value.get("summary"), dict):
+        return ""
+    summary = value["summary"]
+    controls = value.get("control_topology")
+    controls = controls if isinstance(controls, list) else []
+    review = [
+        item
+        for item in controls
+        if isinstance(item, dict)
+        and (
+            item.get("topology_status") == "bypass-capable"
+            or item.get("shared_mandatory_security_route_point") is True
+        )
+    ][:10]
+    rows = "".join(
+        "<tr><td><code>"
+        + html.escape(str(item.get("topology_status") or "unknown"))
+        + "</code>"
+        + (
+            "<br>shared mandatory security-route point"
+            if item.get("shared_mandatory_security_route_point")
+            else ""
+        )
+        + "</td><td><code>"
+        + html.escape(str(item.get("path") or "unknown"))
+        + "</code></td><td>"
+        + str(len(item.get("entry_point_ids") or []))
+        + " entries / "
+        + str(len(item.get("target_ids") or []))
+        + " targets</td><td>"
+        + html.escape(str(item.get("recommended_action") or "Review."))
+        + "</td></tr>"
+        for item in review
+    )
+    table = (
+        "<table><thead><tr><th>Status</th><th>Candidate control</th>"
+        "<th>Scope</th><th>Action</th></tr></thead><tbody>" + rows + "</tbody></table>"
+        if rows
+        else "<p>No bypass-capable or shared mandatory control point was retained.</p>"
+    )
+    return (
+        '<section aria-labelledby="advanced-analysis-heading">'
+        '<h2 id="advanced-analysis-heading">Cross-evidence security leverage</h2>'
+        "<p>Typed evidence relationships connect route topology, native taint paths, "
+        "release entry points, threats, tests, mutations, telemetry, and dependencies. "
+        "They guide review and do not prove exploitability or control effectiveness.</p>"
+        '<div class="stats">'
+        '<div class="stat"><strong>'
+        + str(int(summary.get("bypass_capable_control_points") or 0))
+        + "</strong><span>bypass-capable controls</span></div>"
+        '<div class="stat"><strong>'
+        + str(int(summary.get("shared_mandatory_security_route_points") or 0))
+        + "</strong><span>shared mandatory security-route points</span></div>"
+        '<div class="stat"><strong>'
+        + str(int(summary.get("scanner_confirmed_taint_paths") or 0))
+        + "</strong><span>confirmed taint paths</span></div>"
+        '<div class="stat"><strong>'
+        + str(int(summary.get("unmodeled_published_entry_points") or 0))
+        + "</strong><span>unmodeled artifact entries</span></div>"
+        '<div class="stat"><strong>'
+        + str(int(summary.get("telemetry_routes_without_observed_protection") or 0))
+        + "</strong><span>telemetry protection gaps</span></div></div>"
+        + table
+        + '<p><a href="advanced-analysis.json">Download the complete typed evidence graph (JSON)</a></p>'
+        "</section>"
+    )
+
+
 def render_html(
     manifest: ScanManifest,
     findings: list[Finding],
     *,
     risk_paths: dict[str, Any] | None = None,
+    advanced_analysis: dict[str, Any] | None = None,
 ) -> str:
     tool_versions = {run.tool: run.version for run in manifest.tools}
     active_findings = [
@@ -4292,6 +4541,7 @@ def render_html(
     release_status = _report_release_status(manifest.outcome)
     admission_cards = _html_admission_cards(manifest, active_findings)
     unrouted_structural_html = _html_unrouted_structural_summary(risk_paths)
+    advanced_analysis_html = _html_advanced_analysis_summary(advanced_analysis)
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -4465,6 +4715,7 @@ required governed sidecars; this report alone does not authorize release.</p>
 <div class="axis-grid">{admission_cards}</div>
 </section>
 {unrouted_structural_html}
+{advanced_analysis_html}
 <main>
 <h2>Prioritized findings</h2>
 <p>Start here. Each item links the security meaning to a precise source

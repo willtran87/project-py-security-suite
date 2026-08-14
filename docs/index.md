@@ -18,6 +18,7 @@ verification happen inside an enterprise-controlled isolated boundary.
 | Trace entry points and investigate disconnected code | [Python reachability](reachability.md) |
 | Add graph-aware blast radius and cross-tool context | [Graphify integration](graphify.md) |
 | Trace declared entry points to findings and sensitive sinks | [Static risk routes](risk-paths.md) |
+| Find control bypasses, artifact activation gaps, and cross-release attack-surface regressions | [Advanced cross-evidence analysis](advanced-analysis.md) |
 | Cross-validate dead code, islands, and import cycles | [Structural synthesis](structural-synthesis.md) |
 | Trace sensitive data into logs, telemetry, and SDKs | [Sensitive-data exposure](data-exposure.md) |
 | Understand source-to-artifact and cross-scanner joins | [Cross-tool evidence fusion](evidence-fusion.md) |
@@ -53,7 +54,8 @@ flowchart LR
         Repo["Python repository"] --> Doctor
         Doctor --> Scan["64-adapter applicability-aware scan"]
         Scan --> Normalize["Normalize, correlate, classify, and own"]
-        Normalize --> Gate["Policy decision"]
+        Normalize --> Leverage["Typed evidence graph<br/>controls, taint, artifacts, privacy, trust"]
+        Leverage --> Gate["Policy decision"]
         Gate --> Seal["Checksum-sealed report"]
     end
     Seal --> Inspect["verify-report and inspect"]
@@ -202,6 +204,8 @@ and zero findings on the safe negative control.
 | Graphify evidence | [1.0](../src/py_security_suite/schemas/graphify-evidence.schema.json) | Validated code-only nodes, edges, confidence, and bounded file topology |
 | Graph analysis | [1.0](../src/py_security_suite/schemas/graph-analysis.schema.json) | Finding neighborhoods, cross-tool clusters, and structural hotspots |
 | Static risk routes | [1.0](../src/py_security_suite/schemas/risk-paths.schema.json) | Bounded multi-entry matrices with exact entry-node runtime attribution; end-to-end sensitive-data routes that keep scanner-confirmed and inventory-only evidence distinct while joining boundary, protection, assurance, validation, lifecycle, and ownership; exact contributing-tool assurance; fail-closed finding/change attribution; ordered CODEOWNERS handoffs; producer-verified test evidence; shared-test quality; and Graphify/source/artifact-aware route applicability. Genuine Python model gaps remain distinct from artifact, generated-evidence, test, and non-Python native-control dispositions while every finding and closure action is retained |
+| Advanced cross-evidence analysis | [1.0](../src/py_security_suite/schemas/advanced-analysis.schema.json) | Typed evidence relationships, Graphify dominators and control bypasses, native SARIF taint paths, wheel activation/RECORD parity, threat-control-test traceability, security mutation leverage, telemetry privacy topology, and dependency trust routes |
+| Cross-evidence attack-surface delta | [1.0](../src/py_security_suite/schemas/advanced-analysis-delta.schema.json) | Digest-bound regressions for control topology, telemetry protection, dependency trust, scanner-confirmed taint paths, published artifact entry points, and wheel identity |
 | Observed effectiveness | [1.1](../src/py_security_suite/schemas/effectiveness-1.1.schema.json) | Attribution, actionability, corroboration, normalized/unique contribution, and exact per-tool execution plus primary/helper trust posture used by route evidence assurance |
 | Evidence fusion | [1.3](../src/py_security_suite/schemas/evidence-fusion.schema.json) | Semantic, graph, package-lineage, provenance, alias-aware advisory, dependency-use/reachability, threat-intelligence, fixed-version, remediation-decision, owner/test selection, exact retained focused-test execution, and test/import-path coverage alignment; [1.2](../src/py_security_suite/schemas/evidence-fusion-1.2.schema.json), [1.1](../src/py_security_suite/schemas/evidence-fusion-1.1.schema.json), and [1.0](../src/py_security_suite/schemas/evidence-fusion-1.0.schema.json) remain bundled |
 | Structural synthesis | [1.2](../src/py_security_suite/schemas/structural-synthesis-1.2.schema.json) | Dead-code dispositions, island boundaries, structural orphans, import cycles, change-risk scoring, graph-guided test selection, exact selected-test execution, and changed-line coverage alignment; 1.1 and 1.0 remain bundled |

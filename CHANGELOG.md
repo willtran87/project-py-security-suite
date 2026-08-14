@@ -5,6 +5,18 @@ for published releases.
 
 ## Unreleased
 
+- Add `advanced-analysis.json`, a bounded typed evidence graph joining static
+  control dominance and alternate paths, native SARIF source-to-sink steps,
+  wheel activation/`RECORD` parity, pytm threats, mutmut survivors, focused
+  tests, telemetry privacy routes, and dependency trust evidence. Markdown and
+  HTML lead with actionable bypass, privacy, artifact, and dependency signals.
+  Add digest-bound `pysec advanced-diff` release regression analysis for new
+  taint paths, unmodeled artifact entries, wheel identity gaps, degraded
+  controls, privacy posture, and dependency trust tiers. Structural joins stay
+  explicitly distinct from exploitability and control-effectiveness claims.
+  Promote actionable advanced records into the owned closure plan, and make the
+  native dogfood profile inspect the freshly built `dist/` candidates instead
+  of a historical staging directory.
 - Add bounded `unrouted_structural_intersections` that join Python route gaps
   to exact retained structural-island path or line membership. The ledger
   combines reachability state, Graphify boundary classification, candidate
