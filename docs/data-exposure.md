@@ -52,7 +52,8 @@ flowchart LR
     Fusion["Evidence fusion<br/>corroboration, coverage, graph impact, related findings"]
     Surface["Inventory review surface<br/>structural/test priority and verification"]
     Finding["Normalized exposure finding<br/>source, sink, SDK, CWE, action"]
-    Route["End-to-end sensitive-data route<br/>entry + runtime + protection + owner"]
+    Standards["Applicable CWE, OWASP, and OpenTelemetry guidance"]
+    Route["End-to-end sensitive-data route<br/>entry + runtime + protection + owner + citations"]
 
     Sources --> Taint --> Sinks --> Finding
     SDK --> Triage --> Finding
@@ -61,6 +62,7 @@ flowchart LR
     Structure --> Fusion
     Supply --> Fusion
     Finding --> Fusion --> Triage
+    Standards --> Route
     SDK --> Surface
     Graph --> Surface
     Tests --> Surface
@@ -168,7 +170,11 @@ separate evidence-basis labels, then join to every retained declared entry,
 exact entry-node runtime counts, trust boundary, observed protection, scanner
 assurance, validation, lifecycle, and ownership. This creates one actionable
 boundary review without implying attacker-controlled input, runtime data flow,
-disclosure, or regulatory impact.
+disclosure, or regulatory impact. Normalized finding citations flow into
+confirmed routes, while inventory routes select applicable CWE, OWASP, or
+OpenTelemetry guidance by sink family. Citation coverage and gaps remain visible
+in summaries and closure work; a citation supports classification or remediation
+and does not prove the route.
 
 When structural synthesis is available, the same record contributes its
 change-risk score and classification, exact graph-selected test files, test

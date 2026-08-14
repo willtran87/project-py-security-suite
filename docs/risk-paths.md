@@ -312,6 +312,7 @@ flowchart LR
     Assurance["Scanner trust + perspective"] --> Join
     Validation["Coverage + focused tests"] --> Join
     Owners["CODEOWNERS handoffs"] --> Join
+    Citations["Finding citations + applicable exposure standards"] --> Join
     Join --> Ledger["sensitive_data_routes"]
     Ledger --> Report["Readable report + SARIF context"]
     Ledger --> Closure["Protection and canary-test criteria"]
@@ -319,15 +320,65 @@ flowchart LR
 
 Summary counters separate scanner-confirmed and inventory-only records and show
 routes without observed protection, routes with runtime-observed entries,
-validation or scanner-assurance gaps, ownership boundaries, and multiple entry
-interfaces. Finding cards and closure work retain the stable sensitive-route ID
-and require concrete data-class, recipient, purpose, retention, access-control,
-minimization, and synthetic-canary review.
+validation or scanner-assurance gaps, ownership boundaries, multiple entry
+interfaces, and citation coverage. Confirmed routes retain bounded normalized
+finding citations; inventory routes select only standards applicable to the sink
+family. Finding cards, SARIF, and closure work retain these references with the
+stable sensitive-route ID and require concrete data-class, recipient, purpose,
+retention, access-control, minimization, and synthetic-canary review. A route
+without a citation becomes an explicit closure gap.
 
 The ledger is not interprocedural taint proof. Static entry reachability plus a
 sink observation does not establish attacker-controlled input, that a value
 reached the sink at runtime, that a disclosure occurred, or that a regulatory
 classification applies.
+Citations support classification and remediation guidance; they do not validate
+the route or elevate inventory evidence into a confirmed flow.
+
+## Secret candidate provenance
+
+`secret_provenance_assessments` gives each retained `secrets` or
+`secrets-history` finding a bounded, value-free triage record. It joins evidence
+that dedicated scanners cannot safely determine in isolation:
+
+- whether the cited path is production Python, test/validation source,
+  generated evidence, a built artifact, or another repository control;
+- whether the path belongs to the sealed source inventory, Graphify graph, or
+  built-artifact manifest, and whether it has a Python entry-point route;
+- whether the observation came from the current tree or retained Git history;
+- whether a scanner verified the credential, ran without verification, or
+  supplied no verification state, plus its execution/trust posture;
+- whether the finding is new, existing, regressed, or unclassified and which
+  CODEOWNERS should review it; and
+- whether the normalized evidence explicitly confirms that secret material was
+  redacted before report generation.
+
+```mermaid
+flowchart LR
+    Secret["Redacted secret findings"] --> Join{"Secret provenance join"}
+    Applicability["Content lane + source/graph/artifact membership"] --> Join
+    History["Current tree / Git history"] --> Join
+    Assurance["Verification + scanner trust"] --> Join
+    Lifecycle["Baseline/change + owners"] --> Join
+    Join --> Ledger["secret_provenance_assessments"]
+    Ledger --> Report["Markdown + HTML + SARIF"]
+    Ledger --> Closure["Lane-specific closure criteria"]
+```
+
+The report gives production credentials a rotate/remove/secret-store action;
+generated evidence a credential-versus-deterministic-digest review; test
+fixtures a synthetic/nonfunctional proof requirement; artifact candidates a
+purge-and-fix-producer action; and history candidates a cited-commit review.
+Closure also requires protected investigation, appropriate history cleanup,
+scanner verification review, and redaction verification when those signals are
+missing.
+
+This context never changes native severity, suppresses a finding, or labels it a
+false positive. Test and generated paths can still contain live credentials,
+and scanner verification does not prove current usability, privilege, or scope.
+The suite never retains detected secret values. Summary counters expose lane,
+history, verification, scanner-assurance, and redaction gaps; the retained
+assessment list is capped at 250 and reports its exact omitted count.
 
 ## Dependency-advisory importer routes
 

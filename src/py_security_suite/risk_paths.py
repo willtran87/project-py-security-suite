@@ -47,7 +47,23 @@ _MAX_ADVISORY_IMPORT_PATHS = 50
 _MAX_FINDING_ADVISORY_ROUTES = 25
 _MAX_EXPOSURE_ADVISORY_INTERSECTIONS = 100
 _MAX_SENSITIVE_DATA_ROUTES = 100
+_MAX_SENSITIVE_ROUTE_CITATIONS = 10
+_MAX_SECRET_PROVENANCE_ASSESSMENTS = 250
 _MAX_ENTRY_POINT_EXPOSURES = 25
+_SECRET_AREAS = frozenset({"secrets", "secrets-history"})
+_SENSITIVE_ROUTE_STANDARD_IDS = {
+    "analytics": ("CWE-201", "OTEL-SENSITIVE-DATA"),
+    "client-response": ("CWE-209",),
+    "error-monitoring": ("CWE-201", "OTEL-SENSITIVE-DATA"),
+    "exception": ("CWE-209",),
+    "logging": ("CWE-532", "OWASP-LOGGING"),
+    "metrics": ("CWE-201", "OTEL-SENSITIVE-DATA"),
+    "network-egress": ("CWE-201",),
+    "observability": ("CWE-201", "OTEL-SENSITIVE-DATA"),
+    "telemetry": ("CWE-201", "OTEL-SENSITIVE-DATA"),
+    "url": ("CWE-598",),
+    "url-query": ("CWE-598",),
+}
 _TOOL_RUN_STATUSES = frozenset(
     {"completed", "unavailable", "failed", "timed_out", "parse_error", "skipped"}
 )
@@ -126,6 +142,14 @@ def build_risk_paths(
     )
     routed.sort(key=_route_order)
     unrouted.sort(key=_target_order)
+    all_secret_provenance_assessments = _secret_provenance_assessments(
+        findings,
+        targets,
+        {str(route["target"]["id"]) for route in routed},
+    )
+    secret_provenance_assessments = all_secret_provenance_assessments[
+        :_MAX_SECRET_PROVENANCE_ASSESSMENTS
+    ]
     retained_routes = routed[:_MAX_ROUTES]
     _attach_entry_point_exposures(
         retained_routes, entry_points, adjacency, entry_point_runtime
@@ -246,6 +270,7 @@ def build_risk_paths(
         exposure_advisory_intersections,
         sensitive_data_routes,
     )
+    _attach_secret_provenance(findings, secret_provenance_assessments)
     validation_gaps = sum(
         route["validation"]["assessment_status"] == "gap" for route in routed
     )
@@ -626,6 +651,57 @@ def build_risk_paths(
                 item["entry_point_exposure_count"] > 1
                 for item in all_sensitive_data_routes
             ),
+            "sensitive_data_routes_with_citations": sum(
+                bool(item["citations"]) for item in all_sensitive_data_routes
+            ),
+            "sensitive_data_routes_without_citations": sum(
+                not item["citations"] for item in all_sensitive_data_routes
+            ),
+            "secret_candidates": _secret_finding_count(findings),
+            "secret_candidates_assessed": len(all_secret_provenance_assessments),
+            "production_source_secret_candidates": sum(
+                item["content_lane"] == "python-runtime-source"
+                for item in all_secret_provenance_assessments
+            ),
+            "test_source_secret_candidates": sum(
+                item["content_lane"] == "test-validation-source"
+                for item in all_secret_provenance_assessments
+            ),
+            "generated_evidence_secret_candidates": sum(
+                item["content_lane"] == "generated-evidence"
+                for item in all_secret_provenance_assessments
+            ),
+            "artifact_secret_candidates": sum(
+                item["content_lane"] == "artifact-control"
+                for item in all_secret_provenance_assessments
+            ),
+            "repository_control_secret_candidates": sum(
+                item["content_lane"] == "outside-python-runtime-model"
+                for item in all_secret_provenance_assessments
+            ),
+            "history_secret_candidates": sum(
+                item["history_status"] == "history-evidence"
+                for item in all_secret_provenance_assessments
+            ),
+            "verified_secret_candidates": sum(
+                item["verification_status"] == "verified"
+                for item in all_secret_provenance_assessments
+            ),
+            "secret_candidates_without_verification": sum(
+                item["verification_status"] != "verified"
+                for item in all_secret_provenance_assessments
+            ),
+            "multi_scanner_secret_candidates": sum(
+                item["scanner_perspective"] == "multi-scanner"
+                for item in all_secret_provenance_assessments
+            ),
+            "secret_candidates_with_assurance_gaps": sum(
+                item["evidence_assurance_status"] != "assured"
+                for item in all_secret_provenance_assessments
+            ),
+            "secret_candidates_without_redaction_marker": sum(
+                not item["redacted"] for item in all_secret_provenance_assessments
+            ),
             "runtime_observed_routes": sum(
                 "observed" in route["runtime_context"]["observations"]
                 for route in routed
@@ -886,6 +962,7 @@ def build_risk_paths(
         "validation_test_hotspots": validation_test_hotspots,
         "exposure_advisory_intersections": exposure_advisory_intersections,
         "sensitive_data_routes": sensitive_data_routes,
+        "secret_provenance_assessments": secret_provenance_assessments,
         "owner_work_queues": owner_work_queues,
         "unrouted_targets": unrouted[:_MAX_UNROUTED],
         "truncation": {
@@ -916,6 +993,10 @@ def build_risk_paths(
             "sensitive_data_routes_omitted": max(
                 0, len(all_sensitive_data_routes) - _MAX_SENSITIVE_DATA_ROUTES
             ),
+            "secret_provenance_assessments_omitted": max(
+                0,
+                _secret_finding_count(findings) - len(secret_provenance_assessments),
+            ),
             "owner_work_queues_omitted": max(
                 0, len(all_owner_work_queues) - _MAX_OWNER_QUEUES
             ),
@@ -932,6 +1013,7 @@ def build_risk_paths(
             "Runtime observation proves only that code executed during retained tests; absence of observation does not prove dead code.",
             "Sensitive-data sink surfaces are inventory signals unless a normalized scanner finding establishes a source-to-sink concern.",
             "A sensitive-data route joins static entry-point, sink, protection, ownership, scanner-assurance, and validation evidence; it does not prove attacker-controlled input, runtime data flow, disclosure, or regulatory impact.",
+            "A secret provenance assessment classifies where a redacted scanner candidate was observed and which evidence is available; it does not prove that the candidate is a real, active, exploitable, or unique credential, and generated or test context is never an automatic false-positive disposition.",
             "A dependency-advisory import route proves only a retained static path to a source file that imports the affected distribution; it does not prove invocation of a vulnerable function, attacker control, or exploitability.",
             "Package lifecycle comparison proves only what the retained source and built-artifact composition inventories report; it does not prove inventory completeness, runtime loading, semantic version safety, or vulnerable-function use.",
             "An exposure-advisory intersection proves only that a retained sensitive sink and an affected SDK importer share an exact source path and advisory identity; it does not prove the SDK processed the sensitive value, that data leaked, or that the vulnerable function executed.",
@@ -1441,6 +1523,11 @@ def _sink_surface_targets(value: Any) -> list[dict[str, Any]]:
     surfaces = value.get("sink_surfaces") if isinstance(value, dict) else None
     if not isinstance(surfaces, list):
         return []
+    standards = _citation_records(
+        value.get("standards") if isinstance(value, dict) else None,
+        limit=25,
+        default_kind="standard",
+    )
     result: list[dict[str, Any]] = []
     for surface in surfaces:
         if not isinstance(surface, dict) or surface.get("scope") != "production":
@@ -1453,6 +1540,7 @@ def _sink_surface_targets(value: Any) -> list[dict[str, Any]]:
             continue
         line = _positive_integer(surface.get("line"))
         label = str(surface.get("label") or surface.get("sink_family") or "sink")
+        sink_family = str(surface.get("sink_family") or "unknown")[:100]
         identifier = (
             "surface-" + _digest({"path": path, "line": line, "label": label})[:16]
         )
@@ -1496,7 +1584,7 @@ def _sink_surface_targets(value: Any) -> list[dict[str, Any]]:
                     "structural_risk_ids": _strings(
                         structural.get("structural_risk_ids"), 25
                     ),
-                    "sink_family": str(surface.get("sink_family") or "unknown")[:100],
+                    "sink_family": sink_family,
                     "data_classes": _strings(surface.get("data_classes"), 25),
                     "protection_status": str(
                         surface.get("protection_status") or "unknown"
@@ -1508,6 +1596,9 @@ def _sink_surface_targets(value: Any) -> list[dict[str, Any]]:
                     "sdk_package_risk": dependency.get("risk_present") is True,
                     "sdk_risk_tier": _optional_string(dependency.get("risk_tier")),
                     "exact_path_sdk_advisories": exact_advisories,
+                    "citations": _sensitive_route_standard_citations(
+                        standards, sink_family
+                    ),
                 },
                 "recommended_action": _surface_action(surface, structural),
                 "evidence_artifacts": sorted(
@@ -2002,6 +2093,63 @@ def _advisory_citations(value: Any) -> list[dict[str, str | None]]:
     return result
 
 
+def _citation_records(
+    value: Any,
+    *,
+    limit: int,
+    default_kind: str,
+) -> list[dict[str, str | None]]:
+    """Normalize bounded citation metadata without treating it as finding proof."""
+    if not isinstance(value, list):
+        return []
+    result: list[dict[str, str | None]] = []
+    seen: set[tuple[str, str | None]] = set()
+    for item in value:
+        kind_value: Any
+        identifier_value: Any
+        title_value: Any
+        uri_value: Any
+        if isinstance(item, Citation):
+            kind_value = item.kind
+            identifier_value = item.identifier
+            title_value = item.title
+            uri_value = item.uri
+        elif isinstance(item, dict):
+            kind_value = item.get("kind")
+            identifier_value = item.get("identifier")
+            title_value = item.get("title")
+            uri_value = item.get("uri")
+        else:
+            continue
+        identifier = str(identifier_value or "").strip()[:500]
+        uri = str(uri_value).strip()[:4000] if isinstance(uri_value, str) else None
+        if not identifier or (identifier, uri) in seen:
+            continue
+        seen.add((identifier, uri))
+        result.append(
+            {
+                "kind": str(kind_value or default_kind).strip()[:100] or default_kind,
+                "identifier": identifier,
+                "title": str(title_value or identifier).strip()[:1000] or identifier,
+                "uri": uri,
+            }
+        )
+        if len(result) >= limit:
+            break
+    return result
+
+
+def _sensitive_route_standard_citations(
+    standards: list[dict[str, str | None]], sink_family: str
+) -> list[dict[str, str | None]]:
+    identifiers = set(_SENSITIVE_ROUTE_STANDARD_IDS.get(sink_family.casefold(), ()))
+    return [
+        citation
+        for citation in standards
+        if str(citation.get("identifier") or "") in identifiers
+    ][:_MAX_SENSITIVE_ROUTE_CITATIONS]
+
+
 def _dependency_advisory_action(
     package: str,
     primary: str,
@@ -2268,6 +2416,7 @@ def _sensitive_data_routes(
             "protection_status": correlations.get("protection_status"),
             "risk_factors": [],
             "review_priority": str(route.get("priority") or "P4"),
+            "citations": correlations.get("citations"),
         }
         ownership = _object(route.get("ownership_context"))
         lifecycle = _object(route.get("change_lifecycle_attribution"))
@@ -2313,6 +2462,11 @@ def _sensitive_data_routes(
                 :100
             ],
             "risk_factors": _strings(context.get("risk_factors"), 25),
+            "citations": _citation_records(
+                context.get("citations"),
+                limit=_MAX_SENSITIVE_ROUTE_CITATIONS,
+                default_kind="reference",
+            ),
             "entry_point_ids": sorted(
                 {
                     str(_object(item.get("entry_point")).get("id"))
@@ -2373,6 +2527,249 @@ def _sensitive_data_routes(
             str(item["sensitive_route_id"]),
         ),
     )
+
+
+def _secret_provenance_assessments(
+    findings: list[Finding],
+    targets: list[dict[str, Any]],
+    routed_target_ids: set[str],
+) -> list[dict[str, Any]]:
+    """Join redacted secret candidates to content, history, and assurance lanes."""
+    targets_by_finding = {
+        str(target["finding_id"]): target
+        for target in targets
+        if target.get("kind") == "finding" and target.get("finding_id")
+    }
+    result: list[dict[str, Any]] = []
+    for finding in findings:
+        if not _is_secret_finding(finding):
+            continue
+        target = targets_by_finding.get(finding.finding_id)
+        if target is None:
+            continue
+        applicability = _object(target.get("route_applicability"))
+        assurance = _object(target.get("evidence_assurance"))
+        lifecycle = _object(target.get("change_lifecycle_attribution"))
+        content_lane = str(
+            applicability.get("classification") or "outside-python-runtime-model"
+        )
+        tools = sorted({source.tool for source in finding.sources})[:25]
+        rules = sorted({source.rule_id for source in finding.sources})[:50]
+        verification_status = _secret_verification_status(finding)
+        history_status = _secret_history_status(finding, tools)
+        redacted = finding.evidence.get("redacted") is True
+        disposition = _secret_review_disposition(content_lane)
+        record = {
+            "secret_context_id": "secret-context-"
+            + _digest(
+                {
+                    "finding_id": finding.finding_id,
+                    "path": target["path"],
+                    "line": target.get("line"),
+                    "content_lane": content_lane,
+                }
+            )[:16],
+            "finding_id": finding.finding_id,
+            "priority": target["priority"],
+            "severity": finding.severity.value,
+            "confidence": finding.confidence.value,
+            "path": target["path"],
+            "line": target.get("line"),
+            "label": target["label"],
+            "content_lane": content_lane,
+            "review_disposition": disposition,
+            "route_status": (
+                "routed" if str(target["id"]) in routed_target_ids else "unrouted"
+            ),
+            "route_assessment": str(
+                applicability.get("assessment") or "not-route-applicable"
+            ),
+            "source_inventory_available": bool(
+                applicability.get("source_inventory_available")
+            ),
+            "source_inventory_member": _optional_boolean(
+                applicability.get("source_inventory_member")
+            ),
+            "graph_available": bool(applicability.get("graph_available")),
+            "graph_path_member": _optional_boolean(
+                applicability.get("graph_path_member")
+            ),
+            "artifact_manifest_available": bool(
+                applicability.get("artifact_manifest_available")
+            ),
+            "artifact_manifest_member": _optional_boolean(
+                applicability.get("artifact_manifest_member")
+            ),
+            "redacted": redacted,
+            "verification_status": verification_status,
+            "history_status": history_status,
+            "history_commit": _secret_history_commit(finding),
+            "scanner_tools": tools,
+            "scanner_rules": rules,
+            "independent_scanner_count": len(tools),
+            "scanner_perspective": (
+                "multi-scanner" if len(tools) > 1 else "single-scanner"
+            ),
+            "evidence_assurance_status": str(
+                assurance.get("review_status") or "not-assessed"
+            ),
+            "lifecycle_status": str(
+                lifecycle.get("lifecycle_status") or finding.status.value
+            ),
+            "change_scope": str(lifecycle.get("change_scope") or "not-established"),
+            "owners": _strings(target.get("owners"), 100),
+            "classifications": _strings(target.get("classifications"), 50),
+            "citations": _citation_records(
+                finding.citations,
+                limit=_MAX_SENSITIVE_ROUTE_CITATIONS,
+                default_kind="reference",
+            ),
+            "evidence_artifacts": sorted(
+                {
+                    "findings.json",
+                    "risk-paths.json",
+                    *_strings(applicability.get("evidence_artifacts"), 10),
+                    *_strings(assurance.get("evidence_artifacts"), 10),
+                    *_strings(lifecycle.get("evidence_artifacts"), 10),
+                }
+            ),
+            "recommended_action": _secret_provenance_action(
+                content_lane=content_lane,
+                verification_status=verification_status,
+                history_status=history_status,
+                redacted=redacted,
+            ),
+        }
+        result.append(record)
+    return sorted(
+        result,
+        key=lambda item: (
+            _priority_rank(str(item["priority"])),
+            0 if item["verification_status"] == "verified" else 1,
+            str(item["path"]),
+            int(item["line"] or 0),
+            str(item["secret_context_id"]),
+        ),
+    )
+
+
+def _is_secret_finding(finding: Finding) -> bool:
+    return (
+        finding.status is not FindingStatus.SUPPRESSED
+        and finding.area.casefold() in _SECRET_AREAS
+    )
+
+
+def _secret_finding_count(findings: list[Finding]) -> int:
+    return sum(_is_secret_finding(finding) for finding in findings)
+
+
+def _secret_verification_status(finding: Finding) -> str:
+    native = {source.native_severity.casefold() for source in finding.sources}
+    if finding.evidence.get("verified") is True or "verified" in native:
+        return "verified"
+    if finding.evidence.get("verification_enabled") is False:
+        return "verification-disabled"
+    if native & {"potential-secret", "secret", "unverified"}:
+        return "unverified"
+    return "not-established"
+
+
+def _secret_history_status(finding: Finding, tools: list[str]) -> str:
+    scan_mode = str(finding.evidence.get("scan_mode") or "").casefold()
+    if scan_mode == "git":
+        return "history-evidence"
+    if scan_mode == "dir":
+        return "current-tree"
+    if set(tools) & {
+        "bandit",
+        "detect-secrets",
+        "ruff",
+        "ruff-quality",
+        "semgrep",
+        "trufflehog",
+    }:
+        return "current-tree"
+    if finding.area.casefold() == "secrets-history":
+        return "history-evidence"
+    return "not-established"
+
+
+def _secret_history_commit(finding: Finding) -> str | None:
+    value = finding.evidence.get("commit")
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    return normalized[:64] if normalized else None
+
+
+def _secret_review_disposition(content_lane: str) -> str:
+    return {
+        "python-runtime-source": "production-source-review",
+        "test-validation-source": "test-fixture-review",
+        "generated-evidence": "generated-evidence-review",
+        "artifact-control": "artifact-material-review",
+        "outside-python-runtime-model": "repository-control-review",
+    }.get(content_lane, "repository-control-review")
+
+
+def _secret_provenance_action(
+    *,
+    content_lane: str,
+    verification_status: str,
+    history_status: str,
+    redacted: bool,
+) -> str:
+    actions = {
+        "python-runtime-source": (
+            "Validate the candidate in the protected checkout; if real, revoke and "
+            "rotate it, remove it from maintained source and applicable history, and "
+            "replace it with an approved secret-store reference."
+        ),
+        "test-validation-source": (
+            "Prove the test value is synthetic and nonfunctional, document its fixture "
+            "purpose, and use only a narrow rule/path allowlist; if it is real, rotate "
+            "it and remove it from source and applicable history."
+        ),
+        "generated-evidence": (
+            "Determine in the protected workspace whether the redacted candidate is a "
+            "credential or deterministic digest/receipt. If real, rotate it, purge the "
+            "generated artifact, and sanitize its producer; if deterministic evidence, "
+            "use only a narrow artifact/rule exclusion that preserves other secret scans."
+        ),
+        "artifact-control": (
+            "Inspect the producing build and release material in a protected workspace; "
+            "rotate and purge real credentials from artifacts and caches, or narrowly "
+            "govern a proven non-secret digest without weakening artifact scanning."
+        ),
+        "outside-python-runtime-model": (
+            "Validate the repository or configuration candidate in its native evidence "
+            "lane; rotate and remove real credentials, or narrowly govern proven "
+            "non-secret test/configuration data without adding a Python entry point."
+        ),
+    }
+    result = actions.get(content_lane, actions["outside-python-runtime-model"])
+    if verification_status == "verified":
+        result = (
+            "Treat scanner verification as urgent evidence, while independently "
+            "confirming scope and credential ownership. " + result
+        )
+    elif verification_status in {"verification-disabled", "not-established"}:
+        result += (
+            " Credential validity was not established; do not copy the value into "
+            "tickets or reports while validating it."
+        )
+    if history_status == "history-evidence":
+        result += (
+            " Review the cited commit and reachable history; removal from the current "
+            "tree alone is not sufficient for a real credential."
+        )
+    if not redacted:
+        result += (
+            " Confirm every generated report path redacts the candidate before the "
+            "report leaves the protected boundary."
+        )
+    return result[:2000]
 
 
 def _route_targets(
@@ -5291,6 +5688,31 @@ def _attach_finding_routes(
             _add_route_citations(finding)
 
 
+def _attach_secret_provenance(
+    findings: list[Finding], assessments: list[dict[str, Any]]
+) -> None:
+    by_finding = {
+        str(item["finding_id"]): item for item in assessments if item.get("finding_id")
+    }
+    for finding in findings:
+        assessment = by_finding.get(finding.finding_id)
+        if assessment is None:
+            continue
+        finding.evidence["secret_provenance"] = assessment
+        if not any(
+            citation.identifier == "pysec-secret-provenance"
+            for citation in finding.citations
+        ):
+            finding.citations.append(
+                Citation(
+                    kind="supporting_evidence",
+                    identifier="pysec-secret-provenance",
+                    title="Suite secret candidate provenance synthesis",
+                    uri=_RISK_PATH_REFERENCE,
+                )
+            )
+
+
 def _compact_dependency_advisory_route(
     route: dict[str, Any],
 ) -> dict[str, Any]:
@@ -5762,6 +6184,11 @@ def _finding_correlations(
             ],
             "risk_factors": _strings(exposure.get("risk_factors"), 25),
             "review_priority": _optional_string(exposure.get("review_priority")),
+            "citations": _citation_records(
+                finding.citations,
+                limit=_MAX_SENSITIVE_ROUTE_CITATIONS,
+                default_kind="reference",
+            ),
         }
     return result
 

@@ -9,6 +9,7 @@ from jsonschema import Draft202012Validator
 
 from py_security_suite.closure_plan import _finding_items
 from py_security_suite.models import (
+    Citation,
     Confidence,
     Finding,
     FindingStatus,
@@ -20,14 +21,30 @@ from py_security_suite.models import (
 from py_security_suite.report_inspection import read_bundled_schema
 from py_security_suite.reports import (
     _html_risk_path_context,
+    _html_secret_provenance_context,
     _markdown_risk_path_context,
+    _markdown_secret_provenance_context,
     _render_risk_path_summary,
+    _risk_advisory_citations_text,
     render_sarif,
 )
 from py_security_suite.risk_paths import build_risk_paths
 
 
 class RiskPathTests(unittest.TestCase):
+    def test_route_citation_renderer_rejects_unsafe_markdown_uri(self) -> None:
+        rendered = _risk_advisory_citations_text(
+            [
+                {
+                    "identifier": "CWE-532",
+                    "title": "Logging guidance",
+                    "uri": "https://example.test/reference_(unsafe)",
+                }
+            ]
+        )
+
+        self.assertEqual(rendered, "`CWE-532`")
+
     def test_routes_findings_and_sensitive_surfaces_from_declared_entry_points(
         self,
     ) -> None:
@@ -1647,9 +1664,30 @@ class RiskPathTests(unittest.TestCase):
             "risk_factors": ["credential-material", "persistent-destination"],
             "review_priority": "high",
         }
+        finding.citations.append(
+            Citation(
+                kind="standard",
+                identifier="CWE-532",
+                title="Insertion of Sensitive Information into Log File",
+                uri="https://cwe.mitre.org/data/definitions/532.html",
+            )
+        )
+        artifacts = _artifacts()
+        artifacts["data-exposure.json"]["standards"] = [
+            {
+                "identifier": "CWE-201",
+                "title": "Insertion of Sensitive Information Into Sent Data",
+                "uri": "https://cwe.mitre.org/data/definitions/201.html",
+            },
+            {
+                "identifier": "OTEL-SENSITIVE-DATA",
+                "title": "OpenTelemetry handling sensitive data",
+                "uri": "https://opentelemetry.io/docs/security/handling-sensitive-data/",
+            },
+        ]
 
         with patch("py_security_suite.risk_paths._MAX_SENSITIVE_DATA_ROUTES", 1):
-            result = build_risk_paths([finding], _artifacts())
+            result = build_risk_paths([finding], artifacts)
 
         self.assertEqual(result["summary"]["sensitive_data_routes"], 2)
         self.assertEqual(
@@ -1674,6 +1712,10 @@ class RiskPathTests(unittest.TestCase):
         self.assertEqual(
             result["summary"]["sensitive_data_routes_with_assurance_gaps"], 2
         )
+        self.assertEqual(result["summary"]["sensitive_data_routes_with_citations"], 2)
+        self.assertEqual(
+            result["summary"]["sensitive_data_routes_without_citations"], 0
+        )
         confirmed = next(
             item
             for item in result["sensitive_data_routes"]
@@ -1686,6 +1728,17 @@ class RiskPathTests(unittest.TestCase):
         self.assertEqual(confirmed["data_classes"], ["credential", "private-data"])
         self.assertEqual(confirmed["trust_boundary"], "persistent-log-storage")
         self.assertEqual(confirmed["protection_status"], "not-observed")
+        self.assertEqual(
+            confirmed["citations"],
+            [
+                {
+                    "kind": "standard",
+                    "identifier": "CWE-532",
+                    "title": "Insertion of Sensitive Information into Log File",
+                    "uri": "https://cwe.mitre.org/data/definitions/532.html",
+                }
+            ],
+        )
         self.assertEqual(confirmed["entry_point_ids"], ["entry:cli"])
         self.assertEqual(
             confirmed["entry_point_runtime_statuses"],
@@ -1698,17 +1751,39 @@ class RiskPathTests(unittest.TestCase):
         rendered = "\n".join(_render_risk_path_summary(result))
         self.assertIn("End-to-end sensitive-data routes", rendered)
         self.assertIn("scanner-confirmed-source-to-sink", rendered)
+        self.assertIn("CWE-532", rendered)
+        inventory_route = next(
+            item
+            for item in result["routes"]
+            if item["target"]["kind"] == "sink-surface"
+        )
+        self.assertEqual(
+            [
+                item["identifier"]
+                for item in inventory_route["correlations"]["citations"]
+            ],
+            ["CWE-201", "OTEL-SENSITIVE-DATA"],
+        )
         markdown = "\n".join(_markdown_risk_path_context(finding))
         self.assertIn("End-to-end sensitive-data route", markdown)
+        self.assertIn(
+            "[CWE-532](https://cwe.mitre.org/data/definitions/532.html)", markdown
+        )
         self.assertIn("not proof of disclosure", markdown)
         html = _html_risk_path_context(finding)
         self.assertIn("End-to-end sensitive-data route", html)
+        self.assertIn("CWE-532", html)
+        sarif_route = render_sarif([finding])["runs"][0]["results"][0]["properties"][
+            "risk_path"
+        ]["sensitive_data_route"]
+        self.assertEqual(sarif_route["citations"], confirmed["citations"])
         closure = _finding_items([json_ready(finding)])[0]
         closure_route = closure["details"]["risk_path"]["sensitive_data_route"]
         self.assertEqual(
             closure_route["sensitive_route_id"], confirmed["sensitive_route_id"]
         )
         self.assertIn("data-exposure.json", closure["evidence_refs"])
+        self.assertEqual(closure_route["citations"], confirmed["citations"])
         self.assertTrue(
             any(
                 "synthetic sensitive canaries" in criterion
@@ -1718,6 +1793,180 @@ class RiskPathTests(unittest.TestCase):
         Draft202012Validator(
             json.loads(read_bundled_schema("risk-paths-1.0"))
         ).validate(result)
+
+    def test_sensitive_data_route_surfaces_missing_citation_as_closure_gap(
+        self,
+    ) -> None:
+        finding = _finding("src/sink.py", 9)
+        finding.evidence["data_exposure"] = {
+            "concern": "sensitive-information-in-logs",
+            "sink_family": "logging",
+            "sink": "logger.info",
+            "confidence": "high",
+            "data_classes": ["credential"],
+            "trust_boundary": "persistent-log-storage",
+            "protection_status": "not-observed",
+            "risk_factors": ["credential-material"],
+            "review_priority": "high",
+        }
+
+        result = build_risk_paths([finding], _artifacts())
+
+        self.assertEqual(result["summary"]["sensitive_data_routes_with_citations"], 0)
+        self.assertEqual(
+            result["summary"]["sensitive_data_routes_without_citations"], 2
+        )
+        self.assertEqual(
+            finding.evidence["risk_path"]["sensitive_data_route"]["citations"], []
+        )
+        closure = _finding_items([json_ready(finding)])[0]
+        self.assertTrue(
+            any(
+                "security-practice citation" in criterion
+                for criterion in closure["acceptance_criteria"]
+            )
+        )
+        Draft202012Validator(
+            json.loads(read_bundled_schema("risk-paths-1.0"))
+        ).validate(result)
+
+    def test_secret_provenance_joins_content_history_assurance_and_closure(
+        self,
+    ) -> None:
+        production = _secret_finding(
+            "PYSEC-SECRET-PRODUCTION",
+            "src/sink.py",
+            9,
+            tool="trufflehog",
+            native_severity="verified",
+            evidence={"redacted": True, "verified": True},
+        )
+        generated = _secret_finding(
+            "PYSEC-SECRET-GENERATED",
+            "junit.xml.pysec-binding.json",
+            1,
+            tool="detect-secrets",
+            native_severity="potential-secret",
+            evidence={"redacted": True},
+        )
+        history = _secret_finding(
+            "PYSEC-SECRET-HISTORY",
+            ".env.example",
+            2,
+            area="secrets-history",
+            tool="gitleaks",
+            native_severity="secret",
+            evidence={
+                "redacted": True,
+                "scan_mode": "git",
+                "commit": "a" * 40,
+            },
+        )
+
+        result = build_risk_paths([production, generated, history], _artifacts())
+
+        summary = result["summary"]
+        self.assertEqual(summary["secret_candidates"], 3)
+        self.assertEqual(summary["secret_candidates_assessed"], 3)
+        self.assertEqual(summary["production_source_secret_candidates"], 1)
+        self.assertEqual(summary["generated_evidence_secret_candidates"], 1)
+        self.assertEqual(summary["repository_control_secret_candidates"], 1)
+        self.assertEqual(summary["history_secret_candidates"], 1)
+        self.assertEqual(summary["verified_secret_candidates"], 1)
+        self.assertEqual(summary["secret_candidates_without_verification"], 2)
+        self.assertEqual(summary["secret_candidates_without_redaction_marker"], 0)
+        self.assertEqual(
+            result["truncation"]["secret_provenance_assessments_omitted"], 0
+        )
+        by_id = {
+            item["finding_id"]: item for item in result["secret_provenance_assessments"]
+        }
+        production_context = by_id[production.finding_id]
+        self.assertEqual(production_context["content_lane"], "python-runtime-source")
+        self.assertEqual(production_context["route_status"], "routed")
+        self.assertEqual(production_context["verification_status"], "verified")
+        self.assertEqual(
+            production_context["review_disposition"], "production-source-review"
+        )
+        generated_context = by_id[generated.finding_id]
+        self.assertEqual(generated_context["content_lane"], "generated-evidence")
+        self.assertEqual(generated_context["route_status"], "unrouted")
+        self.assertFalse(generated_context["source_inventory_member"])
+        self.assertIn(
+            "deterministic digest/receipt", generated_context["recommended_action"]
+        )
+        history_context = by_id[history.finding_id]
+        self.assertEqual(history_context["history_status"], "history-evidence")
+        self.assertEqual(history_context["history_commit"], "a" * 40)
+        self.assertIn("current tree alone", history_context["recommended_action"])
+        self.assertEqual(
+            generated.evidence["secret_provenance"]["secret_context_id"],
+            generated_context["secret_context_id"],
+        )
+        self.assertTrue(
+            any(
+                citation.identifier == "pysec-secret-provenance"
+                for citation in generated.citations
+            )
+        )
+        rendered = "\n".join(_render_risk_path_summary(result))
+        self.assertIn("Secret candidate provenance", rendered)
+        self.assertIn("generated-evidence-review", rendered)
+        markdown = "\n".join(_markdown_risk_path_context(generated))
+        self.assertNotIn("Secret candidate provenance", markdown)
+        report_context = "\n".join(_markdown_secret_provenance_context(generated))
+        self.assertIn("Secret candidate provenance", report_context)
+        self.assertIn("not an automatic false-positive", report_context)
+        html = _html_secret_provenance_context(generated)
+        self.assertIn("Secret candidate provenance", html)
+        sarif = render_sarif([generated])
+        self.assertEqual(
+            sarif["runs"][0]["results"][0]["properties"]["secret_provenance"][
+                "secret_context_id"
+            ],
+            generated_context["secret_context_id"],
+        )
+        closure = _finding_items([json_ready(generated)])[0]
+        self.assertEqual(
+            closure["details"]["secret_provenance"]["content_lane"],
+            "generated-evidence",
+        )
+        self.assertIn("source-inventory.json", closure["evidence_refs"])
+        self.assertTrue(
+            any(
+                "deterministic evidence" in criterion
+                for criterion in closure["acceptance_criteria"]
+            )
+        )
+        self.assertNotIn("must-not-be-retained", json.dumps(json_ready(result)))
+        Draft202012Validator(
+            json.loads(read_bundled_schema("risk-paths-1.0"))
+        ).validate(result)
+
+    def test_secret_provenance_bound_is_explicit(self) -> None:
+        findings = [
+            _secret_finding(
+                f"PYSEC-SECRET-{index}",
+                f"tests/test_secret_{index}.py",
+                1,
+                tool="detect-secrets",
+                native_severity="potential-secret",
+                evidence={"redacted": True},
+            )
+            for index in range(2)
+        ]
+
+        with patch(
+            "py_security_suite.risk_paths._MAX_SECRET_PROVENANCE_ASSESSMENTS", 1
+        ):
+            result = build_risk_paths(findings, _artifacts())
+
+        self.assertEqual(result["summary"]["secret_candidates"], 2)
+        self.assertEqual(result["summary"]["secret_candidates_assessed"], 2)
+        self.assertEqual(len(result["secret_provenance_assessments"]), 1)
+        self.assertEqual(
+            result["truncation"]["secret_provenance_assessments_omitted"], 1
+        )
 
     def test_exposure_advisory_intersection_requires_exact_path_and_package(
         self,
@@ -2077,6 +2326,50 @@ def _finding(path: str, line: int) -> Finding:
         classifications=["CWE-532"],
         locations=[Location(path=path, start_line=line)],
         sources=[Source(tool="semgrep", rule_id="python.leak", message="leak")],
+    )
+
+
+def _secret_finding(
+    finding_id: str,
+    path: str,
+    line: int,
+    *,
+    tool: str,
+    native_severity: str,
+    evidence: dict[str, Any],
+    area: str = "secrets",
+) -> Finding:
+    rule_id = f"{tool}.credential-candidate"
+    return Finding(
+        finding_id=finding_id,
+        fingerprint=f"sha256:{finding_id.casefold()}",
+        title="Redacted credential candidate",
+        description="A scanner identified a credential-shaped value; it was discarded.",
+        impact="A real credential could permit unauthorized access.",
+        remediation="Validate without copying the value, then rotate and remove it if real.",
+        severity=Severity.HIGH,
+        confidence=Confidence.MEDIUM,
+        area=area,
+        domain="security",
+        classifications=["CWE-798"],
+        locations=[Location(path=path, start_line=line)],
+        sources=[
+            Source(
+                tool=tool,
+                rule_id=rule_id,
+                message="redacted credential candidate",
+                native_severity=native_severity,
+            )
+        ],
+        citations=[
+            Citation(
+                kind="taxonomy",
+                identifier="CWE-798",
+                title="Use of Hard-coded Credentials",
+                uri="https://cwe.mitre.org/data/definitions/798.html",
+            )
+        ],
+        evidence=dict(evidence),
     )
 
 

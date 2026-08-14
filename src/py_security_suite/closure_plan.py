@@ -322,6 +322,10 @@ def _finding_items(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
         external = "COSIGN-BUNDLE-MISSING" in rules
         evidence = _as_object(finding.get("evidence"))
         risk_refs, risk_acceptance, risk_details = _risk_path_closure_context(evidence)
+        secret_details = _closure_secret_provenance(evidence.get("secret_provenance"))
+        secret_refs, secret_acceptance = _secret_provenance_closure_context(
+            secret_details
+        )
         advisory = _as_object(
             _as_object(evidence.get("fusion")).get("advisory_context")
         )
@@ -475,18 +479,22 @@ def _finding_items(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 title=str(finding.get("title") or finding_id),
                 why=str(finding.get("impact") or finding.get("description") or ""),
                 action=str(
-                    finding.get("remediation") or "Review and resolve the finding."
+                    secret_details.get("recommended_action")
+                    or finding.get("remediation")
+                    or "Review and resolve the finding."
                 ),
                 acceptance=[
                     f"Finding {finding_id} is absent or governed in a newly sealed report.",
                     "The replacement report independently passes pysec verify-report.",
                     *risk_acceptance,
+                    *secret_acceptance,
                 ],
                 evidence_refs=[
                     "findings.json",
                     "action-plan.md",
                     *location_paths,
                     *risk_refs,
+                    *secret_refs,
                 ],
                 commands=(
                     [
@@ -504,10 +512,91 @@ def _finding_items(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 ),
                 related_findings=[finding_id],
                 tools=tools,
-                details={"risk_path": risk_details} if risk_details else {},
+                details={
+                    **({"risk_path": risk_details} if risk_details else {}),
+                    **({"secret_provenance": secret_details} if secret_details else {}),
+                },
             )
         )
     return items
+
+
+def _closure_secret_provenance(value: Any) -> dict[str, Any]:
+    item = _as_object(value)
+    if not item:
+        return {}
+    return {
+        "secret_context_id": str(item.get("secret_context_id") or "unknown"),
+        "content_lane": str(item.get("content_lane") or "unknown"),
+        "review_disposition": str(item.get("review_disposition") or "unknown"),
+        "path": str(item.get("path") or "unknown"),
+        "line": item.get("line"),
+        "redacted": item.get("redacted") is True,
+        "verification_status": str(
+            item.get("verification_status") or "not-established"
+        ),
+        "history_status": str(item.get("history_status") or "not-established"),
+        "history_commit": item.get("history_commit"),
+        "scanner_tools": _string_values(item.get("scanner_tools"), 25),
+        "scanner_rules": _string_values(item.get("scanner_rules"), 50),
+        "scanner_perspective": str(item.get("scanner_perspective") or "single-scanner"),
+        "evidence_assurance_status": str(
+            item.get("evidence_assurance_status") or "not-assessed"
+        ),
+        "source_inventory_member": item.get("source_inventory_member"),
+        "graph_path_member": item.get("graph_path_member"),
+        "artifact_manifest_member": item.get("artifact_manifest_member"),
+        "owners": _string_values(item.get("owners"), 100),
+        "citations": _closure_citations(item.get("citations")),
+        "evidence_artifacts": _string_values(item.get("evidence_artifacts"), 25),
+        "recommended_action": str(
+            item.get("recommended_action") or "Review the redacted secret candidate."
+        ),
+    }
+
+
+def _secret_provenance_closure_context(
+    item: dict[str, Any],
+) -> tuple[list[str], list[str]]:
+    if not item:
+        return [], []
+    acceptance = [
+        "The redacted candidate is validated only in a protected workspace and no secret value is copied into reports, tickets, logs, or telemetry."
+    ]
+    lane = item.get("content_lane")
+    if lane == "generated-evidence":
+        acceptance.append(
+            "The candidate is proven to be either a real credential or deterministic evidence: real credentials are rotated and purged with the producer sanitized; proven digests use only a narrow artifact/rule exclusion that preserves other secret scanning."
+        )
+    elif lane == "test-validation-source":
+        acceptance.append(
+            "Any retained test value is proven synthetic and nonfunctional, its fixture purpose is documented, and any allowlist is limited to the exact rule and path."
+        )
+    elif lane == "python-runtime-source":
+        acceptance.append(
+            "Any real credential is revoked and rotated, removed from maintained source and applicable history, and replaced by an approved secret-store reference."
+        )
+    elif lane == "artifact-control":
+        acceptance.append(
+            "Any real credential is removed from build and release material, caches are purged as required, and the producing build is corrected before promotion."
+        )
+    else:
+        acceptance.append(
+            "The candidate is resolved or narrowly governed in its native repository or configuration evidence lane without weakening unrelated secret scanning."
+        )
+    if item.get("history_status") == "history-evidence":
+        acceptance.append(
+            "The cited commit and reachable history are reviewed; a real credential is rotated and the governed history-remediation decision is retained."
+        )
+    if item.get("verification_status") != "verified":
+        acceptance.append(
+            "Credential validity is established or explicitly ruled out without treating scanner shape matching as proof of an active credential."
+        )
+    if item.get("redacted") is not True:
+        acceptance.append(
+            "Every report and export path is verified to redact secret material before artifacts leave the protected boundary."
+        )
+    return _string_values(item.get("evidence_artifacts"), 25), acceptance
 
 
 def _closure_validation_campaigns(value: Any) -> list[dict[str, Any]]:
@@ -703,6 +792,7 @@ def _closure_sensitive_data_route(value: Any) -> dict[str, Any]:
         "trust_boundary": str(item.get("trust_boundary") or "unknown"),
         "protection_status": str(item.get("protection_status") or "unknown"),
         "risk_factors": _string_values(item.get("risk_factors"), 25),
+        "citations": _closure_citations(item.get("citations")),
         "entry_point_ids": _string_values(item.get("entry_point_ids"), 100),
         "entry_point_runtime_statuses": _as_object(
             item.get("entry_point_runtime_statuses")
@@ -720,6 +810,24 @@ def _closure_sensitive_data_route(value: Any) -> dict[str, Any]:
             item.get("recommended_action") or "Review the sensitive-data route."
         ),
     }
+
+
+def _closure_citations(value: Any) -> list[dict[str, Any]]:
+    result: list[dict[str, Any]] = []
+    for item in _bounded_objects(value, 10):
+        identifier = str(item.get("identifier") or "").strip()
+        if not identifier:
+            continue
+        uri = item.get("uri")
+        result.append(
+            {
+                "kind": str(item.get("kind") or "reference")[:100],
+                "identifier": identifier[:500],
+                "title": str(item.get("title") or identifier)[:1000],
+                "uri": str(uri)[:4000] if isinstance(uri, str) else None,
+            }
+        )
+    return result
 
 
 def _risk_path_closure_context(
@@ -972,6 +1080,10 @@ def _routed_risk_path_acceptance(
         }:
             result.append(
                 "A tested allowlist, minimization, masking, hashing, or redaction control is retained before the cited trust boundary, including negative tests with synthetic sensitive canaries."
+            )
+        if not sensitive_data_route.get("citations"):
+            result.append(
+                "At least one applicable scanner rule, weakness classification, or security-practice citation is retained for the route, with its use limited to classification or remediation guidance rather than proof of disclosure."
             )
     return result
 

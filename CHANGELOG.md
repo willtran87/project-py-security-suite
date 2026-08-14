@@ -5,13 +5,22 @@ for published releases.
 
 ## Unreleased
 
+- Add a bounded secret-provenance assessment ledger that cross-references every
+  retained secret candidate with its source, graph, built-artifact, Git-history,
+  scanner-assurance, verification, lifecycle, ownership, and redaction context.
+  Markdown, HTML, SARIF, schemas, and closure work now provide lane-specific
+  review actions for production source, tests, generated evidence, artifacts,
+  and repository controls without retaining secret values, suppressing a
+  finding, or treating test/generated context as proof of a false positive.
 - Add a bounded end-to-end sensitive-data route ledger that joins confirmed
   exposure findings and review-worthy sink inventory to every retained entry
   point, runtime state, data class, trust boundary, observed protection,
   scanner assurance, validation status, lifecycle, and ownership handoff.
-  Stable route IDs now flow through Markdown/HTML finding context, SARIF,
-  schemas, and closure criteria while explicitly remaining static review
-  evidence rather than proof of attacker control, data flow, or disclosure.
+  Applicable CWE, OWASP, OpenTelemetry, and scanner citations now remain
+  bounded and attributable through the ledger, Markdown/HTML finding context,
+  SARIF, schemas, and closure criteria. Missing citation provenance becomes an
+  explicit closure gap, while citations remain classification and remediation
+  guidance rather than proof of attacker control, data flow, or disclosure.
 - Cross-reference every review target with Graphify file membership, the sealed
   source inventory, built-artifact manifest, target kind, scanner, area, and
   path type before interpreting a missing Python entry-point route. Unrouted

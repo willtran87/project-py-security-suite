@@ -91,7 +91,7 @@ performed.
 |---|---|---|---|---:|
 | Bandit | Python AST security patterns | Local source only | quick, standard, all broader profiles | Yes |
 | Semgrep CE | Organization-defined structural and taint rules, including credential fields, private fields, precise request collections, runtime/environment-state dumps, logs, telemetry, direct URL interpolation and query parameters, raw client errors, and risky SDK/configuration capture | Local immutable rules; generic configuration and Python analysis; metrics and version checks disabled | standard and broader | Yes |
-| detect-secrets | Credential-shaped and high-entropy values | Online verification disabled; values never retained | quick, standard, broader | Yes |
+| detect-secrets | Credential-shaped and high-entropy values | Online verification disabled; values never retained; findings join source/graph/artifact, lifecycle, ownership, and redaction provenance | quick, standard, broader | Yes |
 | OSV-Scanner | Known vulnerable dependencies and advisory aliases | Local OSV snapshot, offline mode, no resolution; exit 1 is retained as findings-present success | standard and broader | Yes |
 | CycloneDX Python | Reproducible Python SBOM evidence | Reads Poetry/Pipenv/pinned requirements directly; `uv.lock` uses hash-verified `uv export --frozen --offline` before CycloneDX conversion | extended and broader | Yes |
 | Ruff `S` | Independent, fast Python security AST checks | `--isolated`, no cache, local source only | extended and broader | Yes |
@@ -123,8 +123,8 @@ performed.
 | GuardDog | Malicious Python package and source heuristics | Local target only; GuardDog's own sandbox remains enabled | supply-chain and comprehensive | Yes |
 | ScanCode Toolkit | License, origin, and package-metadata inventory | Local rules and files; no target execution | supply-chain and comprehensive | Yes |
 | REUSE | SPDX license and copyright metadata compliance | Local lint; explicit repository marker required | quality, repo, comprehensive, production, release | Yes |
-| Gitleaks | Current-tree, archive, and Git-history secrets | Local Git or directory mode; 100% secret redaction | supply-chain and broader | Yes |
-| TruffleHog | Independent credential detectors | Filesystem mode; verification and update checks disabled; raw values discarded | supply-chain and broader | Yes |
+| Gitleaks | Current-tree, archive, and Git-history secrets | Local Git or directory mode; 100% secret redaction; history and content-lane provenance retained without secret material | supply-chain and broader | Yes |
+| TruffleHog | Independent credential detectors | Filesystem mode; verification and update checks disabled; raw values discarded; verification-disabled state remains explicit in provenance | supply-chain and broader | Yes |
 | Microsoft DevSkim CLI | Security-sensitive implementation patterns across supported source formats | Scans a generated/tool-free temporary source mirror; SARIF output | repo, comprehensive, production, release | Yes |
 | Flawfinder | C/C++ native-extension weakness patterns | Local staged source only; conditional on native source files | repo, comprehensive, production, release | Yes |
 | CodeQL through `run-codeql` | Deep semantic and data-flow queries | Pre-staged local CLI and packs; auto-download rejected; temporary source mirror | deep, comprehensive, production, release | Yes |
@@ -362,9 +362,15 @@ contracts that complement scanner coverage:
   with findings. Use a separate full-tree ScanCode job when forensic
   copyright/origin due diligence is required.
 - Gitleaks is invoked with full redaction, and the adapter discards `Secret`,
-  `Match`, and source-line content.
+  `Match`, and source-line content. Its current-tree/history mode is retained in
+  the bounded secret-provenance assessment.
 - TruffleHog disables verification and updates, then discards `Raw`, `RawV2`,
-  and all detected secret material.
+  and all detected secret material. The suite reports verification as disabled,
+  not as evidence that the credential is inactive.
+- Secret findings from detect-secrets, Gitleaks, and TruffleHog are
+  cross-referenced with source, Graphify, built-artifact, lifecycle, ownership,
+  scanner-assurance, history, and redaction evidence. Test/generated context
+  guides the review action but never suppresses or downgrades the finding.
 - DevSkim excludes its generic token/key rule because checksum-pinned bundle
   assets create high-volume false positives and three dedicated secret
   scanners already cover that class. All other default rules remain enabled.

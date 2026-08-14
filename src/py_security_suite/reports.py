@@ -816,6 +816,10 @@ def _render_risk_path_summary(value: dict[str, Any] | None) -> list[str]:
     intersections = intersections if isinstance(intersections, list) else []
     sensitive_routes = value.get("sensitive_data_routes")
     sensitive_routes = sensitive_routes if isinstance(sensitive_routes, list) else []
+    secret_assessments = value.get("secret_provenance_assessments")
+    secret_assessments = (
+        secret_assessments if isinstance(secret_assessments, list) else []
+    )
     owner_queues = value.get("owner_work_queues")
     owner_queues = owner_queues if isinstance(owner_queues, list) else []
     lines = [
@@ -882,6 +886,13 @@ def _render_risk_path_summary(value: dict[str, Any] | None) -> list[str]:
         f"| Sensitive-data routes with runtime-observed entry points | {int(summary.get('sensitive_data_routes_with_runtime_observed_entry_points', 0))} |",
         f"| Sensitive-data routes with validation / scanner-assurance gaps | {int(summary.get('sensitive_data_routes_with_validation_gaps', 0))} / {int(summary.get('sensitive_data_routes_with_assurance_gaps', 0))} |",
         f"| Sensitive-data routes crossing ownership boundaries / reached by multiple entry points | {int(summary.get('sensitive_data_routes_crossing_ownership_boundaries', 0))} / {int(summary.get('sensitive_data_routes_with_multiple_entry_points', 0))} |",
+        f"| Sensitive-data routes with / without applicable citations | {int(summary.get('sensitive_data_routes_with_citations', 0))} / {int(summary.get('sensitive_data_routes_without_citations', 0))} |",
+        f"| Secret candidates assessed / total | {int(summary.get('secret_candidates_assessed', 0))} / {int(summary.get('secret_candidates', 0))} |",
+        f"| Secret candidates in production / test / generated evidence | {int(summary.get('production_source_secret_candidates', 0))} / {int(summary.get('test_source_secret_candidates', 0))} / {int(summary.get('generated_evidence_secret_candidates', 0))} |",
+        f"| Secret candidates in artifacts / repository controls | {int(summary.get('artifact_secret_candidates', 0))} / {int(summary.get('repository_control_secret_candidates', 0))} |",
+        f"| Secret candidates with history / scanner verification | {int(summary.get('history_secret_candidates', 0))} / {int(summary.get('verified_secret_candidates', 0))} |",
+        f"| Secret candidates without verification / with multiple scanners | {int(summary.get('secret_candidates_without_verification', 0))} / {int(summary.get('multi_scanner_secret_candidates', 0))} |",
+        f"| Secret candidates with assurance gaps / without redaction marker | {int(summary.get('secret_candidates_with_assurance_gaps', 0))} / {int(summary.get('secret_candidates_without_redaction_marker', 0))} |",
         f"| Targets analyzed within bound | {int(summary.get('targets_analyzed', 0))} |",
         f"| Python route-applicable / intentionally non-runtime targets | {int(summary.get('route_applicable_targets', 0))} / {int(summary.get('route_not_applicable_targets', 0))} |",
         f"| Targets with a bounded route | {int(summary.get('routed_targets', 0))} |",
@@ -1001,6 +1012,7 @@ def _render_risk_path_summary(value: dict[str, Any] | None) -> list[str]:
             )
     lines.extend(_render_dependency_route_table(dependency_routes))
     lines.extend(_render_sensitive_data_routes(sensitive_routes))
+    lines.extend(_render_secret_provenance_assessments(secret_assessments))
     lines.extend(_render_exposure_advisory_intersections(intersections))
     if test_hotspots:
         lines.extend(
@@ -1314,7 +1326,8 @@ def _render_sensitive_data_routes(values: list[Any]) -> list[str]:
             "sink inventory to declared entry points, trust boundaries, observed "
             "protections, scanner assurance, validation, and ownership. They are "
             "bounded static review paths, not proof of attacker control, runtime "
-            "data flow, disclosure, or regulatory impact."
+            "data flow, disclosure, or regulatory impact. Retained citations support "
+            "classification and remediation guidance; they do not validate the route."
         ),
         "",
         "| Priority / evidence | Entry route / boundary | Data / protection | Assurance / validation | Owner / action |",
@@ -1331,6 +1344,7 @@ def _render_sensitive_data_routes(values: list[Any]) -> list[str]:
         owner_values = owners if isinstance(owners, list) else []
         runtime = value.get("entry_point_runtime_statuses")
         runtime_text = _entry_runtime_status_text(runtime)
+        citations = _risk_advisory_citations_text(value.get("citations"))
         path = str(value.get("path") or "unknown")
         if value.get("line"):
             path += f":{value['line']}"
@@ -1365,6 +1379,7 @@ def _render_sensitive_data_routes(values: list[Any]) -> list[str]:
                 if value.get("sdk")
                 else ""
             )
+            + ("<br>guidance " + citations if citations else "<br>guidance unavailable")
             + " | scanner `"
             + _markdown_code(
                 str(value.get("evidence_assurance_status") or "not-assessed")
@@ -1387,6 +1402,112 @@ def _render_sensitive_data_routes(values: list[Any]) -> list[str]:
             + " |"
         )
     return lines
+
+
+def _render_secret_provenance_assessments(values: list[Any]) -> list[str]:
+    if not values:
+        return []
+    lines = [
+        "",
+        "### Secret candidate provenance",
+        "",
+        (
+            "These records join redacted secret-scanner candidates with content lane, "
+            "source/graph/artifact membership, history mode, scanner verification and "
+            "assurance, lifecycle, and ownership. Generated evidence or test context "
+            "is not an automatic false-positive disposition, and scanner verification "
+            "does not establish current usability or scope."
+        ),
+        "",
+        "| Priority / candidate | Content / inventory | Verification / history | Scanner / owner | Action |",
+        "|---|---|---|---|---|",
+    ]
+    for value in values[:10]:
+        if not isinstance(value, dict):
+            continue
+        path = str(value.get("path") or "unknown")
+        if value.get("line"):
+            path += f":{value['line']}"
+        tools = value.get("scanner_tools")
+        tool_values = tools if isinstance(tools, list) else []
+        owners = value.get("owners")
+        owner_values = owners if isinstance(owners, list) else []
+        citations = _risk_advisory_citations_text(value.get("citations"))
+        inventory = "; ".join(
+            (
+                _secret_membership_text(
+                    "source",
+                    value.get("source_inventory_available"),
+                    value.get("source_inventory_member"),
+                ),
+                _secret_membership_text(
+                    "graph",
+                    value.get("graph_available"),
+                    value.get("graph_path_member"),
+                ),
+                _secret_membership_text(
+                    "artifact",
+                    value.get("artifact_manifest_available"),
+                    value.get("artifact_manifest_member"),
+                ),
+            )
+        )
+        lines.append(
+            "| `"
+            + _markdown_code(str(value.get("priority") or "P4"))
+            + "` `"
+            + _markdown_code(str(value.get("secret_context_id") or "unknown"))
+            + "`<br>`"
+            + _markdown_code(path)
+            + "`<br>finding `"
+            + _markdown_code(str(value.get("finding_id") or "unknown"))
+            + "` | `"
+            + _markdown_code(str(value.get("content_lane") or "unknown"))
+            + "`<br>disposition `"
+            + _markdown_code(str(value.get("review_disposition") or "unknown"))
+            + "`<br>"
+            + _markdown_text(inventory)
+            + "<br>redacted `"
+            + _markdown_code("yes" if value.get("redacted") is True else "no")
+            + "` | verification `"
+            + _markdown_code(str(value.get("verification_status") or "not-established"))
+            + "`<br>history `"
+            + _markdown_code(str(value.get("history_status") or "not-established"))
+            + "`<br>lifecycle `"
+            + _markdown_code(str(value.get("lifecycle_status") or "unclassified"))
+            + "` | "
+            + _markdown_text(
+                ", ".join(str(item) for item in tool_values[:5]) or "Unattributed"
+            )
+            + "<br>perspective `"
+            + _markdown_code(str(value.get("scanner_perspective") or "single-scanner"))
+            + "`; assurance `"
+            + _markdown_code(
+                str(value.get("evidence_assurance_status") or "not-assessed")
+            )
+            + "`<br>owner **"
+            + _markdown_text(
+                ", ".join(str(item) for item in owner_values[:3]) or "Unassigned"
+            )
+            + "**"
+            + ("<br>" + citations if citations else "")
+            + " | "
+            + _markdown_text(
+                str(value.get("recommended_action") or "Review the redacted candidate.")
+            )
+            + " |"
+        )
+    return lines
+
+
+def _secret_membership_text(label: str, available: Any, member: Any) -> str:
+    if available is not True:
+        return f"{label} not available"
+    if member is True:
+        return f"{label} member"
+    if member is False:
+        return f"{label} absent"
+    return f"{label} unknown"
 
 
 def _render_dependency_route_table(routes: list[Any]) -> list[str]:
@@ -2079,10 +2200,11 @@ def _risk_advisory_citations_text(value: Any) -> str:
         if not isinstance(item, dict):
             continue
         identifier = str(item.get("identifier") or "reference")
-        uri = item.get("uri")
+        uri_value = item.get("uri")
+        uri = _safe_http_reference(uri_value) if isinstance(uri_value, str) else None
         citations.append(
             f"[{_markdown_text(identifier)}]({uri})"
-            if isinstance(uri, str) and uri.startswith(("https://", "http://"))
+            if uri
             else f"`{_markdown_code(identifier)}`"
         )
     return ", ".join(citations)
@@ -2711,6 +2833,7 @@ def _render_markdown_findings(
                 f"- **Classification:** {classifications}",
                 f"- **References:** {references}",
                 *_markdown_graph_context(finding),
+                *_markdown_secret_provenance_context(finding),
                 *_markdown_risk_path_context(finding),
                 *_markdown_structural_context(finding),
                 *_markdown_data_exposure_context(finding),
@@ -3921,6 +4044,9 @@ def render_sarif(findings: list[Finding]) -> dict[str, Any]:
         risk_path = finding.evidence.get("risk_path")
         if isinstance(risk_path, dict):
             result["properties"]["risk_path"] = json_ready(risk_path)
+        secret_provenance = finding.evidence.get("secret_provenance")
+        if isinstance(secret_provenance, dict):
+            result["properties"]["secret_provenance"] = json_ready(secret_provenance)
         structural = finding.evidence.get("structural_synthesis")
         if isinstance(structural, dict):
             result["properties"]["structural_synthesis"] = json_ready(structural)
@@ -4186,6 +4312,7 @@ def _render_html_finding(finding: Finding, tool_versions: dict[str, str]) -> str
     )
     source_context = _html_source_excerpt(finding)
     graph_context = _html_graph_context(finding)
+    secret_provenance_context = _html_secret_provenance_context(finding)
     risk_path_context = _html_risk_path_context(finding)
     structural_context = _html_structural_context(finding)
     data_exposure_context = _html_data_exposure_context(finding)
@@ -4215,6 +4342,7 @@ def _render_html_finding(finding: Finding, tool_versions: dict[str, str]) -> str
         f"<code>{html.escape(_location_text(finding))}</code></div>"
         f"{source_context}"
         f"{graph_context}"
+        f"{secret_provenance_context}"
         f"{risk_path_context}"
         f"{structural_context}"
         f"{data_exposure_context}"
@@ -4239,6 +4367,113 @@ def _finding_tools(finding: Finding) -> str:
     return (
         ", ".join(f"{source.tool}/{source.rule_id}" for source in finding.sources)
         or "unattributed"
+    )
+
+
+def _markdown_secret_provenance_context(finding: Finding) -> list[str]:
+    context = finding.evidence.get("secret_provenance")
+    if not isinstance(context, dict):
+        return []
+    membership = "; ".join(
+        (
+            _secret_membership_text(
+                "source",
+                context.get("source_inventory_available"),
+                context.get("source_inventory_member"),
+            ),
+            _secret_membership_text(
+                "graph",
+                context.get("graph_available"),
+                context.get("graph_path_member"),
+            ),
+            _secret_membership_text(
+                "artifact",
+                context.get("artifact_manifest_available"),
+                context.get("artifact_manifest_member"),
+            ),
+        )
+    )
+    return [
+        "- **Secret candidate provenance:** `"
+        + _markdown_code(str(context.get("secret_context_id") or "unknown"))
+        + "`; content `"
+        + _markdown_code(str(context.get("content_lane") or "unknown"))
+        + "`; disposition `"
+        + _markdown_code(str(context.get("review_disposition") or "unknown"))
+        + "`; verification `"
+        + _markdown_code(str(context.get("verification_status") or "not-established"))
+        + "`; history `"
+        + _markdown_code(str(context.get("history_status") or "not-established"))
+        + "`; "
+        + _markdown_text(membership)
+        + "; scanner `"
+        + _markdown_code(str(context.get("scanner_perspective") or "single-scanner"))
+        + "`; assurance `"
+        + _markdown_code(
+            str(context.get("evidence_assurance_status") or "not-assessed")
+        )
+        + "`; redacted `"
+        + _markdown_code("yes" if context.get("redacted") is True else "no")
+        + "`. **Lane-specific action:** "
+        + _markdown_text(
+            str(context.get("recommended_action") or "Review the redacted candidate.")
+        )
+        + " This context does not establish that the candidate is a real, active, "
+        "exploitable, or unique credential, and test/generated placement is not an "
+        "automatic false-positive disposition."
+    ]
+
+
+def _html_secret_provenance_context(finding: Finding) -> str:
+    context = finding.evidence.get("secret_provenance")
+    if not isinstance(context, dict):
+        return ""
+    membership = "; ".join(
+        (
+            _secret_membership_text(
+                "source",
+                context.get("source_inventory_available"),
+                context.get("source_inventory_member"),
+            ),
+            _secret_membership_text(
+                "graph",
+                context.get("graph_available"),
+                context.get("graph_path_member"),
+            ),
+            _secret_membership_text(
+                "artifact",
+                context.get("artifact_manifest_available"),
+                context.get("artifact_manifest_member"),
+            ),
+        )
+    )
+    return (
+        "<section class='source-context'><h4>Secret candidate provenance</h4><p>"
+        "Context <code>"
+        + html.escape(str(context.get("secret_context_id") or "unknown"))
+        + "</code>; content <code>"
+        + html.escape(str(context.get("content_lane") or "unknown"))
+        + "</code>; disposition <code>"
+        + html.escape(str(context.get("review_disposition") or "unknown"))
+        + "</code>; verification <code>"
+        + html.escape(str(context.get("verification_status") or "not-established"))
+        + "</code>; history <code>"
+        + html.escape(str(context.get("history_status") or "not-established"))
+        + "</code>; "
+        + html.escape(membership)
+        + "; scanner <code>"
+        + html.escape(str(context.get("scanner_perspective") or "single-scanner"))
+        + "</code>; assurance <code>"
+        + html.escape(str(context.get("evidence_assurance_status") or "not-assessed"))
+        + "</code>; redacted <code>"
+        + ("yes" if context.get("redacted") is True else "no")
+        + "</code>. <strong>Lane-specific action:</strong> "
+        + html.escape(
+            str(context.get("recommended_action") or "Review the redacted candidate.")
+        )
+        + " This context does not establish that the candidate is a real, active, "
+        "exploitable, or unique credential, and test/generated placement is not an "
+        "automatic false-positive disposition.</p></section>"
     )
 
 
@@ -4462,6 +4697,9 @@ def _markdown_risk_path_context(finding: Finding) -> list[str]:
     sensitive_route = sensitive_route if isinstance(sensitive_route, dict) else {}
     sensitive_route_text = ""
     if sensitive_route:
+        sensitive_route_citations = _risk_advisory_citations_text(
+            sensitive_route.get("citations")
+        )
         sensitive_route_text = (
             " **End-to-end sensitive-data route:** `"
             + _markdown_code(
@@ -4483,7 +4721,14 @@ def _markdown_risk_path_context(finding: Finding) -> list[str]:
             + _markdown_code(
                 str(sensitive_route.get("validation_status") or "not-assessed")
             )
-            + "`. This is static review context, not proof of disclosure."
+            + "`"
+            + (
+                "; guidance " + sensitive_route_citations
+                if sensitive_route_citations
+                else "; guidance citation unavailable"
+            )
+            + ". Citations support classification and remediation guidance; this "
+            "static route is not proof of disclosure."
         )
     return [
         "- **Static risk route:** `"
@@ -5007,6 +5252,9 @@ def _html_risk_path_context(finding: Finding) -> str:
     sensitive_route = sensitive_route if isinstance(sensitive_route, dict) else {}
     sensitive_route_html = ""
     if sensitive_route:
+        sensitive_route_citations = _risk_advisory_citations_html(
+            sensitive_route.get("citations")
+        )
         sensitive_route_html = (
             " <strong>End-to-end sensitive-data route:</strong> <code>"
             + html.escape(str(sensitive_route.get("sensitive_route_id") or "unknown"))
@@ -5026,7 +5274,14 @@ def _html_risk_path_context(finding: Finding) -> str:
             + html.escape(
                 str(sensitive_route.get("validation_status") or "not-assessed")
             )
-            + "</code>. This is static review context, not proof of disclosure."
+            + "</code>"
+            + (
+                "; guidance " + sensitive_route_citations
+                if sensitive_route_citations
+                else "; guidance citation unavailable"
+            )
+            + ". Citations support classification and remediation guidance; this "
+            "static route is not proof of disclosure."
         )
     return (
         "<section class='source-context'><h4>Static risk route</h4><p>"

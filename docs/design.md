@@ -428,8 +428,11 @@ Confirmed exposure findings and review-worthy sink inventory also become a
 separate end-to-end sensitive-data route ledger. It preserves the evidence
 basis and joins entry-interface breadth, exact runtime state, data class, sink,
 trust boundary, observed protection, scanner assurance, validation, lifecycle,
-and CODEOWNERS handoffs without converting static coincidence into a leakage
-claim.
+CODEOWNERS handoffs, and bounded applicable citations without converting static
+coincidence into a leakage claim. Confirmed routes inherit normalized finding
+references; inventory routes select sink-family standards from the data-exposure
+artifact. Missing citation provenance is counted and becomes closure work, while
+the references remain guidance rather than route validation.
 
 ```mermaid
 flowchart LR
@@ -459,6 +462,7 @@ flowchart LR
     OwnerPath --> Routed["Bounded risk routes"]
     Search --> Routed
     Routed --> SensitiveRoutes["End-to-end sensitive-data routes<br/>boundary + protection + assurance"]
+    Citations["Finding citations + sink-family standards"] --> SensitiveRoutes
     Routed --> Hotspots["Shared control points"]
     Graph --> Campaigns["Graph-selected validation campaigns"]
     Hotspots --> Campaigns
@@ -828,6 +832,26 @@ are resolved beneath the target, symlink and traversal escapes are rejected,
 common credential assignments in non-secret context are redacted, and line
 length and context are bounded. Complete results remain in HTML, JSON, and
 SARIF.
+
+The risk-path synthesis further cross-references each redacted secret candidate
+with its content lane, source/graph/artifact membership, current-tree or
+Git-history origin, scanner verification and assurance, lifecycle, and owners.
+This produces `secret_provenance_assessments` and lane-specific closure criteria
+without copying the candidate value or changing the finding's severity or
+status. Generated evidence and test fixtures remain review contexts, not
+automatic false-positive classifications.
+
+```mermaid
+flowchart LR
+    Scanners["detect-secrets | Gitleaks | TruffleHog"] --> Normalize["Redacted normalized findings"]
+    Inventory["Source + graph + artifact inventory"] --> Join{"Provenance join"}
+    History["Current tree + Git history"] --> Join
+    Trust["Verification + scanner assurance"] --> Join
+    Normalize --> Join
+    Join --> Ledger["Bounded secret provenance ledger"]
+    Ledger --> Reports["Finding cards + SARIF"]
+    Ledger --> Actions["Lane-specific closure work"]
+```
 
 ## Configuration and policy ownership
 
