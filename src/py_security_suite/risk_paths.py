@@ -51,6 +51,8 @@ _MAX_SENSITIVE_ROUTE_CITATIONS = 10
 _MAX_SECRET_PROVENANCE_ASSESSMENTS = 250
 _MAX_SECRET_EXPOSURE_INTERSECTIONS = 100
 _MAX_CONTEXT_SECRET_EXPOSURE_INTERSECTIONS = 25
+_MAX_SECRET_EXPOSURE_ADVISORY_INTERSECTIONS = 100
+_MAX_CONTEXT_SECRET_EXPOSURE_ADVISORY_INTERSECTIONS = 25
 _MAX_ENTRY_POINT_EXPOSURES = 25
 _SECRET_AREAS = frozenset({"secrets", "secrets-history"})
 _SENSITIVE_ROUTE_STANDARD_IDS = {
@@ -261,6 +263,36 @@ def build_risk_paths(
     secret_exposure_intersections = all_secret_exposure_intersections[
         :_MAX_SECRET_EXPOSURE_INTERSECTIONS
     ]
+    all_secret_exposure_advisory_intersections = (
+        _secret_exposure_advisory_intersections(
+            all_secret_exposure_intersections,
+            all_exposure_advisory_intersections,
+        )
+    )
+    retained_secret_intersection_ids = {
+        str(item["intersection_id"]) for item in secret_exposure_intersections
+    }
+    retained_advisory_intersection_ids = {
+        str(item["intersection_id"]) for item in exposure_advisory_intersections
+    }
+    retained_secret_exposure_advisory_candidates = [
+        item
+        for item in all_secret_exposure_advisory_intersections
+        if item["secret_exposure_intersection_id"] in retained_secret_intersection_ids
+        and item["exposure_advisory_intersection_id"]
+        in retained_advisory_intersection_ids
+    ]
+    secret_exposure_advisory_intersections = (
+        retained_secret_exposure_advisory_candidates[
+            :_MAX_SECRET_EXPOSURE_ADVISORY_INTERSECTIONS
+        ]
+    )
+    _attach_secret_exposure_advisory_intersections(
+        secret_exposure_intersections,
+        exposure_advisory_intersections,
+        sensitive_data_routes,
+        secret_exposure_advisory_intersections,
+    )
     _attach_secret_exposure_intersections(
         secret_provenance_assessments,
         sensitive_data_routes,
@@ -303,7 +335,8 @@ def build_risk_paths(
             "dependency-advisory importers, with bounded compound intersections"
             ", end-to-end sensitive-data routes, and evidence-plane-aware "
             "unrouted dispositions, including conservative secret-to-sink "
-            "route intersections"
+            "route intersections and exact sensitive-route joins between secret, "
+            "sink, and dependency-advisory evidence"
         ),
         "summary": {
             "graph_available": graph_available,
@@ -783,6 +816,50 @@ def build_risk_paths(
                 item["canary_validation_status"] != "established"
                 for item in all_secret_exposure_intersections
             ),
+            "secret_exposure_advisory_intersections": len(
+                all_secret_exposure_advisory_intersections
+            ),
+            "known_exploited_secret_exposure_advisory_intersections": sum(
+                item["known_exploited"]
+                for item in all_secret_exposure_advisory_intersections
+            ),
+            "verified_secret_exposure_advisory_intersections": sum(
+                item["secret_verification_status"] == "verified"  # noqa: S105  # pragma: allowlist secret
+                for item in all_secret_exposure_advisory_intersections
+            ),
+            "unprotected_secret_exposure_advisory_intersections": sum(
+                item["protection_status"] in {"not-observed", "none", "unknown"}
+                for item in all_secret_exposure_advisory_intersections
+            ),
+            "fix_available_secret_exposure_advisory_intersections": sum(
+                item["fix_available"]
+                for item in all_secret_exposure_advisory_intersections
+            ),
+            "runtime_observed_secret_exposure_advisory_intersections": sum(
+                int(item["entry_point_runtime_statuses"]["observed"]) > 0
+                for item in all_secret_exposure_advisory_intersections
+            ),
+            "secret_exposure_advisory_intersections_with_validation_gaps": sum(
+                item["validation_handoff"]["supporting_evidence_readiness"]
+                != "supporting-evidence-ready"
+                or any(
+                    status != "aligned"
+                    for status in item["validation_statuses"].values()
+                )
+                for item in all_secret_exposure_advisory_intersections
+            ),
+            "secret_exposure_advisory_intersections_with_assurance_gaps": sum(
+                not item["combined_assurance_prerequisite_met"]
+                for item in all_secret_exposure_advisory_intersections
+            ),
+            "secret_exposure_advisory_intersections_with_temporal_gaps": sum(
+                item["temporal_alignment"] != "aligned-current-tree"
+                for item in all_secret_exposure_advisory_intersections
+            ),
+            "secret_exposure_advisory_intersections_without_canary_validation": sum(
+                item["canary_validation_status"] != "established"
+                for item in all_secret_exposure_advisory_intersections
+            ),
             "runtime_observed_routes": sum(
                 "observed" in route["runtime_context"]["observations"]
                 for route in routed
@@ -1045,6 +1122,9 @@ def build_risk_paths(
         "sensitive_data_routes": sensitive_data_routes,
         "secret_provenance_assessments": secret_provenance_assessments,
         "secret_exposure_intersections": secret_exposure_intersections,
+        "secret_exposure_advisory_intersections": (
+            secret_exposure_advisory_intersections
+        ),
         "owner_work_queues": owner_work_queues,
         "unrouted_targets": unrouted[:_MAX_UNROUTED],
         "truncation": {
@@ -1084,6 +1164,11 @@ def build_risk_paths(
                 len(all_secret_exposure_intersections)
                 - _MAX_SECRET_EXPOSURE_INTERSECTIONS,
             ),
+            "secret_exposure_advisory_intersections_omitted": max(
+                0,
+                len(all_secret_exposure_advisory_intersections)
+                - len(secret_exposure_advisory_intersections),
+            ),
             "owner_work_queues_omitted": max(
                 0, len(all_owner_work_queues) - _MAX_OWNER_QUEUES
             ),
@@ -1105,6 +1190,7 @@ def build_risk_paths(
             "A dependency-advisory import route proves only a retained static path to a source file that imports the affected distribution; it does not prove invocation of a vulnerable function, attacker control, or exploitability.",
             "Package lifecycle comparison proves only what the retained source and built-artifact composition inventories report; it does not prove inventory completeness, runtime loading, semantic version safety, or vulnerable-function use.",
             "An exposure-advisory intersection proves only that a retained sensitive sink and an affected SDK importer share an exact source path and advisory identity; it does not prove the SDK processed the sensitive value, that data leaked, or that the vulnerable function executed.",
+            "A secret-exposure-advisory intersection proves only that the secret/sink and sink/advisory ledgers reference the identical retained sensitive route; it does not prove credential validity, symbol-level value flow, runtime disclosure, vulnerable-function execution, or exploitability.",
             "Graph-selected tests are bounded static candidates; passing selected tests and full retained coverage improve regression confidence but do not prove security, exploitability, or complete runtime behavior.",
             "The shared-control review score is a transparent triage aid, not native scanner severity, exploitability probability, or an admission decision.",
             "A shared validation test hotspot identifies concentrated regression responsibility; it does not prove test independence, assertion quality, or sufficient behavioral coverage.",
@@ -3430,6 +3516,9 @@ def _compact_secret_exposure_intersection(
         "canary_validation_status",
         "recommended_test_files",
         "intersection_validation_gap_reasons",
+        "secret_exposure_advisory_intersection_ids",
+        "secret_exposure_advisory_intersections",
+        "secret_exposure_advisory_intersections_omitted",
         "distance_to_sink",
         "owners",
         "finding_ids",
@@ -3467,6 +3556,268 @@ def _attach_secret_exposure_intersections(
             ]
             record["secret_exposure_intersections_omitted"] = max(
                 0, len(matches) - _MAX_CONTEXT_SECRET_EXPOSURE_INTERSECTIONS
+            )
+
+
+def _secret_exposure_advisory_intersections(
+    secret_intersections: list[dict[str, Any]],
+    advisory_intersections: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Join secret/sink and sink/advisory evidence at the identical sink route."""
+    advisories_by_sink_route: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for advisory in advisory_intersections:
+        advisories_by_sink_route[str(advisory["sink_route_id"])].append(advisory)
+    result: list[dict[str, Any]] = []
+    for secret in secret_intersections:
+        for advisory in advisories_by_sink_route.get(str(secret["route_id"]), []):
+            secret_id = str(secret["intersection_id"])
+            advisory_id = str(advisory["intersection_id"])
+            intersection_id = (
+                "secret-exposure-advisory-"
+                + _digest(
+                    {
+                        "secret_exposure_intersection_id": secret_id,
+                        "exposure_advisory_intersection_id": advisory_id,
+                        "sink_route_id": secret["route_id"],
+                    }
+                )[:16]
+            )
+            validation_handoff = _object(secret.get("validation_handoff"))
+            advisory_validation = _object(advisory.get("validation_statuses"))
+            advisory_assurance = _object(advisory.get("evidence_assurance_statuses"))
+            combined_assurance = (
+                secret.get("combined_assurance_prerequisite_met") is True
+                and advisory_assurance.get("sink") == "assured"
+                and advisory_assurance.get("dependency") == "assured"
+            )
+            owners = sorted(
+                {
+                    *_strings(secret.get("owners"), 100),
+                    *_strings(advisory.get("owners"), 100),
+                }
+            )[:100]
+            finding_ids = sorted(
+                {
+                    *_strings(secret.get("finding_ids"), 100),
+                    *_strings(advisory.get("finding_ids"), 100),
+                }
+            )[:100]
+            risk_factors = [
+                "secret-candidate-and-advisory-at-identical-sensitive-route"
+            ]
+            if advisory.get("known_exploited") is True:
+                risk_factors.append("known-exploited-dependency")
+            if advisory.get("epss_high") is True:
+                risk_factors.append("high-epss-dependency")
+            if advisory.get("fix_available") is True:
+                risk_factors.append("dependency-fix-available")
+            if secret.get("secret_verification_status") == "verified":
+                risk_factors.append("scanner-verified-secret-candidate")
+            if secret.get("temporal_alignment") != "aligned-current-tree":
+                risk_factors.append("secret-sink-temporal-alignment-gap")
+            if secret.get("protection_status") in {
+                "not-observed",
+                "none",
+                "unknown",
+            }:
+                risk_factors.append("sink-protection-not-observed")
+            if not combined_assurance:
+                risk_factors.append("combined-evidence-assurance-gap")
+            if (
+                validation_handoff.get("supporting_evidence_readiness")
+                != "supporting-evidence-ready"
+            ):
+                risk_factors.append("validation-supporting-evidence-gap")
+            if secret.get("canary_validation_status") != "established":
+                risk_factors.append("synthetic-canary-not-established")
+            citations = _citation_records(
+                [
+                    *_objects(secret.get("citations"), 20),
+                    *_objects(advisory.get("advisory_citations"), 25),
+                ],
+                limit=30,
+                default_kind="reference",
+            )
+            priorities = sorted(
+                [str(secret.get("priority") or "P4"), str(advisory["priority"])],
+                key=_priority_rank,
+            )
+            result.append(
+                {
+                    "intersection_id": intersection_id,
+                    "priority": priorities[0],
+                    "evidence_basis": "identical-sensitive-route-join",
+                    "secret_exposure_intersection_id": secret_id,
+                    "exposure_advisory_intersection_id": advisory_id,
+                    "secret_context_id": str(secret["secret_context_id"]),
+                    "secret_finding_id": str(secret["secret_finding_id"]),
+                    "secret_path": str(secret["secret_path"]),
+                    "secret_line": secret.get("secret_line"),
+                    "secret_verification_status": str(
+                        secret["secret_verification_status"]
+                    ),
+                    "secret_history_status": str(
+                        secret.get("secret_history_status") or "not-established"
+                    ),
+                    "secret_assurance_status": str(secret["secret_assurance_status"]),
+                    "secret_sink_association_kind": str(secret["association_kind"]),
+                    "secret_distance_to_sink": int(secret["distance_to_sink"]),
+                    "temporal_alignment": str(secret["temporal_alignment"]),
+                    "sensitive_route_id": str(secret["sensitive_route_id"]),
+                    "sink_route_id": str(advisory["sink_route_id"]),
+                    "sink_path": str(advisory["path"]),
+                    "sink_line": advisory.get("line"),
+                    "sink_family": str(advisory["sink_family"]),
+                    "sdk": _optional_string(advisory.get("sdk")),
+                    "trust_boundary": str(advisory["trust_boundary"]),
+                    "protection_status": str(advisory["protection_status"]),
+                    "sensitive_evidence_basis": str(secret["sensitive_evidence_basis"]),
+                    "sink_assurance_status": str(
+                        advisory_assurance.get("sink") or "not-assessed"
+                    ),
+                    "dependency_route_id": str(advisory["dependency_route_id"]),
+                    "advisory_cluster_id": str(advisory["advisory_cluster_id"]),
+                    "primary_identifier": str(advisory["primary_identifier"]),
+                    "package": str(advisory["package"]),
+                    "known_exploited": advisory.get("known_exploited") is True,
+                    "epss_high": advisory.get("epss_high") is True,
+                    "fix_available": advisory.get("fix_available") is True,
+                    "package_lifecycle": _object(advisory.get("package_lifecycle")),
+                    "dependency_assurance_status": str(
+                        advisory_assurance.get("dependency") or "not-assessed"
+                    ),
+                    "entry_point_ids": _strings(advisory.get("entry_point_ids"), 100),
+                    "entry_point_runtime_statuses": _object(
+                        advisory.get("entry_point_runtime_statuses")
+                    ),
+                    "validation_statuses": {
+                        "secret_sink": str(
+                            secret.get("validation_status") or "not-assessed"
+                        ),
+                        "sink": str(advisory_validation.get("sink") or "not-assessed"),
+                        "dependency": str(
+                            advisory_validation.get("dependency") or "not-assessed"
+                        ),
+                    },
+                    "validation_handoff": validation_handoff,
+                    "combined_assurance_prerequisite_met": combined_assurance,
+                    "canary_validation_status": str(
+                        secret.get("canary_validation_status") or "not-established"
+                    ),
+                    "recommended_test_files": _strings(
+                        secret.get("recommended_test_files"), 50
+                    ),
+                    "owners": owners,
+                    "ownership_coordination_status": (
+                        "unassigned"
+                        if not owners
+                        else "single-owner"
+                        if len(owners) == 1
+                        else "cross-owner"
+                    ),
+                    "finding_ids": finding_ids,
+                    "risk_factors": risk_factors,
+                    "citations": citations,
+                    "evidence_artifacts": sorted(
+                        {
+                            "risk-paths.json",
+                            *_strings(secret.get("evidence_artifacts"), 25),
+                            *_strings(advisory.get("evidence_artifacts"), 25),
+                        }
+                    ),
+                    "recommended_action": _secret_exposure_advisory_action(
+                        secret, advisory, validation_handoff
+                    ),
+                    "interpretation": (
+                        "This record joins two derived ledgers only because they cite "
+                        "the identical retained sensitive route. It does not establish "
+                        "credential validity, symbol-level value flow, runtime "
+                        "disclosure, vulnerable-function execution, or exploitability."
+                    ),
+                }
+            )
+    return sorted(
+        result,
+        key=lambda item: (
+            _priority_rank(str(item["priority"])),
+            0 if item["known_exploited"] else 1,
+            0
+            if item["secret_verification_status"] == "verified"  # noqa: S105  # pragma: allowlist secret
+            else 1,
+            str(item["sink_path"]),
+            str(item["intersection_id"]),
+        ),
+    )
+
+
+def _secret_exposure_advisory_action(
+    secret: dict[str, Any],
+    advisory: dict[str, Any],
+    validation_handoff: dict[str, Any],
+) -> str:
+    action = (
+        "In a protected workspace, trace the candidate symbol to the cited sink and "
+        "establish whether the advisory's vulnerable function can process boundary "
+        "data. Add an explicit synthetic credential-canary assertion, verify "
+        "pre-sink minimization or masking, apply the retained dependency remediation "
+        "or governed VEX disposition, and rerun the candidate tests."
+    )
+    if secret.get("secret_verification_status") == "verified":
+        action += " Revoke and rotate the verified candidate while confirming scope."
+    if secret.get("temporal_alignment") != "aligned-current-tree":
+        action += (
+            " Align secret, sink, advisory, and test evidence to one source revision."
+        )
+    if advisory.get("fix_available") is True:
+        action += " Verify the fixed package version in the built artifact."
+    if (
+        validation_handoff.get("supporting_evidence_readiness")
+        != "supporting-evidence-ready"
+    ):
+        action += (
+            " Resolve retained test, coverage, revision, and assurance gaps first."
+        )
+    return action[:2000]
+
+
+def _compact_secret_exposure_advisory_intersection(
+    value: dict[str, Any],
+) -> dict[str, Any]:
+    return dict(value)
+
+
+def _attach_secret_exposure_advisory_intersections(
+    secret_intersections: list[dict[str, Any]],
+    advisory_intersections: list[dict[str, Any]],
+    sensitive_routes: list[dict[str, Any]],
+    compounds: list[dict[str, Any]],
+) -> None:
+    by_secret: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    by_advisory: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    by_sensitive: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for compound in compounds:
+        by_secret[str(compound["secret_exposure_intersection_id"])].append(compound)
+        by_advisory[str(compound["exposure_advisory_intersection_id"])].append(compound)
+        by_sensitive[str(compound["sensitive_route_id"])].append(compound)
+    for records, key_name, index in (
+        (secret_intersections, "intersection_id", by_secret),
+        (advisory_intersections, "intersection_id", by_advisory),
+        (sensitive_routes, "sensitive_route_id", by_sensitive),
+    ):
+        for record in records:
+            matches = index.get(str(record[key_name]), [])
+            record["secret_exposure_advisory_intersection_ids"] = [
+                str(item["intersection_id"]) for item in matches
+            ]
+            record["secret_exposure_advisory_intersections"] = [
+                _compact_secret_exposure_advisory_intersection(item)
+                for item in matches[
+                    :_MAX_CONTEXT_SECRET_EXPOSURE_ADVISORY_INTERSECTIONS
+                ]
+            ]
+            record["secret_exposure_advisory_intersections_omitted"] = max(
+                0,
+                len(matches) - _MAX_CONTEXT_SECRET_EXPOSURE_ADVISORY_INTERSECTIONS,
             )
 
 
@@ -6628,6 +6979,9 @@ def _compact_exposure_advisory_intersection(
             "evidence_assurance_statuses",
             "validation_statuses",
             "advisory_citations",
+            "secret_exposure_advisory_intersection_ids",
+            "secret_exposure_advisory_intersections",
+            "secret_exposure_advisory_intersections_omitted",
             "recommended_action",
         )
     }

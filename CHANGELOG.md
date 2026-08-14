@@ -5,6 +5,14 @@ for published releases.
 
 ## Unreleased
 
+- Add bounded `secret_exposure_advisory_intersections` that join a production
+  secret-to-sink record with an SDK advisory only when both cite the identical
+  retained sensitive route. The compound ledger combines candidate
+  verification/history, sink protection, KEV/EPSS/fix and package-lifecycle
+  context, entry/runtime breadth, source-bound validation handoffs, scanner
+  assurance, owners, findings, citations, and coordinated closure actions. It
+  remains explicit that the join proves neither credential flow nor disclosure,
+  vulnerable-function execution, or exploitability.
 - Cross-reference redacted production-source secret candidates with retained
   sensitive-data sink routes when they share the exact sink file or the secret
   file occurs on the bounded Graphify route to the sink. The new bounded ledger

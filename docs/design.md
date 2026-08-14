@@ -875,6 +875,24 @@ binding, route-scanner assurance, shared-test findings, and ownership. It fails
 closed on gaps and deliberately reports canary validation as not established;
 candidate test proximity is not evidence that a secret assignment was exercised.
 
+When an exact sink/advisory intersection and a secret/sink intersection cite the
+same retained sensitive route, risk-path synthesis creates a third bounded
+ledger rather than asking reviewers to discover the relationship manually.
+
+```mermaid
+flowchart TD
+    SecretSink["Secret / sink ledger"] --> Identity{"Same sensitive route ID"}
+    SinkAdvisory["Sink / SDK advisory ledger"] --> Identity
+    Identity --> Compound["Secret / boundary / advisory ledger"]
+    Compound --> Reports["Markdown + HTML + SARIF + JSON"]
+    Compound --> Closure["Coordinated credential, protection, dependency closure"]
+```
+
+Stable route identity prevents accidental joins across unrelated sinks in the
+same file or package. The compound record preserves both source IDs, runtime,
+validation, lifecycle, assurance, ownership, and citations, but remains derived
+review context rather than taint, disclosure, or exploitability evidence.
+
 ## Configuration and policy ownership
 
 Configuration is layered in this order:

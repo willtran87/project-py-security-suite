@@ -383,6 +383,11 @@ contracts that complement scanner coverage:
   binding, scanner assurance, shared-test findings/quality, and CODEOWNERS gaps.
   The join fails closed and always distinguishes candidate tests from proof of an
   explicit synthetic credential-canary assertion.
+- The secret/sink and sink/advisory ledgers are then joined only by identical
+  retained sensitive-route identity. This adds a coordinated credential,
+  boundary-protection, and dependency-remediation view with KEV/EPSS/fix,
+  package-lifecycle, runtime, validation, assurance, ownership, and citations;
+  it never infers disclosure, vulnerable-function execution, or exploitability.
 - DevSkim excludes its generic token/key rule because checksum-pinned bundle
   assets create high-volume false positives and three dedicated secret
   scanners already cover that class. All other default rules remain enabled.

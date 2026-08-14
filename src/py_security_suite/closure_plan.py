@@ -662,12 +662,34 @@ def _secret_provenance_closure_context(
             acceptance.append(
                 "Candidate validation tests have accountable ownership and coordinated review across secret, sink, and test owners."
             )
+        compounds = [
+            compound
+            for candidate in intersections
+            for compound in _bounded_objects(
+                candidate.get("secret_exposure_advisory_intersections"), 25
+            )
+        ]
+        if compounds:
+            acceptance.extend(
+                [
+                    "Every exact sensitive-route secret/sink/advisory intersection is reviewed as one protected remediation scope while credential flow and vulnerable-function execution are established independently.",
+                    "Dependency remediation or a governed VEX disposition is completed alongside credential rotation when applicable, pre-sink protection, and explicit synthetic-canary validation against the same sealed source revision.",
+                ]
+            )
     references = {
         *_string_values(item.get("evidence_artifacts"), 25),
         *(
             reference
             for candidate in intersections
             for reference in _string_values(candidate.get("evidence_artifacts"), 25)
+        ),
+        *(
+            reference
+            for candidate in intersections
+            for compound in _bounded_objects(
+                candidate.get("secret_exposure_advisory_intersections"), 25
+            )
+            for reference in _string_values(compound.get("evidence_artifacts"), 25)
         ),
     }
     return sorted(references), acceptance
@@ -720,6 +742,19 @@ def _closure_secret_exposure_intersections(value: Any) -> list[dict[str, Any]]:
                 "intersection_validation_gap_reasons": _string_values(
                     item.get("intersection_validation_gap_reasons"), 25
                 ),
+                "secret_exposure_advisory_intersection_ids": _string_values(
+                    item.get("secret_exposure_advisory_intersection_ids"), 100
+                ),
+                "secret_exposure_advisory_intersections": (
+                    _closure_secret_exposure_advisory_intersections(
+                        item.get("secret_exposure_advisory_intersections")
+                    )
+                ),
+                "secret_exposure_advisory_intersections_omitted": (
+                    _nonnegative_integer(
+                        item.get("secret_exposure_advisory_intersections_omitted")
+                    )
+                ),
                 "distance_to_sink": int(item.get("distance_to_sink") or 0),
                 "owners": _string_values(item.get("owners"), 100),
                 "finding_ids": _string_values(item.get("finding_ids"), 100),
@@ -730,6 +765,82 @@ def _closure_secret_exposure_intersections(value: Any) -> list[dict[str, Any]]:
                 ),
                 "recommended_action": str(
                     item.get("recommended_action") or "Trace and protect the route."
+                ),
+                "interpretation": str(item.get("interpretation") or ""),
+            }
+        )
+    return result
+
+
+def _closure_secret_exposure_advisory_intersections(
+    value: Any,
+) -> list[dict[str, Any]]:
+    result: list[dict[str, Any]] = []
+    for item in _bounded_objects(value, 25):
+        result.append(
+            {
+                "intersection_id": str(item.get("intersection_id") or "unknown"),
+                "priority": str(item.get("priority") or "P4"),
+                "evidence_basis": str(item.get("evidence_basis") or "unknown"),
+                "secret_exposure_intersection_id": str(
+                    item.get("secret_exposure_intersection_id") or "unknown"
+                ),
+                "exposure_advisory_intersection_id": str(
+                    item.get("exposure_advisory_intersection_id") or "unknown"
+                ),
+                "secret_path": str(item.get("secret_path") or "unknown"),
+                "secret_line": item.get("secret_line"),
+                "secret_verification_status": str(
+                    item.get("secret_verification_status") or "not-established"
+                ),
+                "temporal_alignment": str(
+                    item.get("temporal_alignment") or "not-established"
+                ),
+                "sink_path": str(item.get("sink_path") or "unknown"),
+                "sink_line": item.get("sink_line"),
+                "sink_family": str(item.get("sink_family") or "unknown"),
+                "trust_boundary": str(item.get("trust_boundary") or "unknown"),
+                "protection_status": str(item.get("protection_status") or "unknown"),
+                "dependency_route_id": str(
+                    item.get("dependency_route_id") or "unknown"
+                ),
+                "advisory_cluster_id": str(
+                    item.get("advisory_cluster_id") or "unknown"
+                ),
+                "primary_identifier": str(item.get("primary_identifier") or "unknown"),
+                "package": str(item.get("package") or "unknown"),
+                "known_exploited": item.get("known_exploited") is True,
+                "epss_high": item.get("epss_high") is True,
+                "fix_available": item.get("fix_available") is True,
+                "package_lifecycle": _as_object(item.get("package_lifecycle")),
+                "entry_point_ids": _string_values(item.get("entry_point_ids"), 100),
+                "entry_point_runtime_statuses": _as_object(
+                    item.get("entry_point_runtime_statuses")
+                ),
+                "validation_statuses": _as_object(item.get("validation_statuses")),
+                "validation_handoff": _closure_sensitive_validation_handoff(
+                    item.get("validation_handoff")
+                ),
+                "combined_assurance_prerequisite_met": item.get(
+                    "combined_assurance_prerequisite_met"
+                )
+                is True,
+                "canary_validation_status": str(
+                    item.get("canary_validation_status") or "not-established"
+                ),
+                "recommended_test_files": _string_values(
+                    item.get("recommended_test_files"), 50
+                ),
+                "owners": _string_values(item.get("owners"), 100),
+                "finding_ids": _string_values(item.get("finding_ids"), 100),
+                "risk_factors": _string_values(item.get("risk_factors"), 25),
+                "citations": _closure_citations(item.get("citations")),
+                "evidence_artifacts": _string_values(
+                    item.get("evidence_artifacts"), 25
+                ),
+                "recommended_action": str(
+                    item.get("recommended_action")
+                    or "Review and remediate the compound exposure scope."
                 ),
                 "interpretation": str(item.get("interpretation") or ""),
             }
@@ -980,6 +1091,17 @@ def _closure_exposure_advisory_intersection(
             item.get("evidence_assurance_statuses")
         ),
         "advisory_citations": _bounded_objects(item.get("advisory_citations"), 25),
+        "secret_exposure_advisory_intersection_ids": _string_values(
+            item.get("secret_exposure_advisory_intersection_ids"), 100
+        ),
+        "secret_exposure_advisory_intersections": (
+            _closure_secret_exposure_advisory_intersections(
+                item.get("secret_exposure_advisory_intersections")
+            )
+        ),
+        "secret_exposure_advisory_intersections_omitted": _nonnegative_integer(
+            item.get("secret_exposure_advisory_intersections_omitted")
+        ),
         "recommended_action": str(
             item.get("recommended_action")
             or "Review the exposure-advisory intersection."
@@ -1032,6 +1154,17 @@ def _closure_sensitive_data_route(value: Any) -> dict[str, Any]:
         ),
         "secret_exposure_intersections_omitted": int(
             item.get("secret_exposure_intersections_omitted") or 0
+        ),
+        "secret_exposure_advisory_intersection_ids": _string_values(
+            item.get("secret_exposure_advisory_intersection_ids"), 100
+        ),
+        "secret_exposure_advisory_intersections": (
+            _closure_secret_exposure_advisory_intersections(
+                item.get("secret_exposure_advisory_intersections")
+            )
+        ),
+        "secret_exposure_advisory_intersections_omitted": _nonnegative_integer(
+            item.get("secret_exposure_advisory_intersections_omitted")
         ),
         "recommended_action": str(
             item.get("recommended_action") or "Review the sensitive-data route."
@@ -1303,6 +1436,20 @@ def _routed_risk_path_acceptance(
         ):
             result.append(
                 "A tested protection control is retained at every intersection that previously reported no observed minimization, masking, hashing, or redaction."
+            )
+        compound_intersections = [
+            compound
+            for intersection in exposure_advisory_intersections
+            for compound in _bounded_objects(
+                intersection.get("secret_exposure_advisory_intersections"), 25
+            )
+        ]
+        if compound_intersections:
+            result.extend(
+                [
+                    "Every exact sensitive-route secret/sink/advisory intersection receives coordinated credential, boundary-protection, and dependency-remediation review without treating the join as proof of data flow or vulnerable-function execution.",
+                    "A same-revision replacement report retains explicit synthetic-canary assertions, source-bound passing candidate tests, verified pre-sink protection, and the fixed built-artifact package or governed VEX disposition.",
+                ]
             )
     if sensitive_data_route:
         result.append(

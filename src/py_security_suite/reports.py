@@ -826,6 +826,14 @@ def _render_risk_path_summary(value: dict[str, Any] | None) -> list[str]:
         if isinstance(secret_exposure_intersections, list)
         else []
     )
+    secret_exposure_advisory_intersections = value.get(
+        "secret_exposure_advisory_intersections"
+    )
+    secret_exposure_advisory_intersections = (
+        secret_exposure_advisory_intersections
+        if isinstance(secret_exposure_advisory_intersections, list)
+        else []
+    )
     owner_queues = value.get("owner_work_queues")
     owner_queues = owner_queues if isinstance(owner_queues, list) else []
     lines = [
@@ -908,6 +916,12 @@ def _render_risk_path_summary(value: dict[str, Any] | None) -> list[str]:
         f"| Secret intersections with validation / revision gaps | {int(summary.get('secret_exposure_intersections_with_validation_evidence_gaps', 0))} / {int(summary.get('secret_exposure_intersections_with_revision_gaps', 0))} |",
         f"| Secret intersections with failing tests / assurance-prerequisite gaps | {int(summary.get('secret_exposure_intersections_with_failing_tests', 0))} / {int(summary.get('secret_exposure_intersections_with_assurance_prerequisite_gaps', 0))} |",
         f"| Secret intersections without explicit canary validation | {int(summary.get('secret_exposure_intersections_without_canary_validation', 0))} |",
+        f"| Secret / sensitive-sink / advisory intersections | {int(summary.get('secret_exposure_advisory_intersections', 0))} |",
+        f"| Known-exploited / fix-available compound intersections | {int(summary.get('known_exploited_secret_exposure_advisory_intersections', 0))} / {int(summary.get('fix_available_secret_exposure_advisory_intersections', 0))} |",
+        f"| Verified-secret / unprotected compound intersections | {int(summary.get('verified_secret_exposure_advisory_intersections', 0))} / {int(summary.get('unprotected_secret_exposure_advisory_intersections', 0))} |",
+        f"| Runtime-observed compound intersections | {int(summary.get('runtime_observed_secret_exposure_advisory_intersections', 0))} |",
+        f"| Compound intersections with validation / assurance / temporal gaps | {int(summary.get('secret_exposure_advisory_intersections_with_validation_gaps', 0))} / {int(summary.get('secret_exposure_advisory_intersections_with_assurance_gaps', 0))} / {int(summary.get('secret_exposure_advisory_intersections_with_temporal_gaps', 0))} |",
+        f"| Compound intersections without explicit canary validation | {int(summary.get('secret_exposure_advisory_intersections_without_canary_validation', 0))} |",
         f"| Targets analyzed within bound | {int(summary.get('targets_analyzed', 0))} |",
         f"| Python route-applicable / intentionally non-runtime targets | {int(summary.get('route_applicable_targets', 0))} / {int(summary.get('route_not_applicable_targets', 0))} |",
         f"| Targets with a bounded route | {int(summary.get('routed_targets', 0))} |",
@@ -1029,6 +1043,11 @@ def _render_risk_path_summary(value: dict[str, Any] | None) -> list[str]:
     lines.extend(_render_sensitive_data_routes(sensitive_routes))
     lines.extend(_render_secret_provenance_assessments(secret_assessments))
     lines.extend(_render_secret_exposure_intersections(secret_exposure_intersections))
+    lines.extend(
+        _render_secret_exposure_advisory_intersections(
+            secret_exposure_advisory_intersections
+        )
+    )
     lines.extend(_render_exposure_advisory_intersections(intersections))
     if test_hotspots:
         lines.extend(
@@ -1649,6 +1668,132 @@ def _render_secret_exposure_intersections(values: list[Any]) -> list[str]:
             [
                 "",
                 f"{len(values) - 10} additional retained intersection(s) are available in `risk-paths.json`.",
+            ]
+        )
+    return lines
+
+
+def _render_secret_exposure_advisory_intersections(
+    values: list[Any],
+) -> list[str]:
+    if not values:
+        return []
+    lines = [
+        "",
+        "### Secret, sensitive-boundary, and advisory intersections",
+        "",
+        (
+            "Each record joins a secret-to-sink intersection and an SDK-advisory "
+            "intersection only when both cite the identical retained sensitive "
+            "route. It is compound review scope—not proof of credential flow, "
+            "disclosure, vulnerable-function execution, or exploitability."
+        ),
+        "",
+        "| Priority / secret | Sensitive boundary | Advisory / lifecycle | Runtime / validation / assurance | Owners / action |",
+        "|---|---|---|---|---|",
+    ]
+    for value in values[:10]:
+        if not isinstance(value, dict):
+            continue
+        secret_path = str(value.get("secret_path") or "unknown")
+        if value.get("secret_line"):
+            secret_path += f":{value['secret_line']}"
+        sink_path = str(value.get("sink_path") or "unknown")
+        if value.get("sink_line"):
+            sink_path += f":{value['sink_line']}"
+        handoff = value.get("validation_handoff")
+        handoff = handoff if isinstance(handoff, dict) else {}
+        tests = value.get("recommended_test_files")
+        tests = tests if isinstance(tests, list) else []
+        statuses = value.get("validation_statuses")
+        statuses = statuses if isinstance(statuses, dict) else {}
+        owners = value.get("owners")
+        owners = owners if isinstance(owners, list) else []
+        citations = _risk_advisory_citations_text(value.get("citations"))
+        threat = (
+            ", ".join(
+                label
+                for applies, label in (
+                    (value.get("known_exploited") is True, "CISA KEV"),
+                    (value.get("epss_high") is True, "high EPSS"),
+                    (value.get("fix_available") is True, "fix available"),
+                )
+                if applies
+            )
+            or "no retained KEV/high-EPSS/fix signal"
+        )
+        lines.append(
+            "| `"
+            + _markdown_code(str(value.get("priority") or "P4"))
+            + "` `"
+            + _markdown_code(secret_path)
+            + "`<br>verification `"
+            + _markdown_code(
+                str(value.get("secret_verification_status") or "not-established")
+            )
+            + "`; temporal `"
+            + _markdown_code(str(value.get("temporal_alignment") or "not-established"))
+            + "`; distance `"
+            + _markdown_code(str(value.get("secret_distance_to_sink") or 0))
+            + "` hop(s) | `"
+            + _markdown_code(sink_path)
+            + "`<br>family `"
+            + _markdown_code(str(value.get("sink_family") or "unknown"))
+            + "`; boundary `"
+            + _markdown_code(str(value.get("trust_boundary") or "unknown"))
+            + "`; protection `"
+            + _markdown_code(str(value.get("protection_status") or "unknown"))
+            + "` | `"
+            + _markdown_code(str(value.get("package") or "unknown"))
+            + "` / `"
+            + _markdown_code(str(value.get("primary_identifier") or "unknown"))
+            + "`<br>"
+            + _markdown_text(threat)
+            + "<br>lifecycle "
+            + _markdown_text(_package_lifecycle_text(value.get("package_lifecycle")))
+            + ("<br>" + citations if citations else "")
+            + " | runtime "
+            + _markdown_text(
+                _entry_runtime_status_text(value.get("entry_point_runtime_statuses"))
+            )
+            + "<br>validation secret/sink/dependency `"
+            + _markdown_code(
+                "/".join(
+                    str(statuses.get(key) or "not-assessed")
+                    for key in ("secret_sink", "sink", "dependency")
+                )
+            )
+            + "`<br>handoff `"
+            + _markdown_code(
+                str(handoff.get("supporting_evidence_readiness") or "not-established")
+            )
+            + "`; combined prerequisite `"
+            + _markdown_code(
+                "met"
+                if value.get("combined_assurance_prerequisite_met") is True
+                else "not met"
+            )
+            + "`; canary `"
+            + _markdown_code(
+                str(value.get("canary_validation_status") or "not-established")
+            )
+            + "`<br>tests `"
+            + _markdown_code(", ".join(str(item) for item in tests[:3]) or "none")
+            + "` | **"
+            + _markdown_text(
+                ", ".join(str(item) for item in owners[:3]) or "Unassigned"
+            )
+            + "**<br>"
+            + _markdown_text(
+                str(value.get("recommended_action") or "Review the compound scope.")
+            )
+            + " |"
+        )
+    if len(values) > 10:
+        lines.extend(
+            [
+                "",
+                f"{len(values) - 10} additional retained compound intersection(s) are available in `risk-paths.json`.",
             ]
         )
     return lines
@@ -4620,6 +4765,32 @@ def _markdown_secret_provenance_context(finding: Finding) -> list[str]:
             + " Static file-route co-location does not prove value flow, runtime "
             "execution, credential validity, or disclosure."
         )
+        compounds = item.get("secret_exposure_advisory_intersections")
+        compound_values = compounds if isinstance(compounds, list) else []
+        for compound in compound_values[:2]:
+            if not isinstance(compound, dict):
+                continue
+            lines.append(
+                "- **Secret / sensitive-boundary / advisory intersection:** `"
+                + _markdown_code(str(compound.get("intersection_id") or "unknown"))
+                + "`; package `"
+                + _markdown_code(str(compound.get("package") or "unknown"))
+                + "`; advisory `"
+                + _markdown_code(str(compound.get("primary_identifier") or "unknown"))
+                + "`; known exploited `"
+                + _markdown_code(
+                    "yes" if compound.get("known_exploited") is True else "no"
+                )
+                + "`; fix available `"
+                + _markdown_code(
+                    "yes" if compound.get("fix_available") is True else "no"
+                )
+                + "`; canary `"
+                + _markdown_code(
+                    str(compound.get("canary_validation_status") or "not-established")
+                )
+                + "`. This exact-route join does not prove value flow, disclosure, vulnerable-function execution, or exploitability."
+            )
     omitted = int(context.get("secret_exposure_intersections_omitted") or 0)
     if omitted:
         lines.append(
@@ -4668,6 +4839,27 @@ def _html_secret_provenance_context(finding: Finding) -> str:
             candidate_tests = (
                 candidate_tests if isinstance(candidate_tests, list) else []
             )
+            compounds = item.get("secret_exposure_advisory_intersections")
+            compound_values = compounds if isinstance(compounds, list) else []
+            compound_html = ""
+            if compound_values and isinstance(compound_values[0], dict):
+                compound = compound_values[0]
+                compound_html = (
+                    " Compound scope <code>"
+                    + html.escape(str(compound.get("intersection_id") or "unknown"))
+                    + "</code> joins package <code>"
+                    + html.escape(str(compound.get("package") or "unknown"))
+                    + "</code> / advisory <code>"
+                    + html.escape(str(compound.get("primary_identifier") or "unknown"))
+                    + "</code>; canary <code>"
+                    + html.escape(
+                        str(
+                            compound.get("canary_validation_status")
+                            or "not-established"
+                        )
+                    )
+                    + "</code>."
+                )
             items.append(
                 "<li><code>"
                 + html.escape(str(item.get("intersection_id") or "unknown"))
@@ -4713,7 +4905,9 @@ def _html_secret_provenance_context(finding: Finding) -> str:
                     )
                 )
                 + " Static file-route co-location does not prove value flow, runtime "
-                "execution, credential validity, or disclosure.</li>"
+                "execution, credential validity, or disclosure."
+                + compound_html
+                + "</li>"
             )
         if items:
             omitted = int(context.get("secret_exposure_intersections_omitted") or 0)
@@ -4977,6 +5171,33 @@ def _markdown_risk_path_context(finding: Finding) -> list[str]:
             )
             + ". This is compound review context, not leakage or vulnerable-function proof."
         )
+    compound_values = [
+        compound
+        for intersection in intersections
+        if isinstance(intersection, dict)
+        for compound in (
+            intersection.get("secret_exposure_advisory_intersections") or []
+        )
+        if isinstance(compound, dict)
+    ]
+    compound_text = ""
+    if compound_values:
+        first_compound = compound_values[0]
+        compound_text = (
+            " **Secret / sensitive-boundary / advisory intersection(s):** "
+            + str(len(compound_values))
+            + "; secret `"
+            + _markdown_code(str(first_compound.get("secret_path") or "unknown"))
+            + "`; package `"
+            + _markdown_code(str(first_compound.get("package") or "unknown"))
+            + "`; advisory `"
+            + _markdown_code(str(first_compound.get("primary_identifier") or "unknown"))
+            + "`; canary `"
+            + _markdown_code(
+                str(first_compound.get("canary_validation_status") or "not-established")
+            )
+            + "`. The exact sensitive-route join does not prove value flow, disclosure, or vulnerable-function execution."
+        )
     sensitive_route = context.get("sensitive_data_route")
     sensitive_route = sensitive_route if isinstance(sensitive_route, dict) else {}
     sensitive_route_text = ""
@@ -5041,6 +5262,7 @@ def _markdown_risk_path_context(finding: Finding) -> list[str]:
         + campaign_text
         + advisory_text
         + intersection_text
+        + compound_text
         + sensitive_route_text
     ]
 
@@ -5532,6 +5754,33 @@ def _html_risk_path_context(finding: Finding) -> str:
             )
             + ". This is compound review context, not leakage or vulnerable-function proof."
         )
+    compound_values = [
+        compound
+        for intersection in intersections
+        if isinstance(intersection, dict)
+        for compound in (
+            intersection.get("secret_exposure_advisory_intersections") or []
+        )
+        if isinstance(compound, dict)
+    ]
+    compound_html = ""
+    if compound_values:
+        first_compound = compound_values[0]
+        compound_html = (
+            " <strong>Secret / sensitive-boundary / advisory intersection(s):</strong> "
+            + str(len(compound_values))
+            + "; secret <code>"
+            + html.escape(str(first_compound.get("secret_path") or "unknown"))
+            + "</code>; package <code>"
+            + html.escape(str(first_compound.get("package") or "unknown"))
+            + "</code>; advisory <code>"
+            + html.escape(str(first_compound.get("primary_identifier") or "unknown"))
+            + "</code>; canary <code>"
+            + html.escape(
+                str(first_compound.get("canary_validation_status") or "not-established")
+            )
+            + "</code>. The exact sensitive-route join does not prove value flow, disclosure, or vulnerable-function execution."
+        )
     sensitive_route = context.get("sensitive_data_route")
     sensitive_route = sensitive_route if isinstance(sensitive_route, dict) else {}
     sensitive_route_html = ""
@@ -5595,6 +5844,7 @@ def _html_risk_path_context(finding: Finding) -> str:
         + campaign_html
         + advisory_html
         + intersection_html
+        + compound_html
         + sensitive_route_html
         + "</p></section>"
     )

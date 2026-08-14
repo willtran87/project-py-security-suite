@@ -192,6 +192,14 @@ handoff is supporting evidence only. It does not prove that those tests exercise
 the candidate assignment, attribute aggregate coverage to a test, or establish
 the required synthetic credential-canary assertion.
 
+If an exact SDK sink/advisory intersection cites the same retained sensitive
+route as a secret-to-sink intersection, the suite emits a bounded
+`secret_exposure_advisory_intersection`. This compound record unifies credential
+review, pre-sink protection, dependency remediation or VEX, entry/runtime
+context, and the validation handoff. Matching is by stable route identity—not
+loose file, SDK, or package similarity—and does not prove value flow,
+disclosure, vulnerable-function execution, or exploitability.
+
 When structural synthesis is available, the same record contributes its
 change-risk score and classification, exact graph-selected test files, test
 selection confidence, and island or import-cycle identifiers. CODEOWNERS-derived

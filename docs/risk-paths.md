@@ -434,6 +434,44 @@ intersections are retained globally and 25 compact records per contributing
 secret or sink context; each handoff retains at most 25 campaign records and 50
 candidate tests or execution records. Exact omission counts remain visible.
 
+### Secret, sensitive-boundary, and advisory intersections
+
+`secret_exposure_advisory_intersections` joins the two compound ledgers above
+only when their `route_id` and `sink_route_id` identify the same retained
+sensitive sink route. It does not fall back to file, SDK-name, or package-name
+similarity.
+
+```mermaid
+flowchart LR
+    Secret["Production secret candidate"] --> SecretSink["Secret-to-sink intersection"]
+    Sink["Sensitive sink route"] --> SecretSink
+    Sink --> SinkAdvisory["Exact SDK sink/advisory intersection"]
+    Advisory["Advisory importer<br/>package + cluster"] --> SinkAdvisory
+    SecretSink --> Exact{"Identical retained sensitive route ID?"}
+    SinkAdvisory --> Exact
+    Exact -->|"No"| Separate["Keep ledgers separate"]
+    Exact -->|"Yes"| Compound["Secret / boundary / advisory intersection"]
+    Validation["Tests + coverage + source binding + assurance"] --> Compound
+    Compound --> Review["Credential + protection + dependency review"]
+```
+
+Each record retains both source-intersection IDs, secret verification and
+history, file-hop distance, sink protection, advisory identity, KEV/EPSS/fix and
+package-lifecycle context, declared-entry runtime status, three-lane validation,
+the source-bound validation handoff, scanner-assurance prerequisites, owners,
+findings, citations, and one coordinated action. Reports and closure plans make
+the relationship quickly reviewable from either contributing secret or
+dependency finding.
+
+The join is a prioritization and coordination mechanism. It does not establish
+that the candidate is a credential, the candidate value reaches the SDK, data is
+disclosed, the vulnerable function executes, or the advisory is exploitable.
+Those claims require protected symbol-level review, an explicit synthetic
+credential canary, vulnerable-function analysis, and same-revision evidence.
+The global ledger is bounded at 100 and each contributing context at 25;
+omissions include relationships excluded by source-ledger bounds so retained
+references remain closed.
+
 ## Dependency-advisory importer routes
 
 The synthesis promotes each deduplicated advisory/importer pair from

@@ -1499,8 +1499,24 @@ class RiskPathTests(unittest.TestCase):
 
     def test_joins_sensitive_sdk_sink_to_exact_advisory_importer(self) -> None:
         finding = _finding("requirements.txt", 1)
+        secret = _secret_finding(
+            "PYSEC-SECRET-SDK-BOUNDARY",
+            "src/sink.py",
+            5,
+            tool="trufflehog",
+            native_severity="verified",
+            evidence={
+                "redacted": True,
+                "verified": True,
+                "scan_mode": "dir",
+            },
+        )
+        secret.evidence["owners"] = ["@credential-owner"]
         artifacts = _artifacts()
         _add_multi_entry_paths(artifacts)
+        artifacts["effectiveness.json"]["tool_posture"].append(
+            _tool_posture("trufflehog", "source-security")
+        )
         cluster = _dependency_advisory_cluster()
         usage = cluster["dependency_usage"]
         usage["import_paths"] = ["src/sink.py"]
@@ -1529,7 +1545,7 @@ class RiskPathTests(unittest.TestCase):
             "advisory_clusters": [cluster],
         }
 
-        result = build_risk_paths([finding], artifacts)
+        result = build_risk_paths([finding, secret], artifacts)
 
         self.assertEqual(result["summary"]["exposure_advisory_intersections"], 1)
         self.assertEqual(
@@ -1596,6 +1612,83 @@ class RiskPathTests(unittest.TestCase):
             result["summary"]["owner_queues_with_exposure_advisory_intersections"],
             2,
         )
+        self.assertEqual(result["summary"]["secret_exposure_advisory_intersections"], 1)
+        self.assertEqual(
+            result["summary"]["known_exploited_secret_exposure_advisory_intersections"],
+            1,
+        )
+        self.assertEqual(
+            result["summary"]["verified_secret_exposure_advisory_intersections"],
+            1,
+        )
+        self.assertEqual(
+            result["summary"]["unprotected_secret_exposure_advisory_intersections"],
+            1,
+        )
+        self.assertEqual(
+            result["summary"]["fix_available_secret_exposure_advisory_intersections"],
+            1,
+        )
+        self.assertEqual(
+            result["summary"][
+                "runtime_observed_secret_exposure_advisory_intersections"
+            ],
+            1,
+        )
+        self.assertEqual(
+            result["summary"][
+                "secret_exposure_advisory_intersections_with_validation_gaps"
+            ],
+            1,
+        )
+        self.assertEqual(
+            result["summary"][
+                "secret_exposure_advisory_intersections_with_assurance_gaps"
+            ],
+            1,
+        )
+        self.assertEqual(
+            result["summary"][
+                "secret_exposure_advisory_intersections_with_temporal_gaps"
+            ],
+            0,
+        )
+        self.assertEqual(
+            result["summary"][
+                "secret_exposure_advisory_intersections_without_canary_validation"
+            ],
+            1,
+        )
+        compound = result["secret_exposure_advisory_intersections"][0]
+        self.assertEqual(compound["evidence_basis"], "identical-sensitive-route-join")
+        self.assertEqual(
+            compound["secret_exposure_intersection_id"],
+            result["secret_exposure_intersections"][0]["intersection_id"],
+        )
+        self.assertEqual(
+            compound["exposure_advisory_intersection_id"],
+            intersection["intersection_id"],
+        )
+        self.assertEqual(compound["sink_route_id"], intersection["sink_route_id"])
+        self.assertEqual(compound["package"], "demo-package")
+        self.assertEqual(compound["primary_identifier"], "GHSA-DEMO-1234")
+        self.assertTrue(compound["known_exploited"])
+        self.assertTrue(compound["fix_available"])
+        self.assertEqual(compound["secret_verification_status"], "verified")
+        self.assertEqual(compound["temporal_alignment"], "aligned-current-tree")
+        self.assertEqual(compound["recommended_test_files"], ["tests/test_sink.py"])
+        self.assertEqual(
+            compound["validation_handoff"]["supporting_evidence_readiness"],
+            "evidence-gap",
+        )
+        self.assertFalse(compound["combined_assurance_prerequisite_met"])
+        self.assertEqual(compound["canary_validation_status"], "not-established")
+        self.assertIn("@credential-owner", compound["owners"])
+        self.assertIn("@observability", compound["owners"])
+        self.assertEqual(
+            intersection["secret_exposure_advisory_intersection_ids"],
+            [compound["intersection_id"]],
+        )
         self.assertTrue(
             all(
                 "boundary controls and dependency remediation"
@@ -1623,15 +1716,36 @@ class RiskPathTests(unittest.TestCase):
         self.assertIn("external-observability", rendered)
         self.assertIn("not prove sensitive data reached the SDK", rendered)
         self.assertIn("lifecycle artifact-only", rendered)
+        self.assertIn(
+            "Secret, sensitive-boundary, and advisory intersections", rendered
+        )
+        self.assertIn("identical retained sensitive route", rendered)
         markdown = "\n".join(_markdown_risk_path_context(finding))
         self.assertIn("Sensitive-boundary dependency intersection", markdown)
+        self.assertIn("Secret / sensitive-boundary / advisory intersection", markdown)
         html = _html_risk_path_context(finding)
         self.assertIn("Sensitive-boundary dependency intersection", html)
+        self.assertIn("Secret / sensitive-boundary / advisory intersection", html)
+        secret_markdown = "\n".join(_markdown_secret_provenance_context(secret))
+        self.assertIn(
+            "Secret / sensitive-boundary / advisory intersection", secret_markdown
+        )
+        secret_html = _html_secret_provenance_context(secret)
+        self.assertIn("Compound scope", secret_html)
         sarif = render_sarif([finding])
         sarif_risk = sarif["runs"][0]["results"][0]["properties"]["risk_path"]
         self.assertEqual(
             sarif_risk["exposure_advisory_intersection_ids"],
             [intersection["intersection_id"]],
+        )
+        sarif_secret = render_sarif([secret])["runs"][0]["results"][0]["properties"][
+            "secret_provenance"
+        ]
+        self.assertEqual(
+            sarif_secret["secret_exposure_intersections"][0][
+                "secret_exposure_advisory_intersection_ids"
+            ],
+            [compound["intersection_id"]],
         )
         closure = _finding_items([json_ready(finding)])[0]
         closure_risk = closure["details"]["risk_path"]
@@ -1639,10 +1753,33 @@ class RiskPathTests(unittest.TestCase):
             closure_risk["exposure_advisory_intersection_ids"],
             [intersection["intersection_id"]],
         )
+        self.assertEqual(
+            closure_risk["exposure_advisory_intersections"][0][
+                "secret_exposure_advisory_intersection_ids"
+            ],
+            [compound["intersection_id"]],
+        )
+        secret_closure = _finding_items([json_ready(secret)])[0]
+        closure_compounds = secret_closure["details"]["secret_provenance"][
+            "secret_exposure_intersections"
+        ][0]["secret_exposure_advisory_intersections"]
+        self.assertEqual(closure_compounds[0]["package"], "demo-package")
         self.assertTrue(
             any(
                 "data minimization" in criterion
                 for criterion in closure["acceptance_criteria"]
+            )
+        )
+        self.assertTrue(
+            any(
+                "credential, boundary-protection" in criterion
+                for criterion in closure["acceptance_criteria"]
+            )
+        )
+        self.assertTrue(
+            any(
+                "Dependency remediation" in criterion
+                for criterion in secret_closure["acceptance_criteria"]
             )
         )
         schema = json.loads(read_bundled_schema("risk-paths-1.0"))
@@ -2424,6 +2561,77 @@ class RiskPathTests(unittest.TestCase):
         self.assertEqual(result["truncation"]["targets_omitted"], 3)
         schema = json.loads(read_bundled_schema("risk-paths-1.0"))
         Draft202012Validator(schema).validate(result)
+
+    def test_secret_exposure_advisory_bound_is_explicit_and_referentially_closed(
+        self,
+    ) -> None:
+        secret = _secret_finding(
+            "PYSEC-SECRET-COMPOUND-BOUND",
+            "src/sink.py",
+            5,
+            tool="trufflehog",
+            native_severity="verified",
+            evidence={"redacted": True, "verified": True, "scan_mode": "dir"},
+        )
+        artifacts = _artifacts()
+        artifacts["effectiveness.json"]["tool_posture"].append(
+            _tool_posture("trufflehog", "source-security")
+        )
+        cluster = _dependency_advisory_cluster()
+        cluster["dependency_usage"]["import_paths"] = ["src/sink.py"]
+        cluster["dependency_usage"]["import_path_assessments"] = [
+            _import_path_assessment(
+                "src/sink.py",
+                owners=["@observability"],
+                tests=["tests/test_sink.py"],
+                coverage_percent=55.5,
+                alignment="coverage-gap",
+                gap_reasons=["Coverage gap."],
+            )
+        ]
+        artifacts["evidence-fusion.json"] = {
+            "schema_version": "1.3",
+            "advisory_clusters": [cluster],
+            "package_lineage": [_package_lineage("artifact-only", [], ["1.0.0"])],
+            "evidence_lanes": _composition_lanes(),
+        }
+        surface = artifacts["data-exposure.json"]["sink_surfaces"][0]
+        surface["sdk"] = "Sentry SDK"
+        surface["sdk_dependency_context"] = {
+            "risk_present": True,
+            "risk_tier": "high",
+            "advisory_clusters": [cluster],
+        }
+
+        with patch(
+            "py_security_suite.risk_paths._MAX_SECRET_EXPOSURE_ADVISORY_INTERSECTIONS",
+            0,
+        ):
+            result = build_risk_paths(
+                [_finding("requirements.txt", 1), secret], artifacts
+            )
+
+        self.assertEqual(result["summary"]["secret_exposure_advisory_intersections"], 1)
+        self.assertEqual(result["secret_exposure_advisory_intersections"], [])
+        self.assertEqual(
+            result["truncation"]["secret_exposure_advisory_intersections_omitted"],
+            1,
+        )
+        self.assertEqual(
+            result["secret_exposure_intersections"][0][
+                "secret_exposure_advisory_intersection_ids"
+            ],
+            [],
+        )
+        self.assertEqual(
+            result["exposure_advisory_intersections"][0][
+                "secret_exposure_advisory_intersection_ids"
+            ],
+            [],
+        )
+        Draft202012Validator(
+            json.loads(read_bundled_schema("risk-paths-1.0"))
+        ).validate(result)
 
     def test_missing_graph_and_entry_points_do_not_claim_clean_routes(self) -> None:
         finding = _finding("src/sink.py", 9)
