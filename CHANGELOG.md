@@ -5,6 +5,15 @@ for published releases.
 
 ## Unreleased
 
+- Add bounded `unrouted_structural_intersections` that join Python route gaps
+  to exact retained structural-island path or line membership. The ledger
+  combines reachability state, Graphify boundary classification, candidate
+  entry paths, Vulture corroboration, runtime counter-evidence, coverage,
+  focused tests, scanner assurance, and owners into an explicit model-path,
+  separate-test-scope, remediate-or-retire, or further-review decision. Stable
+  IDs flow through JSON, Markdown, HTML, SARIF, schemas, and closure criteria;
+  bounds are referentially closed. Island membership never becomes proof of
+  dead code, safety, exploitability, or production inaccessibility.
 - Add bounded `secret_exposure_advisory_intersections` that join a production
   secret-to-sink record with an SDK advisory only when both cite the identical
   retained sensitive route. The compound ledger combines candidate

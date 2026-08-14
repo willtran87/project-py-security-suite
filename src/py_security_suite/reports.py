@@ -278,7 +278,14 @@ def _write_primary_report_files(
         output / "assurance-case.md",
         render_assurance_case(manifest, active_findings),
     )
-    _write_text(output / "index.html", render_html(manifest, findings))
+    _write_text(
+        output / "index.html",
+        render_html(
+            manifest,
+            findings,
+            risk_paths=risk_paths if isinstance(risk_paths, dict) else None,
+        ),
+    )
     _write_json(output / "results.sarif", render_sarif(active_findings))
     _write_json(
         output / "sonarqube-external-issues.json",
@@ -806,6 +813,10 @@ def _render_risk_path_summary(value: dict[str, Any] | None) -> list[str]:
     ]
     unrouted = value.get("unrouted_targets")
     unrouted = unrouted if isinstance(unrouted, list) else []
+    unrouted_structural = value.get("unrouted_structural_intersections")
+    unrouted_structural = (
+        unrouted_structural if isinstance(unrouted_structural, list) else []
+    )
     hotspots = value.get("convergence_hotspots")
     hotspots = hotspots if isinstance(hotspots, list) else []
     campaigns = value.get("validation_campaigns")
@@ -928,6 +939,11 @@ def _render_risk_path_summary(value: dict[str, Any] | None) -> list[str]:
         f"| Targets without a bounded route (all dispositions) | {int(summary.get('unrouted_targets', 0))} |",
         f"| Actionable Python route gaps / expected non-runtime dispositions | {int(summary.get('unrouted_route_applicable_targets', 0))} / {int(summary.get('unrouted_expected_non_runtime_targets', 0))} |",
         f"| Python targets absent from graph / without an entry route | {int(summary.get('unrouted_targets_missing_graph_membership', 0))} / {int(summary.get('unrouted_targets_without_entry_route', 0))} |",
+        f"| Unrouted target / structural-island intersections | {int(summary.get('unrouted_structural_intersections', 0))} |",
+        f"| Unrouted targets in disconnected islands | {int(summary.get('unrouted_targets_in_disconnected_islands', 0))} |",
+        f"| Unrouted targets with runtime counter-evidence / dead-code corroboration | {int(summary.get('unrouted_targets_with_runtime_counter_evidence', 0))} / {int(summary.get('unrouted_targets_with_dead_code_corroboration', 0))} |",
+        f"| Unrouted targets with candidate entry paths | {int(summary.get('unrouted_targets_with_candidate_entry_paths', 0))} |",
+        f"| Unrouted structural intersections with validation gaps | {int(summary.get('unrouted_structural_intersections_with_validation_gaps', 0))} |",
         f"| Runtime-observed routes | {int(summary.get('runtime_observed_routes', 0))} |",
         f"| Routes with line-coverage gaps | {int(summary.get('coverage_gap_routes', 0))} |",
         f"| Routes with validation gaps | {int(summary.get('validation_gap_routes', 0))} |",
@@ -1296,6 +1312,7 @@ def _render_risk_path_summary(value: dict[str, Any] | None) -> list[str]:
                 + " |"
             )
     lines.extend(_render_risk_owner_queues(owner_queues))
+    lines.extend(_render_unrouted_structural_intersections(unrouted_structural))
     if unrouted:
         lines.extend(
             [
@@ -1346,6 +1363,99 @@ def _render_risk_path_summary(value: dict[str, Any] | None) -> list[str]:
                 )
                 + " |"
             )
+    return lines
+
+
+def _render_unrouted_structural_intersections(values: list[Any]) -> list[str]:
+    if not values:
+        return []
+    lines = [
+        "",
+        "### Unrouted target / structural-island decisions",
+        "",
+        (
+            "These exact retained island-membership joins combine route gaps with "
+            "reachability, Graphify boundaries, dead-code corroboration, runtime "
+            "counter-evidence, coverage, tests, and ownership. They guide a missing-"
+            "entry-point versus dormant-capability decision; they do not prove dead "
+            "code, safety, exploitability, or production inaccessibility."
+        ),
+        "",
+        "| Priority / target | Island / evidence | Decision | Validation / owner / action |",
+        "|---|---|---|---|",
+    ]
+    for item in values[:10]:
+        if not isinstance(item, dict):
+            continue
+        validation = item.get("target_validation")
+        validation = validation if isinstance(validation, dict) else {}
+        owners = item.get("coordination_owners")
+        owner_values = owners if isinstance(owners, list) else []
+        candidate_entries = item.get("candidate_entry_paths")
+        entry_values = candidate_entries if isinstance(candidate_entries, list) else []
+        tests = item.get("direct_test_files")
+        test_values = tests if isinstance(tests, list) else []
+        lines.append(
+            "| `"
+            + _markdown_code(str(item.get("priority") or "P4"))
+            + "` `"
+            + _markdown_code(str(item.get("path") or "unknown"))
+            + "`"
+            + (
+                ":" + str(int(item["line"]))
+                if isinstance(item.get("line"), int)
+                else ""
+            )
+            + "<br>`"
+            + _markdown_code(str(item.get("target_kind") or "unknown"))
+            + "` | `"
+            + _markdown_code(str(item.get("island_id") or "unknown"))
+            + "`<br>state `"
+            + _markdown_code(str(item.get("island_state") or "unknown"))
+            + "`; boundary `"
+            + _markdown_code(
+                str(item.get("boundary_classification") or "not-established")
+            )
+            + "`; membership `"
+            + _markdown_code(str(item.get("evidence_basis") or "unknown"))
+            + "` | `"
+            + _markdown_code(str(item.get("risk_signal") or "unknown"))
+            + "`<br>`"
+            + _markdown_code(str(item.get("decision") or "review"))
+            + "`"
+            + (
+                "<br>candidate entry "
+                + ", ".join(
+                    "`" + _markdown_code(str(path)) + "`" for path in entry_values[:3]
+                )
+                if entry_values
+                else ""
+            )
+            + " | validation `"
+            + _markdown_code(str(validation.get("assessment_status") or "not-assessed"))
+            + "`; tests "
+            + (
+                ", ".join(
+                    "`" + _markdown_code(str(path)) + "`" for path in test_values[:3]
+                )
+                if test_values
+                else "not mapped"
+            )
+            + "<br>owner "
+            + _markdown_text(
+                ", ".join(str(owner) for owner in owner_values) or "unassigned"
+            )
+            + "<br>"
+            + _markdown_text(str(item.get("recommended_action") or "Review."))
+            + " |"
+        )
+    if len(values) > 10:
+        lines.extend(
+            [
+                "",
+                f"{len(values) - 10} additional retained structural intersection(s) are available in `risk-paths.json`.",
+            ]
+        )
     return lines
 
 
@@ -2465,6 +2575,50 @@ def _route_applicability_text(value: dict[str, Any]) -> str:
     assessment = str(value.get("assessment") or "not-established")
     classification = str(value.get("classification") or "not-established")
     return f"{assessment} ({classification})"
+
+
+def _unrouted_structural_context_text(value: Any) -> str:
+    intersections = value if isinstance(value, list) else []
+    retained = [item for item in intersections if isinstance(item, dict)]
+    if not retained:
+        return ""
+    first = retained[0]
+    entries = first.get("candidate_entry_paths")
+    entry_values = entries if isinstance(entries, list) else []
+    tests = first.get("direct_test_files")
+    test_values = tests if isinstance(tests, list) else []
+    owners = first.get("coordination_owners")
+    owner_values = owners if isinstance(owners, list) else []
+    return (
+        " Structural cross-reference: "
+        + str(len(retained))
+        + " exact retained island membership(s); first island "
+        + str(first.get("island_id") or "unknown")
+        + ", state "
+        + str(first.get("island_state") or "unknown")
+        + ", boundary "
+        + str(first.get("boundary_classification") or "not-established")
+        + ", signal "
+        + str(first.get("risk_signal") or "unknown")
+        + ", decision "
+        + str(first.get("decision") or "review")
+        + (
+            ", candidate entries " + ", ".join(map(str, entry_values[:3]))
+            if entry_values
+            else ""
+        )
+        + (
+            ", focused tests " + ", ".join(map(str, test_values[:3]))
+            if test_values
+            else ""
+        )
+        + (
+            ", coordinating owners " + ", ".join(map(str, owner_values[:5]))
+            if owner_values
+            else ""
+        )
+        + ". This membership does not prove dead code or production inaccessibility."
+    )
 
 
 def _campaign_shared_test_quality_text(campaign: dict[str, Any]) -> str:
@@ -3987,7 +4141,123 @@ def _html_admission_cards(manifest: ScanManifest, findings: list[Finding]) -> st
     return "".join(cards)
 
 
-def render_html(manifest: ScanManifest, findings: list[Finding]) -> str:
+def _html_unrouted_structural_summary(value: dict[str, Any] | None) -> str:
+    if not isinstance(value, dict) or not isinstance(value.get("summary"), dict):
+        return ""
+    summary = value["summary"]
+    raw = value.get("unrouted_structural_intersections")
+    intersections = raw if isinstance(raw, list) else []
+    availability = value.get("evidence_availability")
+    availability = availability if isinstance(availability, dict) else {}
+    rows: list[str] = []
+    for item in intersections[:10]:
+        if not isinstance(item, dict):
+            continue
+        owners = item.get("coordination_owners")
+        owner_values = owners if isinstance(owners, list) else []
+        candidate_entries = item.get("candidate_entry_paths")
+        entry_values = candidate_entries if isinstance(candidate_entries, list) else []
+        tests = item.get("direct_test_files")
+        test_values = tests if isinstance(tests, list) else []
+        validation = item.get("target_validation")
+        validation = validation if isinstance(validation, dict) else {}
+        location = str(item.get("path") or "unknown") + (
+            f":{int(item['line'])}" if isinstance(item.get("line"), int) else ""
+        )
+        rows.append(
+            "<tr><td><code>"
+            + html.escape(str(item.get("priority") or "P4"))
+            + "</code><br><code>"
+            + html.escape(location)
+            + "</code><br>"
+            + html.escape(str(item.get("target_kind") or "unknown"))
+            + "</td><td><code>"
+            + html.escape(str(item.get("island_id") or "unknown"))
+            + "</code><br>state <code>"
+            + html.escape(str(item.get("island_state") or "unknown"))
+            + "</code><br>boundary <code>"
+            + html.escape(str(item.get("boundary_classification") or "not-established"))
+            + "</code><br>membership <code>"
+            + html.escape(str(item.get("evidence_basis") or "unknown"))
+            + "</code></td><td><code>"
+            + html.escape(str(item.get("risk_signal") or "unknown"))
+            + "</code><br><strong>"
+            + html.escape(str(item.get("decision") or "review"))
+            + "</strong>"
+            + (
+                "<br>Candidate entry: "
+                + ", ".join(
+                    "<code>" + html.escape(str(path)) + "</code>"
+                    for path in entry_values[:3]
+                )
+                if entry_values
+                else ""
+            )
+            + "</td><td>Validation <code>"
+            + html.escape(str(validation.get("assessment_status") or "not-assessed"))
+            + "</code>"
+            + (
+                "<br>Tests: "
+                + ", ".join(
+                    "<code>" + html.escape(str(path)) + "</code>"
+                    for path in test_values[:3]
+                )
+                if test_values
+                else "<br>Tests: not mapped"
+            )
+            + "<br>Owner: "
+            + html.escape(", ".join(map(str, owner_values)) or "unassigned")
+            + "<br>"
+            + html.escape(str(item.get("recommended_action") or "Review."))
+            + "</td></tr>"
+        )
+    retained_note = (
+        f" Showing the first {len(rows)} of {len(intersections)} retained intersections."
+        if intersections
+        else " No exact retained intersections were found."
+    )
+    evidence_state = (
+        "available"
+        if availability.get("structural_synthesis") is True
+        else "not available"
+    )
+    table = (
+        "<table><thead><tr><th>Priority / target</th><th>Island / evidence</th>"
+        "<th>Decision</th><th>Validation / owner / action</th></tr></thead><tbody>"
+        + "".join(rows)
+        + "</tbody></table>"
+        if rows
+        else ""
+    )
+    return (
+        "<section aria-labelledby='unrouted-structural-heading'>"
+        "<h2 id='unrouted-structural-heading'>Unrouted target / structural-island decisions</h2>"
+        "<p><strong>Intersections:</strong> "
+        + str(int(summary.get("unrouted_structural_intersections") or 0))
+        + "; <strong>disconnected targets:</strong> "
+        + str(int(summary.get("unrouted_targets_in_disconnected_islands") or 0))
+        + "; <strong>runtime counter-evidence:</strong> "
+        + str(int(summary.get("unrouted_targets_with_runtime_counter_evidence") or 0))
+        + "; <strong>dead-code corroboration:</strong> "
+        + str(int(summary.get("unrouted_targets_with_dead_code_corroboration") or 0))
+        + ". Structural synthesis is <strong>"
+        + evidence_state
+        + "</strong>."
+        + html.escape(retained_note)
+        + "</p><p>Exact retained island membership guides a missing-entry-path, "
+        "test-scope, or dormant-capability decision. It does not prove dead code, "
+        "safety, exploitability, or production inaccessibility.</p>"
+        + table
+        + "</section>"
+    )
+
+
+def render_html(
+    manifest: ScanManifest,
+    findings: list[Finding],
+    *,
+    risk_paths: dict[str, Any] | None = None,
+) -> str:
     tool_versions = {run.tool: run.version for run in manifest.tools}
     active_findings = [
         finding
@@ -4021,6 +4291,7 @@ def render_html(manifest: ScanManifest, findings: list[Finding]) -> str:
     )["overall"]
     release_status = _report_release_status(manifest.outcome)
     admission_cards = _html_admission_cards(manifest, active_findings)
+    unrouted_structural_html = _html_unrouted_structural_summary(risk_paths)
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -4193,6 +4464,7 @@ required governed sidecars; this report alone does not authorize release.</p>
 <p>Use these cards to route work quickly. The scan-policy decision remains authoritative.</p>
 <div class="axis-grid">{admission_cards}</div>
 </section>
+{unrouted_structural_html}
 <main>
 <h2>Prioritized findings</h2>
 <p>Start here. Each item links the security meaning to a precise source
@@ -4989,6 +5261,9 @@ def _markdown_risk_path_context(finding: Finding) -> list[str]:
             if applicability.get("assessment") == "route-applicable"
             else "The finding remains actionable in its native evidence lane; a production Python route is not expected."
         )
+        structural_text = _unrouted_structural_context_text(
+            context.get("unrouted_structural_intersections")
+        )
         return [
             "- **Static risk route:** "
             + _markdown_text(applicability_text)
@@ -5008,6 +5283,7 @@ def _markdown_risk_path_context(finding: Finding) -> list[str]:
             )
             + ". "
             + interpretation
+            + structural_text
         ]
     entry = context.get("entry_point")
     entry = entry if isinstance(entry, dict) else {}
@@ -5591,12 +5867,18 @@ def _html_risk_path_context(finding: Finding) -> str:
         lifecycle = html.escape(
             _change_lifecycle_text(context.get("change_lifecycle_attribution"))
         )
+        structural_text = html.escape(
+            _unrouted_structural_context_text(
+                context.get("unrouted_structural_intersections")
+            )
+        )
         return (
             "<section class='source-context'><h4>Static risk route</h4>"
             f"<p>{applicability_text}: {reason}. "
             f"<strong>Evidence assurance:</strong> {assurance}. "
             f"<strong>Change/lifecycle attribution:</strong> {lifecycle}. "
-            f"<strong>Action:</strong> {action}. {html.escape(interpretation)}</p></section>"
+            f"<strong>Action:</strong> {action}. {html.escape(interpretation)}"
+            f"{structural_text}</p></section>"
         )
     entry = context.get("entry_point")
     entry = entry if isinstance(entry, dict) else {}

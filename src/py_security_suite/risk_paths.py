@@ -20,6 +20,7 @@ from .validation_alignment import (
 _GRAPHIFY_REFERENCE = "https://graphify.com/docs/cli"
 _REACHABILITY_REFERENCE = "docs/reachability.md"
 _RISK_PATH_REFERENCE = "docs/risk-paths.md"
+_STRUCTURAL_SYNTHESIS_REFERENCE = "docs/structural-synthesis.md"
 _ROUTE_RELATIONS = frozenset(
     {"calls", "imports", "imports_from", "depends_on", "references", "uses"}
 )
@@ -53,6 +54,8 @@ _MAX_SECRET_EXPOSURE_INTERSECTIONS = 100
 _MAX_CONTEXT_SECRET_EXPOSURE_INTERSECTIONS = 25
 _MAX_SECRET_EXPOSURE_ADVISORY_INTERSECTIONS = 100
 _MAX_CONTEXT_SECRET_EXPOSURE_ADVISORY_INTERSECTIONS = 25
+_MAX_UNROUTED_STRUCTURAL_INTERSECTIONS = 100
+_MAX_CONTEXT_UNROUTED_STRUCTURAL_INTERSECTIONS = 5
 _MAX_ENTRY_POINT_EXPOSURES = 25
 _SECRET_AREAS = frozenset({"secrets", "secrets-history"})
 _SENSITIVE_ROUTE_STANDARD_IDS = {
@@ -146,6 +149,24 @@ def build_risk_paths(
     )
     routed.sort(key=_route_order)
     unrouted.sort(key=_target_order)
+    retained_unrouted = unrouted[:_MAX_UNROUTED]
+    all_unrouted_structural_intersections = _unrouted_structural_intersections(
+        unrouted, structural
+    )
+    retained_unrouted_target_ids = {
+        str(item["target"]["id"]) for item in retained_unrouted
+    }
+    retained_unrouted_structural_candidates = [
+        item
+        for item in all_unrouted_structural_intersections
+        if str(item["target_id"]) in retained_unrouted_target_ids
+    ]
+    unrouted_structural_intersections = retained_unrouted_structural_candidates[
+        :_MAX_UNROUTED_STRUCTURAL_INTERSECTIONS
+    ]
+    _attach_unrouted_structural_intersections(
+        retained_unrouted, unrouted_structural_intersections
+    )
     all_secret_provenance_assessments = _secret_provenance_assessments(
         findings,
         targets,
@@ -336,7 +357,8 @@ def build_risk_paths(
             ", end-to-end sensitive-data routes, and evidence-plane-aware "
             "unrouted dispositions, including conservative secret-to-sink "
             "route intersections and exact sensitive-route joins between secret, "
-            "sink, and dependency-advisory evidence"
+            "sink, and dependency-advisory evidence, plus exact retained structural-"
+            "island explanations for Python route gaps"
         ),
         "summary": {
             "graph_available": graph_available,
@@ -383,6 +405,41 @@ def build_risk_paths(
                 item["route_applicability"]["assessment"] == "route-applicable"
                 and item["route_applicability"]["graph_path_member"] is True
                 for item in unrouted
+            ),
+            "unrouted_structural_intersections": len(
+                all_unrouted_structural_intersections
+            ),
+            "unrouted_targets_in_disconnected_islands": len(
+                {
+                    str(item["target_id"])
+                    for item in all_unrouted_structural_intersections
+                    if item["island_state"] == "disconnected"
+                }
+            ),
+            "unrouted_targets_with_runtime_counter_evidence": len(
+                {
+                    str(item["target_id"])
+                    for item in all_unrouted_structural_intersections
+                    if item["runtime_observation"] == "observed"
+                }
+            ),
+            "unrouted_targets_with_dead_code_corroboration": len(
+                {
+                    str(item["target_id"])
+                    for item in all_unrouted_structural_intersections
+                    if item["dead_code_finding_ids"]
+                }
+            ),
+            "unrouted_targets_with_candidate_entry_paths": len(
+                {
+                    str(item["target_id"])
+                    for item in all_unrouted_structural_intersections
+                    if item["candidate_entry_paths"]
+                }
+            ),
+            "unrouted_structural_intersections_with_validation_gaps": sum(
+                item["target_validation"]["assessment_status"] in {"gap", "partial"}
+                for item in all_unrouted_structural_intersections
             ),
             "unrouted_by_applicability_class": {
                 classification: sum(
@@ -1126,7 +1183,8 @@ def build_risk_paths(
             secret_exposure_advisory_intersections
         ),
         "owner_work_queues": owner_work_queues,
-        "unrouted_targets": unrouted[:_MAX_UNROUTED],
+        "unrouted_structural_intersections": unrouted_structural_intersections,
+        "unrouted_targets": retained_unrouted,
         "truncation": {
             "graph_files_omitted": graph_truncated,
             "entry_points_omitted": max(
@@ -1140,6 +1198,11 @@ def build_risk_paths(
             ),
             "routes_omitted": max(0, len(routed) - _MAX_ROUTES),
             "unrouted_targets_omitted": max(0, len(unrouted) - _MAX_UNROUTED),
+            "unrouted_structural_intersections_omitted": max(
+                0,
+                len(all_unrouted_structural_intersections)
+                - len(unrouted_structural_intersections),
+            ),
             "convergence_hotspots_omitted": max(
                 0, len(all_convergence_hotspots) - _MAX_CONVERGENCE_HOTSPOTS
             ),
@@ -1181,6 +1244,7 @@ def build_risk_paths(
             "Finding lifecycle is attributed to a change only when finding-delta evidence proves a comparable approved baseline; default new status without that comparison is reported as not established.",
             "Route ownership applies retained CODEOWNERS-style rules to exact static file paths; a handoff is coordination evidence, not proof of organizational approval, runtime responsibility, or access control.",
             "No bounded route may indicate reflection, registries, dependency injection, generated code, framework dispatch, or an incomplete entry-point model.",
+            "An unrouted-target/structural-island intersection proves only exact retained path or line membership in the island assessment; it does not prove dead code, safety, exploitability, or production inaccessibility, and runtime or boundary counter-evidence must be resolved before removal.",
             "Artifact controls, generated evidence, validation code, and non-Python repository controls are not expected to have production Python routes; that disposition does not suppress, downgrade, validate, or resolve the underlying finding.",
             "Runtime observation proves only that code executed during retained tests; absence of observation does not prove dead code.",
             "Sensitive-data sink surfaces are inventory signals unless a normalized scanner finding establishes a source-to-sink concern.",
@@ -1200,6 +1264,7 @@ def build_risk_paths(
             _GRAPHIFY_REFERENCE,
             _REACHABILITY_REFERENCE,
             _RISK_PATH_REFERENCE,
+            _STRUCTURAL_SYNTHESIS_REFERENCE,
         ],
     }
 
@@ -4033,6 +4098,266 @@ def _route_targets(
     return routed, unrouted
 
 
+def _unrouted_structural_intersections(
+    unrouted: list[dict[str, Any]], structural: Any
+) -> list[dict[str, Any]]:
+    """Join Python route gaps to exact retained structural-island membership."""
+    if not isinstance(structural, dict):
+        return []
+    islands = _objects(structural.get("island_assessments"), 500)
+    boundaries = {
+        str(item.get("island_id")): item
+        for item in _objects(structural.get("island_boundary_assessments"), 500)
+        if item.get("island_id")
+    }
+    result: list[dict[str, Any]] = []
+    for record in unrouted:
+        applicability = _object(record.get("route_applicability"))
+        if applicability.get("assessment") != "route-applicable":
+            continue
+        target = _object(record.get("target"))
+        for island in islands:
+            evidence_basis = _target_island_membership_basis(target, island)
+            if evidence_basis is None:
+                continue
+            boundary = boundaries.get(str(island.get("island_id")), {})
+            result.append(
+                _unrouted_structural_intersection(
+                    record,
+                    target,
+                    island,
+                    boundary,
+                    evidence_basis=evidence_basis,
+                )
+            )
+    return sorted(
+        result,
+        key=lambda item: (
+            _priority_rank(str(item["priority"])),
+            {
+                "static-runtime-model-conflict": 0,
+                "candidate-missing-entry-point": 1,
+                "dormant-risk-review": 2,
+                "attack-surface-retirement-candidate": 3,
+            }.get(str(item["risk_signal"]), 4),
+            str(item["intersection_id"]),
+        ),
+    )
+
+
+def _target_island_membership_basis(
+    target: dict[str, Any], island: dict[str, Any]
+) -> str | None:
+    target_path = _path(target.get("path"))
+    island_paths = {_path(value) for value in _strings(island.get("paths"), 500)}
+    if not target_path or target_path not in island_paths:
+        return None
+    primary_path = _path(island.get("primary_path"))
+    target_line = target.get("line")
+    start = island.get("primary_start_line")
+    end = island.get("primary_end_line")
+    if (
+        target_path == primary_path
+        and isinstance(target_line, int)
+        and isinstance(start, int)
+        and isinstance(end, int)
+    ):
+        if not start <= target_line <= end:
+            return None
+        return "exact-line-island-membership"
+    return "exact-path-island-membership"
+
+
+def _unrouted_structural_intersection(
+    record: dict[str, Any],
+    target: dict[str, Any],
+    island: dict[str, Any],
+    boundary: dict[str, Any],
+    *,
+    evidence_basis: str,
+) -> dict[str, Any]:
+    target_id = str(target.get("id") or "unknown-target")
+    island_id = str(island.get("island_id") or "unknown-island")
+    observation = str(island.get("runtime_observation") or "unknown")
+    boundary_classification = str(
+        boundary.get("boundary_classification") or "not-established"
+    )
+    island_classification = str(island.get("classification") or "orphaned-code-review")
+    dead_code_ids = _strings(island.get("dead_code_finding_ids"), 25)
+    risk_signal, decision, action = _unrouted_structural_decision(
+        observation=observation,
+        boundary_classification=boundary_classification,
+        island_classification=island_classification,
+        island_state=str(island.get("state") or "unknown"),
+        dead_code_corroborated=bool(dead_code_ids),
+    )
+    target_owners = _strings(record.get("owners"), 100)
+    island_owners = _strings(island.get("owners"), 100)
+    validation = _object(record.get("validation"))
+    evidence_artifacts = {
+        "structural-synthesis.json",
+        "reachability.json",
+        *({"graphify.json"} if boundary else set()),
+        *(
+            {"coverage-summary.json"}
+            if island.get("minimum_file_coverage_percent") is not None
+            else set()
+        ),
+        *({"junit-summary.json"} if boundary.get("direct_test_files") else set()),
+    }
+    return {
+        "intersection_id": "unrouted-structural-"
+        + _digest(
+            {
+                "target_id": target_id,
+                "island_id": island_id,
+                "evidence_basis": evidence_basis,
+            }
+        )[:16],
+        "priority": str(record.get("priority") or "P4"),
+        "evidence_basis": evidence_basis,
+        "target_id": target_id,
+        "target_kind": str(target.get("kind") or "unknown"),
+        "target_finding_id": target.get("finding_id"),
+        "path": _path(target.get("path")) or ".",
+        "line": target.get("line") if isinstance(target.get("line"), int) else None,
+        "island_id": island_id,
+        "island_state": str(island.get("state") or "unknown"),
+        "island_classification": island_classification,
+        "island_confidence": str(island.get("confidence") or "unknown"),
+        "island_kind": str(island.get("kind") or "unknown"),
+        "island_lines_of_code": max(0, int(island.get("lines_of_code") or 0)),
+        "runtime_observation": observation,
+        "minimum_file_coverage_percent": island.get("minimum_file_coverage_percent"),
+        "boundary_classification": boundary_classification,
+        "candidate_entry_paths": _strings(boundary.get("candidate_entry_paths"), 25),
+        "direct_test_files": _strings(boundary.get("direct_test_files"), 25),
+        "external_inbound_files": _strings(island.get("external_inbound_files"), 20),
+        "external_outbound_files": _strings(island.get("external_outbound_files"), 20),
+        "dead_code_finding_ids": dead_code_ids,
+        "security_finding_ids": _strings(island.get("security_finding_ids"), 25),
+        "architecture_finding_ids": _strings(island.get("tach_finding_ids"), 25),
+        "target_validation": validation,
+        "target_evidence_assurance": record["evidence_assurance"],
+        "target_owners": target_owners,
+        "island_owners": island_owners,
+        "coordination_owners": sorted({*target_owners, *island_owners})[:100],
+        "risk_signal": risk_signal,
+        "decision": decision,
+        "evidence": _strings(island.get("evidence"), 25),
+        "counter_evidence": _strings(island.get("counter_evidence"), 25),
+        "recommended_action": action,
+        "evidence_artifacts": sorted(evidence_artifacts),
+        "interpretation": (
+            "Exact retained island membership explains a static route gap but does not "
+            "prove dead code, safety, exploitability, or production inaccessibility. "
+            "Runtime observations and boundary references are counter-evidence that "
+            "must be resolved before removal."
+        ),
+    }
+
+
+def _unrouted_structural_decision(
+    *,
+    observation: str,
+    boundary_classification: str,
+    island_classification: str,
+    island_state: str,
+    dead_code_corroborated: bool,
+) -> tuple[str, str, str]:
+    if observation == "observed" or boundary_classification == "runtime-model-gap":
+        return (
+            "static-runtime-model-conflict",
+            "model-runtime-path",
+            "Use the retained runtime observation to model the missing callback, registry, plugin, framework, or generated edge; keep the target actionable until the route model and replacement evidence agree.",
+        )
+    if boundary_classification == "candidate-missing-entry-point":
+        return (
+            "candidate-missing-entry-point",
+            "model-missing-entry-point",
+            "Inspect the cited production inbound paths and add the missing entry point or dynamic edge; if the integration is obsolete, retire it only after owner review and focused regression evidence.",
+        )
+    if boundary_classification == "test-only-or-fixture":
+        return (
+            "test-only-scope-disagreement",
+            "separate-test-scope-or-model-entry",
+            "Confirm the code is intentionally test-only, move it under an explicit test scope when appropriate, or model the missing production root before changing the target's disposition.",
+        )
+    if island_classification == "latent-attack-surface":
+        return (
+            "dormant-risk-review",
+            "remediate-or-retire-dormant-risk",
+            "Treat the finding and dormant capability as one owner decision: remediate it if retained, or remove the capability with focused tests and a clean reachability, structural, and security rescan.",
+        )
+    if (
+        island_state == "disconnected"
+        and dead_code_corroborated
+        and boundary_classification == "closed-boundary"
+    ):
+        return (
+            "attack-surface-retirement-candidate",
+            "evaluate-attack-surface-retirement",
+            "Validate dynamic loading and ownership, then consider removing the closed disconnected capability; require focused tests and a clean reachability, Vulture, Graphify, and security rescan before closure.",
+        )
+    return (
+        "unrouted-structural-review",
+        "resolve-structural-route-disagreement",
+        "Resolve the retained island, boundary, runtime, ownership, and validation evidence before adding an entry point, suppressing the route gap, or removing code.",
+    )
+
+
+def _compact_unrouted_structural_intersection(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: item[key]
+        for key in (
+            "intersection_id",
+            "priority",
+            "evidence_basis",
+            "target_kind",
+            "path",
+            "line",
+            "island_id",
+            "island_state",
+            "island_classification",
+            "island_confidence",
+            "runtime_observation",
+            "minimum_file_coverage_percent",
+            "boundary_classification",
+            "candidate_entry_paths",
+            "direct_test_files",
+            "dead_code_finding_ids",
+            "security_finding_ids",
+            "coordination_owners",
+            "risk_signal",
+            "decision",
+            "recommended_action",
+            "evidence_artifacts",
+            "interpretation",
+        )
+    }
+
+
+def _attach_unrouted_structural_intersections(
+    unrouted: list[dict[str, Any]], intersections: list[dict[str, Any]]
+) -> None:
+    by_target: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for item in intersections:
+        by_target[str(item["target_id"])].append(item)
+    for record in unrouted:
+        target_id = str(_object(record.get("target")).get("id") or "")
+        matches = by_target.get(target_id, [])
+        retained = matches[:_MAX_CONTEXT_UNROUTED_STRUCTURAL_INTERSECTIONS]
+        record["unrouted_structural_intersection_ids"] = [
+            str(item["intersection_id"]) for item in retained
+        ]
+        record["unrouted_structural_intersections"] = [
+            _compact_unrouted_structural_intersection(item) for item in retained
+        ]
+        record["unrouted_structural_intersections_omitted"] = max(
+            0, len(matches) - len(retained)
+        )
+
+
 def _attach_entry_point_exposures(
     routes: list[dict[str, Any]],
     entry_points: list[dict[str, Any]],
@@ -6845,8 +7170,19 @@ def _attach_finding_routes(
             finding.evidence["risk_path"] = {
                 "status": "unrouted",
                 "reason": record["reason"],
+                "runtime_context": record["runtime_context"],
+                "validation": record["validation"],
                 "evidence_assurance": record["evidence_assurance"],
                 "route_applicability": record["route_applicability"],
+                "unrouted_structural_intersection_ids": record[
+                    "unrouted_structural_intersection_ids"
+                ],
+                "unrouted_structural_intersections": record[
+                    "unrouted_structural_intersections"
+                ],
+                "unrouted_structural_intersections_omitted": record[
+                    "unrouted_structural_intersections_omitted"
+                ],
                 "recommended_action": record["recommended_action"],
                 "change_lifecycle_attribution": _object(
                     record.get("change_lifecycle_attribution")
@@ -7010,6 +7346,19 @@ def _add_route_citations(finding: Finding) -> None:
                     uri=uri,
                 )
             )
+    risk_path = _object(finding.evidence.get("risk_path"))
+    if (
+        risk_path.get("unrouted_structural_intersection_ids")
+        and "pysec-unrouted-structural-intersection" not in existing
+    ):
+        finding.citations.append(
+            Citation(
+                kind="supporting_evidence",
+                identifier="pysec-unrouted-structural-intersection",
+                title="Suite exact unrouted-target and structural-island intersection",
+                uri=_STRUCTURAL_SYNTHESIS_REFERENCE,
+            )
+        )
 
 
 def _validation_context(
@@ -7470,6 +7819,8 @@ def _unrouted(target: dict[str, Any], reason: str) -> dict[str, Any]:
         "priority": target["priority"],
         "target": _public_target(target),
         "owners": target["owners"],
+        "runtime_context": target["runtime_context"],
+        "validation": target["validation"],
         "evidence_assurance": target.get(
             "evidence_assurance", _empty_evidence_assurance(target)
         ),
@@ -7481,6 +7832,9 @@ def _unrouted(target: dict[str, Any], reason: str) -> dict[str, Any]:
         ),
         "reason": reason,
         "recommended_action": applicability["recommended_action"],
+        "unrouted_structural_intersection_ids": [],
+        "unrouted_structural_intersections": [],
+        "unrouted_structural_intersections_omitted": 0,
     }
 
 

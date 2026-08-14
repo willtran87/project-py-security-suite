@@ -6,7 +6,7 @@
   "required": [
     "schema_version", "schema_id", "authoritative", "purpose", "summary",
     "evidence_availability", "routes", "convergence_hotspots",
-    "validation_campaigns", "validation_test_hotspots", "exposure_advisory_intersections", "sensitive_data_routes", "secret_provenance_assessments", "secret_exposure_intersections", "secret_exposure_advisory_intersections", "owner_work_queues", "unrouted_targets", "truncation",
+    "validation_campaigns", "validation_test_hotspots", "exposure_advisory_intersections", "sensitive_data_routes", "secret_provenance_assessments", "secret_exposure_intersections", "secret_exposure_advisory_intersections", "owner_work_queues", "unrouted_structural_intersections", "unrouted_targets", "truncation",
     "interpretation_limits", "references"
   ],
   "properties": {
@@ -24,7 +24,12 @@
         "routed_targets", "unrouted_targets", "route_applicable_targets",
         "route_not_applicable_targets", "unrouted_route_applicable_targets",
         "unrouted_expected_non_runtime_targets", "unrouted_targets_missing_graph_membership",
-        "unrouted_targets_without_entry_route", "unrouted_by_applicability_class", "routed_findings",
+        "unrouted_targets_without_entry_route", "unrouted_by_applicability_class",
+        "unrouted_structural_intersections", "unrouted_targets_in_disconnected_islands",
+        "unrouted_targets_with_runtime_counter_evidence",
+        "unrouted_targets_with_dead_code_corroboration",
+        "unrouted_targets_with_candidate_entry_paths",
+        "unrouted_structural_intersections_with_validation_gaps", "routed_findings",
         "routed_sink_surfaces", "routed_dependency_advisory_imports",
         "retained_entry_point_exposures", "routes_with_multiple_entry_points",
         "observed_entry_point_exposures", "unobserved_entry_point_exposures",
@@ -144,6 +149,12 @@
         "unrouted_targets_missing_graph_membership": {"$ref": "#/$defs/count"},
         "unrouted_targets_without_entry_route": {"$ref": "#/$defs/count"},
         "unrouted_by_applicability_class": {"$ref": "#/$defs/routeApplicabilityCounts"},
+        "unrouted_structural_intersections": {"$ref": "#/$defs/count"},
+        "unrouted_targets_in_disconnected_islands": {"$ref": "#/$defs/count"},
+        "unrouted_targets_with_runtime_counter_evidence": {"$ref": "#/$defs/count"},
+        "unrouted_targets_with_dead_code_corroboration": {"$ref": "#/$defs/count"},
+        "unrouted_targets_with_candidate_entry_paths": {"$ref": "#/$defs/count"},
+        "unrouted_structural_intersections_with_validation_gaps": {"$ref": "#/$defs/count"},
         "routed_findings": {"$ref": "#/$defs/count"},
         "routed_sink_surfaces": {"$ref": "#/$defs/count"},
         "routed_dependency_advisory_imports": {"$ref": "#/$defs/count"},
@@ -359,6 +370,11 @@
       "maxItems": 100,
       "items": {"$ref": "#/$defs/ownerQueue"}
     },
+    "unrouted_structural_intersections": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {"$ref": "#/$defs/unroutedStructuralIntersection"}
+    },
     "unrouted_targets": {
       "type": "array",
       "maxItems": 250,
@@ -371,7 +387,7 @@
         "graph_files_omitted", "entry_points_omitted", "targets_omitted",
         "dependency_advisory_import_targets_omitted",
         "entry_point_exposures_omitted",
-        "routes_omitted", "unrouted_targets_omitted",
+        "routes_omitted", "unrouted_targets_omitted", "unrouted_structural_intersections_omitted",
         "convergence_hotspots_omitted", "validation_test_hotspots_omitted", "exposure_advisory_intersections_omitted", "sensitive_data_routes_omitted", "secret_provenance_assessments_omitted", "secret_exposure_intersections_omitted", "secret_exposure_advisory_intersections_omitted",
         "owner_work_queues_omitted"
       ],
@@ -383,6 +399,7 @@
         "entry_point_exposures_omitted": {"$ref": "#/$defs/count"},
         "routes_omitted": {"$ref": "#/$defs/count"},
         "unrouted_targets_omitted": {"$ref": "#/$defs/count"},
+        "unrouted_structural_intersections_omitted": {"$ref": "#/$defs/count"},
         "convergence_hotspots_omitted": {"$ref": "#/$defs/count"},
         "validation_test_hotspots_omitted": {"$ref": "#/$defs/count"},
         "exposure_advisory_intersections_omitted": {"$ref": "#/$defs/count"},
@@ -1775,19 +1792,96 @@
         "recommended_action": {"type": "string", "minLength": 1}
       }
     },
+    "unroutedStructuralIntersectionBase": {
+      "type": "object",
+      "required": [
+        "intersection_id", "priority", "evidence_basis", "target_kind", "path", "line", "island_id",
+        "island_state", "island_classification", "island_confidence",
+        "runtime_observation", "minimum_file_coverage_percent",
+        "boundary_classification", "candidate_entry_paths", "direct_test_files",
+        "dead_code_finding_ids", "security_finding_ids", "coordination_owners",
+        "risk_signal", "decision", "recommended_action", "evidence_artifacts",
+        "interpretation"
+      ],
+      "properties": {
+        "intersection_id": {"type": "string", "pattern": "^unrouted-structural-[0-9a-f]{16}$"},
+        "priority": {"enum": ["P0", "P1", "P2", "P3", "P4"]},
+        "evidence_basis": {"enum": ["exact-line-island-membership", "exact-path-island-membership"]},
+        "target_kind": {"type": "string", "minLength": 1},
+        "path": {"type": "string", "minLength": 1},
+        "line": {"type": ["integer", "null"], "minimum": 1},
+        "island_id": {"type": "string", "minLength": 1},
+        "island_state": {"type": "string", "minLength": 1},
+        "island_classification": {"type": "string", "minLength": 1},
+        "island_confidence": {"type": "string", "minLength": 1},
+        "runtime_observation": {"type": "string", "minLength": 1},
+        "minimum_file_coverage_percent": {"type": ["number", "null"], "minimum": 0, "maximum": 100},
+        "boundary_classification": {"type": "string", "minLength": 1},
+        "candidate_entry_paths": {"type": "array", "maxItems": 25, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "direct_test_files": {"type": "array", "maxItems": 25, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "dead_code_finding_ids": {"type": "array", "maxItems": 25, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "security_finding_ids": {"type": "array", "maxItems": 25, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "coordination_owners": {"type": "array", "maxItems": 100, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "risk_signal": {"enum": ["static-runtime-model-conflict", "candidate-missing-entry-point", "test-only-scope-disagreement", "dormant-risk-review", "attack-surface-retirement-candidate", "unrouted-structural-review"]},
+        "decision": {"enum": ["model-runtime-path", "model-missing-entry-point", "separate-test-scope-or-model-entry", "remediate-or-retire-dormant-risk", "evaluate-attack-surface-retirement", "resolve-structural-route-disagreement"]},
+        "recommended_action": {"type": "string", "minLength": 1},
+        "evidence_artifacts": {"$ref": "#/$defs/strings"},
+        "interpretation": {"type": "string", "minLength": 1}
+      }
+    },
+    "unroutedStructuralIntersectionCompact": {
+      "allOf": [{"$ref": "#/$defs/unroutedStructuralIntersectionBase"}],
+      "unevaluatedProperties": false
+    },
+    "unroutedStructuralIntersection": {
+      "allOf": [
+        {"$ref": "#/$defs/unroutedStructuralIntersectionBase"},
+        {
+          "type": "object",
+          "required": [
+            "target_id", "target_finding_id",
+            "island_kind", "island_lines_of_code", "external_inbound_files",
+            "external_outbound_files", "architecture_finding_ids",
+            "target_validation", "target_evidence_assurance", "target_owners",
+            "island_owners", "evidence", "counter_evidence"
+          ],
+          "properties": {
+            "target_id": {"type": "string", "minLength": 1},
+            "target_finding_id": {"$ref": "#/$defs/nullableString"},
+            "island_kind": {"type": "string", "minLength": 1},
+            "island_lines_of_code": {"$ref": "#/$defs/count"},
+            "external_inbound_files": {"type": "array", "maxItems": 20, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+            "external_outbound_files": {"type": "array", "maxItems": 20, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+            "architecture_finding_ids": {"type": "array", "maxItems": 25, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+            "target_validation": {"$ref": "#/$defs/validation"},
+            "target_evidence_assurance": {"$ref": "#/$defs/evidenceAssurance"},
+            "target_owners": {"type": "array", "maxItems": 100, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+            "island_owners": {"type": "array", "maxItems": 100, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+            "evidence": {"type": "array", "maxItems": 25, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+            "counter_evidence": {"type": "array", "maxItems": 25, "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
     "unrouted": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["priority", "target", "owners", "evidence_assurance", "route_applicability", "reason", "recommended_action"],
+      "required": ["priority", "target", "owners", "runtime_context", "validation", "evidence_assurance", "route_applicability", "reason", "recommended_action", "unrouted_structural_intersection_ids", "unrouted_structural_intersections", "unrouted_structural_intersections_omitted"],
       "properties": {
         "priority": {"enum": ["P0", "P1", "P2", "P3", "P4"]},
         "target": {"$ref": "#/$defs/target"},
         "owners": {"$ref": "#/$defs/strings"},
+        "runtime_context": {"$ref": "#/$defs/runtime"},
+        "validation": {"$ref": "#/$defs/validation"},
         "evidence_assurance": {"$ref": "#/$defs/evidenceAssurance"},
         "route_applicability": {"$ref": "#/$defs/routeApplicability"},
         "change_lifecycle_attribution": {"$ref": "#/$defs/changeLifecycleAttribution"},
         "reason": {"type": "string", "minLength": 1},
-        "recommended_action": {"type": "string", "minLength": 1}
+        "recommended_action": {"type": "string", "minLength": 1},
+        "unrouted_structural_intersection_ids": {"type": "array", "maxItems": 5, "uniqueItems": true, "items": {"type": "string", "pattern": "^unrouted-structural-[0-9a-f]{16}$"}},
+        "unrouted_structural_intersections": {"type": "array", "maxItems": 5, "items": {"$ref": "#/$defs/unroutedStructuralIntersectionCompact"}},
+        "unrouted_structural_intersections_omitted": {"$ref": "#/$defs/count"}
       }
     }
   }

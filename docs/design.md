@@ -377,9 +377,14 @@ comparability to exact lifecycle, changed-line scope, validation, entry-runtime,
 and scanner-assurance evidence. This identifies baseline-new or regressed work
 on changed lines and modified pre-existing debt while failing closed when a
 baseline is absent or incompatible; default `new` never becomes an unsupported
-change-origin claim. Unrouted targets remain explicit
-model gaps; neither a route nor its absence is treated as an exploitability or
-safety verdict. Routes converging on the same non-entry file become bounded
+change-origin claim. Unrouted Python targets are also joined to exact retained
+structural-island path or line membership. Reachability state, Graphify boundary
+edges, candidate entry paths, Vulture corroboration, runtime/coverage
+counter-evidence, focused tests, scanner assurance, and owners then produce a
+bounded model-path, scope-separation, remediate-or-retire, or further-review
+decision. Unrouted targets remain explicit model gaps; neither a route, its
+absence, nor island membership is treated as an exploitability, safety, or
+dead-code verdict. Routes converging on the same non-entry file become bounded
 shared control points with one cross-target validation action. Exact primary
 and alternate-entry file order is joined to retained CODEOWNERS last-match
 rules. This creates stable owner-to-owner boundary records, identifies unowned

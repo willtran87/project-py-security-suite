@@ -706,6 +706,44 @@ gaps, graph-membership gaps, and expected non-runtime targets. A non-route-
 applicable classification changes only the route action; it never suppresses or
 downgrades the underlying finding.
 
+### Unrouted target / structural-island intersections
+
+For route-applicable Python targets only, the suite now joins `unrouted_targets`
+to retained structural-island assessments when the target has exact path
+membership and, when the island supplies a primary line range, the target line
+falls inside that range. It does not join on names, owners, classifications, or
+nearby files. Each bounded `unrouted_structural_intersection` retains:
+
+- island state, classification, confidence, size, and exact membership basis;
+- Graphify boundary classification, concrete candidate entry paths, and direct
+  structural-boundary tests;
+- Vulture dead-code corroboration, security and architecture findings, runtime
+  counter-evidence, and minimum retained file coverage;
+- target validation and scanner-assurance posture; and
+- target/island owners, an explicit decision, evidence artifacts, and a closure
+  action.
+
+```mermaid
+flowchart LR
+    Gap["Route-applicable Python target<br/>without declared-entry route"] --> Exact{"Exact retained island<br/>path or line membership?"}
+    Island["Reachability island + confidence"] --> Exact
+    Boundary["Graphify boundary edges<br/>candidate entries + tests"] --> Decision
+    Counter["Runtime + coverage + Vulture<br/>findings + owners"] --> Decision
+    Exact -->|"No"| Generic["Keep ordinary route-model gap"]
+    Exact -->|"Yes"| Decision{"Resolve evidence"}
+    Decision --> Model["Model runtime or missing entry path"]
+    Decision --> Scope["Separate intentional test-only scope"]
+    Decision --> Retire["Remediate retained capability<br/>or validate removal"]
+```
+
+Runtime observation takes precedence as counter-evidence and requires the
+missing dynamic path to be modeled. Candidate production inbound paths require
+an entry-model decision. A closed disconnected island with Vulture agreement
+may become an attack-surface retirement candidate, but removal still requires
+owner review, focused tests, and clean replacement reachability, Graphify,
+Vulture, and security evidence. The join never proves dead code, safety,
+exploitability, or production inaccessibility.
+
 Inventory-only sink targets are included only when they are production scoped
 and have high review priority, sensitive-data context, a nearby normalized
 finding, or package-risk evidence. This keeps common low-context logging calls
@@ -731,7 +769,9 @@ secret-to-sensitive-sink intersections are retained; each contributing secret
 or sink context embeds at most 25 compact intersection records and reports any
 omission. At most 500 bounded tool-posture records are accepted from the local
 effectiveness artifact; each route retains at most 25 exact contributing-tool
-records.
+records. At most 100 unrouted-target/structural-island intersections are
+retained globally and five compact records per unrouted target; source and
+compound bounds remain referentially closed and omitted counts are explicit.
 
 The current JSON Schema is
 [`risk-paths.schema.json`](../src/py_security_suite/schemas/risk-paths.schema.json).
@@ -748,6 +788,8 @@ inventing a Python entry point.
 
 - Static imports and calls can over-approximate production execution.
 - Dynamic Python behavior can create legitimate paths absent from the graph.
+- Structural-island membership can explain a route gap but does not prove that
+  the target is dead, safe, non-executable, or removable.
 - Artifact, generated-evidence, test, and non-Python dispositions mean a
   production Python route is not expected; they do not mean the finding is safe,
   false, or resolved.

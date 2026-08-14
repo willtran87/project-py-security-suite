@@ -1208,6 +1208,9 @@ def _risk_path_closure_context(
     route_applicability = _closure_route_applicability(
         risk_path.get("route_applicability")
     )
+    unrouted_structural_intersections = _closure_unrouted_structural_intersections(
+        risk_path.get("unrouted_structural_intersections")
+    )
     sensitive_data_route = _closure_sensitive_data_route(
         risk_path.get("sensitive_data_route")
     )
@@ -1217,6 +1220,7 @@ def _risk_path_closure_context(
         "change_lifecycle_attribution": lifecycle_attribution,
         "ownership_context": ownership_context,
         "route_applicability": route_applicability,
+        "unrouted_structural_intersections": unrouted_structural_intersections,
         "sensitive_data_route": sensitive_data_route,
     }
     if evidence_assurance["tool_records"]:
@@ -1228,6 +1232,21 @@ def _risk_path_closure_context(
         refs.extend(_string_values(ownership_context.get("unowned_files"), 225))
     if route_applicability:
         refs.extend(_string_values(route_applicability.get("evidence_artifacts"), 3))
+    if unrouted_structural_intersections:
+        refs.extend(
+            artifact
+            for intersection in unrouted_structural_intersections
+            for artifact in _string_values(intersection.get("evidence_artifacts"), 10)
+        )
+        refs.extend(
+            str(intersection["path"])
+            for intersection in unrouted_structural_intersections
+        )
+        refs.extend(
+            test
+            for intersection in unrouted_structural_intersections
+            for test in _string_values(intersection.get("direct_test_files"), 25)
+        )
     if sensitive_data_route:
         refs.extend(["data-exposure.json", str(sensitive_data_route["path"])])
         refs.extend(
@@ -1354,12 +1373,77 @@ def _risk_path_closure_context(
         refs,
         [
             *_unrouted_route_applicability_acceptance(route_applicability),
+            *_unrouted_structural_acceptance(unrouted_structural_intersections),
             *_evidence_assurance_acceptance(evidence_assurance),
             *_change_lifecycle_acceptance(lifecycle_attribution),
             *_route_ownership_acceptance(ownership_context),
         ],
         details,
     )
+
+
+def _closure_unrouted_structural_intersections(value: Any) -> list[dict[str, Any]]:
+    return [
+        {
+            "intersection_id": str(item.get("intersection_id") or "unknown"),
+            "priority": str(item.get("priority") or "P4"),
+            "evidence_basis": str(item.get("evidence_basis") or "unknown"),
+            "island_id": str(item.get("island_id") or "unknown"),
+            "island_state": str(item.get("island_state") or "unknown"),
+            "island_classification": str(
+                item.get("island_classification") or "unknown"
+            ),
+            "runtime_observation": str(item.get("runtime_observation") or "unknown"),
+            "boundary_classification": str(
+                item.get("boundary_classification") or "not-established"
+            ),
+            "path": str(item.get("path") or "unknown"),
+            "candidate_entry_paths": _string_values(
+                item.get("candidate_entry_paths"), 25
+            ),
+            "direct_test_files": _string_values(item.get("direct_test_files"), 25),
+            "dead_code_finding_ids": _string_values(
+                item.get("dead_code_finding_ids"), 25
+            ),
+            "security_finding_ids": _string_values(
+                item.get("security_finding_ids"), 25
+            ),
+            "coordination_owners": _string_values(item.get("coordination_owners"), 100),
+            "risk_signal": str(item.get("risk_signal") or "unknown"),
+            "decision": str(item.get("decision") or "review"),
+            "recommended_action": str(
+                item.get("recommended_action") or "Review structural evidence."
+            ),
+            "evidence_artifacts": _string_values(item.get("evidence_artifacts"), 10),
+            "interpretation": str(item.get("interpretation") or ""),
+        }
+        for item in _bounded_objects(value, 5)
+    ]
+
+
+def _unrouted_structural_acceptance(values: list[dict[str, Any]]) -> list[str]:
+    if not values:
+        return []
+    result = [
+        "Every exact unrouted-target/structural-island intersection is resolved by modeling the missing production path or by removing the capability with owner approval, focused regression evidence, and a clean replacement reachability, structural, and security scan; island membership alone is not accepted as proof of dead code or safety."
+    ]
+    if any(item["runtime_observation"] == "observed" for item in values):
+        result.append(
+            "Every retained runtime-observed structural conflict has its callback, registry, plugin, framework, generated, or external entry path modeled in the replacement report before any removal decision."
+        )
+    if any(item["candidate_entry_paths"] for item in values):
+        result.append(
+            "Every cited candidate production entry path is dispositioned as an executable/load path, an explicitly governed dynamic boundary, or an obsolete integration removed with focused tests."
+        )
+    if any(item["direct_test_files"] for item in values):
+        result.append(
+            "The cited structural-boundary tests pass against the replacement source revision and retain coverage for the remediated or removed behavior."
+        )
+    if any(not item["coordination_owners"] for item in values):
+        result.append(
+            "An accountable owner is established for every unowned route-gap/island decision before suppression, entry-model expansion, or removal."
+        )
+    return result
 
 
 def _closure_route_applicability(value: Any) -> dict[str, Any]:

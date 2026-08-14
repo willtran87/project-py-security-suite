@@ -145,6 +145,14 @@ distinguishes `test-only-or-fixture`, `candidate-missing-entry-point`,
 `runtime-model-gap`, `closed-boundary`, and `referenced-boundary`. These refine
 triage without overwriting the underlying reachability state.
 
+Risk-route synthesis consumes these retained islands and boundaries for a
+second-order join: an unrouted production Python target receives structural
+context only for exact path membership and, where a primary line range exists,
+exact line containment. This connects candidate entry paths, direct tests,
+Vulture corroboration, runtime and coverage counter-evidence, findings, and
+owners to the route-gap decision. The bounded risk-path ledger remains
+referentially closed and does not reinterpret an island as proof of dead code.
+
 ## Report contract and limits
 
 The current artifact uses bundled JSON Schema `structural-synthesis-1.2`; the

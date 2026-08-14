@@ -20,6 +20,7 @@ from py_security_suite.models import (
 )
 from py_security_suite.report_inspection import read_bundled_schema
 from py_security_suite.reports import (
+    _html_unrouted_structural_summary,
     _html_risk_path_context,
     _html_secret_provenance_context,
     _markdown_risk_path_context,
@@ -2534,6 +2535,329 @@ class RiskPathTests(unittest.TestCase):
         Draft202012Validator(
             json.loads(read_bundled_schema("risk-paths-1.0"))
         ).validate(result)
+
+    def test_unrouted_python_target_joins_exact_structural_island_evidence(
+        self,
+    ) -> None:
+        finding = _finding("src/dynamic_plugin.py", 14)
+        finding.evidence["owners"] = ["@plugin-security"]
+        finding.evidence["fusion"] = {
+            "review_tier": "elevated",
+            "review_reasons": ["finding line lacks retained test coverage"],
+            "source_context": {
+                "changed_line": True,
+                "line_covered": False,
+                "coverage_percent": 40.0,
+                "reachability_states": ["disconnected"],
+                "runtime_observations": ["not-observed"],
+            },
+        }
+        finding.evidence["structural_synthesis"] = {
+            "change_impact": {
+                "direct_test_files": ["tests/test_dynamic_plugin.py"],
+                "focused_test_validation_status": "passed",
+                "test_coverage_alignment": "coverage-gap",
+                "validation_gap_reasons": ["The finding line is uncovered."],
+                "validation_action": "Cover the changed plugin path.",
+            }
+        }
+        artifacts = _artifacts()
+        artifacts["source-inventory.json"]["files"].extend(
+            [
+                {
+                    "path": "src/dynamic_plugin.py",
+                    "sha256": "1" * 64,
+                    "size_bytes": 100,
+                },
+                {
+                    "path": "src/plugin_registry.py",
+                    "sha256": "2" * 64,
+                    "size_bytes": 100,
+                },
+                {
+                    "path": "tests/test_dynamic_plugin.py",
+                    "sha256": "3" * 64,
+                    "size_bytes": 100,
+                },
+            ]
+        )
+        artifacts["graphify.json"]["topology"]["file_edges"].extend(
+            [
+                {
+                    "source": "src/plugin_registry.py",
+                    "target": "src/dynamic_plugin.py",
+                    "relation": "references",
+                },
+                {
+                    "source": "tests/test_dynamic_plugin.py",
+                    "target": "src/dynamic_plugin.py",
+                    "relation": "calls",
+                },
+            ]
+        )
+        artifacts["coverage-summary.json"]["files"].append(
+            {
+                "path": "src/dynamic_plugin.py",
+                "missing_lines": [14],
+                "summary": {"percent_covered": 40.0},
+            }
+        )
+        structural = artifacts["structural-synthesis.json"]
+        structural["island_assessments"] = [
+            {
+                "island_id": "island-dynamic-plugin",
+                "classification": "latent-attack-surface",
+                "priority": "high",
+                "impact_score": 85,
+                "state": "disconnected",
+                "confidence": "high",
+                "kind": "symbol",
+                "lines_of_code": 180,
+                "paths": ["src/dynamic_plugin.py"],
+                "primary_path": "src/dynamic_plugin.py",
+                "primary_start_line": 10,
+                "primary_end_line": 40,
+                "runtime_observation": "not-observed",
+                "reportable": True,
+                "external_inbound_files": [
+                    "src/plugin_registry.py",
+                    "tests/test_dynamic_plugin.py",
+                ],
+                "external_outbound_files": [],
+                "security_finding_ids": [finding.finding_id],
+                "dead_code_finding_ids": ["VULTURE-PLUGIN"],
+                "tach_finding_ids": ["TACH-PLUGIN"],
+                "all_finding_ids": [finding.finding_id, "VULTURE-PLUGIN"],
+                "owners": ["@plugin-platform"],
+                "minimum_file_coverage_percent": 40.0,
+                "maximum_complexity": 22,
+                "evidence": [
+                    "security findings occur inside the island",
+                    "Vulture dead-code candidates occur inside the island",
+                ],
+                "counter_evidence": ["Graphify found cross-island references"],
+                "recommended_action": "Resolve the dormant capability.",
+            }
+        ]
+        structural["island_boundary_assessments"] = [
+            {
+                "island_id": "island-dynamic-plugin",
+                "boundary_classification": "candidate-missing-entry-point",
+                "paths": ["src/dynamic_plugin.py"],
+                "inbound_edges": [],
+                "outbound_edges": [],
+                "candidate_entry_paths": ["src/plugin_registry.py"],
+                "direct_test_files": ["tests/test_dynamic_plugin.py"],
+                "boundary_relation_count": 2,
+                "recommended_action": "Model the plugin registry.",
+            }
+        ]
+
+        result = build_risk_paths([finding], artifacts)
+
+        self.assertEqual(result["summary"]["unrouted_structural_intersections"], 1)
+        self.assertEqual(
+            result["summary"]["unrouted_targets_in_disconnected_islands"], 1
+        )
+        self.assertEqual(
+            result["summary"]["unrouted_targets_with_dead_code_corroboration"], 1
+        )
+        self.assertEqual(
+            result["summary"]["unrouted_targets_with_candidate_entry_paths"], 1
+        )
+        self.assertEqual(
+            result["summary"]["unrouted_structural_intersections_with_validation_gaps"],
+            1,
+        )
+        intersection = result["unrouted_structural_intersections"][0]
+        self.assertEqual(intersection["evidence_basis"], "exact-line-island-membership")
+        self.assertEqual(intersection["target_id"], finding.finding_id)
+        self.assertEqual(intersection["island_id"], "island-dynamic-plugin")
+        self.assertEqual(intersection["risk_signal"], "candidate-missing-entry-point")
+        self.assertEqual(intersection["decision"], "model-missing-entry-point")
+        self.assertEqual(
+            intersection["candidate_entry_paths"], ["src/plugin_registry.py"]
+        )
+        self.assertEqual(
+            intersection["direct_test_files"], ["tests/test_dynamic_plugin.py"]
+        )
+        self.assertEqual(
+            intersection["coordination_owners"],
+            ["@plugin-platform", "@plugin-security"],
+        )
+        self.assertEqual(intersection["target_validation"]["assessment_status"], "gap")
+        record = next(
+            item
+            for item in result["unrouted_targets"]
+            if item["target"].get("finding_id") == finding.finding_id
+        )
+        self.assertEqual(
+            record["unrouted_structural_intersection_ids"],
+            [intersection["intersection_id"]],
+        )
+        self.assertEqual(
+            finding.evidence["risk_path"]["unrouted_structural_intersection_ids"],
+            [intersection["intersection_id"]],
+        )
+        self.assertIn(
+            "pysec-unrouted-structural-intersection",
+            {citation.identifier for citation in finding.citations},
+        )
+        rendered = "\n".join(_render_risk_path_summary(result))
+        self.assertIn("Unrouted target / structural-island decisions", rendered)
+        self.assertIn("model-missing-entry-point", rendered)
+        markdown = "\n".join(_markdown_risk_path_context(finding))
+        self.assertIn("Structural cross-reference", markdown)
+        self.assertIn("candidate-missing-entry-point", markdown)
+        self.assertIn("does not prove dead code", markdown)
+        html = _html_risk_path_context(finding)
+        self.assertIn("Structural cross-reference", html)
+        html_summary = _html_unrouted_structural_summary(result)
+        self.assertIn("Unrouted target / structural-island decisions", html_summary)
+        self.assertIn("model-missing-entry-point", html_summary)
+        self.assertIn("src/plugin_registry.py", html_summary)
+        closure = _finding_items([json_ready(finding)])[0]
+        closure_intersection = closure["details"]["risk_path"][
+            "unrouted_structural_intersections"
+        ][0]
+        self.assertEqual(closure_intersection["decision"], "model-missing-entry-point")
+        self.assertTrue(
+            any(
+                "structural-island intersection" in criterion
+                for criterion in closure["acceptance_criteria"]
+            )
+        )
+        sarif = render_sarif([finding])
+        sarif_context = sarif["runs"][0]["results"][0]["properties"]["risk_path"]
+        self.assertEqual(
+            sarif_context["unrouted_structural_intersection_ids"],
+            [intersection["intersection_id"]],
+        )
+        Draft202012Validator(
+            json.loads(read_bundled_schema("risk-paths-1.0"))
+        ).validate(result)
+
+    def test_unrouted_structural_bound_is_explicit_and_referentially_closed(
+        self,
+    ) -> None:
+        finding = _finding("src/dynamic_plugin.py", 14)
+        artifacts = _artifacts()
+        artifacts["source-inventory.json"]["files"].append(
+            {
+                "path": "src/dynamic_plugin.py",
+                "sha256": "1" * 64,
+                "size_bytes": 100,
+            }
+        )
+        artifacts["graphify.json"]["topology"]["file_edges"].append(
+            {
+                "source": "src/plugin_registry.py",
+                "target": "src/dynamic_plugin.py",
+                "relation": "references",
+            }
+        )
+        artifacts["structural-synthesis.json"]["island_assessments"] = [
+            {
+                "island_id": "island-dynamic-plugin",
+                "classification": "orphaned-code-review",
+                "state": "disconnected",
+                "confidence": "medium",
+                "kind": "module",
+                "lines_of_code": 120,
+                "paths": ["src/dynamic_plugin.py"],
+                "primary_path": "src/dynamic_plugin.py",
+                "primary_start_line": 1,
+                "primary_end_line": 30,
+                "runtime_observation": "not-observed",
+                "external_inbound_files": ["src/plugin_registry.py"],
+                "external_outbound_files": [],
+                "security_finding_ids": [finding.finding_id],
+                "dead_code_finding_ids": [],
+                "tach_finding_ids": [],
+                "owners": [],
+                "minimum_file_coverage_percent": None,
+                "evidence": [],
+                "counter_evidence": [],
+            }
+        ]
+        artifacts["structural-synthesis.json"]["island_boundary_assessments"] = []
+
+        with patch(
+            "py_security_suite.risk_paths._MAX_UNROUTED_STRUCTURAL_INTERSECTIONS",
+            0,
+        ):
+            result = build_risk_paths([finding], artifacts)
+
+        self.assertEqual(result["summary"]["unrouted_structural_intersections"], 1)
+        self.assertEqual(result["unrouted_structural_intersections"], [])
+        self.assertEqual(
+            result["truncation"]["unrouted_structural_intersections_omitted"], 1
+        )
+        record = next(
+            item
+            for item in result["unrouted_targets"]
+            if item["target"].get("finding_id") == finding.finding_id
+        )
+        self.assertEqual(record["unrouted_structural_intersection_ids"], [])
+        self.assertEqual(record["unrouted_structural_intersections"], [])
+        Draft202012Validator(
+            json.loads(read_bundled_schema("risk-paths-1.0"))
+        ).validate(result)
+
+    def test_unrouted_structural_join_rejects_same_file_outside_symbol_range(
+        self,
+    ) -> None:
+        finding = _finding("src/dynamic_plugin.py", 80)
+        artifacts = _artifacts()
+        artifacts["source-inventory.json"]["files"].append(
+            {
+                "path": "src/dynamic_plugin.py",
+                "sha256": "1" * 64,
+                "size_bytes": 100,
+            }
+        )
+        artifacts["graphify.json"]["topology"]["file_edges"].append(
+            {
+                "source": "src/plugin_registry.py",
+                "target": "src/dynamic_plugin.py",
+                "relation": "references",
+            }
+        )
+        artifacts["structural-synthesis.json"]["island_assessments"] = [
+            {
+                "island_id": "island-other-symbol",
+                "classification": "orphaned-code-review",
+                "state": "disconnected",
+                "confidence": "medium",
+                "kind": "symbol",
+                "lines_of_code": 20,
+                "paths": ["src/dynamic_plugin.py"],
+                "primary_path": "src/dynamic_plugin.py",
+                "primary_start_line": 10,
+                "primary_end_line": 30,
+                "runtime_observation": "not-observed",
+                "external_inbound_files": [],
+                "external_outbound_files": [],
+                "security_finding_ids": [],
+                "dead_code_finding_ids": [],
+                "tach_finding_ids": [],
+                "owners": [],
+                "minimum_file_coverage_percent": None,
+                "evidence": [],
+                "counter_evidence": [],
+            }
+        ]
+
+        result = build_risk_paths([finding], artifacts)
+
+        self.assertEqual(result["summary"]["unrouted_structural_intersections"], 0)
+        self.assertEqual(result["unrouted_structural_intersections"], [])
+        record = next(
+            item
+            for item in result["unrouted_targets"]
+            if item["target"].get("finding_id") == finding.finding_id
+        )
+        self.assertEqual(record["unrouted_structural_intersection_ids"], [])
 
     def test_dependency_import_target_bound_reports_exact_omissions(self) -> None:
         artifacts = _artifacts()
