@@ -176,6 +176,22 @@ OpenTelemetry guidance by sink family. Citation coverage and gaps remain visible
 in summaries and closure work; a citation supports classification or remediation
 and does not prove the route.
 
+Production-source secret candidates are also compared with the retained sink
+routes. Exact-file and bounded upstream Graphify-route matches become
+`secret_exposure_intersections` carrying candidate verification/history,
+file-hop distance, sink protection, validation, scanner assurance, owners, and
+citations. These intersections prioritize protected symbol-level review and
+synthetic credential-canary tests; they are not taint, runtime, or disclosure
+proof and never retain the candidate value.
+
+Each sensitive route and resulting intersection also carries a validation
+handoff assembled from linked validation campaigns: Graphify-selected or
+route-mapped tests, retained case execution, aggregate coverage, source-revision
+binding, scanner assurance, shared-test quality/findings, and ownership. The
+handoff is supporting evidence only. It does not prove that those tests exercise
+the candidate assignment, attribute aggregate coverage to a test, or establish
+the required synthetic credential-canary assertion.
+
 When structural synthesis is available, the same record contributes its
 change-risk score and classification, exact graph-selected test files, test
 selection confidence, and island or import-cycle identifiers. CODEOWNERS-derived

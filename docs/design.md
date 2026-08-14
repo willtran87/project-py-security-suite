@@ -851,7 +851,29 @@ flowchart LR
     Join --> Ledger["Bounded secret provenance ledger"]
     Ledger --> Reports["Finding cards + SARIF"]
     Ledger --> Actions["Lane-specific closure work"]
+    Sensitive["Sensitive-data sink routes"] --> Intersect{"Exact path or bounded route member?"}
+    Ledger --> Intersect
+    Intersect --> Compound["Secret-to-sink review intersections"]
+    Campaign["Validation campaigns<br/>tests + execution + coverage"] --> Handoff["Source-bound validation handoff"]
+    Quality["Scanner assurance + shared-test quality"] --> Handoff
+    Compound --> Handoff
+    Compound --> Reports
+    Handoff --> Reports
+    Handoff --> Actions
 ```
+
+The compound intersection is emitted only for production-source candidates in
+the exact sink file or on the ordered Graphify file route to that sink. It
+preserves file-hop distance, history/current-tree alignment, protection,
+validation, scanner assurance, and owners. It remains static co-location
+evidence: symbol-level value flow, credential validity, runtime execution, and
+disclosure require separate proof.
+
+The handoff cross-references Graphify-selected or route-mapped candidate tests
+with retained JUnit execution, aggregate coverage, producer-verified source
+binding, route-scanner assurance, shared-test findings, and ownership. It fails
+closed on gaps and deliberately reports canary validation as not established;
+candidate test proximity is not evidence that a secret assignment was exercised.
 
 ## Configuration and policy ownership
 

@@ -1968,6 +1968,247 @@ class RiskPathTests(unittest.TestCase):
             result["truncation"]["secret_provenance_assessments_omitted"], 1
         )
 
+    def test_secret_candidates_intersect_exact_and_upstream_sensitive_routes(
+        self,
+    ) -> None:
+        upstream = _secret_finding(
+            "PYSEC-SECRET-UPSTREAM",
+            "src/service.py",
+            7,
+            tool="gitleaks",
+            native_severity="secret",
+            evidence={"redacted": True, "scan_mode": "git", "commit": "b" * 40},
+        )
+        upstream.evidence["owners"] = ["@service-owner"]
+        exact = _secret_finding(
+            "PYSEC-SECRET-EXACT",
+            "src/sink.py",
+            5,
+            tool="trufflehog",
+            native_severity="verified",
+            evidence={"redacted": True, "verified": True},
+        )
+        exact.evidence["owners"] = ["@credential-owner"]
+        exposure = _finding("src/sink.py", 9)
+        exposure.evidence["owners"] = ["@observability"]
+        exposure.evidence["data_exposure"] = {
+            "concern": "credential-in-telemetry",
+            "sink_family": "telemetry",
+            "sink": "telemetry.emit",
+            "sdk": "opentelemetry",
+            "confidence": "high",
+            "data_classes": ["credential"],
+            "trust_boundary": "external-observability",
+            "protection_status": "not-observed",
+            "risk_factors": ["credential-material"],
+            "review_priority": "high",
+        }
+        exposure.citations.append(
+            Citation(
+                kind="standard",
+                identifier="CWE-201",
+                title="Insertion of Sensitive Information Into Sent Data",
+                uri="https://cwe.mitre.org/data/definitions/201.html",
+            )
+        )
+        artifacts = _artifacts()
+        artifacts["effectiveness.json"]["tool_posture"].extend(
+            [
+                _tool_posture("gitleaks", "source-security"),
+                _tool_posture("trufflehog", "source-security"),
+            ]
+        )
+
+        result = build_risk_paths([upstream, exact, exposure], artifacts)
+
+        summary = result["summary"]
+        self.assertEqual(summary["secret_exposure_intersections"], 4)
+        self.assertEqual(summary["exact_path_secret_exposure_intersections"], 2)
+        self.assertEqual(summary["upstream_route_secret_exposure_intersections"], 2)
+        self.assertEqual(summary["verified_secret_exposure_intersections"], 2)
+        self.assertEqual(summary["history_secret_exposure_intersections"], 2)
+        self.assertEqual(summary["unprotected_secret_exposure_intersections"], 4)
+        self.assertEqual(summary["scanner_confirmed_secret_exposure_intersections"], 2)
+        self.assertEqual(
+            summary["secret_exposure_intersections_with_assurance_gaps"], 4
+        )
+        self.assertEqual(
+            summary["secret_exposure_intersections_with_candidate_tests"], 4
+        )
+        self.assertEqual(
+            summary["secret_exposure_intersections_without_candidate_tests"], 0
+        )
+        self.assertEqual(
+            summary["secret_exposure_intersections_with_validation_evidence_gaps"],
+            4,
+        )
+        self.assertEqual(summary["secret_exposure_intersections_with_revision_gaps"], 4)
+        self.assertEqual(summary["secret_exposure_intersections_with_failing_tests"], 0)
+        self.assertEqual(
+            summary["secret_exposure_intersections_with_assurance_prerequisite_gaps"],
+            4,
+        )
+        self.assertEqual(
+            summary["secret_exposure_intersections_without_canary_validation"], 4
+        )
+        self.assertEqual(
+            result["truncation"]["secret_exposure_intersections_omitted"], 0
+        )
+        intersections = result["secret_exposure_intersections"]
+        self.assertEqual(len(intersections), 4)
+        by_pair = {
+            (item["secret_finding_id"], item["sensitive_evidence_basis"]): item
+            for item in intersections
+        }
+        upstream_confirmed = by_pair[
+            ("PYSEC-SECRET-UPSTREAM", "scanner-confirmed-source-to-sink")
+        ]
+        self.assertEqual(upstream_confirmed["association_kind"], "upstream-route")
+        self.assertEqual(upstream_confirmed["distance_to_sink"], 1)
+        self.assertEqual(
+            upstream_confirmed["route_files"],
+            ["src/cli.py", "src/service.py", "src/sink.py"],
+        )
+        self.assertEqual(
+            upstream_confirmed["temporal_alignment"], "history-to-current-route"
+        )
+        handoff = upstream_confirmed["validation_handoff"]
+        self.assertEqual(handoff["supporting_evidence_readiness"], "evidence-gap")
+        self.assertEqual(handoff["canary_assertion_status"], "not-established")
+        self.assertEqual(handoff["candidate_test_files"], ["tests/test_sink.py"])
+        self.assertEqual(handoff["focused_test_statuses"], ["passed"])
+        self.assertEqual(handoff["coverage_statuses"], ["covered", "gap"])
+        self.assertIn("coverage-gap", handoff["test_coverage_alignments"])
+        self.assertEqual(handoff["source_revision_bindings"], ["not-established"])
+        self.assertFalse(handoff["source_revision_aligned"])
+        self.assertTrue(handoff["campaign_assurance_prerequisite_met"])
+        self.assertFalse(upstream_confirmed["combined_assurance_prerequisite_met"])
+        self.assertEqual(
+            upstream_confirmed["canary_validation_status"], "not-established"
+        )
+        self.assertEqual(
+            upstream_confirmed["recommended_test_files"], ["tests/test_sink.py"]
+        )
+        self.assertEqual(upstream_confirmed["trust_boundary"], "external-observability")
+        self.assertIn(
+            "CWE-201", {item["identifier"] for item in upstream_confirmed["citations"]}
+        )
+        exact_inventory = by_pair[("PYSEC-SECRET-EXACT", "inventory-review-surface")]
+        self.assertEqual(exact_inventory["association_kind"], "exact-path")
+        self.assertEqual(exact_inventory["distance_to_sink"], 0)
+        self.assertEqual(exact_inventory["secret_verification_status"], "verified")
+        self.assertIn("rotate", exact_inventory["recommended_action"].casefold())
+        upstream_context = upstream.evidence["secret_provenance"]
+        self.assertEqual(len(upstream_context["secret_exposure_intersection_ids"]), 2)
+        self.assertEqual(len(upstream_context["secret_exposure_intersections"]), 2)
+        self.assertTrue(
+            any(
+                citation.identifier == "pysec-secret-exposure-route"
+                for citation in upstream.citations
+            )
+        )
+        sensitive_routes = result["sensitive_data_routes"]
+        self.assertTrue(
+            all(
+                len(item["secret_exposure_intersection_ids"]) == 2
+                for item in sensitive_routes
+            )
+        )
+        rendered = "\n".join(_render_risk_path_summary(result))
+        self.assertIn("Secret-to-sensitive-sink route intersections", rendered)
+        self.assertIn("external-observability", rendered)
+        self.assertIn("not symbol-level taint proof", rendered)
+        self.assertIn("Secret intersections with / without candidate tests", rendered)
+        self.assertIn("handoff `evidence-gap`", rendered)
+        self.assertIn("tests/test_sink.py", rendered)
+        markdown = "\n".join(_markdown_secret_provenance_context(upstream))
+        self.assertIn("Secret-to-sensitive-sink intersection", markdown)
+        self.assertIn("does not prove value flow", markdown)
+        self.assertIn("validation handoff `evidence-gap`", markdown)
+        self.assertIn("candidate tests `tests/test_sink.py`", markdown)
+        html = _html_secret_provenance_context(upstream)
+        self.assertIn("Secret-to-sensitive-sink intersections", html)
+        self.assertIn("validation handoff <code>evidence-gap</code>", html)
+        sarif = render_sarif([upstream])
+        sarif_secret = sarif["runs"][0]["results"][0]["properties"]["secret_provenance"]
+        self.assertEqual(len(sarif_secret["secret_exposure_intersections"]), 2)
+        closure = _finding_items([json_ready(upstream)])[0]
+        closure_secret = closure["details"]["secret_provenance"]
+        self.assertEqual(len(closure_secret["secret_exposure_intersections"]), 2)
+        closure_intersection = closure_secret["secret_exposure_intersections"][0]
+        self.assertEqual(
+            closure_intersection["validation_handoff"]["candidate_test_files"],
+            ["tests/test_sink.py"],
+        )
+        self.assertFalse(closure_intersection["combined_assurance_prerequisite_met"])
+        self.assertEqual(
+            closure_intersection["canary_validation_status"], "not-established"
+        )
+        self.assertTrue(
+            any(
+                "symbol-level review" in criterion
+                for criterion in closure["acceptance_criteria"]
+            )
+        )
+        self.assertTrue(
+            any(
+                "revision-aligned" in criterion
+                for criterion in closure["acceptance_criteria"]
+            )
+        )
+        self.assertTrue(
+            any(
+                "cryptographically bound" in criterion
+                for criterion in closure["acceptance_criteria"]
+            )
+        )
+        self.assertTrue(
+            any(
+                "validation handoff" in criterion
+                for criterion in closure["acceptance_criteria"]
+            )
+        )
+        self.assertNotIn("must-not-be-retained", json.dumps(json_ready(result)))
+        Draft202012Validator(
+            json.loads(read_bundled_schema("risk-paths-1.0"))
+        ).validate(result)
+
+    def test_secret_exposure_intersection_bound_is_explicit(self) -> None:
+        secret = _secret_finding(
+            "PYSEC-SECRET-BOUND",
+            "src/sink.py",
+            5,
+            tool="detect-secrets",
+            native_severity="potential-secret",
+            evidence={"redacted": True},
+        )
+        exposure = _finding("src/sink.py", 9)
+        exposure.evidence["data_exposure"] = {
+            "sink_family": "telemetry",
+            "trust_boundary": "external-observability",
+            "protection_status": "not-observed",
+            "data_classes": ["credential"],
+        }
+
+        with patch(
+            "py_security_suite.risk_paths._MAX_SECRET_EXPOSURE_INTERSECTIONS", 1
+        ):
+            result = build_risk_paths([secret, exposure], _artifacts())
+
+        self.assertEqual(result["summary"]["secret_exposure_intersections"], 2)
+        self.assertEqual(len(result["secret_exposure_intersections"]), 1)
+        self.assertEqual(
+            result["truncation"]["secret_exposure_intersections_omitted"], 1
+        )
+        self.assertEqual(
+            len(
+                result["secret_provenance_assessments"][0][
+                    "secret_exposure_intersection_ids"
+                ]
+            ),
+            1,
+        )
+
     def test_exposure_advisory_intersection_requires_exact_path_and_package(
         self,
     ) -> None:

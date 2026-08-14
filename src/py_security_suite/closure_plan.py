@@ -547,6 +547,15 @@ def _closure_secret_provenance(value: Any) -> dict[str, Any]:
         "graph_path_member": item.get("graph_path_member"),
         "artifact_manifest_member": item.get("artifact_manifest_member"),
         "owners": _string_values(item.get("owners"), 100),
+        "secret_exposure_intersection_ids": _string_values(
+            item.get("secret_exposure_intersection_ids"), 100
+        ),
+        "secret_exposure_intersections": _closure_secret_exposure_intersections(
+            item.get("secret_exposure_intersections")
+        ),
+        "secret_exposure_intersections_omitted": int(
+            item.get("secret_exposure_intersections_omitted") or 0
+        ),
         "citations": _closure_citations(item.get("citations")),
         "evidence_artifacts": _string_values(item.get("evidence_artifacts"), 25),
         "recommended_action": str(
@@ -596,7 +605,213 @@ def _secret_provenance_closure_context(
         acceptance.append(
             "Every report and export path is verified to redact secret material before artifacts leave the protected boundary."
         )
-    return _string_values(item.get("evidence_artifacts"), 25), acceptance
+    intersections = _bounded_objects(item.get("secret_exposure_intersections"), 25)
+    if intersections:
+        acceptance.extend(
+            [
+                "Each retained secret-to-sensitive-sink intersection has a symbol-level review that either proves and remediates the value flow or records bounded counter-evidence; file-route co-location alone is not used as a disclosure claim.",
+                "Synthetic-canary tests prove credential-shaped values are minimized, masked, or rejected before every cited sink boundary, and the newly sealed report retains the resulting validation evidence.",
+            ]
+        )
+        if any(
+            str(candidate.get("temporal_alignment")) == "history-to-current-route"
+            for candidate in intersections
+        ):
+            acceptance.append(
+                "Historical candidate and current sink evidence are revision-aligned before they are related; reachable history is remediated when the candidate was real."
+            )
+        if any(
+            str(candidate.get("secret_assurance_status")) != "assured"
+            or str(candidate.get("sensitive_assurance_status")) != "assured"
+            for candidate in intersections
+        ):
+            acceptance.append(
+                "Contributing secret and sensitive-sink scanners complete with approved, integrity-verified evidence or a governed assurance limitation remains explicit."
+            )
+        if any(
+            _as_object(candidate.get("validation_handoff")).get(
+                "source_revision_aligned"
+            )
+            is not True
+            for candidate in intersections
+        ):
+            acceptance.append(
+                "Candidate sink tests, coverage, and scanner evidence are regenerated against and cryptographically bound to the replacement source revision before they are accepted as supporting evidence."
+            )
+        if any(
+            candidate.get("combined_assurance_prerequisite_met") is not True
+            for candidate in intersections
+        ):
+            acceptance.append(
+                "Secret, sink, and linked campaign evidence all meet completed, integrity-verified, organization-approved assurance prerequisites before the validation handoff is used for closure."
+            )
+        if any(
+            _as_object(candidate.get("validation_handoff")).get("test_file_finding_ids")
+            for candidate in intersections
+        ):
+            acceptance.append(
+                "Active findings in every candidate validation-test file are resolved or governed before its assertions are trusted as closure evidence."
+            )
+        if any(
+            _as_object(candidate.get("validation_handoff")).get(
+                "cross_owner_test_files"
+            )
+            or _as_object(candidate.get("validation_handoff")).get("unowned_test_files")
+            for candidate in intersections
+        ):
+            acceptance.append(
+                "Candidate validation tests have accountable ownership and coordinated review across secret, sink, and test owners."
+            )
+    references = {
+        *_string_values(item.get("evidence_artifacts"), 25),
+        *(
+            reference
+            for candidate in intersections
+            for reference in _string_values(candidate.get("evidence_artifacts"), 25)
+        ),
+    }
+    return sorted(references), acceptance
+
+
+def _closure_secret_exposure_intersections(value: Any) -> list[dict[str, Any]]:
+    result: list[dict[str, Any]] = []
+    for item in _bounded_objects(value, 25):
+        result.append(
+            {
+                "intersection_id": str(item.get("intersection_id") or "unknown"),
+                "priority": str(item.get("priority") or "P4"),
+                "association_kind": str(item.get("association_kind") or "unknown"),
+                "temporal_alignment": str(
+                    item.get("temporal_alignment") or "not-established"
+                ),
+                "secret_path": str(item.get("secret_path") or "unknown"),
+                "secret_line": item.get("secret_line"),
+                "secret_verification_status": str(
+                    item.get("secret_verification_status") or "not-established"
+                ),
+                "secret_assurance_status": str(
+                    item.get("secret_assurance_status") or "not-assessed"
+                ),
+                "sensitive_route_id": str(item.get("sensitive_route_id") or "unknown"),
+                "sink_path": str(item.get("sink_path") or "unknown"),
+                "sink_line": item.get("sink_line"),
+                "sink_family": str(item.get("sink_family") or "unknown"),
+                "trust_boundary": str(item.get("trust_boundary") or "unknown"),
+                "protection_status": str(item.get("protection_status") or "unknown"),
+                "sensitive_assurance_status": str(
+                    item.get("sensitive_assurance_status") or "not-assessed"
+                ),
+                "validation_status": str(
+                    item.get("validation_status") or "not-assessed"
+                ),
+                "validation_handoff": _closure_sensitive_validation_handoff(
+                    item.get("validation_handoff")
+                ),
+                "combined_assurance_prerequisite_met": item.get(
+                    "combined_assurance_prerequisite_met"
+                )
+                is True,
+                "canary_validation_status": str(
+                    item.get("canary_validation_status") or "not-established"
+                ),
+                "recommended_test_files": _string_values(
+                    item.get("recommended_test_files"), 50
+                ),
+                "intersection_validation_gap_reasons": _string_values(
+                    item.get("intersection_validation_gap_reasons"), 25
+                ),
+                "distance_to_sink": int(item.get("distance_to_sink") or 0),
+                "owners": _string_values(item.get("owners"), 100),
+                "finding_ids": _string_values(item.get("finding_ids"), 100),
+                "risk_factors": _string_values(item.get("risk_factors"), 25),
+                "citations": _closure_citations(item.get("citations")),
+                "evidence_artifacts": _string_values(
+                    item.get("evidence_artifacts"), 25
+                ),
+                "recommended_action": str(
+                    item.get("recommended_action") or "Trace and protect the route."
+                ),
+                "interpretation": str(item.get("interpretation") or ""),
+            }
+        )
+    return result
+
+
+def _closure_sensitive_validation_handoff(value: Any) -> dict[str, Any]:
+    handoff = _as_object(value)
+    if not handoff:
+        return {}
+    return {
+        "supporting_evidence_readiness": str(
+            handoff.get("supporting_evidence_readiness") or "not-established"
+        ),
+        "canary_assertion_status": str(
+            handoff.get("canary_assertion_status") or "not-established"
+        ),
+        "route_validation_status": str(
+            handoff.get("route_validation_status") or "not-assessed"
+        ),
+        "campaign_ids": _string_values(handoff.get("campaign_ids"), 50),
+        "campaigns_omitted": _nonnegative_integer(handoff.get("campaigns_omitted")),
+        "campaign_records": _bounded_objects(handoff.get("campaign_records"), 25),
+        "test_hotspot_ids": _string_values(handoff.get("test_hotspot_ids"), 100),
+        "candidate_test_files": _string_values(handoff.get("candidate_test_files"), 50),
+        "candidate_test_files_omitted": _nonnegative_integer(
+            handoff.get("candidate_test_files_omitted")
+        ),
+        "test_selection_confidence": str(
+            handoff.get("test_selection_confidence") or "not-available"
+        ),
+        "focused_test_statuses": _string_values(
+            handoff.get("focused_test_statuses"), 25
+        ),
+        "focused_test_execution": _bounded_objects(
+            handoff.get("focused_test_execution"), 50
+        ),
+        "focused_test_execution_omitted": _nonnegative_integer(
+            handoff.get("focused_test_execution_omitted")
+        ),
+        "test_execution_evidence_complete": handoff.get(
+            "test_execution_evidence_complete"
+        )
+        is True,
+        "test_case_inventory_complete": handoff.get("test_case_inventory_complete"),
+        "coverage_statuses": _string_values(handoff.get("coverage_statuses"), 25),
+        "coverage_attribution": str(
+            handoff.get("coverage_attribution") or "not-established"
+        ),
+        "test_coverage_alignments": _string_values(
+            handoff.get("test_coverage_alignments"), 25
+        ),
+        "source_revision_bindings": _string_values(
+            handoff.get("source_revision_bindings"), 25
+        ),
+        "source_revision_aligned": handoff.get("source_revision_aligned") is True,
+        "campaign_assurance_statuses": _string_values(
+            handoff.get("campaign_assurance_statuses"), 25
+        ),
+        "campaign_assurance_prerequisite_met": handoff.get(
+            "campaign_assurance_prerequisite_met"
+        )
+        is True,
+        "shared_test_quality_statuses": _string_values(
+            handoff.get("shared_test_quality_statuses"), 25
+        ),
+        "test_file_finding_ids": _string_values(
+            handoff.get("test_file_finding_ids"), 100
+        ),
+        "cross_owner_test_files": _string_values(
+            handoff.get("cross_owner_test_files"), 50
+        ),
+        "unowned_test_files": _string_values(handoff.get("unowned_test_files"), 50),
+        "gap_reasons": _string_values(handoff.get("gap_reasons"), 20),
+        "evidence_artifacts": _string_values(handoff.get("evidence_artifacts"), 25),
+        "recommended_action": str(
+            handoff.get("recommended_action")
+            or "Establish source-bound sink validation evidence."
+        ),
+        "interpretation": str(handoff.get("interpretation") or ""),
+    }
 
 
 def _closure_validation_campaigns(value: Any) -> list[dict[str, Any]]:
@@ -798,6 +1013,9 @@ def _closure_sensitive_data_route(value: Any) -> dict[str, Any]:
             item.get("entry_point_runtime_statuses")
         ),
         "validation_status": str(item.get("validation_status") or "not-assessed"),
+        "validation_handoff": _closure_sensitive_validation_handoff(
+            item.get("validation_handoff")
+        ),
         "evidence_assurance_status": str(
             item.get("evidence_assurance_status") or "not-assessed"
         ),
@@ -806,6 +1024,15 @@ def _closure_sensitive_data_route(value: Any) -> dict[str, Any]:
         ),
         "ownership_boundaries": item.get("ownership_boundaries"),
         "owners": _string_values(item.get("owners"), 100),
+        "secret_exposure_intersection_ids": _string_values(
+            item.get("secret_exposure_intersection_ids"), 100
+        ),
+        "secret_exposure_intersections": _closure_secret_exposure_intersections(
+            item.get("secret_exposure_intersections")
+        ),
+        "secret_exposure_intersections_omitted": int(
+            item.get("secret_exposure_intersections_omitted") or 0
+        ),
         "recommended_action": str(
             item.get("recommended_action") or "Review the sensitive-data route."
         ),
@@ -870,6 +1097,13 @@ def _risk_path_closure_context(
         refs.extend(_string_values(route_applicability.get("evidence_artifacts"), 3))
     if sensitive_data_route:
         refs.extend(["data-exposure.json", str(sensitive_data_route["path"])])
+        refs.extend(
+            artifact
+            for intersection in _bounded_objects(
+                sensitive_data_route.get("secret_exposure_intersections"), 25
+            )
+            for artifact in _string_values(intersection.get("evidence_artifacts"), 25)
+        )
     if status == "routed":
         route_id = str(risk_path.get("route_id") or "unknown")
         files = _string_values(risk_path.get("files"), 9)
@@ -1085,6 +1319,50 @@ def _routed_risk_path_acceptance(
             result.append(
                 "At least one applicable scanner rule, weakness classification, or security-practice citation is retained for the route, with its use limited to classification or remediation guidance rather than proof of disclosure."
             )
+        validation_handoff = _as_object(sensitive_data_route.get("validation_handoff"))
+        if validation_handoff.get("candidate_test_files"):
+            result.append(
+                "The graph-selected or route-mapped candidate sink tests are rerun with an explicit synthetic credential canary, and assertions prove minimization, masking, or rejection before the sink boundary."
+            )
+        else:
+            result.append(
+                "A focused sink-boundary test is retained with an explicit synthetic credential canary because no graph-selected or route-mapped candidate test was available."
+            )
+        if validation_handoff.get("source_revision_aligned") is not True:
+            result.append(
+                "Sink test execution and coverage evidence are producer-verified and bound to the replacement source revision before supporting closure."
+            )
+        if validation_handoff.get("campaign_assurance_prerequisite_met") is not True:
+            result.append(
+                "Every linked sink-validation campaign resolves scanner execution, trust, and route-reference gaps before its evidence supports closure."
+            )
+        if validation_handoff.get("test_file_finding_ids"):
+            result.append(
+                "Findings in candidate sink-validation tests are resolved or governed before their assertions are trusted."
+            )
+        if validation_handoff.get("cross_owner_test_files") or validation_handoff.get(
+            "unowned_test_files"
+        ):
+            result.append(
+                "Candidate sink-validation tests have accountable CODEOWNERS coverage and coordinated sink/test ownership."
+            )
+        secret_intersections = _bounded_objects(
+            sensitive_data_route.get("secret_exposure_intersections"), 25
+        )
+        if secret_intersections:
+            result.extend(
+                [
+                    "Every redacted secret candidate co-located with this sensitive sink route receives a protected symbol-level flow review; static file-route proximity alone is not accepted as proof of credential flow or disclosure.",
+                    "Synthetic credential canaries verify that allowlisting, minimization, masking, or rejection occurs before the cited sensitive boundary, and the replacement report retains the result.",
+                ]
+            )
+            if any(
+                str(item.get("temporal_alignment")) == "history-to-current-route"
+                for item in secret_intersections
+            ):
+                result.append(
+                    "Historical secret evidence is revision-aligned to this sink route before correlation, and real credentials are rotated with a governed history-remediation decision."
+                )
     return result
 
 

@@ -820,6 +820,12 @@ def _render_risk_path_summary(value: dict[str, Any] | None) -> list[str]:
     secret_assessments = (
         secret_assessments if isinstance(secret_assessments, list) else []
     )
+    secret_exposure_intersections = value.get("secret_exposure_intersections")
+    secret_exposure_intersections = (
+        secret_exposure_intersections
+        if isinstance(secret_exposure_intersections, list)
+        else []
+    )
     owner_queues = value.get("owner_work_queues")
     owner_queues = owner_queues if isinstance(owner_queues, list) else []
     lines = [
@@ -893,6 +899,15 @@ def _render_risk_path_summary(value: dict[str, Any] | None) -> list[str]:
         f"| Secret candidates with history / scanner verification | {int(summary.get('history_secret_candidates', 0))} / {int(summary.get('verified_secret_candidates', 0))} |",
         f"| Secret candidates without verification / with multiple scanners | {int(summary.get('secret_candidates_without_verification', 0))} / {int(summary.get('multi_scanner_secret_candidates', 0))} |",
         f"| Secret candidates with assurance gaps / without redaction marker | {int(summary.get('secret_candidates_with_assurance_gaps', 0))} / {int(summary.get('secret_candidates_without_redaction_marker', 0))} |",
+        f"| Secret / sensitive-sink route intersections | {int(summary.get('secret_exposure_intersections', 0))} |",
+        f"| Exact-path / upstream-route secret intersections | {int(summary.get('exact_path_secret_exposure_intersections', 0))} / {int(summary.get('upstream_route_secret_exposure_intersections', 0))} |",
+        f"| Verified / historical secret intersections | {int(summary.get('verified_secret_exposure_intersections', 0))} / {int(summary.get('history_secret_exposure_intersections', 0))} |",
+        f"| Unprotected / scanner-confirmed secret intersections | {int(summary.get('unprotected_secret_exposure_intersections', 0))} / {int(summary.get('scanner_confirmed_secret_exposure_intersections', 0))} |",
+        f"| Secret intersections with contributing assurance gaps | {int(summary.get('secret_exposure_intersections_with_assurance_gaps', 0))} |",
+        f"| Secret intersections with / without candidate tests | {int(summary.get('secret_exposure_intersections_with_candidate_tests', 0))} / {int(summary.get('secret_exposure_intersections_without_candidate_tests', 0))} |",
+        f"| Secret intersections with validation / revision gaps | {int(summary.get('secret_exposure_intersections_with_validation_evidence_gaps', 0))} / {int(summary.get('secret_exposure_intersections_with_revision_gaps', 0))} |",
+        f"| Secret intersections with failing tests / assurance-prerequisite gaps | {int(summary.get('secret_exposure_intersections_with_failing_tests', 0))} / {int(summary.get('secret_exposure_intersections_with_assurance_prerequisite_gaps', 0))} |",
+        f"| Secret intersections without explicit canary validation | {int(summary.get('secret_exposure_intersections_without_canary_validation', 0))} |",
         f"| Targets analyzed within bound | {int(summary.get('targets_analyzed', 0))} |",
         f"| Python route-applicable / intentionally non-runtime targets | {int(summary.get('route_applicable_targets', 0))} / {int(summary.get('route_not_applicable_targets', 0))} |",
         f"| Targets with a bounded route | {int(summary.get('routed_targets', 0))} |",
@@ -1013,6 +1028,7 @@ def _render_risk_path_summary(value: dict[str, Any] | None) -> list[str]:
     lines.extend(_render_dependency_route_table(dependency_routes))
     lines.extend(_render_sensitive_data_routes(sensitive_routes))
     lines.extend(_render_secret_provenance_assessments(secret_assessments))
+    lines.extend(_render_secret_exposure_intersections(secret_exposure_intersections))
     lines.extend(_render_exposure_advisory_intersections(intersections))
     if test_hotspots:
         lines.extend(
@@ -1508,6 +1524,134 @@ def _secret_membership_text(label: str, available: Any, member: Any) -> str:
     if member is False:
         return f"{label} absent"
     return f"{label} unknown"
+
+
+def _render_secret_exposure_intersections(values: list[Any]) -> list[str]:
+    if not values:
+        return []
+    lines = [
+        "",
+        "### Secret-to-sensitive-sink route intersections",
+        "",
+        (
+            "These records identify a redacted production-source secret candidate in "
+            "the exact sink file or on the bounded Graphify file route to a sensitive "
+            "sink. This is a focused review signal, not symbol-level taint proof, "
+            "credential validation, runtime execution evidence, or proof of disclosure."
+        ),
+        "",
+        "| Priority / relationship | Secret candidate | Sensitive sink | Evidence / assurance | Owners / action |",
+        "|---|---|---|---|---|",
+    ]
+    for value in values[:10]:
+        if not isinstance(value, dict):
+            continue
+        secret_path = str(value.get("secret_path") or "unknown")
+        if value.get("secret_line"):
+            secret_path += f":{value['secret_line']}"
+        sink_path = str(value.get("sink_path") or "unknown")
+        if value.get("sink_line"):
+            sink_path += f":{value['sink_line']}"
+        owners = value.get("owners")
+        owner_values = owners if isinstance(owners, list) else []
+        citations = _risk_advisory_citations_text(value.get("citations"))
+        handoff = value.get("validation_handoff")
+        handoff = handoff if isinstance(handoff, dict) else {}
+        candidate_tests = handoff.get("candidate_test_files")
+        candidate_tests = candidate_tests if isinstance(candidate_tests, list) else []
+        focused_statuses = handoff.get("focused_test_statuses")
+        focused_statuses = (
+            focused_statuses if isinstance(focused_statuses, list) else []
+        )
+        alignments = handoff.get("test_coverage_alignments")
+        alignments = alignments if isinstance(alignments, list) else []
+        revisions = handoff.get("source_revision_bindings")
+        revisions = revisions if isinstance(revisions, list) else []
+        lines.append(
+            "| `"
+            + _markdown_code(str(value.get("priority") or "P4"))
+            + "` `"
+            + _markdown_code(str(value.get("association_kind") or "unknown"))
+            + "`<br>distance `"
+            + _markdown_code(str(value.get("distance_to_sink") or 0))
+            + "` file hop(s)<br>temporal `"
+            + _markdown_code(str(value.get("temporal_alignment") or "not-established"))
+            + "` | `"
+            + _markdown_code(secret_path)
+            + "`<br>verification `"
+            + _markdown_code(
+                str(value.get("secret_verification_status") or "not-established")
+            )
+            + "` | `"
+            + _markdown_code(sink_path)
+            + "`<br>family `"
+            + _markdown_code(str(value.get("sink_family") or "unknown"))
+            + "`; boundary `"
+            + _markdown_code(str(value.get("trust_boundary") or "unknown"))
+            + "`<br>protection `"
+            + _markdown_code(str(value.get("protection_status") or "unknown"))
+            + "` | basis `"
+            + _markdown_code(str(value.get("sensitive_evidence_basis") or "unknown"))
+            + "`<br>secret `"
+            + _markdown_code(
+                str(value.get("secret_assurance_status") or "not-assessed")
+            )
+            + "`; sink `"
+            + _markdown_code(
+                str(value.get("sensitive_assurance_status") or "not-assessed")
+            )
+            + "`; validation `"
+            + _markdown_code(str(value.get("validation_status") or "not-assessed"))
+            + "`<br>handoff `"
+            + _markdown_code(
+                str(handoff.get("supporting_evidence_readiness") or "not-established")
+            )
+            + "`; combined prerequisite `"
+            + _markdown_code(
+                "met"
+                if value.get("combined_assurance_prerequisite_met") is True
+                else "not met"
+            )
+            + "`<br>candidate tests `"
+            + _markdown_code(
+                ", ".join(str(item) for item in candidate_tests[:3]) or "none"
+            )
+            + "`; focused `"
+            + _markdown_code(
+                ", ".join(str(item) for item in focused_statuses) or "not available"
+            )
+            + "`<br>coverage alignment `"
+            + _markdown_code(
+                ", ".join(str(item) for item in alignments) or "not available"
+            )
+            + "`; revision `"
+            + _markdown_code(
+                ", ".join(str(item) for item in revisions) or "not established"
+            )
+            + "`; canary `"
+            + _markdown_code(
+                str(value.get("canary_validation_status") or "not-established")
+            )
+            + "`"
+            + ("<br>" + citations if citations else "")
+            + " | **"
+            + _markdown_text(
+                ", ".join(str(item) for item in owner_values[:3]) or "Unassigned"
+            )
+            + "**<br>"
+            + _markdown_text(
+                str(value.get("recommended_action") or "Trace and protect the route.")
+            )
+            + " |"
+        )
+    if len(values) > 10:
+        lines.extend(
+            [
+                "",
+                f"{len(values) - 10} additional retained intersection(s) are available in `risk-paths.json`.",
+            ]
+        )
+    return lines
 
 
 def _render_dependency_route_table(routes: list[Any]) -> list[str]:
@@ -4393,7 +4537,7 @@ def _markdown_secret_provenance_context(finding: Finding) -> list[str]:
             ),
         )
     )
-    return [
+    lines = [
         "- **Secret candidate provenance:** `"
         + _markdown_code(str(context.get("secret_context_id") or "unknown"))
         + "`; content `"
@@ -4422,6 +4566,66 @@ def _markdown_secret_provenance_context(finding: Finding) -> list[str]:
         "exploitable, or unique credential, and test/generated placement is not an "
         "automatic false-positive disposition."
     ]
+    intersections = context.get("secret_exposure_intersections")
+    values = intersections if isinstance(intersections, list) else []
+    for item in values[:3]:
+        if not isinstance(item, dict):
+            continue
+        sink_path = str(item.get("sink_path") or "unknown")
+        if item.get("sink_line"):
+            sink_path += f":{item['sink_line']}"
+        handoff = item.get("validation_handoff")
+        handoff = handoff if isinstance(handoff, dict) else {}
+        candidate_tests = handoff.get("candidate_test_files")
+        candidate_tests = candidate_tests if isinstance(candidate_tests, list) else []
+        lines.append(
+            "- **Secret-to-sensitive-sink intersection:** `"
+            + _markdown_code(str(item.get("intersection_id") or "unknown"))
+            + "`; relationship `"
+            + _markdown_code(str(item.get("association_kind") or "unknown"))
+            + "`; sink `"
+            + _markdown_code(sink_path)
+            + "`; family `"
+            + _markdown_code(str(item.get("sink_family") or "unknown"))
+            + "`; boundary `"
+            + _markdown_code(str(item.get("trust_boundary") or "unknown"))
+            + "`; protection `"
+            + _markdown_code(str(item.get("protection_status") or "unknown"))
+            + "`; distance `"
+            + _markdown_code(str(item.get("distance_to_sink") or 0))
+            + "` file hop(s); temporal `"
+            + _markdown_code(str(item.get("temporal_alignment") or "not-established"))
+            + "`; validation handoff `"
+            + _markdown_code(
+                str(handoff.get("supporting_evidence_readiness") or "not-established")
+            )
+            + "`; candidate tests `"
+            + _markdown_code(
+                ", ".join(str(value) for value in candidate_tests[:3]) or "none"
+            )
+            + "`; combined assurance prerequisite `"
+            + _markdown_code(
+                "met"
+                if item.get("combined_assurance_prerequisite_met") is True
+                else "not met"
+            )
+            + "`; canary `"
+            + _markdown_code(
+                str(item.get("canary_validation_status") or "not-established")
+            )
+            + "`. **Cross-reference action:** "
+            + _markdown_text(
+                str(item.get("recommended_action") or "Trace and protect the route.")
+            )
+            + " Static file-route co-location does not prove value flow, runtime "
+            "execution, credential validity, or disclosure."
+        )
+    omitted = int(context.get("secret_exposure_intersections_omitted") or 0)
+    if omitted:
+        lines.append(
+            f"- **Additional secret-to-sink intersections omitted from finding context:** {omitted}; inspect `risk-paths.json`."
+        )
+    return lines
 
 
 def _html_secret_provenance_context(finding: Finding) -> str:
@@ -4447,6 +4651,86 @@ def _html_secret_provenance_context(finding: Finding) -> str:
             ),
         )
     )
+    intersections = context.get("secret_exposure_intersections")
+    values = intersections if isinstance(intersections, list) else []
+    intersection_html = ""
+    if values:
+        items: list[str] = []
+        for item in values[:3]:
+            if not isinstance(item, dict):
+                continue
+            sink_path = str(item.get("sink_path") or "unknown")
+            if item.get("sink_line"):
+                sink_path += f":{item['sink_line']}"
+            handoff = item.get("validation_handoff")
+            handoff = handoff if isinstance(handoff, dict) else {}
+            candidate_tests = handoff.get("candidate_test_files")
+            candidate_tests = (
+                candidate_tests if isinstance(candidate_tests, list) else []
+            )
+            items.append(
+                "<li><code>"
+                + html.escape(str(item.get("intersection_id") or "unknown"))
+                + "</code>: relationship <code>"
+                + html.escape(str(item.get("association_kind") or "unknown"))
+                + "</code>; sink <code>"
+                + html.escape(sink_path)
+                + "</code>; family <code>"
+                + html.escape(str(item.get("sink_family") or "unknown"))
+                + "</code>; boundary <code>"
+                + html.escape(str(item.get("trust_boundary") or "unknown"))
+                + "</code>; protection <code>"
+                + html.escape(str(item.get("protection_status") or "unknown"))
+                + "</code>; distance <code>"
+                + html.escape(str(item.get("distance_to_sink") or 0))
+                + "</code> file hop(s); temporal <code>"
+                + html.escape(str(item.get("temporal_alignment") or "not-established"))
+                + "</code>; validation handoff <code>"
+                + html.escape(
+                    str(
+                        handoff.get("supporting_evidence_readiness")
+                        or "not-established"
+                    )
+                )
+                + "</code>; candidate tests <code>"
+                + html.escape(
+                    ", ".join(str(value) for value in candidate_tests[:3]) or "none"
+                )
+                + "</code>; combined assurance prerequisite <code>"
+                + (
+                    "met"
+                    if item.get("combined_assurance_prerequisite_met") is True
+                    else "not met"
+                )
+                + "</code>; canary <code>"
+                + html.escape(
+                    str(item.get("canary_validation_status") or "not-established")
+                )
+                + "</code>. <strong>Cross-reference action:</strong> "
+                + html.escape(
+                    str(
+                        item.get("recommended_action") or "Trace and protect the route."
+                    )
+                )
+                + " Static file-route co-location does not prove value flow, runtime "
+                "execution, credential validity, or disclosure.</li>"
+            )
+        if items:
+            omitted = int(context.get("secret_exposure_intersections_omitted") or 0)
+            omitted_text = (
+                f"<p>{omitted} additional intersection(s) are retained in "
+                "<code>risk-paths.json</code>.</p>"
+                if omitted
+                else ""
+            )
+            intersection_html = (
+                "<section class='source-context'><h4>Secret-to-sensitive-sink "
+                "intersections</h4><ul class='compact'>"
+                + "".join(items)
+                + "</ul>"
+                + omitted_text
+                + "</section>"
+            )
     return (
         "<section class='source-context'><h4>Secret candidate provenance</h4><p>"
         "Context <code>"
@@ -4473,7 +4757,7 @@ def _html_secret_provenance_context(finding: Finding) -> str:
         )
         + " This context does not establish that the candidate is a real, active, "
         "exploitable, or unique credential, and test/generated placement is not an "
-        "automatic false-positive disposition.</p></section>"
+        "automatic false-positive disposition.</p></section>" + intersection_html
     )
 
 

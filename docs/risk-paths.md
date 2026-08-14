@@ -380,6 +380,60 @@ The suite never retains detected secret values. Summary counters expose lane,
 history, verification, scanner-assurance, and redaction gaps; the retained
 assessment list is capped at 250 and reports its exact omitted count.
 
+### Secret-to-sensitive-sink intersections
+
+`secret_exposure_intersections` combines secret provenance with sensitive-data
+routes only for production Python candidates and only when one of two bounded
+relationships exists:
+
+- `exact-path`: the redacted candidate and sensitive sink cite the same file;
+- `upstream-route`: the candidate file occurs on the retained Graphify file
+  route to the sink.
+
+```mermaid
+flowchart LR
+    Secret["Redacted production secret candidate"] --> Match{"Exact sink file or bounded route member?"}
+    Route["Sensitive-data route<br/>sink + boundary + protection"] --> Match
+    Graph["Graphify ordered file route"] --> Match
+    Match -->|"No"| Separate["Keep evidence separate"]
+    Match -->|"Yes"| Intersection["secret_exposure_intersections"]
+    History["Current tree / Git history"] --> Intersection
+    Assurance["Verification + scanner trust + validation"] --> Intersection
+    Campaigns["Validation campaigns<br/>selected tests + JUnit + coverage"] --> Handoff["Fail-closed validation handoff"]
+    Revision["Source revision binding"] --> Handoff
+    TestQuality["Shared-test findings + ownership"] --> Handoff
+    Intersection --> Handoff
+    Intersection --> Findings["Secret and sink finding context"]
+    Handoff --> Closure["Trace + explicit canary + protection actions"]
+```
+
+Each record retains the file-hop distance to the sink, temporal alignment,
+candidate verification, secret and sink scanner assurance, sink evidence basis,
+trust boundary, protection, validation, owners, citations, and a protected
+review action. Current-tree and history evidence are not silently blended: a
+historical candidate joined to a current route is marked
+`history-to-current-route` and requires revision alignment before interpretation.
+
+The nested `validation_handoff` reuses linked route campaigns to identify
+candidate tests and retain their exact observed execution, test-case inventory,
+aggregate file coverage, source-revision binding, route-scanner assurance,
+shared-test quality, active test-file findings, and ownership gaps. Readiness is
+fail-closed: missing campaigns/tests are `not-established`; execution, coverage,
+revision, or assurance failures are `evidence-gap`; only uniformly passing,
+source-bound evidence can become `supporting-evidence-ready`. Aggregate coverage
+is never attributed solely to the candidate tests, and every handoff reports
+`canary_assertion_status: not-established` until a future explicit canary-evidence
+contract exists.
+
+The cross-reference never changes a native severity or finding status. File
+membership cannot establish that the redacted value is a credential, that the
+same symbol or value reaches the sink, that the route executes, or that a leak
+occurred. Closure therefore requires symbol-level review and synthetic-canary
+tests, rather than accepting the intersection itself as proof. At most 100
+intersections are retained globally and 25 compact records per contributing
+secret or sink context; each handoff retains at most 25 campaign records and 50
+candidate tests or execution records. Exact omission counts remain visible.
+
 ## Dependency-advisory importer routes
 
 The synthesis promotes each deduplicated advisory/importer pair from
@@ -634,9 +688,12 @@ campaign and retains at most 100 missing lines. At most 50 normalized importer
 paths are promoted per advisory, inside the existing 10,000-target global bound.
 At most 100 exact-path exposure/advisory intersections are retained. Omitted
 counts are explicit. At most 100 sensitive-data route records are retained with
-a separate omission count. At most 500 bounded tool-posture records are accepted from
-the local effectiveness artifact; each route retains at most 25 exact
-contributing-tool records.
+a separate omission count. At most 250 secret-provenance assessments and 100
+secret-to-sensitive-sink intersections are retained; each contributing secret
+or sink context embeds at most 25 compact intersection records and reports any
+omission. At most 500 bounded tool-posture records are accepted from the local
+effectiveness artifact; each route retains at most 25 exact contributing-tool
+records.
 
 The current JSON Schema is
 [`risk-paths.schema.json`](../src/py_security_suite/schemas/risk-paths.schema.json).

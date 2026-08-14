@@ -371,6 +371,18 @@ contracts that complement scanner coverage:
   cross-referenced with source, Graphify, built-artifact, lifecycle, ownership,
   scanner-assurance, history, and redaction evidence. Test/generated context
   guides the review action but never suppresses or downgrades the finding.
+- Production-source secret candidates are further joined to Semgrep/Pysa/CodeQL
+  exposure findings and the sensitive-sink inventory only for exact-file or
+  bounded Graphify-route membership. The resulting route intersection carries
+  sink protection, temporal alignment, verification, assurance, validation,
+  ownership, and citations, but is never represented as symbol-level taint or
+  proof that a credential reached a log, telemetry SDK, URL, or network sink.
+- Linked risk-route campaigns turn these intersections into an actionable
+  validation handoff by combining Graphify-selected or route-mapped tests with
+  exact retained JUnit execution, aggregate coverage, producer-verified source
+  binding, scanner assurance, shared-test findings/quality, and CODEOWNERS gaps.
+  The join fails closed and always distinguishes candidate tests from proof of an
+  explicit synthetic credential-canary assertion.
 - DevSkim excludes its generic token/key rule because checksum-pinned bundle
   assets create high-volume false positives and three dedicated secret
   scanners already cover that class. All other default rules remain enabled.

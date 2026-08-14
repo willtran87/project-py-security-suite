@@ -5,6 +5,19 @@ for published releases.
 
 ## Unreleased
 
+- Cross-reference redacted production-source secret candidates with retained
+  sensitive-data sink routes when they share the exact sink file or the secret
+  file occurs on the bounded Graphify route to the sink. The new bounded ledger
+  preserves distance, current-tree/history alignment, verification, protection,
+  validation, scanner assurance, owners, citations, and lane-specific closure
+  actions in Markdown, HTML, SARIF, JSON schema, and finding evidence. Each
+  intersection also carries a fail-closed validation handoff that joins
+  Graphify-selected or route-mapped tests with exact retained execution,
+  aggregate coverage, source-revision binding, scanner assurance, shared-test
+  quality, findings, and ownership. Candidate tests never imply a canary
+  assertion: reports explicitly require a synthetic credential canary. It never
+  retains secret material or presents file-route proximity as symbol-level data
+  flow, credential validity, runtime execution, or proof of disclosure.
 - Add a bounded secret-provenance assessment ledger that cross-references every
   retained secret candidate with its source, graph, built-artifact, Git-history,
   scanner-assurance, verification, lifecycle, ownership, and redaction context.

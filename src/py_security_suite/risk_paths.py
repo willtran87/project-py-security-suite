@@ -49,6 +49,8 @@ _MAX_EXPOSURE_ADVISORY_INTERSECTIONS = 100
 _MAX_SENSITIVE_DATA_ROUTES = 100
 _MAX_SENSITIVE_ROUTE_CITATIONS = 10
 _MAX_SECRET_PROVENANCE_ASSESSMENTS = 250
+_MAX_SECRET_EXPOSURE_INTERSECTIONS = 100
+_MAX_CONTEXT_SECRET_EXPOSURE_INTERSECTIONS = 25
 _MAX_ENTRY_POINT_EXPOSURES = 25
 _SECRET_AREAS = frozenset({"secrets", "secrets-history"})
 _SENSITIVE_ROUTE_STANDARD_IDS = {
@@ -248,8 +250,22 @@ def build_risk_paths(
         route["exposure_advisory_intersection_ids"] = sorted(
             intersection_ids_by_route.get(str(route["route_id"]), [])
         )
-    all_sensitive_data_routes = _sensitive_data_routes(retained_routes)
+    all_sensitive_data_routes = _sensitive_data_routes(
+        retained_routes, validation_campaigns
+    )
     sensitive_data_routes = all_sensitive_data_routes[:_MAX_SENSITIVE_DATA_ROUTES]
+    all_secret_exposure_intersections = _secret_exposure_intersections(
+        secret_provenance_assessments,
+        sensitive_data_routes,
+    )
+    secret_exposure_intersections = all_secret_exposure_intersections[
+        :_MAX_SECRET_EXPOSURE_INTERSECTIONS
+    ]
+    _attach_secret_exposure_intersections(
+        secret_provenance_assessments,
+        sensitive_data_routes,
+        secret_exposure_intersections,
+    )
     all_owner_work_queues = _owner_work_queues(
         retained_routes,
         convergence_hotspots,
@@ -286,7 +302,8 @@ def build_risk_paths(
             "findings, review-worthy sensitive-data sink surfaces, and exact "
             "dependency-advisory importers, with bounded compound intersections"
             ", end-to-end sensitive-data routes, and evidence-plane-aware "
-            "unrouted dispositions"
+            "unrouted dispositions, including conservative secret-to-sink "
+            "route intersections"
         ),
         "summary": {
             "graph_available": graph_available,
@@ -702,6 +719,70 @@ def build_risk_paths(
             "secret_candidates_without_redaction_marker": sum(
                 not item["redacted"] for item in all_secret_provenance_assessments
             ),
+            "secret_exposure_intersections": len(all_secret_exposure_intersections),
+            "exact_path_secret_exposure_intersections": sum(
+                item["association_kind"] == "exact-path"
+                for item in all_secret_exposure_intersections
+            ),
+            "upstream_route_secret_exposure_intersections": sum(
+                item["association_kind"] == "upstream-route"
+                for item in all_secret_exposure_intersections
+            ),
+            "verified_secret_exposure_intersections": sum(
+                item["secret_verification_status"] == "verified"  # noqa: S105  # pragma: allowlist secret
+                for item in all_secret_exposure_intersections
+            ),
+            "history_secret_exposure_intersections": sum(
+                item["temporal_alignment"] == "history-to-current-route"
+                for item in all_secret_exposure_intersections
+            ),
+            "unprotected_secret_exposure_intersections": sum(
+                item["protection_status"] in {"not-observed", "none", "unknown"}
+                for item in all_secret_exposure_intersections
+            ),
+            "scanner_confirmed_secret_exposure_intersections": sum(
+                item["sensitive_evidence_basis"] == "scanner-confirmed-source-to-sink"
+                for item in all_secret_exposure_intersections
+            ),
+            "secret_exposure_intersections_with_assurance_gaps": sum(
+                item["secret_assurance_status"] != "assured"  # noqa: S105  # pragma: allowlist secret
+                or item["sensitive_assurance_status"] != "assured"
+                for item in all_secret_exposure_intersections
+            ),
+            "secret_exposure_intersections_with_candidate_tests": sum(
+                bool(item["recommended_test_files"])
+                for item in all_secret_exposure_intersections
+            ),
+            "secret_exposure_intersections_without_candidate_tests": sum(
+                not item["recommended_test_files"]
+                for item in all_secret_exposure_intersections
+            ),
+            "secret_exposure_intersections_with_validation_evidence_gaps": sum(
+                _object(item["validation_handoff"]).get("supporting_evidence_readiness")
+                != "supporting-evidence-ready"
+                for item in all_secret_exposure_intersections
+            ),
+            "secret_exposure_intersections_with_revision_gaps": sum(
+                _object(item["validation_handoff"]).get("source_revision_aligned")
+                is not True
+                for item in all_secret_exposure_intersections
+            ),
+            "secret_exposure_intersections_with_failing_tests": sum(
+                "failed"
+                in _strings(
+                    _object(item["validation_handoff"]).get("focused_test_statuses"),
+                    10,
+                )
+                for item in all_secret_exposure_intersections
+            ),
+            "secret_exposure_intersections_with_assurance_prerequisite_gaps": sum(
+                item["combined_assurance_prerequisite_met"] is not True
+                for item in all_secret_exposure_intersections
+            ),
+            "secret_exposure_intersections_without_canary_validation": sum(
+                item["canary_validation_status"] != "established"
+                for item in all_secret_exposure_intersections
+            ),
             "runtime_observed_routes": sum(
                 "observed" in route["runtime_context"]["observations"]
                 for route in routed
@@ -963,6 +1044,7 @@ def build_risk_paths(
         "exposure_advisory_intersections": exposure_advisory_intersections,
         "sensitive_data_routes": sensitive_data_routes,
         "secret_provenance_assessments": secret_provenance_assessments,
+        "secret_exposure_intersections": secret_exposure_intersections,
         "owner_work_queues": owner_work_queues,
         "unrouted_targets": unrouted[:_MAX_UNROUTED],
         "truncation": {
@@ -997,6 +1079,11 @@ def build_risk_paths(
                 0,
                 _secret_finding_count(findings) - len(secret_provenance_assessments),
             ),
+            "secret_exposure_intersections_omitted": max(
+                0,
+                len(all_secret_exposure_intersections)
+                - _MAX_SECRET_EXPOSURE_INTERSECTIONS,
+            ),
             "owner_work_queues_omitted": max(
                 0, len(all_owner_work_queues) - _MAX_OWNER_QUEUES
             ),
@@ -1014,6 +1101,7 @@ def build_risk_paths(
             "Sensitive-data sink surfaces are inventory signals unless a normalized scanner finding establishes a source-to-sink concern.",
             "A sensitive-data route joins static entry-point, sink, protection, ownership, scanner-assurance, and validation evidence; it does not prove attacker-controlled input, runtime data flow, disclosure, or regulatory impact.",
             "A secret provenance assessment classifies where a redacted scanner candidate was observed and which evidence is available; it does not prove that the candidate is a real, active, exploitable, or unique credential, and generated or test context is never an automatic false-positive disposition.",
+            "A secret exposure intersection proves only that a redacted candidate is in the same file as, or on the bounded Graphify file route to, a sensitive sink; it does not establish symbol-level data flow, that the candidate is a credential, that it reached the sink, or that disclosure occurred.",
             "A dependency-advisory import route proves only a retained static path to a source file that imports the affected distribution; it does not prove invocation of a vulnerable function, attacker control, or exploitability.",
             "Package lifecycle comparison proves only what the retained source and built-artifact composition inventories report; it does not prove inventory completeness, runtime loading, semantic version safety, or vulnerable-function use.",
             "An exposure-advisory intersection proves only that a retained sensitive sink and an affected SDK importer share an exact source path and advisory identity; it does not prove the SDK processed the sensitive value, that data leaked, or that the vulnerable function executed.",
@@ -2395,8 +2483,12 @@ def _exposure_advisory_intersections(
 
 def _sensitive_data_routes(
     routes: list[dict[str, Any]],
+    validation_campaigns: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     """Join exposure semantics to entry, assurance, ownership, and validation."""
+    campaigns_by_id = {
+        str(campaign["campaign_id"]): campaign for campaign in validation_campaigns
+    }
     result: list[dict[str, Any]] = []
     for route in routes:
         target = route["target"]
@@ -2484,6 +2576,9 @@ def _sensitive_data_routes(
                 _object(route.get("validation")).get("assessment_status")
                 or "not-assessed"
             ),
+            "validation_handoff": _sensitive_route_validation_handoff(
+                route, campaigns_by_id
+            ),
             "evidence_assurance_status": str(
                 _object(route.get("evidence_assurance")).get("review_status")
                 or "not-assessed"
@@ -2501,6 +2596,9 @@ def _sensitive_data_routes(
             "change_lifecycle_classification": _optional_string(
                 lifecycle.get("classification")
             ),
+            "secret_exposure_intersection_ids": [],
+            "secret_exposure_intersections": [],
+            "secret_exposure_intersections_omitted": 0,  # nosec B105
             "exposure_advisory_intersection_ids": _strings(
                 route.get("exposure_advisory_intersection_ids"), 100
             ),
@@ -2619,6 +2717,9 @@ def _secret_provenance_assessments(
             "change_scope": str(lifecycle.get("change_scope") or "not-established"),
             "owners": _strings(target.get("owners"), 100),
             "classifications": _strings(target.get("classifications"), 50),
+            "secret_exposure_intersection_ids": [],
+            "secret_exposure_intersections": [],
+            "secret_exposure_intersections_omitted": 0,  # nosec B105
             "citations": _citation_records(
                 finding.citations,
                 limit=_MAX_SENSITIVE_ROUTE_CITATIONS,
@@ -2651,6 +2752,722 @@ def _secret_provenance_assessments(
             str(item["secret_context_id"]),
         ),
     )
+
+
+def _sensitive_route_validation_handoff(
+    route: dict[str, Any],
+    campaigns_by_id: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    campaign_ids = _strings(route.get("validation_campaign_ids"), 50)
+    campaigns = [
+        campaigns_by_id[campaign_id]
+        for campaign_id in campaign_ids
+        if campaign_id in campaigns_by_id
+    ]
+    selected_all = list(
+        dict.fromkeys(
+            test_file
+            for campaign in campaigns
+            for test_file in _strings(campaign.get("selected_test_files"), 50)
+        )
+    )
+    selected = selected_all[:_MAX_CAMPAIGN_TESTS]
+    execution_by_path: dict[str, dict[str, Any]] = {}
+    for campaign in campaigns:
+        for execution in _objects(campaign.get("focused_test_execution"), 50):
+            path = str(execution.get("path") or "")
+            if path and path not in execution_by_path:
+                execution_by_path[path] = execution
+    executions_all = [execution_by_path[path] for path in sorted(execution_by_path)]
+    executions = executions_all[:_MAX_CAMPAIGN_TESTS]
+    focused_statuses = sorted(
+        {
+            str(campaign.get("focused_test_validation_status") or "not-selected")
+            for campaign in campaigns
+        }
+    )
+    coverage_statuses = sorted(
+        {
+            str(campaign.get("coverage_status") or "not-available")
+            for campaign in campaigns
+        }
+    )
+    alignments = sorted(
+        {
+            str(campaign.get("test_coverage_alignment") or "not-selected")
+            for campaign in campaigns
+        }
+    )
+    revision_bindings = sorted(
+        {
+            str(
+                _object(campaign.get("source_snapshot")).get(
+                    "evidence_revision_binding"
+                )
+                or "not-established"
+            )
+            for campaign in campaigns
+        }
+    )
+    campaign_assurance = sorted(
+        {
+            str(
+                _object(campaign.get("route_evidence_assurance")).get("assessment")
+                or "not-assessed"
+            )
+            for campaign in campaigns
+        }
+    )
+    shared_test_quality = sorted(
+        {
+            str(
+                _object(campaign.get("shared_test_evidence_quality")).get("assessment")
+                or "not-established"
+            )
+            for campaign in campaigns
+        }
+    )
+    route_validation_status = str(
+        _object(route.get("validation")).get("assessment_status") or "not-assessed"
+    )
+    execution_complete = bool(campaigns) and all(
+        campaign.get("test_execution_evidence_available") is True
+        for campaign in campaigns
+    )
+    case_inventory_complete = (
+        all(
+            campaign.get("test_case_inventory_complete") is True
+            for campaign in campaigns
+        )
+        if campaigns
+        else None
+    )
+    campaign_assurance_prerequisite_met = bool(campaigns) and all(
+        _object(campaign.get("route_evidence_assurance")).get(
+            "tool_assurance_prerequisite_met"
+        )
+        is True
+        for campaign in campaigns
+    )
+    source_revision_aligned = bool(campaigns) and all(
+        _object(campaign.get("source_snapshot")).get("evidence_revision_binding")
+        == "aligned"
+        for campaign in campaigns
+    )
+    readiness = _sensitive_validation_readiness(
+        campaigns=campaigns,
+        selected=selected,
+        route_validation_status=route_validation_status,
+        focused_statuses=focused_statuses,
+        alignments=alignments,
+        revision_bindings=revision_bindings,
+        campaign_assurance_prerequisite_met=campaign_assurance_prerequisite_met,
+        execution_complete=execution_complete,
+        case_inventory_complete=case_inventory_complete,
+    )
+    gap_reasons = _sensitive_validation_gap_reasons(
+        campaigns=campaigns,
+        selected=selected,
+        route_validation_status=route_validation_status,
+        focused_statuses=focused_statuses,
+        coverage_statuses=coverage_statuses,
+        alignments=alignments,
+        revision_bindings=revision_bindings,
+        campaign_assurance_prerequisite_met=campaign_assurance_prerequisite_met,
+        execution_complete=execution_complete,
+        case_inventory_complete=case_inventory_complete,
+    )
+    hotspot_ids = sorted(
+        {
+            *_strings(route.get("validation_test_hotspot_ids"), 100),
+            *(
+                hotspot_id
+                for campaign in campaigns
+                for hotspot_id in _strings(campaign.get("shared_test_hotspot_ids"), 100)
+            ),
+        }
+    )[:100]
+    test_file_finding_ids = sorted(
+        {
+            finding_id
+            for campaign in campaigns
+            for finding_id in _strings(
+                _object(campaign.get("shared_test_evidence_quality")).get(
+                    "test_file_finding_ids"
+                ),
+                100,
+            )
+        }
+    )[:100]
+    cross_owner_tests = sorted(
+        {
+            path
+            for campaign in campaigns
+            for path in _strings(
+                _object(campaign.get("shared_test_evidence_quality")).get(
+                    "cross_owner_test_files"
+                ),
+                50,
+            )
+        }
+    )[:50]
+    unowned_tests = sorted(
+        {
+            path
+            for campaign in campaigns
+            for path in _strings(
+                _object(campaign.get("shared_test_evidence_quality")).get(
+                    "unowned_test_files"
+                ),
+                50,
+            )
+        }
+    )[:50]
+    evidence_artifacts = sorted(
+        {
+            "risk-paths.json",
+            *(
+                artifact
+                for campaign in campaigns
+                for artifact in _strings(campaign.get("evidence_artifacts"), 25)
+            ),
+        }
+    )
+    campaign_records = [
+        {
+            "campaign_id": str(campaign["campaign_id"]),
+            "path": str(campaign["path"]),
+            "selected_test_files": _strings(campaign.get("selected_test_files"), 50),
+            "focused_test_validation_status": str(
+                campaign.get("focused_test_validation_status") or "not-selected"
+            ),
+            "coverage_status": str(campaign.get("coverage_status") or "not-available"),
+            "test_coverage_alignment": str(
+                campaign.get("test_coverage_alignment") or "not-selected"
+            ),
+            "source_revision_binding": str(
+                _object(campaign.get("source_snapshot")).get(
+                    "evidence_revision_binding"
+                )
+                or "not-established"
+            ),
+            "route_assurance_status": str(
+                _object(campaign.get("route_evidence_assurance")).get("assessment")
+                or "not-assessed"
+            ),
+            "route_assurance_prerequisite_met": _object(
+                campaign.get("route_evidence_assurance")
+            ).get("tool_assurance_prerequisite_met")
+            is True,
+            "shared_test_evidence_quality": str(
+                _object(campaign.get("shared_test_evidence_quality")).get("assessment")
+                or "not-established"
+            ),
+            "review_tier": str(campaign.get("review_tier") or "low"),
+            "evidence_artifacts": _strings(campaign.get("evidence_artifacts"), 25),
+        }
+        for campaign in campaigns[:25]
+    ]
+    return {
+        "supporting_evidence_readiness": readiness,
+        "canary_assertion_status": "not-established",
+        "route_validation_status": route_validation_status,
+        "campaign_ids": [str(campaign["campaign_id"]) for campaign in campaigns],
+        "campaigns_omitted": max(0, len(campaigns) - 25),
+        "campaign_records": campaign_records,
+        "test_hotspot_ids": hotspot_ids,
+        "candidate_test_files": selected,
+        "candidate_test_files_omitted": max(0, len(selected_all) - _MAX_CAMPAIGN_TESTS),
+        "test_selection_confidence": _combined_test_selection_confidence(campaigns),
+        "focused_test_statuses": focused_statuses,
+        "focused_test_execution": executions,
+        "focused_test_execution_omitted": max(
+            0, len(executions_all) - _MAX_CAMPAIGN_TESTS
+        ),
+        "test_execution_evidence_complete": execution_complete,
+        "test_case_inventory_complete": case_inventory_complete,
+        "coverage_statuses": coverage_statuses,
+        "coverage_attribution": "not-established",
+        "test_coverage_alignments": alignments,
+        "source_revision_bindings": revision_bindings,
+        "source_revision_aligned": source_revision_aligned,
+        "campaign_assurance_statuses": campaign_assurance,
+        "campaign_assurance_prerequisite_met": campaign_assurance_prerequisite_met,
+        "shared_test_quality_statuses": shared_test_quality,
+        "test_file_finding_ids": test_file_finding_ids,
+        "cross_owner_test_files": cross_owner_tests,
+        "unowned_test_files": unowned_tests,
+        "gap_reasons": gap_reasons,
+        "evidence_artifacts": evidence_artifacts,
+        "recommended_action": _sensitive_validation_action(
+            readiness, selected, gap_reasons
+        ),
+        "interpretation": (
+            "Candidate tests and retained execution, coverage, source-binding, and "
+            "assurance evidence form a validation handoff only. Aggregate file "
+            "coverage is not attributed solely to these tests, and no retained "
+            "evidence proves that a synthetic credential canary assertion exists."
+        ),
+    }
+
+
+def _combined_test_selection_confidence(campaigns: list[dict[str, Any]]) -> str:
+    values = {
+        str(campaign.get("test_selection_confidence") or "not-available")
+        for campaign in campaigns
+    }
+    if not values:
+        return "not-available"
+    if len(values) == 1:
+        return next(iter(values))
+    return "mixed"
+
+
+def _sensitive_validation_readiness(
+    *,
+    campaigns: list[dict[str, Any]],
+    selected: list[str],
+    route_validation_status: str,
+    focused_statuses: list[str],
+    alignments: list[str],
+    revision_bindings: list[str],
+    campaign_assurance_prerequisite_met: bool,
+    execution_complete: bool,
+    case_inventory_complete: bool | None,
+) -> str:
+    if not campaigns or not selected:
+        return "not-established"
+    if (
+        route_validation_status == "gap"
+        or set(focused_statuses) & {"failed", "incomplete"}
+        or set(alignments) & {"tests-failing", "coverage-gap"}
+        or "mismatch" in revision_bindings
+        or not campaign_assurance_prerequisite_met
+    ):
+        return "evidence-gap"
+    if (
+        route_validation_status == "aligned"
+        and focused_statuses == ["passed"]
+        and alignments == ["aligned-current-evidence"]
+        and revision_bindings == ["aligned"]
+        and execution_complete
+        and case_inventory_complete is True
+    ):
+        return "supporting-evidence-ready"
+    return "partial"
+
+
+def _sensitive_validation_gap_reasons(
+    *,
+    campaigns: list[dict[str, Any]],
+    selected: list[str],
+    route_validation_status: str,
+    focused_statuses: list[str],
+    coverage_statuses: list[str],
+    alignments: list[str],
+    revision_bindings: list[str],
+    campaign_assurance_prerequisite_met: bool,
+    execution_complete: bool,
+    case_inventory_complete: bool | None,
+) -> list[str]:
+    reasons: list[str] = []
+    if not campaigns:
+        reasons.append("No shared validation campaign is linked to the sink route.")
+    if not selected:
+        reasons.append("No graph-selected or route-mapped candidate test is retained.")
+    if route_validation_status != "aligned":
+        reasons.append(
+            f"The sink route validation status is {route_validation_status}."
+        )
+    if focused_statuses and focused_statuses != ["passed"]:
+        reasons.append(
+            "Focused test status is not uniformly passed: "
+            + ", ".join(focused_statuses)
+            + "."
+        )
+    if coverage_statuses and coverage_statuses != ["covered"]:
+        reasons.append(
+            "Campaign control-point coverage is not uniformly complete: "
+            + ", ".join(coverage_statuses)
+            + "."
+        )
+    if alignments and alignments != ["aligned-current-evidence"]:
+        reasons.append(
+            "Test/coverage alignment is not current and complete: "
+            + ", ".join(alignments)
+            + "."
+        )
+    if revision_bindings and revision_bindings != ["aligned"]:
+        reasons.append(
+            "Campaign source-revision binding is not uniformly aligned: "
+            + ", ".join(revision_bindings)
+            + "."
+        )
+    if campaigns and not campaign_assurance_prerequisite_met:
+        reasons.append(
+            "At least one campaign lacks completed, integrity-verified, approved route evidence."
+        )
+    if campaigns and not execution_complete:
+        reasons.append("Test execution evidence is incomplete for linked campaigns.")
+    if campaigns and case_inventory_complete is not True:
+        reasons.append("The retained test-case inventory is incomplete or unavailable.")
+    reasons.append(
+        "A synthetic credential-canary assertion has not been established by retained evidence."
+    )
+    return reasons[:20]
+
+
+def _sensitive_validation_action(
+    readiness: str,
+    selected: list[str],
+    gap_reasons: list[str],
+) -> str:
+    tests = ", ".join(selected[:5]) if selected else "a focused sink-boundary test"
+    action = (
+        f"Use {tests} as candidate validation scope. Add an explicit synthetic "
+        "credential canary and assert minimization, masking, or rejection before the "
+        "sink boundary; then regenerate source-bound JUnit and coverage evidence."
+    )
+    if readiness != "supporting-evidence-ready" and gap_reasons:
+        action += " Resolve the retained execution, coverage, revision, and assurance gaps first."
+    return action[:2000]
+
+
+def _secret_exposure_intersections(
+    secret_assessments: list[dict[str, Any]],
+    sensitive_routes: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Join production secret candidates to exact sink or bounded route files."""
+    result: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for secret in secret_assessments:
+        if secret.get("content_lane") != "python-runtime-source":
+            continue
+        secret_path = str(secret.get("path") or "")
+        if not secret_path:
+            continue
+        for sensitive in sensitive_routes:
+            route_files = _ordered_strings(
+                sensitive.get("route_files"), _MAX_ROUTE_HOPS + 1
+            )
+            sink_path = str(sensitive.get("path") or "")
+            if secret_path == sink_path:
+                association_kind = "exact-path"
+            elif secret_path in route_files:
+                association_kind = "upstream-route"
+            else:
+                continue
+            pair = (
+                str(secret.get("secret_context_id") or ""),
+                str(sensitive.get("sensitive_route_id") or ""),
+            )
+            if not all(pair) or pair in seen:
+                continue
+            seen.add(pair)
+            secret_route_index = max(
+                index for index, path in enumerate(route_files) if path == secret_path
+            )
+            distance_to_sink = max(0, len(route_files) - 1 - secret_route_index)
+            temporal_alignment = _secret_route_temporal_alignment(
+                str(secret.get("history_status") or "not-established")
+            )
+            candidate_assurance = str(
+                secret.get("evidence_assurance_status") or "not-assessed"
+            )
+            sensitive_assurance = str(
+                sensitive.get("evidence_assurance_status") or "not-assessed"
+            )
+            validation_handoff = _object(sensitive.get("validation_handoff"))
+            combined_assurance_prerequisite_met = (
+                candidate_assurance == "assured"
+                and sensitive_assurance == "assured"
+                and validation_handoff.get("campaign_assurance_prerequisite_met")
+                is True
+            )
+            protection_status = str(sensitive.get("protection_status") or "unknown")
+            risk_factors = [
+                (
+                    "exact-file-secret-and-sensitive-sink"
+                    if association_kind == "exact-path"
+                    else "secret-on-bounded-route-to-sensitive-sink"
+                )
+            ]
+            if secret.get("verification_status") == "verified":
+                risk_factors.append("scanner-verified-secret-candidate")
+            if temporal_alignment == "history-to-current-route":
+                risk_factors.append("history-current-route-revision-gap")
+            if protection_status in {"not-observed", "none", "unknown"}:
+                risk_factors.append("sink-protection-not-observed")
+            if sensitive.get("evidence_basis") == "scanner-confirmed-source-to-sink":
+                risk_factors.append("scanner-confirmed-sensitive-data-concern")
+            if candidate_assurance != "assured" or sensitive_assurance != "assured":
+                risk_factors.append("contributing-evidence-assurance-gap")
+            finding_ids = sorted(
+                {
+                    str(secret["finding_id"]),
+                    *(
+                        [str(sensitive["finding_id"])]
+                        if sensitive.get("finding_id")
+                        else []
+                    ),
+                }
+            )
+            owners = sorted(
+                {
+                    *_strings(secret.get("owners"), 100),
+                    *_strings(sensitive.get("owners"), 100),
+                }
+            )[:100]
+            citations = _citation_records(
+                [
+                    *_objects(secret.get("citations"), 10),
+                    *_objects(sensitive.get("citations"), 10),
+                ],
+                limit=20,
+                default_kind="reference",
+            )
+            priority = sorted(
+                [str(secret.get("priority") or "P4"), str(sensitive["priority"])],
+                key=_priority_rank,
+            )[0]
+            intersection_id = (
+                "secret-exposure-"
+                + _digest(
+                    {
+                        "secret_context_id": pair[0],
+                        "sensitive_route_id": pair[1],
+                        "association_kind": association_kind,
+                    }
+                )[:16]
+            )
+            action = _secret_exposure_action(
+                association_kind=association_kind,
+                temporal_alignment=temporal_alignment,
+                verification_status=str(
+                    secret.get("verification_status") or "not-established"
+                ),
+                protection_status=protection_status,
+            )
+            handoff_action = str(validation_handoff.get("recommended_action") or "")
+            if handoff_action:
+                action = (action + " " + handoff_action)[:2000]
+            validation_gap_reasons = _strings(validation_handoff.get("gap_reasons"), 20)
+            if candidate_assurance != "assured":
+                validation_gap_reasons.append(
+                    "Secret-candidate scanner evidence is not fully assured."
+                )
+            if sensitive_assurance != "assured":
+                validation_gap_reasons.append(
+                    "Sensitive-sink scanner evidence is not fully assured."
+                )
+            if temporal_alignment != "aligned-current-tree":
+                validation_gap_reasons.append(
+                    "Secret and sink evidence require current-revision alignment."
+                )
+            result.append(
+                {
+                    "intersection_id": intersection_id,
+                    "priority": priority,
+                    "association_kind": association_kind,
+                    "temporal_alignment": temporal_alignment,
+                    "secret_context_id": pair[0],
+                    "secret_finding_id": str(secret["finding_id"]),
+                    "secret_path": secret_path,
+                    "secret_line": secret.get("line"),
+                    "secret_verification_status": str(
+                        secret.get("verification_status") or "not-established"
+                    ),
+                    "secret_history_status": str(
+                        secret.get("history_status") or "not-established"
+                    ),
+                    "secret_scanner_tools": _strings(secret.get("scanner_tools"), 25),
+                    "secret_assurance_status": candidate_assurance,
+                    "sensitive_route_id": pair[1],
+                    "route_id": str(sensitive["route_id"]),
+                    "sensitive_finding_id": _optional_string(
+                        sensitive.get("finding_id")
+                    ),
+                    "sink_path": sink_path,
+                    "sink_line": sensitive.get("line"),
+                    "sink_family": str(sensitive.get("sink_family") or "unknown"),
+                    "sink": _optional_string(sensitive.get("sink")),
+                    "sdk": _optional_string(sensitive.get("sdk")),
+                    "trust_boundary": str(sensitive.get("trust_boundary") or "unknown"),
+                    "protection_status": protection_status,
+                    "data_classes": _strings(sensitive.get("data_classes"), 25),
+                    "sensitive_evidence_basis": str(sensitive["evidence_basis"]),
+                    "sensitive_source_tools": _strings(
+                        sensitive.get("source_tools"), 25
+                    ),
+                    "sensitive_assurance_status": sensitive_assurance,
+                    "validation_status": str(
+                        sensitive.get("validation_status") or "not-assessed"
+                    ),
+                    "validation_handoff": validation_handoff,
+                    "combined_assurance_prerequisite_met": combined_assurance_prerequisite_met,
+                    "canary_validation_status": "not-established",
+                    "recommended_test_files": _strings(
+                        validation_handoff.get("candidate_test_files"), 50
+                    ),
+                    "intersection_validation_gap_reasons": validation_gap_reasons[:25],
+                    "route_files": route_files,
+                    "secret_route_index": secret_route_index,
+                    "distance_to_sink": distance_to_sink,
+                    "entry_point_ids": _strings(sensitive.get("entry_point_ids"), 100),
+                    "entry_point_runtime_statuses": _object(
+                        sensitive.get("entry_point_runtime_statuses")
+                    ),
+                    "owners": owners,
+                    "ownership_coordination_status": (
+                        "unassigned"
+                        if not owners
+                        else "single-owner"
+                        if len(owners) == 1
+                        else "cross-owner"
+                    ),
+                    "finding_ids": finding_ids,
+                    "risk_factors": risk_factors,
+                    "citations": citations,
+                    "evidence_artifacts": sorted(
+                        {
+                            "findings.json",
+                            "data-exposure.json",
+                            "graphify.json",
+                            "risk-paths.json",
+                            *_strings(secret.get("evidence_artifacts"), 25),
+                            *_strings(sensitive.get("evidence_artifacts"), 25),
+                        }
+                    ),
+                    "recommended_action": action,
+                    "interpretation": (
+                        "Static file-route co-location only; this record does not prove "
+                        "that the redacted candidate is a credential, that a symbol or "
+                        "value flows to the sink, that the route executes, or that a "
+                        "disclosure occurred."
+                    ),
+                }
+            )
+    return sorted(
+        result,
+        key=lambda item: (
+            _priority_rank(str(item["priority"])),
+            0 if item["association_kind"] == "exact-path" else 1,
+            int(item["distance_to_sink"]),
+            str(item["secret_path"]),
+            str(item["sink_path"]),
+            str(item["intersection_id"]),
+        ),
+    )
+
+
+def _secret_route_temporal_alignment(history_status: str) -> str:
+    if history_status == "current-tree":
+        return "aligned-current-tree"
+    if history_status == "history-evidence":
+        return "history-to-current-route"
+    return "not-established"
+
+
+def _secret_exposure_action(
+    *,
+    association_kind: str,
+    temporal_alignment: str,
+    verification_status: str,
+    protection_status: str,
+) -> str:
+    relationship = (
+        "the exact source file containing both the redacted candidate and sink"
+        if association_kind == "exact-path"
+        else "the bounded Graphify file route from the candidate file to the sink"
+    )
+    result = (
+        f"Review {relationship} in a protected workspace. Trace the actual symbol-level "
+        "flow, confirm credential validity and ownership without copying the value, "
+        "and add a synthetic-canary test proving secrets are minimized or redacted "
+        "before the cited boundary."
+    )
+    if verification_status == "verified":
+        result += " Revoke and rotate the verified candidate while confirming scope."
+    if temporal_alignment == "history-to-current-route":
+        result += (
+            " Establish revision alignment before relating the historical candidate "
+            "to the current sink route, and review reachable history if it was real."
+        )
+    if protection_status in {"not-observed", "none", "unknown"}:
+        result += " Implement or document an effective pre-sink protection control."
+    return result[:2000]
+
+
+def _compact_secret_exposure_intersection(
+    value: dict[str, Any],
+) -> dict[str, Any]:
+    keys = (
+        "intersection_id",
+        "priority",
+        "association_kind",
+        "temporal_alignment",
+        "secret_context_id",
+        "secret_finding_id",
+        "secret_path",
+        "secret_line",
+        "secret_verification_status",
+        "secret_assurance_status",
+        "sensitive_route_id",
+        "route_id",
+        "sensitive_finding_id",
+        "sink_path",
+        "sink_line",
+        "sink_family",
+        "sink",
+        "sdk",
+        "trust_boundary",
+        "protection_status",
+        "sensitive_evidence_basis",
+        "sensitive_assurance_status",
+        "validation_status",
+        "validation_handoff",
+        "combined_assurance_prerequisite_met",
+        "canary_validation_status",
+        "recommended_test_files",
+        "intersection_validation_gap_reasons",
+        "distance_to_sink",
+        "owners",
+        "finding_ids",
+        "risk_factors",
+        "citations",
+        "evidence_artifacts",
+        "recommended_action",
+        "interpretation",
+    )
+    return {key: value[key] for key in keys}
+
+
+def _attach_secret_exposure_intersections(
+    secret_assessments: list[dict[str, Any]],
+    sensitive_routes: list[dict[str, Any]],
+    intersections: list[dict[str, Any]],
+) -> None:
+    by_secret: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    by_sensitive: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for intersection in intersections:
+        by_secret[str(intersection["secret_context_id"])].append(intersection)
+        by_sensitive[str(intersection["sensitive_route_id"])].append(intersection)
+    for records, key_name, index in (
+        (secret_assessments, "secret_context_id", by_secret),
+        (sensitive_routes, "sensitive_route_id", by_sensitive),
+    ):
+        for record in records:
+            matches = index.get(str(record[key_name]), [])
+            record["secret_exposure_intersection_ids"] = [
+                str(item["intersection_id"]) for item in matches
+            ]
+            record["secret_exposure_intersections"] = [
+                _compact_secret_exposure_intersection(item)
+                for item in matches[:_MAX_CONTEXT_SECRET_EXPOSURE_INTERSECTIONS]
+            ]
+            record["secret_exposure_intersections_omitted"] = max(
+                0, len(matches) - _MAX_CONTEXT_SECRET_EXPOSURE_INTERSECTIONS
+            )
 
 
 def _is_secret_finding(finding: Finding) -> bool:
@@ -5708,6 +6525,18 @@ def _attach_secret_provenance(
                     kind="supporting_evidence",
                     identifier="pysec-secret-provenance",
                     title="Suite secret candidate provenance synthesis",
+                    uri=_RISK_PATH_REFERENCE,
+                )
+            )
+        if assessment.get("secret_exposure_intersection_ids") and not any(
+            citation.identifier == "pysec-secret-exposure-route"
+            for citation in finding.citations
+        ):
+            finding.citations.append(
+                Citation(
+                    kind="supporting_evidence",
+                    identifier="pysec-secret-exposure-route",
+                    title="Suite bounded secret-to-sensitive-sink route intersection",
                     uri=_RISK_PATH_REFERENCE,
                 )
             )
