@@ -5,6 +5,27 @@ for published releases.
 
 ## Unreleased
 
+- Add a bounded end-to-end sensitive-data route ledger that joins confirmed
+  exposure findings and review-worthy sink inventory to every retained entry
+  point, runtime state, data class, trust boundary, observed protection,
+  scanner assurance, validation status, lifecycle, and ownership handoff.
+  Stable route IDs now flow through Markdown/HTML finding context, SARIF,
+  schemas, and closure criteria while explicitly remaining static review
+  evidence rather than proof of attacker control, data flow, or disclosure.
+- Cross-reference every review target with Graphify file membership, the sealed
+  source inventory, built-artifact manifest, target kind, scanner, area, and
+  path type before interpreting a missing Python entry-point route. Unrouted
+  targets now distinguish actionable Python model gaps from artifact controls,
+  generated evidence, validation code, and non-Python repository controls.
+  Reports, finding/SARIF context, schemas, and closure work preserve the native
+  evidence-lane action without dropping the finding or inventing an irrelevant
+  Python entry point.
+- Cross-reference shared validation-test hotspots with active findings in the
+  exact test file and retained CODEOWNERS. Campaigns now grade shared-test
+  evidence as strong, qualified, weak, or not established; carry finding/tool/
+  severity and campaign-to-test owner alignment; and propagate quality gaps to
+  review factors, owner queues, reports, and closure criteria. This expanded
+  factor contract is versioned as `shared-control-review-v5`.
 - Cross-reference each shared validation campaign with the exact contributing
   scanner posture of every retained route. Campaigns now retain assessed and
   missing route counts, trust/execution/perspective states, contributing and

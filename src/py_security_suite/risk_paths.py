@@ -46,6 +46,7 @@ _MAX_TEST_GRAPH_NEIGHBORS = 500
 _MAX_ADVISORY_IMPORT_PATHS = 50
 _MAX_FINDING_ADVISORY_ROUTES = 25
 _MAX_EXPOSURE_ADVISORY_INTERSECTIONS = 100
+_MAX_SENSITIVE_DATA_ROUTES = 100
 _MAX_ENTRY_POINT_EXPOSURES = 25
 _TOOL_RUN_STATUSES = frozenset(
     {"completed", "unavailable", "failed", "timed_out", "parse_error", "skipped"}
@@ -58,6 +59,22 @@ _TOOL_ASSURANCE_STATUSES = frozenset(
         "not-established",
         "execution-gap",
         "not-applicable",
+    }
+)
+_ARTIFACT_CONTROL_TOOLS = frozenset(
+    {"check-wheel-contents", "cosign", "pypi-attestations", "twine"}
+)
+_GENERATED_EVIDENCE_NAMES = frozenset(
+    {
+        ".coverage",
+        "artifact-manifest.json",
+        "checksums.sha256",
+        "coverage.json",
+        "coverage.xml",
+        "findings.json",
+        "junit.xml",
+        "results.sarif",
+        "scan-manifest.json",
     }
 )
 
@@ -76,6 +93,7 @@ def build_risk_paths(
     fusion = artifacts.get("evidence-fusion.json")
     structural = artifacts.get("structural-synthesis.json")
     adjacency, graph_available, graph_truncated = _file_graph(graph)
+    route_inventory = _route_applicability_inventory(artifacts, graph)
     entry_points = _entry_points(reachability)
     entry_point_runtime = _entry_point_runtime_index(reachability)
     path_context = _campaign_control_context_index(structural, reachability)
@@ -94,6 +112,9 @@ def build_risk_paths(
     for target in targets:
         target["validation"] = _assess_validation(target["validation"], artifacts)
         target["evidence_assurance"] = _target_evidence_assurance(target, tool_posture)
+        target["route_applicability"] = _target_route_applicability(
+            target, route_inventory
+        )
         attribution = _change_lifecycle_attribution(target, baseline_context)
         if attribution is not None:
             target["change_lifecycle_attribution"] = attribution
@@ -203,6 +224,8 @@ def build_risk_paths(
         route["exposure_advisory_intersection_ids"] = sorted(
             intersection_ids_by_route.get(str(route["route_id"]), [])
         )
+    all_sensitive_data_routes = _sensitive_data_routes(retained_routes)
+    sensitive_data_routes = all_sensitive_data_routes[:_MAX_SENSITIVE_DATA_ROUTES]
     all_owner_work_queues = _owner_work_queues(
         retained_routes,
         convergence_hotspots,
@@ -221,6 +244,7 @@ def build_risk_paths(
         unrouted,
         validation_campaigns,
         exposure_advisory_intersections,
+        sensitive_data_routes,
     )
     validation_gaps = sum(
         route["validation"]["assessment_status"] == "gap" for route in routed
@@ -236,6 +260,8 @@ def build_risk_paths(
             "bounded multi-entry static routes from declared Python entry points to normalized "
             "findings, review-worthy sensitive-data sink surfaces, and exact "
             "dependency-advisory importers, with bounded compound intersections"
+            ", end-to-end sensitive-data routes, and evidence-plane-aware "
+            "unrouted dispositions"
         ),
         "summary": {
             "graph_available": graph_available,
@@ -257,6 +283,45 @@ def build_risk_paths(
             + dependency_targets_omitted,
             "routed_targets": len(routed),
             "unrouted_targets": len(unrouted),
+            "route_applicable_targets": sum(
+                target["route_applicability"]["assessment"] == "route-applicable"
+                for target in targets
+            ),
+            "route_not_applicable_targets": sum(
+                target["route_applicability"]["assessment"] == "not-route-applicable"
+                for target in targets
+            ),
+            "unrouted_route_applicable_targets": sum(
+                item["route_applicability"]["assessment"] == "route-applicable"
+                for item in unrouted
+            ),
+            "unrouted_expected_non_runtime_targets": sum(
+                item["route_applicability"]["assessment"] == "not-route-applicable"
+                for item in unrouted
+            ),
+            "unrouted_targets_missing_graph_membership": sum(
+                item["route_applicability"]["assessment"] == "route-applicable"
+                and item["route_applicability"]["graph_path_member"] is False
+                for item in unrouted
+            ),
+            "unrouted_targets_without_entry_route": sum(
+                item["route_applicability"]["assessment"] == "route-applicable"
+                and item["route_applicability"]["graph_path_member"] is True
+                for item in unrouted
+            ),
+            "unrouted_by_applicability_class": {
+                classification: sum(
+                    item["route_applicability"]["classification"] == classification
+                    for item in unrouted
+                )
+                for classification in (
+                    "python-runtime-source",
+                    "artifact-control",
+                    "generated-evidence",
+                    "test-validation-source",
+                    "outside-python-runtime-model",
+                )
+            },
             "routed_findings": sum(
                 route["target"]["kind"] == "finding" for route in routed
             ),
@@ -530,6 +595,37 @@ def build_risk_paths(
                 "gap" in item["validation_statuses"].values()
                 for item in all_exposure_advisory_intersections
             ),
+            "sensitive_data_routes": len(all_sensitive_data_routes),
+            "scanner_confirmed_sensitive_data_routes": sum(
+                item["evidence_basis"] == "scanner-confirmed-source-to-sink"
+                for item in all_sensitive_data_routes
+            ),
+            "inventory_sensitive_data_routes": sum(
+                item["evidence_basis"] == "inventory-review-surface"
+                for item in all_sensitive_data_routes
+            ),
+            "sensitive_data_routes_without_observed_protection": sum(
+                item["protection_status"] in {"not-observed", "unknown"}
+                for item in all_sensitive_data_routes
+            ),
+            "sensitive_data_routes_with_runtime_observed_entry_points": sum(
+                item["entry_point_runtime_statuses"]["observed"] > 0
+                for item in all_sensitive_data_routes
+            ),
+            "sensitive_data_routes_with_validation_gaps": sum(
+                item["validation_status"] == "gap" for item in all_sensitive_data_routes
+            ),
+            "sensitive_data_routes_with_assurance_gaps": sum(
+                item["evidence_assurance_status"] != "assured"
+                for item in all_sensitive_data_routes
+            ),
+            "sensitive_data_routes_crossing_ownership_boundaries": sum(
+                item["ownership_boundaries"] > 0 for item in all_sensitive_data_routes
+            ),
+            "sensitive_data_routes_with_multiple_entry_points": sum(
+                item["entry_point_exposure_count"] > 1
+                for item in all_sensitive_data_routes
+            ),
             "runtime_observed_routes": sum(
                 "observed" in route["runtime_context"]["observations"]
                 for route in routed
@@ -780,12 +876,16 @@ def build_risk_paths(
             "source_inventory": isinstance(
                 artifacts.get("source-inventory.json"), dict
             ),
+            "artifact_manifest": isinstance(
+                artifacts.get("artifact-manifest.json"), dict
+            ),
         },
         "routes": retained_routes,
         "convergence_hotspots": convergence_hotspots,
         "validation_campaigns": validation_campaigns,
         "validation_test_hotspots": validation_test_hotspots,
         "exposure_advisory_intersections": exposure_advisory_intersections,
+        "sensitive_data_routes": sensitive_data_routes,
         "owner_work_queues": owner_work_queues,
         "unrouted_targets": unrouted[:_MAX_UNROUTED],
         "truncation": {
@@ -813,6 +913,9 @@ def build_risk_paths(
                 len(all_exposure_advisory_intersections)
                 - _MAX_EXPOSURE_ADVISORY_INTERSECTIONS,
             ),
+            "sensitive_data_routes_omitted": max(
+                0, len(all_sensitive_data_routes) - _MAX_SENSITIVE_DATA_ROUTES
+            ),
             "owner_work_queues_omitted": max(
                 0, len(all_owner_work_queues) - _MAX_OWNER_QUEUES
             ),
@@ -825,8 +928,10 @@ def build_risk_paths(
             "Finding lifecycle is attributed to a change only when finding-delta evidence proves a comparable approved baseline; default new status without that comparison is reported as not established.",
             "Route ownership applies retained CODEOWNERS-style rules to exact static file paths; a handoff is coordination evidence, not proof of organizational approval, runtime responsibility, or access control.",
             "No bounded route may indicate reflection, registries, dependency injection, generated code, framework dispatch, or an incomplete entry-point model.",
+            "Artifact controls, generated evidence, validation code, and non-Python repository controls are not expected to have production Python routes; that disposition does not suppress, downgrade, validate, or resolve the underlying finding.",
             "Runtime observation proves only that code executed during retained tests; absence of observation does not prove dead code.",
             "Sensitive-data sink surfaces are inventory signals unless a normalized scanner finding establishes a source-to-sink concern.",
+            "A sensitive-data route joins static entry-point, sink, protection, ownership, scanner-assurance, and validation evidence; it does not prove attacker-controlled input, runtime data flow, disclosure, or regulatory impact.",
             "A dependency-advisory import route proves only a retained static path to a source file that imports the affected distribution; it does not prove invocation of a vulnerable function, attacker control, or exploitability.",
             "Package lifecycle comparison proves only what the retained source and built-artifact composition inventories report; it does not prove inventory completeness, runtime loading, semantic version safety, or vulnerable-function use.",
             "An exposure-advisory intersection proves only that a retained sensitive sink and an affected SDK importer share an exact source path and advisory identity; it does not prove the SDK processed the sensitive value, that data leaked, or that the vulnerable function executed.",
@@ -883,6 +988,149 @@ def _file_graph(value: Any) -> tuple[dict[str, dict[str, str]], bool, int]:
         for source, targets in sorted(candidates.items())
     }
     return adjacency, True, len(omitted_paths)
+
+
+def _route_applicability_inventory(
+    artifacts: dict[str, Any], graph: Any
+) -> dict[str, Any]:
+    source_inventory = artifacts.get("source-inventory.json")
+    artifact_manifest = artifacts.get("artifact-manifest.json")
+    return {
+        "graph_available": isinstance(graph, dict)
+        and graph.get("schema_version") == "1.0",
+        "graph_paths": _graph_paths(graph),
+        "source_inventory_available": isinstance(source_inventory, dict),
+        "source_paths": _manifest_paths(source_inventory, "files"),
+        "artifact_manifest_available": isinstance(artifact_manifest, dict),
+        "artifact_paths": _manifest_paths(artifact_manifest, "artifacts"),
+    }
+
+
+def _graph_paths(value: Any) -> set[str]:
+    if not isinstance(value, dict) or value.get("schema_version") != "1.0":
+        return set()
+    paths = {
+        path
+        for item in value.get("nodes", [])
+        if isinstance(item, dict)
+        if (path := _path(item.get("path")))
+    }
+    topology = value.get("topology")
+    edges = topology.get("file_edges") if isinstance(topology, dict) else []
+    for edge in edges if isinstance(edges, list) else []:
+        if not isinstance(edge, dict):
+            continue
+        paths.update(
+            path for key in ("source", "target") if (path := _path(edge.get(key)))
+        )
+    return set(sorted(paths)[:_MAX_GRAPH_FILES])
+
+
+def _manifest_paths(value: Any, key: str) -> set[str]:
+    items = value.get(key) if isinstance(value, dict) else None
+    if not isinstance(items, list):
+        return set()
+    return {
+        path
+        for item in items[:_MAX_GRAPH_FILES]
+        if isinstance(item, dict)
+        if (path := _path(item.get("path")))
+    }
+
+
+def _target_route_applicability(
+    target: dict[str, Any], inventory: dict[str, Any]
+) -> dict[str, Any]:
+    path = str(target["path"])
+    graph_available = inventory["graph_available"] is True
+    source_available = inventory["source_inventory_available"] is True
+    artifact_available = inventory["artifact_manifest_available"] is True
+    graph_member = path in inventory["graph_paths"] if graph_available else None
+    source_member = path in inventory["source_paths"] if source_available else None
+    artifact_member = (
+        path in inventory["artifact_paths"] if artifact_available else None
+    )
+    classification = _route_applicability_classification(
+        target, artifact_member=artifact_member is True
+    )
+    applicable = classification == "python-runtime-source"
+    reason, action = _route_applicability_guidance(classification)
+    evidence_artifacts = [
+        name
+        for name, available in (
+            ("graphify.json", graph_available),
+            ("source-inventory.json", source_available),
+            ("artifact-manifest.json", artifact_available),
+        )
+        if available
+    ]
+    return {
+        "assessment": "route-applicable" if applicable else "not-route-applicable",
+        "classification": classification,
+        "reason": reason,
+        "source_inventory_available": source_available,
+        "source_inventory_member": source_member,
+        "graph_available": graph_available,
+        "graph_path_member": graph_member,
+        "artifact_manifest_available": artifact_available,
+        "artifact_manifest_member": artifact_member,
+        "evidence_artifacts": evidence_artifacts,
+        "recommended_action": action,
+    }
+
+
+def _route_applicability_classification(
+    target: dict[str, Any], *, artifact_member: bool
+) -> str:
+    path = str(target["path"])
+    normalized = path.casefold()
+    area = str(target.get("area") or "").casefold()
+    tools = {str(tool).casefold() for tool in target.get("tools", [])}
+    if (
+        artifact_member
+        or normalized.startswith((".artifacts/", "dist/", "build/"))
+        or "artifact" in area.split("-")
+        or bool(tools & _ARTIFACT_CONTROL_TOOLS)
+        or normalized.endswith((".whl", ".tar.gz"))
+    ):
+        return "artifact-control"
+    if normalized.rsplit("/", 1)[
+        -1
+    ] in _GENERATED_EVIDENCE_NAMES or normalized.endswith(".pysec-binding.json"):
+        return "generated-evidence"
+    if _is_test_path(path):
+        return "test-validation-source"
+    if target.get("kind") in {"sink-surface", "dependency-advisory-import"}:
+        return "python-runtime-source"
+    if normalized.endswith((".py", ".pyi")):
+        return "python-runtime-source"
+    return "outside-python-runtime-model"
+
+
+def _route_applicability_guidance(classification: str) -> tuple[str, str]:
+    guidance = {
+        "python-runtime-source": (
+            "the target is Python runtime source and should be evaluated against declared entry points",
+            "Confirm framework, plugin, registry, generated-code, or external entry points and extend the governed Python reachability model before interpreting this target as unreachable.",
+        ),
+        "artifact-control": (
+            "the finding concerns a built-artifact, provenance, or source-parity control rather than a Python runtime path",
+            "Resolve the artifact integrity, provenance, packaging, or source-parity control through the release evidence lane; do not add a Python entry point solely to route this target.",
+        ),
+        "generated-evidence": (
+            "the target is generated test, coverage, or scan evidence rather than maintained Python runtime source",
+            "Confirm the generated file belongs in scanner scope, remediate the evidence producer or exclusion policy as appropriate, and do not model the generated file as a Python entry point.",
+        ),
+        "test-validation-source": (
+            "the target is validation code and is not expected to have a production entry-point route",
+            "Resolve or govern the test-file finding as validation-evidence quality, then rerun affected campaigns; do not treat absence of a production route as proof that the test finding is harmless.",
+        ),
+        "outside-python-runtime-model": (
+            "the target is outside the suite's Python runtime route model",
+            "Use the target's native repository, configuration, infrastructure, or supply-chain scanner context; add a separate governed entry model only when this file is an actual runtime interface.",
+        ),
+    }
+    return guidance[classification]
 
 
 def _entry_points(value: Any) -> list[dict[str, Any]]:
@@ -970,7 +1218,9 @@ def _finding_targets(findings: list[Finding]) -> list[dict[str, Any]]:
                 "owners": _strings(finding.evidence.get("owners"), 20),
                 "runtime_context": _runtime_context(source, structural),
                 "validation": validation,
-                "correlations": _finding_correlations(finding, fusion, structural),
+                "correlations": _finding_correlations(
+                    finding, fusion, structural, exposure
+                ),
                 "recommended_action": _recommended_action(
                     finding.remediation, validation, exposure
                 ),
@@ -1995,6 +2245,136 @@ def _exposure_advisory_intersections(
     )
 
 
+def _sensitive_data_routes(
+    routes: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Join exposure semantics to entry, assurance, ownership, and validation."""
+    result: list[dict[str, Any]] = []
+    for route in routes:
+        target = route["target"]
+        correlations = route["correlations"]
+        confirmed = _object(correlations.get("sensitive_data_context"))
+        inventory_surface = target.get("kind") == "sink-surface"
+        if not confirmed and not inventory_surface:
+            continue
+        context = confirmed or {
+            "concern": "review-worthy-sensitive-data-sink",
+            "sink_family": correlations.get("sink_family"),
+            "sink": target.get("label"),
+            "sdk": correlations.get("sdk"),
+            "confidence": None,
+            "data_classes": correlations.get("data_classes"),
+            "trust_boundary": correlations.get("trust_boundary"),
+            "protection_status": correlations.get("protection_status"),
+            "risk_factors": [],
+            "review_priority": str(route.get("priority") or "P4"),
+        }
+        ownership = _object(route.get("ownership_context"))
+        lifecycle = _object(route.get("change_lifecycle_attribution"))
+        entry_exposures = _objects(
+            route.get("entry_point_exposures"), _MAX_ENTRY_POINT_EXPOSURES
+        )
+        confidence = _optional_string(context.get("confidence"))
+        if confidence not in {"high", "medium", "low"}:
+            confidence = None
+        record = {
+            "sensitive_route_id": "sensitive-route-"
+            + _digest(
+                {
+                    "route_id": route["route_id"],
+                    "target_id": target["id"],
+                    "sink_family": context.get("sink_family"),
+                    "trust_boundary": context.get("trust_boundary"),
+                }
+            )[:16],
+            "route_id": route["route_id"],
+            "priority": route["priority"],
+            "evidence_basis": (
+                "scanner-confirmed-source-to-sink"
+                if confirmed
+                else "inventory-review-surface"
+            ),
+            "target_kind": target["kind"],
+            "target_id": target["id"],
+            "finding_id": target.get("finding_id"),
+            "path": target["path"],
+            "line": target.get("line"),
+            "label": target["label"],
+            "source_tools": _strings(target.get("tools"), 25),
+            "classifications": _strings(target.get("classifications"), 50),
+            "concern": str(context.get("concern") or "sensitive-data-exposure")[:200],
+            "sink_family": str(context.get("sink_family") or "unknown")[:100],
+            "sink": _optional_string(context.get("sink")),
+            "sdk": _optional_string(context.get("sdk")),
+            "confidence": confidence,
+            "data_classes": _strings(context.get("data_classes"), 25),
+            "trust_boundary": str(context.get("trust_boundary") or "unknown")[:100],
+            "protection_status": str(context.get("protection_status") or "unknown")[
+                :100
+            ],
+            "risk_factors": _strings(context.get("risk_factors"), 25),
+            "entry_point_ids": sorted(
+                {
+                    str(_object(item.get("entry_point")).get("id"))
+                    for item in entry_exposures
+                    if _object(item.get("entry_point")).get("id")
+                }
+            ),
+            "entry_point_kinds": _strings(route.get("entry_point_kinds"), 25),
+            "entry_point_exposure_count": int(route["entry_point_exposure_count"]),
+            "entry_point_exposures_omitted": int(
+                route["entry_point_exposures_omitted"]
+            ),
+            "entry_point_runtime_statuses": _entry_runtime_counts(entry_exposures),
+            "validation_status": str(
+                _object(route.get("validation")).get("assessment_status")
+                or "not-assessed"
+            ),
+            "evidence_assurance_status": str(
+                _object(route.get("evidence_assurance")).get("review_status")
+                or "not-assessed"
+            ),
+            "ownership_coordination_status": str(
+                ownership.get("coordination_status") or "not-established"
+            ),
+            "ownership_boundaries": _nonnegative_integer(
+                ownership.get("boundary_count")
+            )
+            or 0,
+            "owners": _strings(ownership.get("coordination_owners"), 100),
+            "route_files": _ordered_strings(route.get("files"), _MAX_ROUTE_HOPS + 1),
+            "route_hop_count": int(route["hop_count"]),
+            "change_lifecycle_classification": _optional_string(
+                lifecycle.get("classification")
+            ),
+            "exposure_advisory_intersection_ids": _strings(
+                route.get("exposure_advisory_intersection_ids"), 100
+            ),
+            "evidence_artifacts": sorted(
+                {
+                    "data-exposure.json",
+                    "risk-paths.json",
+                    *_strings(route.get("evidence_artifacts"), 25),
+                }
+            ),
+            "recommended_action": str(
+                route.get("recommended_action")
+                or "Trace, minimize, protect, and validate the sensitive-data route."
+            )[:2000],
+        }
+        result.append(record)
+    return sorted(
+        result,
+        key=lambda item: (
+            _priority_rank(str(item["priority"])),
+            0 if item["evidence_basis"] == "scanner-confirmed-source-to-sink" else 1,
+            str(item["path"]),
+            int(item["line"] or 0),
+            str(item["sensitive_route_id"]),
+        ),
+    )
+
+
 def _route_targets(
     entry_points: list[dict[str, Any]],
     targets: list[dict[str, Any]],
@@ -2002,21 +2382,27 @@ def _route_targets(
     *,
     graph_available: bool,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    if not entry_points:
-        return [], [
-            _unrouted(target, "declared entry-point evidence is unavailable")
-            for target in targets
-        ]
     parent, origin, depth = _multi_source_paths(entry_points, adjacency)
     entries_by_id = {item["id"]: item for item in entry_points}
     routed: list[dict[str, Any]] = []
     unrouted: list[dict[str, Any]] = []
     for target in targets:
         path = target["path"]
+        applicability = target["route_applicability"]
+        if applicability["assessment"] != "route-applicable":
+            unrouted.append(_unrouted(target, str(applicability["reason"])))
+            continue
+        if not entry_points:
+            unrouted.append(
+                _unrouted(target, "declared entry-point evidence is unavailable")
+            )
+            continue
         if path not in origin:
             reason = (
                 "Graphify file-route evidence is unavailable"
                 if not graph_available
+                else "the Python target path is absent from the retained Graphify file model"
+                if applicability["graph_path_member"] is False
                 else f"no declared-entry-point route was found within {_MAX_ROUTE_HOPS} file hops"
             )
             unrouted.append(_unrouted(target, reason))
@@ -2046,6 +2432,7 @@ def _route_targets(
                 "runtime_context": target["runtime_context"],
                 "validation": target["validation"],
                 "evidence_assurance": target["evidence_assurance"],
+                "route_applicability": applicability,
                 **(
                     {
                         "change_lifecycle_attribution": target[
@@ -2067,6 +2454,7 @@ def _route_targets(
                         ),
                         *target["evidence_artifacts"],
                         *target["evidence_assurance"]["evidence_artifacts"],
+                        *applicability["evidence_artifacts"],
                         *_strings(
                             _object(target.get("change_lifecycle_attribution")).get(
                                 "evidence_artifacts"
@@ -4743,6 +5131,7 @@ def _attach_finding_routes(
     unrouted: list[dict[str, Any]],
     validation_campaigns: list[dict[str, Any]],
     exposure_advisory_intersections: list[dict[str, Any]],
+    sensitive_data_routes: list[dict[str, Any]],
 ) -> None:
     campaigns_by_id = {
         str(campaign["campaign_id"]): campaign for campaign in validation_campaigns
@@ -4764,6 +5153,11 @@ def _attach_finding_routes(
     for intersection in exposure_advisory_intersections:
         for finding_id in _strings(intersection.get("finding_ids"), 100):
             intersections_by_finding[finding_id].append(intersection)
+    sensitive_routes_by_finding = {
+        str(item["finding_id"]): item
+        for item in sensitive_data_routes
+        if item.get("finding_id")
+    }
     for finding in findings:
         advisory_routes = sorted(
             advisory_routes_by_finding.get(finding.finding_id, []),
@@ -4803,6 +5197,7 @@ def _attach_finding_routes(
                 "runtime_context": route["runtime_context"],
                 "validation": route["validation"],
                 "evidence_assurance": route["evidence_assurance"],
+                "route_applicability": route["route_applicability"],
                 "ownership_context": route["ownership_context"],
                 "change_lifecycle_attribution": lifecycle_attribution,
                 "convergence_hotspot_ids": route["convergence_hotspot_ids"],
@@ -4821,6 +5216,9 @@ def _attach_finding_routes(
                     _compact_exposure_advisory_intersection(item)
                     for item in finding_intersections
                 ],
+                "sensitive_data_route": _object(
+                    sensitive_routes_by_finding.get(finding.finding_id)
+                ),
                 "validation_campaigns": [
                     {
                         key: campaign[key]
@@ -4883,6 +5281,8 @@ def _attach_finding_routes(
                 "status": "unrouted",
                 "reason": record["reason"],
                 "evidence_assurance": record["evidence_assurance"],
+                "route_applicability": record["route_applicability"],
+                "recommended_action": record["recommended_action"],
                 "change_lifecycle_attribution": _object(
                     record.get("change_lifecycle_attribution")
                 ),
@@ -4922,6 +5322,7 @@ def _compact_dependency_advisory_route(
         "runtime_context": route["runtime_context"],
         "validation": route["validation"],
         "evidence_assurance": route["evidence_assurance"],
+        "route_applicability": route["route_applicability"],
         "ownership_context": route["ownership_context"],
         "validation_campaign_ids": list(route["validation_campaign_ids"]),
         "exposure_advisory_intersection_ids": list(
@@ -5329,11 +5730,12 @@ def _finding_correlations(
     finding: Finding,
     fusion: dict[str, Any],
     structural: dict[str, Any],
+    exposure: dict[str, Any],
 ) -> dict[str, Any]:
     island = _object(structural.get("island"))
     cycle = _object(structural.get("import_cycle"))
     advisory = _object(fusion.get("advisory_context"))
-    return {
+    result: dict[str, Any] = {
         "related_finding_ids": _strings(fusion.get("related_finding_ids"), 50),
         "related_tools": _strings(fusion.get("related_tools"), 25),
         "review_tier": _optional_string(fusion.get("review_tier")),
@@ -5346,6 +5748,22 @@ def _finding_correlations(
             _object(finding.evidence.get("risk_intelligence")).get("known_exploited")
         ),
     }
+    if exposure:
+        result["sensitive_data_context"] = {
+            "concern": str(exposure.get("concern") or "sensitive-data-exposure")[:200],
+            "sink_family": str(exposure.get("sink_family") or "unknown")[:100],
+            "sink": _optional_string(exposure.get("sink")),
+            "sdk": _optional_string(exposure.get("sdk")),
+            "confidence": _optional_string(exposure.get("confidence")),
+            "data_classes": _strings(exposure.get("data_classes"), 25),
+            "trust_boundary": str(exposure.get("trust_boundary") or "unknown")[:100],
+            "protection_status": str(exposure.get("protection_status") or "unknown")[
+                :100
+            ],
+            "risk_factors": _strings(exposure.get("risk_factors"), 25),
+            "review_priority": _optional_string(exposure.get("review_priority")),
+        }
+    return result
 
 
 def _finding_evidence_artifacts(
@@ -5437,6 +5855,7 @@ def _public_target(target: dict[str, Any]) -> dict[str, Any]:
 
 
 def _unrouted(target: dict[str, Any], reason: str) -> dict[str, Any]:
+    applicability = target["route_applicability"]
     return {
         "priority": target["priority"],
         "target": _public_target(target),
@@ -5444,17 +5863,14 @@ def _unrouted(target: dict[str, Any], reason: str) -> dict[str, Any]:
         "evidence_assurance": target.get(
             "evidence_assurance", _empty_evidence_assurance(target)
         ),
+        "route_applicability": applicability,
         **(
             {"change_lifecycle_attribution": target["change_lifecycle_attribution"]}
             if "change_lifecycle_attribution" in target
             else {}
         ),
         "reason": reason,
-        "recommended_action": (
-            "Confirm framework, plugin, registry, generated-code, or external entry "
-            "points and extend the governed reachability model before interpreting "
-            "this target as unreachable."
-        ),
+        "recommended_action": applicability["recommended_action"],
     }
 
 

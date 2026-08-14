@@ -6,7 +6,7 @@
   "required": [
     "schema_version", "schema_id", "authoritative", "purpose", "summary",
     "evidence_availability", "routes", "convergence_hotspots",
-    "validation_campaigns", "validation_test_hotspots", "exposure_advisory_intersections", "owner_work_queues", "unrouted_targets", "truncation",
+    "validation_campaigns", "validation_test_hotspots", "exposure_advisory_intersections", "sensitive_data_routes", "owner_work_queues", "unrouted_targets", "truncation",
     "interpretation_limits", "references"
   ],
   "properties": {
@@ -21,7 +21,10 @@
         "graph_available", "reachability_available", "entry_points",
         "candidate_targets", "targets_analyzed", "finding_targets", "sink_surface_targets",
         "dependency_advisory_import_targets",
-        "routed_targets", "unrouted_targets", "routed_findings",
+        "routed_targets", "unrouted_targets", "route_applicable_targets",
+        "route_not_applicable_targets", "unrouted_route_applicable_targets",
+        "unrouted_expected_non_runtime_targets", "unrouted_targets_missing_graph_membership",
+        "unrouted_targets_without_entry_route", "unrouted_by_applicability_class", "routed_findings",
         "routed_sink_surfaces", "routed_dependency_advisory_imports",
         "retained_entry_point_exposures", "routes_with_multiple_entry_points",
         "observed_entry_point_exposures", "unobserved_entry_point_exposures",
@@ -57,6 +60,14 @@
         "known_exploited_exposure_advisory_intersections",
         "unprotected_exposure_advisory_intersections",
         "exposure_advisory_intersections_with_validation_gaps",
+        "sensitive_data_routes", "scanner_confirmed_sensitive_data_routes",
+        "inventory_sensitive_data_routes",
+        "sensitive_data_routes_without_observed_protection",
+        "sensitive_data_routes_with_runtime_observed_entry_points",
+        "sensitive_data_routes_with_validation_gaps",
+        "sensitive_data_routes_with_assurance_gaps",
+        "sensitive_data_routes_crossing_ownership_boundaries",
+        "sensitive_data_routes_with_multiple_entry_points",
         "runtime_observed_routes",
         "coverage_gap_routes", "validation_gap_routes",
         "validation_assessed_routes", "validation_unassessed_routes", "owned_routes",
@@ -94,6 +105,13 @@
         "dependency_advisory_import_targets": {"$ref": "#/$defs/count"},
         "routed_targets": {"$ref": "#/$defs/count"},
         "unrouted_targets": {"$ref": "#/$defs/count"},
+        "route_applicable_targets": {"$ref": "#/$defs/count"},
+        "route_not_applicable_targets": {"$ref": "#/$defs/count"},
+        "unrouted_route_applicable_targets": {"$ref": "#/$defs/count"},
+        "unrouted_expected_non_runtime_targets": {"$ref": "#/$defs/count"},
+        "unrouted_targets_missing_graph_membership": {"$ref": "#/$defs/count"},
+        "unrouted_targets_without_entry_route": {"$ref": "#/$defs/count"},
+        "unrouted_by_applicability_class": {"$ref": "#/$defs/routeApplicabilityCounts"},
         "routed_findings": {"$ref": "#/$defs/count"},
         "routed_sink_surfaces": {"$ref": "#/$defs/count"},
         "routed_dependency_advisory_imports": {"$ref": "#/$defs/count"},
@@ -143,6 +161,15 @@
         "known_exploited_exposure_advisory_intersections": {"$ref": "#/$defs/count"},
         "unprotected_exposure_advisory_intersections": {"$ref": "#/$defs/count"},
         "exposure_advisory_intersections_with_validation_gaps": {"$ref": "#/$defs/count"},
+        "sensitive_data_routes": {"$ref": "#/$defs/count"},
+        "scanner_confirmed_sensitive_data_routes": {"$ref": "#/$defs/count"},
+        "inventory_sensitive_data_routes": {"$ref": "#/$defs/count"},
+        "sensitive_data_routes_without_observed_protection": {"$ref": "#/$defs/count"},
+        "sensitive_data_routes_with_runtime_observed_entry_points": {"$ref": "#/$defs/count"},
+        "sensitive_data_routes_with_validation_gaps": {"$ref": "#/$defs/count"},
+        "sensitive_data_routes_with_assurance_gaps": {"$ref": "#/$defs/count"},
+        "sensitive_data_routes_crossing_ownership_boundaries": {"$ref": "#/$defs/count"},
+        "sensitive_data_routes_with_multiple_entry_points": {"$ref": "#/$defs/count"},
         "runtime_observed_routes": {"$ref": "#/$defs/count"},
         "coverage_gap_routes": {"$ref": "#/$defs/count"},
         "validation_gap_routes": {"$ref": "#/$defs/count"},
@@ -235,6 +262,11 @@
       "maxItems": 100,
       "items": {"$ref": "#/$defs/exposureAdvisoryIntersection"}
     },
+    "sensitive_data_routes": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {"$ref": "#/$defs/sensitiveDataRoute"}
+    },
     "owner_work_queues": {
       "type": "array",
       "maxItems": 100,
@@ -253,7 +285,7 @@
         "dependency_advisory_import_targets_omitted",
         "entry_point_exposures_omitted",
         "routes_omitted", "unrouted_targets_omitted",
-        "convergence_hotspots_omitted", "validation_test_hotspots_omitted", "exposure_advisory_intersections_omitted",
+        "convergence_hotspots_omitted", "validation_test_hotspots_omitted", "exposure_advisory_intersections_omitted", "sensitive_data_routes_omitted",
         "owner_work_queues_omitted"
       ],
       "properties": {
@@ -267,6 +299,7 @@
         "convergence_hotspots_omitted": {"$ref": "#/$defs/count"},
         "validation_test_hotspots_omitted": {"$ref": "#/$defs/count"},
         "exposure_advisory_intersections_omitted": {"$ref": "#/$defs/count"},
+        "sensitive_data_routes_omitted": {"$ref": "#/$defs/count"},
         "owner_work_queues_omitted": {"$ref": "#/$defs/count"}
       }
     },
@@ -286,6 +319,50 @@
     },
     "nullableString": {"type": ["string", "null"]},
     "nullableDigest": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+    "routeApplicabilityCounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "python-runtime-source", "artifact-control", "generated-evidence",
+        "test-validation-source", "outside-python-runtime-model"
+      ],
+      "properties": {
+        "python-runtime-source": {"$ref": "#/$defs/count"},
+        "artifact-control": {"$ref": "#/$defs/count"},
+        "generated-evidence": {"$ref": "#/$defs/count"},
+        "test-validation-source": {"$ref": "#/$defs/count"},
+        "outside-python-runtime-model": {"$ref": "#/$defs/count"}
+      }
+    },
+    "routeApplicability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "assessment", "classification", "reason",
+        "source_inventory_available", "source_inventory_member",
+        "graph_available", "graph_path_member",
+        "artifact_manifest_available", "artifact_manifest_member",
+        "evidence_artifacts", "recommended_action"
+      ],
+      "properties": {
+        "assessment": {"enum": ["route-applicable", "not-route-applicable"]},
+        "classification": {
+          "enum": [
+            "python-runtime-source", "artifact-control", "generated-evidence",
+            "test-validation-source", "outside-python-runtime-model"
+          ]
+        },
+        "reason": {"type": "string", "minLength": 1},
+        "source_inventory_available": {"type": "boolean"},
+        "source_inventory_member": {"type": ["boolean", "null"]},
+        "graph_available": {"type": "boolean"},
+        "graph_path_member": {"type": ["boolean", "null"]},
+        "artifact_manifest_available": {"type": "boolean"},
+        "artifact_manifest_member": {"type": ["boolean", "null"]},
+        "evidence_artifacts": {"type": "array", "maxItems": 3, "items": {"type": "string", "minLength": 1}},
+        "recommended_action": {"type": "string", "minLength": 1}
+      }
+    },
     "entryPoint": {
       "type": "object",
       "additionalProperties": false,
@@ -602,7 +679,7 @@
         "target", "hop_count",
         "files", "edges", "owners", "runtime_context", "validation", "evidence_assurance", "ownership_context",
         "correlations", "convergence_hotspot_ids", "validation_campaign_ids",
-        "validation_test_hotspot_ids", "exposure_advisory_intersection_ids", "recommended_action",
+        "validation_test_hotspot_ids", "exposure_advisory_intersection_ids", "route_applicability", "recommended_action",
         "evidence_artifacts"
       ],
       "properties": {
@@ -621,6 +698,7 @@
         "runtime_context": {"$ref": "#/$defs/runtime"},
         "validation": {"$ref": "#/$defs/validation"},
         "evidence_assurance": {"$ref": "#/$defs/evidenceAssurance"},
+        "route_applicability": {"$ref": "#/$defs/routeApplicability"},
         "ownership_context": {"$ref": "#/$defs/routeOwnership"},
         "change_lifecycle_attribution": {"$ref": "#/$defs/changeLifecycleAttribution"},
         "correlations": {"type": "object"},
@@ -693,6 +771,63 @@
           }
         },
         "advisory_citations": {"type": "array", "maxItems": 25, "items": {"type": "object"}},
+        "evidence_artifacts": {"$ref": "#/$defs/strings"},
+        "recommended_action": {"type": "string", "minLength": 1}
+      }
+    },
+    "sensitiveDataRoute": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sensitive_route_id", "route_id", "priority", "evidence_basis",
+        "target_kind", "target_id", "finding_id", "path", "line", "label",
+        "source_tools", "classifications", "concern", "sink_family", "sink",
+        "sdk", "confidence", "data_classes", "trust_boundary",
+        "protection_status", "risk_factors", "entry_point_ids",
+        "entry_point_kinds", "entry_point_exposure_count",
+        "entry_point_exposures_omitted", "entry_point_runtime_statuses",
+        "validation_status", "evidence_assurance_status",
+        "ownership_coordination_status", "ownership_boundaries", "owners",
+        "route_files", "route_hop_count", "change_lifecycle_classification",
+        "exposure_advisory_intersection_ids", "evidence_artifacts",
+        "recommended_action"
+      ],
+      "properties": {
+        "sensitive_route_id": {"type": "string", "pattern": "^sensitive-route-[0-9a-f]{16}$"},
+        "route_id": {"type": "string", "pattern": "^route-[0-9a-f]{16}$"},
+        "priority": {"enum": ["P0", "P1", "P2", "P3", "P4"]},
+        "evidence_basis": {"enum": ["scanner-confirmed-source-to-sink", "inventory-review-surface"]},
+        "target_kind": {"enum": ["finding", "sink-surface"]},
+        "target_id": {"type": "string", "minLength": 1},
+        "finding_id": {"$ref": "#/$defs/nullableString"},
+        "path": {"type": "string", "minLength": 1},
+        "line": {"type": ["integer", "null"], "minimum": 1},
+        "label": {"type": "string", "minLength": 1},
+        "source_tools": {"$ref": "#/$defs/strings"},
+        "classifications": {"$ref": "#/$defs/strings"},
+        "concern": {"type": "string", "minLength": 1},
+        "sink_family": {"type": "string", "minLength": 1},
+        "sink": {"$ref": "#/$defs/nullableString"},
+        "sdk": {"$ref": "#/$defs/nullableString"},
+        "confidence": {"type": ["string", "null"], "enum": ["high", "medium", "low", null]},
+        "data_classes": {"$ref": "#/$defs/strings"},
+        "trust_boundary": {"type": "string", "minLength": 1},
+        "protection_status": {"type": "string", "minLength": 1},
+        "risk_factors": {"$ref": "#/$defs/strings"},
+        "entry_point_ids": {"$ref": "#/$defs/strings"},
+        "entry_point_kinds": {"$ref": "#/$defs/strings"},
+        "entry_point_exposure_count": {"$ref": "#/$defs/count"},
+        "entry_point_exposures_omitted": {"$ref": "#/$defs/count"},
+        "entry_point_runtime_statuses": {"$ref": "#/$defs/entryPointRuntimeCounts"},
+        "validation_status": {"enum": ["aligned", "gap", "partial", "not-assessed"]},
+        "evidence_assurance_status": {"enum": ["assured", "perspective-gap", "trust-gap", "execution-gap", "not-assessed", "derived-analysis"]},
+        "ownership_coordination_status": {"enum": ["single-owner", "cross-owner", "unowned-segment", "not-established"]},
+        "ownership_boundaries": {"$ref": "#/$defs/count"},
+        "owners": {"$ref": "#/$defs/strings"},
+        "route_files": {"type": "array", "minItems": 1, "maxItems": 9, "items": {"type": "string", "minLength": 1}},
+        "route_hop_count": {"type": "integer", "minimum": 0, "maximum": 8},
+        "change_lifecycle_classification": {"$ref": "#/$defs/nullableString"},
+        "exposure_advisory_intersection_ids": {"$ref": "#/$defs/strings"},
         "evidence_artifacts": {"$ref": "#/$defs/strings"},
         "recommended_action": {"type": "string", "minLength": 1}
       }
@@ -1166,12 +1301,13 @@
     "unrouted": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["priority", "target", "owners", "evidence_assurance", "reason", "recommended_action"],
+      "required": ["priority", "target", "owners", "evidence_assurance", "route_applicability", "reason", "recommended_action"],
       "properties": {
         "priority": {"enum": ["P0", "P1", "P2", "P3", "P4"]},
         "target": {"$ref": "#/$defs/target"},
         "owners": {"$ref": "#/$defs/strings"},
         "evidence_assurance": {"$ref": "#/$defs/evidenceAssurance"},
+        "route_applicability": {"$ref": "#/$defs/routeApplicability"},
         "change_lifecycle_attribution": {"$ref": "#/$defs/changeLifecycleAttribution"},
         "reason": {"type": "string", "minLength": 1},
         "recommended_action": {"type": "string", "minLength": 1}

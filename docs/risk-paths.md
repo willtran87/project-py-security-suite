@@ -26,7 +26,12 @@ flowchart LR
     Sink --> Intersection["Exact path + package + advisory identity"]
     Importer --> Intersection
     Intersection --> Compound["Sensitive-boundary dependency review"]
-    Target --> Route
+    SourceInventory["Sealed source inventory"] --> Applicability["Route applicability<br/>runtime vs native evidence lane"]
+    ArtifactManifest["Built-artifact manifest"] --> Applicability
+    Graph --> Applicability
+    Target --> Applicability
+    Applicability -->|"Python runtime source"| Route
+    Applicability -->|"Artifact, generated evidence, test, or non-Python"| Native["Native evidence-lane disposition"]
     Fusion["Evidence fusion<br/>change, coverage, related tools"] --> Context["Route context"]
     Effectiveness["Effectiveness 1.1<br/>completion + contribution"] --> Assurance["Exact contributing-tool assurance"]
     Trust["Scanner trust + integrity continuity"] --> Assurance
@@ -40,6 +45,7 @@ flowchart LR
     Route --> Routed["Bounded risk routes"]
     Context --> Routed
     Assurance --> Routed
+    Routed --> SensitiveRoute["End-to-end sensitive-data routes<br/>entry + boundary + protection + assurance"]
     Routed --> Converge["Convergence hotspots<br/>shared control points"]
     Graph --> Campaign["Validation campaigns<br/>direct + transitive tests"]
     Converge --> Campaign
@@ -50,7 +56,9 @@ flowchart LR
     Routed --> Result["risk-paths.json"]
     Converge --> Result
     Campaign --> Result
+    SensitiveRoute --> Result
     Queues --> Result
+    Native --> Result
     Result --> Reports["Markdown, HTML, SARIF, JSON"]
     Result --> Closure["Owner and validation action"]
 ```
@@ -66,6 +74,9 @@ Each retained route includes:
   exposure ID, exact file/edge sequence, entry kind, and explicit omissions;
 - the Graphify relation for every step;
 - target tool, rule/classification, file, and line attribution;
+- a route-applicability record joining Graphify membership, sealed source
+  inventory membership, built-artifact identity, target kind, scanner, area,
+  and path class;
 - reachability state and retained runtime observation;
 - changed-line, line/file coverage, graph-selected tests, focused execution,
   alignment gaps, an explicit aligned/gap/partial/not-assessed state, and the
@@ -80,6 +91,12 @@ Each retained route includes:
 - ordered CODEOWNERS assignments, exact cross-owner handoffs, unowned segments,
   collaborating owners, and target-owner alignment; and
 - an explicit recommended action.
+
+Exposure findings additionally retain a stable end-to-end sensitive-data route
+record. The record preserves whether evidence is scanner-confirmed or an
+inventory-only review surface and joins sink family, SDK, data classes, trust
+boundary, protection state, every retained entry point, exact entry-node runtime
+counts, route files, validation, scanner assurance, lifecycle, and ownership.
 
 Routes are also cross-referenced with one another. A convergence hotspot is a
 file traversed by at least two routes leading to at least two distinct targets.
@@ -277,6 +294,41 @@ Observation is attributable only to the retained test/runtime evidence. It does
 not establish production traffic, external accessibility, attacker control, or
 sufficient behavioral coverage; non-observation does not prove dead code.
 
+## End-to-end sensitive-data routes
+
+`sensitive_data_routes` closes a reporting seam between source-to-sink analysis
+and reachability. A confirmed Semgrep, Pysa, CodeQL, or other normalized
+exposure finding retains `scanner-confirmed-source-to-sink`; a high-value AST
+sink inventory record retains `inventory-review-surface`. These bases are never
+presented as equivalent evidence.
+
+```mermaid
+flowchart LR
+    Entry["Declared entry points"] --> Route["Bounded Graphify route"]
+    Finding["Scanner-confirmed exposure finding"] --> Join{"Exposure route join"}
+    Inventory["Review-worthy sink inventory"] --> Join
+    Route --> Join
+    Boundary["Sink + data classes + trust boundary + protection"] --> Join
+    Assurance["Scanner trust + perspective"] --> Join
+    Validation["Coverage + focused tests"] --> Join
+    Owners["CODEOWNERS handoffs"] --> Join
+    Join --> Ledger["sensitive_data_routes"]
+    Ledger --> Report["Readable report + SARIF context"]
+    Ledger --> Closure["Protection and canary-test criteria"]
+```
+
+Summary counters separate scanner-confirmed and inventory-only records and show
+routes without observed protection, routes with runtime-observed entries,
+validation or scanner-assurance gaps, ownership boundaries, and multiple entry
+interfaces. Finding cards and closure work retain the stable sensitive-route ID
+and require concrete data-class, recipient, purpose, retention, access-control,
+minimization, and synthetic-canary review.
+
+The ledger is not interprocedural taint proof. Static entry reachability plus a
+sink observation does not establish attacker-controlled input, that a value
+reached the sink at runtime, that a disclosure occurred, or that a regulatory
+classification applies.
+
 ## Dependency-advisory importer routes
 
 The synthesis promotes each deduplicated advisory/importer pair from
@@ -450,15 +502,16 @@ flowchart LR
     Unbound --> Queue
 ```
 
-`shared-control-review-v4` ranks review work from route priority and convergence,
+`shared-control-review-v5` ranks review work from route priority and convergence,
 security-target and tool diversity, coverage/test state, changed-control risk,
 uncovered changed lines, runtime observation gaps, complexity, graph centrality,
 ownership, route scanner execution/trust/perspective assurance, evidence-revision
-coherence, and producer-verified payload-binding state. The report retains every non-zero
+coherence, producer-verified payload-binding state, and the quality of any shared
+test evidence. The report retains every non-zero
 factor, point contribution, and exact source artifacts; Markdown/HTML campaign
 cards show a bounded factor breakdown beside the score. The score is triage guidance, not a
-vulnerability severity or exploitability calculation. The prior v1 identifier
-through v3 identifiers remain schema-readable for stored artifacts. Evidence revision state is
+vulnerability severity or exploitability calculation. The prior v1 through v4
+identifiers remain schema-readable for stored artifacts. Evidence revision state is
 `aligned` only when all retained coverage/case artifacts declare the exact sealed
 source-inventory digest. `mismatch` and `not-established` generate explicit
 regeneration/binding work and flow into owner queues and closure acceptance
@@ -477,18 +530,38 @@ selected by at least two distinct campaigns. Each record joins:
 - exact retained execution states, case count, and producer artifacts without
   summing the same JUnit cases once per campaign; and
 - the test file's source-inventory binding and a consistency check across every
-  contributing campaign.
+  contributing campaign;
+- active normalized findings in the exact test file, including line, severity,
+  classifications, and contributing tools; and
+- exact test-file CODEOWNERS plus alignment with the campaign owners.
 
 The report turns this into a coordination action and recommends an independent
 focused test when a campaign depends on the shared test alone. Stable hotspot
 IDs flow into routes, finding JSON, SARIF, owner queues, Markdown/HTML context,
-and closure criteria. This is concentration evidence, not proof that tests are
-independent, assertions are strong, or behavior is sufficiently covered.
+and closure criteria. Each hotspot is graded `strong`, `qualified`, `weak`, or
+`not-established`; the weakest linked state feeds back into every dependent
+campaign. A passing test with active findings, an ownership handoff, or sole-test
+dependency is qualified rather than silently treated as strong. This is
+concentration and evidence-quality context, not proof that tests are independent,
+assertions are strong, or behavior is sufficiently covered.
 
 Targets with no route are retained in `unrouted_targets`. They are not presented
-as safe or unreachable: the action is to confirm framework, registry, plugin,
-generated-code, dependency-injection, or externally invoked entry points and
-extend the governed model.
+as safe or unreachable. Before calling a target a model gap, applicability joins
+Graphify file membership, source-inventory membership, artifact-manifest identity,
+target kind, scanner, area, and path type. The result is one of:
+
+| Class | Python route expected? | Required action |
+|---|---:|---|
+| `python-runtime-source` | Yes | Model framework, registry, plugin, generated-code, dependency-injection, or external entry paths, or retain a governed rationale |
+| `artifact-control` | No | Resolve packaging, provenance, integrity, or source-parity evidence in the release lane |
+| `generated-evidence` | No | Correct the evidence producer or scanner scope; do not add the output as an entry point |
+| `test-validation-source` | No | Resolve the test finding as validation-evidence quality and rerun affected campaigns |
+| `outside-python-runtime-model` | No | Use the native repository, configuration, infrastructure, or supply-chain evidence lane |
+
+The report separately counts all unrouted dispositions, actionable Python route
+gaps, graph-membership gaps, and expected non-runtime targets. A non-route-
+applicable classification changes only the route action; it never suppresses or
+downgrades the underlying finding.
 
 Inventory-only sink targets are included only when they are production scoped
 and have high review priority, sensitive-data context, a nearby normalized
@@ -509,7 +582,8 @@ selection examines at most 500 graph neighbors per
 campaign and retains at most 100 missing lines. At most 50 normalized importer
 paths are promoted per advisory, inside the existing 10,000-target global bound.
 At most 100 exact-path exposure/advisory intersections are retained. Omitted
-counts are explicit. At most 500 bounded tool-posture records are accepted from
+counts are explicit. At most 100 sensitive-data route records are retained with
+a separate omission count. At most 500 bounded tool-posture records are accepted from
 the local effectiveness artifact; each route retains at most 25 exact
 contributing-tool records.
 
@@ -520,12 +594,17 @@ report; SARIF carries the same `risk_path` property used by Markdown and HTML.
 Finding closure items cite the route artifact and exact route files, preserve
 route, hotspot, and campaign IDs plus selected test files and assessment state,
 and require missing validation evidence or an unrouted dynamic-entry rationale
-to be closed in the replacement report.
+to be closed in the replacement report. Non-runtime dispositions instead require
+the finding to be resolved or governed in its native evidence lane without
+inventing a Python entry point.
 
 ## Interpretation limits
 
 - Static imports and calls can over-approximate production execution.
 - Dynamic Python behavior can create legitimate paths absent from the graph.
+- Artifact, generated-evidence, test, and non-Python dispositions mean a
+  production Python route is not expected; they do not mean the finding is safe,
+  false, or resolved.
 - Runtime observation covers only retained executions and is not a proof of
   completeness.
 - A passing focused test does not resolve uncovered changed lines or establish

@@ -52,6 +52,7 @@ flowchart LR
     Fusion["Evidence fusion<br/>corroboration, coverage, graph impact, related findings"]
     Surface["Inventory review surface<br/>structural/test priority and verification"]
     Finding["Normalized exposure finding<br/>source, sink, SDK, CWE, action"]
+    Route["End-to-end sensitive-data route<br/>entry + runtime + protection + owner"]
 
     Sources --> Taint --> Sinks --> Finding
     SDK --> Triage --> Finding
@@ -66,6 +67,11 @@ flowchart LR
     Structure --> Surface
     Supply --> Surface
     Fusion --> Surface
+    Finding --> Route
+    Surface --> Route
+    Graph --> Route
+    Tests --> Route
+    Structure --> Route
 ```
 
 The bundled Semgrep rules identify credential-bearing values obtained from:
@@ -155,6 +161,14 @@ raises review priority for compound evidence such as a changed but uncovered
 sink or a sensitive runtime-observed sink, and generates evidence-specific
 verification steps. These joins improve review order only: an inventory surface
 remains unconfirmed until source-to-sink or exact configuration evidence exists.
+
+The static risk-route layer preserves that distinction in
+`sensitive_data_routes`. Confirmed findings and inventory-only surfaces receive
+separate evidence-basis labels, then join to every retained declared entry,
+exact entry-node runtime counts, trust boundary, observed protection, scanner
+assurance, validation, lifecycle, and ownership. This creates one actionable
+boundary review without implying attacker-controlled input, runtime data flow,
+disclosure, or regulatory impact.
 
 When structural synthesis is available, the same record contributes its
 change-risk score and classification, exact graph-selected test files, test

@@ -683,6 +683,45 @@ def _closure_exposure_advisory_intersection(
     }
 
 
+def _closure_sensitive_data_route(value: Any) -> dict[str, Any]:
+    item = _as_object(value)
+    if not item:
+        return {}
+    return {
+        "sensitive_route_id": str(item.get("sensitive_route_id") or "unknown"),
+        "route_id": str(item.get("route_id") or "unknown"),
+        "priority": str(item.get("priority") or "P4"),
+        "evidence_basis": str(item.get("evidence_basis") or "unknown"),
+        "path": str(item.get("path") or "unknown"),
+        "line": item.get("line"),
+        "concern": str(item.get("concern") or "sensitive-data-exposure"),
+        "sink_family": str(item.get("sink_family") or "unknown"),
+        "sink": item.get("sink"),
+        "sdk": item.get("sdk"),
+        "confidence": item.get("confidence"),
+        "data_classes": _string_values(item.get("data_classes"), 25),
+        "trust_boundary": str(item.get("trust_boundary") or "unknown"),
+        "protection_status": str(item.get("protection_status") or "unknown"),
+        "risk_factors": _string_values(item.get("risk_factors"), 25),
+        "entry_point_ids": _string_values(item.get("entry_point_ids"), 100),
+        "entry_point_runtime_statuses": _as_object(
+            item.get("entry_point_runtime_statuses")
+        ),
+        "validation_status": str(item.get("validation_status") or "not-assessed"),
+        "evidence_assurance_status": str(
+            item.get("evidence_assurance_status") or "not-assessed"
+        ),
+        "ownership_coordination_status": str(
+            item.get("ownership_coordination_status") or "not-established"
+        ),
+        "ownership_boundaries": item.get("ownership_boundaries"),
+        "owners": _string_values(item.get("owners"), 100),
+        "recommended_action": str(
+            item.get("recommended_action") or "Review the sensitive-data route."
+        ),
+    }
+
+
 def _risk_path_closure_context(
     evidence: dict[str, Any],
 ) -> tuple[list[str], list[str], dict[str, Any]]:
@@ -698,11 +737,19 @@ def _risk_path_closure_context(
         risk_path.get("change_lifecycle_attribution")
     )
     ownership_context = _closure_route_ownership(risk_path.get("ownership_context"))
+    route_applicability = _closure_route_applicability(
+        risk_path.get("route_applicability")
+    )
+    sensitive_data_route = _closure_sensitive_data_route(
+        risk_path.get("sensitive_data_route")
+    )
     details: dict[str, Any] = {
         "status": status,
         "evidence_assurance": evidence_assurance,
         "change_lifecycle_attribution": lifecycle_attribution,
         "ownership_context": ownership_context,
+        "route_applicability": route_applicability,
+        "sensitive_data_route": sensitive_data_route,
     }
     if evidence_assurance["tool_records"]:
         refs.extend(["effectiveness.json", "scanner-trust.json"])
@@ -711,6 +758,10 @@ def _risk_path_closure_context(
     if ownership_context:
         refs.extend(_string_values(ownership_context.get("evidence_artifacts"), 10))
         refs.extend(_string_values(ownership_context.get("unowned_files"), 225))
+    if route_applicability:
+        refs.extend(_string_values(route_applicability.get("evidence_artifacts"), 3))
+    if sensitive_data_route:
+        refs.extend(["data-exposure.json", str(sensitive_data_route["path"])])
     if status == "routed":
         route_id = str(risk_path.get("route_id") or "unknown")
         files = _string_values(risk_path.get("files"), 9)
@@ -819,6 +870,7 @@ def _risk_path_closure_context(
             campaigns=campaigns,
             dependency_routes=dependency_routes,
             exposure_advisory_intersections=exposure_advisory_intersections,
+            sensitive_data_route=sensitive_data_route,
         )
         return refs, acceptance, details
     reason = str(risk_path.get("reason") or "bounded static route unavailable")
@@ -826,13 +878,43 @@ def _risk_path_closure_context(
     return (
         refs,
         [
-            "The target has a governed entry-point route or a documented dynamic/external-entry rationale in the replacement report.",
+            *_unrouted_route_applicability_acceptance(route_applicability),
             *_evidence_assurance_acceptance(evidence_assurance),
             *_change_lifecycle_acceptance(lifecycle_attribution),
             *_route_ownership_acceptance(ownership_context),
         ],
         details,
     )
+
+
+def _closure_route_applicability(value: Any) -> dict[str, Any]:
+    raw = _as_object(value)
+    if not raw:
+        return {}
+    return {
+        "assessment": str(raw.get("assessment") or "not-established"),
+        "classification": str(raw.get("classification") or "not-established"),
+        "reason": str(raw.get("reason") or "route applicability is not established"),
+        "source_inventory_available": raw.get("source_inventory_available") is True,
+        "source_inventory_member": raw.get("source_inventory_member"),
+        "graph_available": raw.get("graph_available") is True,
+        "graph_path_member": raw.get("graph_path_member"),
+        "artifact_manifest_available": raw.get("artifact_manifest_available") is True,
+        "artifact_manifest_member": raw.get("artifact_manifest_member"),
+        "evidence_artifacts": _string_values(raw.get("evidence_artifacts"), 3),
+        "recommended_action": str(raw.get("recommended_action") or "Review."),
+    }
+
+
+def _unrouted_route_applicability_acceptance(value: dict[str, Any]) -> list[str]:
+    if value.get("assessment") == "route-applicable":
+        return [
+            "The Python runtime target has a governed entry-point route or a documented dynamic/external-entry rationale in the replacement report."
+        ]
+    classification = str(value.get("classification") or "non-runtime target")
+    return [
+        f"The replacement report retains the {classification} disposition, and the finding is resolved or governed through its native evidence lane without inventing a Python entry point."
+    ]
 
 
 def _routed_risk_path_acceptance(
@@ -846,6 +928,7 @@ def _routed_risk_path_acceptance(
     campaigns: list[dict[str, Any]],
     dependency_routes: list[dict[str, Any]],
     exposure_advisory_intersections: list[dict[str, Any]],
+    sensitive_data_route: dict[str, Any],
 ) -> list[str]:
     result = [
         f"Static route {route_id} is reviewed with its owner and retained in the replacement report."
@@ -878,6 +961,17 @@ def _routed_risk_path_acceptance(
         ):
             result.append(
                 "A tested protection control is retained at every intersection that previously reported no observed minimization, masking, hashing, or redaction."
+            )
+    if sensitive_data_route:
+        result.append(
+            "The end-to-end sensitive-data route is reviewed from each declared entry point through the cited sink, with concrete data classes, recipient, purpose, retention, and access controls documented without treating the static path as proof of disclosure."
+        )
+        if sensitive_data_route.get("protection_status") in {
+            "not-observed",
+            "unknown",
+        }:
+            result.append(
+                "A tested allowlist, minimization, masking, hashing, or redaction control is retained before the cited trust boundary, including negative tests with synthetic sensitive canaries."
             )
     return result
 

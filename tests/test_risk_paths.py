@@ -1631,6 +1631,94 @@ class RiskPathTests(unittest.TestCase):
         schema = json.loads(read_bundled_schema("risk-paths-1.0"))
         Draft202012Validator(schema).validate(result)
 
+    def test_sensitive_data_routes_join_entry_boundary_assurance_and_validation(
+        self,
+    ) -> None:
+        finding = _finding("src/sink.py", 9)
+        finding.evidence["data_exposure"] = {
+            "concern": "sensitive-information-in-logs",
+            "sink_family": "logging",
+            "sink": "logger.info",
+            "sdk": "structlog",
+            "confidence": "high",
+            "data_classes": ["credential", "private-data"],
+            "trust_boundary": "persistent-log-storage",
+            "protection_status": "not-observed",
+            "risk_factors": ["credential-material", "persistent-destination"],
+            "review_priority": "high",
+        }
+
+        with patch("py_security_suite.risk_paths._MAX_SENSITIVE_DATA_ROUTES", 1):
+            result = build_risk_paths([finding], _artifacts())
+
+        self.assertEqual(result["summary"]["sensitive_data_routes"], 2)
+        self.assertEqual(
+            result["summary"]["scanner_confirmed_sensitive_data_routes"], 1
+        )
+        self.assertEqual(result["summary"]["inventory_sensitive_data_routes"], 1)
+        self.assertEqual(len(result["sensitive_data_routes"]), 1)
+        self.assertEqual(result["truncation"]["sensitive_data_routes_omitted"], 1)
+        self.assertEqual(
+            result["summary"]["sensitive_data_routes_without_observed_protection"],
+            2,
+        )
+        self.assertEqual(
+            result["summary"][
+                "sensitive_data_routes_with_runtime_observed_entry_points"
+            ],
+            2,
+        )
+        self.assertEqual(
+            result["summary"]["sensitive_data_routes_with_validation_gaps"], 1
+        )
+        self.assertEqual(
+            result["summary"]["sensitive_data_routes_with_assurance_gaps"], 2
+        )
+        confirmed = next(
+            item
+            for item in result["sensitive_data_routes"]
+            if item["evidence_basis"] == "scanner-confirmed-source-to-sink"
+        )
+        self.assertEqual(confirmed["finding_id"], finding.finding_id)
+        self.assertEqual(confirmed["sink_family"], "logging")
+        self.assertEqual(confirmed["sink"], "logger.info")
+        self.assertEqual(confirmed["sdk"], "structlog")
+        self.assertEqual(confirmed["data_classes"], ["credential", "private-data"])
+        self.assertEqual(confirmed["trust_boundary"], "persistent-log-storage")
+        self.assertEqual(confirmed["protection_status"], "not-observed")
+        self.assertEqual(confirmed["entry_point_ids"], ["entry:cli"])
+        self.assertEqual(
+            confirmed["entry_point_runtime_statuses"],
+            {"observed": 1, "not-observed": 0, "not-available": 0},
+        )
+        self.assertEqual(
+            finding.evidence["risk_path"]["sensitive_data_route"]["sensitive_route_id"],
+            confirmed["sensitive_route_id"],
+        )
+        rendered = "\n".join(_render_risk_path_summary(result))
+        self.assertIn("End-to-end sensitive-data routes", rendered)
+        self.assertIn("scanner-confirmed-source-to-sink", rendered)
+        markdown = "\n".join(_markdown_risk_path_context(finding))
+        self.assertIn("End-to-end sensitive-data route", markdown)
+        self.assertIn("not proof of disclosure", markdown)
+        html = _html_risk_path_context(finding)
+        self.assertIn("End-to-end sensitive-data route", html)
+        closure = _finding_items([json_ready(finding)])[0]
+        closure_route = closure["details"]["risk_path"]["sensitive_data_route"]
+        self.assertEqual(
+            closure_route["sensitive_route_id"], confirmed["sensitive_route_id"]
+        )
+        self.assertIn("data-exposure.json", closure["evidence_refs"])
+        self.assertTrue(
+            any(
+                "synthetic sensitive canaries" in criterion
+                for criterion in closure["acceptance_criteria"]
+            )
+        )
+        Draft202012Validator(
+            json.loads(read_bundled_schema("risk-paths-1.0"))
+        ).validate(result)
+
     def test_exposure_advisory_intersection_requires_exact_path_and_package(
         self,
     ) -> None:
@@ -1703,9 +1791,122 @@ class RiskPathTests(unittest.TestCase):
         self.assertEqual(result["summary"]["validation_unassessed_routes"], 0)
         record = result["unrouted_targets"][0]
         self.assertEqual(record["target"]["finding_id"], "PYSEC-RISK-PATH")
-        self.assertIn("no declared-entry-point route", record["reason"])
+        self.assertIn("absent from the retained Graphify", record["reason"])
+        self.assertEqual(
+            record["route_applicability"]["classification"],
+            "python-runtime-source",
+        )
+        self.assertTrue(result["summary"]["unrouted_targets_missing_graph_membership"])
         self.assertEqual(finding.evidence["risk_path"]["status"], "unrouted")
         self.assertIn("not proof", "\n".join(_render_risk_path_summary(result)))
+
+    def test_unrouted_targets_are_dispositioned_by_native_evidence_lane(
+        self,
+    ) -> None:
+        def candidate(path: str, identifier: str) -> Finding:
+            finding = _finding(path, 1)
+            finding.finding_id = identifier
+            finding.fingerprint = "sha256:" + identifier.casefold()
+            return finding
+
+        artifact = candidate("src/sink.py", "PYSEC-ARTIFACT")
+        artifact.area = "artifact-source-parity"
+        artifact.sources = [
+            Source(
+                tool="check-wheel-contents",
+                rule_id="WHEEL-SOURCE-PARITY",
+                message="mismatch",
+            )
+        ]
+        generated = candidate("coverage.json", "PYSEC-GENERATED")
+        binding_receipt = candidate(
+            "coverage.json.pysec-binding.json", "PYSEC-BINDING-RECEIPT"
+        )
+        test_source = candidate("tests/test_sink.py", "PYSEC-TEST")
+        repository_control = candidate("pyproject.toml", "PYSEC-CONFIG")
+        python_gap = candidate("src/dynamic_plugin.py", "PYSEC-PYTHON-GAP")
+        findings = [
+            artifact,
+            generated,
+            binding_receipt,
+            test_source,
+            repository_control,
+            python_gap,
+        ]
+        artifacts = _artifacts()
+        artifacts.pop("data-exposure.json", None)
+        artifacts.pop("evidence-fusion.json", None)
+        artifacts["artifact-manifest.json"] = {
+            "schema_version": "1.0",
+            "artifacts": [
+                {"path": "dist/example.whl", "sha256": "f" * 64, "size_bytes": 1}
+            ],
+        }
+
+        result = build_risk_paths(findings, artifacts)
+
+        self.assertEqual(result["summary"]["route_applicable_targets"], 1)
+        self.assertEqual(result["summary"]["route_not_applicable_targets"], 5)
+        self.assertEqual(result["summary"]["unrouted_route_applicable_targets"], 1)
+        self.assertEqual(result["summary"]["unrouted_expected_non_runtime_targets"], 5)
+        self.assertEqual(
+            result["summary"]["unrouted_by_applicability_class"],
+            {
+                "python-runtime-source": 1,
+                "artifact-control": 1,
+                "generated-evidence": 2,
+                "test-validation-source": 1,
+                "outside-python-runtime-model": 1,
+            },
+        )
+        by_id = {
+            item["target"]["finding_id"]: item for item in result["unrouted_targets"]
+        }
+        self.assertEqual(
+            by_id["PYSEC-ARTIFACT"]["route_applicability"]["classification"],
+            "artifact-control",
+        )
+        self.assertEqual(
+            by_id["PYSEC-GENERATED"]["route_applicability"]["classification"],
+            "generated-evidence",
+        )
+        self.assertEqual(
+            by_id["PYSEC-BINDING-RECEIPT"]["route_applicability"]["classification"],
+            "generated-evidence",
+        )
+        self.assertEqual(
+            by_id["PYSEC-TEST"]["route_applicability"]["classification"],
+            "test-validation-source",
+        )
+        self.assertEqual(
+            by_id["PYSEC-CONFIG"]["route_applicability"]["classification"],
+            "outside-python-runtime-model",
+        )
+        self.assertIn(
+            "do not add a Python entry point",
+            by_id["PYSEC-ARTIFACT"]["recommended_action"],
+        )
+        closure = _finding_items([json_ready(artifact)])[0]
+        self.assertEqual(
+            closure["details"]["risk_path"]["route_applicability"]["classification"],
+            "artifact-control",
+        )
+        self.assertTrue(
+            any(
+                "native evidence lane" in criterion
+                for criterion in closure["acceptance_criteria"]
+            )
+        )
+        rendered = "\n".join(_render_risk_path_summary(result))
+        self.assertIn("Actionable Python route gaps", rendered)
+        self.assertIn("artifact-control", rendered)
+        finding_context = "\n".join(_markdown_risk_path_context(artifact))
+        self.assertIn("native evidence lane", finding_context)
+        self.assertNotIn("entry point..", finding_context)
+        self.assertNotIn("entry point..", _html_risk_path_context(artifact))
+        Draft202012Validator(
+            json.loads(read_bundled_schema("risk-paths-1.0"))
+        ).validate(result)
 
     def test_dependency_import_target_bound_reports_exact_omissions(self) -> None:
         artifacts = _artifacts()

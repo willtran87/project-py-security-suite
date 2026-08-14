@@ -612,6 +612,23 @@ temporary tree so Syft and Grype can recognize Python package metadata. The
 generated `artifact-manifest.json` binds the evidence to the unexpanded
 release files by SHA-256 and byte size.
 
+### An unrouted target recommends the wrong kind of entry point
+
+Inspect `route_applicability` in `risk-paths.json` and the **Unrouted target
+dispositions** table in `summary.md`. Only `python-runtime-source` is an
+actionable Python route-model gap. The suite separately classifies
+`artifact-control`, `generated-evidence`, `test-validation-source`, and
+`outside-python-runtime-model`; these retain the finding and point to packaging/
+provenance, evidence-producer, test-quality, or native repository controls.
+
+For a Python target, compare `graph_path_member` with
+`source_inventory_member`: graph `false` identifies a Graphify/model-membership
+gap, while graph `true` with no route identifies a declared-entry connectivity
+gap. For artifact findings, confirm `artifact_manifest_member` and follow the
+release evidence action. Do not add an artificial Python entry point merely to
+make an artifact, test, generated report, or configuration finding appear
+routed.
+
 ### Result is INCOMPLETE although all scanners completed
 
 Check `network_isolation_attested` in `scan-manifest.json`. A diagnostic run on

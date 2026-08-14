@@ -814,6 +814,8 @@ def _render_risk_path_summary(value: dict[str, Any] | None) -> list[str]:
     test_hotspots = test_hotspots if isinstance(test_hotspots, list) else []
     intersections = value.get("exposure_advisory_intersections")
     intersections = intersections if isinstance(intersections, list) else []
+    sensitive_routes = value.get("sensitive_data_routes")
+    sensitive_routes = sensitive_routes if isinstance(sensitive_routes, list) else []
     owner_queues = value.get("owner_work_queues")
     owner_queues = owner_queues if isinstance(owner_queues, list) else []
     lines = [
@@ -874,9 +876,18 @@ def _render_risk_path_summary(value: dict[str, Any] | None) -> list[str]:
         f"| Known-exploited exposure / advisory intersections | {int(summary.get('known_exploited_exposure_advisory_intersections', 0))} |",
         f"| Unprotected exposure / advisory intersections | {int(summary.get('unprotected_exposure_advisory_intersections', 0))} |",
         f"| Exposure / advisory intersections with validation gaps | {int(summary.get('exposure_advisory_intersections_with_validation_gaps', 0))} |",
+        f"| End-to-end sensitive-data routes | {int(summary.get('sensitive_data_routes', 0))} |",
+        f"| Scanner-confirmed / inventory-only sensitive-data routes | {int(summary.get('scanner_confirmed_sensitive_data_routes', 0))} / {int(summary.get('inventory_sensitive_data_routes', 0))} |",
+        f"| Sensitive-data routes without observed protection | {int(summary.get('sensitive_data_routes_without_observed_protection', 0))} |",
+        f"| Sensitive-data routes with runtime-observed entry points | {int(summary.get('sensitive_data_routes_with_runtime_observed_entry_points', 0))} |",
+        f"| Sensitive-data routes with validation / scanner-assurance gaps | {int(summary.get('sensitive_data_routes_with_validation_gaps', 0))} / {int(summary.get('sensitive_data_routes_with_assurance_gaps', 0))} |",
+        f"| Sensitive-data routes crossing ownership boundaries / reached by multiple entry points | {int(summary.get('sensitive_data_routes_crossing_ownership_boundaries', 0))} / {int(summary.get('sensitive_data_routes_with_multiple_entry_points', 0))} |",
         f"| Targets analyzed within bound | {int(summary.get('targets_analyzed', 0))} |",
+        f"| Python route-applicable / intentionally non-runtime targets | {int(summary.get('route_applicable_targets', 0))} / {int(summary.get('route_not_applicable_targets', 0))} |",
         f"| Targets with a bounded route | {int(summary.get('routed_targets', 0))} |",
-        f"| Targets without a bounded route | {int(summary.get('unrouted_targets', 0))} |",
+        f"| Targets without a bounded route (all dispositions) | {int(summary.get('unrouted_targets', 0))} |",
+        f"| Actionable Python route gaps / expected non-runtime dispositions | {int(summary.get('unrouted_route_applicable_targets', 0))} / {int(summary.get('unrouted_expected_non_runtime_targets', 0))} |",
+        f"| Python targets absent from graph / without an entry route | {int(summary.get('unrouted_targets_missing_graph_membership', 0))} / {int(summary.get('unrouted_targets_without_entry_route', 0))} |",
         f"| Runtime-observed routes | {int(summary.get('runtime_observed_routes', 0))} |",
         f"| Routes with line-coverage gaps | {int(summary.get('coverage_gap_routes', 0))} |",
         f"| Routes with validation gaps | {int(summary.get('validation_gap_routes', 0))} |",
@@ -989,6 +1000,7 @@ def _render_risk_path_summary(value: dict[str, Any] | None) -> list[str]:
                 + " |"
             )
     lines.extend(_render_dependency_route_table(dependency_routes))
+    lines.extend(_render_sensitive_data_routes(sensitive_routes))
     lines.extend(_render_exposure_advisory_intersections(intersections))
     if test_hotspots:
         lines.extend(
@@ -1241,29 +1253,139 @@ def _render_risk_path_summary(value: dict[str, Any] | None) -> list[str]:
         lines.extend(
             [
                 "",
-                "### Unrouted review targets",
+                "### Unrouted target dispositions",
                 "",
-                "No route is not a clean result: confirm dynamic or externally invoked entry points before disposition.",
+                "Only Python runtime-source targets are reachability gaps. Artifact controls, generated evidence, tests, and non-Python repository controls retain their findings but receive their native evidence-lane action instead of misleading entry-point advice.",
                 "",
+                "| Applicability | Target | Evidence | Action |",
+                "|---|---|---|---|",
             ]
         )
-        for item in unrouted[:5]:
+        for item in unrouted[:10]:
             if not isinstance(item, dict):
                 continue
             target = item.get("target")
             target = target if isinstance(target, dict) else {}
+            applicability = item.get("route_applicability")
+            applicability = applicability if isinstance(applicability, dict) else {}
             lines.append(
-                "- `"
+                "| `"
+                + _markdown_code(
+                    str(applicability.get("assessment") or "not-established")
+                )
+                + "`<br>`"
+                + _markdown_code(
+                    str(applicability.get("classification") or "not-established")
+                )
+                + "` | `"
                 + _markdown_code(str(item.get("priority") or "P4"))
                 + "` `"
                 + _markdown_code(str(target.get("path") or "unknown"))
-                + "`: "
+                + "`<br>"
                 + _markdown_text(str(item.get("reason") or "route unavailable"))
-                + "; evidence "
+                + " | graph/source/artifact `"
+                + _markdown_code(_route_applicability_membership_text(applicability))
+                + "`<br>scanner "
                 + _markdown_text(
                     _evidence_assurance_text(item.get("evidence_assurance"))
                 )
+                + " | "
+                + _markdown_text(
+                    str(
+                        item.get("recommended_action")
+                        or applicability.get("recommended_action")
+                        or "Review the target in its native evidence lane."
+                    )
+                )
+                + " |"
             )
+    return lines
+
+
+def _render_sensitive_data_routes(values: list[Any]) -> list[str]:
+    if not values:
+        return []
+    lines = [
+        "",
+        "### End-to-end sensitive-data routes",
+        "",
+        (
+            "These records join scanner-confirmed exposure findings or review-worthy "
+            "sink inventory to declared entry points, trust boundaries, observed "
+            "protections, scanner assurance, validation, and ownership. They are "
+            "bounded static review paths, not proof of attacker control, runtime "
+            "data flow, disclosure, or regulatory impact."
+        ),
+        "",
+        "| Priority / evidence | Entry route / boundary | Data / protection | Assurance / validation | Owner / action |",
+        "|---|---|---|---|---|",
+    ]
+    for value in values[:10]:
+        if not isinstance(value, dict):
+            continue
+        entry_ids = value.get("entry_point_ids")
+        entries = entry_ids if isinstance(entry_ids, list) else []
+        data_classes = value.get("data_classes")
+        classes = data_classes if isinstance(data_classes, list) else []
+        owners = value.get("owners")
+        owner_values = owners if isinstance(owners, list) else []
+        runtime = value.get("entry_point_runtime_statuses")
+        runtime_text = _entry_runtime_status_text(runtime)
+        path = str(value.get("path") or "unknown")
+        if value.get("line"):
+            path += f":{value['line']}"
+        lines.append(
+            "| `"
+            + _markdown_code(str(value.get("priority") or "P4"))
+            + "` `"
+            + _markdown_code(str(value.get("evidence_basis") or "unknown"))
+            + "`<br>`"
+            + _markdown_code(str(value.get("sensitive_route_id") or "unknown"))
+            + "`<br>`"
+            + _markdown_code(path)
+            + "` | "
+            + _markdown_text(
+                ", ".join(str(item) for item in entries[:3]) or "No retained entry"
+            )
+            + "<br>"
+            + _markdown_text(runtime_text)
+            + "<br>sink `"
+            + _markdown_code(str(value.get("sink_family") or "unknown"))
+            + "`; boundary `"
+            + _markdown_code(str(value.get("trust_boundary") or "unknown"))
+            + "` | "
+            + _markdown_text(
+                ", ".join(str(item) for item in classes[:5]) or "Unclassified"
+            )
+            + "<br>protection `"
+            + _markdown_code(str(value.get("protection_status") or "unknown"))
+            + "`"
+            + (
+                "<br>SDK `" + _markdown_code(str(value["sdk"])) + "`"
+                if value.get("sdk")
+                else ""
+            )
+            + " | scanner `"
+            + _markdown_code(
+                str(value.get("evidence_assurance_status") or "not-assessed")
+            )
+            + "`<br>validation `"
+            + _markdown_code(str(value.get("validation_status") or "not-assessed"))
+            + "` | **"
+            + _markdown_text(
+                ", ".join(str(item) for item in owner_values[:3]) or "Unassigned"
+            )
+            + "**<br>handoffs `"
+            + _markdown_code(str(int(value.get("ownership_boundaries") or 0)))
+            + "`<br>"
+            + _markdown_text(
+                str(
+                    value.get("recommended_action")
+                    or "Review the sensitive-data route."
+                )
+            )
+            + " |"
+        )
     return lines
 
 
@@ -1912,6 +2034,27 @@ def _campaign_route_assurance_text(campaign: dict[str, Any]) -> str:
     return (
         f"{assessment}; routes {assessed}/{expected}; trust/execution/unassessed {gaps}"
     )
+
+
+def _route_applicability_membership_text(value: dict[str, Any]) -> str:
+    def state(key: str) -> str:
+        member = value.get(key)
+        return "yes" if member is True else "no" if member is False else "n/a"
+
+    return "/".join(
+        state(key)
+        for key in (
+            "graph_path_member",
+            "source_inventory_member",
+            "artifact_manifest_member",
+        )
+    )
+
+
+def _route_applicability_text(value: dict[str, Any]) -> str:
+    assessment = str(value.get("assessment") or "not-established")
+    classification = str(value.get("classification") or "not-established")
+    return f"{assessment} ({classification})"
 
 
 def _campaign_shared_test_quality_text(campaign: dict[str, Any]) -> str:
@@ -4125,8 +4268,18 @@ def _markdown_risk_path_context(finding: Finding) -> list[str]:
     if not isinstance(context, dict):
         return []
     if context.get("status") != "routed":
+        applicability = context.get("route_applicability")
+        applicability = applicability if isinstance(applicability, dict) else {}
+        applicability_text = _route_applicability_text(applicability)
+        interpretation = (
+            "This is a Python route-model evidence gap, not proof that the code is unreachable."
+            if applicability.get("assessment") == "route-applicable"
+            else "The finding remains actionable in its native evidence lane; a production Python route is not expected."
+        )
         return [
-            "- **Static risk route:** no bounded declared-entry-point route; "
+            "- **Static risk route:** "
+            + _markdown_text(applicability_text)
+            + "; "
             + _markdown_text(str(context.get("reason") or "review model coverage"))
             + ". **Evidence assurance:** "
             + _markdown_text(
@@ -4136,7 +4289,12 @@ def _markdown_risk_path_context(finding: Finding) -> list[str]:
             + _markdown_text(
                 _change_lifecycle_text(context.get("change_lifecycle_attribution"))
             )
-            + ". This is an evidence gap, not proof that the code is unreachable."
+            + ". **Action:** "
+            + _markdown_text(
+                str(context.get("recommended_action") or "Review.").rstrip(".")
+            )
+            + ". "
+            + interpretation
         ]
     entry = context.get("entry_point")
     entry = entry if isinstance(entry, dict) else {}
@@ -4300,6 +4458,33 @@ def _markdown_risk_path_context(finding: Finding) -> list[str]:
             )
             + ". This is compound review context, not leakage or vulnerable-function proof."
         )
+    sensitive_route = context.get("sensitive_data_route")
+    sensitive_route = sensitive_route if isinstance(sensitive_route, dict) else {}
+    sensitive_route_text = ""
+    if sensitive_route:
+        sensitive_route_text = (
+            " **End-to-end sensitive-data route:** `"
+            + _markdown_code(
+                str(sensitive_route.get("sensitive_route_id") or "unknown")
+            )
+            + "`; evidence `"
+            + _markdown_code(str(sensitive_route.get("evidence_basis") or "unknown"))
+            + "`; sink `"
+            + _markdown_code(str(sensitive_route.get("sink_family") or "unknown"))
+            + "`; boundary `"
+            + _markdown_code(str(sensitive_route.get("trust_boundary") or "unknown"))
+            + "`; protection `"
+            + _markdown_code(str(sensitive_route.get("protection_status") or "unknown"))
+            + "`; scanner assurance `"
+            + _markdown_code(
+                str(sensitive_route.get("evidence_assurance_status") or "not-assessed")
+            )
+            + "`; validation `"
+            + _markdown_code(
+                str(sensitive_route.get("validation_status") or "not-assessed")
+            )
+            + "`. This is static review context, not proof of disclosure."
+        )
     return [
         "- **Static risk route:** `"
         + _markdown_code(str(context.get("route_id") or "unknown"))
@@ -4327,6 +4512,7 @@ def _markdown_risk_path_context(finding: Finding) -> list[str]:
         + campaign_text
         + advisory_text
         + intersection_text
+        + sensitive_route_text
     ]
 
 
@@ -4637,6 +4823,17 @@ def _html_risk_path_context(finding: Finding) -> str:
         return ""
     if context.get("status") != "routed":
         reason = html.escape(str(context.get("reason") or "review model coverage"))
+        applicability = context.get("route_applicability")
+        applicability = applicability if isinstance(applicability, dict) else {}
+        applicability_text = html.escape(_route_applicability_text(applicability))
+        action = html.escape(
+            str(context.get("recommended_action") or "Review.").rstrip(".")
+        )
+        interpretation = (
+            "This is a Python route-model evidence gap, not proof that the code is unreachable."
+            if applicability.get("assessment") == "route-applicable"
+            else "The finding remains actionable in its native evidence lane; a production Python route is not expected."
+        )
         assurance = html.escape(
             _evidence_assurance_text(context.get("evidence_assurance"))
         )
@@ -4645,10 +4842,10 @@ def _html_risk_path_context(finding: Finding) -> str:
         )
         return (
             "<section class='source-context'><h4>Static risk route</h4>"
-            f"<p>No bounded declared-entry-point route: {reason}. "
+            f"<p>{applicability_text}: {reason}. "
             f"<strong>Evidence assurance:</strong> {assurance}. "
-            f"<strong>Change/lifecycle attribution:</strong> {lifecycle}. This is an "
-            "evidence gap, not proof that the code is unreachable.</p></section>"
+            f"<strong>Change/lifecycle attribution:</strong> {lifecycle}. "
+            f"<strong>Action:</strong> {action}. {html.escape(interpretation)}</p></section>"
         )
     entry = context.get("entry_point")
     entry = entry if isinstance(entry, dict) else {}
@@ -4806,6 +5003,31 @@ def _html_risk_path_context(finding: Finding) -> str:
             )
             + ". This is compound review context, not leakage or vulnerable-function proof."
         )
+    sensitive_route = context.get("sensitive_data_route")
+    sensitive_route = sensitive_route if isinstance(sensitive_route, dict) else {}
+    sensitive_route_html = ""
+    if sensitive_route:
+        sensitive_route_html = (
+            " <strong>End-to-end sensitive-data route:</strong> <code>"
+            + html.escape(str(sensitive_route.get("sensitive_route_id") or "unknown"))
+            + "</code>; evidence <code>"
+            + html.escape(str(sensitive_route.get("evidence_basis") or "unknown"))
+            + "</code>; sink <code>"
+            + html.escape(str(sensitive_route.get("sink_family") or "unknown"))
+            + "</code>; boundary <code>"
+            + html.escape(str(sensitive_route.get("trust_boundary") or "unknown"))
+            + "</code>; protection <code>"
+            + html.escape(str(sensitive_route.get("protection_status") or "unknown"))
+            + "</code>; scanner assurance <code>"
+            + html.escape(
+                str(sensitive_route.get("evidence_assurance_status") or "not-assessed")
+            )
+            + "</code>; validation <code>"
+            + html.escape(
+                str(sensitive_route.get("validation_status") or "not-assessed")
+            )
+            + "</code>. This is static review context, not proof of disclosure."
+        )
     return (
         "<section class='source-context'><h4>Static risk route</h4><p>"
         "Route <code>"
@@ -4834,6 +5056,7 @@ def _html_risk_path_context(finding: Finding) -> str:
         + campaign_html
         + advisory_html
         + intersection_html
+        + sensitive_route_html
         + "</p></section>"
     )
 

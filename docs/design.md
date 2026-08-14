@@ -1,7 +1,7 @@
 # Python Security Suite design
 
 Status: alpha foundation  
-Last reviewed: 2026-08-12
+Last reviewed: 2026-08-13
 
 ## Purpose
 
@@ -60,6 +60,37 @@ flowchart LR
     Reports --> GitHub
     Contracts --> GitHub
 ```
+
+### Evidence-plane-aware route synthesis
+
+Risk-route synthesis does not assume every normalized finding belongs on a
+production Python call path. It cross-references the exact target with the
+Graphify file model, sealed source inventory, built-artifact manifest, target
+kind, scanner, finding area, and path type before selecting an action.
+
+```mermaid
+flowchart LR
+    Target["Normalized review target"] --> Join{"Route applicability"}
+    Graph["Graphify file membership"] --> Join
+    Source["Sealed source inventory"] --> Join
+    Artifact["Built-artifact manifest"] --> Join
+    Identity["Target kind + scanner + area + path"] --> Join
+    Join -->|"Python runtime source"| Route["Declared-entry route or explicit model gap"]
+    Join -->|"Artifact control"| Release["Release integrity / provenance lane"]
+    Join -->|"Generated evidence"| Producer["Evidence producer / scan-scope lane"]
+    Join -->|"Validation code"| Test["Shared-test quality lane"]
+    Join -->|"Non-Python control"| Native["Native repository / IaC / configuration lane"]
+    Route --> Report["Finding + report + closure"]
+    Release --> Report
+    Producer --> Report
+    Test --> Report
+    Native --> Report
+```
+
+This classification never suppresses a finding or changes native severity. It
+prevents an artifact-provenance failure, generated JUnit file, or test-quality
+finding from being mislabeled as a missing production entry point while keeping
+real Python graph and entry-model gaps fail-visible.
 
 The scan lane emits an unsigned in-toto Statement using the SLSA Verification
 Summary Attestation predicate. A separate approval lane verifies the report and
@@ -393,6 +424,12 @@ risk synthesis requires matching package and advisory-cluster identity before
 emitting a sensitive-boundary dependency intersection. The compound record
 coordinates boundary-control and dependency-remediation review while explicitly
 leaving disclosure, attacker control, and vulnerable-function use unproven.
+Confirmed exposure findings and review-worthy sink inventory also become a
+separate end-to-end sensitive-data route ledger. It preserves the evidence
+basis and joins entry-interface breadth, exact runtime state, data class, sink,
+trust boundary, observed protection, scanner assurance, validation, lifecycle,
+and CODEOWNERS handoffs without converting static coincidence into a leakage
+claim.
 
 ```mermaid
 flowchart LR
@@ -421,6 +458,7 @@ flowchart LR
     Matrix --> OwnerPath
     OwnerPath --> Routed["Bounded risk routes"]
     Search --> Routed
+    Routed --> SensitiveRoutes["End-to-end sensitive-data routes<br/>boundary + protection + assurance"]
     Routed --> Hotspots["Shared control points"]
     Graph --> Campaigns["Graph-selected validation campaigns"]
     Hotspots --> Campaigns
@@ -437,6 +475,7 @@ flowchart LR
     Campaigns --> Queues
     SharedTests --> Queues
     Routed --> Routes["risk-paths.json"]
+    SensitiveRoutes --> Routes
     Hotspots --> Routes
     Campaigns --> Routes
     SharedTests --> Routes
@@ -475,6 +514,10 @@ findings add a separate SDK dependency lane with advisory citations and explicit
 matched-versus-risk semantics. Package-scoped CVE/GHSA/PYSEC/OSV alias clusters
 prevent reciprocal advisory records from overstating distinct risk while
 retaining every scanner source and enabling OSV/Grype corroboration.
+Risk-route synthesis then carries those exposure semantics across each declared
+entry route. Reports and closure work distinguish scanner-confirmed
+source-to-sink evidence from inventory-only surfaces while presenting
+protection, runtime, assurance, validation, lifecycle, and owner gaps together.
 Those clusters also join CycloneDX dependency roots, exact Graphify import
 edges, importing-file reachability/runtime state, and deptry findings. The
 result is actionable dependency-use context with explicit incomplete and
