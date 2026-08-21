@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urljoin, urlparse
+from uuid import UUID
 
 from ..models import (
     Citation,
@@ -63,7 +64,9 @@ def parse_sarif_findings(
     document = json.loads(payload)
     findings: list[Finding] = []
     for run in _object_list(document.get("runs", []), "runs"):
-        driver = _object(_object(run.get("tool")).get("driver"))
+        tool = _object(run.get("tool"))
+        driver = _object(tool.get("driver"))
+        extensions = _object_list(tool.get("extensions") or [], "tool extensions")
         ordered_rules = _ordered_rules(driver)
         global_message_strings = _object(driver.get("globalMessageStrings"))
         uri_bases = _object(run.get("originalUriBaseIds"))
@@ -87,6 +90,8 @@ def parse_sarif_findings(
                     uri_bases=uri_bases,
                     artifacts=artifacts,
                     invocations=invocations,
+                    driver=driver,
+                    extensions=extensions,
                 )
             )
     return findings
@@ -106,8 +111,17 @@ def _finding(
     uri_bases: dict[str, Any],
     artifacts: list[dict[str, Any]],
     invocations: list[dict[str, Any]],
+    driver: dict[str, Any],
+    extensions: list[dict[str, Any]],
 ) -> Finding:
-    rule_id, rule, rule_reference = _resolve_rule(result, ordered_rules)
+    rule_id, rule, rule_reference = _resolve_rule(
+        result,
+        ordered_rules,
+        driver=driver,
+        extensions=extensions,
+    )
+    component = _component_from_reference(rule_reference, driver, extensions)
+    component_rules = _ordered_rules(component)
     properties = _object(result.get("properties"))
     rule_properties = _object(rule.get("properties"))
     tags = _tags(properties, rule_properties)
@@ -138,8 +152,11 @@ def _finding(
     configuration_override, configuration_reference = _invocation_configuration(
         result,
         invocations,
-        ordered_rules,
+        component_rules,
         rule_id=rule_id,
+        component_reference=_object(rule_reference.get("component")),
+        driver=driver,
+        extensions=extensions,
     )
     severity, severity_decision = _sarif_severity_decision(
         result.get("level", _MISSING),
@@ -381,8 +398,28 @@ def _ordered_rules(driver: Any) -> list[dict[str, Any]]:
 
 
 def _resolve_rule(
-    result: dict[str, Any], ordered_rules: list[dict[str, Any]]
+    result: dict[str, Any],
+    ordered_rules: list[dict[str, Any]],
+    *,
+    driver: dict[str, Any] | None = None,
+    extensions: list[dict[str, Any]] | None = None,
 ) -> tuple[str, dict[str, Any], dict[str, Any]]:
+    effective_driver = driver if driver is not None else {"rules": ordered_rules}
+    effective_extensions = extensions or []
+    if "rule" not in result:
+        rule_reference: dict[str, Any] = {}
+    else:
+        raw_reference = result.get("rule")
+        if not isinstance(raw_reference, dict):
+            raise TypeError("SARIF rule must be an object")
+        rule_reference = raw_reference
+    component, component_reference = _resolve_tool_component(
+        rule_reference.get("toolComponent", _MISSING),
+        effective_driver,
+        effective_extensions,
+    )
+    component_rules = _ordered_rules(component)
+
     raw_rule_id = result.get("ruleId")
     if raw_rule_id is None:
         declared_rule_id = ""
@@ -393,42 +430,92 @@ def _resolve_rule(
         if not declared_rule_id:
             raise ValueError("SARIF ruleId must not be empty")
 
+    raw_reference_id = rule_reference.get("id")
+    reference_rule_id = ""
+    if raw_reference_id is not None:
+        if not isinstance(raw_reference_id, str):
+            raise TypeError("SARIF rule.id must be a string")
+        reference_rule_id = raw_reference_id.strip()
+        if not reference_rule_id:
+            raise ValueError("SARIF rule.id must not be empty")
+    if declared_rule_id and reference_rule_id and declared_rule_id != reference_rule_id:
+        raise ValueError("SARIF ruleId and rule.id reference different rules")
+    declared_rule_id = declared_rule_id or reference_rule_id
+
     raw_rule_index = result.get("ruleIndex")
-    rule_index: int | None = None
-    if raw_rule_index is not None:
-        if not isinstance(raw_rule_index, int) or isinstance(raw_rule_index, bool):
-            raise TypeError("SARIF ruleIndex must be an integer")
-        if raw_rule_index < -1:
-            raise ValueError("SARIF ruleIndex must be -1 or non-negative")
-        if raw_rule_index >= 0:
-            rule_index = raw_rule_index
+    result_rule_index = _descriptor_index(raw_rule_index, label="ruleIndex")
+    raw_reference_index = rule_reference.get("index")
+    reference_rule_index = _descriptor_index(
+        raw_reference_index,
+        label="rule.index",
+    )
+    if (
+        raw_rule_index is not None
+        and raw_reference_index is not None
+        and result_rule_index != reference_rule_index
+    ):
+        raise ValueError("SARIF ruleIndex and rule.index reference different rules")
+    rule_index = (
+        reference_rule_index if raw_reference_index is not None else result_rule_index
+    )
+
+    raw_reference_guid = rule_reference.get("guid")
+    reference_guid = (
+        _normalized_guid(raw_reference_guid, label="rule.guid")
+        if raw_reference_guid is not None
+        else None
+    )
 
     indexed_rule: dict[str, Any] | None = None
     indexed_rule_id = ""
     if rule_index is not None:
-        if rule_index >= len(ordered_rules):
-            raise ValueError("SARIF ruleIndex is outside the driver rule table")
-        indexed_rule = ordered_rules[rule_index]
+        if rule_index >= len(component_rules):
+            raise ValueError(
+                "SARIF rule index is outside the selected component rule table"
+            )
+        indexed_rule = component_rules[rule_index]
         raw_indexed_id = indexed_rule.get("id")
         if not isinstance(raw_indexed_id, str) or not raw_indexed_id.strip():
-            raise ValueError("SARIF ruleIndex references a rule without an id")
+            raise ValueError("SARIF rule index references a rule without an id")
         indexed_rule_id = raw_indexed_id.strip()
-        if declared_rule_id and declared_rule_id != indexed_rule_id:
-            raise ValueError("SARIF ruleId and ruleIndex reference different rules")
+        if declared_rule_id and not _rule_id_matches(declared_rule_id, indexed_rule_id):
+            raise ValueError("SARIF rule id and index reference different rules")
+        if reference_guid is not None and _rule_guid(indexed_rule) != reference_guid:
+            raise ValueError("SARIF rule guid and index reference different rules")
 
     rule_id = declared_rule_id or indexed_rule_id or "unknown"
     if indexed_rule is not None:
         rule = indexed_rule
         basis = "rule-id-and-index" if declared_rule_id else "rule-index"
+    elif reference_guid is not None:
+        matches = [
+            candidate
+            for candidate in component_rules
+            if _rule_guid(candidate) == reference_guid
+        ]
+        if len(matches) != 1:
+            qualifier = "ambiguous" if matches else "unresolved"
+            raise ValueError(
+                f"SARIF rule guid is {qualifier} in the selected component"
+            )
+        rule = matches[0]
+        resolved_id = rule.get("id")
+        if not isinstance(resolved_id, str) or not resolved_id.strip():
+            raise ValueError("SARIF rule guid references a rule without an id")
+        resolved_id = resolved_id.strip()
+        if declared_rule_id and not _rule_id_matches(declared_rule_id, resolved_id):
+            raise ValueError("SARIF rule id and guid reference different rules")
+        rule_id = declared_rule_id or resolved_id
+        basis = "rule-guid"
     elif declared_rule_id:
         matches = [
             candidate
-            for candidate in ordered_rules
+            for candidate in component_rules
             if isinstance(candidate.get("id"), str)
-            and str(candidate["id"]).strip() == declared_rule_id
+            and _rule_id_matches(declared_rule_id, str(candidate["id"]).strip())
         ]
         if len(matches) > 1:
-            raise ValueError("SARIF ruleId is ambiguous in the driver rule table")
+            raise ValueError("SARIF rule id is ambiguous in the selected component")
         rule = matches[0] if matches else {}
         basis = "rule-id"
     else:
@@ -441,7 +528,158 @@ def _resolve_rule(
             "basis": basis,
             "rule_index": rule_index,
             "metadata_resolved": bool(rule),
+            "component": component_reference,
         },
+    )
+
+
+def _resolve_tool_component(
+    value: Any,
+    driver: dict[str, Any],
+    extensions: list[dict[str, Any]],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    if value is _MISSING:
+        return driver, _component_reference("driver", None, "default-driver")
+    if not isinstance(value, dict):
+        raise TypeError("SARIF rule.toolComponent must be an object")
+    raw_index = value.get("index")
+    index = _component_index(raw_index)
+    raw_guid = value.get("guid")
+    guid = (
+        _normalized_guid(raw_guid, label="rule.toolComponent.guid")
+        if raw_guid is not None
+        else None
+    )
+    if raw_index is not None:
+        if index is None or index >= len(extensions):
+            raise ValueError(
+                "SARIF tool component index is outside the extension table"
+            )
+        component = extensions[index]
+        kind = "extension"
+        basis = "extension-index"
+    elif guid is not None:
+        candidates: list[tuple[str, int | None, dict[str, Any]]] = []
+        if _component_guid(driver) == guid:
+            candidates.append(("driver", None, driver))
+        candidates.extend(
+            ("extension", extension_index, extension)
+            for extension_index, extension in enumerate(extensions)
+            if _component_guid(extension) == guid
+        )
+        if len(candidates) != 1:
+            qualifier = "ambiguous" if candidates else "unresolved"
+            raise ValueError(f"SARIF tool component guid is {qualifier}")
+        kind, index, component = candidates[0]
+        basis = "component-guid"
+    else:
+        component = driver
+        kind = "driver"
+        index = None
+        basis = "default-driver"
+    if guid is not None and _component_guid(component) != guid:
+        raise ValueError(
+            "SARIF tool component index and guid reference different components"
+        )
+    raw_name = value.get("name")
+    name_verified = False
+    if raw_name is not None:
+        if not isinstance(raw_name, str) or not raw_name.strip():
+            raise ValueError("SARIF tool component name must be a non-empty string")
+        component_name = component.get("name")
+        if not isinstance(component_name, str) or component_name != raw_name:
+            raise ValueError(
+                "SARIF tool component name does not match the selected component"
+            )
+        name_verified = True
+    reference = _component_reference(kind, index, basis)
+    reference["name_verified"] = name_verified
+    reference["guid_verified"] = guid is not None
+    return component, reference
+
+
+def _component_reference(kind: str, index: int | None, basis: str) -> dict[str, Any]:
+    return {
+        "kind": kind,
+        "extension_index": index,
+        "basis": basis,
+        "name_verified": False,
+        "guid_verified": False,
+    }
+
+
+def _component_from_reference(
+    reference: dict[str, Any],
+    driver: dict[str, Any],
+    extensions: list[dict[str, Any]],
+) -> dict[str, Any]:
+    component = _object(reference.get("component"))
+    if component.get("kind") != "extension":
+        return driver
+    index = component.get("extension_index")
+    if (
+        not isinstance(index, int)
+        or isinstance(index, bool)
+        or index < 0
+        or index >= len(extensions)
+    ):
+        raise ValueError("resolved SARIF extension reference is invalid")
+    return extensions[index]
+
+
+def _descriptor_index(value: Any, *, label: str) -> int | None:
+    if value is None:
+        return None
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise TypeError(f"SARIF {label} must be an integer")
+    if value < -1:
+        raise ValueError(f"SARIF {label} must be -1 or non-negative")
+    return value if value >= 0 else None
+
+
+def _component_index(value: Any) -> int | None:
+    if value is None:
+        return None
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise TypeError("SARIF tool component index must be an integer")
+    if value < 0:
+        raise ValueError("SARIF tool component index must be non-negative")
+    return value
+
+
+def _normalized_guid(value: Any, *, label: str) -> str:
+    if not isinstance(value, str):
+        raise TypeError(f"SARIF {label} must be a GUID string")
+    try:
+        return str(UUID(value.strip()))
+    except (ValueError, AttributeError) as error:
+        raise ValueError(f"SARIF {label} must be a valid GUID") from error
+
+
+def _component_guid(component: dict[str, Any]) -> str | None:
+    value = component.get("guid")
+    return (
+        _normalized_guid(value, label="tool component guid")
+        if value is not None
+        else None
+    )
+
+
+def _rule_guid(rule: dict[str, Any]) -> str | None:
+    value = rule.get("guid")
+    return _normalized_guid(value, label="rule guid") if value is not None else None
+
+
+def _rule_id_matches(reference_id: str, descriptor_id: str) -> bool:
+    if not descriptor_id:
+        return False
+    if reference_id == descriptor_id:
+        return True
+    hierarchical_suffix = reference_id.removeprefix(f"{descriptor_id}/")
+    return (
+        hierarchical_suffix != reference_id
+        and bool(hierarchical_suffix)
+        and "/" not in hierarchical_suffix
     )
 
 
@@ -451,7 +689,15 @@ def _invocation_configuration(
     ordered_rules: list[dict[str, Any]],
     *,
     rule_id: str,
+    component_reference: dict[str, Any] | None = None,
+    driver: dict[str, Any] | None = None,
+    extensions: list[dict[str, Any]] | None = None,
 ) -> tuple[Any, dict[str, Any]]:
+    effective_driver = driver if driver is not None else {"rules": ordered_rules}
+    effective_extensions = extensions or []
+    selected_component = component_reference or _component_reference(
+        "driver", None, "default-driver"
+    )
     reference: dict[str, Any] = {
         "basis": "no-invocation-reference",
         "invocation_index": None,
@@ -513,6 +759,9 @@ def _invocation_configuration(
             raw_override.get("descriptor"),
             ordered_rules,
             rule_id=rule_id,
+            component_reference=selected_component,
+            driver=effective_driver,
+            extensions=effective_extensions,
         )
         unsupported_component_count += int(unsupported_component)
         if match == "invalid":
@@ -551,37 +800,41 @@ def _configuration_descriptor_match(
     ordered_rules: list[dict[str, Any]],
     *,
     rule_id: str,
+    component_reference: dict[str, Any],
+    driver: dict[str, Any],
+    extensions: list[dict[str, Any]],
 ) -> tuple[str, bool]:
     if not isinstance(value, dict):
         return "invalid", False
     if "component" in value:
         return "unmatched", True
-    raw_id = value.get("id")
-    descriptor_id = ""
-    if raw_id is not None:
-        if not isinstance(raw_id, str) or not raw_id.strip():
-            return "invalid", False
-        descriptor_id = raw_id.strip()
-    raw_index = value.get("index", -1)
-    if not isinstance(raw_index, int) or isinstance(raw_index, bool) or raw_index < -1:
+    try:
+        _, descriptor, reference = _resolve_rule(
+            {"rule": value},
+            ordered_rules,
+            driver=driver,
+            extensions=extensions,
+        )
+    except (TypeError, ValueError):
         return "invalid", False
-    indexed_id = ""
-    if raw_index >= 0:
-        if raw_index >= len(ordered_rules):
-            return "invalid", False
-        candidate_id = ordered_rules[raw_index].get("id")
-        if not isinstance(candidate_id, str) or not candidate_id.strip():
-            return "invalid", False
-        indexed_id = candidate_id.strip()
-    if descriptor_id and indexed_id and descriptor_id != indexed_id:
-        return "invalid", False
-    target_id = descriptor_id or indexed_id
-    if not target_id:
+    descriptor_component = _object(reference.get("component"))
+    if not _same_component(component_reference, descriptor_component):
+        return "unmatched", False
+    descriptor_id = descriptor.get("id")
+    if not isinstance(descriptor_id, str) or not descriptor_id.strip():
         return "invalid", False
     return (
-        "match" if rule_id != "unknown" and target_id == rule_id else "unmatched",
+        "match"
+        if rule_id != "unknown" and _rule_id_matches(rule_id, descriptor_id.strip())
+        else "unmatched",
         False,
     )
+
+
+def _same_component(left: dict[str, Any], right: dict[str, Any]) -> bool:
+    return left.get("kind") == right.get("kind") and left.get(
+        "extension_index"
+    ) == right.get("extension_index")
 
 
 def _message(value: Any) -> str:

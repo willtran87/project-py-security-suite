@@ -637,7 +637,18 @@ class SarifNormalizationContractTests(unittest.TestCase):
         self.assertEqual(finding.classifications, ["CWE-79"])
         self.assertEqual(
             finding.evidence["sarif_rule_reference"],
-            {"basis": "rule-index", "rule_index": 0, "metadata_resolved": True},
+            {
+                "basis": "rule-index",
+                "rule_index": 0,
+                "metadata_resolved": True,
+                "component": {
+                    "kind": "driver",
+                    "extension_index": None,
+                    "basis": "default-driver",
+                    "name_verified": False,
+                    "guid_verified": False,
+                },
+            },
         )
         self.assertEqual(
             finding.evidence["sarif_message_reference"]["basis"],
@@ -736,6 +747,250 @@ class SarifNormalizationContractTests(unittest.TestCase):
                 candidate_rules = [{}] if reference.get("ruleIndex") == 0 else rules
                 with self.assertRaisesRegex(error_type, message):
                     _resolve_rule(reference, candidate_rules)
+
+    def test_sarif_resolves_extension_rule_metadata_and_component_identity(
+        self,
+    ) -> None:
+        component_guid = "22222222-2222-4222-8222-222222222222"
+        rule_guid = "33333333-3333-4333-8333-333333333333"
+        payload = json.dumps(
+            {
+                "runs": [
+                    {
+                        "tool": {
+                            "driver": {
+                                "name": "driver",
+                                "guid": "11111111-1111-4111-8111-111111111111",
+                                "rules": [{"id": "driver-rule"}],
+                            },
+                            "extensions": [
+                                {
+                                    "name": "security-plugin",
+                                    "guid": component_guid,
+                                    "rules": [
+                                        {
+                                            "id": "plugin-rule",
+                                            "guid": rule_guid,
+                                            "shortDescription": {
+                                                "text": "Extension rule title"
+                                            },
+                                            "defaultConfiguration": {"level": "error"},
+                                            "properties": {
+                                                "tags": [
+                                                    "security",
+                                                    "external/cwe/cwe-89",
+                                                ]
+                                            },
+                                        }
+                                    ],
+                                }
+                            ],
+                        },
+                        "invocations": [
+                            {
+                                "ruleConfigurationOverrides": [
+                                    {
+                                        "descriptor": {
+                                            "guid": rule_guid,
+                                            "toolComponent": {"guid": component_guid},
+                                        },
+                                        "configuration": {"level": "note"},
+                                    }
+                                ]
+                            }
+                        ],
+                        "results": [
+                            {
+                                "ruleId": "plugin-rule/hierarchical",
+                                "ruleIndex": 0,
+                                "rule": {
+                                    "id": "plugin-rule/hierarchical",
+                                    "index": 0,
+                                    "guid": rule_guid,
+                                    "toolComponent": {
+                                        "index": 0,
+                                        "guid": component_guid,
+                                        "name": "security-plugin",
+                                    },
+                                },
+                                "message": {"text": "extension result"},
+                            },
+                            {
+                                "rule": {
+                                    "guid": rule_guid,
+                                    "toolComponent": {"guid": component_guid},
+                                },
+                                "provenance": {"invocationIndex": 0},
+                                "message": {"text": "extension result with override"},
+                            },
+                        ],
+                    }
+                ]
+            }
+        )
+
+        findings = parse_sarif_findings(
+            payload,
+            self.root,
+            tool_name="codeql",
+            default_area="security",
+            default_impact="impact",
+            default_remediation="fix",
+        )
+        finding, overridden_finding = findings
+
+        self.assertEqual(finding.sources[0].rule_id, "plugin-rule/hierarchical")
+        self.assertEqual(finding.title, "Extension rule title")
+        self.assertEqual(finding.severity, Severity.HIGH)
+        self.assertEqual(finding.classifications, ["CWE-89"])
+        self.assertEqual(
+            finding.evidence["sarif_rule_reference"],
+            {
+                "basis": "rule-id-and-index",
+                "rule_index": 0,
+                "metadata_resolved": True,
+                "component": {
+                    "kind": "extension",
+                    "extension_index": 0,
+                    "basis": "extension-index",
+                    "name_verified": True,
+                    "guid_verified": True,
+                },
+            },
+        )
+        portable = render_sarif([finding])["runs"][0]["results"][0]
+        self.assertEqual(
+            portable["properties"]["sarif_rule_reference"],
+            finding.evidence["sarif_rule_reference"],
+        )
+        override_decision = overridden_finding.evidence["sarif_severity_decision"]
+        self.assertEqual(overridden_finding.severity, Severity.INFORMATIONAL)
+        self.assertEqual(override_decision["basis"], "invocation-override-level")
+        self.assertEqual(
+            override_decision["configuration_override"]["basis"],
+            "invocation-rule-override",
+        )
+        self.assertEqual(
+            overridden_finding.evidence["sarif_rule_reference"]["component"]["basis"],
+            "component-guid",
+        )
+
+    def test_sarif_component_guid_resolution_is_strict_and_unambiguous(self) -> None:
+        component_guid = "22222222-2222-4222-8222-222222222222"
+        rule_guid = "33333333-3333-4333-8333-333333333333"
+        driver = {
+            "name": "driver",
+            "guid": "11111111-1111-4111-8111-111111111111",
+            "rules": [{"id": "driver-rule"}],
+        }
+        extension = {
+            "name": "security-plugin",
+            "guid": component_guid,
+            "rules": [{"id": "plugin-rule", "guid": rule_guid}],
+        }
+        rule_id, rule, reference = _resolve_rule(
+            {
+                "rule": {
+                    "guid": rule_guid,
+                    "toolComponent": {
+                        "guid": component_guid,
+                        "name": "security-plugin",
+                    },
+                }
+            },
+            driver["rules"],
+            driver=driver,
+            extensions=[extension],
+        )
+        self.assertEqual(rule_id, "plugin-rule")
+        self.assertEqual(rule, extension["rules"][0])
+        self.assertEqual(reference["basis"], "rule-guid")
+        self.assertEqual(
+            reference["component"],
+            {
+                "kind": "extension",
+                "extension_index": 0,
+                "basis": "component-guid",
+                "name_verified": True,
+                "guid_verified": True,
+            },
+        )
+        invalid_references: tuple[
+            tuple[dict[str, Any], list[dict[str, Any]], str], ...
+        ] = (
+            (
+                {
+                    "ruleId": "plugin-rule",
+                    "rule": {
+                        "toolComponent": {
+                            "index": 0,
+                            "guid": driver["guid"],
+                        }
+                    },
+                },
+                [extension],
+                "different components",
+            ),
+            (
+                {
+                    "ruleId": "plugin-rule",
+                    "rule": {
+                        "toolComponent": {
+                            "index": 0,
+                            "name": "wrong-plugin",
+                        }
+                    },
+                },
+                [extension],
+                "name does not match",
+            ),
+            (
+                {
+                    "ruleId": "plugin-rule",
+                    "rule": {"toolComponent": {"guid": component_guid}},
+                },
+                [extension, extension],
+                "ambiguous",
+            ),
+            (
+                {
+                    "ruleId": "plugin-rule",
+                    "ruleIndex": 0,
+                    "rule": {
+                        "index": 1,
+                        "toolComponent": {"index": 0},
+                    },
+                },
+                [extension],
+                "different rules",
+            ),
+            (
+                {
+                    "ruleId": "plugin-rule",
+                    "rule": {"toolComponent": {"index": 1}},
+                },
+                [extension],
+                "outside",
+            ),
+            (
+                {
+                    "ruleId": "plugin-rule/first/second",
+                    "ruleIndex": 0,
+                    "rule": {"toolComponent": {"index": 0}},
+                },
+                [extension],
+                "different rules",
+            ),
+        )
+        for result, extensions, message in invalid_references:
+            with self.subTest(message=message):
+                with self.assertRaisesRegex(ValueError, message):
+                    _resolve_rule(
+                        result,
+                        driver["rules"],
+                        driver=driver,
+                        extensions=extensions,
+                    )
 
     def test_sarif_severity_classification_domain_and_help_mapping(self) -> None:
         self.assertEqual(

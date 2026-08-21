@@ -174,11 +174,16 @@ suppression states are retained as bounded counts only and remain informational:
 an accepted scanner or source suppression does not replace the suite's
 digest-bound policy acceptance process.
 Rule attribution follows both SARIF `ruleId` and positional `ruleIndex`
-references. Index-only results inherit the exact descriptor title, severity,
-classification, and guidance; contradictory, out-of-range, ambiguous, or
-malformed references fail parsing instead of attaching unrelated metadata.
-The chosen attribution basis and descriptor-resolution state remain available
-in normalized and portable SARIF evidence.
+references across the tool driver and `tool.extensions`. An absent component
+reference selects the driver; an extension index or unique component GUID
+selects its own rule table, while a supplied component name is verification
+only. Nested rule IDs, indexes, and GUIDs must agree with the selected
+descriptor, including SARIF's single hierarchical ID component allowance.
+Index-only and GUID-only results inherit the exact descriptor title, severity,
+classification, and guidance. Contradictory, cross-component, out-of-range,
+ambiguous, or malformed references fail parsing instead of attaching unrelated
+metadata. The chosen rule and component attribution basis remains available in
+normalized and portable SARIF evidence.
 Result messages resolve inline text or Markdown plus rule-level and driver-global
 `messageStrings` templates. Numeric arguments and escaped braces are expanded
 with fixed input/output bounds; malformed arguments become explicit markers and
@@ -212,12 +217,12 @@ rank is validated in the inclusive 0-100 range and retained as tool-relative
 priority evidence, but it is never converted into cross-tool severity. The
 decision, effective native level, score/rank basis, and invalid-input counts are
 preserved in normalized and portable SARIF evidence.
-When `result.provenance.invocationIndex` selects a run invocation, driver-rule
-`ruleConfigurationOverrides` are evaluated before rule defaults. Descriptor ID
-and index references must identify the same resolved rule, the override list is
-bounded to 1,000 entries, and exactly one matching configuration is required.
-Malformed containers, invalid or conflicting descriptors, ambiguous matches,
-out-of-range invocations, and tool-component references that cannot be resolved
-against the driver rule table are counted and ignored. Only validated `level`
-and `rank` fields enter the severity decision; arbitrary override parameters are
-not retained.
+When `result.provenance.invocationIndex` selects a run invocation, driver or
+extension `ruleConfigurationOverrides` are evaluated before rule defaults.
+Descriptor ID, index, GUID, and tool-component references must identify the
+same resolved rule; the override list is bounded to 1,000 entries, and exactly
+one matching configuration is required. Malformed containers, invalid or conflicting
+descriptors, ambiguous matches, out-of-range invocations, and unresolved
+tool-component references are counted and ignored. Only validated `level` and
+`rank` fields enter the severity decision; arbitrary override parameters are not
+retained.

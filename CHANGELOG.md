@@ -5,6 +5,14 @@ for published releases.
 
 ## Unreleased
 
+- Resolve SARIF rule descriptors across both the tool driver and declared tool
+  extensions. Standard component index or unique GUID references select the
+  correct rule table; component name/GUID and rule ID/index/GUID agreement are
+  verified before extension titles, severity defaults, classifications, or
+  guidance can influence a finding. Ambiguous and cross-component references
+  fail closed, invocation overrides now target extension rules through the same
+  standard references, and normalized plus portable evidence records the
+  attribution.
 - Resolve bounded SARIF invocation-level `ruleConfigurationOverrides` through
   `result.provenance.invocationIndex` before applying rule severity defaults.
   Driver-rule descriptor IDs and indexes must agree, exactly one matching

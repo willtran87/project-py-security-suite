@@ -417,7 +417,18 @@ class AdvancedAnalysisTests(unittest.TestCase):
         )
         self.assertEqual(
             portable["properties"]["sarif_rule_reference"],
-            {"basis": "rule-id", "rule_index": None, "metadata_resolved": True},
+            {
+                "basis": "rule-id",
+                "rule_index": None,
+                "metadata_resolved": True,
+                "component": {
+                    "kind": "driver",
+                    "extension_index": None,
+                    "basis": "default-driver",
+                    "name_verified": False,
+                    "guid_verified": False,
+                },
+            },
         )
         self.assertEqual(
             portable["properties"]["sarif_message_reference"]["basis"],
