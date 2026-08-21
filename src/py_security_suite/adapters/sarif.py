@@ -30,6 +30,12 @@ _MAX_RULE_CONFIGURATION_OVERRIDES = 1_000
 _MAX_ARTIFACT_INDEX_DEPTH = 20
 _MAX_URI_BASE_DEPTH = 20
 _MISSING = object()
+_INVALID_THREAD_FLOW_LOCATION_RESOLUTIONS = {
+    "conflicting-thread-flow-location-cache",
+    "invalid-thread-flow-location-cache-index",
+    "invalid-thread-flow-location-index",
+    "unresolved-thread-flow-location-index",
+}
 _SARIF_LEVELS = {"error", "warning", "note", "none"}
 _RESULT_KINDS = {
     "fail": "fail",
@@ -70,6 +76,9 @@ def parse_sarif_findings(
         ordered_rules = _ordered_rules(driver)
         uri_bases = _object(run.get("originalUriBaseIds"))
         artifacts = _object_list(run.get("artifacts") or [], "artifacts")
+        thread_flow_locations = _object_list(
+            run.get("threadFlowLocations") or [], "thread flow locations"
+        )
         invocations = _object_list(run.get("invocations") or [], "invocations")
         for result in _object_list(run.get("results") or [], "results"):
             result_semantics = _result_semantics(result)
@@ -87,6 +96,7 @@ def parse_sarif_findings(
                     result_semantics=result_semantics,
                     uri_bases=uri_bases,
                     artifacts=artifacts,
+                    thread_flow_locations=thread_flow_locations,
                     invocations=invocations,
                     driver=driver,
                     extensions=extensions,
@@ -107,6 +117,7 @@ def _finding(
     result_semantics: dict[str, Any],
     uri_bases: dict[str, Any],
     artifacts: list[dict[str, Any]],
+    thread_flow_locations: list[dict[str, Any]],
     invocations: list[dict[str, Any]],
     driver: dict[str, Any],
     extensions: list[dict[str, Any]],
@@ -216,6 +227,7 @@ def _finding(
         secret_bearing_messages=secret_bearing,
         uri_bases=uri_bases,
         artifacts=artifacts,
+        thread_flow_locations=thread_flow_locations,
     )
     evidence: dict[str, Any] = {
         "sarif_result_semantics": result_semantics,
@@ -277,6 +289,7 @@ def _code_flows(
     secret_bearing_messages: bool,
     uri_bases: dict[str, Any],
     artifacts: list[dict[str, Any]],
+    thread_flow_locations: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     """Retain bounded SARIF path steps without snippets or sensitive state."""
     raw_code_flows = result.get("codeFlows") or []
@@ -296,25 +309,37 @@ def _code_flows(
             if not isinstance(raw_locations, list):
                 raise TypeError("SARIF threadFlow locations must be a list")
             native_steps: list[tuple[int, dict[str, Any]]] = []
+            location_resolution_counts: dict[str, int] = {}
             for native_index, raw in enumerate(raw_locations[:100]):
                 if not isinstance(raw, dict):
                     raise TypeError("SARIF threadFlow location must be an object")
-                nested = raw.get("location")
-                location = nested if isinstance(nested, dict) else raw
+                resolved_location, location_resolution = _resolve_thread_flow_location(
+                    raw, thread_flow_locations
+                )
+                location_resolution_counts[location_resolution] = (
+                    location_resolution_counts.get(location_resolution, 0) + 1
+                )
+                effective = resolved_location if resolved_location is not None else {}
+                nested = effective.get("location")
+                location = nested if isinstance(nested, dict) else effective
                 physical = location.get("physicalLocation")
                 physical = physical if isinstance(physical, dict) else {}
                 artifact = physical.get("artifactLocation")
                 artifact = artifact if isinstance(artifact, dict) else {}
                 region = physical.get("region")
                 region = region if isinstance(region, dict) else {}
-                path, path_resolution = _artifact_path(
-                    artifact,
-                    target,
-                    uri_bases=uri_bases,
-                    artifacts=artifacts,
-                )
+                if resolved_location is None:
+                    path = f"<{location_resolution}>"
+                    path_resolution = location_resolution
+                else:
+                    path, path_resolution = _artifact_path(
+                        artifact,
+                        target,
+                        uri_bases=uri_bases,
+                        artifacts=artifacts,
+                    )
                 message = _message(location.get("message")) or _message(
-                    raw.get("message")
+                    effective.get("message")
                 )
                 message = redact_sensitive_text(
                     message, secret_bearing=secret_bearing_messages
@@ -325,16 +350,17 @@ def _code_flows(
                         {
                             "path": path,
                             "path_resolution": path_resolution,
+                            "thread_flow_location_resolution": location_resolution,
                             "line": _positive_integer(region.get("startLine")),
                             "message": message[:500],
                             "execution_order": _nonnegative_integer(
-                                raw.get("executionOrder")
+                                effective.get("executionOrder")
                             ),
                             "nesting_level": _nonnegative_integer(
-                                raw.get("nestingLevel")
+                                effective.get("nestingLevel")
                             ),
-                            "importance": str(raw.get("importance") or "")[:100],
-                            "kinds": _flow_kinds(raw.get("kinds")),
+                            "importance": str(effective.get("importance") or "")[:100],
+                            "kinds": _flow_kinds(effective.get("kinds")),
                         },
                     )
                 )
@@ -361,11 +387,36 @@ def _code_flows(
                         "steps": steps,
                         "step_count": len(raw_locations),
                         "steps_omitted": max(0, len(raw_locations) - len(steps)),
+                        "thread_flow_location_resolution_counts": dict(
+                            sorted(location_resolution_counts.items())
+                        ),
                     }
                 )
             if len(flows) >= 10:
                 return flows
     return flows
+
+
+def _resolve_thread_flow_location(
+    value: dict[str, Any], cached_locations: list[dict[str, Any]]
+) -> tuple[dict[str, Any] | None, str]:
+    if "index" not in value:
+        return value, "inline-thread-flow-location"
+    index = _nonnegative_integer(value.get("index"))
+    if index is None:
+        return None, "invalid-thread-flow-location-index"
+    if index >= len(cached_locations):
+        return None, "unresolved-thread-flow-location-index"
+    cached = cached_locations[index]
+    if "index" in cached and _nonnegative_integer(cached.get("index")) != index:
+        return None, "invalid-thread-flow-location-cache-index"
+    if any(
+        key not in cached or cached[key] != nested_value
+        for key, nested_value in value.items()
+        if key != "index"
+    ):
+        return None, "conflicting-thread-flow-location-cache"
+    return cached, "thread-flow-location-index-resolved"
 
 
 def _object(value: Any) -> dict[str, Any]:
@@ -1744,6 +1795,12 @@ def _flow_semantic_basis(
     steps: list[dict[str, Any]], *, security_domain: bool, rule_kind: str
 ) -> str:
     if not security_domain:
+        return "unclassified-code-flow"
+    if any(
+        step.get("thread_flow_location_resolution")
+        in _INVALID_THREAD_FLOW_LOCATION_RESOLUTIONS
+        for step in steps
+    ):
         return "unclassified-code-flow"
     source_positions = [
         index for index, step in enumerate(steps) if "source" in step.get("kinds", [])

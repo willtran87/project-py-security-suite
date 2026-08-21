@@ -301,6 +301,163 @@ class AdvancedAnalysisTests(unittest.TestCase):
         self.assertEqual(flow["semantic_basis"], "native-source-sink-kinds")
         self.assertNotIn("snippet", flow["steps"][0])
 
+    def test_sarif_resolves_cached_thread_flow_locations_fail_closed(self) -> None:
+        payload = json.dumps(
+            {
+                "runs": [
+                    {
+                        "tool": {
+                            "driver": {
+                                "rules": [
+                                    {
+                                        "id": "py/indexed-flow",
+                                        "properties": {"kind": "path-problem"},
+                                    }
+                                ]
+                            }
+                        },
+                        "threadFlowLocations": [
+                            {
+                                "index": 0,
+                                "location": _sarif_location("src/entry.py", 3),
+                                "executionOrder": 10,
+                                "kinds": ["source"],
+                            },
+                            {
+                                "location": _sarif_location("src/auth.py", 6),
+                                "executionOrder": 20,
+                            },
+                            {
+                                "location": _sarif_location("src/sink.py", 9),
+                                "executionOrder": 30,
+                                "kinds": ["sink"],
+                            },
+                            {
+                                "index": 0,
+                                "location": _sarif_location("src/entry.py", 3),
+                                "executionOrder": 10,
+                                "kinds": ["source"],
+                            },
+                        ],
+                        "results": [
+                            {
+                                "ruleId": "py/indexed-flow",
+                                "message": {"text": "indexed source reaches sink"},
+                                "locations": [_sarif_location("src/sink.py", 9)],
+                                "codeFlows": [
+                                    {
+                                        "threadFlows": [
+                                            {
+                                                "locations": [
+                                                    {"index": 2},
+                                                    {"index": 0},
+                                                    {"index": 1},
+                                                ]
+                                            }
+                                        ]
+                                    },
+                                    {
+                                        "threadFlows": [
+                                            {
+                                                "locations": [
+                                                    {
+                                                        "index": 99,
+                                                        "kinds": ["source"],
+                                                    },
+                                                    {"index": 2},
+                                                ]
+                                            }
+                                        ]
+                                    },
+                                    {
+                                        "threadFlows": [
+                                            {
+                                                "locations": [
+                                                    {
+                                                        "index": 0,
+                                                        "executionOrder": 999,
+                                                    },
+                                                    {"index": 2},
+                                                ]
+                                            }
+                                        ]
+                                    },
+                                    {
+                                        "threadFlows": [
+                                            {
+                                                "locations": [
+                                                    {"index": 3},
+                                                    {"index": 2},
+                                                ]
+                                            }
+                                        ]
+                                    },
+                                ],
+                            }
+                        ],
+                    }
+                ]
+            }
+        )
+
+        finding = parse_sarif_findings(
+            payload,
+            Path.cwd(),
+            tool_name="codeql",
+            default_area="data-flow",
+            default_impact="impact",
+            default_remediation="fix",
+        )[0]
+        (
+            valid_flow,
+            unresolved_flow,
+            conflicting_flow,
+            invalid_cache_flow,
+        ) = finding.evidence["sarif_code_flows"]
+        artifacts = _artifacts()
+        artifacts["risk-paths.json"]["routes"][0]["target"]["finding_id"] = (
+            finding.finding_id
+        )
+        analysis = build_advanced_analysis(Path.cwd(), [finding], artifacts)
+
+        self.assertEqual(
+            [step["path"] for step in valid_flow["steps"]],
+            ["src/entry.py", "src/auth.py", "src/sink.py"],
+        )
+        self.assertEqual(valid_flow["semantic_basis"], "native-source-sink-kinds")
+        self.assertEqual(
+            valid_flow["thread_flow_location_resolution_counts"],
+            {"thread-flow-location-index-resolved": 3},
+        )
+        self.assertEqual(
+            valid_flow["steps"][0]["thread_flow_location_resolution"],
+            "thread-flow-location-index-resolved",
+        )
+        self.assertEqual(unresolved_flow["semantic_basis"], "unclassified-code-flow")
+        self.assertEqual(
+            unresolved_flow["steps"][0]["path"],
+            "<unresolved-thread-flow-location-index>",
+        )
+        self.assertEqual(conflicting_flow["semantic_basis"], "unclassified-code-flow")
+        self.assertEqual(
+            conflicting_flow["steps"][0]["thread_flow_location_resolution"],
+            "conflicting-thread-flow-location-cache",
+        )
+        self.assertEqual(invalid_cache_flow["semantic_basis"], "unclassified-code-flow")
+        self.assertEqual(
+            invalid_cache_flow["steps"][0]["thread_flow_location_resolution"],
+            "invalid-thread-flow-location-cache-index",
+        )
+        self.assertEqual(len(analysis["taint_paths"]), 1)
+        self.assertEqual(analysis["taint_paths"][0]["route_alignment"], "aligned")
+        portable = render_sarif([finding])["runs"][0]["results"][0]
+        self.assertEqual(
+            portable["properties"]["sarif_code_flow_summary"][0][
+                "thread_flow_location_resolution_counts"
+            ],
+            {"thread-flow-location-index-resolved": 3},
+        )
+
     def test_sarif_secondary_location_corroborates_native_sink_alignment(
         self,
     ) -> None:

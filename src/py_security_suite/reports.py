@@ -4912,6 +4912,11 @@ def render_sarif(findings: list[Finding]) -> dict[str, Any]:
             result["properties"]["sarif_severity_decision"] = json_ready(
                 severity_decision
             )
+        code_flows = finding.evidence.get("sarif_code_flows")
+        if isinstance(code_flows, list):
+            flow_summary = _sarif_code_flow_summary(code_flows)
+            if flow_summary:
+                result["properties"]["sarif_code_flow_summary"] = flow_summary
         if finding.locations:
             result["locations"] = [
                 _sarif_result_location(location) for location in finding.locations
@@ -4932,6 +4937,52 @@ def render_sarif(findings: list[Finding]) -> dict[str, Any]:
             }
         ],
     }
+
+
+def _sarif_code_flow_summary(value: list[Any]) -> list[dict[str, Any]]:
+    allowed_semantics = {
+        "native-source-sink-kinds",
+        "security-path-problem",
+        "unclassified-code-flow",
+    }
+    summaries: list[dict[str, Any]] = []
+    for flow_index, flow in enumerate(value[:10]):
+        if not isinstance(flow, dict):
+            continue
+        raw_semantic_basis = flow.get("semantic_basis")
+        semantic_basis = (
+            raw_semantic_basis
+            if isinstance(raw_semantic_basis, str)
+            and raw_semantic_basis in allowed_semantics
+            else "unclassified-code-flow"
+        )
+        raw_counts = flow.get("thread_flow_location_resolution_counts")
+        counts = raw_counts if isinstance(raw_counts, dict) else {}
+        bounded_counts = sorted(
+            ((key, count) for key, count in counts.items() if isinstance(key, str)),
+            key=lambda item: item[0],
+        )[:20]
+        summaries.append(
+            {
+                "flow_index": flow_index,
+                "semantic_basis": semantic_basis,
+                "reported_step_count": _sarif_summary_count(flow.get("step_count")),
+                "steps_omitted": _sarif_summary_count(flow.get("steps_omitted")),
+                "thread_flow_location_resolution_counts": {
+                    key[:100]: _sarif_summary_count(count)
+                    for key, count in bounded_counts
+                },
+            }
+        )
+    return summaries
+
+
+def _sarif_summary_count(value: Any) -> int:
+    return (
+        value
+        if isinstance(value, int) and not isinstance(value, bool) and value >= 0
+        else 0
+    )
 
 
 def _sarif_result_location(location: Location) -> dict[str, Any]:

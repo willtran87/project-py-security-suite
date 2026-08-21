@@ -5,6 +5,12 @@ for published releases.
 
 ## Unreleased
 
+- Resolve SARIF `threadFlowLocation.index` through the run-level cached location
+  table before native source/sink correlation. Cached self-index and nested
+  overlay agreement are verified, resolved execution metadata participates in
+  deterministic ordering, and invalid, conflicting, or out-of-range references
+  receive explicit markers and cannot be promoted as scanner-confirmed flows.
+  Per-flow resolution counts remain available in normalized and portable SARIF.
 - Complete component-aware SARIF message and invocation lookup. Result message
   IDs now fall back to the selected driver or extension's own
   `globalMessageStrings` table after rule-local lookup, preventing a colliding

@@ -112,6 +112,16 @@ outside the exposure, or contradictory native source/sink markers cannot create
 route corroboration. Those flows remain scanner-confirmed but are reported as
 `not-established` with a reconciliation action. Native `executionOrder` is used
 when every retained step supplies it; otherwise the SARIF array order is kept.
+Run-level `threadFlowLocations` caches are resolved before this normalization.
+An indexed step inherits its cached location, ordering, kinds, and message only
+when its array index is valid, the cached self-index agrees, and every nested
+overlay property matches the cached value. Invalid, unresolved, or conflicting
+references receive explicit non-repository markers, demote the entire native
+flow to unclassified, and are summarized by resolution status. This prevents a
+broken cache reference from becoming scanner-confirmed source-to-sink evidence
+while allowing valid compact producer output to retain its complete route.
+Regenerated SARIF retains only bounded per-flow counts and semantic status, not
+the complete path messages, as `sarif_code_flow_summary`.
 Generic SARIF `codeFlows` are not automatically taint evidence: promotion
 requires a security-domain `path-problem` rule or correctly ordered native
 `source` and `sink` kinds. Other paths remain bounded in normalized finding
