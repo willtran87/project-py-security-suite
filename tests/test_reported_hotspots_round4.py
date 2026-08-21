@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from contextlib import nullcontext
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 from py_security_suite.adapters.devskim import DevSkimAdapter
@@ -23,6 +24,7 @@ from py_security_suite.adapters.ruff import (
 )
 from py_security_suite.adapters.sarif import (
     _area,
+    _artifact_path,
     _classifications,
     _derived_help_uri,
     _domain,
@@ -255,6 +257,97 @@ class SarifNormalizationContractTests(unittest.TestCase):
         self.assertEqual(summary["limit_omitted_count"], 6)
         self.assertEqual(summary["omitted_count"], 10)
         self.assertTrue(summary["truncated"])
+        self.assertEqual(summary["path_resolution_counts"], {"target-relative": 31})
+
+    def test_sarif_uri_base_failures_do_not_create_repository_correlations(
+        self,
+    ) -> None:
+        cases: tuple[tuple[str, dict[str, Any], dict[str, Any], str], ...] = (
+            (
+                "missing",
+                {"uri": "sink.py", "uriBaseId": "MISSING"},
+                {},
+                "unresolved-uri-base",
+            ),
+            (
+                "cycle",
+                {"uri": "sink.py", "uriBaseId": "A"},
+                {
+                    "A": {"uri": "a/", "uriBaseId": "B"},
+                    "B": {"uri": "b/", "uriBaseId": "A"},
+                },
+                "cyclic-uri-base",
+            ),
+            (
+                "external",
+                {"uri": "sink.py", "uriBaseId": "REMOTE"},
+                {"REMOTE": {"uri": "https://user:secret@example.test/repository/"}},
+                "external-uri-base",
+            ),
+            (
+                "malformed-base",
+                {"uri": "sink.py", "uriBaseId": "ROOT"},
+                {"ROOT": {"uri": "file://[invalid"}},
+                "invalid-uri-base",
+            ),
+            (
+                "malformed-artifact",
+                {"uri": "src/%not-encoded.py"},
+                {},
+                "invalid-artifact-uri",
+            ),
+        )
+        for name, artifact, uri_bases, expected_resolution in cases:
+            with self.subTest(name=name):
+                path, resolution = _artifact_path(
+                    artifact, self.root, uri_bases=uri_bases
+                )
+                self.assertIn(
+                    path,
+                    {
+                        "<unresolved-uri-base>",
+                        "<external-artifact>",
+                        "<invalid-artifact-uri>",
+                    },
+                )
+                self.assertEqual(resolution, expected_resolution)
+                self.assertNotIn("secret", path)
+
+        deep_bases: dict[str, Any] = {
+            f"BASE-{index}": {
+                "uri": f"level-{index}/",
+                "uriBaseId": f"BASE-{index + 1}",
+            }
+            for index in range(20)
+        }
+        deep_bases["BASE-20"] = {"uri": "root/"}
+        path, resolution = _artifact_path(
+            {"uri": "sink.py", "uriBaseId": "BASE-0"},
+            self.root,
+            uri_bases=deep_bases,
+        )
+        self.assertEqual(path, "<unresolved-uri-base>")
+        self.assertEqual(resolution, "uri-base-depth-exceeded")
+
+    def test_sarif_rejects_nonlocal_file_uri_authorities(self) -> None:
+        path, resolution = _artifact_path(
+            {"uri": "file://user:secret@server.example/src/sink.py"},
+            self.root,
+            uri_bases={},
+        )
+
+        self.assertEqual(path, "<external-artifact>")
+        self.assertEqual(resolution, "external-uri")
+
+    def test_sarif_uri_paths_ignore_query_and_fragment_metadata(self) -> None:
+        path, resolution = _artifact_path(
+            {"uri": "src/sink.py?generated=true#result"},
+            self.root,
+            uri_bases={},
+        )
+
+        self.assertEqual(path, "src/sink.py")
+        self.assertEqual(resolution, "target-relative")
 
     def test_sarif_excludes_only_semantically_inactive_results(self) -> None:
         results = [

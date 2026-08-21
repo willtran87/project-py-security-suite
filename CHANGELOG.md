@@ -5,6 +5,11 @@ for published releases.
 
 ## Unreleased
 
+- Resolve chained SARIF `originalUriBaseIds` for both result locations and
+  native-flow steps before graph or route correlation. Missing, malformed,
+  cyclic, over-deep, and external bases produce explicit non-repository markers
+  instead of false file matches; bounded resolution state is retained without
+  persisting base identifiers or credential-bearing URIs.
 - Resolve SARIF inline, rule-level, and driver-global message templates with
   bounded numeric argument substitution and escaped-brace handling. Findings
   retain scanner context plus explicit unresolved, invalid, omitted, and

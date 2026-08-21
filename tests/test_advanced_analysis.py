@@ -308,6 +308,10 @@ class AdvancedAnalysisTests(unittest.TestCase):
             {
                 "runs": [
                     {
+                        "originalUriBaseIds": {
+                            "ROOT": {"uri": "./"},
+                            "SRC": {"uri": "src/", "uriBaseId": "ROOT"},
+                        },
                         "tool": {
                             "driver": {
                                 "rules": [
@@ -323,8 +327,8 @@ class AdvancedAnalysisTests(unittest.TestCase):
                                 "ruleId": "py/multi-location-flow",
                                 "message": {"text": "source reaches sink"},
                                 "locations": [
-                                    _sarif_location("src/wrapper.py", 5),
-                                    _sarif_location("src/sink.py", 9),
+                                    _sarif_location("wrapper.py", 5, "SRC"),
+                                    _sarif_location("sink.py", 9, "SRC"),
                                 ],
                                 "codeFlows": [
                                     {
@@ -333,13 +337,13 @@ class AdvancedAnalysisTests(unittest.TestCase):
                                                 "locations": [
                                                     {
                                                         "location": _sarif_location(
-                                                            "src/entry.py", 3
+                                                            "entry.py", 3, "SRC"
                                                         ),
                                                         "kinds": ["source"],
                                                     },
                                                     {
                                                         "location": _sarif_location(
-                                                            "src/sink.py", 9
+                                                            "sink.py", 9, "SRC"
                                                         ),
                                                         "kinds": ["sink"],
                                                     },
@@ -384,9 +388,14 @@ class AdvancedAnalysisTests(unittest.TestCase):
                 "limit_omitted_count": 0,
                 "omitted_count": 0,
                 "truncated": False,
+                "path_resolution_counts": {"uri-base-resolved": 2},
             },
         )
         self.assertEqual(result["taint_paths"][0]["route_alignment"], "aligned")
+        self.assertEqual(
+            finding.evidence["sarif_code_flows"][0]["steps"][0]["path_resolution"],
+            "uri-base-resolved",
+        )
         self.assertEqual(
             [
                 location["physicalLocation"]["artifactLocation"]["uri"]
@@ -1308,10 +1317,15 @@ def _add_source_bound_passing_campaign_evidence(campaign: dict[str, Any]) -> Non
     )
 
 
-def _sarif_location(path: str, line: int) -> dict[str, object]:
+def _sarif_location(
+    path: str, line: int, uri_base_id: str | None = None
+) -> dict[str, object]:
+    artifact_location = {"uri": path}
+    if uri_base_id is not None:
+        artifact_location["uriBaseId"] = uri_base_id
     return {
         "physicalLocation": {
-            "artifactLocation": {"uri": path},
+            "artifactLocation": artifact_location,
             "region": {"startLine": line},
         }
     }

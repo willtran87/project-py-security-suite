@@ -188,3 +188,9 @@ entire dynamic message fail closed. Regenerated portable SARIF uses the resolved
 finding description as its result message rather than repeating the rule title.
 Credential redaction runs before every dynamic-text bound so truncation cannot
 turn a recognizable token into a retained, unrecognized fragment.
+Artifact paths resolve SARIF `originalUriBaseIds` and per-location `uriBaseId`
+chains before repository normalization. Resolution is shared by result
+locations and native-flow steps, bounded to 20 ancestors, and fails closed on
+missing, malformed, cyclic, over-deep, or external bases. Bounded resolution
+counts make path confidence auditable without retaining base identifiers or
+credential-bearing URIs.
