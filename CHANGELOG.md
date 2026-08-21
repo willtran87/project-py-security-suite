@@ -5,6 +5,12 @@ for published releases.
 
 ## Unreleased
 
+- Honor SARIF result semantics without weakening policy authority. Explicit
+  pass, not-applicable, and baseline-absent results no longer become false
+  active findings, while unknown future states remain conservatively reviewable.
+  Accepted, rejected, under-review, unknown, and malformed native suppressions
+  are retained as counts only; they cannot substitute for a digest-bound suite
+  policy acceptance. Portable SARIF preserves this decision evidence.
 - Retain bounded multi-location SARIF evidence instead of silently collapsing
   every result to its first location. Stable finding identity remains anchored
   to the ordered primary location, while deduplication and explicit reported,

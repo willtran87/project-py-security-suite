@@ -398,6 +398,9 @@ class AdvancedAnalysisTests(unittest.TestCase):
             portable["properties"]["sarif_location_summary"]["retained_count"],
             2,
         )
+        self.assertEqual(
+            portable["properties"]["sarif_result_semantics"]["kind"], "fail"
+        )
 
     def test_sarif_sanitizes_finding_and_flow_messages_before_normalization(
         self,

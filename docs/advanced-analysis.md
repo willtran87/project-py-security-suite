@@ -167,3 +167,9 @@ duplicate, malformed, and limit-omitted counts make evidence loss auditable.
 Secondary locations can therefore participate in graph, exposure, and native
 sink correlation without multiplying scanner findings. Portable SARIF output
 preserves the retained location set and its completeness summary.
+SARIF result-state semantics are normalized before findings enter correlation.
+Explicit `pass`, `notApplicable`, and baseline `absent` results are not treated
+as active findings; unknown or future states remain reviewable. Native
+suppression states are retained as bounded counts only and remain informational:
+an accepted scanner or source suppression does not replace the suite's
+digest-bound policy acceptance process.

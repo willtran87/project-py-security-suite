@@ -34,6 +34,7 @@ from py_security_suite.adapters.sarif import (
     _object_list,
     _rule_classification,
     _rule_index,
+    _result_semantics,
     _safe_uri as sarif_safe_uri,
     _sarif_severity,
     _tags,
@@ -252,6 +253,116 @@ class SarifNormalizationContractTests(unittest.TestCase):
         self.assertEqual(summary["limit_omitted_count"], 6)
         self.assertEqual(summary["omitted_count"], 10)
         self.assertTrue(summary["truncated"])
+
+    def test_sarif_excludes_only_semantically_inactive_results(self) -> None:
+        results = [
+            {
+                "ruleId": f"rule-{name}",
+                "kind": kind,
+                "baselineState": baseline,
+                "message": {"text": name},
+            }
+            for name, kind, baseline in (
+                ("default-failure", None, None),
+                ("explicit-failure", "fail", "new"),
+                ("review", "review", "updated"),
+                ("unknown", "future-kind", "future-state"),
+                ("pass", "pass", None),
+                ("not-applicable", "notApplicable", None),
+                ("absent", "fail", "absent"),
+            )
+        ]
+        payload = json.dumps(
+            {
+                "runs": [
+                    {
+                        "tool": {"driver": {"rules": []}},
+                        "results": results,
+                    }
+                ]
+            }
+        )
+
+        findings = parse_sarif_findings(
+            payload,
+            self.root,
+            tool_name="codeql",
+            default_area="security",
+            default_impact="impact",
+            default_remediation="fix",
+        )
+
+        self.assertEqual(
+            [finding.description for finding in findings],
+            ["default-failure", "explicit-failure", "review", "unknown"],
+        )
+        self.assertEqual(
+            findings[-1].evidence["sarif_result_semantics"]["kind"], "unknown"
+        )
+        self.assertEqual(
+            findings[-1].evidence["sarif_result_semantics"]["baseline_state"],
+            "unknown",
+        )
+
+    def test_sarif_suppressions_are_evidence_not_policy_acceptance(self) -> None:
+        justification_secret = "suppression-justification-must-not-be-retained"
+        payload = json.dumps(
+            {
+                "runs": [
+                    {
+                        "tool": {"driver": {"rules": []}},
+                        "results": [
+                            {
+                                "ruleId": "rule-suppressed",
+                                "kind": "review",
+                                "baselineState": "unchanged",
+                                "message": {"text": "still requires policy review"},
+                                "suppressions": [
+                                    {
+                                        "kind": "inSource",
+                                        "status": "accepted",
+                                        "justification": justification_secret,
+                                    },
+                                    {"kind": "external", "status": "underReview"},
+                                    {"kind": "external", "status": "rejected"},
+                                    {"kind": "external", "status": "future"},
+                                    "malformed",
+                                ],
+                            }
+                        ],
+                    }
+                ]
+            }
+        )
+
+        finding = parse_sarif_findings(
+            payload,
+            self.root,
+            tool_name="codeql",
+            default_area="security",
+            default_impact="impact",
+            default_remediation="fix",
+        )[0]
+        semantics = finding.evidence["sarif_result_semantics"]
+
+        self.assertEqual(finding.status.value, "new")
+        self.assertTrue(semantics["normalized_as_finding"])
+        self.assertEqual(semantics["native_suppression_count"], 5)
+        self.assertEqual(semantics["accepted_native_suppression_count"], 1)
+        self.assertEqual(semantics["invalid_native_suppression_count"], 1)
+        self.assertEqual(
+            semantics["native_suppression_status_counts"],
+            {"accepted": 1, "rejected": 1, "under-review": 1, "unknown": 1},
+        )
+        self.assertNotIn(justification_secret, json.dumps(finding.evidence))
+        self.assertIn(
+            "suite policy acceptance", semantics["native_suppression_authority"]
+        )
+        self.assertTrue(
+            _result_semantics({"suppressions": {}})[
+                "malformed_native_suppression_container"
+            ]
+        )
 
     def test_sarif_severity_classification_domain_and_help_mapping(self) -> None:
         self.assertEqual(

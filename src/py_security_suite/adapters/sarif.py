@@ -20,6 +20,25 @@ from .common import map_confidence, map_severity, string_list
 
 
 _MAX_RESULT_LOCATIONS = 25
+_RESULT_KINDS = {
+    "fail": "fail",
+    "informational": "informational",
+    "notapplicable": "not-applicable",
+    "open": "open",
+    "pass": "pass",
+    "review": "review",
+}
+_BASELINE_STATES = {
+    "absent": "absent",
+    "new": "new",
+    "unchanged": "unchanged",
+    "updated": "updated",
+}
+_SUPPRESSION_STATUSES = {
+    "accepted": "accepted",
+    "rejected": "rejected",
+    "underreview": "under-review",
+}
 
 
 def parse_sarif_findings(
@@ -36,18 +55,22 @@ def parse_sarif_findings(
     for run in _object_list(document.get("runs", []), "runs"):
         driver = _object(_object(run.get("tool")).get("driver"))
         rules = _rule_index(driver)
-        findings.extend(
-            _finding(
-                result,
-                rules,
-                target,
-                tool_name=tool_name,
-                default_area=default_area,
-                default_impact=default_impact,
-                default_remediation=default_remediation,
+        for result in _object_list(run.get("results") or [], "results"):
+            result_semantics = _result_semantics(result)
+            if not result_semantics["normalized_as_finding"]:
+                continue
+            findings.append(
+                _finding(
+                    result,
+                    rules,
+                    target,
+                    tool_name=tool_name,
+                    default_area=default_area,
+                    default_impact=default_impact,
+                    default_remediation=default_remediation,
+                    result_semantics=result_semantics,
+                )
             )
-            for result in _object_list(run.get("results") or [], "results")
-        )
     return findings
 
 
@@ -60,6 +83,7 @@ def _finding(
     default_area: str,
     default_impact: str,
     default_remediation: str,
+    result_semantics: dict[str, Any],
 ) -> Finding:
     rule_id = str(result.get("ruleId") or "unknown")
     rule = rules.get(rule_id, {})
@@ -127,7 +151,7 @@ def _finding(
         rule_kind=str(rule_properties.get("kind") or properties.get("kind") or ""),
         secret_bearing_messages=secret_bearing,
     )
-    evidence: dict[str, Any] = {}
+    evidence: dict[str, Any] = {"sarif_result_semantics": result_semantics}
     if code_flows:
         evidence["sarif_code_flows"] = code_flows
     if location_summary:
@@ -294,6 +318,54 @@ def _message(value: Any) -> str:
     if isinstance(value, dict):
         return str(value.get("text") or value.get("markdown") or "").strip()
     return ""
+
+
+def _result_semantics(result: dict[str, Any]) -> dict[str, Any]:
+    kind = _enum_value(result.get("kind"), _RESULT_KINDS, default="fail")
+    baseline_state = _enum_value(
+        result.get("baselineState"), _BASELINE_STATES, default="unspecified"
+    )
+    raw_suppressions = result.get("suppressions")
+    malformed_container = raw_suppressions is not None and not isinstance(
+        raw_suppressions, list
+    )
+    suppressions = raw_suppressions if isinstance(raw_suppressions, list) else []
+    status_counts: dict[str, int] = {}
+    invalid_count = 0
+    for suppression in suppressions:
+        if not isinstance(suppression, dict):
+            invalid_count += 1
+            continue
+        status = _enum_value(
+            suppression.get("status"),
+            _SUPPRESSION_STATUSES,
+            default="unspecified",
+        )
+        status_counts[status] = status_counts.get(status, 0) + 1
+    normalized_as_finding = kind not in {"pass", "not-applicable"} and (
+        baseline_state != "absent"
+    )
+    return {
+        "kind": kind,
+        "baseline_state": baseline_state,
+        "normalized_as_finding": normalized_as_finding,
+        "native_suppression_count": len(suppressions),
+        "native_suppression_status_counts": dict(sorted(status_counts.items())),
+        "accepted_native_suppression_count": status_counts.get("accepted", 0),
+        "invalid_native_suppression_count": invalid_count,
+        "malformed_native_suppression_container": malformed_container,
+        "native_suppression_authority": (
+            "informational-only; suite policy acceptance is still required"
+        ),
+    }
+
+
+def _enum_value(value: Any, allowed: dict[str, str], *, default: str) -> str:
+    if value is None:
+        return default
+    if not isinstance(value, str):
+        return "unknown"
+    return allowed.get(value.strip().casefold(), "unknown")
 
 
 def _location(result: dict[str, Any], target: Path) -> Location:
