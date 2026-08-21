@@ -34,6 +34,7 @@ from py_security_suite.adapters.sarif import (
     _object_list,
     _rule_classification,
     _rule_index,
+    _resolve_rule,
     _result_semantics,
     _safe_uri as sarif_safe_uri,
     _sarif_severity,
@@ -363,6 +364,79 @@ class SarifNormalizationContractTests(unittest.TestCase):
                 "malformed_native_suppression_container"
             ]
         )
+
+    def test_sarif_rule_index_resolves_exact_descriptor_metadata(self) -> None:
+        payload = json.dumps(
+            {
+                "runs": [
+                    {
+                        "tool": {
+                            "driver": {
+                                "rules": [
+                                    {
+                                        "id": "py/indexed-rule",
+                                        "shortDescription": {
+                                            "text": "Indexed rule title"
+                                        },
+                                        "properties": {
+                                            "security-severity": "8.2",
+                                            "tags": ["security", "external/cwe/cwe-79"],
+                                        },
+                                    }
+                                ]
+                            }
+                        },
+                        "results": [
+                            {
+                                "ruleIndex": 0,
+                                "message": {"text": "indexed result"},
+                            }
+                        ],
+                    }
+                ]
+            }
+        )
+
+        finding = parse_sarif_findings(
+            payload,
+            self.root,
+            tool_name="codeql",
+            default_area="security",
+            default_impact="impact",
+            default_remediation="fix",
+        )[0]
+
+        self.assertEqual(finding.sources[0].rule_id, "py/indexed-rule")
+        self.assertEqual(finding.title, "Indexed rule title")
+        self.assertEqual(finding.severity, Severity.HIGH)
+        self.assertEqual(finding.classifications, ["CWE-79"])
+        self.assertEqual(
+            finding.evidence["sarif_rule_reference"],
+            {"basis": "rule-index", "rule_index": 0, "metadata_resolved": True},
+        )
+
+    def test_sarif_rule_reference_rejects_mismatch_and_ambiguity(self) -> None:
+        rules = [{"id": "rule-a"}, {"id": "rule-b"}]
+        with self.assertRaisesRegex(ValueError, "different rules"):
+            _resolve_rule({"ruleId": "rule-b", "ruleIndex": 0}, rules)
+        with self.assertRaisesRegex(ValueError, "ambiguous"):
+            _resolve_rule({"ruleId": "rule-a"}, [rules[0], rules[0]])
+
+        invalid_references: tuple[
+            tuple[dict[str, object], type[Exception], str], ...
+        ] = (
+            ({"ruleIndex": True}, TypeError, "integer"),
+            ({"ruleIndex": -2}, ValueError, "-1 or non-negative"),
+            ({"ruleIndex": 2}, ValueError, "outside"),
+            ({"ruleIndex": 0}, ValueError, "without an id"),
+            ({"ruleId": []}, TypeError, "string"),
+            ({"ruleId": ""}, ValueError, "must not be empty"),
+        )
+        for reference, error_type, message in invalid_references:
+            with self.subTest(reference=reference):
+                candidate_rules = [{}] if reference.get("ruleIndex") == 0 else rules
+                with self.assertRaisesRegex(error_type, message):
+                    _resolve_rule(reference, candidate_rules)
 
     def test_sarif_severity_classification_domain_and_help_mapping(self) -> None:
         self.assertEqual(

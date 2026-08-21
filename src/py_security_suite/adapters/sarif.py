@@ -54,7 +54,7 @@ def parse_sarif_findings(
     findings: list[Finding] = []
     for run in _object_list(document.get("runs", []), "runs"):
         driver = _object(_object(run.get("tool")).get("driver"))
-        rules = _rule_index(driver)
+        ordered_rules = _ordered_rules(driver)
         for result in _object_list(run.get("results") or [], "results"):
             result_semantics = _result_semantics(result)
             if not result_semantics["normalized_as_finding"]:
@@ -62,7 +62,7 @@ def parse_sarif_findings(
             findings.append(
                 _finding(
                     result,
-                    rules,
+                    ordered_rules,
                     target,
                     tool_name=tool_name,
                     default_area=default_area,
@@ -76,7 +76,7 @@ def parse_sarif_findings(
 
 def _finding(
     result: dict[str, Any],
-    rules: dict[str, dict[str, Any]],
+    ordered_rules: list[dict[str, Any]],
     target: Path,
     *,
     tool_name: str,
@@ -85,8 +85,7 @@ def _finding(
     default_remediation: str,
     result_semantics: dict[str, Any],
 ) -> Finding:
-    rule_id = str(result.get("ruleId") or "unknown")
-    rule = rules.get(rule_id, {})
+    rule_id, rule, rule_reference = _resolve_rule(result, ordered_rules)
     properties = _object(result.get("properties"))
     rule_properties = _object(rule.get("properties"))
     tags = _tags(properties, rule_properties)
@@ -151,7 +150,10 @@ def _finding(
         rule_kind=str(rule_properties.get("kind") or properties.get("kind") or ""),
         secret_bearing_messages=secret_bearing,
     )
-    evidence: dict[str, Any] = {"sarif_result_semantics": result_semantics}
+    evidence: dict[str, Any] = {
+        "sarif_result_semantics": result_semantics,
+        "sarif_rule_reference": rule_reference,
+    }
     if code_flows:
         evidence["sarif_code_flows"] = code_flows
     if location_summary:
@@ -310,6 +312,80 @@ def _rule_index(driver: Any) -> dict[str, dict[str, Any]]:
         for rule in rules
         if isinstance(rule, dict) and rule.get("id")
     }
+
+
+def _ordered_rules(driver: Any) -> list[dict[str, Any]]:
+    if not isinstance(driver, dict):
+        return []
+    rules = driver.get("rules") or []
+    if not isinstance(rules, list):
+        return []
+    return [rule if isinstance(rule, dict) else {} for rule in rules]
+
+
+def _resolve_rule(
+    result: dict[str, Any], ordered_rules: list[dict[str, Any]]
+) -> tuple[str, dict[str, Any], dict[str, Any]]:
+    raw_rule_id = result.get("ruleId")
+    if raw_rule_id is None:
+        declared_rule_id = ""
+    elif not isinstance(raw_rule_id, str):
+        raise TypeError("SARIF ruleId must be a string")
+    else:
+        declared_rule_id = raw_rule_id.strip()
+        if not declared_rule_id:
+            raise ValueError("SARIF ruleId must not be empty")
+
+    raw_rule_index = result.get("ruleIndex")
+    rule_index: int | None = None
+    if raw_rule_index is not None:
+        if not isinstance(raw_rule_index, int) or isinstance(raw_rule_index, bool):
+            raise TypeError("SARIF ruleIndex must be an integer")
+        if raw_rule_index < -1:
+            raise ValueError("SARIF ruleIndex must be -1 or non-negative")
+        if raw_rule_index >= 0:
+            rule_index = raw_rule_index
+
+    indexed_rule: dict[str, Any] | None = None
+    indexed_rule_id = ""
+    if rule_index is not None:
+        if rule_index >= len(ordered_rules):
+            raise ValueError("SARIF ruleIndex is outside the driver rule table")
+        indexed_rule = ordered_rules[rule_index]
+        raw_indexed_id = indexed_rule.get("id")
+        if not isinstance(raw_indexed_id, str) or not raw_indexed_id.strip():
+            raise ValueError("SARIF ruleIndex references a rule without an id")
+        indexed_rule_id = raw_indexed_id.strip()
+        if declared_rule_id and declared_rule_id != indexed_rule_id:
+            raise ValueError("SARIF ruleId and ruleIndex reference different rules")
+
+    rule_id = declared_rule_id or indexed_rule_id or "unknown"
+    if indexed_rule is not None:
+        rule = indexed_rule
+        basis = "rule-id-and-index" if declared_rule_id else "rule-index"
+    elif declared_rule_id:
+        matches = [
+            candidate
+            for candidate in ordered_rules
+            if isinstance(candidate.get("id"), str)
+            and str(candidate["id"]).strip() == declared_rule_id
+        ]
+        if len(matches) > 1:
+            raise ValueError("SARIF ruleId is ambiguous in the driver rule table")
+        rule = matches[0] if matches else {}
+        basis = "rule-id"
+    else:
+        rule = {}
+        basis = "unresolved"
+    return (
+        rule_id,
+        rule,
+        {
+            "basis": basis,
+            "rule_index": rule_index,
+            "metadata_resolved": bool(rule),
+        },
+    )
 
 
 def _message(value: Any) -> str:

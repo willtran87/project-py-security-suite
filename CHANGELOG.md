@@ -5,6 +5,11 @@ for published releases.
 
 ## Unreleased
 
+- Resolve SARIF rules by both `ruleId` and positional `ruleIndex`, preserving
+  exact descriptor titles, severity, classifications, and guidance for
+  index-only results. Contradictory, out-of-range, malformed, and ambiguous
+  references now fail closed instead of attaching unrelated rule metadata, and
+  normalized plus portable SARIF record the attribution basis.
 - Honor SARIF result semantics without weakening policy authority. Explicit
   pass, not-applicable, and baseline-absent results no longer become false
   active findings, while unknown future states remain conservatively reviewable.

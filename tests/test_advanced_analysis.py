@@ -401,6 +401,10 @@ class AdvancedAnalysisTests(unittest.TestCase):
         self.assertEqual(
             portable["properties"]["sarif_result_semantics"]["kind"], "fail"
         )
+        self.assertEqual(
+            portable["properties"]["sarif_rule_reference"],
+            {"basis": "rule-id", "rule_index": None, "metadata_resolved": True},
+        )
 
     def test_sarif_sanitizes_finding_and_flow_messages_before_normalization(
         self,

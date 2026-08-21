@@ -173,3 +173,9 @@ as active findings; unknown or future states remain reviewable. Native
 suppression states are retained as bounded counts only and remain informational:
 an accepted scanner or source suppression does not replace the suite's
 digest-bound policy acceptance process.
+Rule attribution follows both SARIF `ruleId` and positional `ruleIndex`
+references. Index-only results inherit the exact descriptor title, severity,
+classification, and guidance; contradictory, out-of-range, ambiguous, or
+malformed references fail parsing instead of attaching unrelated metadata.
+The chosen attribution basis and descriptor-resolution state remain available
+in normalized and portable SARIF evidence.
