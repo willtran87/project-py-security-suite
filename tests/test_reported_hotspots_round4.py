@@ -207,6 +207,11 @@ class SarifNormalizationContractTests(unittest.TestCase):
         self.assertEqual(location.path, "<repository>")
         self.assertEqual(_uri_path("src/example%20file.py"), "src/example file.py")
         self.assertEqual(_uri_path("file:///C:/repo/app.py"), "C:/repo/app.py")
+        self.assertEqual(_uri_path("C:/repo/app.py"), "C:/repo/app.py")
+        self.assertEqual(
+            _uri_path("https://user:secret@example.test/app.py"),
+            "<external-artifact>",
+        )
         self.assertIsNone(sarif_integer([]))
         self.assertIsNone(sarif_safe_uri("relative"))
 

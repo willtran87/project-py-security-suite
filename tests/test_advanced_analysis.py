@@ -20,7 +20,14 @@ from py_security_suite.advanced_delta import (
     render_advanced_delta_markdown,
 )
 from py_security_suite.advanced_analysis import build_advanced_analysis
-from py_security_suite.models import Confidence, Finding, Location, Severity, Source
+from py_security_suite.models import (
+    Confidence,
+    Finding,
+    Location,
+    Severity,
+    Source,
+    json_ready,
+)
 from py_security_suite.report_inspection import read_bundled_schema
 
 
@@ -292,6 +299,170 @@ class AdvancedAnalysisTests(unittest.TestCase):
         self.assertEqual(flow["steps"][1]["kinds"], ["sink"])
         self.assertEqual(flow["semantic_basis"], "native-source-sink-kinds")
         self.assertNotIn("snippet", flow["steps"][0])
+
+    def test_sarif_sanitizes_finding_and_flow_messages_before_normalization(
+        self,
+    ) -> None:
+        result_secret = "result_secret_must_not_survive"
+        bearer_secret = "bearer_secret_must_not_survive"
+        userinfo_secret = "user:password_must_not_survive"
+        uri_secret = "uri_user:uri_password_must_not_survive"
+        payload = json.dumps(
+            {
+                "runs": [
+                    {
+                        "tool": {
+                            "driver": {
+                                "rules": [
+                                    {
+                                        "id": "py/secret-flow",
+                                        "shortDescription": {"text": "Secret flow"},
+                                        "properties": {"kind": "path-problem"},
+                                    }
+                                ]
+                            }
+                        },
+                        "results": [
+                            {
+                                "ruleId": "py/secret-flow",
+                                "message": {"text": f"token={result_secret}"},
+                                "locations": [_sarif_location("src/sink.py", 9)],
+                                "codeFlows": [
+                                    {
+                                        "threadFlows": [
+                                            {
+                                                "locations": [
+                                                    {
+                                                        "location": _sarif_location(
+                                                            "src/source.py", 3
+                                                        ),
+                                                        "message": {
+                                                            "text": "Authorization: Bearer "
+                                                            + bearer_secret
+                                                        },
+                                                        "kinds": ["source"],
+                                                    },
+                                                    {
+                                                        "location": _sarif_location(
+                                                            "https://"
+                                                            + uri_secret
+                                                            + "@example.test/sink.py",
+                                                            9,
+                                                        ),
+                                                        "message": {
+                                                            "text": "send https://"
+                                                            + userinfo_secret
+                                                            + "@example.test/path"
+                                                        },
+                                                        "kinds": ["sink"],
+                                                    },
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                ]
+            }
+        )
+
+        finding = parse_sarif_findings(
+            payload,
+            Path.cwd(),
+            tool_name="codeql",
+            default_area="data-flow",
+            default_impact="impact",
+            default_remediation="fix",
+        )[0]
+        serialized = json.dumps(json_ready(finding))
+
+        self.assertNotIn(result_secret, serialized)
+        self.assertNotIn(bearer_secret, serialized)
+        self.assertNotIn(userinfo_secret, serialized)
+        self.assertNotIn(uri_secret, serialized)
+        self.assertIn("<redacted>", serialized)
+        self.assertEqual(
+            finding.evidence["sarif_code_flows"][0]["steps"][1]["path"],
+            "<external-artifact>",
+        )
+        self.assertEqual(
+            finding.evidence["sarif_code_flows"][0]["semantic_basis"],
+            "native-source-sink-kinds",
+        )
+
+    def test_secret_sarif_lane_redacts_unstructured_result_text(self) -> None:
+        secrets = {
+            "result": "unstructured-result-value-without-a-known-prefix",
+            "title": "unstructured-title-value-without-a-known-prefix",
+            "help": "unstructured-help-value-without-a-known-prefix",
+            "impact": "unstructured-impact-value-without-a-known-prefix",
+            "remediation": "unstructured-remediation-value-without-a-known-prefix",
+            "flow": "unstructured-flow-value-without-a-known-prefix",
+        }
+        payload = json.dumps(
+            {
+                "runs": [
+                    {
+                        "tool": {
+                            "driver": {
+                                "rules": [
+                                    {
+                                        "id": "secret-rule",
+                                        "shortDescription": {"text": secrets["title"]},
+                                        "help": {"text": secrets["help"]},
+                                    }
+                                ]
+                            }
+                        },
+                        "results": [
+                            {
+                                "ruleId": "secret-rule",
+                                "message": {"text": secrets["result"]},
+                                "locations": [_sarif_location("src/config.py", 4)],
+                                "properties": {
+                                    "impact": secrets["impact"],
+                                    "remediation": secrets["remediation"],
+                                },
+                                "codeFlows": [
+                                    {
+                                        "threadFlows": [
+                                            {
+                                                "locations": [
+                                                    {
+                                                        "location": _sarif_location(
+                                                            "src/config.py", 4
+                                                        ),
+                                                        "message": {
+                                                            "text": secrets["flow"]
+                                                        },
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                ]
+            }
+        )
+
+        finding = parse_sarif_findings(
+            payload,
+            Path.cwd(),
+            tool_name="gitleaks",
+            default_area="secrets",
+            default_impact="impact",
+            default_remediation="fix",
+        )[0]
+
+        serialized = json.dumps(json_ready(finding))
+        for secret in secrets.values():
+            self.assertNotIn(secret, serialized)
+        self.assertIn("sensitive scanner text", finding.description)
 
     def test_generic_quality_code_flow_is_not_promoted_to_taint(self) -> None:
         payload = json.dumps(

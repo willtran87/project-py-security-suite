@@ -15,6 +15,7 @@ from ..models import (
     finding_identity,
     normalize_repo_path,
 )
+from ..source_context import is_secret_bearing_scan, redact_sensitive_text
 from .common import map_confidence, map_severity, string_list
 
 
@@ -59,17 +60,25 @@ def _finding(
 ) -> Finding:
     rule_id = str(result.get("ruleId") or "unknown")
     rule = rules.get(rule_id, {})
-    message = _message(result.get("message")) or rule_id
-    title = (
+    properties = _object(result.get("properties"))
+    rule_properties = _object(rule.get("properties"))
+    tags = _tags(properties, rule_properties)
+    area = str(
+        properties.get("area")
+        or rule_properties.get("category")
+        or _area(tags, default_area)
+    )
+    secret_bearing = is_secret_bearing_scan(area=area, tool_name=tool_name)
+    raw_message = _message(result.get("message")) or rule_id
+    message = redact_sensitive_text(raw_message, secret_bearing=secret_bearing)
+    raw_title = (
         _message(rule.get("shortDescription"))
         or _message(rule.get("fullDescription"))
         or message
     )
+    title = redact_sensitive_text(raw_title, secret_bearing=secret_bearing)
     location = _location(result, target)
-    properties = _object(result.get("properties"))
-    rule_properties = _object(rule.get("properties"))
     severity = _sarif_severity(result.get("level"), properties, rule_properties)
-    tags = _tags(properties, rule_properties)
     domain = _domain(tags)
     finding_id, fingerprint = finding_identity(
         tool=tool_name,
@@ -77,12 +86,23 @@ def _finding(
         path=location.path,
         start_line=location.start_line,
     )
-    help_text = _message(rule.get("help"))
+    help_text = redact_sensitive_text(
+        _message(rule.get("help")), secret_bearing=secret_bearing
+    )
     help_uri = _safe_uri(rule.get("helpUri")) or _derived_help_uri(tool_name, rule_id)
-    impact = str(properties.get("impact") or "").strip() or help_text
-    remediation = str(
-        properties.get("recommended_action") or properties.get("remediation") or ""
-    ).strip()
+    impact = (
+        redact_sensitive_text(
+            str(properties.get("impact") or "").strip(),
+            secret_bearing=secret_bearing,
+        )
+        or help_text
+    )
+    remediation = redact_sensitive_text(
+        str(
+            properties.get("recommended_action") or properties.get("remediation") or ""
+        ).strip(),
+        secret_bearing=secret_bearing,
+    )
     if domain == "quality":
         impact = impact or (
             "The code pattern can conceal an implementation mistake or make future "
@@ -101,6 +121,7 @@ def _finding(
         tool_name,
         security_domain=domain == "security",
         rule_kind=str(rule_properties.get("kind") or properties.get("kind") or ""),
+        secret_bearing_messages=secret_bearing,
     )
     return Finding(
         finding_id=finding_id,
@@ -116,11 +137,7 @@ def _finding(
             or properties.get("precision")
             or rule_properties.get("precision")
         ),
-        area=str(
-            properties.get("area")
-            or rule_properties.get("category")
-            or _area(tags, default_area)
-        ),
+        area=area,
         domain=domain,
         classifications=classifications,
         locations=[location],
@@ -151,6 +168,7 @@ def _code_flows(
     *,
     security_domain: bool,
     rule_kind: str,
+    secret_bearing_messages: bool,
 ) -> list[dict[str, Any]]:
     """Retain bounded SARIF path steps without snippets or sensitive state."""
     raw_code_flows = result.get("codeFlows") or []
@@ -183,6 +201,9 @@ def _code_flows(
                 region = region if isinstance(region, dict) else {}
                 message = _message(location.get("message")) or _message(
                     raw.get("message")
+                )
+                message = redact_sensitive_text(
+                    message, secret_bearing=secret_bearing_messages
                 )
                 native_steps.append(
                     (
@@ -292,9 +313,16 @@ def _location(result: dict[str, Any], target: Path) -> Location:
 
 
 def _uri_path(value: str) -> str:
-    if not value.startswith("file:"):
+    value = value.strip()
+    if not value:
+        return "<repository>"
+    if re.match(r"^[A-Za-z]:[\\/]", value):
         return unquote(value)
     parsed = urlparse(value)
+    if not parsed.scheme:
+        return unquote(value)
+    if parsed.scheme.casefold() != "file":
+        return "<external-artifact>"
     path = unquote(parsed.path)
     if len(path) >= 3 and path[0] == "/" and path[2] == ":":
         path = path[1:]

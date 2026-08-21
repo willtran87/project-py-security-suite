@@ -6,10 +6,15 @@ from pathlib import Path
 from .models import Finding, Location
 
 
+_SECRET_AREAS = {"secrets", "secrets-history"}
 _SECRET_TOOLS = {"detect-secrets", "gitleaks", "trufflehog"}
 _REDACTED_SOURCE = "<redacted: secret-bearing source is not embedded in reports>"
+_REDACTED_SCANNER_TEXT = "<redacted: sensitive scanner text is not retained>"
 _REDACTED_VALUE = "<redacted>"
-_SECRET_NAME = r"(?:password|passwd|secret|token|api[_-]?key|private[_-]?key)"
+_SECRET_NAME = (
+    r"(?:password|passwd|secret|token|credential|api[_-]?key|access[_-]?key|"
+    r"private[_-]?key)"
+)
 _SECRET_ASSIGNMENT = re.compile(
     rf"(?ix)"
     rf"(?P<prefix>"
@@ -24,6 +29,26 @@ _SECRET_ASSIGNMENT = re.compile(
     rf"|'(?:\\.|[^'\\])*'"
     rf"|[^#;,\r\n]*?\S(?=\s*(?:[#;,]|$))"
     rf")"
+)
+_AUTHORIZATION_VALUE = re.compile(
+    r"(?i)\b(?P<prefix>(?:proxy-)?authorization\s*[:=]\s*(?:bearer|basic)?\s*)"
+    r"[^\s,;]+"
+)
+_URI_USERINFO = re.compile(r"(?i)(?P<scheme>[a-z][a-z0-9+.-]*://)[^/@\s]+@")
+_JWT_VALUE = re.compile(
+    r"(?<![A-Za-z0-9_-])[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\."
+    r"[A-Za-z0-9_-]{8,}(?![A-Za-z0-9_-])"
+)
+_KNOWN_TOKEN = re.compile(
+    r"(?<![A-Za-z0-9])(?:"
+    r"(?:AKIA|ASIA)[A-Z0-9]{16}"
+    r"|gh[pousr]_[A-Za-z0-9]{20,}"
+    r"|xox[baprs]-[A-Za-z0-9-]{10,}"
+    r"|sk_(?:live|test)_[A-Za-z0-9]{16,}"
+    r")(?![A-Za-z0-9])"
+)
+_PRIVATE_KEY_MARKER = re.compile(
+    r"-----BEGIN (?:[A-Z0-9 ]+ )?PRIVATE KEY-----", re.IGNORECASE
 )
 _LANGUAGES = {
     ".c": "c",
@@ -92,9 +117,28 @@ def redact_sensitive_snippets(findings: list[Finding]) -> None:
                 location.snippet_redacted = True
 
 
+def redact_sensitive_text(value: str, *, secret_bearing: bool = False) -> str:
+    """Remove concrete credentials from scanner-controlled report text."""
+    if not value:
+        return ""
+    if secret_bearing or _PRIVATE_KEY_MARKER.search(value):
+        return _REDACTED_SCANNER_TEXT
+    redacted = _SECRET_ASSIGNMENT.sub(rf"\g<prefix>{_REDACTED_VALUE}", value)
+    redacted = _AUTHORIZATION_VALUE.sub(rf"\g<prefix>{_REDACTED_VALUE}", redacted)
+    redacted = _URI_USERINFO.sub(rf"\g<scheme>{_REDACTED_VALUE}@", redacted)
+    redacted = _JWT_VALUE.sub(_REDACTED_VALUE, redacted)
+    return _KNOWN_TOKEN.sub(_REDACTED_VALUE, redacted)
+
+
+def is_secret_bearing_scan(*, area: str, tool_name: str) -> bool:
+    """Return whether scanner-controlled text must be discarded fail closed."""
+    return area.casefold() in _SECRET_AREAS or tool_name.casefold() in _SECRET_TOOLS
+
+
 def _is_secret_finding(finding: Finding) -> bool:
-    return finding.area.casefold() in {"secrets", "secrets-history"} or any(
-        source.tool.casefold() in _SECRET_TOOLS for source in finding.sources
+    return finding.area.casefold() in _SECRET_AREAS or any(
+        is_secret_bearing_scan(area=finding.area, tool_name=source.tool)
+        for source in finding.sources
     )
 
 

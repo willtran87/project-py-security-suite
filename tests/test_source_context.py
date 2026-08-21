@@ -13,6 +13,8 @@ from py_security_suite.models import (
 )
 from py_security_suite.source_context import (
     attach_source_context,
+    is_secret_bearing_scan,
+    redact_sensitive_text,
     redact_sensitive_snippets,
 )
 
@@ -40,6 +42,36 @@ def finding(*, path: str, line: int, area: str = "injection") -> Finding:
 
 
 class SourceContextTests(unittest.TestCase):
+    def test_secret_lane_classification_is_shared_across_area_and_tool(self) -> None:
+        self.assertTrue(is_secret_bearing_scan(area="secrets", tool_name="codeql"))
+        self.assertTrue(is_secret_bearing_scan(area="other", tool_name="Gitleaks"))
+        self.assertFalse(is_secret_bearing_scan(area="injection", tool_name="codeql"))
+
+    def test_scanner_text_redacts_credentials_without_losing_context(self) -> None:
+        jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyMTIzIn0.signaturevalue"
+        value = (
+            "source Authorization: Bearer bearer_secret; "
+            "url=postgresql://user:password@example.test/database; "
+            f"token={jwt}; sink"
+        )
+
+        redacted = redact_sensitive_text(value)
+
+        self.assertIn("source", redacted)
+        self.assertIn("sink", redacted)
+        self.assertNotIn("bearer_secret", redacted)
+        self.assertNotIn("user:password", redacted)
+        self.assertNotIn(jwt, redacted)
+        self.assertGreaterEqual(redacted.count("<redacted>"), 3)
+
+    def test_secret_scanner_text_is_fail_closed(self) -> None:
+        secret = "unstructured-value-that-patterns-cannot-classify"
+
+        redacted = redact_sensitive_text(secret, secret_bearing=True)
+
+        self.assertNotIn(secret, redacted)
+        self.assertIn("sensitive scanner text", redacted)
+
     def test_excerpt_is_bounded_numberable_and_sanitized(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             target = Path(directory)

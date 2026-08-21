@@ -5,6 +5,13 @@ for published releases.
 
 ## Unreleased
 
+- Sanitize SARIF-controlled finding, native-flow text, and artifact locations
+  before normalization.
+  Credential assignments, authorization values, URL userinfo, JWTs, known token
+  formats, and private-key material are removed without discarding source/sink
+  semantics; secret-scanner lanes replace unstructured messages fail closed so
+  normalized evidence cannot become a secondary secret store. Non-file URI
+  locations are retained only as an explicit external-artifact marker.
 - Make wheel `RECORD` validation standards-aware and fail closed. Ordinary
   members now require a hash and size, duplicate rows and non-empty self
   metadata are reported, negative sizes are invalid, and stronger SHA-384,

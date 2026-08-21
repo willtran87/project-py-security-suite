@@ -152,4 +152,11 @@ also promoted into `closure-plan.json` with an owner, priority, acceptance
 criteria, and evidence references.
 
 Native SARIF path retention excludes source snippets and arbitrary execution
-state so reports do not create a secondary sensitive-data store.
+state so reports do not create a secondary sensitive-data store. Scanner-owned
+finding text, native step messages, and artifact locations are sanitized at the
+adapter boundary:
+credential assignments, authorization values, URL userinfo, JWTs, known token
+formats, and private-key material are removed before normalization, while
+secret-scanner lanes replace all unstructured result and path text fail closed.
+Non-file URI locations become an explicit external-artifact marker rather than
+persisting credentials, queries, or other URI state as repository paths.
