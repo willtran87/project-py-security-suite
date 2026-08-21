@@ -5,6 +5,13 @@ for published releases.
 
 ## Unreleased
 
+- Retain bounded multi-location SARIF evidence instead of silently collapsing
+  every result to its first location. Stable finding identity remains anchored
+  to the ordered primary location, while deduplication and explicit reported,
+  retained, malformed, duplicate, and limit-omitted counts expose evidence
+  loss. Secondary affected files now participate in downstream graph, exposure,
+  source-context, and native sink correlation without multiplying findings, and
+  portable SARIF output preserves the retained location set and summary.
 - Sanitize SARIF-controlled finding, native-flow text, and artifact locations
   before normalization.
   Credential assignments, authorization values, URL userinfo, JWTs, known token

@@ -4889,28 +4889,15 @@ def render_sarif(findings: list[Finding]) -> dict[str, Any]:
         fusion = finding.evidence.get("fusion")
         if isinstance(fusion, dict):
             result["properties"]["evidence_fusion"] = json_ready(fusion)
+        location_summary = finding.evidence.get("sarif_location_summary")
+        if isinstance(location_summary, dict):
+            result["properties"]["sarif_location_summary"] = json_ready(
+                location_summary
+            )
         if finding.locations:
-            location = finding.locations[0]
-            physical: dict[str, Any] = {"artifactLocation": {"uri": location.path}}
-            if location.start_line:
-                region: dict[str, Any] = {
-                    "startLine": location.start_line,
-                    "endLine": location.end_line or location.start_line,
-                }
-                if location.snippet and not location.snippet_redacted:
-                    highlighted = _highlighted_snippet(location)
-                    if highlighted:
-                        region["snippet"] = {"text": highlighted}
-                    snippet_start = location.snippet_start_line or location.start_line
-                    physical["contextRegion"] = {
-                        "startLine": snippet_start,
-                        "endLine": (
-                            snippet_start + len(location.snippet.splitlines()) - 1
-                        ),
-                        "snippet": {"text": location.snippet},
-                    }
-                physical["region"] = region
-            result["locations"] = [{"physicalLocation": physical}]
+            result["locations"] = [
+                _sarif_result_location(location) for location in finding.locations
+            ]
         results.append(result)
     return {
         "$schema": ("https://json.schemastore.org/sarif-2.1.0.json"),
@@ -4927,6 +4914,27 @@ def render_sarif(findings: list[Finding]) -> dict[str, Any]:
             }
         ],
     }
+
+
+def _sarif_result_location(location: Location) -> dict[str, Any]:
+    physical: dict[str, Any] = {"artifactLocation": {"uri": location.path}}
+    if location.start_line:
+        region: dict[str, Any] = {
+            "startLine": location.start_line,
+            "endLine": location.end_line or location.start_line,
+        }
+        if location.snippet and not location.snippet_redacted:
+            highlighted = _highlighted_snippet(location)
+            if highlighted:
+                region["snippet"] = {"text": highlighted}
+            snippet_start = location.snippet_start_line or location.start_line
+            physical["contextRegion"] = {
+                "startLine": snippet_start,
+                "endLine": snippet_start + len(location.snippet.splitlines()) - 1,
+                "snippet": {"text": location.snippet},
+            }
+        physical["region"] = region
+    return {"physicalLocation": physical}
 
 
 def render_sonarqube_external_issues(findings: list[Finding]) -> dict[str, Any]:

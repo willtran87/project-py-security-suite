@@ -160,3 +160,10 @@ formats, and private-key material are removed before normalization, while
 secret-scanner lanes replace all unstructured result and path text fail closed.
 Non-file URI locations become an explicit external-artifact marker rather than
 persisting credentials, queries, or other URI state as repository paths.
+SARIF results also retain up to 25 ordered, distinct native locations instead
+of collapsing multi-file evidence to the first location. The primary location
+continues to determine stable finding identity, while reported, retained,
+duplicate, malformed, and limit-omitted counts make evidence loss auditable.
+Secondary locations can therefore participate in graph, exposure, and native
+sink correlation without multiplying scanner findings. Portable SARIF output
+preserves the retained location set and its completeness summary.

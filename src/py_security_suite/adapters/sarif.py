@@ -19,6 +19,9 @@ from ..source_context import is_secret_bearing_scan, redact_sensitive_text
 from .common import map_confidence, map_severity, string_list
 
 
+_MAX_RESULT_LOCATIONS = 25
+
+
 def parse_sarif_findings(
     payload: str,
     target: Path,
@@ -77,7 +80,8 @@ def _finding(
         or message
     )
     title = redact_sensitive_text(raw_title, secret_bearing=secret_bearing)
-    location = _location(result, target)
+    locations, location_summary = _locations(result, target)
+    location = locations[0]
     severity = _sarif_severity(result.get("level"), properties, rule_properties)
     domain = _domain(tags)
     finding_id, fingerprint = finding_identity(
@@ -123,6 +127,11 @@ def _finding(
         rule_kind=str(rule_properties.get("kind") or properties.get("kind") or ""),
         secret_bearing_messages=secret_bearing,
     )
+    evidence: dict[str, Any] = {}
+    if code_flows:
+        evidence["sarif_code_flows"] = code_flows
+    if location_summary:
+        evidence["sarif_location_summary"] = location_summary
     return Finding(
         finding_id=finding_id,
         fingerprint=fingerprint,
@@ -140,7 +149,7 @@ def _finding(
         area=area,
         domain=domain,
         classifications=classifications,
-        locations=[location],
+        locations=locations,
         sources=[
             Source(
                 tool=tool_name,
@@ -157,7 +166,7 @@ def _finding(
                 uri=help_uri,
             )
         ],
-        evidence={"sarif_code_flows": code_flows} if code_flows else {},
+        evidence=evidence,
     )
 
 
@@ -213,7 +222,7 @@ def _code_flows(
                                 target,
                                 _uri_path(str(artifact.get("uri") or "<repository>")),
                             ),
-                            "line": _integer(region.get("startLine")),
+                            "line": _positive_integer(region.get("startLine")),
                             "message": message[:500],
                             "execution_order": _nonnegative_integer(
                                 raw.get("executionOrder")
@@ -288,11 +297,55 @@ def _message(value: Any) -> str:
 
 
 def _location(result: dict[str, Any], target: Path) -> Location:
-    locations = result.get("locations") or []
-    if not isinstance(locations, list) or not locations:
-        return Location(path="<repository>")
-    location = locations[0]
-    physical = location.get("physicalLocation") if isinstance(location, dict) else {}
+    """Return the stable primary result location for compatibility."""
+    return _locations(result, target)[0][0]
+
+
+def _locations(
+    result: dict[str, Any], target: Path
+) -> tuple[list[Location], dict[str, Any]]:
+    """Retain bounded, ordered, distinct native result locations."""
+    raw_locations = result.get("locations") or []
+    if not isinstance(raw_locations, list) or not raw_locations:
+        return [Location(path="<repository>")], {}
+    retained: list[Location] = []
+    seen: set[tuple[str, int | None, int | None]] = set()
+    duplicate_count = 0
+    invalid_count = 0
+    limit_count = 0
+    for raw_location in raw_locations:
+        if not isinstance(raw_location, dict) or not _valid_location_shape(
+            raw_location
+        ):
+            invalid_count += 1
+            continue
+        location = _physical_location(raw_location, target)
+        identity = (location.path, location.start_line, location.end_line)
+        if identity in seen:
+            duplicate_count += 1
+            continue
+        seen.add(identity)
+        if len(retained) >= _MAX_RESULT_LOCATIONS:
+            limit_count += 1
+            continue
+        retained.append(location)
+    native_retained_count = len(retained)
+    if not retained:
+        retained.append(Location(path="<repository>"))
+    summary = {
+        "reported_count": len(raw_locations),
+        "retained_count": native_retained_count,
+        "duplicate_count": duplicate_count,
+        "invalid_count": invalid_count,
+        "limit_omitted_count": limit_count,
+        "omitted_count": duplicate_count + invalid_count + limit_count,
+        "truncated": limit_count > 0,
+    }
+    return retained, summary
+
+
+def _physical_location(location: dict[str, Any], target: Path) -> Location:
+    physical = location.get("physicalLocation")
     if not isinstance(physical, dict):
         physical = {}
     artifact = physical.get("artifactLocation") or {}
@@ -307,9 +360,36 @@ def _location(result: dict[str, Any], target: Path) -> Location:
         region = {}
     return Location(
         path=normalize_repo_path(target, path),
-        start_line=_integer(region.get("startLine")),
-        end_line=_integer(region.get("endLine")),
+        start_line=_positive_integer(region.get("startLine")),
+        end_line=_positive_integer(region.get("endLine")),
     )
+
+
+def _valid_location_shape(location: dict[str, Any]) -> bool:
+    physical = location.get("physicalLocation")
+    if physical is None:
+        return True
+    if not isinstance(physical, dict):
+        return False
+    artifact = physical.get("artifactLocation")
+    if artifact is not None:
+        if not isinstance(artifact, dict):
+            return False
+        uri = artifact.get("uri")
+        if uri is not None and not isinstance(uri, str):
+            return False
+    region = physical.get("region")
+    if region is None:
+        return True
+    if not isinstance(region, dict):
+        return False
+    start = _positive_integer(region.get("startLine"))
+    end = _positive_integer(region.get("endLine"))
+    if region.get("startLine") is not None and start is None:
+        return False
+    if region.get("endLine") is not None and end is None:
+        return False
+    return start is None or end is None or end >= start
 
 
 def _uri_path(value: str) -> str:
@@ -423,11 +503,20 @@ def _integer(value: Any) -> int | None:
         return None
 
 
+def _positive_integer(value: Any) -> int | None:
+    return (
+        value
+        if isinstance(value, int) and not isinstance(value, bool) and value > 0
+        else None
+    )
+
+
 def _nonnegative_integer(value: Any) -> int | None:
-    if isinstance(value, bool):
-        return None
-    result = _integer(value)
-    return result if result is not None and result >= 0 else None
+    return (
+        value
+        if isinstance(value, int) and not isinstance(value, bool) and value >= 0
+        else None
+    )
 
 
 def _flow_kinds(value: Any) -> list[str]:

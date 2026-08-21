@@ -28,6 +28,7 @@ from py_security_suite.adapters.sarif import (
     _domain,
     _integer as sarif_integer,
     _location,
+    _locations,
     _message,
     _object,
     _object_list,
@@ -214,6 +215,43 @@ class SarifNormalizationContractTests(unittest.TestCase):
         )
         self.assertIsNone(sarif_integer([]))
         self.assertIsNone(sarif_safe_uri("relative"))
+
+    def test_sarif_locations_are_bounded_deduplicated_and_auditable(self) -> None:
+        primary = {
+            "physicalLocation": {
+                "artifactLocation": {"uri": "src/primary.py"},
+                "region": {"startLine": 7},
+            }
+        }
+        raw_locations: list[object] = [
+            primary,
+            primary,
+            "invalid",
+            {"physicalLocation": {"region": {"startLine": True}}},
+            {"physicalLocation": {"region": {"startLine": 1.5}}},
+        ]
+        raw_locations.extend(
+            {
+                "physicalLocation": {
+                    "artifactLocation": {"uri": f"src/secondary-{index}.py"},
+                    "region": {"startLine": index + 1},
+                }
+            }
+            for index in range(30)
+        )
+
+        locations, summary = _locations({"locations": raw_locations}, self.root)
+
+        self.assertEqual(len(locations), 25)
+        self.assertEqual(locations[0].path, "src/primary.py")
+        self.assertEqual(locations[0].start_line, 7)
+        self.assertEqual(summary["reported_count"], 35)
+        self.assertEqual(summary["retained_count"], 25)
+        self.assertEqual(summary["duplicate_count"], 1)
+        self.assertEqual(summary["invalid_count"], 3)
+        self.assertEqual(summary["limit_omitted_count"], 6)
+        self.assertEqual(summary["omitted_count"], 10)
+        self.assertTrue(summary["truncated"])
 
     def test_sarif_severity_classification_domain_and_help_mapping(self) -> None:
         self.assertEqual(

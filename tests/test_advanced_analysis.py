@@ -29,6 +29,7 @@ from py_security_suite.models import (
     json_ready,
 )
 from py_security_suite.report_inspection import read_bundled_schema
+from py_security_suite.reports import render_sarif
 
 
 class AdvancedAnalysisTests(unittest.TestCase):
@@ -299,6 +300,104 @@ class AdvancedAnalysisTests(unittest.TestCase):
         self.assertEqual(flow["steps"][1]["kinds"], ["sink"])
         self.assertEqual(flow["semantic_basis"], "native-source-sink-kinds")
         self.assertNotIn("snippet", flow["steps"][0])
+
+    def test_sarif_secondary_location_corroborates_native_sink_alignment(
+        self,
+    ) -> None:
+        payload = json.dumps(
+            {
+                "runs": [
+                    {
+                        "tool": {
+                            "driver": {
+                                "rules": [
+                                    {
+                                        "id": "py/multi-location-flow",
+                                        "properties": {"kind": "path-problem"},
+                                    }
+                                ]
+                            }
+                        },
+                        "results": [
+                            {
+                                "ruleId": "py/multi-location-flow",
+                                "message": {"text": "source reaches sink"},
+                                "locations": [
+                                    _sarif_location("src/wrapper.py", 5),
+                                    _sarif_location("src/sink.py", 9),
+                                ],
+                                "codeFlows": [
+                                    {
+                                        "threadFlows": [
+                                            {
+                                                "locations": [
+                                                    {
+                                                        "location": _sarif_location(
+                                                            "src/entry.py", 3
+                                                        ),
+                                                        "kinds": ["source"],
+                                                    },
+                                                    {
+                                                        "location": _sarif_location(
+                                                            "src/sink.py", 9
+                                                        ),
+                                                        "kinds": ["sink"],
+                                                    },
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                ]
+            }
+        )
+        finding = parse_sarif_findings(
+            payload,
+            Path.cwd(),
+            tool_name="codeql",
+            default_area="data-flow",
+            default_impact="impact",
+            default_remediation="fix",
+        )[0]
+        artifacts = _artifacts()
+        artifacts["risk-paths.json"]["routes"][0]["target"]["finding_id"] = (
+            finding.finding_id
+        )
+
+        result = build_advanced_analysis(Path.cwd(), [finding], artifacts)
+        portable = render_sarif([finding])["runs"][0]["results"][0]
+
+        self.assertEqual(
+            [(location.path, location.start_line) for location in finding.locations],
+            [("src/wrapper.py", 5), ("src/sink.py", 9)],
+        )
+        self.assertEqual(
+            finding.evidence["sarif_location_summary"],
+            {
+                "reported_count": 2,
+                "retained_count": 2,
+                "duplicate_count": 0,
+                "invalid_count": 0,
+                "limit_omitted_count": 0,
+                "omitted_count": 0,
+                "truncated": False,
+            },
+        )
+        self.assertEqual(result["taint_paths"][0]["route_alignment"], "aligned")
+        self.assertEqual(
+            [
+                location["physicalLocation"]["artifactLocation"]["uri"]
+                for location in portable["locations"]
+            ],
+            ["src/wrapper.py", "src/sink.py"],
+        )
+        self.assertEqual(
+            portable["properties"]["sarif_location_summary"]["retained_count"],
+            2,
+        )
 
     def test_sarif_sanitizes_finding_and_flow_messages_before_normalization(
         self,
