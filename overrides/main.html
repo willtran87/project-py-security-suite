@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block extrahead %}
+  {{ super() }}
+  {% if page %}
+    {% set page_title = page.meta.title or page.title or config.site_name %}
+    {% set page_description = page.meta.description or config.site_description %}
+    {% set canonical_url = page.canonical_url %}
+  {% else %}
+    {% set page_title = "Page not found" %}
+    {% set page_description = config.site_description %}
+    {% set canonical_url = config.site_url ~ "404.html" %}
+    <link rel="canonical" href="{{ canonical_url | e }}">
+  {% endif %}
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="{{ config.site_name | e }}">
+  <meta property="og:title" content="{{ page_title | e }}">
+  <meta property="og:description" content="{{ page_description | e }}">
+  <meta property="og:url" content="{{ canonical_url | e }}">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="{{ page_title | e }}">
+  <meta name="twitter:description" content="{{ page_description | e }}">
+  <script
+    defer
+    src="https://unpkg.com/mermaid@11.12.0/dist/mermaid.min.js"
+    integrity="sha384-o+g/BxPwhi0C3RK7oQBxQuNimeafQ3GE/ST4iT2BxVI4Wzt60SH4pq9iXVYujjaS"
+    crossorigin="anonymous"
+  ></script>
+{% endblock %}

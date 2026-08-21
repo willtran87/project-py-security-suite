@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from scripts.mkdocs_hooks import on_page_markdown
+from scripts.mkdocs_hooks import on_page_content, on_page_markdown
 
 
 def test_pages_hook_rewrites_only_links_outside_docs() -> None:
@@ -26,3 +26,15 @@ def test_pages_hook_rewrites_only_links_outside_docs() -> None:
     ) in rendered
     assert "[Sibling](../operations.md)" in rendered
     assert "[Web](https://example.com)" in rendered
+
+
+def test_pages_hook_adds_table_header_scope_without_replacing_existing_scope() -> None:
+    rendered = on_page_content(
+        '<table><thead><tr><th>Rule</th><th scope="row">Value</th></tr></thead></table>',
+        page=None,
+        config=None,
+        files=None,
+    )
+
+    assert '<th scope="col">Rule</th>' in rendered
+    assert '<th scope="row">Value</th>' in rendered

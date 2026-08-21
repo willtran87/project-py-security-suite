@@ -14,6 +14,7 @@ _PARENT_RELATIVE_LINK = re.compile(
     r"(?P<target>\.\./[^)\s]+)"
     r"(?P<suffix>\))"
 )
+_TABLE_HEADER_WITHOUT_SCOPE = re.compile(r"<th(?![^>]*\bscope=)(?P<attrs>[^>]*)>")
 
 
 def on_page_markdown(
@@ -44,3 +45,16 @@ def on_page_markdown(
         return f"{match.group('prefix')}{published_target}{match.group('suffix')}"
 
     return _PARENT_RELATIVE_LINK.sub(replace, markdown)
+
+
+def on_page_content(
+    html: str,
+    *,
+    page: Any,
+    config: Any,
+    files: Any,
+) -> str:
+    """Associate Markdown table headings with their data columns."""
+
+    del page, config, files
+    return _TABLE_HEADER_WITHOUT_SCOPE.sub(r'<th scope="col"\g<attrs>>', html)

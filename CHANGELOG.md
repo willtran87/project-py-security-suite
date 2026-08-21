@@ -1,5 +1,8 @@
 # Changelog
 
+- Harden Pages with a hash-locked dependency closure, SRI-protected Mermaid,
+  complete metadata, a custom 404, reduced-motion and responsive defaults,
+  accessible table headers, automated artifact auditing, and Dependabot upkeep.
 - Publish the complete documentation set as a strict, searchable GitHub Pages
   site with pinned workflow actions, exact direct build dependencies, dark-mode
   support, Mermaid diagrams, source links, and deployment-safe navigation.

@@ -9,6 +9,9 @@ on:
       - .github/workflows/pages.yml
       - docs/**
       - mkdocs.yml
+      - overrides/**
+      - scripts/audit_pages.py
+      - scripts/mkdocs_hooks.py
   workflow_dispatch:
 
 concurrency:
@@ -30,9 +33,11 @@ jobs:
           cache: pip
           cache-dependency-path: docs/requirements-pages.txt
       - name: Install exact documentation dependencies
-        run: python -m pip install --disable-pip-version-check -r docs/requirements-pages.txt
+        run: python -m pip install --disable-pip-version-check --require-hashes -r docs/requirements-pages.txt
       - name: Build strict documentation site
         run: mkdocs build --strict
+      - name: Audit generated Pages artifact
+        run: python scripts/audit_pages.py site
       - name: Configure Pages
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
       - name: Upload Pages artifact

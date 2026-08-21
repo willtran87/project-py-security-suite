@@ -9,6 +9,7 @@ hooks:
 
 theme:
   name: material
+  custom_dir: overrides
   language: en
   features:
     - content.code.copy
@@ -80,10 +81,16 @@ markdown_extensions:
           class: mermaid
           format: !!python/name:pymdownx.superfences.fence_code_format
 
-extra_javascript:
-  - https://unpkg.com/mermaid@11.12.0/dist/mermaid.min.js
 extra_css:
   - stylesheets/extra.css
+
+extra:
+  generator: false
+
+copyright: Copyright &copy; Python Security Suite contributors
+
+not_in_nav: |
+  404.md
 
 validation:
   links:
