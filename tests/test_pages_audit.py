@@ -17,7 +17,6 @@ _VALID_PAGE = """<!doctype html>
   <meta property="og:description" content="Reference">
   <meta property="og:url" content="https://willtran87.github.io/project-py-security-suite/">
   <link rel="canonical" href="https://willtran87.github.io/project-py-security-suite/">
-  <script type="importmap">{"imports":{"mermaid":"https://unpkg.com/mermaid@11.12.0/dist/mermaid.esm.min.mjs"},"integrity":{"https://unpkg.com/mermaid@11.12.0/dist/mermaid.esm.min.mjs":"sha384-Suhbho4eDX5+Gk0l8iCwmrDm03lSI3Ndnyd0HsR00OVxqg6xQGDY7yyMxkIjWSIb"}}</script>
   <script type="module" src="javascripts/mermaid-init.js"></script>
   <script defer src="assets/javascripts/bundle.1234.min.js"></script>
 </head>
@@ -54,10 +53,15 @@ def test_pages_audit_reports_security_accessibility_and_link_defects(
     tmp_path: Path,
 ) -> None:
     _write_required_site_files(tmp_path)
-    broken = _VALID_PAGE.replace(
-        "sha384-Suhbho4eDX5+Gk0l8iCwmrDm03lSI3Ndnyd0HsR00OVxqg6xQGDY7yyMxkIjWSIb",
-        "sha384-invalid",
-    ).replace('<th scope="col">', "<th>")
+    loader_path = tmp_path / "javascripts" / "mermaid-init.js"
+    loader_path.write_text(
+        loader_path.read_text(encoding="utf-8").replace(
+            "sha384-o+g/BxPwhi0C3RK7oQBxQuNimeafQ3GE/ST4iT2BxVI4Wzt60SH4pq9iXVYujjaS",
+            "sha384-invalid",
+        ),
+        encoding="utf-8",
+    )
+    broken = _VALID_PAGE.replace('<th scope="col">', "<th>")
     broken = broken.replace('href="#start"', 'href="missing/" target="_blank"')
     broken = broken.replace(' aria-label="Search documentation"', "")
     broken = broken.replace("</body>", '<a data-md-component="source"></a></body>')
@@ -66,7 +70,7 @@ def test_pages_audit_reports_security_accessibility_and_link_defects(
 
     errors = audit_site(tmp_path)
 
-    assert "index.html: Mermaid import map is missing integrity metadata" in errors
+    assert "site: Mermaid loader does not match its reviewed source" in errors
     assert "index.html: table header is missing a valid scope" in errors
     assert "index.html: dialog is missing an accessible name" in errors
     assert "index.html: new-window link lacks noopener noreferrer" in errors

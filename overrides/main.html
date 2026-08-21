@@ -24,15 +24,5 @@
   <meta name="twitter:card" content="summary">
   <meta name="twitter:title" content="{{ page_title | e }}">
   <meta name="twitter:description" content="{{ page_description | e }}">
-  <script type="importmap">
-    {
-      "imports": {
-        "mermaid": "https://unpkg.com/mermaid@11.12.0/dist/mermaid.esm.min.mjs"
-      },
-      "integrity": {
-        "https://unpkg.com/mermaid@11.12.0/dist/mermaid.esm.min.mjs": "sha384-Suhbho4eDX5+Gk0l8iCwmrDm03lSI3Ndnyd0HsR00OVxqg6xQGDY7yyMxkIjWSIb"
-      }
-    }
-  </script>
   <script type="module" src="{{ 'javascripts/mermaid-init.js' | url }}"></script>
 {% endblock %}

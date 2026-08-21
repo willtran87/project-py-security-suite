@@ -10,18 +10,41 @@ from urllib.parse import unquote, urlsplit
 
 _SITE_HOST = "willtran87.github.io"
 _SITE_PREFIX = "/project-py-security-suite/"
-_MERMAID_SOURCE = "https://unpkg.com/mermaid@11.12.0/dist/mermaid.esm.min.mjs"
+_MERMAID_SOURCE = "https://unpkg.com/mermaid@11.12.0/dist/mermaid.min.js"
 _MERMAID_INTEGRITY = (
-    "sha384-Suhbho4eDX5+Gk0l8iCwmrDm03lSI3Ndnyd0HsR00OVxqg6xQGDY7yyMxkIjWSIb"
+    "sha384-o+g/BxPwhi0C3RK7oQBxQuNimeafQ3GE/ST4iT2BxVI4Wzt60SH4pq9iXVYujjaS"
 )
 _MERMAID_LOADER = """const diagrams = [...document.querySelectorAll(".pysec-mermaid > code")];
+const mermaidSource = "https://unpkg.com/mermaid@11.12.0/dist/mermaid.min.js";
+const mermaidIntegrity =
+  "sha384-o+g/BxPwhi0C3RK7oQBxQuNimeafQ3GE/ST4iT2BxVI4Wzt60SH4pq9iXVYujjaS";
 
 if (diagrams.length) {
   let started = false;
+  const loadMermaid = () =>
+    new Promise((resolve, reject) => {
+      if (window.mermaid) {
+        resolve(window.mermaid);
+        return;
+      }
+      const script = document.createElement("script");
+      script.src = mermaidSource;
+      script.integrity = mermaidIntegrity;
+      script.crossOrigin = "anonymous";
+      script.referrerPolicy = "no-referrer";
+      script.addEventListener("load", () => resolve(window.mermaid), { once: true });
+      script.addEventListener(
+        "error",
+        () => reject(new Error("The integrity-checked Mermaid bundle failed to load")),
+        { once: true },
+      );
+      document.head.append(script);
+    });
   const render = async () => {
     if (started) return;
     started = true;
-    const { default: mermaid } = await import("mermaid");
+    const mermaid = await loadMermaid();
+    if (!mermaid) throw new Error("The Mermaid bundle did not expose its API");
     mermaid.initialize({ startOnLoad: false });
     await mermaid.run({ nodes: diagrams });
   };
@@ -175,11 +198,14 @@ def audit_site(root: Path) -> list[str]:
         if not (root / required).is_file():
             errors.append(f"site: missing {required}")
     loader_path = root / "javascripts/mermaid-init.js"
-    if (
-        loader_path.is_file()
-        and loader_path.read_text(encoding="utf-8") != _MERMAID_LOADER
-    ):
-        errors.append("site: Mermaid loader does not match its reviewed source")
+    if loader_path.is_file():
+        loader_source = loader_path.read_text(encoding="utf-8")
+        if loader_source != _MERMAID_LOADER:
+            errors.append("site: Mermaid loader does not match its reviewed source")
+        if _MERMAID_SOURCE not in loader_source:
+            errors.append("site: Mermaid loader does not pin the reviewed source")
+        if _MERMAID_INTEGRITY not in loader_source:
+            errors.append("site: Mermaid loader lacks reviewed integrity metadata")
 
     documents = {path.resolve(): _read_document(path) for path in html_files}
     for path, document in documents.items():
@@ -204,10 +230,6 @@ def audit_site(root: Path) -> list[str]:
             errors.append(f"{label}: invalid canonical URL {document.canonical!r}")
         if document.meta_properties.get("og:url") != document.canonical:
             errors.append(f"{label}: Open Graph URL does not match canonical URL")
-        if _MERMAID_SOURCE not in document.source:
-            errors.append(f"{label}: Mermaid import map is missing the exact source")
-        if _MERMAID_INTEGRITY not in document.source:
-            errors.append(f"{label}: Mermaid import map is missing integrity metadata")
         if "javascripts/mermaid-init.js" not in document.source:
             errors.append(f"{label}: Mermaid module loader is missing")
         if "pysec-mermaid" not in document.source and label != "404.html":
