@@ -4965,6 +4965,29 @@ def _sarif_code_flow_summary(value: list[Any]) -> list[dict[str, Any]]:
         summaries.append(
             {
                 "flow_index": flow_index,
+                "code_flow_index": _sarif_summary_count(flow.get("code_flow_index")),
+                "code_flow_thread_count": _sarif_summary_count(
+                    flow.get("code_flow_thread_count")
+                ),
+                "represented_thread_count": _sarif_summary_count(
+                    flow.get("represented_thread_count")
+                ),
+                "thread_flows_omitted": _sarif_summary_count(
+                    flow.get("thread_flows_omitted")
+                ),
+                "cross_thread_combined": flow.get("cross_thread_combined") is True,
+                "execution_order_complete": (
+                    flow.get("execution_order_complete") is True
+                ),
+                "invalid_execution_order_count": _sarif_summary_count(
+                    flow.get("invalid_execution_order_count")
+                ),
+                "duplicate_execution_order_count": _sarif_summary_count(
+                    flow.get("duplicate_execution_order_count")
+                ),
+                "simultaneous_execution_order_count": _sarif_summary_count(
+                    flow.get("simultaneous_execution_order_count")
+                ),
                 "semantic_basis": semantic_basis,
                 "reported_step_count": _sarif_summary_count(flow.get("step_count")),
                 "steps_omitted": _sarif_summary_count(flow.get("steps_omitted")),

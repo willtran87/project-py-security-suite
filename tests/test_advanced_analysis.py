@@ -458,6 +458,174 @@ class AdvancedAnalysisTests(unittest.TestCase):
             {"thread-flow-location-index-resolved": 3},
         )
 
+    def test_sarif_combines_only_globally_ordered_multi_thread_flows(self) -> None:
+        payload = json.dumps(
+            {
+                "runs": [
+                    {
+                        "tool": {
+                            "driver": {
+                                "rules": [
+                                    {
+                                        "id": "py/cross-thread-flow",
+                                        "properties": {"kind": "path-problem"},
+                                    }
+                                ]
+                            }
+                        },
+                        "results": [
+                            {
+                                "ruleId": "py/cross-thread-flow",
+                                "message": {"text": "cross-thread source and sink"},
+                                "locations": [_sarif_location("src/sink.py", 9)],
+                                "codeFlows": [
+                                    {
+                                        "threadFlows": [
+                                            {
+                                                "locations": [
+                                                    {
+                                                        "location": _sarif_location(
+                                                            "src/entry.py", 3
+                                                        ),
+                                                        "executionOrder": 10,
+                                                        "kinds": ["source"],
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                "locations": [
+                                                    {
+                                                        "location": _sarif_location(
+                                                            "src/sink.py", 9
+                                                        ),
+                                                        "executionOrder": 30,
+                                                        "kinds": ["sink"],
+                                                    }
+                                                ]
+                                            },
+                                        ]
+                                    },
+                                    {
+                                        "threadFlows": [
+                                            {
+                                                "locations": [
+                                                    {
+                                                        "location": _sarif_location(
+                                                            "src/entry.py", 3
+                                                        ),
+                                                        "kinds": ["source"],
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                "locations": [
+                                                    {
+                                                        "location": _sarif_location(
+                                                            "src/sink.py", 9
+                                                        ),
+                                                        "executionOrder": 30,
+                                                        "kinds": ["sink"],
+                                                    }
+                                                ]
+                                            },
+                                        ]
+                                    },
+                                    {
+                                        "threadFlows": [
+                                            {
+                                                "locations": [
+                                                    {
+                                                        "location": _sarif_location(
+                                                            "src/entry.py", 3
+                                                        ),
+                                                        "executionOrder": 10,
+                                                        "kinds": ["source"],
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                "locations": [
+                                                    {
+                                                        "location": _sarif_location(
+                                                            "src/sink.py", 9
+                                                        ),
+                                                        "executionOrder": 10,
+                                                        "kinds": ["sink"],
+                                                    }
+                                                ]
+                                            },
+                                        ]
+                                    },
+                                    {
+                                        "threadFlows": [
+                                            {
+                                                "locations": [
+                                                    {
+                                                        "location": _sarif_location(
+                                                            "src/entry.py", 3
+                                                        ),
+                                                        "executionOrder": 10,
+                                                        "kinds": ["source"],
+                                                    },
+                                                    {
+                                                        "location": _sarif_location(
+                                                            "src/sink.py", 9
+                                                        ),
+                                                        "executionOrder": 10,
+                                                        "kinds": ["sink"],
+                                                    },
+                                                ]
+                                            }
+                                        ]
+                                    },
+                                ],
+                            }
+                        ],
+                    }
+                ]
+            }
+        )
+
+        finding = parse_sarif_findings(
+            payload,
+            Path.cwd(),
+            tool_name="codeql",
+            default_area="data-flow",
+            default_impact="impact",
+            default_remediation="fix",
+        )[0]
+        flows = finding.evidence["sarif_code_flows"]
+        combined, incomplete_source, incomplete_sink, simultaneous, duplicate = flows
+        artifacts = _artifacts()
+        artifacts["risk-paths.json"]["routes"][0]["target"]["finding_id"] = (
+            finding.finding_id
+        )
+        analysis = build_advanced_analysis(Path.cwd(), [finding], artifacts)
+
+        self.assertTrue(combined["cross_thread_combined"])
+        self.assertEqual(combined["represented_thread_count"], 2)
+        self.assertEqual(
+            [step["path"] for step in combined["steps"]],
+            ["src/entry.py", "src/sink.py"],
+        )
+        self.assertEqual(combined["semantic_basis"], "native-source-sink-kinds")
+        self.assertFalse(incomplete_source["cross_thread_combined"])
+        self.assertFalse(incomplete_source["execution_order_complete"])
+        self.assertEqual(incomplete_source["semantic_basis"], "security-path-problem")
+        self.assertEqual(incomplete_sink["semantic_basis"], "security-path-problem")
+        self.assertTrue(simultaneous["cross_thread_combined"])
+        self.assertEqual(simultaneous["simultaneous_execution_order_count"], 1)
+        self.assertEqual(simultaneous["semantic_basis"], "unclassified-code-flow")
+        self.assertEqual(duplicate["duplicate_execution_order_count"], 1)
+        self.assertEqual(duplicate["semantic_basis"], "unclassified-code-flow")
+        self.assertEqual(len(analysis["taint_paths"]), 1)
+        self.assertEqual(analysis["taint_paths"][0]["route_alignment"], "aligned")
+        portable = render_sarif([finding])["runs"][0]["results"][0]
+        combined_summary = portable["properties"]["sarif_code_flow_summary"][0]
+        self.assertTrue(combined_summary["cross_thread_combined"])
+        self.assertEqual(combined_summary["represented_thread_count"], 2)
+        self.assertEqual(combined_summary["duplicate_execution_order_count"], 0)
+
     def test_sarif_secondary_location_corroborates_native_sink_alignment(
         self,
     ) -> None:

@@ -296,105 +296,231 @@ def _code_flows(
     if not isinstance(raw_code_flows, list):
         raise TypeError("SARIF codeFlows must be a list")
     flows: list[dict[str, Any]] = []
-    for code_flow in raw_code_flows[:5]:
+    for code_flow_index, code_flow in enumerate(raw_code_flows[:5]):
         if not isinstance(code_flow, dict):
             raise TypeError("SARIF codeFlow must be an object")
         thread_flows = code_flow.get("threadFlows") or []
         if not isinstance(thread_flows, list):
             raise TypeError("SARIF threadFlows must be a list")
-        for thread_flow in thread_flows[:5]:
+        thread_records: list[dict[str, Any]] = []
+        for thread_index, thread_flow in enumerate(thread_flows[:5]):
             if not isinstance(thread_flow, dict):
                 raise TypeError("SARIF threadFlow must be an object")
-            raw_locations = thread_flow.get("locations") or []
-            if not isinstance(raw_locations, list):
-                raise TypeError("SARIF threadFlow locations must be a list")
-            native_steps: list[tuple[int, dict[str, Any]]] = []
-            location_resolution_counts: dict[str, int] = {}
-            for native_index, raw in enumerate(raw_locations[:100]):
-                if not isinstance(raw, dict):
-                    raise TypeError("SARIF threadFlow location must be an object")
-                resolved_location, location_resolution = _resolve_thread_flow_location(
-                    raw, thread_flow_locations
-                )
-                location_resolution_counts[location_resolution] = (
-                    location_resolution_counts.get(location_resolution, 0) + 1
-                )
-                effective = resolved_location if resolved_location is not None else {}
-                nested = effective.get("location")
-                location = nested if isinstance(nested, dict) else effective
-                physical = location.get("physicalLocation")
-                physical = physical if isinstance(physical, dict) else {}
-                artifact = physical.get("artifactLocation")
-                artifact = artifact if isinstance(artifact, dict) else {}
-                region = physical.get("region")
-                region = region if isinstance(region, dict) else {}
-                if resolved_location is None:
-                    path = f"<{location_resolution}>"
-                    path_resolution = location_resolution
-                else:
-                    path, path_resolution = _artifact_path(
-                        artifact,
-                        target,
-                        uri_bases=uri_bases,
-                        artifacts=artifacts,
-                    )
-                message = _message(location.get("message")) or _message(
-                    effective.get("message")
-                )
-                message = redact_sensitive_text(
-                    message, secret_bearing=secret_bearing_messages
-                )
-                native_steps.append(
-                    (
-                        native_index,
-                        {
-                            "path": path,
-                            "path_resolution": path_resolution,
-                            "thread_flow_location_resolution": location_resolution,
-                            "line": _positive_integer(region.get("startLine")),
-                            "message": message[:500],
-                            "execution_order": _nonnegative_integer(
-                                effective.get("executionOrder")
-                            ),
-                            "nesting_level": _nonnegative_integer(
-                                effective.get("nestingLevel")
-                            ),
-                            "importance": str(effective.get("importance") or "")[:100],
-                            "kinds": _flow_kinds(effective.get("kinds")),
-                        },
-                    )
-                )
-            if native_steps and all(
-                isinstance(step.get("execution_order"), int) for _, step in native_steps
-            ):
-                native_steps.sort(
-                    key=lambda item: (int(item[1]["execution_order"]), item[0])
-                )
-            steps = [
-                {**step, "sequence": sequence}
-                for sequence, (_, step) in enumerate(native_steps)
-            ]
-            if steps:
-                semantic_basis = _flow_semantic_basis(
-                    steps,
+            record = _thread_flow_record(
+                thread_flow,
+                thread_index=thread_index,
+                target=target,
+                secret_bearing_messages=secret_bearing_messages,
+                uri_bases=uri_bases,
+                artifacts=artifacts,
+                cached_locations=thread_flow_locations,
+            )
+            if record["steps"]:
+                thread_records.append(record)
+        if not thread_records:
+            continue
+        combine_threads = (
+            len(thread_records) > 1
+            and len(thread_records) == len(thread_flows)
+            and all(
+                record["execution_order_complete"] and int(record["steps_omitted"]) == 0
+                for record in thread_records
+            )
+        )
+        record_groups = (
+            [thread_records]
+            if combine_threads
+            else [[record] for record in thread_records]
+        )
+        for records in record_groups:
+            flows.append(
+                _flow_record(
+                    records,
+                    tool_name=tool_name,
+                    code_flow_index=code_flow_index,
+                    code_flow_thread_count=len(thread_flows),
+                    thread_flows_omitted=max(0, len(thread_flows) - 5),
+                    cross_thread_combined=combine_threads,
                     security_domain=security_domain,
                     rule_kind=rule_kind,
                 )
-                flows.append(
-                    {
-                        "tool": tool_name,
-                        "semantic_basis": semantic_basis,
-                        "steps": steps,
-                        "step_count": len(raw_locations),
-                        "steps_omitted": max(0, len(raw_locations) - len(steps)),
-                        "thread_flow_location_resolution_counts": dict(
-                            sorted(location_resolution_counts.items())
-                        ),
-                    }
-                )
+            )
             if len(flows) >= 10:
                 return flows
     return flows
+
+
+def _thread_flow_record(
+    thread_flow: dict[str, Any],
+    *,
+    thread_index: int,
+    target: Path,
+    secret_bearing_messages: bool,
+    uri_bases: dict[str, Any],
+    artifacts: list[dict[str, Any]],
+    cached_locations: list[dict[str, Any]],
+) -> dict[str, Any]:
+    raw_locations = thread_flow.get("locations") or []
+    if not isinstance(raw_locations, list):
+        raise TypeError("SARIF threadFlow locations must be a list")
+    native_steps: list[tuple[int, dict[str, Any]]] = []
+    location_resolution_counts: dict[str, int] = {}
+    invalid_execution_order_count = 0
+    for native_index, raw in enumerate(raw_locations[:100]):
+        if not isinstance(raw, dict):
+            raise TypeError("SARIF threadFlow location must be an object")
+        resolved_location, location_resolution = _resolve_thread_flow_location(
+            raw, cached_locations
+        )
+        location_resolution_counts[location_resolution] = (
+            location_resolution_counts.get(location_resolution, 0) + 1
+        )
+        effective = resolved_location if resolved_location is not None else {}
+        nested = effective.get("location")
+        location = nested if isinstance(nested, dict) else effective
+        physical = location.get("physicalLocation")
+        physical = physical if isinstance(physical, dict) else {}
+        artifact = physical.get("artifactLocation")
+        artifact = artifact if isinstance(artifact, dict) else {}
+        region = physical.get("region")
+        region = region if isinstance(region, dict) else {}
+        if resolved_location is None:
+            path = f"<{location_resolution}>"
+            path_resolution = location_resolution
+        else:
+            path, path_resolution = _artifact_path(
+                artifact,
+                target,
+                uri_bases=uri_bases,
+                artifacts=artifacts,
+            )
+        message = _message(location.get("message")) or _message(
+            effective.get("message")
+        )
+        message = redact_sensitive_text(message, secret_bearing=secret_bearing_messages)
+        raw_execution_order = effective.get("executionOrder", _MISSING)
+        execution_order = _nonnegative_integer(raw_execution_order)
+        invalid_execution_order_count += int(
+            raw_execution_order is not _MISSING and execution_order is None
+        )
+        native_steps.append(
+            (
+                native_index,
+                {
+                    "path": path,
+                    "path_resolution": path_resolution,
+                    "thread_flow_location_resolution": location_resolution,
+                    "line": _positive_integer(region.get("startLine")),
+                    "message": message[:500],
+                    "execution_order": execution_order,
+                    "nesting_level": _nonnegative_integer(
+                        effective.get("nestingLevel")
+                    ),
+                    "importance": str(effective.get("importance") or "")[:100],
+                    "kinds": _flow_kinds(effective.get("kinds")),
+                    "thread_index": thread_index,
+                },
+            )
+        )
+    execution_order_complete = bool(native_steps) and all(
+        isinstance(step.get("execution_order"), int) for _, step in native_steps
+    )
+    orders = [
+        int(step["execution_order"])
+        for _, step in native_steps
+        if isinstance(step.get("execution_order"), int)
+    ]
+    duplicate_execution_order_count = len(orders) - len(set(orders))
+    if execution_order_complete:
+        native_steps.sort(key=lambda item: (int(item[1]["execution_order"]), item[0]))
+    steps = [
+        {**step, "thread_sequence": sequence}
+        for sequence, (_, step) in enumerate(native_steps)
+    ]
+    return {
+        "thread_index": thread_index,
+        "steps": steps,
+        "step_count": len(raw_locations),
+        "steps_omitted": max(0, len(raw_locations) - len(steps)),
+        "execution_order_complete": execution_order_complete,
+        "invalid_execution_order_count": invalid_execution_order_count,
+        "duplicate_execution_order_count": duplicate_execution_order_count,
+        "thread_flow_location_resolution_counts": location_resolution_counts,
+    }
+
+
+def _flow_record(
+    records: list[dict[str, Any]],
+    *,
+    tool_name: str,
+    code_flow_index: int,
+    code_flow_thread_count: int,
+    thread_flows_omitted: int,
+    cross_thread_combined: bool,
+    security_domain: bool,
+    rule_kind: str,
+) -> dict[str, Any]:
+    steps = [step for record in records for step in record["steps"]]
+    if cross_thread_combined:
+        steps.sort(
+            key=lambda step: (
+                int(step["execution_order"]),
+                int(step["thread_index"]),
+                int(step["thread_sequence"]),
+            )
+        )
+    steps = [{**step, "sequence": sequence} for sequence, step in enumerate(steps)]
+    duplicate_execution_order_count = sum(
+        int(record["duplicate_execution_order_count"]) for record in records
+    )
+    invalid_execution_order_count = sum(
+        int(record["invalid_execution_order_count"]) for record in records
+    )
+    semantic_basis = _flow_semantic_basis(
+        steps,
+        security_domain=security_domain,
+        rule_kind=rule_kind,
+    )
+    if duplicate_execution_order_count or invalid_execution_order_count:
+        semantic_basis = "unclassified-code-flow"
+    order_thread_sets: dict[int, set[int]] = {}
+    for step in steps:
+        order = step.get("execution_order")
+        if isinstance(order, int):
+            order_thread_sets.setdefault(order, set()).add(int(step["thread_index"]))
+    simultaneous_execution_order_count = sum(
+        1 for thread_indices in order_thread_sets.values() if len(thread_indices) > 1
+    )
+    resolution_counts: dict[str, int] = {}
+    for record in records:
+        for resolution, count in record[
+            "thread_flow_location_resolution_counts"
+        ].items():
+            resolution_counts[resolution] = resolution_counts.get(resolution, 0) + int(
+                count
+            )
+    return {
+        "tool": tool_name,
+        "code_flow_index": code_flow_index,
+        "code_flow_thread_count": code_flow_thread_count,
+        "represented_thread_count": len(records),
+        "thread_indices": [int(record["thread_index"]) for record in records],
+        "thread_flows_omitted": thread_flows_omitted,
+        "cross_thread_combined": cross_thread_combined,
+        "execution_order_complete": all(
+            bool(record["execution_order_complete"]) for record in records
+        ),
+        "invalid_execution_order_count": invalid_execution_order_count,
+        "duplicate_execution_order_count": duplicate_execution_order_count,
+        "simultaneous_execution_order_count": simultaneous_execution_order_count,
+        "semantic_basis": semantic_basis,
+        "steps": steps,
+        "step_count": sum(int(record["step_count"]) for record in records),
+        "steps_omitted": sum(int(record["steps_omitted"]) for record in records),
+        "thread_flow_location_resolution_counts": dict(
+            sorted(resolution_counts.items())
+        ),
+    }
 
 
 def _resolve_thread_flow_location(
@@ -1808,8 +1934,18 @@ def _flow_semantic_basis(
     sink_positions = [
         index for index, step in enumerate(steps) if "sink" in step.get("kinds", [])
     ]
-    if source_positions and sink_positions and source_positions[0] < sink_positions[-1]:
-        return "native-source-sink-kinds"
+    if source_positions and sink_positions:
+        source_position = source_positions[0]
+        sink_position = sink_positions[-1]
+        source_order = steps[source_position].get("execution_order")
+        sink_order = steps[sink_position].get("execution_order")
+        if source_position < sink_position and (
+            not isinstance(source_order, int)
+            or not isinstance(sink_order, int)
+            or source_order < sink_order
+        ):
+            return "native-source-sink-kinds"
+        return "unclassified-code-flow"
     if rule_kind.strip().casefold().replace("_", "-") == "path-problem":
         return "security-path-problem"
     return "unclassified-code-flow"

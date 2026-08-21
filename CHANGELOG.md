@@ -5,6 +5,13 @@ for published releases.
 
 ## Unreleased
 
+- Correlate complete multi-thread SARIF code flows by their global
+  `executionOrder` instead of analyzing each thread in isolation. Cross-thread
+  source/sink evidence is fused only when every bounded thread and step is
+  retained and ordered; incomplete threads remain separate, simultaneous
+  cross-thread endpoints do not gain an arbitrary order, and duplicate order
+  values within one thread invalidate promotion. Bounded thread/order
+  completeness remains portable.
 - Resolve SARIF `threadFlowLocation.index` through the run-level cached location
   table before native source/sink correlation. Cached self-index and nested
   overlay agreement are verified, resolved execution metadata participates in

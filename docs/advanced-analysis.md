@@ -112,6 +112,17 @@ outside the exposure, or contradictory native source/sink markers cannot create
 route corroboration. Those flows remain scanner-confirmed but are reported as
 `not-established` with a reconciliation action. Native `executionOrder` is used
 when every retained step supplies it; otherwise the SARIF array order is kept.
+For a code flow containing multiple threads, complete execution order with no
+bounded thread or step omissions combines the retained steps into one
+deterministic cross-thread sequence. Equal order values across different threads
+remain simultaneous and receive a stable display order, but simultaneous
+source/sink endpoints cannot establish data-flow direction. Missing order keeps
+threads separate, while duplicate order values within the same thread invalidate
+promotion as required by SARIF. Portable flow summaries expose represented
+threads, combination status, omitted threads, and invalid, duplicate, or
+simultaneous order counts. Advanced analysis treats an explicit
+`unclassified-code-flow` decision as authoritative instead of re-promoting it
+from bounded kinds alone.
 Run-level `threadFlowLocations` caches are resolved before this normalization.
 An indexed step inherits its cached location, ordering, kinds, and message only
 when its array index is valid, the cached self-index agrees, and every nested

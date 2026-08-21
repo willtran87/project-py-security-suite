@@ -556,7 +556,11 @@ def _taint_endpoints(steps: list[dict[str, Any]]) -> tuple[int, int] | None:
 
 def _taint_semantic_basis(flow: dict[str, Any], steps: list[dict[str, Any]]) -> str:
     declared = str(flow.get("semantic_basis") or "").strip().casefold()
-    if declared in {"native-source-sink-kinds", "security-path-problem"}:
+    if declared in {
+        "native-source-sink-kinds",
+        "security-path-problem",
+        "unclassified-code-flow",
+    }:
         return declared
     source_positions = [
         index for index, step in enumerate(steps) if "source" in _taint_kinds(step)
@@ -564,8 +568,17 @@ def _taint_semantic_basis(flow: dict[str, Any], steps: list[dict[str, Any]]) -> 
     sink_positions = [
         index for index, step in enumerate(steps) if "sink" in _taint_kinds(step)
     ]
-    if source_positions and sink_positions and source_positions[0] < sink_positions[-1]:
-        return "native-source-sink-kinds"
+    if source_positions and sink_positions:
+        source_position = source_positions[0]
+        sink_position = sink_positions[-1]
+        source_order = steps[source_position].get("execution_order")
+        sink_order = steps[sink_position].get("execution_order")
+        if source_position < sink_position and (
+            not isinstance(source_order, int)
+            or not isinstance(sink_order, int)
+            or source_order < sink_order
+        ):
+            return "native-source-sink-kinds"
     return "unclassified-code-flow"
 
 
