@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import tomllib
 from collections.abc import Mapping
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
 from .config import ConfigurationError, load_config
@@ -273,7 +273,8 @@ def _path_inventory(mapping: Mapping[str, Any]) -> list[dict[str, str]]:
 def _path_kind(value: str) -> str:
     if value.startswith("@bundle/"):
         return "bundle"
-    return "absolute" if Path(value).is_absolute() else "relative"
+    path_types = (Path(value), PurePosixPath(value), PureWindowsPath(value))
+    return "absolute" if any(path.is_absolute() for path in path_types) else "relative"
 
 
 def _declared_digest_settings(mapping: Mapping[str, Any]) -> list[str]:

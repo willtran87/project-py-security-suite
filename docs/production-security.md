@@ -32,6 +32,13 @@ hosted runner is the production isolation boundary:
 - CodeQL runs the Python `security-extended` query suite and uploads SARIF to
   GitHub code scanning.
 
+Secret-bearing findings cross an additional fail-closed boundary before
+correlation or derived analysis: scanner-controlled titles, descriptions,
+messages, remediation, rule labels, non-taxonomy citations, snippets, and
+non-allowlisted evidence are discarded. Reports retain only normalized
+location, lifecycle, verification, history, ownership, and redaction metadata;
+they never retain the candidate value.
+
 Every third-party action is commit-SHA pinned, checkout credentials are not
 persisted, jobs use explicit least-privilege permissions and timeouts, and
 concurrency cancels superseded work. Dependabot covers GitHub Actions, the root

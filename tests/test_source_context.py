@@ -16,6 +16,7 @@ from py_security_suite.source_context import (
     is_secret_bearing_scan,
     redact_sensitive_text,
     redact_sensitive_snippets,
+    sanitize_secret_findings,
 )
 
 
@@ -156,6 +157,40 @@ class SourceContextTests(unittest.TestCase):
 
         self.assertTrue(item.locations[0].snippet_redacted)
         self.assertNotIn("future_adapter_secret", item.locations[0].snippet or "")
+
+    def test_secret_finding_boundary_discards_all_scanner_controlled_text(self) -> None:
+        sentinel = "future-adapter-value-must-not-survive"
+        item = finding(path="settings.py", line=1, area="secrets-history")
+        item.sources[0].tool = "future-secret-scanner"
+        item.title = sentinel
+        item.description = sentinel
+        item.impact = sentinel
+        item.remediation = sentinel
+        item.sources[0].rule_id = sentinel
+        item.sources[0].message = sentinel
+        item.citations = []
+        item.evidence = {
+            "redacted": False,
+            "verified": True,
+            "scan_mode": "git",
+            "commit": "a" * 40,
+            "raw": sentinel,
+        }
+
+        sanitize_secret_findings([item])
+
+        self.assertNotIn(sentinel, repr(item))
+        self.assertEqual(item.title, "Redacted credential candidate")
+        self.assertEqual(
+            item.evidence,
+            {
+                "redacted": True,
+                "verified": True,
+                "scan_mode": "git",
+                "commit": "a" * 40,
+            },
+        )
+        self.assertTrue(item.locations[0].snippet_redacted)
 
     def test_path_outside_target_is_not_read(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

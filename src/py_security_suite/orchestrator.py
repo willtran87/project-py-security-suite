@@ -43,7 +43,7 @@ from .path_safety import resolve_regular_directory, resolve_unlinked_path
 from .reports import write_reports
 from .risk_intelligence import enrich_findings
 from .risk_paths import build_risk_paths
-from .source_context import attach_source_context
+from .source_context import attach_source_context, sanitize_secret_findings
 from .structural_synthesis import build_structural_synthesis
 from .trust_catalog import apply_trust_catalog
 
@@ -128,6 +128,7 @@ def scan_project(
         )
         _annotate_tool_authority(tool_runs, diagnostics, config)
         derived_artifacts.update(adapter_artifacts)
+        sanitize_secret_findings(findings)
         findings = correlate_findings(findings)
         intelligence = enrich_findings(findings, config.intelligence)
         context_errors.extend(intelligence.errors)

@@ -4,7 +4,11 @@
   environment across Python 3.11–3.13; enforce explicit security linting,
   pedantic workflow auditing, typing, dependency auditing, and package builds;
   expand Dependabot to the root lock; and harden Pages jobs with credential
-  isolation and timeouts.
+  isolation and timeouts. Classify Windows and POSIX absolute configuration
+  paths consistently on every host while retaining fail-closed interpreter
+  symlink rejection. Add an early fail-closed boundary that discards all
+  scanner-controlled text and non-allowlisted evidence from secret findings
+  before correlation or derived analysis.
 - Load the integrity-checked Mermaid runtime only when diagrams approach the
   viewport, remove blocking remote fonts and release probes, name the search
   dialog, distinguish content links without color alone, and gate those

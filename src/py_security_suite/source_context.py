@@ -11,6 +11,12 @@ _SECRET_TOOLS = {"detect-secrets", "gitleaks", "trufflehog"}
 _REDACTED_SOURCE = "<redacted: secret-bearing source is not embedded in reports>"
 _REDACTED_SCANNER_TEXT = "<redacted: sensitive scanner text is not retained>"
 _REDACTED_VALUE = "<redacted>"
+_SECRET_TITLE = "Redacted credential candidate"
+_SECRET_IMPACT = "A real credential could permit unauthorized access."
+_SECRET_REMEDIATION = (
+    "Validate in the protected workspace without copying the value; revoke, rotate, "
+    "and remove it from maintained source and applicable history if it is real."
+)
 _SECRET_NAME = (
     r"(?:password|passwd|secret|token|credential|api[_-]?key|access[_-]?key|"
     r"private[_-]?key)"
@@ -115,6 +121,52 @@ def redact_sensitive_snippets(findings: list[Finding]) -> None:
                 location.snippet = _REDACTED_SOURCE
                 location.snippet_start_line = location.start_line
                 location.snippet_redacted = True
+
+
+def sanitize_secret_findings(findings: list[Finding]) -> None:
+    """Discard scanner-controlled secret text before correlation or persistence."""
+    for finding in findings:
+        if not _is_secret_finding(finding):
+            continue
+        finding.title = _SECRET_TITLE
+        finding.description = _REDACTED_SCANNER_TEXT
+        finding.impact = _SECRET_IMPACT
+        finding.remediation = _SECRET_REMEDIATION
+        for source in finding.sources:
+            source.rule_id = f"{source.tool}.redacted-candidate"
+            source.message = _REDACTED_SCANNER_TEXT
+        safe_citations = []
+        for citation in finding.citations:
+            match = re.fullmatch(r"CWE-(\d+)", citation.identifier, re.IGNORECASE)
+            if citation.kind != "taxonomy" or match is None:
+                continue
+            identifier = f"CWE-{match.group(1)}"
+            citation.identifier = identifier
+            citation.title = f"{identifier} security classification"
+            citation.uri = (
+                f"https://cwe.mitre.org/data/definitions/{match.group(1)}.html"
+            )
+            safe_citations.append(citation)
+        finding.citations = safe_citations
+        finding.evidence = _safe_secret_evidence(finding.evidence)
+        for location in finding.locations:
+            location.snippet = _REDACTED_SOURCE
+            location.snippet_start_line = location.start_line
+            location.snippet_redacted = True
+
+
+def _safe_secret_evidence(evidence: dict[str, object]) -> dict[str, object]:
+    safe: dict[str, object] = {"redacted": True}
+    for key in ("verified", "verification_enabled"):
+        if isinstance(evidence.get(key), bool):
+            safe[key] = evidence[key]
+    scan_mode = evidence.get("scan_mode")
+    if scan_mode in {"dir", "git"}:
+        safe["scan_mode"] = scan_mode
+    commit = evidence.get("commit")
+    if isinstance(commit, str) and re.fullmatch(r"[0-9a-fA-F]{7,64}", commit):
+        safe["commit"] = commit
+    return safe
 
 
 def redact_sensitive_text(value: str, *, secret_bearing: bool = False) -> str:

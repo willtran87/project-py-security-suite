@@ -90,7 +90,7 @@ class NativeBundleVerificationTests(unittest.TestCase):
         with patch("py_security_suite.native_bundle.run_command", side_effect=resolve):
             verified = verify_native_bundle(
                 self.root,
-                python=Path(sys.executable),
+                python=Path(sys.executable).resolve(),
                 require_wheelhouse_closure=True,
             )
         self.assertTrue(verified["verified"])
@@ -139,7 +139,7 @@ class NativeBundleVerificationTests(unittest.TestCase):
         with patch("py_security_suite.native_bundle.run_command", return_value=failure):
             unresolved = verify_native_bundle(
                 self.root,
-                python=Path(sys.executable),
+                python=Path(sys.executable).resolve(),
                 require_wheelhouse_closure=True,
             )
         self.assertFalse(unresolved["verified"])

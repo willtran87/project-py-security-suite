@@ -9,6 +9,7 @@ from pathlib import Path
 from jsonschema import Draft202012Validator  # pylint: disable=import-error
 
 from py_security_suite.config_advisor import (
+    _path_kind,
     advise_configuration,
     render_config_advice,
     render_config_advice_markdown,
@@ -17,6 +18,13 @@ from py_security_suite.report_inspection import read_bundled_schema
 
 
 class ConfigAdvisorTests(unittest.TestCase):
+    def test_path_kind_is_independent_of_the_runner_operating_system(self) -> None:
+        for value in ("C:/approved/tool.exe", r"C:\approved\tool.exe", "/opt/tool"):
+            with self.subTest(value=value):
+                self.assertEqual(_path_kind(value), "absolute")
+        self.assertEqual(_path_kind("tools/scanner"), "relative")
+        self.assertEqual(_path_kind("@bundle/bin/scanner"), "bundle")
+
     def test_valid_configuration_reports_portability_and_authority_advice(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             config = Path(directory) / "pysec.toml"
