@@ -1,6 +1,6 @@
 # Production security gate
 
-Last reviewed: 2026-08-08
+Last reviewed: 2026-08-21
 
 ## Purpose
 
@@ -14,6 +14,30 @@ It does not claim that a scanner can prove software safe. NIST SSDF treats
 secure release as a lifecycle practice, OWASP ASVS includes controls that need
 runtime verification, and SLSA distinguishes source review from trustworthy
 artifact provenance.
+
+## Repository continuous verification
+
+The repository runs a connected GitHub validation lane on every push and pull
+request. It complements the isolated production gate without claiming that a
+hosted runner is the production isolation boundary:
+
+- the locked test environment runs on Python 3.11, 3.12, and 3.13;
+- an explicit Ruff baseline covers correctness, async hazards, common bugs,
+  broad exception handling, and Bandit-derived security rules;
+- zizmor audits every GitHub workflow with its pedantic ruleset;
+- mypy checks production source and the Pages audit hooks;
+- `pip-audit` evaluates a hash-pinned export of the complete locked dependency
+  graph while excluding only the unpublished local project itself;
+- distributions are built from the locked checkout; and
+- CodeQL runs the Python `security-extended` query suite and uploads SARIF to
+  GitHub code scanning.
+
+Every third-party action is commit-SHA pinned, checkout credentials are not
+persisted, jobs use explicit least-privilege permissions and timeouts, and
+concurrency cancels superseded work. Dependabot covers GitHub Actions, the root
+Python lock, and the separately hashed documentation environment with a
+seven-day version-update cooldown. Security updates are not a replacement for
+the locked dependency audit.
 
 ## Release flow
 

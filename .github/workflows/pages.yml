@@ -18,14 +18,20 @@ concurrency:
   group: pages
   cancel-in-progress: true
 
+permissions: {}
+
 jobs:
   build:
+    name: Build and audit site
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
@@ -46,14 +52,16 @@ jobs:
           path: site
 
   deploy:
+    name: Deploy audited site
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
-      id-token: write
-      pages: write
+      id-token: write # Authenticate the Pages deployment with OIDC.
+      pages: write # Publish the artifact to the Pages environment.
     steps:
       - name: Deploy Pages
         id: deployment

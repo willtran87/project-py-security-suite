@@ -1,0 +1,77 @@
+name: Continuous integration
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.11.19"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - name: Install locked dependencies
+        env:
+          PYTHON_VERSION: ${{ matrix.python-version }}
+        run: uv sync --locked --all-groups --python "$PYTHON_VERSION"
+      - name: Run tests
+        run: uv run --frozen pytest -q
+
+  quality:
+    name: Quality and dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.11.19"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - name: Install locked dependencies
+        run: uv sync --locked --all-groups --python "3.13"
+      - name: Check formatting
+        run: uv run --frozen ruff format --check .
+      - name: Lint
+        run: uv run --frozen ruff check .
+      - name: Audit GitHub workflows
+        run: uv run --frozen zizmor --pedantic --no-progress --color never .github
+      - name: Check types
+        run: uv run --frozen mypy src scripts/audit_pages.py scripts/mkdocs_hooks.py
+      - name: Export locked dependency graph
+        run: >-
+          uv export --quiet --frozen --all-groups --no-emit-project
+          --output-file "$RUNNER_TEMP/requirements-audit.txt"
+      - name: Audit locked dependency graph
+        run: >-
+          uv run --frozen pip-audit
+          --requirement "$RUNNER_TEMP/requirements-audit.txt"
+          --disable-pip --strict --progress-spinner off
+      - name: Build distributions
+        run: uv build --no-sources

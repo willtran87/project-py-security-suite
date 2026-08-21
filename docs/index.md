@@ -115,6 +115,7 @@ platform support, and acquisition requirements.
 | Reachability states | 1,350 executable; 123 load-only; 0 disconnected; 0 reportable islands |
 | Runtime corroboration | Refreshed branch-aware coverage from every unit/property test; static states are not reclassified by runtime evidence |
 | Tests | 657 collected: 656 passed and 1 platform-limited skip; 289 subtests passed |
+| Repository automation | Locked tests on Python 3.11–3.13; explicit security/correctness lint, pedantic workflow audit, mypy, strict dependency audit, package build, CodeQL `security-extended`, and audited Pages deployment |
 | Combined line and branch coverage | 90.07% across 13,486 statements and 4,558 branches; 92.98% statement and 81.48% branch coverage |
 | Changed-line coverage | Recomputed on every scan; uncovered changed executable lines remain explicit in `diff-coverage.json` |
 | Operational portfolio | Execution A; observed risk D; evidence F; the stale Grype database remains an explicit supply-chain evidence gap |

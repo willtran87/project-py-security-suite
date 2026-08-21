@@ -1,5 +1,10 @@
 # Changelog
 
+- Add least-privilege, SHA-pinned CI and CodeQL workflows; test the locked
+  environment across Python 3.11–3.13; enforce explicit security linting,
+  pedantic workflow auditing, typing, dependency auditing, and package builds;
+  expand Dependabot to the root lock; and harden Pages jobs with credential
+  isolation and timeouts.
 - Load the integrity-checked Mermaid runtime only when diagrams approach the
   viewport, remove blocking remote fonts and release probes, name the search
   dialog, distinguish content links without color alone, and gate those

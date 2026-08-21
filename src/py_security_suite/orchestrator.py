@@ -565,7 +565,9 @@ def _run_adapters(
             name = futures[future]
             try:
                 results[name] = future.result()
-            except Exception as exc:  # pylint: disable=broad-exception-caught
+            # Scanner adapters are an isolation boundary: convert every failure into
+            # an explicit tool result so one adapter cannot abort the whole scan.
+            except Exception as exc:  # noqa: BLE001  # pylint: disable=broad-exception-caught
                 run = ToolRun(
                     tool=name,
                     status=ToolStatus.FAILED,
