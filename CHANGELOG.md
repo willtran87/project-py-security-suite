@@ -5,6 +5,10 @@ for published releases.
 
 ## Unreleased
 
+- Make wheel `RECORD` validation standards-aware and fail closed. Ordinary
+  members now require a hash and size, duplicate rows and non-empty self
+  metadata are reported, negative sizes are invalid, and stronger SHA-384,
+  SHA-512, and BLAKE2 digests are verified instead of being false positives.
 - Deepen wheel integrity analysis beyond `RECORD` hashes. Digest-bound artifact
   inspection now detects duplicate and case-colliding ZIP members, unsafe or
   platform-ambiguous paths, symlinks, encryption, unverifiably large members,

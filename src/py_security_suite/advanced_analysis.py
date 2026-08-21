@@ -20,6 +20,7 @@ _MAX_RECORDS = 500
 _MAX_WHEEL_MEMBERS = 100_000
 _MAX_MEMBER_BYTES = 32 * 1024 * 1024
 _MAX_WHEEL_UNCOMPRESSED_BYTES = 512 * 1024 * 1024
+_RECORD_HASH_ALGORITHMS = {"blake2b", "blake2s", "sha256", "sha384", "sha512"}
 _VIRTUAL_ROOT = "<pysec-entry-root>"
 _CONTROL_TERMS = (
     "auth",
@@ -911,27 +912,47 @@ def _record_integrity_gaps(
             )
             continue
         name, digest_value, size_value = row
+        if name in recorded:
+            gaps.append({"kind": "duplicate-record-row", "path": name[:500]})
         recorded.add(name)
         if name not in members:
             gaps.append({"kind": "record-member-missing", "path": name[:500]})
             continue
         info = archive.getinfo(name)
-        if size_value:
+        signature = name.endswith((".dist-info/RECORD.jws", ".dist-info/RECORD.p7s"))
+        if name == record_name:
+            if digest_value or size_value:
+                gaps.append(
+                    {"kind": "record-self-metadata-present", "path": name[:500]}
+                )
+            continue
+        if not size_value and not signature:
+            gaps.append({"kind": "missing-record-size", "path": name[:500]})
+        elif size_value:
             try:
                 expected_size = int(size_value)
             except ValueError:
                 gaps.append({"kind": "invalid-record-size", "path": name[:500]})
             else:
-                if expected_size != info.file_size:
+                if expected_size < 0:
+                    gaps.append({"kind": "invalid-record-size", "path": name[:500]})
+                elif expected_size != info.file_size:
                     gaps.append({"kind": "record-size-mismatch", "path": name[:500]})
-        if digest_value and name != record_name:
+        if not digest_value and not signature:
+            gaps.append({"kind": "missing-record-hash", "path": name[:500]})
+        elif digest_value:
             algorithm, separator, encoded = digest_value.partition("=")
-            if separator != "=" or algorithm != "sha256":
+            algorithm = algorithm.casefold()
+            if (
+                separator != "="
+                or algorithm not in _RECORD_HASH_ALGORITHMS
+                or not encoded
+            ):
                 gaps.append({"kind": "unsupported-record-hash", "path": name[:500]})
             elif info.file_size <= _MAX_MEMBER_BYTES:
                 actual = (
                     base64.urlsafe_b64encode(
-                        hashlib.sha256(_read_zip_member(archive, name)).digest()
+                        hashlib.new(algorithm, _read_zip_member(archive, name)).digest()
                     )
                     .rstrip(b"=")
                     .decode("ascii")

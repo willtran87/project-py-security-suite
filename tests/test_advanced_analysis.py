@@ -134,6 +134,41 @@ class AdvancedAnalysisTests(unittest.TestCase):
         )
         self.assertGreaterEqual(parity["summary"]["record_integrity_gaps"], 4)
 
+    def test_wheel_record_accepts_stronger_hashes_and_rejects_unsigned_rows(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory)
+            wheel = target / "dist" / "demo-1.0-py3-none-any.whl"
+            wheel.parent.mkdir()
+            _write_wheel(
+                wheel,
+                record_algorithm="sha384",
+                unsigned_path="demo/cli.py",
+                duplicate_record_path="demo/cli.py",
+            )
+            artifacts = _artifacts()
+            artifacts["artifact-manifest.json"] = {
+                "schema_version": "1.0",
+                "artifacts": [
+                    {
+                        "path": "dist/demo-1.0-py3-none-any.whl",
+                        "sha256": hashlib.sha256(wheel.read_bytes()).hexdigest(),
+                        "size_bytes": wheel.stat().st_size,
+                    }
+                ],
+            }
+
+            result = build_advanced_analysis(target, [], artifacts)
+
+        gaps = result["artifact_route_parity"][0]["record_gaps"]
+        kinds = {item["kind"] for item in gaps}
+        self.assertIn("duplicate-record-row", kinds)
+        self.assertIn("missing-record-hash", kinds)
+        self.assertIn("missing-record-size", kinds)
+        self.assertNotIn("unsupported-record-hash", kinds)
+        self.assertNotIn("record-hash-mismatch", kinds)
+
     def test_control_dominance_is_scoped_to_route_entry_identity(self) -> None:
         artifacts = _artifacts()
         artifacts["graphify.json"]["nodes"].append({"path": "src/other.py"})
@@ -921,7 +956,13 @@ def _artifacts() -> dict[str, Any]:
     }
 
 
-def _write_wheel(path: Path) -> None:
+def _write_wheel(
+    path: Path,
+    *,
+    record_algorithm: str = "sha256",
+    unsigned_path: str | None = None,
+    duplicate_record_path: str | None = None,
+) -> None:
     members = {
         "demo/cli.py": b"def main():\n    return 0\n",
         "demo-1.0.dist-info/entry_points.txt": b"[console_scripts]\ndemo = demo.cli:main\n",
@@ -929,13 +970,23 @@ def _write_wheel(path: Path) -> None:
     }
     output = io.StringIO()
     writer = csv.writer(output, lineterminator="\n")
+    row: list[str | int]
     for name, content in members.items():
+        if name == unsigned_path:
+            row = [name, "", ""]
+            writer.writerow(row)
+            if name == duplicate_record_path:
+                writer.writerow(row)
+            continue
         digest = (
-            base64.urlsafe_b64encode(hashlib.sha256(content).digest())
+            base64.urlsafe_b64encode(hashlib.new(record_algorithm, content).digest())
             .rstrip(b"=")
             .decode("ascii")
         )
-        writer.writerow([name, f"sha256={digest}", len(content)])
+        row = [name, f"{record_algorithm}={digest}", len(content)]
+        writer.writerow(row)
+        if name == duplicate_record_path:
+            writer.writerow(row)
     writer.writerow(["demo-1.0.dist-info/RECORD", "", ""])
     members["demo-1.0.dist-info/RECORD"] = output.getvalue().encode("utf-8")
     with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:

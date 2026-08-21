@@ -85,7 +85,10 @@ duplicate names, case collisions, traversal or platform-ambiguous paths,
 symlinks, encrypted entries, unverifiably large members, suspicious compression
 ratios, and excessive total expansion are retained as integrity gaps. Exact ZIP
 member counts are preserved instead of collapsing duplicate central-directory
-entries into a set.
+entries into a set. `RECORD` validation rejects duplicate rows, missing hashes
+or sizes on ordinary members, invalid self-metadata, weak or unknown hash
+algorithms, and digest mismatches while accepting fixed-length SHA-384, SHA-512,
+and BLAKE2 hashes in addition to SHA-256.
 
 ## Report interpretation
 
