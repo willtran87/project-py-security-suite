@@ -5,6 +5,12 @@ for published releases.
 
 ## Unreleased
 
+- Make SARIF severity normalization standards-aware and auditable. Finite
+  bounded security scores retain precedence without losing a valid zero;
+  malformed scores cannot inflate severity, rule `defaultConfiguration.level`
+  and the SARIF failure default are honored, and non-failure kinds remain
+  informational. Result/rule rank is retained with its basis but never mapped
+  across tools as severity.
 - Resolve SARIF `artifactLocation.index` references through each run's artifact
   table for both finding locations and native-flow steps. Chained references are
   bounded and cycle-safe; malformed, missing, external, and outside-target

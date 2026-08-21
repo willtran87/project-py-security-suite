@@ -201,3 +201,14 @@ cycles, external URIs, and paths outside the scan target with explicit
 non-repository states. Direct artifact URIs remain authoritative when present,
 which keeps partially redundant producer output usable without trusting a
 malformed optional index.
+SARIF severity decisions retain their exact basis. A finite `security-severity`
+score in the inclusive 0-10 range remains the strongest security signal,
+including an explicit zero; invalid and non-finite values are counted and
+cannot raise priority. Otherwise explicit result level, compatible producer
+`problem.severity`, rule `defaultConfiguration.level`, and the SARIF default
+`warning` level are considered in order. Non-failure result kinds normalize to
+informational regardless of stray failure severity metadata. Result or rule
+rank is validated in the inclusive 0-100 range and retained as tool-relative
+priority evidence, but it is never converted into cross-tool severity. The
+decision, effective native level, score/rank basis, and invalid-input counts are
+preserved in normalized and portable SARIF evidence.

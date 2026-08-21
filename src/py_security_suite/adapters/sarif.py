@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 from pathlib import Path
 from typing import Any
@@ -26,6 +27,8 @@ _MAX_MESSAGE_TEMPLATE_CHARACTERS = 4_000
 _MAX_RESOLVED_MESSAGE_CHARACTERS = 8_000
 _MAX_ARTIFACT_INDEX_DEPTH = 20
 _MAX_URI_BASE_DEPTH = 20
+_MISSING = object()
+_SARIF_LEVELS = {"error", "warning", "note", "none"}
 _RESULT_KINDS = {
     "fail": "fail",
     "informational": "informational",
@@ -128,7 +131,14 @@ def _finding(
         result, target, uri_bases=uri_bases, artifacts=artifacts
     )
     location = locations[0]
-    severity = _sarif_severity(result.get("level"), properties, rule_properties)
+    severity, severity_decision = _sarif_severity_decision(
+        result.get("level", _MISSING),
+        properties,
+        rule_properties,
+        default_configuration=rule.get("defaultConfiguration", _MISSING),
+        rank=result.get("rank", _MISSING),
+        kind=str(result_semantics["kind"]),
+    )
     domain = _domain(tags)
     finding_id, fingerprint = finding_identity(
         tool=tool_name,
@@ -179,6 +189,7 @@ def _finding(
         "sarif_result_semantics": result_semantics,
         "sarif_rule_reference": rule_reference,
         "sarif_message_reference": message_reference,
+        "sarif_severity_decision": severity_decision,
     }
     if code_flows:
         evidence["sarif_code_flows"] = code_flows
@@ -207,7 +218,9 @@ def _finding(
                 tool=tool_name,
                 rule_id=rule_id,
                 message=message,
-                native_severity=str(result.get("level") or severity.value),
+                native_severity=str(
+                    severity_decision["effective_level"] or severity.value
+                ),
             )
         ],
         citations=[
@@ -986,27 +999,209 @@ def _sarif_severity(
     properties: dict[str, Any],
     rule_properties: dict[str, Any],
 ) -> Severity:
-    raw_score = properties.get("security-severity") or rule_properties.get(
-        "security-severity"
+    return _sarif_severity_decision(
+        level,
+        properties,
+        rule_properties,
+        default_configuration=_MISSING,
+        rank=_MISSING,
+        kind="fail",
+    )[0]
+
+
+def _sarif_severity_decision(
+    level: Any,
+    properties: dict[str, Any],
+    rule_properties: dict[str, Any],
+    *,
+    default_configuration: Any,
+    rank: Any,
+    kind: str,
+) -> tuple[Severity, dict[str, Any]]:
+    configuration_invalid = default_configuration is not _MISSING and not isinstance(
+        default_configuration, dict
     )
-    try:
-        score = float(str(raw_score))
-    except (TypeError, ValueError):
-        score = -1
-    if score >= 9:
-        return Severity.CRITICAL
-    if score >= 7:
-        return Severity.HIGH
-    if score >= 4:
-        return Severity.MEDIUM
-    if score >= 0:
-        return Severity.LOW
-    effective_level = (
-        level
-        or properties.get("problem.severity")
-        or rule_properties.get("problem.severity")
+    configuration = (
+        default_configuration if isinstance(default_configuration, dict) else {}
     )
-    return map_severity(effective_level, default=Severity.INFORMATIONAL)
+    score, score_basis, invalid_score_count = _security_score(
+        properties, rule_properties
+    )
+    effective_level, level_basis, invalid_level_count = _effective_sarif_level(
+        level,
+        properties,
+        rule_properties,
+        configuration,
+        kind=kind,
+    )
+    effective_rank, rank_basis, invalid_rank_count = _effective_sarif_rank(
+        rank,
+        configuration,
+        kind=kind,
+    )
+    score_ignored_for_kind = score is not None and kind != "fail"
+    if score is not None and not score_ignored_for_kind:
+        if score >= 9:
+            severity = Severity.CRITICAL
+        elif score >= 7:
+            severity = Severity.HIGH
+        elif score >= 4:
+            severity = Severity.MEDIUM
+        else:
+            severity = Severity.LOW
+        basis = score_basis
+    else:
+        severity = (
+            Severity.INFORMATIONAL
+            if effective_level == "none"
+            else map_severity(effective_level, default=Severity.INFORMATIONAL)
+        )
+        basis = level_basis
+    return (
+        severity,
+        {
+            "basis": basis,
+            "effective_level": effective_level,
+            "security_score": score,
+            "security_score_basis": score_basis,
+            "invalid_security_score_count": invalid_score_count,
+            "security_score_ignored_for_kind": score_ignored_for_kind,
+            "effective_rank": effective_rank,
+            "rank_basis": rank_basis,
+            "invalid_rank_count": invalid_rank_count,
+            "rank_used_for_severity": False,
+            "invalid_level_count": invalid_level_count,
+            "invalid_default_configuration": configuration_invalid,
+        },
+    )
+
+
+def _security_score(
+    properties: dict[str, Any], rule_properties: dict[str, Any]
+) -> tuple[float | None, str, int]:
+    invalid_count = 0
+    for basis, source in (
+        ("result-security-score", properties),
+        ("rule-security-score", rule_properties),
+    ):
+        if "security-severity" not in source:
+            continue
+        score = _bounded_number(
+            source.get("security-severity"),
+            minimum=0,
+            maximum=10,
+            allow_string=True,
+        )
+        if score is not None:
+            return score, basis, invalid_count
+        invalid_count += 1
+    return None, "unavailable", invalid_count
+
+
+def _effective_sarif_level(
+    level: Any,
+    properties: dict[str, Any],
+    rule_properties: dict[str, Any],
+    configuration: dict[str, Any],
+    *,
+    kind: str,
+) -> tuple[str, str, int]:
+    invalid_count = 0
+    if kind != "fail":
+        if level is not _MISSING and _normalized_sarif_level(level) != "none":
+            invalid_count += 1
+        return "none", "non-failure-kind", invalid_count
+    if level is not _MISSING:
+        normalized = _normalized_sarif_level(level)
+        if normalized is not None:
+            return normalized, "result-level", invalid_count
+        invalid_count += 1
+    for basis, source in (
+        ("result-problem-severity", properties),
+        ("rule-problem-severity", rule_properties),
+    ):
+        if "problem.severity" not in source:
+            continue
+        normalized = _normalized_problem_severity(source.get("problem.severity"))
+        if normalized is not None:
+            return normalized, basis, invalid_count
+        invalid_count += 1
+    if "level" in configuration:
+        normalized = _normalized_sarif_level(configuration.get("level"))
+        if normalized is not None:
+            return normalized, "rule-default-level", invalid_count
+        invalid_count += 1
+    return "warning", "sarif-default-warning", invalid_count
+
+
+def _effective_sarif_rank(
+    rank: Any,
+    configuration: dict[str, Any],
+    *,
+    kind: str,
+) -> tuple[float | None, str, int]:
+    if kind != "fail":
+        return None, "non-failure-kind", int(rank is not _MISSING)
+    invalid_count = 0
+    if rank is not _MISSING:
+        value = _bounded_number(rank, minimum=0, maximum=100, allow_string=False)
+        if value is not None:
+            return value, "result-rank", invalid_count
+        invalid_count += 1
+    if "rank" in configuration:
+        value = _bounded_number(
+            configuration.get("rank"),
+            minimum=0,
+            maximum=100,
+            allow_string=False,
+        )
+        if value is not None:
+            return value, "rule-default-rank", invalid_count
+        invalid_count += 1
+    return None, "unknown", invalid_count
+
+
+def _bounded_number(
+    value: Any,
+    *,
+    minimum: float,
+    maximum: float,
+    allow_string: bool,
+) -> float | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        try:
+            number = float(value)
+        except (OverflowError, ValueError):
+            return None
+    elif allow_string and isinstance(value, str):
+        try:
+            number = float(value.strip())
+        except ValueError:
+            return None
+    else:
+        return None
+    if not math.isfinite(number) or not minimum <= number <= maximum:
+        return None
+    return number
+
+
+def _normalized_sarif_level(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip().casefold()
+    return normalized if normalized in _SARIF_LEVELS else None
+
+
+def _normalized_problem_severity(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip().casefold()
+    if normalized in _SARIF_LEVELS:
+        return normalized
+    mapped = map_severity(normalized, default=Severity.UNKNOWN)
+    return normalized if mapped != Severity.UNKNOWN else None
 
 
 def _classifications(

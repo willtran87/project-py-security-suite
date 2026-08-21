@@ -40,6 +40,7 @@ from py_security_suite.adapters.sarif import (
     _result_semantics,
     _safe_uri as sarif_safe_uri,
     _sarif_severity,
+    _sarif_severity_decision,
     _tags,
     _uri_path,
     parse_sarif_findings,
@@ -765,6 +766,110 @@ class SarifNormalizationContractTests(unittest.TestCase):
             "py-sql-injection", _derived_help_uri("codeql", "py/sql-injection") or ""
         )
 
+    def test_sarif_severity_decision_is_bounded_and_rank_is_advisory(self) -> None:
+        severity, decision = _sarif_severity_decision(
+            "note",
+            {"security-severity": 0},
+            {"security-severity": 9.8},
+            default_configuration={"level": "error", "rank": 95},
+            rank=100,
+            kind="fail",
+        )
+        self.assertEqual(severity, Severity.LOW)
+        self.assertEqual(decision["basis"], "result-security-score")
+        self.assertEqual(decision["security_score"], 0.0)
+        self.assertEqual(decision["effective_level"], "note")
+        self.assertEqual(decision["effective_rank"], 100.0)
+        self.assertEqual(decision["rank_basis"], "result-rank")
+        self.assertFalse(decision["rank_used_for_severity"])
+
+        severity, decision = _sarif_severity_decision(
+            "warning",
+            {"security-severity": float("inf")},
+            {"security-severity": 7.5},
+            default_configuration={},
+            rank="100",
+            kind="fail",
+        )
+        self.assertEqual(severity, Severity.HIGH)
+        self.assertEqual(decision["basis"], "rule-security-score")
+        self.assertEqual(decision["invalid_security_score_count"], 1)
+        self.assertIsNone(decision["effective_rank"])
+        self.assertEqual(decision["invalid_rank_count"], 1)
+
+        severity, decision = _sarif_severity_decision(
+            "error",
+            {"security-severity": 10},
+            {},
+            default_configuration={"level": "error", "rank": 100},
+            rank=100,
+            kind="review",
+        )
+        self.assertEqual(severity, Severity.INFORMATIONAL)
+        self.assertEqual(decision["basis"], "non-failure-kind")
+        self.assertTrue(decision["security_score_ignored_for_kind"])
+        self.assertIsNone(decision["effective_rank"])
+
+        severity, decision = _sarif_severity_decision(
+            None,
+            {"security-severity": 10**10_000},
+            {},
+            default_configuration={},
+            rank=10**10_000,
+            kind="fail",
+        )
+        self.assertEqual(severity, Severity.MEDIUM)
+        self.assertEqual(decision["basis"], "sarif-default-warning")
+        self.assertEqual(decision["invalid_security_score_count"], 1)
+        self.assertEqual(decision["invalid_rank_count"], 1)
+
+    def test_sarif_rule_default_configuration_drives_effective_level(self) -> None:
+        payload = json.dumps(
+            {
+                "runs": [
+                    {
+                        "tool": {
+                            "driver": {
+                                "rules": [
+                                    {
+                                        "id": "configured-rule",
+                                        "defaultConfiguration": {
+                                            "level": "error",
+                                            "rank": 92,
+                                        },
+                                    }
+                                ]
+                            }
+                        },
+                        "results": [
+                            {
+                                "ruleId": "configured-rule",
+                                "message": {"text": "configured severity"},
+                            }
+                        ],
+                    }
+                ]
+            }
+        )
+
+        finding = parse_sarif_findings(
+            payload,
+            self.root,
+            tool_name="codeql",
+            default_area="security",
+            default_impact="impact",
+            default_remediation="fix",
+        )[0]
+        decision = finding.evidence["sarif_severity_decision"]
+        portable = render_sarif([finding])["runs"][0]["results"][0]
+
+        self.assertEqual(finding.severity, Severity.HIGH)
+        self.assertEqual(finding.sources[0].native_severity, "error")
+        self.assertEqual(decision["basis"], "rule-default-level")
+        self.assertEqual(decision["effective_rank"], 92.0)
+        self.assertEqual(decision["rank_basis"], "rule-default-rank")
+        self.assertEqual(portable["properties"]["sarif_severity_decision"], decision)
+
     def test_sarif_quality_finding_uses_safe_defaults_without_location(self) -> None:
         payload = json.dumps(
             {
@@ -802,6 +907,11 @@ class SarifNormalizationContractTests(unittest.TestCase):
         self.assertEqual(finding.domain, "quality")
         self.assertEqual(finding.locations[0].path, "<repository>")
         self.assertEqual(finding.area, "fallback")
+        self.assertEqual(finding.severity, Severity.MEDIUM)
+        self.assertEqual(
+            finding.evidence["sarif_severity_decision"]["basis"],
+            "sarif-default-warning",
+        )
         self.assertIn("implementation mistake", finding.impact)
         self.assertIn("focused test", finding.remediation)
 

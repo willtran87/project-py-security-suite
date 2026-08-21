@@ -4907,6 +4907,11 @@ def render_sarif(findings: list[Finding]) -> dict[str, Any]:
             result["properties"]["sarif_message_reference"] = json_ready(
                 message_reference
             )
+        severity_decision = finding.evidence.get("sarif_severity_decision")
+        if isinstance(severity_decision, dict):
+            result["properties"]["sarif_severity_decision"] = json_ready(
+                severity_decision
+            )
         if finding.locations:
             result["locations"] = [
                 _sarif_result_location(location) for location in finding.locations
