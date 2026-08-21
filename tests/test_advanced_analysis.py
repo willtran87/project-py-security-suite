@@ -7,6 +7,7 @@ import io
 import json
 import tempfile
 import unittest
+import warnings
 import zipfile
 from pathlib import Path
 from typing import Any
@@ -89,6 +90,49 @@ class AdvancedAnalysisTests(unittest.TestCase):
             parity["published_entry_points"][0]["parity_status"],
             "graph-member-not-entry-modeled",
         )
+
+    def test_wheel_structure_rejects_ambiguous_and_unsafe_members(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory)
+            wheel = target / "dist" / "demo-1.0-py3-none-any.whl"
+            wheel.parent.mkdir()
+            _write_wheel(wheel)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", UserWarning)
+                with zipfile.ZipFile(wheel, "a") as archive:
+                    archive.writestr("demo/cli.py", b"shadowed = True\n")
+                    archive.writestr("demo/CLI.py", b"case_collision = True\n")
+                    archive.writestr("../escape.py", b"escape = True\n")
+                    archive.writestr("demo\\ambiguous.py", b"ambiguous = True\n")
+                    link = zipfile.ZipInfo("demo/link.py")
+                    link.create_system = 3
+                    link.external_attr = 0o120777 << 16
+                    archive.writestr(link, b"cli.py")
+            artifacts = _artifacts()
+            artifacts["artifact-manifest.json"] = {
+                "schema_version": "1.0",
+                "artifacts": [
+                    {
+                        "path": "dist/demo-1.0-py3-none-any.whl",
+                        "sha256": hashlib.sha256(wheel.read_bytes()).hexdigest(),
+                        "size_bytes": wheel.stat().st_size,
+                    }
+                ],
+            }
+
+            result = build_advanced_analysis(target, [], artifacts)
+
+        parity = result["artifact_route_parity"][0]
+        kinds = {item["kind"] for item in parity["record_gaps"]}
+        self.assertTrue(
+            {
+                "case-colliding-members",
+                "duplicate-member-name",
+                "symbolic-link-member",
+                "unsafe-member-name",
+            }.issubset(kinds)
+        )
+        self.assertGreaterEqual(parity["summary"]["record_integrity_gaps"], 4)
 
     def test_control_dominance_is_scoped_to_route_entry_identity(self) -> None:
         artifacts = _artifacts()

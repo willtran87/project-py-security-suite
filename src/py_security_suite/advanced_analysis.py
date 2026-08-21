@@ -19,6 +19,7 @@ _MAX_RELATIONSHIPS = 20_000
 _MAX_RECORDS = 500
 _MAX_WHEEL_MEMBERS = 100_000
 _MAX_MEMBER_BYTES = 32 * 1024 * 1024
+_MAX_WHEEL_UNCOMPRESSED_BYTES = 512 * 1024 * 1024
 _VIRTUAL_ROOT = "<pysec-entry-root>"
 _CONTROL_TERMS = (
     "auth",
@@ -676,7 +677,13 @@ def _artifact_route_parity(
                     risk_paths_available=bool(risk_paths),
                 )
             )
-        except (OSError, ValueError, zipfile.BadZipFile, configparser.Error) as exc:
+        except (
+            OSError,
+            RuntimeError,
+            ValueError,
+            zipfile.BadZipFile,
+            configparser.Error,
+        ) as exc:
             result.append(
                 {
                     "artifact": relative,
@@ -758,9 +765,11 @@ def _wheel_route_parity(
                         }
                     )
         record_names = sorted(
-            name for name in names if name.endswith(".dist-info/RECORD")
+            info.filename
+            for info in infos
+            if info.filename.endswith(".dist-info/RECORD")
         )
-        record_gaps: list[dict[str, Any]] = []
+        record_gaps = _wheel_member_integrity_gaps(infos)
         if len(record_names) != 1:
             record_gaps.append(
                 {
@@ -780,7 +789,7 @@ def _wheel_route_parity(
         "published_entry_points": entry_points[:_MAX_RECORDS],
         "record_gaps": record_gaps[:_MAX_RECORDS],
         "summary": {
-            "members": len(names),
+            "members": len(infos),
             "entry_points": len(entry_points),
             "unmodeled_entry_points": unmodeled,
             "record_integrity_gaps": len(record_gaps),
@@ -798,6 +807,89 @@ def _wheel_route_parity(
             }
         ),
     }
+
+
+def _wheel_member_integrity_gaps(
+    infos: list[zipfile.ZipInfo],
+) -> list[dict[str, Any]]:
+    gaps: list[dict[str, Any]] = []
+    names: dict[str, int] = defaultdict(int)
+    casefolded: dict[str, set[str]] = defaultdict(set)
+    total_uncompressed = 0
+    for info in infos:
+        name = info.filename
+        names[name] += 1
+        casefolded[name.casefold()].add(name)
+        total_uncompressed += max(0, info.file_size)
+        components = name.split("/")
+        checked_components = components[:-1] if name.endswith("/") else components
+        unsafe_reason = (
+            "absolute-or-drive-qualified"
+            if name.startswith(("/", "\\")) or re.match(r"^[a-zA-Z]:", name)
+            else "backslash-separator"
+            if "\\" in name
+            else "dot-or-empty-component"
+            if any(component in {"", ".", ".."} for component in checked_components)
+            else None
+        )
+        if unsafe_reason:
+            gaps.append(
+                {
+                    "kind": "unsafe-member-name",
+                    "path": name[:500],
+                    "detail": unsafe_reason,
+                }
+            )
+        unix_mode = (info.external_attr >> 16) & 0o170000
+        if unix_mode == 0o120000:
+            gaps.append({"kind": "symbolic-link-member", "path": name[:500]})
+        if info.flag_bits & 0x1:
+            gaps.append({"kind": "encrypted-member", "path": name[:500]})
+        if info.file_size > _MAX_MEMBER_BYTES:
+            gaps.append(
+                {
+                    "kind": "member-analysis-size-limit",
+                    "path": name[:500],
+                    "size_bytes": info.file_size,
+                }
+            )
+        if info.file_size >= 1024 * 1024 and (
+            info.compress_size == 0 or info.file_size / info.compress_size > 1000
+        ):
+            gaps.append(
+                {
+                    "kind": "suspicious-compression-ratio",
+                    "path": name[:500],
+                    "uncompressed_bytes": info.file_size,
+                    "compressed_bytes": info.compress_size,
+                }
+            )
+    gaps.extend(
+        {
+            "kind": "duplicate-member-name",
+            "path": name[:500],
+            "occurrences": count,
+        }
+        for name, count in sorted(names.items())
+        if count > 1
+    )
+    gaps.extend(
+        {
+            "kind": "case-colliding-members",
+            "paths": sorted(values)[:20],
+        }
+        for values in sorted(casefolded.values(), key=lambda item: sorted(item))
+        if len(values) > 1
+    )
+    if total_uncompressed > _MAX_WHEEL_UNCOMPRESSED_BYTES:
+        gaps.append(
+            {
+                "kind": "wheel-uncompressed-size-limit",
+                "uncompressed_bytes": total_uncompressed,
+                "limit_bytes": _MAX_WHEEL_UNCOMPRESSED_BYTES,
+            }
+        )
+    return gaps[:_MAX_RECORDS]
 
 
 def _record_integrity_gaps(

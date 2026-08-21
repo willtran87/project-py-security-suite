@@ -34,7 +34,7 @@ flowchart LR
 |---|---|---|
 | Control topology | Graphify file edges, exact route entry IDs mapped through reachability, retained validation campaigns | A candidate control is mandatory on every route-scoped static path, bypass-capable, absent from retained routes, or `not-established` when entry identity or graph connectivity is incomplete |
 | Taint-path fusion | Native SARIF `codeFlows` plus normalized finding identity | Preserves bounded execution order, nesting, importance, and source/sink kinds; route alignment requires a sink matching the finding plus the complete ordered native file path as a subsequence of one retained entry exposure |
-| Artifact route parity | Digest-bound wheel, `entry_points.txt`, `RECORD`, source graph, declared entry points | Published commands and plugins are modeled, graph-only, or absent from reviewed source |
+| Artifact route parity | Digest-bound wheel, ZIP member structure, `entry_points.txt`, `RECORD`, source graph, declared entry points | Detects ambiguous or unsafe archive members and determines whether published commands and plugins are modeled, graph-only, or absent from reviewed source |
 | Threat traceability | Exact pytm finding path, mapped control campaign, case-level execution, complete inventory, source-revision binding | Separates selected test candidates from source-bound passing observations and keeps security-test intent `not-established` until an abuse-case assertion is reviewed |
 | Mutation leverage | Exact mutmut finding path, control candidate, and source-bound case execution | A security-relevant control mutation survived; selected or passing tests are distinguished from mutation-killing evidence |
 | Telemetry privacy | Sensitive-data route, protection status, candidate controls, aligned native taint steps | Assesses every aligned path against its retained sink, distinguishes native sanitizer kinds from heuristic labels, exposes partial redaction and exact pre-sink control correlation, and withholds a protected decision when evidence is incomplete |
@@ -79,6 +79,13 @@ The command fails with exit code `1` when it observes any of the following:
 Both inputs are regular files, size-bounded, schema-identified, and
 digest-verified before comparison. A passing delta means no retained regression;
 it does not prove safe runtime behavior or absence of vulnerabilities.
+
+Wheel inspection validates archive structure before interpreting `RECORD`:
+duplicate names, case collisions, traversal or platform-ambiguous paths,
+symlinks, encrypted entries, unverifiably large members, suspicious compression
+ratios, and excessive total expansion are retained as integrity gaps. Exact ZIP
+member counts are preserved instead of collapsing duplicate central-directory
+entries into a set.
 
 ## Report interpretation
 

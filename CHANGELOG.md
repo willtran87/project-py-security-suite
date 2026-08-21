@@ -5,6 +5,11 @@ for published releases.
 
 ## Unreleased
 
+- Deepen wheel integrity analysis beyond `RECORD` hashes. Digest-bound artifact
+  inspection now detects duplicate and case-colliding ZIP members, unsafe or
+  platform-ambiguous paths, symlinks, encryption, unverifiably large members,
+  suspicious compression ratios, and excessive total expansion without losing
+  duplicate central-directory entries during normalization.
 - Make dependency trust scoring version-aware. Artifact inventory availability
   no longer counts as package presence; exact advisory/artifact intersections,
   fixed-version intersections, comparable absence, unresolved versions, and
