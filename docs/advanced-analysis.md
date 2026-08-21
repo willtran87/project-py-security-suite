@@ -194,3 +194,10 @@ locations and native-flow steps, bounded to 20 ancestors, and fails closed on
 missing, malformed, cyclic, over-deep, or external bases. Bounded resolution
 counts make path confidence auditable without retaining base identifiers or
 credential-bearing URIs.
+Run-level SARIF artifact tables are also resolved when a result or native-flow
+step supplies only `artifactLocation.index`. Index chains are bounded to 20
+indirections and reject invalid types, missing records, absent locations,
+cycles, external URIs, and paths outside the scan target with explicit
+non-repository states. Direct artifact URIs remain authoritative when present,
+which keeps partially redundant producer output usable without trusting a
+malformed optional index.

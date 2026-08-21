@@ -296,6 +296,12 @@ class SarifNormalizationContractTests(unittest.TestCase):
                 {},
                 "invalid-artifact-uri",
             ),
+            (
+                "null-artifact",
+                {"uri": None},
+                {},
+                "invalid-artifact-uri",
+            ),
         )
         for name, artifact, uri_bases, expected_resolution in cases:
             with self.subTest(name=name):
@@ -338,6 +344,114 @@ class SarifNormalizationContractTests(unittest.TestCase):
 
         self.assertEqual(path, "<external-artifact>")
         self.assertEqual(resolution, "external-uri")
+
+    def test_sarif_artifact_indices_are_resolved_and_fail_closed(self) -> None:
+        indexed_artifacts: list[dict[str, Any]] = [
+            {"location": {"index": 1}},
+            {"location": {"uri": "sink.py", "uriBaseId": "SRC"}},
+        ]
+        path, resolution = _artifact_path(
+            {"index": 0},
+            self.root,
+            uri_bases={"SRC": {"uri": "src/"}},
+            artifacts=indexed_artifacts,
+        )
+        self.assertEqual(path, "src/sink.py")
+        self.assertEqual(resolution, "artifact-index-resolved")
+
+        direct_path, direct_resolution = _artifact_path(
+            {"uri": "src/direct.py", "index": True},
+            self.root,
+            uri_bases={},
+            artifacts=indexed_artifacts,
+        )
+        self.assertEqual(direct_path, "src/direct.py")
+        self.assertEqual(direct_resolution, "target-relative")
+
+        outside_path, outside_resolution = _artifact_path(
+            {"index": 0},
+            self.root,
+            uri_bases={},
+            artifacts=[{"location": {"uri": "../outside.py"}}],
+        )
+        self.assertEqual(outside_path, "<outside-target>")
+        self.assertEqual(outside_resolution, "artifact-index-outside-target")
+
+        failures: tuple[
+            tuple[str, dict[str, Any], list[dict[str, Any]], str, str], ...
+        ] = (
+            (
+                "invalid",
+                {"index": True},
+                indexed_artifacts,
+                "<invalid-artifact-index>",
+                "invalid-artifact-index",
+            ),
+            (
+                "missing",
+                {"index": 50},
+                indexed_artifacts,
+                "<unresolved-artifact-index>",
+                "unresolved-artifact-index",
+            ),
+            (
+                "missing-location",
+                {"index": 0},
+                [{}],
+                "<unresolved-artifact-index>",
+                "unresolved-artifact-index",
+            ),
+            (
+                "cycle",
+                {"index": 0},
+                [
+                    {"location": {"index": 1}},
+                    {"location": {"index": 0}},
+                ],
+                "<unresolved-artifact-index>",
+                "cyclic-artifact-index",
+            ),
+        )
+        for name, artifact, artifacts, expected_path, expected_resolution in failures:
+            with self.subTest(name=name):
+                path, resolution = _artifact_path(
+                    artifact,
+                    self.root,
+                    uri_bases={},
+                    artifacts=artifacts,
+                )
+                self.assertEqual(path, expected_path)
+                self.assertEqual(resolution, expected_resolution)
+
+    def test_sarif_indexed_external_uri_does_not_retain_credentials(self) -> None:
+        path, resolution = _artifact_path(
+            {"index": 0},
+            self.root,
+            uri_bases={},
+            artifacts=[
+                {"location": {"uri": "https://user:secret@example.test/src/sink.py"}}
+            ],
+        )
+
+        self.assertEqual(path, "<external-artifact>")
+        self.assertEqual(resolution, "artifact-index-external-uri")
+        self.assertNotIn("secret", path)
+
+    def test_sarif_artifact_index_depth_is_bounded(self) -> None:
+        artifacts: list[dict[str, Any]] = [
+            {"location": {"index": index + 1}} for index in range(21)
+        ]
+        artifacts.append({"location": {"uri": "src/sink.py"}})
+
+        path, resolution = _artifact_path(
+            {"index": 0},
+            self.root,
+            uri_bases={},
+            artifacts=artifacts,
+        )
+
+        self.assertEqual(path, "<unresolved-artifact-index>")
+        self.assertEqual(resolution, "artifact-index-depth-exceeded")
 
     def test_sarif_uri_paths_ignore_query_and_fragment_metadata(self) -> None:
         path, resolution = _artifact_path(

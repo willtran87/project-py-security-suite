@@ -5,6 +5,11 @@ for published releases.
 
 ## Unreleased
 
+- Resolve SARIF `artifactLocation.index` references through each run's artifact
+  table for both finding locations and native-flow steps. Chained references are
+  bounded and cycle-safe; malformed, missing, external, and outside-target
+  artifacts fail closed instead of being mistaken for repository-level evidence.
+  Resolution summaries expose whether retained paths came through indirection.
 - Resolve chained SARIF `originalUriBaseIds` for both result locations and
   native-flow steps before graph or route correlation. Missing, malformed,
   cyclic, over-deep, and external bases produce explicit non-repository markers

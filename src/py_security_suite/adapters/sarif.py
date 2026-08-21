@@ -24,6 +24,7 @@ _MAX_MESSAGE_ARGUMENTS = 100
 _MAX_MESSAGE_ARGUMENT_CHARACTERS = 500
 _MAX_MESSAGE_TEMPLATE_CHARACTERS = 4_000
 _MAX_RESOLVED_MESSAGE_CHARACTERS = 8_000
+_MAX_ARTIFACT_INDEX_DEPTH = 20
 _MAX_URI_BASE_DEPTH = 20
 _RESULT_KINDS = {
     "fail": "fail",
@@ -62,6 +63,7 @@ def parse_sarif_findings(
         ordered_rules = _ordered_rules(driver)
         global_message_strings = _object(driver.get("globalMessageStrings"))
         uri_bases = _object(run.get("originalUriBaseIds"))
+        artifacts = _object_list(run.get("artifacts") or [], "artifacts")
         for result in _object_list(run.get("results") or [], "results"):
             result_semantics = _result_semantics(result)
             if not result_semantics["normalized_as_finding"]:
@@ -78,6 +80,7 @@ def parse_sarif_findings(
                     result_semantics=result_semantics,
                     global_message_strings=global_message_strings,
                     uri_bases=uri_bases,
+                    artifacts=artifacts,
                 )
             )
     return findings
@@ -95,6 +98,7 @@ def _finding(
     result_semantics: dict[str, Any],
     global_message_strings: dict[str, Any],
     uri_bases: dict[str, Any],
+    artifacts: list[dict[str, Any]],
 ) -> Finding:
     rule_id, rule, rule_reference = _resolve_rule(result, ordered_rules)
     properties = _object(result.get("properties"))
@@ -120,7 +124,9 @@ def _finding(
         or message
     )
     title = redact_sensitive_text(raw_title, secret_bearing=secret_bearing)
-    locations, location_summary = _locations(result, target, uri_bases=uri_bases)
+    locations, location_summary = _locations(
+        result, target, uri_bases=uri_bases, artifacts=artifacts
+    )
     location = locations[0]
     severity = _sarif_severity(result.get("level"), properties, rule_properties)
     domain = _domain(tags)
@@ -167,6 +173,7 @@ def _finding(
         rule_kind=str(rule_properties.get("kind") or properties.get("kind") or ""),
         secret_bearing_messages=secret_bearing,
         uri_bases=uri_bases,
+        artifacts=artifacts,
     )
     evidence: dict[str, Any] = {
         "sarif_result_semantics": result_semantics,
@@ -224,6 +231,7 @@ def _code_flows(
     rule_kind: str,
     secret_bearing_messages: bool,
     uri_bases: dict[str, Any],
+    artifacts: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     """Retain bounded SARIF path steps without snippets or sensitive state."""
     raw_code_flows = result.get("codeFlows") or []
@@ -255,7 +263,10 @@ def _code_flows(
                 region = physical.get("region")
                 region = region if isinstance(region, dict) else {}
                 path, path_resolution = _artifact_path(
-                    artifact, target, uri_bases=uri_bases
+                    artifact,
+                    target,
+                    uri_bases=uri_bases,
+                    artifacts=artifacts,
                 )
                 message = _message(location.get("message")) or _message(
                     raw.get("message")
@@ -647,6 +658,7 @@ def _locations(
     target: Path,
     *,
     uri_bases: dict[str, Any] | None = None,
+    artifacts: list[dict[str, Any]] | None = None,
 ) -> tuple[list[Location], dict[str, Any]]:
     """Retain bounded, ordered, distinct native result locations."""
     raw_locations = result.get("locations") or []
@@ -665,7 +677,10 @@ def _locations(
             invalid_count += 1
             continue
         location, path_resolution = _physical_location(
-            raw_location, target, uri_bases=uri_bases or {}
+            raw_location,
+            target,
+            uri_bases=uri_bases or {},
+            artifacts=artifacts or [],
         )
         identity = (location.path, location.start_line, location.end_line)
         if identity in seen:
@@ -700,13 +715,16 @@ def _physical_location(
     target: Path,
     *,
     uri_bases: dict[str, Any],
+    artifacts: list[dict[str, Any]],
 ) -> tuple[Location, str]:
     physical = location.get("physicalLocation")
     if not isinstance(physical, dict):
         physical = {}
     artifact = physical.get("artifactLocation") or {}
     artifact = artifact if isinstance(artifact, dict) else {}
-    path, path_resolution = _artifact_path(artifact, target, uri_bases=uri_bases)
+    path, path_resolution = _artifact_path(
+        artifact, target, uri_bases=uri_bases, artifacts=artifacts
+    )
     region = physical.get("region") or {}
     if not isinstance(region, dict):
         region = {}
@@ -731,11 +749,19 @@ def _valid_location_shape(location: dict[str, Any]) -> bool:
         if not isinstance(artifact, dict):
             return False
         uri = artifact.get("uri")
-        if uri is not None and not isinstance(uri, str):
+        if "uri" in artifact and not isinstance(uri, str):
             return False
         uri_base_id = artifact.get("uriBaseId")
-        if uri_base_id is not None and (
+        if "uriBaseId" in artifact and (
             not isinstance(uri_base_id, str) or not uri_base_id.strip()
+        ):
+            return False
+        artifact_index = artifact.get("index")
+        if (
+            "index" in artifact
+            and uri is None
+            and uri_base_id is None
+            and _nonnegative_integer(artifact_index) is None
         ):
             return False
     region = physical.get("region")
@@ -757,40 +783,122 @@ def _artifact_path(
     target: Path,
     *,
     uri_bases: dict[str, Any],
+    artifacts: list[dict[str, Any]] | None = None,
 ) -> tuple[str, str]:
+    resolved_artifact, index_resolution = _resolve_artifact_index(
+        artifact,
+        artifacts or [],
+        visited=(),
+        depth=0,
+    )
+    if resolved_artifact is None:
+        marker = (
+            "<invalid-artifact-index>"
+            if index_resolution == "invalid-artifact-index"
+            else "<unresolved-artifact-index>"
+        )
+        return marker, index_resolution or "unresolved-artifact-index"
+    artifact = resolved_artifact
     raw_uri = artifact.get("uri")
     raw_base_id = artifact.get("uriBaseId")
-    if raw_uri is not None and not isinstance(raw_uri, str):
-        return "<invalid-artifact-uri>", "invalid-artifact-uri"
+    if "uri" in artifact and not isinstance(raw_uri, str):
+        return "<invalid-artifact-uri>", _indexed_path_resolution(
+            index_resolution, "invalid-artifact-uri"
+        )
     if isinstance(raw_uri, str):
         uri = raw_uri.strip()
     else:
         uri = "" if raw_base_id is not None else "<repository>"
     if not _valid_uri_reference(uri):
-        return "<invalid-artifact-uri>", "invalid-artifact-uri"
-    if raw_base_id is None:
+        return "<invalid-artifact-uri>", _indexed_path_resolution(
+            index_resolution, "invalid-artifact-uri"
+        )
+    if "uriBaseId" not in artifact:
         path = _uri_path(uri)
         resolution = (
             "external-uri" if path == "<external-artifact>" else "target-relative"
         )
-        return normalize_repo_path(target, path), resolution
+        if path == "<external-artifact>":
+            return path, _indexed_path_resolution(index_resolution, resolution)
+        normalized = normalize_repo_path(target, path)
+        if normalized == "<outside-target>":
+            return normalized, _indexed_path_resolution(
+                index_resolution, "outside-target"
+            )
+        return normalized, _indexed_path_resolution(index_resolution, resolution)
     if not isinstance(raw_base_id, str) or not raw_base_id.strip():
-        return "<unresolved-uri-base>", "invalid-uri-base"
+        return "<unresolved-uri-base>", _indexed_path_resolution(
+            index_resolution, "invalid-uri-base"
+        )
     base_uri, resolution = _resolve_uri_base(
         raw_base_id.strip(), uri_bases, visited=(), depth=0
     )
     if base_uri is None:
-        return "<unresolved-uri-base>", resolution
+        return "<unresolved-uri-base>", _indexed_path_resolution(
+            index_resolution, resolution
+        )
     try:
         resolved_uri = urljoin(base_uri, uri)
     except ValueError:
-        return "<invalid-artifact-uri>", "invalid-artifact-uri"
+        return "<invalid-artifact-uri>", _indexed_path_resolution(
+            index_resolution, "invalid-artifact-uri"
+        )
     path = _uri_path(resolved_uri)
     if path == "<invalid-artifact-uri>":
-        return path, "invalid-artifact-uri"
+        return path, _indexed_path_resolution(index_resolution, "invalid-artifact-uri")
     if path == "<external-artifact>":
-        return path, "external-uri-base"
-    return normalize_repo_path(target, path), "uri-base-resolved"
+        return path, _indexed_path_resolution(index_resolution, "external-uri-base")
+    normalized = normalize_repo_path(target, path)
+    if normalized == "<outside-target>":
+        return normalized, _indexed_path_resolution(
+            index_resolution, "uri-base-outside-target"
+        )
+    return normalized, _indexed_path_resolution(index_resolution, "uri-base-resolved")
+
+
+def _indexed_path_resolution(index_resolution: str | None, resolution: str) -> str:
+    if index_resolution is None:
+        return resolution
+    if resolution in {"target-relative", "uri-base-resolved"}:
+        return index_resolution
+    return f"artifact-index-{resolution}"
+
+
+def _resolve_artifact_index(
+    artifact: dict[str, Any],
+    artifacts: list[dict[str, Any]],
+    *,
+    visited: tuple[int, ...],
+    depth: int,
+) -> tuple[dict[str, Any] | None, str | None]:
+    if "uri" in artifact or "uriBaseId" in artifact or "index" not in artifact:
+        return artifact, None
+    raw_index = artifact.get("index")
+    index = _nonnegative_integer(raw_index)
+    if index is None:
+        return None, "invalid-artifact-index"
+    if depth >= _MAX_ARTIFACT_INDEX_DEPTH:
+        return None, "artifact-index-depth-exceeded"
+    if index in visited:
+        return None, "cyclic-artifact-index"
+    if index >= len(artifacts):
+        return None, "unresolved-artifact-index"
+    raw_location = artifacts[index].get("location")
+    if raw_location is None:
+        return None, "unresolved-artifact-index"
+    if not isinstance(raw_location, dict):
+        return None, "invalid-artifact-index"
+    if not any(key in raw_location for key in ("uri", "uriBaseId", "index")):
+        return None, "unresolved-artifact-index"
+    resolved, resolution = _resolve_artifact_index(
+        raw_location,
+        artifacts,
+        visited=(*visited, index),
+        depth=depth + 1,
+    )
+    if resolved is None:
+        return None, resolution
+    return resolved, "artifact-index-resolved"
 
 
 def _resolve_uri_base(
