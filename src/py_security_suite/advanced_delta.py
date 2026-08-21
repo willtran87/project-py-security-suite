@@ -12,13 +12,23 @@ _MAX_BYTES = 128 * 1024 * 1024
 _MAX_CHANGES = 500
 _PRIVACY_RANK = {
     "protected-static-route": 0,
+    "redaction-not-established": 1,
+    "redaction-effect-not-established": 1,
     "mandatory-control-not-established": 1,
+    "control-flow-correlation-not-established": 2,
     "control-bypass-review": 2,
     "protection-gap": 3,
-    "redaction-order-risk": 4,
+    "redaction-path-gap": 4,
+    "redaction-order-risk": 5,
 }
-_CONTROL_RANK = {"mandatory": 0, "not-on-retained-route": 1, "bypass-capable": 2}
+_CONTROL_RANK = {
+    "mandatory": 0,
+    "not-established": 1,
+    "not-on-retained-route": 1,
+    "bypass-capable": 2,
+}
 _TIER_RANK = {"low": 0, "medium": 1, "high": 2, "critical": 3}
+_TAINT_ALIGNMENT_RANK = {"aligned": 0, "not-established": 1}
 
 
 def compare_advanced_analysis(
@@ -53,6 +63,12 @@ def compare_advanced_analysis(
         _index(before, "taint_paths", _taint_key),
         _index(after, "taint_paths", _taint_key),
     )
+    taint_alignment = _transitions(
+        _index(before, "taint_paths", _taint_key),
+        _index(after, "taint_paths", _taint_key),
+        field="route_alignment",
+        rank=_TAINT_ALIGNMENT_RANK,
+    )
     new_entries = [
         item
         for item in _added(_published_entries(before), _published_entries(after))
@@ -63,6 +79,7 @@ def compare_advanced_analysis(
         *controls["regressions"],
         *privacy["regressions"],
         *dependencies["regressions"],
+        *taint_alignment["regressions"],
         *new_taint,
         *new_entries,
         *new_record_gaps,
@@ -84,22 +101,30 @@ def compare_advanced_analysis(
             "privacy_regressions": len(privacy["regressions"]),
             "dependency_trust_regressions": len(dependencies["regressions"]),
             "new_scanner_confirmed_taint_paths": len(new_taint),
+            "taint_route_alignment_regressions": len(taint_alignment["regressions"]),
             "new_unmodeled_published_entry_points": len(new_entries),
             "new_wheel_record_gaps": len(new_record_gaps),
             "control_improvements": len(controls["improvements"]),
             "privacy_improvements": len(privacy["improvements"]),
             "dependency_trust_improvements": len(dependencies["improvements"]),
+            "taint_route_alignment_improvements": len(taint_alignment["improvements"]),
         },
         "changes": {
             "control_regressions": controls["regressions"][:_MAX_CHANGES],
             "privacy_regressions": privacy["regressions"][:_MAX_CHANGES],
             "dependency_trust_regressions": dependencies["regressions"][:_MAX_CHANGES],
             "new_scanner_confirmed_taint_paths": new_taint[:_MAX_CHANGES],
+            "taint_route_alignment_regressions": taint_alignment["regressions"][
+                :_MAX_CHANGES
+            ],
             "new_unmodeled_published_entry_points": new_entries[:_MAX_CHANGES],
             "new_wheel_record_gaps": new_record_gaps[:_MAX_CHANGES],
             "control_improvements": controls["improvements"][:_MAX_CHANGES],
             "privacy_improvements": privacy["improvements"][:_MAX_CHANGES],
             "dependency_trust_improvements": dependencies["improvements"][
+                :_MAX_CHANGES
+            ],
+            "taint_route_alignment_improvements": taint_alignment["improvements"][
                 :_MAX_CHANGES
             ],
         },
@@ -124,6 +149,7 @@ def render_advanced_delta_markdown(delta: dict[str, Any]) -> str:
         f"- **Telemetry privacy regressions:** {int(summary.get('privacy_regressions') or 0)}",
         f"- **Dependency trust regressions:** {int(summary.get('dependency_trust_regressions') or 0)}",
         f"- **New confirmed taint paths:** {int(summary.get('new_scanner_confirmed_taint_paths') or 0)}",
+        f"- **Taint route-alignment regressions:** {int(summary.get('taint_route_alignment_regressions') or 0)}",
         f"- **New unmodeled artifact entry points:** {int(summary.get('new_unmodeled_published_entry_points') or 0)}",
         f"- **New wheel RECORD gaps:** {int(summary.get('new_wheel_record_gaps') or 0)}",
         "",
@@ -137,6 +163,7 @@ def render_advanced_delta_markdown(delta: dict[str, Any]) -> str:
         ("control_regressions", "control"),
         ("privacy_regressions", "privacy"),
         ("dependency_trust_regressions", "dependency"),
+        ("taint_route_alignment_regressions", "taint alignment"),
     ):
         rows.extend(
             f"| `{label}` | `{_md(item.get('key'))}` | "

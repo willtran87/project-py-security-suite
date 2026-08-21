@@ -5,6 +5,7 @@ import configparser
 import csv
 import hashlib
 import io
+import re
 import zipfile
 from collections import defaultdict
 from pathlib import Path
@@ -40,8 +41,13 @@ _TELEMETRY_FAMILIES = {
     "url",
     "url-query",
 }
-_EXPORT_TERMS = ("emit", "export", "log", "record", "send", "span", "telemetry")
-_REDACTION_TERMS = ("filter", "redact", "sanitize", "scrub")
+_NATIVE_REDACTION_KINDS = {
+    "redactor",
+    "sanitiser",
+    "sanitizer",
+    "scrubber",
+}
+_REDACTION_TOKEN_PREFIXES = ("redact", "sanitis", "sanitiz", "scrub")
 
 
 def build_advanced_analysis(
@@ -141,7 +147,11 @@ def build_advanced_analysis(
                 for item in telemetry
             ),
             "telemetry_routes_with_redaction_order_risk": sum(
-                item["redaction_order"] == "export-before-redaction"
+                item["redaction_order"]
+                in {
+                    "export-before-redaction",
+                    "redaction-not-on-all-confirmed-paths",
+                }
                 for item in telemetry
             ),
             "dependency_trust_routes": len(dependency_routes),
@@ -176,8 +186,7 @@ def _control_topology(
     artifacts: dict[str, Any], risk_paths: dict[str, Any]
 ) -> list[dict[str, Any]]:
     adjacency = _graph_adjacency(artifacts.get("graphify.json"))
-    roots = _entry_paths(artifacts.get("reachability.json"))
-    idom = _immediate_dominators(adjacency, roots)
+    entry_paths = _entry_path_index(artifacts.get("reachability.json"))
     routes = _objects(risk_paths.get("routes"), _MAX_RECORDS)
     campaigns = {
         str(item.get("campaign_id")): item
@@ -189,7 +198,9 @@ def _control_topology(
         for item in _objects(risk_paths.get("convergence_hotspots"), _MAX_RECORDS)
         if item.get("hotspot_id")
     }
-    observations = _control_observations(routes, campaigns, hotspots, idom)
+    observations = _control_observations(
+        routes, campaigns, hotspots, adjacency, entry_paths
+    )
     result = [
         _control_record(path, status, raw)
         for (path, status), raw in observations.items()
@@ -197,9 +208,12 @@ def _control_topology(
     return sorted(
         result,
         key=lambda item: (
-            {"bypass-capable": 0, "mandatory": 1, "not-on-retained-route": 2}.get(
-                str(item["topology_status"]), 3
-            ),
+            {
+                "bypass-capable": 0,
+                "not-established": 1,
+                "mandatory": 2,
+                "not-on-retained-route": 3,
+            }.get(str(item["topology_status"]), 4),
             not bool(item["shared_mandatory_security_route_point"]),
             str(item["path"]),
         ),
@@ -210,16 +224,28 @@ def _control_observations(
     routes: list[dict[str, Any]],
     campaigns: dict[str, dict[str, Any]],
     hotspots: dict[str, dict[str, Any]],
-    idom: dict[str, str],
+    adjacency: dict[str, set[str]],
+    entry_paths: dict[str, set[str]],
 ) -> dict[tuple[str, str], dict[str, Any]]:
     observations: dict[tuple[str, str], dict[str, Any]] = {}
+    dominator_cache: dict[tuple[str, ...], dict[str, str]] = {}
     for route in routes:
         target = _object(route.get("target"))
         target_path = _path(target.get("path"))
         target_id = str(target.get("id") or "")
         if not target_path or not target_id:
             continue
-        dominators = set(_dominator_chain(idom, target_path))
+        route_roots, entry_mapping_complete = _route_entry_paths(route, entry_paths)
+        root_key = tuple(route_roots)
+        if root_key not in dominator_cache:
+            dominator_cache[root_key] = _immediate_dominators(adjacency, route_roots)
+        idom = dominator_cache[root_key]
+        dominance_established = (
+            entry_mapping_complete and bool(route_roots) and target_path in idom
+        )
+        dominators = (
+            set(_dominator_chain(idom, target_path)) if dominance_established else set()
+        )
         route_files = {
             path
             for exposure in _objects(route.get("entry_point_exposures"), 100)
@@ -230,7 +256,9 @@ def _control_observations(
             route, campaigns, hotspots
         ).items():
             status = (
-                "mandatory"
+                "not-established"
+                if not dominance_established
+                else "mandatory"
                 if path in dominators
                 else "bypass-capable"
                 if path in route_files
@@ -310,6 +338,8 @@ def _observe_control(
             "hotspot_ids": set(),
             "security_target_ids": set(),
             "test_files": set(),
+            "candidate_test_files": set(),
+            "test_evidence_statuses": set(),
             "owners": set(),
         },
     )
@@ -328,9 +358,13 @@ def _observe_control(
     item["hotspot_ids"].update(candidate["hotspot_ids"])
     item["owners"].update(_strings(route.get("owners"), 100))
     for campaign_id in candidate["campaign_ids"]:
-        item["test_files"].update(
-            _strings(campaigns.get(campaign_id, {}).get("selected_test_files"), 100)
-        )
+        campaign = campaigns.get(campaign_id)
+        if not campaign:
+            continue
+        assurance = _campaign_test_assurance([campaign])
+        item["candidate_test_files"].update(assurance["candidate_test_files"])
+        item["test_files"].update(assurance["verified_test_files"])
+        item["test_evidence_statuses"].add(assurance["status"])
 
 
 def _control_record(path: str, status: str, raw: dict[str, Any]) -> dict[str, Any]:
@@ -349,7 +383,9 @@ def _control_record(path: str, status: str, raw: dict[str, Any]) -> dict[str, An
         "hotspot_ids": sorted(raw["hotspot_ids"]),
         "security_target_ids": security_targets,
         "shared_mandatory_security_route_point": shared_security_point,
+        "candidate_test_files": sorted(raw["candidate_test_files"]),
         "test_files": sorted(raw["test_files"]),
+        "test_evidence_statuses": sorted(raw["test_evidence_statuses"]),
         "owners": sorted(raw["owners"]),
         "recommended_action": _control_action(status, shared_security_point),
         "evidence_artifacts": sorted(
@@ -361,9 +397,15 @@ def _control_record(path: str, status: str, raw: dict[str, Any]) -> dict[str, An
             }
         ),
         "interpretation": (
-            "Exact file-level graph dominance across declared entry roots. "
-            "Security-control behavior must be verified from implementation "
-            "and scanner or test evidence."
+            "Route-scoped file-level graph dominance across the exact entry IDs "
+            "retained for each route. Security-control behavior must be verified "
+            "from implementation and scanner or test evidence. A selected test is "
+            "only candidate evidence; retained test_files are source-bound, complete, "
+            "case-level passing observations and do not prove security-test intent."
+            if status != "not-established"
+            else "Route-scoped dominance was not established because the retained "
+            "entry identity could not be mapped to a graph root or the target was "
+            "not reachable from that root in the retained Graphify topology."
         ),
     }
 
@@ -385,6 +427,11 @@ def _control_action(status: str, single_point: bool) -> str:
             "Verify whether this structurally mandatory integration point is intended "
             "to enforce a control; if so, bind focused tests to every protected route."
         )
+    if status == "not-established":
+        return (
+            "Reconcile the route's exact entry ID with reachability and Graphify, then "
+            "recompute dominance before treating the candidate as mandatory or bypassable."
+        )
     return "Resolve why the candidate control is absent from retained entry-to-target routes."
 
 
@@ -402,23 +449,28 @@ def _taint_paths(
         if not isinstance(raw_flows, list):
             continue
         route = route_by_finding.get(finding.finding_id, {})
-        route_files = set(_strings(route.get("files"), 25))
         for flow_index, flow in enumerate(raw_flows[:10]):
             if not isinstance(flow, dict):
                 continue
-            steps = [
-                {
-                    "path": _path(step.get("path")) or "<repository>",
-                    "line": step.get("line")
-                    if isinstance(step.get("line"), int)
-                    else None,
-                    "message": str(step.get("message") or "")[:500],
-                }
-                for step in _objects(flow.get("steps"), 100)
-            ]
+            steps = [_taint_step(step) for step in _objects(flow.get("steps"), 100)]
             if len(steps) < 2:
                 continue
-            step_paths = {str(step["path"]) for step in steps}
+            semantic_basis = _taint_semantic_basis(flow, steps)
+            if semantic_basis == "unclassified-code-flow":
+                continue
+            endpoints = _taint_endpoints(steps)
+            if endpoints is None:
+                continue
+            source_index, sink_index = endpoints
+            source = steps[source_index]
+            sink = steps[sink_index]
+            route_alignment = _taint_route_alignment(
+                finding,
+                route,
+                steps[source_index : sink_index + 1],
+                source,
+                sink,
+            )
             result.append(
                 {
                     "taint_path_id": "taint-"
@@ -434,13 +486,9 @@ def _taint_paths(
                     "rule_ids": sorted({source.rule_id for source in finding.sources}),
                     "classification": "scanner-confirmed-source-to-sink",
                     "route_id": route.get("route_id"),
-                    "route_alignment": (
-                        "aligned"
-                        if route_files and step_paths & route_files
-                        else "not-established"
-                    ),
-                    "source": steps[0],
-                    "sink": steps[-1],
+                    "route_alignment": route_alignment,
+                    "source": source,
+                    "sink": sink,
                     "steps": steps,
                     "steps_omitted": max(
                         0, int(flow.get("step_count") or len(steps)) - len(steps)
@@ -458,11 +506,135 @@ def _taint_paths(
                         "Review the complete scanner-confirmed source-to-sink path, "
                         "place validation or sanitization before the sink, and bind a "
                         "negative regression test to the cited source and sink."
+                        if route_alignment == "aligned"
+                        else "Review the native scanner flow independently and do not "
+                        "treat the retained entry-route model as corroboration. Reconcile "
+                        "the exact source, sink, and ordered intermediate files before "
+                        "using route reachability or validation evidence to prioritize it."
                     ),
                     "evidence_artifacts": ["findings.json", "risk-paths.json"],
                 }
             )
     return result[:_MAX_RECORDS]
+
+
+def _taint_step(step: dict[str, Any]) -> dict[str, Any]:
+    sequence = step.get("sequence")
+    execution_order = step.get("execution_order")
+    nesting_level = step.get("nesting_level")
+    return {
+        "path": _path(step.get("path")) or "<repository>",
+        "line": step.get("line") if isinstance(step.get("line"), int) else None,
+        "message": str(step.get("message") or "")[:500],
+        "sequence": sequence
+        if isinstance(sequence, int) and not isinstance(sequence, bool)
+        else None,
+        "execution_order": execution_order
+        if isinstance(execution_order, int) and not isinstance(execution_order, bool)
+        else None,
+        "nesting_level": nesting_level
+        if isinstance(nesting_level, int) and not isinstance(nesting_level, bool)
+        else None,
+        "importance": str(step.get("importance") or "")[:100],
+        "kinds": sorted(set(_strings(step.get("kinds"), 10))),
+    }
+
+
+def _taint_endpoints(steps: list[dict[str, Any]]) -> tuple[int, int] | None:
+    source_markers = [
+        index for index, step in enumerate(steps) if "source" in _taint_kinds(step)
+    ]
+    sink_markers = [
+        index for index, step in enumerate(steps) if "sink" in _taint_kinds(step)
+    ]
+    source_index = source_markers[0] if source_markers else 0
+    sink_index = sink_markers[-1] if sink_markers else len(steps) - 1
+    return (source_index, sink_index) if source_index < sink_index else None
+
+
+def _taint_semantic_basis(flow: dict[str, Any], steps: list[dict[str, Any]]) -> str:
+    declared = str(flow.get("semantic_basis") or "").strip().casefold()
+    if declared in {"native-source-sink-kinds", "security-path-problem"}:
+        return declared
+    source_positions = [
+        index for index, step in enumerate(steps) if "source" in _taint_kinds(step)
+    ]
+    sink_positions = [
+        index for index, step in enumerate(steps) if "sink" in _taint_kinds(step)
+    ]
+    if source_positions and sink_positions and source_positions[0] < sink_positions[-1]:
+        return "native-source-sink-kinds"
+    return "unclassified-code-flow"
+
+
+def _taint_kinds(step: dict[str, Any]) -> set[str]:
+    return {value.casefold() for value in _strings(step.get("kinds"), 10)}
+
+
+def _taint_route_alignment(
+    finding: Finding,
+    route: dict[str, Any],
+    steps: list[dict[str, Any]],
+    source: dict[str, Any],
+    sink: dict[str, Any],
+) -> str:
+    if not route or not _sink_matches_finding(finding, sink):
+        return "not-established"
+    flow_paths = _consecutive_paths(steps)
+    if (
+        not flow_paths
+        or flow_paths[0] != source["path"]
+        or flow_paths[-1] != sink["path"]
+    ):
+        return "not-established"
+    for exposure in _objects(route.get("entry_point_exposures"), 100):
+        route_paths = [
+            path
+            for value in _strings(exposure.get("files"), 100)
+            if (path := _path(value))
+        ]
+        if _is_ordered_subsequence(flow_paths, route_paths):
+            return "aligned"
+    return "not-established"
+
+
+def _sink_matches_finding(finding: Finding, sink: dict[str, Any]) -> bool:
+    sink_path = str(sink.get("path") or "")
+    sink_line = sink.get("line")
+    for location in finding.locations:
+        if location.path != sink_path:
+            continue
+        if (
+            location.start_line is None
+            or not isinstance(sink_line, int)
+            or isinstance(sink_line, bool)
+            or location.start_line == sink_line
+        ):
+            return True
+    return False
+
+
+def _consecutive_paths(steps: list[dict[str, Any]]) -> list[str]:
+    paths: list[str] = []
+    for step in steps:
+        path = str(step.get("path") or "")
+        if not path or path == "<repository>":
+            return []
+        if not paths or paths[-1] != path:
+            paths.append(path)
+    return paths
+
+
+def _is_ordered_subsequence(values: list[str], sequence: list[str]) -> bool:
+    if not values or not sequence:
+        return False
+    position = 0
+    for candidate in sequence:
+        if candidate == values[position]:
+            position += 1
+            if position == len(values):
+                return True
+    return False
 
 
 def _artifact_route_parity(
@@ -709,24 +881,32 @@ def _threat_control_test_traceability(
     for control in controls:
         for target_path_value in _strings(control.get("target_paths"), 100):
             controls_by_path[target_path_value].append(control)
-    campaigns_by_path: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    for campaign in _objects(risk_paths.get("validation_campaigns"), _MAX_RECORDS):
-        if campaign_path := _path(campaign.get("path")):
-            campaigns_by_path[campaign_path].append(campaign)
+    campaigns_by_id = {
+        str(campaign.get("campaign_id")): campaign
+        for campaign in _objects(risk_paths.get("validation_campaigns"), _MAX_RECORDS)
+        if campaign.get("campaign_id")
+    }
     result: list[dict[str, Any]] = []
     for finding in findings:
         if "pytm" not in {source.tool for source in finding.sources}:
             continue
         finding_path = _path(finding.locations[0].path) if finding.locations else None
         path_controls = controls_by_path.get(finding_path or "", [])
-        campaigns = campaigns_by_path.get(finding_path or "", [])
-        tests = sorted(
+        campaign_ids = sorted(
             {
-                test
-                for campaign in campaigns
-                for test in _strings(campaign.get("selected_test_files"), 100)
+                campaign_id
+                for control in path_controls
+                for campaign_id in _strings(control.get("campaign_ids"), 100)
             }
         )
+        campaigns = [
+            campaigns_by_id[campaign_id]
+            for campaign_id in campaign_ids
+            if campaign_id in campaigns_by_id
+        ]
+        test_assurance = _campaign_test_assurance(campaigns)
+        candidate_tests = test_assurance["candidate_test_files"]
+        verified_tests = test_assurance["verified_test_files"]
         result.append(
             {
                 "traceability_id": "trace-"
@@ -742,13 +922,22 @@ def _threat_control_test_traceability(
                 "control_statuses": sorted(
                     {str(item["topology_status"]) for item in path_controls}
                 ),
-                "test_files": tests[:100],
+                "campaign_ids": campaign_ids,
+                "candidate_test_files": candidate_tests,
+                "verified_test_files": verified_tests,
+                "test_files": verified_tests,
+                "test_evidence_status": test_assurance["status"],
+                "test_execution_sources": test_assurance["execution_sources"],
+                "source_revision_bindings": test_assurance["revision_bindings"],
+                "semantic_test_intent": "not-established",
                 "closure_status": (
-                    "mapped-control-and-test"
-                    if path_controls and tests
-                    else "control-without-test"
-                    if path_controls
-                    else "threat-without-control-evidence"
+                    "threat-without-control-evidence"
+                    if not path_controls
+                    else "mapped-control-and-source-bound-passing-test-candidate"
+                    if verified_tests
+                    else "control-without-current-passing-test-evidence"
+                    if candidate_tests
+                    else "control-without-test-candidate"
                 ),
                 "owners": sorted(
                     {
@@ -759,16 +948,84 @@ def _threat_control_test_traceability(
                 ),
                 "recommended_action": (
                     "Review the threat, verify an exact enforcing control, and bind a "
-                    "negative or abuse-case test to that control before closure."
+                    "negative or abuse-case assertion to a source-bound passing test. "
+                    "Selection and execution alone do not establish security-test intent."
                 ),
-                "evidence_artifacts": [
-                    "findings.json",
-                    "risk-paths.json",
-                    "pytm-summary.json",
-                ],
+                "evidence_artifacts": sorted(
+                    {
+                        "findings.json",
+                        "risk-paths.json",
+                        "pytm-summary.json",
+                        *test_assurance["execution_sources"],
+                    }
+                ),
             }
         )
     return result[:_MAX_RECORDS]
+
+
+def _campaign_test_assurance(
+    campaigns: list[dict[str, Any]],
+) -> dict[str, Any]:
+    candidate_tests: set[str] = set()
+    verified_tests: set[str] = set()
+    focused_statuses: set[str] = set()
+    revision_bindings: set[str] = set()
+    execution_sources: set[str] = set()
+    for campaign in campaigns:
+        selected = set(_strings(campaign.get("selected_test_files"), 100))
+        candidate_tests.update(selected)
+        focused_status = str(
+            campaign.get("focused_test_validation_status") or "not-available"
+        )
+        focused_statuses.add(focused_status)
+        snapshot = _object(campaign.get("source_snapshot"))
+        revision = str(snapshot.get("evidence_revision_binding") or "not-established")
+        revision_bindings.add(revision)
+        execution_sources.update(_strings(campaign.get("test_execution_sources"), 10))
+        selected_bound = snapshot.get("selected_test_files_bound")
+        source_bound = (
+            revision == "aligned"
+            and isinstance(selected_bound, int)
+            and not isinstance(selected_bound, bool)
+            and selected_bound == len(selected)
+            and not _strings(snapshot.get("selected_test_files_missing"), 100)
+        )
+        execution_by_path = {
+            str(item.get("path") or ""): str(item.get("status") or "")
+            for item in _objects(campaign.get("focused_test_execution"), 100)
+            if item.get("path")
+        }
+        if (
+            selected
+            and focused_status == "passed"
+            and campaign.get("test_case_inventory_complete") is True
+            and source_bound
+        ):
+            verified_tests.update(
+                test for test in selected if execution_by_path.get(test) == "passed"
+            )
+    status = (
+        "not-selected"
+        if not candidate_tests
+        else "source-bound-passing"
+        if verified_tests == candidate_tests
+        else "partially-source-bound-passing"
+        if verified_tests
+        else "failed"
+        if "failed" in focused_statuses
+        else "source-revision-mismatch"
+        if "mismatch" in revision_bindings
+        else "execution-or-binding-not-established"
+    )
+    return {
+        "status": status,
+        "candidate_test_files": sorted(candidate_tests)[:100],
+        "verified_test_files": sorted(verified_tests)[:100],
+        "focused_statuses": sorted(focused_statuses),
+        "revision_bindings": sorted(revision_bindings),
+        "execution_sources": sorted(execution_sources),
+    }
 
 
 def _security_mutation_leverage(
@@ -799,7 +1056,14 @@ def _security_mutation_leverage(
         )
         if not control_like:
             continue
-        tests = sorted(campaign_tests.get(path, set()))
+        campaign_records = [
+            campaign
+            for campaign in _objects(
+                risk_paths.get("validation_campaigns"), _MAX_RECORDS
+            )
+            if _path(campaign.get("path")) == path
+        ]
+        test_assurance = _campaign_test_assurance(campaign_records)
         result.append(
             {
                 "mutation_leverage_id": "mutation-"
@@ -813,7 +1077,10 @@ def _security_mutation_leverage(
                 "topology_statuses": sorted(
                     {str(item["topology_status"]) for item in matches}
                 ),
-                "test_files": tests,
+                "candidate_test_files": sorted(campaign_tests.get(path, set())),
+                "verified_test_files": test_assurance["verified_test_files"],
+                "test_files": test_assurance["verified_test_files"],
+                "test_evidence_status": test_assurance["status"],
                 "validation_signal": "surviving-security-control-mutation",
                 "recommended_action": (
                     "Add a focused negative test that fails for this mutation, verify "
@@ -846,7 +1113,9 @@ def _telemetry_privacy_topology(
         finding_id = str(route.get("finding_id") or "")
         path_controls = controls_by_target.get(target_id, [])
         flows = taint_by_finding.get(finding_id, [])
-        redaction_order = _redaction_order(flows)
+        redaction = _redaction_assessment(flows)
+        redaction_order = str(redaction["status"])
+        control_flow = _control_flow_assessments(path_controls, flows)
         result.append(
             {
                 "privacy_route_id": "privacy-"
@@ -881,12 +1150,31 @@ def _telemetry_privacy_topology(
                 ),
                 "taint_path_ids": sorted(str(item["taint_path_id"]) for item in flows),
                 "redaction_order": redaction_order,
+                "redaction_evidence_basis": redaction["evidence_basis"],
+                "redaction_evidence_quality": redaction["evidence_quality"],
+                "redaction_path_assessments": redaction["path_assessments"],
+                "control_flow_assessments": control_flow,
+                "control_point_ids_observed_before_sink": sorted(
+                    str(item["control_point_id"])
+                    for item in control_flow
+                    if item["taint_path_ids_observed_before_sink"]
+                ),
+                "control_point_ids_observed_on_every_aligned_path": sorted(
+                    str(item["control_point_id"])
+                    for item in control_flow
+                    if item["flow_observation_status"]
+                    == "observed-on-every-aligned-path"
+                ),
                 "validation_status": str(
                     route.get("validation_status") or "not-assessed"
                 ),
                 "owners": _strings(route.get("owners"), 100),
                 "review_status": _privacy_review_status(
-                    route, path_controls, redaction_order
+                    route,
+                    path_controls,
+                    redaction_order,
+                    str(redaction["evidence_quality"]),
+                    control_flow,
                 ),
                 "recommended_action": (
                     "Ensure minimization and redaction dominate every exporter path, "
@@ -902,41 +1190,156 @@ def _telemetry_privacy_topology(
     return result[:_MAX_RECORDS]
 
 
-def _redaction_order(flows: list[dict[str, Any]]) -> str:
-    observed_redaction = False
+def _redaction_assessment(flows: list[dict[str, Any]]) -> dict[str, Any]:
+    path_assessments: list[dict[str, Any]] = []
     for flow in flows:
-        messages = [
-            f"{step.get('path', '')} {step.get('message', '')}".casefold()
-            for step in _objects(flow.get("steps"), 100)
+        if flow.get("route_alignment") != "aligned":
+            continue
+        steps = _objects(flow.get("steps"), 100)
+        endpoints = _taint_endpoints(steps)
+        if endpoints is None:
+            continue
+        source_index, sink_index = endpoints
+        markers = [
+            (index, basis)
+            for index, step in enumerate(steps)
+            if (basis := _redaction_marker_basis(step)) is not None
         ]
-        redact = next(
-            (
-                index
-                for index, value in enumerate(messages)
-                if any(term in value for term in _REDACTION_TERMS)
-            ),
-            None,
+        before = [
+            (index, basis)
+            for index, basis in markers
+            if source_index < index < sink_index
+        ]
+        at_or_after = [
+            (index, basis) for index, basis in markers if index >= sink_index
+        ]
+        incomplete = int(flow.get("steps_omitted") or 0) > 0
+        if at_or_after:
+            status = "export-before-redaction"
+        elif before:
+            status = "redaction-before-export"
+        elif incomplete:
+            status = "incomplete-path-evidence"
+        else:
+            status = "redaction-not-observed"
+        path_assessments.append(
+            {
+                "taint_path_id": str(flow.get("taint_path_id") or ""),
+                "status": status,
+                "source_sequence": source_index,
+                "sink_sequence": sink_index,
+                "redaction_sequences": [index for index, _ in markers],
+                "evidence_bases": sorted({basis for _, basis in markers}),
+                "steps_omitted": int(flow.get("steps_omitted") or 0),
+            }
         )
-        export = next(
-            (
-                index
-                for index, value in enumerate(messages)
-                if any(term in value for term in _EXPORT_TERMS)
-            ),
-            None,
+    statuses = {str(item["status"]) for item in path_assessments}
+    if "export-before-redaction" in statuses:
+        status = "export-before-redaction"
+    elif statuses == {"redaction-before-export"}:
+        status = "redaction-before-export"
+    elif "redaction-before-export" in statuses and statuses - {
+        "redaction-before-export"
+    }:
+        status = "redaction-not-on-all-confirmed-paths"
+    else:
+        status = "not-established"
+    evidence_bases = sorted(
+        {
+            str(basis)
+            for item in path_assessments
+            for basis in _strings(item.get("evidence_bases"), 10)
+        }
+    )
+    if status == "redaction-before-export" and all(
+        "native-step-kind" in _strings(item.get("evidence_bases"), 10)
+        for item in path_assessments
+    ):
+        evidence_quality = "native-on-every-aligned-path"
+    elif evidence_bases:
+        evidence_quality = "heuristic-or-partial"
+    else:
+        evidence_quality = "none"
+    return {
+        "status": status,
+        "evidence_basis": evidence_bases or ["none"],
+        "evidence_quality": evidence_quality,
+        "path_assessments": path_assessments,
+    }
+
+
+def _redaction_marker_basis(step: dict[str, Any]) -> str | None:
+    if _taint_kinds(step) & _NATIVE_REDACTION_KINDS:
+        return "native-step-kind"
+    value = f"{step.get('path', '')} {step.get('message', '')}".casefold()
+    tokens = re.findall(r"[a-z0-9]+", value)
+    if any(token.startswith(_REDACTION_TOKEN_PREFIXES) for token in tokens):
+        return "heuristic-step-label"
+    return None
+
+
+def _control_flow_assessments(
+    controls: list[dict[str, Any]], flows: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    aligned: list[tuple[dict[str, Any], list[dict[str, Any]], int]] = []
+    for flow in flows:
+        if flow.get("route_alignment") != "aligned":
+            continue
+        steps = _objects(flow.get("steps"), 100)
+        endpoints = _taint_endpoints(steps)
+        if endpoints is not None:
+            aligned.append((flow, steps, endpoints[1]))
+    result: list[dict[str, Any]] = []
+    for control in controls:
+        control_path = str(control.get("path") or "")
+        observed: list[str] = []
+        not_observed: list[str] = []
+        for flow, steps, sink_index in aligned:
+            taint_path_id = str(flow.get("taint_path_id") or "")
+            if any(
+                str(step.get("path") or "") == control_path
+                for step in steps[:sink_index]
+            ):
+                observed.append(taint_path_id)
+            else:
+                not_observed.append(taint_path_id)
+        if not aligned:
+            status = "not-established"
+        elif observed and not not_observed:
+            status = "observed-on-every-aligned-path"
+        elif observed:
+            status = "observed-on-some-aligned-paths"
+        else:
+            status = "not-observed-on-aligned-paths"
+        result.append(
+            {
+                "control_point_id": str(control.get("control_point_id") or ""),
+                "path": control_path,
+                "topology_status": str(control.get("topology_status") or "unknown"),
+                "flow_observation_status": status,
+                "taint_path_ids_observed_before_sink": sorted(observed),
+                "taint_path_ids_not_observed_before_sink": sorted(not_observed),
+                "interpretation": (
+                    "Exact file occurrence before the retained native sink; absence "
+                    "does not prove runtime bypass because a scanner may omit "
+                    "non-data-flow control frames."
+                ),
+            }
         )
-        if redact is not None:
-            observed_redaction = True
-        if redact is not None and export is not None and export < redact:
-            return "export-before-redaction"
-    return "redaction-before-export" if observed_redaction else "not-established"
+    return result
 
 
 def _privacy_review_status(
-    route: dict[str, Any], controls: list[dict[str, Any]], redaction_order: str
+    route: dict[str, Any],
+    controls: list[dict[str, Any]],
+    redaction_order: str,
+    redaction_evidence_quality: str,
+    control_flow: list[dict[str, Any]],
 ) -> str:
     if redaction_order == "export-before-redaction":
         return "redaction-order-risk"
+    if redaction_order == "redaction-not-on-all-confirmed-paths":
+        return "redaction-path-gap"
     if str(route.get("protection_status") or "unknown") in {
         "not-observed",
         "none",
@@ -947,6 +1350,21 @@ def _privacy_review_status(
         return "control-bypass-review"
     if not any(item["topology_status"] == "mandatory" for item in controls):
         return "mandatory-control-not-established"
+    mandatory_ids = {
+        str(item["control_point_id"])
+        for item in controls
+        if item["topology_status"] == "mandatory"
+    }
+    if any(
+        str(item.get("control_point_id") or "") in mandatory_ids
+        and item.get("flow_observation_status") != "observed-on-every-aligned-path"
+        for item in control_flow
+    ):
+        return "control-flow-correlation-not-established"
+    if redaction_order != "redaction-before-export":
+        return "redaction-not-established"
+    if redaction_evidence_quality != "native-on-every-aligned-path":
+        return "redaction-effect-not-established"
     return "protected-static-route"
 
 
@@ -959,13 +1377,20 @@ def _dependency_trust_routes(risk_paths: dict[str, Any]) -> list[dict[str, Any]]
         context = _object(target.get("correlations"))
         lifecycle = _object(context.get("package_lifecycle"))
         assurance = _object(route.get("evidence_assurance"))
+        artifact_exposure = _dependency_artifact_exposure(context, lifecycle)
         factors: list[str] = []
         if context.get("known_exploited") is True:
             factors.append("known-exploited")
         if context.get("epss_high") is True:
             factors.append("high-epss")
-        if lifecycle.get("artifact_inventory_available") is True:
-            factors.append("present-in-artifact-inventory")
+        if artifact_exposure["status"] == "affected-version-observed":
+            factors.append("affected-version-observed-in-artifact")
+        elif artifact_exposure["status"] == "package-observed-version-unresolved":
+            factors.append("artifact-package-version-unresolved")
+        elif artifact_exposure["status"] == "not-established":
+            factors.append("artifact-composition-not-established")
+        if artifact_exposure["status"] == "fixed-version-observed":
+            factors.append("fixed-version-observed-in-artifact")
         if lifecycle.get("assessment") in {"version-drift", "artifact-only"}:
             factors.append(str(lifecycle["assessment"]))
         if assurance.get("review_status") != "assured":
@@ -977,7 +1402,9 @@ def _dependency_trust_routes(risk_paths: dict[str, Any]) -> list[dict[str, Any]]
         score = (
             4 * ("known-exploited" in factors)
             + 2 * ("high-epss" in factors)
-            + 2 * ("present-in-artifact-inventory" in factors)
+            + 3 * ("affected-version-observed-in-artifact" in factors)
+            + 1 * ("artifact-package-version-unresolved" in factors)
+            + 1 * ("artifact-composition-not-established" in factors)
             + 2 * ("runtime-observed-importer" in factors)
             + 1 * ("scanner-assurance-gap" in factors)
         )
@@ -1006,6 +1433,7 @@ def _dependency_trust_routes(risk_paths: dict[str, Any]) -> list[dict[str, Any]]
                 "review_tier": tier,
                 "risk_factors": factors,
                 "package_lifecycle": lifecycle,
+                "artifact_exposure": artifact_exposure,
                 "fix_available": context.get("fix_available") is True,
                 "fixed_version_candidates": _strings(
                     context.get("fixed_version_candidates"), 50
@@ -1036,6 +1464,46 @@ def _dependency_trust_routes(risk_paths: dict[str, Any]) -> list[dict[str, Any]]
         result,
         key=lambda item: (-int(item["review_score"]), str(item.get("package") or "")),
     )[:_MAX_RECORDS]
+
+
+def _dependency_artifact_exposure(
+    context: dict[str, Any], lifecycle: dict[str, Any]
+) -> dict[str, Any]:
+    advisory_versions = set(_strings(context.get("versions"), 50))
+    artifact_versions = set(_strings(lifecycle.get("artifact_versions"), 50))
+    fixed_versions = set(_strings(context.get("fixed_version_candidates"), 50))
+    affected = sorted(advisory_versions & artifact_versions)
+    fixed = sorted(fixed_versions & artifact_versions)
+    assessment = str(lifecycle.get("assessment") or "not-established")
+    comparison_available = lifecycle.get("comparison_available") is True
+    package_observed = bool(artifact_versions) or assessment in {
+        "artifact-only",
+        "matched",
+        "version-drift",
+    }
+    if lifecycle.get("artifact_inventory_available") is not True:
+        status = "not-established"
+    elif affected:
+        status = "affected-version-observed"
+    elif fixed and not affected:
+        status = "fixed-version-observed"
+    elif assessment == "package-not-observed" and comparison_available:
+        status = "package-not-observed"
+    elif package_observed:
+        status = "package-observed-version-unresolved"
+    else:
+        status = "not-established"
+    return {
+        "status": status,
+        "advisory_versions": sorted(advisory_versions),
+        "artifact_versions": sorted(artifact_versions),
+        "affected_artifact_versions": affected,
+        "fixed_artifact_versions": fixed,
+        "interpretation": (
+            "Exact version-set comparison when both advisory and artifact versions "
+            "are retained. Inventory availability alone is never package presence."
+        ),
+    }
 
 
 def _evidence_relationships(
@@ -1088,9 +1556,20 @@ def _evidence_relationships(
             add_edge(
                 node_id, f"risk-target:{target_id}", "structurally-governs", evidence
             )
-        for test in _strings(item.get("test_files"), 100):
+        candidate_tests = set(_strings(item.get("candidate_test_files"), 100))
+        verified_tests = set(_strings(item.get("test_files"), 100))
+        for test in sorted(candidate_tests):
             add_node("test", test, test, evidence)
-            add_edge(f"test:{test}", node_id, "validates-candidate-control", evidence)
+            add_edge(
+                f"test:{test}",
+                node_id,
+                (
+                    "source-bound-passing-test-for-candidate-control"
+                    if test in verified_tests
+                    else "selected-for-candidate-control"
+                ),
+                evidence,
+            )
     for item in sections.get("taint_paths", []):
         identifier = str(item["taint_path_id"])
         evidence = _strings(item.get("evidence_artifacts"), 25)
@@ -1145,6 +1624,20 @@ def _evidence_relationships(
                     "applies-to",
                     evidence,
                 )
+            if section_name == "telemetry":
+                for assessment in _objects(
+                    item.get("control_flow_assessments"), _MAX_RECORDS
+                ):
+                    control_id = str(assessment.get("control_point_id") or "")
+                    for taint_path_id in _strings(
+                        assessment.get("taint_path_ids_observed_before_sink"), 100
+                    ):
+                        add_edge(
+                            f"control:{control_id}",
+                            f"taint-path:{taint_path_id}",
+                            "observed-before-native-sink-on",
+                            ["findings.json", "risk-paths.json"],
+                        )
     all_nodes = sorted(nodes.values(), key=lambda item: str(item["node_id"]))
     all_edges = sorted(edges.values(), key=lambda item: str(item["edge_id"]))
     total = len(all_nodes) + len(all_edges)
@@ -1176,14 +1669,34 @@ def _graph_adjacency(value: Any) -> dict[str, set[str]]:
     return dict(result)
 
 
-def _entry_paths(value: Any) -> list[str]:
-    return sorted(
-        {
-            path
-            for item in _objects(_object(value).get("entry_points"), 500)
-            if (path := _path(item.get("path")))
-        }
-    )
+def _entry_path_index(value: Any) -> dict[str, set[str]]:
+    result: dict[str, set[str]] = defaultdict(set)
+    for item in _objects(_object(value).get("entry_points"), 500):
+        identifier = str(item.get("id") or "")
+        path = _path(item.get("path"))
+        if identifier and path:
+            result[identifier].add(path)
+    return dict(result)
+
+
+def _route_entry_paths(
+    route: dict[str, Any], entry_paths: dict[str, set[str]]
+) -> tuple[list[str], bool]:
+    result: set[str] = set()
+    exposures = _objects(route.get("entry_point_exposures"), 100)
+    if not exposures:
+        return [], False
+    complete = True
+    for exposure in exposures:
+        entry = _object(exposure.get("entry_point"))
+        exposure_paths: set[str] = set()
+        if direct_path := _path(entry.get("path")):
+            exposure_paths.add(direct_path)
+        exposure_paths.update(entry_paths.get(str(entry.get("id") or ""), set()))
+        if not exposure_paths:
+            complete = False
+        result.update(exposure_paths)
+    return sorted(result), complete
 
 
 def _immediate_dominators(

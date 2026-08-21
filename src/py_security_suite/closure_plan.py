@@ -2582,30 +2582,41 @@ def _advanced_analysis_items(advanced: dict[str, Any]) -> list[dict[str, Any]]:
         return []
     items: list[dict[str, Any]] = []
     for control in _bounded_objects(advanced.get("control_topology"), 500):
-        if control.get("topology_status") != "bypass-capable":
+        status = str(control.get("topology_status") or "unknown")
+        if status not in {"bypass-capable", "not-established"}:
             continue
         identifier = str(control.get("control_point_id") or "unknown")
+        evidence_gap = status == "not-established"
         items.append(
             _advanced_item(
                 key=f"advanced:control:{identifier}",
-                priority="P1",
+                priority="P2" if evidence_gap else "P1",
                 owner=_advanced_owner(control),
-                title=f"Resolve bypass-capable candidate control at {control.get('path') or 'unknown'}",
+                title=(
+                    f"Establish route-scoped control topology at {control.get('path') or 'unknown'}"
+                    if evidence_gap
+                    else f"Resolve bypass-capable candidate control at {control.get('path') or 'unknown'}"
+                ),
                 why=(
-                    "An alternate retained Graphify path reaches one or more review "
-                    "targets without crossing the candidate control point."
+                    "The retained route entry could not be mapped to a Graphify path "
+                    "that reaches the target, so control dominance is unknown."
+                    if evidence_gap
+                    else "An alternate retained Graphify path reaches one or more "
+                    "review targets without crossing the candidate control point."
                 ),
                 action=str(
                     control.get("recommended_action") or "Review alternate paths."
                 ),
                 acceptance=[
-                    "The replacement advanced analysis classifies the point as mandatory, or every alternate path has an equivalent reviewed control and focused negative test.",
+                    "The replacement advanced analysis maps every retained route entry to the reviewed graph and classifies the point as mandatory, bypass-capable, or absent from the route."
+                    if evidence_gap
+                    else "The replacement advanced analysis classifies the point as mandatory, or every alternate path has an equivalent reviewed control and focused negative test.",
                     "The decision retains exact route, target, owner, and test evidence without claiming exploitability from topology alone.",
                 ],
                 details={
                     "control_point_id": identifier,
                     "path": control.get("path"),
-                    "topology_status": "bypass-capable",
+                    "topology_status": status,
                 },
             )
         )
@@ -2762,7 +2773,7 @@ def _advanced_traceability_items(advanced: dict[str, Any]) -> list[dict[str, Any
                 ),
                 acceptance=[
                     "The threat is mapped to an exact enforcing control and focused abuse-case or negative test.",
-                    "The replacement advanced analysis reports mapped-control-and-test with retained source evidence.",
+                    "A source-bound passing test contains an explicitly reviewed abuse-case or negative assertion for the mapped threat; selection, execution, and line coverage alone are insufficient.",
                 ],
                 details={
                     "traceability_id": identifier,

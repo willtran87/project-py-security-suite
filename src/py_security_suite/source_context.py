@@ -7,9 +7,23 @@ from .models import Finding, Location
 
 
 _SECRET_TOOLS = {"detect-secrets", "gitleaks", "trufflehog"}
+_REDACTED_SOURCE = "<redacted: secret-bearing source is not embedded in reports>"
+_REDACTED_VALUE = "<redacted>"
+_SECRET_NAME = r"(?:password|passwd|secret|token|api[_-]?key|private[_-]?key)"
 _SECRET_ASSIGNMENT = re.compile(
-    r"(?i)(password|passwd|secret|token|api[_-]?key|private[_-]?key)"
-    r"(\s*[=:]\s*)([^\s,;]+)"
+    rf"(?ix)"
+    rf"(?P<prefix>"
+    rf"(?:"
+    rf"[\w.-]*{_SECRET_NAME}[\w.-]*"
+    rf"|[\"'][^\"'\r\n]*{_SECRET_NAME}[^\"'\r\n]*[\"']\s*\]?"
+    rf")"
+    rf"\s*(?::|=(?!=))\s*"
+    rf")"
+    rf"(?P<value>"
+    rf'"(?:\\.|[^"\\])*"'
+    rf"|'(?:\\.|[^'\\])*'"
+    rf"|[^#;,\r\n]*?\S(?=\s*(?:[#;,]|$))"
+    rf")"
 )
 _LANGUAGES = {
     ".c": "c",
@@ -43,9 +57,7 @@ def attach_source_context(
     """Attach bounded, sanitized source excerpts without leaving the target."""
     resolved_target = target.resolve()
     for finding in findings:
-        secret_finding = finding.area.casefold() == "secrets" or any(
-            source.tool.casefold() in _SECRET_TOOLS for source in finding.sources
-        )
+        secret_finding = _is_secret_finding(finding)
         for location in finding.locations:
             if location.start_line is None or location.start_line < 1:
                 continue
@@ -53,9 +65,7 @@ def attach_source_context(
             if source_path is None:
                 continue
             if secret_finding:
-                location.snippet = (
-                    "<redacted: secret-bearing source is not embedded in reports>"
-                )
+                location.snippet = _REDACTED_SOURCE
                 location.snippet_start_line = location.start_line
                 location.snippet_redacted = True
                 continue
@@ -67,6 +77,25 @@ def attach_source_context(
             )
             if excerpt is not None:
                 location.snippet, location.snippet_start_line = excerpt
+
+
+def redact_sensitive_snippets(findings: list[Finding]) -> None:
+    """Fail closed before persistence when a snippet is secret-bearing or redacted."""
+    for finding in findings:
+        secret_finding = _is_secret_finding(finding)
+        for location in finding.locations:
+            if location.snippet is None:
+                continue
+            if secret_finding or location.snippet_redacted:
+                location.snippet = _REDACTED_SOURCE
+                location.snippet_start_line = location.start_line
+                location.snippet_redacted = True
+
+
+def _is_secret_finding(finding: Finding) -> bool:
+    return finding.area.casefold() in {"secrets", "secrets-history"} or any(
+        source.tool.casefold() in _SECRET_TOOLS for source in finding.sources
+    )
 
 
 def source_language(path: str) -> str:
@@ -114,7 +143,7 @@ def _read_excerpt(
                     break
                 if number >= excerpt_start:
                     line = value.rstrip("\r\n")
-                    line = _SECRET_ASSIGNMENT.sub(r"\1\2<redacted>", line)
+                    line = _SECRET_ASSIGNMENT.sub(rf"\g<prefix>{_REDACTED_VALUE}", line)
                     if len(line) > maximum_line_characters:
                         line = line[:maximum_line_characters] + "…"
                     selected.append(line)

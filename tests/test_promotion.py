@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from importlib.resources import files
 from pathlib import Path
+from typing import cast
 from unittest.mock import patch
 
 from jsonschema import Draft202012Validator  # pylint: disable=import-error
@@ -146,7 +147,8 @@ class PromotionPlanTests(unittest.TestCase):
             report.mkdir()
             _write_report(report)
             trend = _operational_trend()
-            trend["timeline"][-1]["checksums_sha256"] = "0" * 64
+            timeline = cast(list[dict[str, object]], trend["timeline"])
+            timeline[-1]["checksums_sha256"] = "0" * 64
             trend_path = root / "trend.json"
             trend_bytes = json.dumps(trend, sort_keys=True).encode()
             trend_path.write_bytes(trend_bytes)

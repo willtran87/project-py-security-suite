@@ -31,6 +31,7 @@ class AdvancedAnalysisTests(unittest.TestCase):
         finding.evidence["sarif_code_flows"] = [
             {
                 "tool": "codeql",
+                "semantic_basis": "security-path-problem",
                 "step_count": 3,
                 "steps": [
                     {"path": "src/entry.py", "line": 3, "message": "user input"},
@@ -89,6 +90,54 @@ class AdvancedAnalysisTests(unittest.TestCase):
             "graph-member-not-entry-modeled",
         )
 
+    def test_control_dominance_is_scoped_to_route_entry_identity(self) -> None:
+        artifacts = _artifacts()
+        artifacts["graphify.json"]["nodes"].append({"path": "src/other.py"})
+        artifacts["graphify.json"]["topology"]["file_edges"] = [
+            {"source": "src/entry.py", "target": "src/auth.py"},
+            {"source": "src/auth.py", "target": "src/sink.py"},
+            {"source": "src/other.py", "target": "src/sink.py"},
+        ]
+        artifacts["reachability.json"]["entry_points"].append(
+            {"id": "entry:other", "path": "src/other.py"}
+        )
+
+        scoped = build_advanced_analysis(Path.cwd(), [], artifacts)
+
+        self.assertEqual(scoped["control_topology"][0]["topology_status"], "mandatory")
+
+        artifacts["risk-paths.json"]["routes"][0]["entry_point_exposures"].append(
+            {
+                "entry_point": {"id": "entry:other"},
+                "files": ["src/other.py", "src/sink.py"],
+            }
+        )
+        multi_entry = build_advanced_analysis(Path.cwd(), [], artifacts)
+
+        self.assertEqual(
+            multi_entry["control_topology"][0]["topology_status"],
+            "bypass-capable",
+        )
+
+    def test_control_dominance_is_unknown_when_route_entry_cannot_be_mapped(
+        self,
+    ) -> None:
+        artifacts = _artifacts()
+        artifacts["risk-paths.json"]["routes"][0]["entry_point_exposures"].append(
+            {
+                "entry_point": {"id": "entry:missing"},
+                "files": ["src/entry.py", "src/auth.py", "src/sink.py"],
+            }
+        )
+
+        result = build_advanced_analysis(Path.cwd(), [], artifacts)
+
+        control = result["control_topology"][0]
+        self.assertEqual(control["topology_status"], "not-established")
+        self.assertIn("could not be mapped", control["interpretation"])
+        schema = json.loads(read_bundled_schema("advanced-analysis-1.0"))
+        Draft202012Validator(schema).validate(result)
+
     def test_sarif_retains_bounded_code_flow_without_snippets(self) -> None:
         payload = json.dumps(
             {
@@ -117,15 +166,21 @@ class AdvancedAnalysisTests(unittest.TestCase):
                                                 "locations": [
                                                     {
                                                         "location": _sarif_location(
-                                                            "src/source.py", 3
-                                                        ),
-                                                        "message": {"text": "source"},
-                                                    },
-                                                    {
-                                                        "location": _sarif_location(
                                                             "src/sink.py", 9
                                                         ),
                                                         "message": {"text": "sink"},
+                                                        "executionOrder": 20,
+                                                        "importance": "essential",
+                                                        "kinds": ["sink"],
+                                                    },
+                                                    {
+                                                        "location": _sarif_location(
+                                                            "src/source.py", 3
+                                                        ),
+                                                        "message": {"text": "source"},
+                                                        "executionOrder": 10,
+                                                        "nestingLevel": 1,
+                                                        "kinds": ["source"],
                                                     },
                                                 ]
                                             }
@@ -151,19 +206,518 @@ class AdvancedAnalysisTests(unittest.TestCase):
         flow = finding.evidence["sarif_code_flows"][0]
         self.assertEqual(flow["step_count"], 2)
         self.assertEqual(flow["steps"][0]["path"], "src/source.py")
+        self.assertEqual(flow["steps"][0]["execution_order"], 10)
+        self.assertEqual(flow["steps"][0]["nesting_level"], 1)
+        self.assertEqual(flow["steps"][0]["kinds"], ["source"])
+        self.assertEqual(flow["steps"][1]["importance"], "essential")
+        self.assertEqual(flow["steps"][1]["kinds"], ["sink"])
+        self.assertEqual(flow["semantic_basis"], "native-source-sink-kinds")
         self.assertNotIn("snippet", flow["steps"][0])
+
+    def test_generic_quality_code_flow_is_not_promoted_to_taint(self) -> None:
+        payload = json.dumps(
+            {
+                "runs": [
+                    {
+                        "tool": {
+                            "driver": {
+                                "rules": [
+                                    {
+                                        "id": "py/quality-path",
+                                        "properties": {
+                                            "kind": "problem",
+                                            "tags": ["maintainability"],
+                                        },
+                                    }
+                                ]
+                            }
+                        },
+                        "results": [
+                            {
+                                "ruleId": "py/quality-path",
+                                "message": {"text": "generic control-flow path"},
+                                "locations": [_sarif_location("src/sink.py", 9)],
+                                "codeFlows": [
+                                    {
+                                        "threadFlows": [
+                                            {
+                                                "locations": [
+                                                    {
+                                                        "location": _sarif_location(
+                                                            "src/entry.py", 3
+                                                        )
+                                                    },
+                                                    {
+                                                        "location": _sarif_location(
+                                                            "src/sink.py", 9
+                                                        )
+                                                    },
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                ]
+            }
+        )
+        finding = parse_sarif_findings(
+            payload,
+            Path.cwd(),
+            tool_name="codeql",
+            default_area="quality",
+            default_impact="impact",
+            default_remediation="fix",
+        )[0]
+
+        self.assertEqual(
+            finding.evidence["sarif_code_flows"][0]["semantic_basis"],
+            "unclassified-code-flow",
+        )
+        result = build_advanced_analysis(Path.cwd(), [finding], _artifacts())
+        self.assertEqual(result["taint_paths"], [])
+
+    def test_taint_route_alignment_requires_complete_ordered_endpoint_evidence(
+        self,
+    ) -> None:
+        scenarios = (
+            (
+                "sink-only-overlap",
+                [
+                    {"path": "src/outside.py", "line": 3, "message": "source"},
+                    {"path": "src/sink.py", "line": 9, "message": "sink"},
+                ],
+                None,
+            ),
+            (
+                "route-order-conflict",
+                [
+                    {"path": "src/entry.py", "line": 3, "message": "source"},
+                    {"path": "src/sink.py", "line": 9, "message": "sink"},
+                ],
+                ["src/sink.py", "src/entry.py"],
+            ),
+            (
+                "sink-line-conflict",
+                [
+                    {"path": "src/entry.py", "line": 3, "message": "source"},
+                    {"path": "src/sink.py", "line": 10, "message": "sink"},
+                ],
+                None,
+            ),
+        )
+        for name, steps, exposure_files in scenarios:
+            with self.subTest(name=name):
+                finding = _finding("PYSEC-FLOW", "codeql", "src/sink.py")
+                finding.evidence["sarif_code_flows"] = [
+                    {
+                        "tool": "codeql",
+                        "semantic_basis": "security-path-problem",
+                        "step_count": len(steps),
+                        "steps": steps,
+                    }
+                ]
+                artifacts = _artifacts()
+                if exposure_files is not None:
+                    artifacts["risk-paths.json"]["routes"][0]["entry_point_exposures"][
+                        0
+                    ]["files"] = exposure_files
+
+                result = build_advanced_analysis(Path.cwd(), [finding], artifacts)
+
+                self.assertEqual(
+                    result["taint_paths"][0]["route_alignment"],
+                    "not-established",
+                )
+                self.assertIn(
+                    "do not treat the retained entry-route model as corroboration",
+                    result["taint_paths"][0]["recommended_action"],
+                )
+
+    def test_contradictory_native_endpoint_markers_are_not_promoted(self) -> None:
+        finding = _finding("PYSEC-FLOW", "codeql", "src/sink.py")
+        finding.evidence["sarif_code_flows"] = [
+            {
+                "tool": "codeql",
+                "step_count": 2,
+                "steps": [
+                    {
+                        "path": "src/entry.py",
+                        "line": 3,
+                        "message": "marked sink first",
+                        "kinds": ["sink"],
+                    },
+                    {
+                        "path": "src/sink.py",
+                        "line": 9,
+                        "message": "marked source last",
+                        "kinds": ["source"],
+                    },
+                ],
+            }
+        ]
+
+        result = build_advanced_analysis(Path.cwd(), [finding], _artifacts())
+
+        self.assertEqual(result["taint_paths"], [])
+
+    def test_telemetry_redaction_requires_every_aligned_native_path(self) -> None:
+        finding = _finding("PYSEC-FLOW", "codeql", "src/sink.py")
+        finding.evidence["sarif_code_flows"] = [
+            {
+                "tool": "codeql",
+                "semantic_basis": "native-source-sink-kinds",
+                "step_count": 3,
+                "steps": [
+                    {
+                        "path": "src/entry.py",
+                        "line": 3,
+                        "message": "catalog request",
+                        "kinds": ["source"],
+                    },
+                    {
+                        "path": "src/auth.py",
+                        "line": 7,
+                        "message": "privacy transform",
+                        "kinds": ["sanitizer"],
+                    },
+                    {
+                        "path": "src/sink.py",
+                        "line": 9,
+                        "message": "send",
+                        "kinds": ["sink"],
+                    },
+                ],
+            },
+            {
+                "tool": "codeql",
+                "semantic_basis": "native-source-sink-kinds",
+                "step_count": 2,
+                "steps": [
+                    {
+                        "path": "src/entry.py",
+                        "line": 3,
+                        "message": "alternate source",
+                        "kinds": ["source"],
+                    },
+                    {
+                        "path": "src/sink.py",
+                        "line": 9,
+                        "message": "send",
+                        "kinds": ["sink"],
+                    },
+                ],
+            },
+        ]
+        artifacts = _artifacts()
+        artifacts["graphify.json"]["topology"]["file_edges"] = artifacts[
+            "graphify.json"
+        ]["topology"]["file_edges"][:2]
+        artifacts["risk-paths.json"]["sensitive_data_routes"][0][
+            "protection_status"
+        ] = "observed"
+
+        result = build_advanced_analysis(Path.cwd(), [finding], artifacts)
+
+        privacy = result["telemetry_privacy_topology"][0]
+        self.assertEqual(
+            privacy["redaction_order"],
+            "redaction-not-on-all-confirmed-paths",
+        )
+        self.assertEqual(privacy["review_status"], "redaction-path-gap")
+        self.assertEqual(privacy["redaction_evidence_basis"], ["native-step-kind"])
+        self.assertEqual(
+            [item["status"] for item in privacy["redaction_path_assessments"]],
+            ["redaction-before-export", "redaction-not-observed"],
+        )
+        control = privacy["control_flow_assessments"][0]
+        self.assertEqual(
+            control["flow_observation_status"], "observed-on-some-aligned-paths"
+        )
+        self.assertEqual(
+            result["summary"]["telemetry_routes_with_redaction_order_risk"], 1
+        )
+        self.assertTrue(
+            any(
+                edge["relationship"] == "observed-before-native-sink-on"
+                for edge in result["evidence_graph"]["edges"]
+            )
+        )
+
+    def test_telemetry_protection_is_not_claimed_without_native_correlation(
+        self,
+    ) -> None:
+        finding = _finding("PYSEC-FLOW", "codeql", "src/sink.py")
+        finding.evidence["sarif_code_flows"] = [
+            {
+                "tool": "codeql",
+                "semantic_basis": "native-source-sink-kinds",
+                "step_count": 3,
+                "steps": [
+                    {
+                        "path": "src/entry.py",
+                        "line": 3,
+                        "kinds": ["source"],
+                    },
+                    {
+                        "path": "src/privacy.py",
+                        "line": 6,
+                        "kinds": ["sanitizer"],
+                    },
+                    {
+                        "path": "src/sink.py",
+                        "line": 9,
+                        "kinds": ["sink"],
+                    },
+                ],
+            }
+        ]
+        artifacts = _artifacts()
+        artifacts["graphify.json"]["topology"]["file_edges"] = artifacts[
+            "graphify.json"
+        ]["topology"]["file_edges"][:2]
+        artifacts["risk-paths.json"]["routes"][0]["entry_point_exposures"][0][
+            "files"
+        ] = ["src/entry.py", "src/privacy.py", "src/sink.py"]
+        artifacts["risk-paths.json"]["sensitive_data_routes"][0][
+            "protection_status"
+        ] = "observed"
+
+        result = build_advanced_analysis(Path.cwd(), [finding], artifacts)
+
+        privacy = result["telemetry_privacy_topology"][0]
+        self.assertEqual(privacy["redaction_order"], "redaction-before-export")
+        self.assertEqual(
+            privacy["review_status"],
+            "control-flow-correlation-not-established",
+        )
+        self.assertEqual(privacy["control_point_ids_observed_before_sink"], [])
+
+    def test_telemetry_protected_decision_requires_native_sanitizer_semantics(
+        self,
+    ) -> None:
+        scenarios: tuple[tuple[str, str, list[str], str, str, str], ...] = (
+            (
+                "unrelated-prefix",
+                "sanity check",
+                [],
+                "not-established",
+                "redaction-not-established",
+                "none",
+            ),
+            (
+                "heuristic-label",
+                "sanitize telemetry value",
+                [],
+                "redaction-before-export",
+                "redaction-effect-not-established",
+                "heuristic-or-partial",
+            ),
+            (
+                "native-kind",
+                "privacy transform",
+                ["sanitizer"],
+                "redaction-before-export",
+                "protected-static-route",
+                "native-on-every-aligned-path",
+            ),
+        )
+        for (
+            name,
+            marker_message,
+            sanitizer_kinds,
+            expected_order,
+            expected_status,
+            expected_quality,
+        ) in scenarios:
+            with self.subTest(name=name):
+                finding = _finding("PYSEC-FLOW", "codeql", "src/sink.py")
+                finding.evidence["sarif_code_flows"] = [
+                    {
+                        "tool": "codeql",
+                        "semantic_basis": "security-path-problem",
+                        "step_count": 3,
+                        "steps": [
+                            {
+                                "path": "src/entry.py",
+                                "line": 3,
+                                "kinds": ["source"],
+                            },
+                            {
+                                "path": "src/auth.py",
+                                "line": 7,
+                                "message": marker_message,
+                                "kinds": sanitizer_kinds,
+                            },
+                            {
+                                "path": "src/sink.py",
+                                "line": 9,
+                                "kinds": ["sink"],
+                            },
+                        ],
+                    }
+                ]
+                artifacts = _artifacts()
+                artifacts["graphify.json"]["topology"]["file_edges"] = artifacts[
+                    "graphify.json"
+                ]["topology"]["file_edges"][:2]
+                artifacts["risk-paths.json"]["sensitive_data_routes"][0][
+                    "protection_status"
+                ] = "observed"
+
+                result = build_advanced_analysis(Path.cwd(), [finding], artifacts)
+
+                privacy = result["telemetry_privacy_topology"][0]
+                self.assertEqual(privacy["redaction_order"], expected_order)
+                self.assertEqual(privacy["review_status"], expected_status)
+                self.assertEqual(
+                    privacy["redaction_evidence_quality"], expected_quality
+                )
+
+    def test_threat_test_assurance_follows_control_campaign_and_source_identity(
+        self,
+    ) -> None:
+        threat = _finding("PYTM-THREAT", "pytm", "src/sink.py")
+        artifacts = _artifacts()
+
+        selected_only = build_advanced_analysis(Path.cwd(), [threat], artifacts)
+
+        trace = selected_only["threat_control_test_traceability"][0]
+        self.assertEqual(trace["candidate_test_files"], ["tests/test_auth.py"])
+        self.assertEqual(trace["verified_test_files"], [])
+        self.assertEqual(
+            trace["closure_status"],
+            "control-without-current-passing-test-evidence",
+        )
+        self.assertEqual(selected_only["summary"]["threats_without_test_evidence"], 1)
+        control = selected_only["control_topology"][0]
+        self.assertEqual(control["candidate_test_files"], ["tests/test_auth.py"])
+        self.assertEqual(control["test_files"], [])
+
+        campaign = artifacts["risk-paths.json"]["validation_campaigns"][0]
+        _add_source_bound_passing_campaign_evidence(campaign)
+        current = build_advanced_analysis(Path.cwd(), [threat], artifacts)
+
+        trace = current["threat_control_test_traceability"][0]
+        self.assertEqual(trace["verified_test_files"], ["tests/test_auth.py"])
+        self.assertEqual(trace["test_evidence_status"], "source-bound-passing")
+        self.assertEqual(
+            trace["closure_status"],
+            "mapped-control-and-source-bound-passing-test-candidate",
+        )
+        self.assertEqual(trace["semantic_test_intent"], "not-established")
+        self.assertEqual(current["summary"]["threats_without_test_evidence"], 0)
+        self.assertTrue(
+            any(
+                edge["relationship"]
+                == "source-bound-passing-test-for-candidate-control"
+                for edge in current["evidence_graph"]["edges"]
+            )
+        )
+
+        campaign["source_snapshot"]["evidence_revision_binding"] = "mismatch"
+        stale = build_advanced_analysis(Path.cwd(), [threat], artifacts)
+
+        trace = stale["threat_control_test_traceability"][0]
+        self.assertEqual(trace["verified_test_files"], [])
+        self.assertEqual(trace["test_evidence_status"], "source-revision-mismatch")
+
+    def test_mutation_test_assurance_rejects_selected_only_test_files(self) -> None:
+        mutation = _finding("MUTMUT-CONTROL", "mutmut", "src/auth.py")
+        artifacts = _artifacts()
+
+        selected_only = build_advanced_analysis(Path.cwd(), [mutation], artifacts)
+
+        leverage = selected_only["security_mutation_leverage"][0]
+        self.assertEqual(leverage["candidate_test_files"], ["tests/test_auth.py"])
+        self.assertEqual(leverage["verified_test_files"], [])
+        self.assertEqual(
+            selected_only["summary"][
+                "security_control_mutations_without_test_evidence"
+            ],
+            1,
+        )
+
+        _add_source_bound_passing_campaign_evidence(
+            artifacts["risk-paths.json"]["validation_campaigns"][0]
+        )
+        current = build_advanced_analysis(Path.cwd(), [mutation], artifacts)
+
+        leverage = current["security_mutation_leverage"][0]
+        self.assertEqual(leverage["verified_test_files"], ["tests/test_auth.py"])
+        self.assertEqual(leverage["test_evidence_status"], "source-bound-passing")
+        self.assertEqual(
+            current["summary"]["security_control_mutations_without_test_evidence"],
+            0,
+        )
+
+    def test_dependency_scoring_does_not_treat_inventory_as_package_presence(
+        self,
+    ) -> None:
+        artifacts = _artifacts()
+        dependency_route = artifacts["risk-paths.json"]["routes"][1]
+        context = dependency_route["target"]["correlations"]
+        context["known_exploited"] = False
+        context["epss_high"] = False
+        dependency_route["runtime_context"]["observations"] = []
+        context["versions"] = ["1.0"]
+        context["package_lifecycle"] = {
+            "artifact_inventory_available": True,
+            "comparison_available": True,
+            "assessment": "package-not-observed",
+            "artifact_versions": [],
+        }
+
+        absent = build_advanced_analysis(Path.cwd(), [], artifacts)
+
+        trust = absent["dependency_trust_routes"][0]
+        self.assertEqual(trust["artifact_exposure"]["status"], "package-not-observed")
+        self.assertEqual(trust["review_score"], 0)
+        self.assertEqual(trust["review_tier"], "low")
+        self.assertNotIn("present-in-artifact-inventory", trust["risk_factors"])
+
+        context["package_lifecycle"].update(
+            {"assessment": "matched", "artifact_versions": ["1.0"]}
+        )
+        affected = build_advanced_analysis(Path.cwd(), [], artifacts)
+
+        trust = affected["dependency_trust_routes"][0]
+        self.assertEqual(
+            trust["artifact_exposure"]["status"], "affected-version-observed"
+        )
+        self.assertEqual(
+            trust["artifact_exposure"]["affected_artifact_versions"], ["1.0"]
+        )
+        self.assertIn("affected-version-observed-in-artifact", trust["risk_factors"])
+        self.assertEqual(trust["review_score"], 3)
 
     def test_digest_bound_delta_detects_control_and_privacy_regressions(self) -> None:
         artifacts = _artifacts()
         artifacts["graphify.json"]["topology"]["file_edges"] = artifacts[
             "graphify.json"
         ]["topology"]["file_edges"][:2]
-        baseline = build_advanced_analysis(Path.cwd(), [], artifacts)
+        finding = _finding("PYSEC-FLOW", "codeql", "src/sink.py")
+        finding.evidence["sarif_code_flows"] = [
+            {
+                "tool": "codeql",
+                "semantic_basis": "security-path-problem",
+                "step_count": 3,
+                "steps": [
+                    {"path": "src/entry.py", "line": 3, "message": "source"},
+                    {"path": "src/auth.py", "line": 7, "message": "control"},
+                    {"path": "src/sink.py", "line": 9, "message": "sink"},
+                ],
+            }
+        ]
+        baseline = build_advanced_analysis(Path.cwd(), [finding], artifacts)
         current = json.loads(json.dumps(baseline))
         current["control_topology"][0]["topology_status"] = "bypass-capable"
         current["telemetry_privacy_topology"][0]["review_status"] = (
             "redaction-order-risk"
         )
+        current["taint_paths"][0]["route_alignment"] = "not-established"
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             before_path = root / "before.json"
@@ -180,7 +734,9 @@ class AdvancedAnalysisTests(unittest.TestCase):
         self.assertEqual(result["verdict"], "regression")
         self.assertEqual(result["summary"]["control_regressions"], 1)
         self.assertEqual(result["summary"]["privacy_regressions"], 1)
+        self.assertEqual(result["summary"]["taint_route_alignment_regressions"], 1)
         self.assertIn("Actionable regressions", render_advanced_delta_markdown(result))
+        self.assertIn("taint alignment", render_advanced_delta_markdown(result))
         schema = json.loads(read_bundled_schema("advanced-analysis-delta-1.0"))
         Draft202012Validator(schema).validate(result)
 
@@ -341,6 +897,33 @@ def _write_wheel(path: Path) -> None:
     with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         for name, content in members.items():
             archive.writestr(name, content)
+
+
+def _add_source_bound_passing_campaign_evidence(campaign: dict[str, Any]) -> None:
+    campaign.update(
+        {
+            "focused_test_validation_status": "passed",
+            "test_case_inventory_complete": True,
+            "test_execution_sources": ["junit-summary.json"],
+            "focused_test_execution": [
+                {
+                    "path": "tests/test_auth.py",
+                    "status": "passed",
+                    "tests": 1,
+                    "passed": 1,
+                    "failures": 0,
+                    "errors": 0,
+                    "skipped": 0,
+                    "sources": ["junit-summary.json"],
+                }
+            ],
+            "source_snapshot": {
+                "selected_test_files_bound": 1,
+                "selected_test_files_missing": [],
+                "evidence_revision_binding": "aligned",
+            },
+        }
+    )
 
 
 def _sarif_location(path: str, line: int) -> dict[str, object]:

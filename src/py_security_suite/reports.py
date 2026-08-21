@@ -31,7 +31,7 @@ from .passport import (
 )
 from .prioritization import finding_order_key, finding_priority
 from .portfolio_health import activation_recipe, portfolio_health_artifact
-from .source_context import source_language
+from .source_context import redact_sensitive_snippets, source_language
 
 
 REPORT_FILES = tuple(REQUIRED_REPORT_ARTIFACTS.values())
@@ -211,6 +211,7 @@ def _write_report_contents(
     include_evidence: bool,
     derived_artifacts: dict[str, Any] | None,
 ) -> None:
+    redact_sensitive_snippets(findings)
     _register_report_artifacts(manifest, derived_artifacts)
     active_findings = [
         finding
@@ -813,6 +814,7 @@ def _render_advanced_analysis_summary(value: dict[str, Any] | None) -> list[str]
     privacy = privacy if isinstance(privacy, list) else []
     dependencies = value.get("dependency_trust_routes")
     dependencies = dependencies if isinstance(dependencies, list) else []
+    aligned_taint_paths, retained_taint_paths = _advanced_taint_alignment_counts(value)
     lines = [
         "",
         "## Cross-evidence security leverage",
@@ -830,10 +832,11 @@ def _render_advanced_analysis_summary(value: dict[str, Any] | None) -> list[str]
         f"| Mandatory / bypass-capable candidate controls | {int(summary.get('mandatory_control_points', 0))} / {int(summary.get('bypass_capable_control_points', 0))} |",
         f"| Shared mandatory security-route points | {int(summary.get('shared_mandatory_security_route_points', 0))} |",
         f"| Scanner-confirmed taint paths / retained steps | {int(summary.get('scanner_confirmed_taint_paths', 0))} / {int(summary.get('retained_taint_steps', 0))} |",
+        f"| Ordered route-aligned / not-established taint paths | {aligned_taint_paths} / {retained_taint_paths - aligned_taint_paths} |",
         f"| Published / unmodeled artifact entry points | {int(summary.get('published_entry_points', 0))} / {int(summary.get('unmodeled_published_entry_points', 0))} |",
         f"| Wheel RECORD integrity gaps | {int(summary.get('wheel_record_integrity_gaps', 0))} |",
-        f"| Threats without control / test evidence | {int(summary.get('threats_without_control_evidence', 0))} / {int(summary.get('threats_without_test_evidence', 0))} |",
-        f"| Security-control mutations without focused tests | {int(summary.get('security_control_mutations_without_test_evidence', 0))} |",
+        f"| Threats without control / source-bound passing test evidence | {int(summary.get('threats_without_control_evidence', 0))} / {int(summary.get('threats_without_test_evidence', 0))} |",
+        f"| Security-control mutations without source-bound passing tests | {int(summary.get('security_control_mutations_without_test_evidence', 0))} |",
         f"| Telemetry routes without observed protection / with ordering risk | {int(summary.get('telemetry_routes_without_observed_protection', 0))} / {int(summary.get('telemetry_routes_with_redaction_order_risk', 0))} |",
         f"| Elevated dependency trust routes | {int(summary.get('elevated_dependency_trust_routes', 0))} |",
     ]
@@ -855,7 +858,7 @@ def _render_advanced_controls(values: list[Any]) -> list[str]:
         for item in values
         if isinstance(item, dict)
         and (
-            item.get("topology_status") == "bypass-capable"
+            item.get("topology_status") in {"bypass-capable", "not-established"}
             or item.get("shared_mandatory_security_route_point") is True
         )
     ]
@@ -930,7 +933,14 @@ def _render_advanced_privacy(values: list[Any]) -> list[str]:
             + _markdown_code(str(item.get("protection_status") or "unknown"))
             + "`<br>redaction `"
             + _markdown_code(str(item.get("redaction_order") or "not-established"))
-            + "` | "
+            + "`<br>native control correlation `"
+            + str(
+                len(item.get("control_point_ids_observed_on_every_aligned_path") or [])
+            )
+            + "/"
+            + str(len(item.get("mandatory_control_point_ids") or []))
+            + " mandatory`"
+            + " | "
             + _markdown_text(str(item.get("recommended_action") or "Review."))
             + " |"
         )
@@ -4435,6 +4445,7 @@ def _html_advanced_analysis_summary(value: dict[str, Any] | None) -> str:
     if not isinstance(value, dict) or not isinstance(value.get("summary"), dict):
         return ""
     summary = value["summary"]
+    aligned_taint_paths, retained_taint_paths = _advanced_taint_alignment_counts(value)
     controls = value.get("control_topology")
     controls = controls if isinstance(controls, list) else []
     review = [
@@ -4442,7 +4453,7 @@ def _html_advanced_analysis_summary(value: dict[str, Any] | None) -> str:
         for item in controls
         if isinstance(item, dict)
         and (
-            item.get("topology_status") == "bypass-capable"
+            item.get("topology_status") in {"bypass-capable", "not-established"}
             or item.get("shared_mandatory_security_route_point") is True
         )
     ][:10]
@@ -4486,8 +4497,8 @@ def _html_advanced_analysis_summary(value: dict[str, Any] | None) -> str:
         + str(int(summary.get("shared_mandatory_security_route_points") or 0))
         + "</strong><span>shared mandatory security-route points</span></div>"
         '<div class="stat"><strong>'
-        + str(int(summary.get("scanner_confirmed_taint_paths") or 0))
-        + "</strong><span>confirmed taint paths</span></div>"
+        + f"{aligned_taint_paths} / {retained_taint_paths}"
+        + "</strong><span>route-aligned / retained taint paths</span></div>"
         '<div class="stat"><strong>'
         + str(int(summary.get("unmodeled_published_entry_points") or 0))
         + "</strong><span>unmodeled artifact entries</span></div>"
@@ -4498,6 +4509,16 @@ def _html_advanced_analysis_summary(value: dict[str, Any] | None) -> str:
         + '<p><a href="advanced-analysis.json">Download the complete typed evidence graph (JSON)</a></p>'
         "</section>"
     )
+
+
+def _advanced_taint_alignment_counts(value: dict[str, Any]) -> tuple[int, int]:
+    taint_paths = value.get("taint_paths")
+    retained = taint_paths if isinstance(taint_paths, list) else []
+    aligned = sum(
+        isinstance(item, dict) and item.get("route_alignment") == "aligned"
+        for item in retained
+    )
+    return aligned, len(retained)
 
 
 def render_html(

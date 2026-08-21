@@ -5,6 +5,46 @@ for published releases.
 
 ## Unreleased
 
+- Make dependency trust scoring version-aware. Artifact inventory availability
+  no longer counts as package presence; exact advisory/artifact intersections,
+  fixed-version intersections, comparable absence, unresolved versions, and
+  missing composition evidence receive distinct dispositions and review weight.
+- Make control and threat test assurance source-bound and execution-aware.
+  Threats now follow mapped control campaign IDs instead of incorrectly looking
+  for campaigns at the sink path; selected filenames remain candidates until a
+  complete case inventory proves that exact file passed against aligned source
+  evidence. Evidence-graph relationships distinguish selection from passing
+  observations, stale or partial test evidence cannot reduce gap counts, and a
+  passing test still requires explicit review of its abuse-case intent.
+- Scope candidate-control dominance to each route's exact retained entry IDs.
+  Unrelated application roots can no longer manufacture a bypass for another
+  route, and missing entry identity or graph connectivity now produces an
+  explicit `not-established` evidence gap with report and closure-plan handoffs
+  instead of inheriting confidence from global roots.
+- Deepen telemetry privacy analysis with per-path, sink-anchored redaction
+  ordering and exact pre-sink candidate-control correlation. A single protected
+  path can no longer hide an aligned path without observed redaction, broad
+  exporter substrings no longer determine order, native sanitizer kinds remain
+  distinguishable from heuristic step labels, and incomplete control-flow
+  correlation withholds a protected decision without overstating runtime bypass.
+- Make scanner-confirmed taint correlation endpoint- and order-aware. Native
+  SARIF flow execution order, nesting, importance, and source/sink kinds are
+  retained without snippets; contradictory endpoint markers are rejected; and
+  route alignment now requires the exact finding sink plus the complete ordered
+  source-to-sink file sequence within one retained entry exposure. Sink-only,
+  unordered, line-conflicting, and partial overlaps remain visible as
+  `not-established` instead of receiving false route corroboration. Digest-bound
+  advanced deltas treat a transition from aligned to not established as a
+  release regression and the reverse transition as an evidence improvement.
+  Generic quality and control-flow `codeFlows` remain retained but unclassified;
+  only security `path-problem` evidence or ordered native source/sink kinds can
+  contribute a scanner-confirmed taint path.
+- Harden report redaction as a fail-closed persistence boundary. Source context
+  now removes quoted, structured, and whitespace-bearing credential assignments
+  from neighboring excerpts, distinguishes assignments from comparisons, and
+  replaces any secret-bearing or pre-marked snippet again immediately before
+  report serialization. Adversarial tests cover Python, JSON/TOML-style, YAML,
+  dictionary, future-adapter, and forged redaction-marker cases.
 - Add `advanced-analysis.json`, a bounded typed evidence graph joining static
   control dominance and alternate paths, native SARIF source-to-sink steps,
   wheel activation/`RECORD` parity, pytm threats, mutmut survivors, focused

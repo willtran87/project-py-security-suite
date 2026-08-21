@@ -95,7 +95,13 @@ def _finding(
     classifications = _classifications(properties, rule_properties) or [
         _rule_classification(tool_name, rule_id)
     ]
-    code_flows = _code_flows(result, target, tool_name)
+    code_flows = _code_flows(
+        result,
+        target,
+        tool_name,
+        security_domain=domain == "security",
+        rule_kind=str(rule_properties.get("kind") or properties.get("kind") or ""),
+    )
     return Finding(
         finding_id=finding_id,
         fingerprint=fingerprint,
@@ -139,7 +145,12 @@ def _finding(
 
 
 def _code_flows(
-    result: dict[str, Any], target: Path, tool_name: str
+    result: dict[str, Any],
+    target: Path,
+    tool_name: str,
+    *,
+    security_domain: bool,
+    rule_kind: str,
 ) -> list[dict[str, Any]]:
     """Retain bounded SARIF path steps without snippets or sensitive state."""
     raw_code_flows = result.get("codeFlows") or []
@@ -158,8 +169,8 @@ def _code_flows(
             raw_locations = thread_flow.get("locations") or []
             if not isinstance(raw_locations, list):
                 raise TypeError("SARIF threadFlow locations must be a list")
-            steps: list[dict[str, Any]] = []
-            for raw in raw_locations[:100]:
+            native_steps: list[tuple[int, dict[str, Any]]] = []
+            for native_index, raw in enumerate(raw_locations[:100]):
                 if not isinstance(raw, dict):
                     raise TypeError("SARIF threadFlow location must be an object")
                 nested = raw.get("location")
@@ -173,20 +184,47 @@ def _code_flows(
                 message = _message(location.get("message")) or _message(
                     raw.get("message")
                 )
-                steps.append(
-                    {
-                        "path": normalize_repo_path(
-                            target,
-                            _uri_path(str(artifact.get("uri") or "<repository>")),
-                        ),
-                        "line": _integer(region.get("startLine")),
-                        "message": message[:500],
-                    }
+                native_steps.append(
+                    (
+                        native_index,
+                        {
+                            "path": normalize_repo_path(
+                                target,
+                                _uri_path(str(artifact.get("uri") or "<repository>")),
+                            ),
+                            "line": _integer(region.get("startLine")),
+                            "message": message[:500],
+                            "execution_order": _nonnegative_integer(
+                                raw.get("executionOrder")
+                            ),
+                            "nesting_level": _nonnegative_integer(
+                                raw.get("nestingLevel")
+                            ),
+                            "importance": str(raw.get("importance") or "")[:100],
+                            "kinds": _flow_kinds(raw.get("kinds")),
+                        },
+                    )
                 )
+            if native_steps and all(
+                isinstance(step.get("execution_order"), int) for _, step in native_steps
+            ):
+                native_steps.sort(
+                    key=lambda item: (int(item[1]["execution_order"]), item[0])
+                )
+            steps = [
+                {**step, "sequence": sequence}
+                for sequence, (_, step) in enumerate(native_steps)
+            ]
             if steps:
+                semantic_basis = _flow_semantic_basis(
+                    steps,
+                    security_domain=security_domain,
+                    rule_kind=rule_kind,
+                )
                 flows.append(
                     {
                         "tool": tool_name,
+                        "semantic_basis": semantic_basis,
                         "steps": steps,
                         "step_count": len(raw_locations),
                         "steps_omitted": max(0, len(raw_locations) - len(steps)),
@@ -355,6 +393,41 @@ def _integer(value: Any) -> int | None:
         return int(value) if value is not None else None
     except (TypeError, ValueError):
         return None
+
+
+def _nonnegative_integer(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    result = _integer(value)
+    return result if result is not None and result >= 0 else None
+
+
+def _flow_kinds(value: Any) -> list[str]:
+    return sorted(
+        {
+            normalized
+            for item in string_list(value)[:25]
+            if (normalized := item.strip().casefold())
+        }
+    )[:10]
+
+
+def _flow_semantic_basis(
+    steps: list[dict[str, Any]], *, security_domain: bool, rule_kind: str
+) -> str:
+    if not security_domain:
+        return "unclassified-code-flow"
+    source_positions = [
+        index for index, step in enumerate(steps) if "source" in step.get("kinds", [])
+    ]
+    sink_positions = [
+        index for index, step in enumerate(steps) if "sink" in step.get("kinds", [])
+    ]
+    if source_positions and sink_positions and source_positions[0] < sink_positions[-1]:
+        return "native-source-sink-kinds"
+    if rule_kind.strip().casefold().replace("_", "-") == "path-problem":
+        return "security-path-problem"
+    return "unclassified-code-flow"
 
 
 def _safe_uri(value: Any) -> str | None:
