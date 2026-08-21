@@ -25,7 +25,7 @@ classifiers = [
 dependencies = ["defusedxml>=0.7.1,<0.8"]
 
 [project.urls]
-Documentation = "https://github.com/willtran87/project-py-security-suite/tree/main/docs"
+Documentation = "https://willtran87.github.io/project-py-security-suite/"
 Issues = "https://github.com/willtran87/project-py-security-suite/issues"
 Repository = "https://github.com/willtran87/project-py-security-suite"
 Security = "https://github.com/willtran87/project-py-security-suite/security/policy"

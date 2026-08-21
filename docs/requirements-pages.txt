@@ -1,0 +1,4 @@
+# Direct build dependencies are exact-pinned; transitive resolution is isolated
+# to the disposable GitHub-hosted Pages builder.
+mkdocs==1.6.1
+mkdocs-material==9.7.7

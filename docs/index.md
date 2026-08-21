@@ -35,10 +35,10 @@ verification happen inside an enterprise-controlled isolated boundary.
 
 Project policies and history:
 
-- [Security policy](../SECURITY.md)
-- [Contributing guide](../CONTRIBUTING.md)
-- [Changelog](../CHANGELOG.md)
-- [Project README](../README.md)
+- [Security policy](https://github.com/willtran87/project-py-security-suite/blob/main/SECURITY.md)
+- [Contributing guide](https://github.com/willtran87/project-py-security-suite/blob/main/CONTRIBUTING.md)
+- [Changelog](https://github.com/willtran87/project-py-security-suite/blob/main/CHANGELOG.md)
+- [Project README](https://github.com/willtran87/project-py-security-suite#readme)
 
 ## System at a glance
 

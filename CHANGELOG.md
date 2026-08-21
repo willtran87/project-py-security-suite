@@ -1,5 +1,9 @@
 # Changelog
 
+- Publish the complete documentation set as a strict, searchable GitHub Pages
+  site with pinned workflow actions, exact direct build dependencies, dark-mode
+  support, Mermaid diagrams, source links, and deployment-safe navigation.
+
 All notable changes are documented here. The project follows semantic versioning
 for published releases.
 

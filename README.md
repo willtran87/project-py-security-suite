@@ -41,7 +41,8 @@ egress-denied container, VM, or enterprise runner, then pass
 
 Markdown is the canonical documentation format:
 
-- [Documentation index](docs/index.md)
+- [Published documentation](https://willtran87.github.io/project-py-security-suite/)
+- [Documentation source](docs/index.md)
 - [Solution design and Mermaid diagrams](docs/design.md)
 - [Native and GitHub operations](docs/operations.md)
 - [Configuration reference](docs/configuration.md)
