@@ -5,6 +5,11 @@ for published releases.
 
 ## Unreleased
 
+- Resolve bounded SARIF invocation-level `ruleConfigurationOverrides` through
+  `result.provenance.invocationIndex` before applying rule severity defaults.
+  Driver-rule descriptor IDs and indexes must agree, exactly one matching
+  override may supply level/rank, and malformed, ambiguous, out-of-range, or
+  unsupported component references remain auditable without changing priority.
 - Make SARIF severity normalization standards-aware and auditable. Finite
   bounded security scores retain precedence without losing a valid zero;
   malformed scores cannot inflate severity, rule `defaultConfiguration.level`

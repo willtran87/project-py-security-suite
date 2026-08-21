@@ -212,3 +212,12 @@ rank is validated in the inclusive 0-100 range and retained as tool-relative
 priority evidence, but it is never converted into cross-tool severity. The
 decision, effective native level, score/rank basis, and invalid-input counts are
 preserved in normalized and portable SARIF evidence.
+When `result.provenance.invocationIndex` selects a run invocation, driver-rule
+`ruleConfigurationOverrides` are evaluated before rule defaults. Descriptor ID
+and index references must identify the same resolved rule, the override list is
+bounded to 1,000 entries, and exactly one matching configuration is required.
+Malformed containers, invalid or conflicting descriptors, ambiguous matches,
+out-of-range invocations, and tool-component references that cannot be resolved
+against the driver rule table are counted and ignored. Only validated `level`
+and `rank` fields enter the severity decision; arbitrary override parameters are
+not retained.

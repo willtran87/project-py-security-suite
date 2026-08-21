@@ -29,6 +29,7 @@ from py_security_suite.adapters.sarif import (
     _derived_help_uri,
     _domain,
     _integer as sarif_integer,
+    _invocation_configuration,
     _location,
     _locations,
     _message,
@@ -774,6 +775,7 @@ class SarifNormalizationContractTests(unittest.TestCase):
             default_configuration={"level": "error", "rank": 95},
             rank=100,
             kind="fail",
+            configuration_override={"level": "error", "rank": 50},
         )
         self.assertEqual(severity, Severity.LOW)
         self.assertEqual(decision["basis"], "result-security-score")
@@ -869,6 +871,140 @@ class SarifNormalizationContractTests(unittest.TestCase):
         self.assertEqual(decision["effective_rank"], 92.0)
         self.assertEqual(decision["rank_basis"], "rule-default-rank")
         self.assertEqual(portable["properties"]["sarif_severity_decision"], decision)
+
+    def test_sarif_invocation_configuration_overrides_rule_defaults(self) -> None:
+        payload = json.dumps(
+            {
+                "runs": [
+                    {
+                        "tool": {
+                            "driver": {
+                                "rules": [
+                                    {
+                                        "id": "configured-rule",
+                                        "defaultConfiguration": {
+                                            "level": "error",
+                                            "rank": 92,
+                                        },
+                                    },
+                                    {"id": "other-rule"},
+                                ]
+                            }
+                        },
+                        "invocations": [
+                            {
+                                "ruleConfigurationOverrides": [
+                                    {
+                                        "descriptor": {"id": "other-rule"},
+                                        "configuration": {"level": "error"},
+                                    },
+                                    {
+                                        "descriptor": {
+                                            "id": "configured-rule",
+                                            "index": 0,
+                                        },
+                                        "configuration": {
+                                            "level": "note",
+                                            "rank": 12,
+                                        },
+                                    },
+                                ]
+                            }
+                        ],
+                        "results": [
+                            {
+                                "ruleId": "configured-rule",
+                                "provenance": {"invocationIndex": 0},
+                                "message": {"text": "overridden severity"},
+                            }
+                        ],
+                    }
+                ]
+            }
+        )
+
+        finding = parse_sarif_findings(
+            payload,
+            self.root,
+            tool_name="codeql",
+            default_area="security",
+            default_impact="impact",
+            default_remediation="fix",
+        )[0]
+        decision = finding.evidence["sarif_severity_decision"]
+        reference = decision["configuration_override"]
+
+        self.assertEqual(finding.severity, Severity.INFORMATIONAL)
+        self.assertEqual(finding.sources[0].native_severity, "note")
+        self.assertEqual(decision["basis"], "invocation-override-level")
+        self.assertEqual(decision["effective_rank"], 12.0)
+        self.assertEqual(decision["rank_basis"], "invocation-override-rank")
+        self.assertEqual(reference["basis"], "invocation-rule-override")
+        self.assertEqual(reference["reported_override_count"], 2)
+        self.assertEqual(reference["matching_override_count"], 1)
+        self.assertTrue(reference["applied"])
+
+    def test_sarif_ambiguous_invocation_overrides_fail_closed(self) -> None:
+        rules = [{"id": "configured-rule"}, {"id": "other-rule"}]
+        override, reference = _invocation_configuration(
+            {"provenance": {"invocationIndex": 0}},
+            [
+                {
+                    "ruleConfigurationOverrides": [
+                        {
+                            "descriptor": {"id": "configured-rule"},
+                            "configuration": {"level": "error"},
+                        },
+                        {
+                            "descriptor": {"index": 0},
+                            "configuration": {"level": "note"},
+                        },
+                        {
+                            "descriptor": {"id": "configured-rule", "index": 1},
+                            "configuration": {"level": "error"},
+                        },
+                    ]
+                }
+            ],
+            rules,
+            rule_id="configured-rule",
+        )
+
+        self.assertNotIsInstance(override, dict)
+        self.assertEqual(reference["basis"], "ambiguous-matching-overrides")
+        self.assertEqual(reference["matching_override_count"], 2)
+        self.assertEqual(reference["invalid_override_count"], 1)
+        self.assertFalse(reference["applied"])
+
+        oversized_override, oversized_reference = _invocation_configuration(
+            {"provenance": {"invocationIndex": 0}},
+            [
+                {
+                    "ruleConfigurationOverrides": [
+                        {
+                            "descriptor": {"id": "other-rule"},
+                            "configuration": {"level": "error"},
+                        }
+                        for _ in range(1_001)
+                    ]
+                }
+            ],
+            rules,
+            rule_id="configured-rule",
+        )
+        self.assertNotIsInstance(oversized_override, dict)
+        self.assertEqual(oversized_reference["basis"], "override-limit-exceeded")
+        self.assertEqual(oversized_reference["evaluated_override_count"], 0)
+        self.assertEqual(oversized_reference["overrides_omitted_count"], 1_001)
+
+        _, null_reference = _invocation_configuration(
+            {"provenance": None},
+            [],
+            rules,
+            rule_id="configured-rule",
+        )
+        self.assertEqual(null_reference["basis"], "invalid-provenance")
+        self.assertTrue(null_reference["invalid_provenance"])
 
     def test_sarif_quality_finding_uses_safe_defaults_without_location(self) -> None:
         payload = json.dumps(

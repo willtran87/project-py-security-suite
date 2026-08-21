@@ -25,6 +25,7 @@ _MAX_MESSAGE_ARGUMENTS = 100
 _MAX_MESSAGE_ARGUMENT_CHARACTERS = 500
 _MAX_MESSAGE_TEMPLATE_CHARACTERS = 4_000
 _MAX_RESOLVED_MESSAGE_CHARACTERS = 8_000
+_MAX_RULE_CONFIGURATION_OVERRIDES = 1_000
 _MAX_ARTIFACT_INDEX_DEPTH = 20
 _MAX_URI_BASE_DEPTH = 20
 _MISSING = object()
@@ -67,6 +68,7 @@ def parse_sarif_findings(
         global_message_strings = _object(driver.get("globalMessageStrings"))
         uri_bases = _object(run.get("originalUriBaseIds"))
         artifacts = _object_list(run.get("artifacts") or [], "artifacts")
+        invocations = _object_list(run.get("invocations") or [], "invocations")
         for result in _object_list(run.get("results") or [], "results"):
             result_semantics = _result_semantics(result)
             if not result_semantics["normalized_as_finding"]:
@@ -84,6 +86,7 @@ def parse_sarif_findings(
                     global_message_strings=global_message_strings,
                     uri_bases=uri_bases,
                     artifacts=artifacts,
+                    invocations=invocations,
                 )
             )
     return findings
@@ -102,6 +105,7 @@ def _finding(
     global_message_strings: dict[str, Any],
     uri_bases: dict[str, Any],
     artifacts: list[dict[str, Any]],
+    invocations: list[dict[str, Any]],
 ) -> Finding:
     rule_id, rule, rule_reference = _resolve_rule(result, ordered_rules)
     properties = _object(result.get("properties"))
@@ -131,6 +135,12 @@ def _finding(
         result, target, uri_bases=uri_bases, artifacts=artifacts
     )
     location = locations[0]
+    configuration_override, configuration_reference = _invocation_configuration(
+        result,
+        invocations,
+        ordered_rules,
+        rule_id=rule_id,
+    )
     severity, severity_decision = _sarif_severity_decision(
         result.get("level", _MISSING),
         properties,
@@ -138,7 +148,9 @@ def _finding(
         default_configuration=rule.get("defaultConfiguration", _MISSING),
         rank=result.get("rank", _MISSING),
         kind=str(result_semantics["kind"]),
+        configuration_override=configuration_override,
     )
+    severity_decision["configuration_override"] = configuration_reference
     domain = _domain(tags)
     finding_id, fingerprint = finding_identity(
         tool=tool_name,
@@ -430,6 +442,145 @@ def _resolve_rule(
             "rule_index": rule_index,
             "metadata_resolved": bool(rule),
         },
+    )
+
+
+def _invocation_configuration(
+    result: dict[str, Any],
+    invocations: list[dict[str, Any]],
+    ordered_rules: list[dict[str, Any]],
+    *,
+    rule_id: str,
+) -> tuple[Any, dict[str, Any]]:
+    reference: dict[str, Any] = {
+        "basis": "no-invocation-reference",
+        "invocation_index": None,
+        "reported_override_count": 0,
+        "evaluated_override_count": 0,
+        "matching_override_count": 0,
+        "invalid_override_count": 0,
+        "unsupported_component_reference_count": 0,
+        "overrides_omitted_count": 0,
+        "applied": False,
+        "invalid_provenance": False,
+    }
+    if "provenance" not in result:
+        return _MISSING, reference
+    raw_provenance = result.get("provenance")
+    if not isinstance(raw_provenance, dict):
+        reference["basis"] = "invalid-provenance"
+        reference["invalid_provenance"] = True
+        return _MISSING, reference
+    raw_invocation_index = raw_provenance.get("invocationIndex", -1)
+    if (
+        not isinstance(raw_invocation_index, int)
+        or isinstance(raw_invocation_index, bool)
+        or raw_invocation_index < -1
+    ):
+        reference["basis"] = "invalid-invocation-index"
+        reference["invalid_provenance"] = True
+        return _MISSING, reference
+    if raw_invocation_index == -1:
+        return _MISSING, reference
+    reference["invocation_index"] = raw_invocation_index
+    if raw_invocation_index >= len(invocations):
+        reference["basis"] = "unresolved-invocation-index"
+        reference["invalid_provenance"] = True
+        return _MISSING, reference
+    invocation = invocations[raw_invocation_index]
+    if "ruleConfigurationOverrides" not in invocation:
+        reference["basis"] = "no-rule-overrides"
+        return _MISSING, reference
+    raw_overrides = invocation.get("ruleConfigurationOverrides")
+    if not isinstance(raw_overrides, list):
+        reference["basis"] = "invalid-override-container"
+        reference["invalid_override_count"] = 1
+        return _MISSING, reference
+    reference["reported_override_count"] = len(raw_overrides)
+    if len(raw_overrides) > _MAX_RULE_CONFIGURATION_OVERRIDES:
+        reference["basis"] = "override-limit-exceeded"
+        reference["overrides_omitted_count"] = len(raw_overrides)
+        return _MISSING, reference
+
+    matches: list[dict[str, Any]] = []
+    invalid_count = 0
+    unsupported_component_count = 0
+    for raw_override in raw_overrides:
+        if not isinstance(raw_override, dict):
+            invalid_count += 1
+            continue
+        match, unsupported_component = _configuration_descriptor_match(
+            raw_override.get("descriptor"),
+            ordered_rules,
+            rule_id=rule_id,
+        )
+        unsupported_component_count += int(unsupported_component)
+        if match == "invalid":
+            invalid_count += 1
+            continue
+        if match != "match":
+            continue
+        raw_configuration = raw_override.get("configuration")
+        if not isinstance(raw_configuration, dict):
+            invalid_count += 1
+            continue
+        matches.append(
+            {
+                key: raw_configuration[key]
+                for key in ("level", "rank")
+                if key in raw_configuration
+            }
+        )
+    reference["evaluated_override_count"] = len(raw_overrides)
+    reference["matching_override_count"] = len(matches)
+    reference["invalid_override_count"] = invalid_count
+    reference["unsupported_component_reference_count"] = unsupported_component_count
+    if not matches:
+        reference["basis"] = "no-matching-override"
+        return _MISSING, reference
+    if len(matches) > 1:
+        reference["basis"] = "ambiguous-matching-overrides"
+        return _MISSING, reference
+    reference["basis"] = "invocation-rule-override"
+    reference["applied"] = True
+    return matches[0], reference
+
+
+def _configuration_descriptor_match(
+    value: Any,
+    ordered_rules: list[dict[str, Any]],
+    *,
+    rule_id: str,
+) -> tuple[str, bool]:
+    if not isinstance(value, dict):
+        return "invalid", False
+    if "component" in value:
+        return "unmatched", True
+    raw_id = value.get("id")
+    descriptor_id = ""
+    if raw_id is not None:
+        if not isinstance(raw_id, str) or not raw_id.strip():
+            return "invalid", False
+        descriptor_id = raw_id.strip()
+    raw_index = value.get("index", -1)
+    if not isinstance(raw_index, int) or isinstance(raw_index, bool) or raw_index < -1:
+        return "invalid", False
+    indexed_id = ""
+    if raw_index >= 0:
+        if raw_index >= len(ordered_rules):
+            return "invalid", False
+        candidate_id = ordered_rules[raw_index].get("id")
+        if not isinstance(candidate_id, str) or not candidate_id.strip():
+            return "invalid", False
+        indexed_id = candidate_id.strip()
+    if descriptor_id and indexed_id and descriptor_id != indexed_id:
+        return "invalid", False
+    target_id = descriptor_id or indexed_id
+    if not target_id:
+        return "invalid", False
+    return (
+        "match" if rule_id != "unknown" and target_id == rule_id else "unmatched",
+        False,
     )
 
 
@@ -1017,12 +1168,19 @@ def _sarif_severity_decision(
     default_configuration: Any,
     rank: Any,
     kind: str,
+    configuration_override: Any = _MISSING,
 ) -> tuple[Severity, dict[str, Any]]:
     configuration_invalid = default_configuration is not _MISSING and not isinstance(
         default_configuration, dict
     )
     configuration = (
         default_configuration if isinstance(default_configuration, dict) else {}
+    )
+    override_invalid = configuration_override is not _MISSING and not isinstance(
+        configuration_override, dict
+    )
+    override = (
+        configuration_override if isinstance(configuration_override, dict) else {}
     )
     score, score_basis, invalid_score_count = _security_score(
         properties, rule_properties
@@ -1031,11 +1189,13 @@ def _sarif_severity_decision(
         level,
         properties,
         rule_properties,
+        override,
         configuration,
         kind=kind,
     )
     effective_rank, rank_basis, invalid_rank_count = _effective_sarif_rank(
         rank,
+        override,
         configuration,
         kind=kind,
     )
@@ -1072,6 +1232,7 @@ def _sarif_severity_decision(
             "rank_used_for_severity": False,
             "invalid_level_count": invalid_level_count,
             "invalid_default_configuration": configuration_invalid,
+            "invalid_configuration_override": override_invalid,
         },
     )
 
@@ -1102,6 +1263,7 @@ def _effective_sarif_level(
     level: Any,
     properties: dict[str, Any],
     rule_properties: dict[str, Any],
+    configuration_override: dict[str, Any],
     configuration: dict[str, Any],
     *,
     kind: str,
@@ -1115,6 +1277,11 @@ def _effective_sarif_level(
         normalized = _normalized_sarif_level(level)
         if normalized is not None:
             return normalized, "result-level", invalid_count
+        invalid_count += 1
+    if "level" in configuration_override:
+        normalized = _normalized_sarif_level(configuration_override.get("level"))
+        if normalized is not None:
+            return normalized, "invocation-override-level", invalid_count
         invalid_count += 1
     for basis, source in (
         ("result-problem-severity", properties),
@@ -1136,6 +1303,7 @@ def _effective_sarif_level(
 
 def _effective_sarif_rank(
     rank: Any,
+    configuration_override: dict[str, Any],
     configuration: dict[str, Any],
     *,
     kind: str,
@@ -1147,6 +1315,16 @@ def _effective_sarif_rank(
         value = _bounded_number(rank, minimum=0, maximum=100, allow_string=False)
         if value is not None:
             return value, "result-rank", invalid_count
+        invalid_count += 1
+    if "rank" in configuration_override:
+        value = _bounded_number(
+            configuration_override.get("rank"),
+            minimum=0,
+            maximum=100,
+            allow_string=False,
+        )
+        if value is not None:
+            return value, "invocation-override-rank", invalid_count
         invalid_count += 1
     if "rank" in configuration:
         value = _bounded_number(
