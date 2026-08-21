@@ -725,6 +725,93 @@ class SarifNormalizationContractTests(unittest.TestCase):
         self.assertEqual(reference["invalid_argument_count"], 1)
         self.assertEqual(reference["unresolved_placeholder_count"], 1)
 
+    def test_sarif_message_lookup_uses_the_selected_tool_component(self) -> None:
+        payload = json.dumps(
+            {
+                "runs": [
+                    {
+                        "tool": {
+                            "driver": {
+                                "name": "driver",
+                                "globalMessageStrings": {
+                                    "component-global": {
+                                        "text": "incorrect driver message"
+                                    },
+                                },
+                            },
+                            "extensions": [
+                                {
+                                    "name": "message-plugin",
+                                    "globalMessageStrings": {
+                                        "component-global": {
+                                            "text": "Extension global {0}"
+                                        },
+                                        "rule-local": {
+                                            "text": "incorrect component fallback"
+                                        },
+                                    },
+                                    "rules": [
+                                        {
+                                            "id": "plugin-message-rule",
+                                            "messageStrings": {
+                                                "rule-local": {"text": "Rule-local {0}"}
+                                            },
+                                        }
+                                    ],
+                                }
+                            ],
+                        },
+                        "results": [
+                            {
+                                "rule": {
+                                    "index": 0,
+                                    "toolComponent": {"index": 0},
+                                },
+                                "message": {
+                                    "id": "component-global",
+                                    "arguments": ["message"],
+                                },
+                            },
+                            {
+                                "rule": {
+                                    "index": 0,
+                                    "toolComponent": {"index": 0},
+                                },
+                                "message": {
+                                    "id": "rule-local",
+                                    "arguments": ["message"],
+                                },
+                            },
+                        ],
+                    }
+                ]
+            }
+        )
+
+        component_finding, rule_finding = parse_sarif_findings(
+            payload,
+            self.root,
+            tool_name="codeql",
+            default_area="security",
+            default_impact="impact",
+            default_remediation="fix",
+        )
+
+        self.assertEqual(component_finding.description, "Extension global message")
+        self.assertEqual(rule_finding.description, "Rule-local message")
+        self.assertNotIn("incorrect", component_finding.description)
+        component_reference = component_finding.evidence["sarif_message_reference"]
+        rule_reference = rule_finding.evidence["sarif_message_reference"]
+        self.assertEqual(component_reference["basis"], "global-message-string")
+        self.assertEqual(rule_reference["basis"], "rule-message-string")
+        self.assertEqual(component_reference["component_kind"], "extension")
+        self.assertEqual(component_reference["component_extension_index"], 0)
+        portable = render_sarif([component_finding])["runs"][0]["results"][0]
+        self.assertEqual(
+            portable["properties"]["sarif_message_reference"],
+            component_reference,
+        )
+
     def test_sarif_rule_reference_rejects_mismatch_and_ambiguity(self) -> None:
         rules = [{"id": "rule-a"}, {"id": "rule-b"}]
         with self.assertRaisesRegex(ValueError, "different rules"):
@@ -1169,7 +1256,7 @@ class SarifNormalizationContractTests(unittest.TestCase):
                         "results": [
                             {
                                 "ruleId": "configured-rule",
-                                "provenance": {"invocationIndex": 0},
+                                "provenance": {},
                                 "message": {"text": "overridden severity"},
                             }
                         ],
@@ -1197,6 +1284,9 @@ class SarifNormalizationContractTests(unittest.TestCase):
         self.assertEqual(reference["basis"], "invocation-rule-override")
         self.assertEqual(reference["reported_override_count"], 2)
         self.assertEqual(reference["matching_override_count"], 1)
+        self.assertEqual(
+            reference["invocation_index_basis"], "single-invocation-default"
+        )
         self.assertTrue(reference["applied"])
 
     def test_sarif_ambiguous_invocation_overrides_fail_closed(self) -> None:
@@ -1260,6 +1350,18 @@ class SarifNormalizationContractTests(unittest.TestCase):
         )
         self.assertEqual(null_reference["basis"], "invalid-provenance")
         self.assertTrue(null_reference["invalid_provenance"])
+
+        _, multiple_reference = _invocation_configuration(
+            {"provenance": {}},
+            [{}, {}],
+            rules,
+            rule_id="configured-rule",
+        )
+        self.assertEqual(multiple_reference["basis"], "no-invocation-reference")
+        self.assertEqual(
+            multiple_reference["invocation_index_basis"],
+            "no-single-invocation-default",
+        )
 
     def test_sarif_quality_finding_uses_safe_defaults_without_location(self) -> None:
         payload = json.dumps(

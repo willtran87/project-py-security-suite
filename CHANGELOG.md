@@ -5,6 +5,12 @@ for published releases.
 
 ## Unreleased
 
+- Complete component-aware SARIF message and invocation lookup. Result message
+  IDs now fall back to the selected driver or extension's own
+  `globalMessageStrings` table after rule-local lookup, preventing a colliding
+  driver message from replacing extension output. A present provenance object
+  with one run invocation now honors SARIF's default `invocationIndex` of zero,
+  with explicit/default/unresolved index provenance retained for audit.
 - Resolve SARIF rule descriptors across both the tool driver and declared tool
   extensions. Standard component index or unique GUID references select the
   correct rule table; component name/GUID and rule ID/index/GUID agreement are
@@ -17,7 +23,7 @@ for published releases.
   `result.provenance.invocationIndex` before applying rule severity defaults.
   Driver-rule descriptor IDs and indexes must agree, exactly one matching
   override may supply level/rank, and malformed, ambiguous, out-of-range, or
-  unsupported component references remain auditable without changing priority.
+  conflicting references remain auditable without changing priority.
 - Make SARIF severity normalization standards-aware and auditable. Finite
   bounded security scores retain precedence without losing a valid zero;
   malformed scores cannot inflate severity, rule `defaultConfiguration.level`

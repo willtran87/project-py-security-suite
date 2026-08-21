@@ -184,15 +184,18 @@ classification, and guidance. Contradictory, cross-component, out-of-range,
 ambiguous, or malformed references fail parsing instead of attaching unrelated
 metadata. The chosen rule and component attribution basis remains available in
 normalized and portable SARIF evidence.
-Result messages resolve inline text or Markdown plus rule-level and driver-global
-`messageStrings` templates. Numeric arguments and escaped braces are expanded
-with fixed input/output bounds; malformed arguments become explicit markers and
-missing placeholders remain visible. Evidence records only resolution and
-completeness counts, never raw arguments, and secret lanes still discard the
-entire dynamic message fail closed. Regenerated portable SARIF uses the resolved
-finding description as its result message rather than repeating the rule title.
-Credential redaction runs before every dynamic-text bound so truncation cannot
-turn a recognizable token into a retained, unrecognized fragment.
+Result messages resolve inline text or Markdown, then rule-level message
+templates, then the selected driver or extension's `globalMessageStrings`
+table. This component-scoped precedence prevents colliding driver and extension
+message IDs from changing the reported narrative. Numeric arguments and escaped
+braces are expanded with fixed input/output bounds; malformed arguments become
+explicit markers and missing placeholders remain visible. Evidence records the
+lookup component plus resolution and completeness counts, never raw arguments,
+and secret lanes still discard the entire dynamic message fail closed.
+Regenerated portable SARIF uses the resolved finding description as its result
+message rather than repeating the rule title. Credential redaction runs before
+every dynamic-text bound so truncation cannot turn a recognizable token into a
+retained, unrecognized fragment.
 Artifact paths resolve SARIF `originalUriBaseIds` and per-location `uriBaseId`
 chains before repository normalization. Resolution is shared by result
 locations and native-flow steps, bounded to 20 ancestors, and fails closed on
@@ -219,10 +222,13 @@ decision, effective native level, score/rank basis, and invalid-input counts are
 preserved in normalized and portable SARIF evidence.
 When `result.provenance.invocationIndex` selects a run invocation, driver or
 extension `ruleConfigurationOverrides` are evaluated before rule defaults.
+If provenance is present but its index is omitted, a single run invocation
+defaults to index zero as required by SARIF; multiple or absent invocations do
+not guess. Evidence distinguishes explicit, defaulted, and unresolved indices.
 Descriptor ID, index, GUID, and tool-component references must identify the
 same resolved rule; the override list is bounded to 1,000 entries, and exactly
-one matching configuration is required. Malformed containers, invalid or conflicting
-descriptors, ambiguous matches, out-of-range invocations, and unresolved
-tool-component references are counted and ignored. Only validated `level` and
-`rank` fields enter the severity decision; arbitrary override parameters are not
-retained.
+one matching configuration is required. Malformed containers, invalid or
+conflicting descriptors, ambiguous matches, out-of-range invocations, and
+unresolved tool-component references are counted and ignored. Only validated
+`level` and `rank` fields enter the severity decision; arbitrary override
+parameters are not retained.

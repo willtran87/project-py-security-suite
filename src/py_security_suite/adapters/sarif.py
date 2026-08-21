@@ -68,7 +68,6 @@ def parse_sarif_findings(
         driver = _object(tool.get("driver"))
         extensions = _object_list(tool.get("extensions") or [], "tool extensions")
         ordered_rules = _ordered_rules(driver)
-        global_message_strings = _object(driver.get("globalMessageStrings"))
         uri_bases = _object(run.get("originalUriBaseIds"))
         artifacts = _object_list(run.get("artifacts") or [], "artifacts")
         invocations = _object_list(run.get("invocations") or [], "invocations")
@@ -86,7 +85,6 @@ def parse_sarif_findings(
                     default_impact=default_impact,
                     default_remediation=default_remediation,
                     result_semantics=result_semantics,
-                    global_message_strings=global_message_strings,
                     uri_bases=uri_bases,
                     artifacts=artifacts,
                     invocations=invocations,
@@ -107,7 +105,6 @@ def _finding(
     default_impact: str,
     default_remediation: str,
     result_semantics: dict[str, Any],
-    global_message_strings: dict[str, Any],
     uri_bases: dict[str, Any],
     artifacts: list[dict[str, Any]],
     invocations: list[dict[str, Any]],
@@ -120,8 +117,10 @@ def _finding(
         driver=driver,
         extensions=extensions,
     )
+    component_reference = _object(rule_reference.get("component"))
     component = _component_from_reference(rule_reference, driver, extensions)
     component_rules = _ordered_rules(component)
+    global_message_strings = _object(component.get("globalMessageStrings"))
     properties = _object(result.get("properties"))
     rule_properties = _object(rule.get("properties"))
     tags = _tags(properties, rule_properties)
@@ -136,6 +135,10 @@ def _finding(
         rule=rule,
         global_message_strings=global_message_strings,
         secret_bearing=secret_bearing,
+    )
+    message_reference["component_kind"] = component_reference.get("kind")
+    message_reference["component_extension_index"] = component_reference.get(
+        "extension_index"
     )
     raw_message = raw_message or rule_id
     message = redact_sensitive_text(raw_message, secret_bearing=secret_bearing)
@@ -154,7 +157,7 @@ def _finding(
         invocations,
         component_rules,
         rule_id=rule_id,
-        component_reference=_object(rule_reference.get("component")),
+        component_reference=component_reference,
         driver=driver,
         extensions=extensions,
     )
@@ -701,6 +704,7 @@ def _invocation_configuration(
     reference: dict[str, Any] = {
         "basis": "no-invocation-reference",
         "invocation_index": None,
+        "invocation_index_basis": "absent-provenance",
         "reported_override_count": 0,
         "evaluated_override_count": 0,
         "matching_override_count": 0,
@@ -715,9 +719,18 @@ def _invocation_configuration(
     raw_provenance = result.get("provenance")
     if not isinstance(raw_provenance, dict):
         reference["basis"] = "invalid-provenance"
+        reference["invocation_index_basis"] = "invalid-provenance"
         reference["invalid_provenance"] = True
         return _MISSING, reference
-    raw_invocation_index = raw_provenance.get("invocationIndex", -1)
+    if "invocationIndex" in raw_provenance:
+        raw_invocation_index = raw_provenance.get("invocationIndex")
+        reference["invocation_index_basis"] = "explicit"
+    elif len(invocations) == 1:
+        raw_invocation_index = 0
+        reference["invocation_index_basis"] = "single-invocation-default"
+    else:
+        raw_invocation_index = -1
+        reference["invocation_index_basis"] = "no-single-invocation-default"
     if (
         not isinstance(raw_invocation_index, int)
         or isinstance(raw_invocation_index, bool)
