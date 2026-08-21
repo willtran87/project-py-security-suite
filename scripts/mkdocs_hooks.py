@@ -15,6 +15,9 @@ _PARENT_RELATIVE_LINK = re.compile(
     r"(?P<suffix>\))"
 )
 _TABLE_HEADER_WITHOUT_SCOPE = re.compile(r"<th(?![^>]*\bscope=)(?P<attrs>[^>]*)>")
+_MATERIAL_BUNDLE_SCRIPT = re.compile(
+    r'<script src="(?P<src>[^\"]*assets/javascripts/bundle\.[^\"]+\.min\.js)"></script>'
+)
 
 
 def on_page_markdown(
@@ -58,3 +61,43 @@ def on_page_content(
 
     del page, config, files
     return _TABLE_HEADER_WITHOUT_SCOPE.sub(r'<th scope="col"\g<attrs>>', html)
+
+
+def on_post_page(
+    output: str,
+    *,
+    page: Any,
+    config: Any,
+) -> str:
+    """Harden pinned-theme markup without copying entire upstream partials."""
+
+    del page, config
+    return _harden_theme_markup(output)
+
+
+def on_post_template(
+    output: str,
+    *,
+    template_name: str,
+    config: Any,
+) -> str:
+    """Apply the page hardening to standalone theme templates such as 404."""
+
+    del template_name, config
+    return _harden_theme_markup(output)
+
+
+def _harden_theme_markup(output: str) -> str:
+    output = output.replace(
+        '<div class="md-search" data-md-component="search" role="dialog">',
+        '<div class="md-search" data-md-component="search" role="dialog" '
+        'aria-label="Search documentation">',
+    )
+    output = output.replace(
+        'class="md-source" data-md-component="source"',
+        'class="md-source"',
+    )
+    return _MATERIAL_BUNDLE_SCRIPT.sub(
+        r'<script defer src="\g<src>"></script>',
+        output,
+    )

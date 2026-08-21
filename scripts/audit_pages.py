@@ -10,12 +10,54 @@ from urllib.parse import unquote, urlsplit
 
 _SITE_HOST = "willtran87.github.io"
 _SITE_PREFIX = "/project-py-security-suite/"
+_MERMAID_SOURCE = "https://unpkg.com/mermaid@11.12.0/dist/mermaid.esm.min.mjs"
+_MERMAID_INTEGRITY = (
+    "sha384-Suhbho4eDX5+Gk0l8iCwmrDm03lSI3Ndnyd0HsR00OVxqg6xQGDY7yyMxkIjWSIb"
+)
+_MERMAID_LOADER = """const diagrams = [...document.querySelectorAll(".pysec-mermaid > code")];
+
+if (diagrams.length) {
+  let started = false;
+  const render = async () => {
+    if (started) return;
+    started = true;
+    const { default: mermaid } = await import("mermaid");
+    mermaid.initialize({ startOnLoad: false });
+    await mermaid.run({ nodes: diagrams });
+  };
+  const start = () => {
+    void render().catch((error) => {
+      document.documentElement.dataset.mermaidError = JSON.stringify(
+        error,
+        Object.getOwnPropertyNames(error),
+      );
+    });
+  };
+
+  if ("IntersectionObserver" in window) {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          observer.disconnect();
+          start();
+        }
+      },
+      { rootMargin: "200px" },
+    );
+    for (const diagram of diagrams) observer.observe(diagram);
+  } else {
+    start();
+  }
+}
+"""
 
 
 class _Document(HTMLParser):
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
         self.canonical = ""
+        self.dialogs: list[dict[str, str]] = []
+        self.external_stylesheets: list[dict[str, str]] = []
         self.html_lang = ""
         self.ids: Counter[str] = Counter()
         self.images: list[dict[str, str]] = []
@@ -25,6 +67,7 @@ class _Document(HTMLParser):
         self.scripts: list[dict[str, str]] = []
         self.table_headers: list[dict[str, str]] = []
         self.title_parts: list[str] = []
+        self.source = ""
         self._inside_title = False
 
     def handle_starttag(
@@ -52,6 +95,8 @@ class _Document(HTMLParser):
             rel = values.get("rel", "").lower().split()
             if "canonical" in rel:
                 self.canonical = values.get("href", "").strip()
+            if "stylesheet" in rel and urlsplit(values.get("href", "")).netloc:
+                self.external_stylesheets.append(values)
         elif tag == "a":
             self.links.append(values)
         elif tag == "img":
@@ -60,6 +105,8 @@ class _Document(HTMLParser):
             self.scripts.append(values)
         elif tag == "th":
             self.table_headers.append(values)
+        if values.get("role") in {"dialog", "alertdialog"}:
+            self.dialogs.append(values)
 
     def handle_endtag(self, tag: str) -> None:
         if tag == "title":
@@ -76,7 +123,8 @@ class _Document(HTMLParser):
 
 def _read_document(path: Path) -> _Document:
     document = _Document()
-    document.feed(path.read_text(encoding="utf-8"))
+    document.source = path.read_text(encoding="utf-8")
+    document.feed(document.source)
     return document
 
 
@@ -118,9 +166,20 @@ def audit_site(root: Path) -> list[str]:
     errors: list[str] = []
     if not html_files:
         return ["site: no HTML pages were generated"]
-    for required in ("404.html", "robots.txt", "sitemap.xml"):
+    for required in (
+        "404.html",
+        "javascripts/mermaid-init.js",
+        "robots.txt",
+        "sitemap.xml",
+    ):
         if not (root / required).is_file():
             errors.append(f"site: missing {required}")
+    loader_path = root / "javascripts/mermaid-init.js"
+    if (
+        loader_path.is_file()
+        and loader_path.read_text(encoding="utf-8") != _MERMAID_LOADER
+    ):
+        errors.append("site: Mermaid loader does not match its reviewed source")
 
     documents = {path.resolve(): _read_document(path) for path in html_files}
     for path, document in documents.items():
@@ -145,9 +204,22 @@ def audit_site(root: Path) -> list[str]:
             errors.append(f"{label}: invalid canonical URL {document.canonical!r}")
         if document.meta_properties.get("og:url") != document.canonical:
             errors.append(f"{label}: Open Graph URL does not match canonical URL")
+        if _MERMAID_SOURCE not in document.source:
+            errors.append(f"{label}: Mermaid import map is missing the exact source")
+        if _MERMAID_INTEGRITY not in document.source:
+            errors.append(f"{label}: Mermaid import map is missing integrity metadata")
+        if "javascripts/mermaid-init.js" not in document.source:
+            errors.append(f"{label}: Mermaid module loader is missing")
+        if "pysec-mermaid" not in document.source and label != "404.html":
+            errors.append(f"{label}: lazy Mermaid markup is missing")
         for identifier, count in document.ids.items():
             if count > 1:
                 errors.append(f"{label}: duplicate id {identifier!r}")
+        for dialog in document.dialogs:
+            if not dialog.get("aria-label") and not dialog.get("aria-labelledby"):
+                errors.append(f"{label}: dialog is missing an accessible name")
+        if document.external_stylesheets:
+            errors.append(f"{label}: page loads a third-party stylesheet")
         for header in document.table_headers:
             if header.get("scope") not in {"col", "row"}:
                 errors.append(f"{label}: table header is missing a valid scope")
@@ -166,6 +238,20 @@ def audit_site(root: Path) -> list[str]:
                     errors.append(f"{label}: third-party script lacks integrity")
                 if script.get("crossorigin") != "anonymous":
                     errors.append(f"{label}: third-party script lacks anonymous CORS")
+                errors.append(
+                    f"{label}: unexpected direct third-party script {source_url!r}"
+                )
+        material_bundles = [
+            script
+            for script in document.scripts
+            if "assets/javascripts/bundle." in script.get("src", "")
+        ]
+        if not material_bundles:
+            errors.append(f"{label}: Material bundle is missing")
+        elif any("defer" not in script for script in material_bundles):
+            errors.append(f"{label}: Material bundle is render blocking")
+        if any(link.get("data-md-component") == "source" for link in document.links):
+            errors.append(f"{label}: repository link enables remote API probes")
         for link in document.links:
             href = link.get("href", "").strip()
             if not href:

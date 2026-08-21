@@ -1,5 +1,8 @@
 # Changelog
 
+- Replace the monolithic Mermaid runtime with its on-demand ESM entry, remove
+  blocking remote fonts and release probes, name the search dialog, distinguish
+  content links without color alone, and gate those properties in Pages audits.
 - Harden Pages with a hash-locked dependency closure, SRI-protected Mermaid,
   complete metadata, a custom 404, reduced-motion and responsive defaults,
   accessible table headers, automated artifact auditing, and Dependabot upkeep.

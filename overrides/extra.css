@@ -7,7 +7,18 @@
   overflow-wrap: anywhere;
 }
 
-.md-typeset .mermaid {
+.md-typeset a {
+  text-decoration: underline;
+  text-decoration-thickness: 0.08em;
+  text-underline-offset: 0.14em;
+}
+
+.md-typeset a.headerlink,
+.md-typeset a.md-button {
+  text-decoration: none;
+}
+
+.md-typeset .pysec-mermaid {
   text-align: center;
 }
 

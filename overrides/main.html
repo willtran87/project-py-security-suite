@@ -12,6 +12,9 @@
     {% set canonical_url = config.site_url ~ "404.html" %}
     <link rel="canonical" href="{{ canonical_url | e }}">
   {% endif %}
+  <style>
+    {% include "extra.css" %}
+  </style>
   <meta name="referrer" content="strict-origin-when-cross-origin">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="{{ config.site_name | e }}">
@@ -21,10 +24,15 @@
   <meta name="twitter:card" content="summary">
   <meta name="twitter:title" content="{{ page_title | e }}">
   <meta name="twitter:description" content="{{ page_description | e }}">
-  <script
-    defer
-    src="https://unpkg.com/mermaid@11.12.0/dist/mermaid.min.js"
-    integrity="sha384-o+g/BxPwhi0C3RK7oQBxQuNimeafQ3GE/ST4iT2BxVI4Wzt60SH4pq9iXVYujjaS"
-    crossorigin="anonymous"
-  ></script>
+  <script type="importmap">
+    {
+      "imports": {
+        "mermaid": "https://unpkg.com/mermaid@11.12.0/dist/mermaid.esm.min.mjs"
+      },
+      "integrity": {
+        "https://unpkg.com/mermaid@11.12.0/dist/mermaid.esm.min.mjs": "sha384-Suhbho4eDX5+Gk0l8iCwmrDm03lSI3Ndnyd0HsR00OVxqg6xQGDY7yyMxkIjWSIb"
+      }
+    }
+  </script>
+  <script type="module" src="{{ 'javascripts/mermaid-init.js' | url }}"></script>
 {% endblock %}
