@@ -50,6 +50,7 @@ from py_security_suite.inventory import (
     inventory_target,
 )
 from py_security_suite.models import Severity
+from py_security_suite.reports import render_sarif
 
 
 class RemainingAdapterContractTests(unittest.TestCase):
@@ -378,6 +379,14 @@ class SarifNormalizationContractTests(unittest.TestCase):
                                         "shortDescription": {
                                             "text": "Indexed rule title"
                                         },
+                                        "messageStrings": {
+                                            "flow": {
+                                                "text": (
+                                                    "Call {0} reaches {1}; "
+                                                    "literal {{review}}"
+                                                )
+                                            }
+                                        },
                                         "properties": {
                                             "security-severity": "8.2",
                                             "tags": ["security", "external/cwe/cwe-79"],
@@ -389,7 +398,10 @@ class SarifNormalizationContractTests(unittest.TestCase):
                         "results": [
                             {
                                 "ruleIndex": 0,
-                                "message": {"text": "indexed result"},
+                                "message": {
+                                    "id": "flow",
+                                    "arguments": ["source_fn", "sink_fn"],
+                                },
                             }
                         ],
                     }
@@ -407,6 +419,10 @@ class SarifNormalizationContractTests(unittest.TestCase):
         )[0]
 
         self.assertEqual(finding.sources[0].rule_id, "py/indexed-rule")
+        self.assertEqual(
+            finding.description,
+            "Call source_fn reaches sink_fn; literal {review}",
+        )
         self.assertEqual(finding.title, "Indexed rule title")
         self.assertEqual(finding.severity, Severity.HIGH)
         self.assertEqual(finding.classifications, ["CWE-79"])
@@ -414,6 +430,80 @@ class SarifNormalizationContractTests(unittest.TestCase):
             finding.evidence["sarif_rule_reference"],
             {"basis": "rule-index", "rule_index": 0, "metadata_resolved": True},
         )
+        self.assertEqual(
+            finding.evidence["sarif_message_reference"]["basis"],
+            "rule-message-string",
+        )
+        self.assertEqual(
+            finding.evidence["sarif_message_reference"]["used_argument_count"], 2
+        )
+        self.assertEqual(
+            finding.evidence["sarif_message_reference"]["truncated_argument_count"],
+            0,
+        )
+        self.assertEqual(
+            finding.evidence["sarif_message_reference"]["unresolved_placeholder_count"],
+            0,
+        )
+        portable = render_sarif([finding])["runs"][0]["results"][0]
+        self.assertEqual(portable["message"]["text"], finding.description)
+        self.assertNotEqual(portable["message"]["text"], finding.title)
+
+    def test_sarif_global_message_template_is_bounded_and_sanitized(self) -> None:
+        credential = "dynamic-credential-must-not-survive"
+        payload = json.dumps(
+            {
+                "runs": [
+                    {
+                        "tool": {
+                            "driver": {
+                                "globalMessageStrings": {
+                                    "global": {
+                                        "text": (
+                                            "Package {0} reported token={1}; "
+                                            "invalid {2}; missing {3}"
+                                        )
+                                    }
+                                }
+                            }
+                        },
+                        "results": [
+                            {
+                                "ruleId": "global-rule",
+                                "message": {
+                                    "id": "global",
+                                    "arguments": [
+                                        "demo",
+                                        credential,
+                                        {"must_not": "be stringified"},
+                                    ],
+                                },
+                            }
+                        ],
+                    }
+                ]
+            }
+        )
+
+        finding = parse_sarif_findings(
+            payload,
+            self.root,
+            tool_name="codeql",
+            default_area="security",
+            default_impact="impact",
+            default_remediation="fix",
+        )[0]
+        reference = finding.evidence["sarif_message_reference"]
+
+        self.assertIn("Package demo", finding.description)
+        self.assertNotIn(credential, finding.description)
+        self.assertIn("token=<redacted>", finding.description)
+        self.assertIn("invalid <invalid-argument>", finding.description)
+        self.assertIn("missing {3}", finding.description)
+        self.assertNotIn("must_not", json.dumps(finding.evidence))
+        self.assertEqual(reference["basis"], "global-message-string")
+        self.assertEqual(reference["invalid_argument_count"], 1)
+        self.assertEqual(reference["unresolved_placeholder_count"], 1)
 
     def test_sarif_rule_reference_rejects_mismatch_and_ambiguity(self) -> None:
         rules = [{"id": "rule-a"}, {"id": "rule-b"}]

@@ -405,6 +405,10 @@ class AdvancedAnalysisTests(unittest.TestCase):
             portable["properties"]["sarif_rule_reference"],
             {"basis": "rule-id", "rule_index": None, "metadata_resolved": True},
         )
+        self.assertEqual(
+            portable["properties"]["sarif_message_reference"]["basis"],
+            "inline-text",
+        )
 
     def test_sarif_sanitizes_finding_and_flow_messages_before_normalization(
         self,
@@ -518,6 +522,9 @@ class AdvancedAnalysisTests(unittest.TestCase):
                                         "id": "secret-rule",
                                         "shortDescription": {"text": secrets["title"]},
                                         "help": {"text": secrets["help"]},
+                                        "messageStrings": {
+                                            "secret": {"text": "Detected value {0}"}
+                                        },
                                     }
                                 ]
                             }
@@ -525,7 +532,10 @@ class AdvancedAnalysisTests(unittest.TestCase):
                         "results": [
                             {
                                 "ruleId": "secret-rule",
-                                "message": {"text": secrets["result"]},
+                                "message": {
+                                    "id": "secret",
+                                    "arguments": [secrets["result"]],
+                                },
                                 "locations": [_sarif_location("src/config.py", 4)],
                                 "properties": {
                                     "impact": secrets["impact"],

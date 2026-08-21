@@ -179,3 +179,12 @@ classification, and guidance; contradictory, out-of-range, ambiguous, or
 malformed references fail parsing instead of attaching unrelated metadata.
 The chosen attribution basis and descriptor-resolution state remain available
 in normalized and portable SARIF evidence.
+Result messages resolve inline text or Markdown plus rule-level and driver-global
+`messageStrings` templates. Numeric arguments and escaped braces are expanded
+with fixed input/output bounds; malformed arguments become explicit markers and
+missing placeholders remain visible. Evidence records only resolution and
+completeness counts, never raw arguments, and secret lanes still discard the
+entire dynamic message fail closed. Regenerated portable SARIF uses the resolved
+finding description as its result message rather than repeating the rule title.
+Credential redaction runs before every dynamic-text bound so truncation cannot
+turn a recognizable token into a retained, unrecognized fragment.

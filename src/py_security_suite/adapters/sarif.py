@@ -20,6 +20,10 @@ from .common import map_confidence, map_severity, string_list
 
 
 _MAX_RESULT_LOCATIONS = 25
+_MAX_MESSAGE_ARGUMENTS = 100
+_MAX_MESSAGE_ARGUMENT_CHARACTERS = 500
+_MAX_MESSAGE_TEMPLATE_CHARACTERS = 4_000
+_MAX_RESOLVED_MESSAGE_CHARACTERS = 8_000
 _RESULT_KINDS = {
     "fail": "fail",
     "informational": "informational",
@@ -55,6 +59,7 @@ def parse_sarif_findings(
     for run in _object_list(document.get("runs", []), "runs"):
         driver = _object(_object(run.get("tool")).get("driver"))
         ordered_rules = _ordered_rules(driver)
+        global_message_strings = _object(driver.get("globalMessageStrings"))
         for result in _object_list(run.get("results") or [], "results"):
             result_semantics = _result_semantics(result)
             if not result_semantics["normalized_as_finding"]:
@@ -69,6 +74,7 @@ def parse_sarif_findings(
                     default_impact=default_impact,
                     default_remediation=default_remediation,
                     result_semantics=result_semantics,
+                    global_message_strings=global_message_strings,
                 )
             )
     return findings
@@ -84,6 +90,7 @@ def _finding(
     default_impact: str,
     default_remediation: str,
     result_semantics: dict[str, Any],
+    global_message_strings: dict[str, Any],
 ) -> Finding:
     rule_id, rule, rule_reference = _resolve_rule(result, ordered_rules)
     properties = _object(result.get("properties"))
@@ -95,7 +102,13 @@ def _finding(
         or _area(tags, default_area)
     )
     secret_bearing = is_secret_bearing_scan(area=area, tool_name=tool_name)
-    raw_message = _message(result.get("message")) or rule_id
+    raw_message, message_reference = _resolve_result_message(
+        result.get("message"),
+        rule=rule,
+        global_message_strings=global_message_strings,
+        secret_bearing=secret_bearing,
+    )
+    raw_message = raw_message or rule_id
     message = redact_sensitive_text(raw_message, secret_bearing=secret_bearing)
     raw_title = (
         _message(rule.get("shortDescription"))
@@ -153,6 +166,7 @@ def _finding(
     evidence: dict[str, Any] = {
         "sarif_result_semantics": result_semantics,
         "sarif_rule_reference": rule_reference,
+        "sarif_message_reference": message_reference,
     }
     if code_flows:
         evidence["sarif_code_flows"] = code_flows
@@ -394,6 +408,178 @@ def _message(value: Any) -> str:
     if isinstance(value, dict):
         return str(value.get("text") or value.get("markdown") or "").strip()
     return ""
+
+
+def _resolve_result_message(
+    value: Any,
+    *,
+    rule: dict[str, Any],
+    global_message_strings: dict[str, Any],
+    secret_bearing: bool,
+) -> tuple[str, dict[str, Any]]:
+    template = ""
+    basis = "missing"
+    message_id_present = False
+    message_id_resolved = False
+    if isinstance(value, str):
+        template = value.strip()
+        basis = "inline-text"
+        raw_arguments: Any = None
+    elif isinstance(value, dict):
+        raw_arguments = value.get("arguments")
+        inline_text = value.get("text")
+        inline_markdown = value.get("markdown")
+        if isinstance(inline_text, str) and inline_text.strip():
+            template = inline_text.strip()
+            basis = "inline-text"
+        elif isinstance(inline_markdown, str) and inline_markdown.strip():
+            template = inline_markdown.strip()
+            basis = "inline-markdown"
+        else:
+            raw_message_id = value.get("id")
+            message_id_present = raw_message_id is not None
+            message_id = (
+                raw_message_id.strip()
+                if isinstance(raw_message_id, str) and raw_message_id.strip()
+                else ""
+            )
+            if message_id:
+                rule_messages = _object(rule.get("messageStrings"))
+                template = _message_template(rule_messages.get(message_id))
+                if template:
+                    basis = "rule-message-string"
+                    message_id_resolved = True
+                else:
+                    template = _message_template(global_message_strings.get(message_id))
+                    if template:
+                        basis = "global-message-string"
+                        message_id_resolved = True
+                    else:
+                        basis = "unresolved-message-id"
+            elif message_id_present:
+                basis = "invalid-message-id"
+    else:
+        raw_arguments = None
+
+    template = redact_sensitive_text(template, secret_bearing=secret_bearing)
+    arguments, argument_summary = _message_arguments(
+        raw_arguments, secret_bearing=secret_bearing
+    )
+    template_characters_omitted = max(
+        0, len(template) - _MAX_MESSAGE_TEMPLATE_CHARACTERS
+    )
+    template_truncated = template_characters_omitted > 0
+    template = template[:_MAX_MESSAGE_TEMPLATE_CHARACTERS]
+    resolved, used_arguments, unresolved_placeholders = _substitute_message_arguments(
+        template, arguments
+    )
+    resolved = redact_sensitive_text(resolved, secret_bearing=secret_bearing)
+    resolved_message_characters_omitted = max(
+        0, len(resolved) - _MAX_RESOLVED_MESSAGE_CHARACTERS
+    )
+    resolved_message_truncated = resolved_message_characters_omitted > 0
+    resolved = resolved[:_MAX_RESOLVED_MESSAGE_CHARACTERS].strip()
+    return (
+        resolved,
+        {
+            "basis": basis,
+            "message_id_present": message_id_present,
+            "message_id_resolved": message_id_resolved,
+            **argument_summary,
+            "used_argument_count": len(used_arguments),
+            "unused_retained_argument_count": max(
+                0, len(arguments) - len(used_arguments)
+            ),
+            "unresolved_placeholder_count": unresolved_placeholders,
+            "template_truncated": template_truncated,
+            "template_characters_omitted": template_characters_omitted,
+            "resolved_message_truncated": resolved_message_truncated,
+            "resolved_message_characters_omitted": (
+                resolved_message_characters_omitted
+            ),
+        },
+    )
+
+
+def _message_template(value: Any) -> str:
+    if isinstance(value, str):
+        return value.strip()
+    if not isinstance(value, dict):
+        return ""
+    text = value.get("text")
+    if isinstance(text, str) and text.strip():
+        return text.strip()
+    markdown = value.get("markdown")
+    return markdown.strip() if isinstance(markdown, str) else ""
+
+
+def _message_arguments(
+    value: Any, *, secret_bearing: bool
+) -> tuple[list[str], dict[str, Any]]:
+    malformed_container = value is not None and not isinstance(value, list)
+    raw_arguments = value if isinstance(value, list) else []
+    retained: list[str] = []
+    invalid_count = 0
+    truncated_count = 0
+    for argument in raw_arguments[:_MAX_MESSAGE_ARGUMENTS]:
+        if not isinstance(argument, str):
+            retained.append("<invalid-argument>")
+            invalid_count += 1
+            continue
+        redacted = redact_sensitive_text(argument, secret_bearing=secret_bearing)
+        if len(redacted) > _MAX_MESSAGE_ARGUMENT_CHARACTERS:
+            truncated_count += 1
+        retained.append(redacted[:_MAX_MESSAGE_ARGUMENT_CHARACTERS])
+    return (
+        retained,
+        {
+            "reported_argument_count": len(raw_arguments),
+            "retained_argument_count": len(retained),
+            "arguments_omitted_count": max(0, len(raw_arguments) - len(retained)),
+            "invalid_argument_count": invalid_count,
+            "truncated_argument_count": truncated_count,
+            "malformed_argument_container": malformed_container,
+        },
+    )
+
+
+def _substitute_message_arguments(
+    template: str, arguments: list[str]
+) -> tuple[str, set[int], int]:
+    output: list[str] = []
+    used: set[int] = set()
+    unresolved = 0
+    index = 0
+    while index < len(template):
+        if template.startswith("{{", index):
+            output.append("{")
+            index += 2
+            continue
+        if template.startswith("}}", index):
+            output.append("}")
+            index += 2
+            continue
+        if template[index] == "{":
+            end = template.find("}", index + 1)
+            placeholder = template[index + 1 : end] if end != -1 else ""
+            if placeholder.isdigit():
+                if len(placeholder) > 6:
+                    output.append(template[index : end + 1])
+                    unresolved += 1
+                    index = end + 1
+                    continue
+                argument_index = int(placeholder)
+                if argument_index < len(arguments):
+                    output.append(arguments[argument_index])
+                    used.add(argument_index)
+                else:
+                    output.append(template[index : end + 1])
+                    unresolved += 1
+                index = end + 1
+                continue
+        output.append(template[index])
+        index += 1
+    return "".join(output), used, unresolved
 
 
 def _result_semantics(result: dict[str, Any]) -> dict[str, Any]:

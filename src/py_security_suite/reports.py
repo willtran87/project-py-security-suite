@@ -4836,7 +4836,7 @@ def render_sarif(findings: list[Finding]) -> dict[str, Any]:
         result: dict[str, Any] = {
             "ruleId": rule_id,
             "level": _sarif_level(finding.severity),
-            "message": {"text": finding.title},
+            "message": {"text": finding.description},
             "partialFingerprints": {"primaryLocationLineHash": finding.fingerprint},
             "properties": {
                 "finding_id": finding.finding_id,
@@ -4902,6 +4902,11 @@ def render_sarif(findings: list[Finding]) -> dict[str, Any]:
         rule_reference = finding.evidence.get("sarif_rule_reference")
         if isinstance(rule_reference, dict):
             result["properties"]["sarif_rule_reference"] = json_ready(rule_reference)
+        message_reference = finding.evidence.get("sarif_message_reference")
+        if isinstance(message_reference, dict):
+            result["properties"]["sarif_message_reference"] = json_ready(
+                message_reference
+            )
         if finding.locations:
             result["locations"] = [
                 _sarif_result_location(location) for location in finding.locations

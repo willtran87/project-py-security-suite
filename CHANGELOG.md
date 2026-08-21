@@ -5,6 +5,13 @@ for published releases.
 
 ## Unreleased
 
+- Resolve SARIF inline, rule-level, and driver-global message templates with
+  bounded numeric argument substitution and escaped-brace handling. Findings
+  retain scanner context plus explicit unresolved, invalid, omitted, and
+  truncation counts without persisting raw arguments as evidence; secret lanes
+  continue to discard the complete dynamic message fail closed. Portable SARIF
+  now emits the resolved finding description as the result message. Credential
+  redaction precedes dynamic-text truncation to prevent boundary fragments.
 - Resolve SARIF rules by both `ruleId` and positional `ruleIndex`, preserving
   exact descriptor titles, severity, classifications, and guidance for
   index-only results. Contradictory, out-of-range, malformed, and ambiguous
