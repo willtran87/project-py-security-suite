@@ -9,6 +9,7 @@ from ..execution import CommandEnvironment
 from ..models import Citation, Confidence, Finding, Location, Severity, Source
 from ..models import finding_identity, normalize_repo_path
 from ..strict_json import canonical_bytes
+from ..native_evidence import protect_native_report
 from .base import ScannerAdapter
 from .staging import maintained_repository_files
 
@@ -118,10 +119,8 @@ class CheckovAdapter(ScannerAdapter):
             **checks,
             "total_checks": sum(checks.values()),
             "frameworks": frameworks,
-            "native_report_sha256": hashlib.sha256(payload.encode("utf-8")).hexdigest(),
-            "native_report_size_bytes": len(payload.encode("utf-8")),
             "native_report_records": sum(checks.values()),
-            "native_report_utf8": payload,
+            **protect_native_report(payload, adapter=self.name),
         }
         artifact["normalization_sha256"] = hashlib.sha256(
             canonical_bytes(artifact)

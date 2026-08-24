@@ -7,7 +7,12 @@ from pathlib import Path
 from unittest.mock import patch
 
 from companion.assurance_context import target_set_sha256
-from companion.authorization_security import _loopback_url, main
+from companion.authorization_security import (
+    _loopback_url,
+    _oracle,
+    _recovery_checks,
+    main,
+)
 
 
 def _context(path: Path, target_ids: list[str]) -> None:
@@ -236,6 +241,90 @@ class CompanionAuthorizationSecurityTests(unittest.TestCase):
         ):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 _loopback_url(value)
+
+    def test_independent_oracle_requires_distinct_origin_and_credentials(self) -> None:
+        roles = {"user": {"authorization_env": "PYSEC_USER_TOKEN"}}
+        with patch.dict(
+            "os.environ", {"PYSEC_AUTHORIZATION_ORACLE_IDENTITY_SHA256": "a" * 64}
+        ):
+            oracle = _oracle(
+                {
+                    "base_url": "http://127.0.0.1:8766/",
+                    "authorization_env": "PYSEC_ORACLE_TOKEN",
+                    "identity_sha256": "a" * 64,
+                },
+                "http://127.0.0.1:8765/",
+                roles,
+            )
+        self.assertEqual(oracle["role"]["authorization_env"], "PYSEC_ORACLE_TOKEN")
+        with (
+            patch.dict(
+                "os.environ",
+                {"PYSEC_AUTHORIZATION_ORACLE_IDENTITY_SHA256": "a" * 64},
+            ),
+            self.assertRaisesRegex(ValueError, "independent network origin"),
+        ):
+            _oracle(
+                {
+                    "base_url": "http://127.0.0.1:8765/observer",
+                    "authorization_env": "PYSEC_ORACLE_TOKEN",
+                    "identity_sha256": "a" * 64,
+                },
+                "http://127.0.0.1:8765/",
+                roles,
+            )
+        with (
+            patch.dict(
+                "os.environ",
+                {"PYSEC_AUTHORIZATION_ORACLE_IDENTITY_SHA256": "a" * 64},
+            ),
+            self.assertRaisesRegex(ValueError, "credentials distinct"),
+        ):
+            _oracle(
+                {
+                    "base_url": "http://127.0.0.1:8766/",
+                    "authorization_env": "PYSEC_USER_TOKEN",
+                    "identity_sha256": "a" * 64,
+                },
+                "http://127.0.0.1:8765/",
+                roles,
+            )
+
+    def test_recovery_checks_require_restart_and_replica_failover(self) -> None:
+        roles = {"operator": {"authorization_env": "PYSEC_OPERATOR_TOKEN"}}
+
+        def check(phase: str) -> dict[str, object]:
+            return {
+                "id": phase,
+                "phase": phase,
+                "trigger": {
+                    "path": f"/fixtures/{phase}",
+                    "role": "operator",
+                    "method": "POST",
+                    "body_env": "",
+                    "expected_status": [202],
+                },
+                "postcondition": {
+                    "path": "/fixtures/state",
+                    "expected_status": [200],
+                    "assertions": [
+                        {"pointer": "/committed", "operator": "equals", "value": True}
+                    ],
+                },
+            }
+
+        normalized = _recovery_checks(
+            [check("process-restart"), check("replica-failover")], roles
+        )
+        self.assertEqual(
+            {item["phase"] for item in normalized},
+            {"process-restart", "replica-failover"},
+        )
+        with self.assertRaisesRegex(ValueError, "restart and replica failover"):
+            _recovery_checks(
+                [check("process-restart"), check("process-restart") | {"id": "again"}],
+                roles,
+            )
 
 
 if __name__ == "__main__":

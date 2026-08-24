@@ -652,6 +652,11 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark.add_argument("--trusted-time", type=Path)
     benchmark.add_argument("--trusted-time-sha256", default="")
     benchmark.add_argument("--replay-ledger", type=Path)
+    benchmark.add_argument("--replay-service-url", default="")
+    benchmark.add_argument("--replay-service-token-env", default="")
+    benchmark.add_argument("--replay-service-receipt-key", type=Path)
+    benchmark.add_argument("--replay-service-receipt-key-sha256", default="")
+    benchmark.add_argument("--replay-query-budget", type=int, default=1)
     benchmark.add_argument("--format", choices=("text", "json"), default="text")
     benchmark.add_argument(
         "--output",
@@ -1766,6 +1771,11 @@ def _benchmark_command(args: argparse.Namespace) -> int:
         trusted_time=args.trusted_time,
         trusted_time_sha256=args.trusted_time_sha256,
         replay_ledger=args.replay_ledger,
+        replay_service_url=args.replay_service_url,
+        replay_service_token_env=args.replay_service_token_env,
+        replay_service_receipt_key=args.replay_service_receipt_key,
+        replay_service_receipt_key_sha256=args.replay_service_receipt_key_sha256,
+        replay_query_budget=args.replay_query_budget,
     )
     rendered_json = json.dumps(result, indent=2, sort_keys=True)
     if args.output:

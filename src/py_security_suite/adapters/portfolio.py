@@ -7,6 +7,7 @@ from typing import Any
 
 from ..execution import CommandEnvironment
 from ..strict_json import canonical_bytes
+from ..native_evidence import protect_native_report
 from ..models import (
     Citation,
     Confidence,
@@ -205,10 +206,8 @@ class PipdeptreeAdapter(ScannerAdapter):
                 "packages": _bounded_count(conflicts, "packages"),
                 "edges": _bounded_count(conflicts, "edges"),
             },
-            "native_report_sha256": hashlib.sha256(payload.encode("utf-8")).hexdigest(),
-            "native_report_size_bytes": len(payload.encode("utf-8")),
             "native_report_records": _bounded_count(document, "total_packages"),
-            "native_report_utf8": payload,
+            **protect_native_report(payload, adapter=self.name),
         }
         artifact["normalization_sha256"] = hashlib.sha256(
             canonical_bytes(artifact)
@@ -277,10 +276,8 @@ class GitSizerAdapter(ScannerAdapter):
             "concerning_metrics": sum(
                 _number(item["level_of_concern"]) >= 1 for item in metrics
             ),
-            "native_report_sha256": hashlib.sha256(payload.encode("utf-8")).hexdigest(),
-            "native_report_size_bytes": len(payload.encode("utf-8")),
             "native_report_records": len(metrics),
-            "native_report_utf8": payload,
+            **protect_native_report(payload, adapter=self.name),
         }
         artifact["normalization_sha256"] = hashlib.sha256(
             canonical_bytes(artifact)

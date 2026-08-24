@@ -219,6 +219,9 @@ def semantic_language_coverage_artifact(
             and len(set(independent_authority.get("signers") or [])) >= 2
             and len(set(independent_authority.get("collectors") or [])) >= 2
             and len(set(independent_authority.get("organizations") or [])) >= 2
+            and len(independent_authority.get("receipts") or [])
+            >= int(independent_authority.get("minimum_signatures") or 0)
+            and len(str(independent_authority.get("trusted_time_sha256") or "")) == 64
         )
         ledgers_valid = bool(
             isinstance(row, dict)

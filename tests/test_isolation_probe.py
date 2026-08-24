@@ -36,6 +36,7 @@ class IsolationProbeTests(unittest.TestCase):
                 '"linux_no_new_privileges":true,'
                 '"linux_capabilities_dropped":true,'
                 '"linux_seccomp_mode":-1,'
+                '"linux_seccomp_filters":-1,'
                 '"windows_policy_tested":false,'
                 '"windows_dep_enabled":true,'
                 '"windows_aslr_enabled":true,'

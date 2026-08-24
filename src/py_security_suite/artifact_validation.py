@@ -129,10 +129,11 @@ def _validate_requirements_crosswalk(value: object) -> None:
     gaps = sorted(
         str(record.get("requirement"))
         for record in applicable
-        if record.get("status") == "gap"
+        if record.get("status") not in {"evidence-collected", "passed"}
     )
     evidenced = sum(
-        record.get("status") == "evidence-collected" for record in applicable
+        record.get("status") in {"evidence-collected", "passed", "failed"}
+        for record in applicable
     )
     applicability = value.get("applicability_decision")
     full_catalog = value.get("full_catalog_coverage") is True
@@ -141,13 +142,16 @@ def _validate_requirements_crosswalk(value: object) -> None:
         and applicability.get("organization_approved") is True
     )
     automation_complete = not gaps
+    assessment_complete = bool(applicable) and all(
+        record.get("status") == "passed" for record in applicable
+    )
     if (
         value.get("applicable_requirements") != len(applicable)
         or value.get("evidenced_requirements") != evidenced
         or value.get("gaps") != gaps
         or value.get("automation_complete") is not automation_complete
         or value.get("complete")
-        is not (automation_complete and full_catalog and approved)
+        is not (assessment_complete and full_catalog and approved)
     ):
         raise ValueError("security requirements crosswalk accounting does not match")
 
@@ -205,14 +209,33 @@ def _validate_native_normalization(value: dict[str, Any], records: int) -> None:
     size = value.get("native_report_size_bytes")
     if isinstance(size, bool) or not isinstance(size, int) or size < 1:
         raise ValueError("native report byte accounting is invalid")
-    native = value.get("native_report_utf8")
+    native = value.get("native_report_redacted_utf8")
     if not isinstance(native, str):
-        raise TypeError("native report replay payload must be UTF-8 text")
+        raise TypeError("native report redacted replay projection must be UTF-8 text")
     encoded = native.encode("utf-8")
-    if len(encoded) != size or hashlib.sha256(encoded).hexdigest() != value.get(
-        "native_report_sha256"
+    redacted_size = value.get("native_report_redacted_size_bytes")
+    if len(encoded) != redacted_size or hashlib.sha256(
+        encoded
+    ).hexdigest() != value.get("native_report_redacted_sha256"):
+        raise ValueError("native report redacted projection commitment does not match")
+    if not isinstance(value.get("native_report_replayable"), bool):
+        raise ValueError("native report replay policy is invalid")
+    storage = value.get("native_report_storage")
+    if not isinstance(storage, dict) or set(storage) != {
+        "mode",
+        "object_id",
+        "ciphertext_sha256",
+        "key_sha256",
+    }:
+        raise ValueError("native report storage receipt is invalid")
+    replayable = storage["mode"] == "encrypted-cas"
+    if value["native_report_replayable"] is not replayable:
+        raise ValueError("native report storage and replay policy do not match")
+    if replayable and not all(
+        isinstance(storage[name], str) and storage[name]
+        for name in ("object_id", "ciphertext_sha256", "key_sha256")
     ):
-        raise ValueError("native report replay payload commitment does not match")
+        raise ValueError("encrypted native report storage receipt is incomplete")
     expected = value.get("normalization_sha256")
     subject = {
         key: item for key, item in value.items() if key != "normalization_sha256"

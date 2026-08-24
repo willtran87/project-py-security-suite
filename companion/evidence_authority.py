@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import base64
 import json
 import os
 from datetime import UTC, datetime, timedelta
@@ -25,7 +26,7 @@ def verify_authority(
     purpose: str,
     subject: object,
     at: datetime | None = None,
-) -> dict[str, str]:
+) -> dict[str, Any]:
     """Verify an independently signed, short-lived authority statement.
 
     The signature covers the purpose, canonical subject digest, validity window,
@@ -117,6 +118,15 @@ def verify_authority(
     organization = _authority_organization(signer_id, required=version == "2.0")
     if version == "2.0":
         _verify_key_lifecycle(signer_id, signed_at, expires_at, observed_at)
+    portable: dict[str, Any] = {
+        "schema_version": "1.0",
+        "statement": statement,
+        "public_key_pem_base64": base64.b64encode(public_key_bytes).decode("ascii"),
+        "public_key_sha256": hashlib.sha256(public_key_bytes).hexdigest(),
+        "signature_base64": base64.b64encode(signature).decode("ascii"),
+        "signature_sha256": hashlib.sha256(signature).hexdigest(),
+    }
+    portable["receipt_sha256"] = hashlib.sha256(canonical_bytes(portable)).hexdigest()
     return {
         "schema_version": str(version),
         "signer_id": signer_id,
@@ -128,6 +138,125 @@ def verify_authority(
         "trust_level": "organization-pinned",
         "algorithm": algorithm,
         "organization": organization,
+        "portable_receipt": portable,
+    }
+
+
+def verify_portable_authority(
+    value: object,
+    *,
+    purpose: str,
+    subject: object,
+    at: datetime,
+) -> dict[str, str]:
+    """Cryptographically reverify a self-contained public authority receipt."""
+
+    required = {
+        "schema_version",
+        "statement",
+        "public_key_pem_base64",
+        "public_key_sha256",
+        "signature_base64",
+        "signature_sha256",
+        "receipt_sha256",
+    }
+    if (
+        not isinstance(value, dict)
+        or set(value) != required
+        or value.get("schema_version") != "1.0"
+    ):
+        raise ValueError("portable authority receipt fields do not match")
+    receipt_subject = {name: value[name] for name in required - {"receipt_sha256"}}
+    if (
+        value["receipt_sha256"]
+        != hashlib.sha256(canonical_bytes(receipt_subject)).hexdigest()
+    ):
+        raise ValueError("portable authority receipt commitment does not match")
+    try:
+        public_key_bytes = base64.b64decode(
+            str(value["public_key_pem_base64"]), validate=True
+        )
+        signature = base64.b64decode(str(value["signature_base64"]), validate=True)
+    except (ValueError, TypeError) as exc:
+        raise ValueError("portable authority receipt encoding is invalid") from exc
+    if (
+        not 1 <= len(public_key_bytes) <= 1024 * 1024
+        or not 1 <= len(signature) <= 4096
+        or hashlib.sha256(public_key_bytes).hexdigest() != value["public_key_sha256"]
+        or hashlib.sha256(signature).hexdigest() != value["signature_sha256"]
+    ):
+        raise ValueError("portable authority receipt payload commitment does not match")
+    statement = value["statement"]
+    base_fields = {
+        "schema_version",
+        "purpose",
+        "subject_sha256",
+        "signer_id",
+        "collector_id",
+        "signed_at",
+        "expires_at",
+    }
+    if not isinstance(statement, dict) or set(statement) not in {
+        frozenset(base_fields),
+        frozenset(base_fields | {"algorithm"}),
+    }:
+        raise ValueError("portable authority statement fields do not match")
+    version = str(statement["schema_version"])
+    algorithm = "ed25519" if version == "1.0" else str(statement.get("algorithm") or "")
+    if version not in {"1.0", "2.0"} or algorithm not in {
+        "ed25519",
+        "ecdsa-p256-sha256",
+    }:
+        raise ValueError("portable authority statement algorithm is unsupported")
+    if (
+        statement["purpose"] != _label(purpose, "authority purpose")
+        or statement["subject_sha256"]
+        != hashlib.sha256(canonical_bytes(subject)).hexdigest()
+    ):
+        raise ValueError("portable authority statement subject does not match")
+    signer_id = _label(statement["signer_id"], "authority signer")
+    collector_id = _label(statement["collector_id"], "authority collector")
+    signed_at = _timestamp(statement["signed_at"], "authority signed_at")
+    expires_at = _timestamp(statement["expires_at"], "authority expires_at")
+    if at.tzinfo is None:
+        raise ValueError("portable authority verification time must include a timezone")
+    observed_at = at.astimezone(UTC)
+    if expires_at <= signed_at or not signed_at <= observed_at <= expires_at:
+        raise ValueError("portable authority statement is not valid at trusted time")
+    try:
+        public_key = serialization.load_pem_public_key(public_key_bytes)
+        if isinstance(public_key, Ed25519PublicKey) and algorithm == "ed25519":
+            public_key.verify(signature, canonical_bytes(statement))
+        elif (
+            isinstance(public_key, ec.EllipticCurvePublicKey)
+            and isinstance(public_key.curve, ec.SECP256R1)
+            and algorithm == "ecdsa-p256-sha256"
+        ):
+            public_key.verify(
+                signature, canonical_bytes(statement), ec.ECDSA(hashes.SHA256())
+            )
+        else:
+            raise ValueError(
+                "portable authority public key does not match its algorithm"
+            )
+    except Exception as exc:
+        raise ValueError("portable authority signature verification failed") from exc
+    if not isinstance(public_key, (Ed25519PublicKey, ec.EllipticCurvePublicKey)):
+        raise ValueError("portable authority public key type is unsupported")
+    if signer_id != _public_key_id(public_key):
+        raise ValueError("portable authority signer does not match its public key")
+    _verify_organizational_trust(signer_id, purpose)
+    organization = _authority_organization(signer_id, required=version == "2.0")
+    if version == "2.0":
+        _verify_key_lifecycle(signer_id, signed_at, expires_at, observed_at)
+    return {
+        "schema_version": version,
+        "signer_id": signer_id,
+        "collector_id": collector_id,
+        "organization": organization,
+        "subject_sha256": str(statement["subject_sha256"]),
+        "algorithm": algorithm,
+        "receipt_sha256": str(value["receipt_sha256"]),
     }
 
 
@@ -139,7 +268,7 @@ def verify_authority_quorum(
     subject: object,
     minimum_signatures: int,
     at: datetime | None = None,
-) -> list[dict[str, str]]:
+) -> list[dict[str, Any]]:
     """Verify a separation-of-duties quorum over one canonical subject.
 
     A quorum is intentionally stricter than accepting several signatures: both

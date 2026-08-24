@@ -11,12 +11,14 @@ from pathlib import Path
 from typing import Any
 
 try:
+    from companion.evidence_authority import verify_portable_authority
     from companion.assurance_context import load_context, load_target_ids
     from companion.provenance import file_provenance, slsa_provenance
     from companion.strict_json import dumps as strict_dumps
     from companion.strict_json import loads as strict_loads
     from companion.strict_json import canonical_bytes
 except ModuleNotFoundError:  # Direct script execution.
+    from evidence_authority import verify_portable_authority  # type: ignore[import-not-found,no-redef]
     from assurance_context import load_context, load_target_ids  # type: ignore[import-not-found,no-redef]
     from provenance import file_provenance, slsa_provenance  # type: ignore[import-not-found,no-redef]
     from strict_json import dumps as strict_dumps  # type: ignore[import-not-found,no-redef]
@@ -415,7 +417,15 @@ def _cross_language_matrix(value: object) -> list[dict[str, Any]]:
             item["boundaries"], languages, kind="boundary"
         )
         flows = _cross_language_records(item["flows"], languages, kind="flow")
-        independent = _independent_validation(item["independent_validation"])
+        independent = _independent_validation(
+            item["independent_validation"],
+            subject_context={
+                "languages": list(languages),
+                "primary_engine": str(item["engine"]),
+                "primary_query_pack_sha256": str(item["query_pack_sha256"]),
+                "source_file_sets_sha256": str(item["source_file_sets_sha256"]),
+            },
+        )
         for name in (
             "query_pack_sha256",
             "source_file_sets_sha256",
@@ -463,7 +473,9 @@ def _cross_language_matrix(value: object) -> list[dict[str, Any]]:
     return sorted(result, key=lambda item: tuple(item["languages"]))
 
 
-def _independent_validation(value: object) -> dict[str, Any]:
+def _independent_validation(
+    value: object, *, subject_context: dict[str, Any]
+) -> dict[str, Any]:
     required = {
         "engine",
         "query_pack_sha256",
@@ -490,6 +502,9 @@ def _independent_validation(value: object) -> dict[str, Any]:
         "collectors",
         "organizations",
         "subject_sha256",
+        "observed_at",
+        "trusted_time_sha256",
+        "receipts",
     }
     if not isinstance(authority, dict) or set(authority) != authority_fields:
         raise ValueError("independent semantic authority summary is invalid")
@@ -503,17 +518,89 @@ def _independent_validation(value: object) -> dict[str, Any]:
         authority.get("organizations"), "authority-organizations", 16
     )
     subject_sha256 = str(authority.get("subject_sha256") or "")
+    observed_at_raw = str(authority.get("observed_at") or "")
+    trusted_time_sha256 = str(authority.get("trusted_time_sha256") or "")
+    receipts = authority.get("receipts")
+    if not isinstance(receipts, list) or len(receipts) > 16:
+        raise ValueError("independent semantic authority receipts are invalid")
     if validated and (
         threshold < 2
         or min(len(signers), len(collectors), len(organizations)) < threshold
         or len(subject_sha256) != 64
         or any(character not in "0123456789abcdef" for character in subject_sha256)
+        or len(trusted_time_sha256) != 64
+        or any(character not in "0123456789abcdef" for character in trusted_time_sha256)
+        or len(receipts) < threshold
     ):
         raise ValueError("independent semantic authority quorum is incomplete")
     if not validated and any(
-        (threshold, signers, collectors, organizations, subject_sha256)
+        (
+            threshold,
+            signers,
+            collectors,
+            organizations,
+            subject_sha256,
+            observed_at_raw,
+            trusted_time_sha256,
+            receipts,
+        )
     ):
         raise ValueError("unvalidated independent semantic authority contains claims")
+    normalized_receipts: list[dict[str, Any]] = []
+    if validated:
+        try:
+            observed_at = datetime.fromisoformat(
+                observed_at_raw.replace("Z", "+00:00")
+            ).astimezone(UTC)
+        except ValueError as exc:
+            raise ValueError("independent semantic trusted time is invalid") from exc
+        independent_result = {
+            name: result[name]
+            for name in (
+                "engine",
+                "query_pack_sha256",
+                "boundaries_sha256",
+                "flows_sha256",
+            )
+        }
+        subject = {
+            "schema_version": "1.0",
+            "purpose": "independent-semantic-validation",
+            **subject_context,
+            "independent_result": independent_result,
+        }
+        if hashlib.sha256(canonical_bytes(subject)).hexdigest() != subject_sha256:
+            raise ValueError("independent semantic authority subject was rewritten")
+        verified = [
+            verify_portable_authority(
+                receipt,
+                purpose="independent-semantic-validation",
+                subject=subject,
+                at=observed_at,
+            )
+            for receipt in receipts
+        ]
+        verified_signers = sorted({item["signer_id"] for item in verified})
+        verified_collectors = sorted({item["collector_id"] for item in verified})
+        verified_organizations = sorted({item["organization"] for item in verified})
+        if (
+            verified_signers != signers
+            or verified_collectors != collectors
+            or verified_organizations != organizations
+            or min(
+                len(verified_signers),
+                len(verified_collectors),
+                len(verified_organizations),
+            )
+            < threshold
+        ):
+            raise ValueError(
+                "independent semantic portable receipt quorum does not match"
+            )
+        normalized_receipts = sorted(
+            [dict(receipt) for receipt in receipts],
+            key=lambda item: str(item["receipt_sha256"]),
+        )
     result["authority"] = {
         "validated": validated,
         "minimum_signatures": threshold,
@@ -521,6 +608,9 @@ def _independent_validation(value: object) -> dict[str, Any]:
         "collectors": collectors,
         "organizations": organizations,
         "subject_sha256": subject_sha256,
+        "observed_at": observed_at_raw,
+        "trusted_time_sha256": trusted_time_sha256,
+        "receipts": normalized_receipts,
     }
     return result
 

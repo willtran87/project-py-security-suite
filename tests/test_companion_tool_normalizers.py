@@ -35,15 +35,24 @@ class CompanionToolNormalizerTests(unittest.TestCase):
                         "signer_id": "signer-a",
                         "collector_id": "collector-a",
                         "organization": "org-a",
+                        "portable_receipt": {"receipt_sha256": "a" * 64},
                     },
                     {
                         "schema_version": "2.0",
                         "signer_id": "signer-b",
                         "collector_id": "collector-b",
                         "organization": "org-b",
+                        "portable_receipt": {"receipt_sha256": "b" * 64},
                     },
                 ],
             ) as verifier,
+            patch(
+                "companion.tool_normalizers.verify_rfc3161",
+                return_value={
+                    "trusted_time_sha256": "f" * 64,
+                    "trusted_time_observed_at": "2026-08-24T00:00:00+00:00",
+                },
+            ),
         ):
             result = _native_independent_validation(
                 {
@@ -53,6 +62,7 @@ class CompanionToolNormalizerTests(unittest.TestCase):
                     "flows_sha256": "c" * 64,
                     "minimum_authority_signatures": 2,
                     "authorities": [{"receipt": "a"}, {"receipt": "b"}],
+                    "trusted_time": {"receipt": "time"},
                 },
                 context=Path(directory) / "native.json",
                 subject_context={

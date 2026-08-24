@@ -13,7 +13,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from companion.database_security import _case as database_case
 from companion.database_security import _verify_negotiated_connection
-from companion.evidence_authority import verify_authority
+from companion.evidence_authority import verify_authority, verify_portable_authority
 from companion.provenance import (
     DSSE_PAYLOAD_TYPE,
     IN_TOTO_STATEMENT_V1,
@@ -161,6 +161,51 @@ def test_authority_rejects_self_authenticated_unpinned_key(tmp_path: Path) -> No
             purpose="surface-inventory:runtime",
             subject=subject,
         )
+
+
+def test_portable_authority_receipt_is_cryptographically_reverified(
+    tmp_path: Path,
+) -> None:
+    subject = {"kind": "semantic", "sha256": "1" * 64}
+    purpose = "independent-semantic-validation"
+    authority = _write_authority(
+        tmp_path,
+        name="portable",
+        purpose=purpose,
+        subject=subject,
+        collector="collector-a",
+    )
+    signer = str(authority["signer_id"])
+    context = tmp_path / "context.json"
+    context.write_text("{}", encoding="utf-8")
+    now = datetime.now(UTC)
+    with patch.dict(
+        "os.environ",
+        {
+            "PYSEC_TRUSTED_AUTHORITY_KEY_SHA256": signer,
+            "PYSEC_TRUSTED_AUTHORITY_ROLES": strict_dumps({signer: [purpose]}),
+        },
+    ):
+        verified = verify_authority(
+            context, authority, purpose=purpose, subject=subject, at=now
+        )
+        replayed = verify_portable_authority(
+            verified["portable_receipt"], purpose=purpose, subject=subject, at=now
+        )
+    assert replayed["signer_id"] == signer
+    tampered = dict(verified["portable_receipt"])
+    tampered["signature_base64"] = "AA=="
+    with (
+        patch.dict(
+            "os.environ",
+            {
+                "PYSEC_TRUSTED_AUTHORITY_KEY_SHA256": signer,
+                "PYSEC_TRUSTED_AUTHORITY_ROLES": strict_dumps({signer: [purpose]}),
+            },
+        ),
+        pytest.raises(ValueError, match="commitment"),
+    ):
+        verify_portable_authority(tampered, purpose=purpose, subject=subject, at=now)
 
 
 def test_replay_service_verifies_signed_hash_chained_receipt(tmp_path: Path) -> None:

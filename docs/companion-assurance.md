@@ -158,14 +158,18 @@ non-anonymous role. Each role receives an isolated authenticated context. For
 resource authorization and tenant boundaries, run
 `companion/authorization_security.py` with the example contract under
 `examples/companion/`; bearer tokens are read only from named environment
-variables and never enter evidence. Authorization schema 2.0 requires a
+variables and never enter evidence. Authorization contract schema 3.0 requires a
 deterministic reset request before each campaign and bounded postcondition
 queries with exact JSON-pointer assertions. The contract also requires declared
 state transitions, out-of-order rejection, one-time replay/idempotency
 resistance, concurrent-attempt atomicity limits, and an approval-limit case.
 Each declared business state machine therefore exercises normal order,
 sequence bypass, duplicate action, and race behavior and then proves the
-durable state invariant, rather than inferring safety from response codes.
+durable state invariant, rather than inferring safety from response codes. The
+v3 contract additionally uses a distinct observer origin and credential, pins
+its deployment identity through `PYSEC_AUTHORIZATION_ORACLE_IDENTITY_SHA256`,
+and requires process-restart and replica-failover invariants. The schema 2.0
+compatibility contract reports those independent resilience checks as skipped.
 These assertions complement authenticated ZAP active scanning. A
 copy-ready scheduled workflow is provided at
 `examples/github-actions/runtime-assurance.yml`.

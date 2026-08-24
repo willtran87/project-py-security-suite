@@ -12,7 +12,6 @@ import sysconfig
 import tempfile
 import threading
 import time
-from datetime import UTC, datetime
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -525,6 +524,8 @@ def _declared_native_plugins(executable: Path, *, required: bool = False) -> set
             or not 2 <= threshold <= 16
         ):
             raise ValueError("native runtime authority threshold is invalid")
+        from .trusted_observation import scan_observed_at
+
         verify_governance_quorum(
             manifest,
             value.get("authorities"),
@@ -537,7 +538,7 @@ def _declared_native_plugins(executable: Path, *, required: bool = False) -> set
                 "observation": value["observation"],
             },
             threshold,
-            datetime.now(UTC),
+            scan_observed_at(),
             purpose="native-loader-observation",
         )
     return result

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import base64
 import json
 import os
 import tempfile
@@ -19,7 +20,10 @@ from jsonschema import (  # pylint: disable=import-error
     ValidationError,
 )
 
-from py_security_suite.effectiveness_corpus import evaluate_report_corpus
+from py_security_suite.effectiveness_corpus import (
+    _consume_remote_effectiveness_replay,
+    evaluate_report_corpus,
+)
 from py_security_suite.report_inspection import read_bundled_schema
 from py_security_suite.strict_json import canonical_bytes
 
@@ -84,6 +88,59 @@ class EffectivenessCorpusTests(unittest.TestCase):
             ),
             encoding="utf-8",
         )
+
+    def test_remote_replay_receipt_enforces_signature_and_query_budget(self) -> None:
+        private = Ed25519PrivateKey.generate()
+        public_path = self.root / "replay.pub.pem"
+        public_path.write_bytes(
+            private.public_key().public_bytes(
+                serialization.Encoding.PEM,
+                serialization.PublicFormat.SubjectPublicKeyInfo,
+            )
+        )
+        replay_key = "a" * 64
+        signed = {
+            "schema_version": "1.0",
+            "status": "consumed",
+            "replay_key": replay_key,
+            "sequence": 7,
+            "holdout_uses": 1,
+        }
+        receipt = {
+            **signed,
+            "signature_base64": base64.b64encode(
+                private.sign(canonical_bytes(signed))
+            ).decode(),
+        }
+
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return None
+
+            def read(self, _maximum):
+                return canonical_bytes(receipt)
+
+        with (
+            patch.dict(os.environ, {"PYSEC_REPLAY_TOKEN": "secret"}),
+            patch(
+                "py_security_suite.effectiveness_corpus.urlopen",
+                return_value=Response(),
+            ),
+        ):
+            _consume_remote_effectiveness_replay(
+                replay_key,
+                corpus_id="holdout",
+                holdout_sha256="b" * 64,
+                observed_at="2026-08-24T00:00:00+00:00",
+                service_url="https://replay.example.invalid/consume",
+                token_env="PYSEC_REPLAY_TOKEN",  # noqa: S106 - environment name
+                receipt_key=public_path,
+                receipt_key_sha256=hashlib.sha256(public_path.read_bytes()).hexdigest(),
+                query_budget=1,
+            )
 
     @staticmethod
     def _file_record(path: str, content: bytes) -> dict[str, Any]:
@@ -400,7 +457,6 @@ class EffectivenessCorpusTests(unittest.TestCase):
             encoding="utf-8",
         )
         trusted_time_digest = hashlib.sha256(trusted_time.read_bytes()).hexdigest()
-        replay_ledger = self.root / "effectiveness-replay.sqlite3"
         environment = {
             "PYSEC_TRUSTED_AUTHORITY_KEY_SHA256": ",".join(trusted),
             "PYSEC_TRUSTED_AUTHORITY_ROLES": json.dumps(roles),
@@ -427,6 +483,9 @@ class EffectivenessCorpusTests(unittest.TestCase):
                     "trusted_time_signer_sha256": "d" * 64,
                 },
             ),
+            patch(
+                "py_security_suite.effectiveness_corpus._consume_remote_effectiveness_replay"
+            ) as replay_service,
         ):
             result = evaluate_report_corpus(
                 self.report,
@@ -434,11 +493,12 @@ class EffectivenessCorpusTests(unittest.TestCase):
                 corpus_sha256=hashlib.sha256(corpus.read_bytes()).hexdigest(),
                 trusted_time=trusted_time,
                 trusted_time_sha256=trusted_time_digest,
-                replay_ledger=replay_ledger,
+                replay_service_url="https://replay.example.invalid/consume",
             )
         self.assertTrue(result["corpus"]["authority"]["validated"])
         self.assertTrue(result["time_authority"]["validated"])
         self.assertTrue(result["replay_protected"])
+        replay_service.assert_called_once()
         self.assertEqual(
             result["corpus"]["authority"]["authority_organizations"],
             ["organization-0", "organization-1"],

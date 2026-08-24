@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import ast
 import hashlib
+import importlib.util
+import json
 import re
 from collections import Counter
 from pathlib import Path
@@ -51,8 +53,18 @@ _SPECIAL_SUFFIXES = {
     ".dylib": "native-extension",
     ".wasm": "webassembly",
 }
-_GENERATED_MARKERS = ("@generated", "code generated", "do not edit")
-_DYNAMIC_CODE = re.compile(r"\b(?:eval|exec|compile|new\s+Function)\s*\(")
+_GENERATED_MARKERS = (
+    "@generated",
+    "code generated",
+    "do not edit",
+    "generated from",
+    "automatically generated",
+    "sourceMappingURL=",
+)
+_DYNAMIC_CODE = re.compile(
+    r"\b(?:eval|exec|compile|new\s+Function|__import__|importlib\.import_module|"
+    r"getattr|setattr|entry_points|load_entry_point|Class\.forName|Assembly\.Load)\s*\("
+)
 
 _TEXT_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     (
@@ -101,15 +113,37 @@ def build_boundary_graph(target: Path) -> dict[str, Any]:
     )
     for path in repository_files[:_MAX_FILES]:
         kind = _SPECIAL_SUFFIXES.get(path.suffix.casefold())
-        if kind:
+        if not kind:
+            continue
+        relative = path.relative_to(root).as_posix()
+        try:
+            _, payload = read_regular_file(
+                path,
+                f"{kind} surface",
+                maximum_bytes=_MAX_FILE_BYTES,
+                boundary=root,
+            )
+            surface, surface_edges = _analyze_special_surface(
+                payload, relative, kind, path
+            )
+            special_surfaces.append(surface)
+            edges.extend(surface_edges)
+        except (
+            OSError,
+            TypeError,
+            ValueError,
+            UnicodeError,
+            json.JSONDecodeError,
+        ) as exc:
             special_surfaces.append(
                 {
-                    "path": path.relative_to(root).as_posix(),
+                    "path": relative,
                     "kind": kind,
                     "analysis": "unsupported",
                     "covered": False,
                 }
             )
+            errors.append({"path": relative, "reason": f"{kind}-{type(exc).__name__}"})
     candidates = [
         path for path in repository_files if path.suffix.casefold() in _LANGUAGES
     ]
@@ -159,8 +193,8 @@ def build_boundary_graph(target: Path) -> dict[str, Any]:
                 {
                     "path": relative,
                     "kind": "dynamic-code",
-                    "analysis": "inventory-only",
-                    "covered": False,
+                    "analysis": "semantic" if language == "python" else "heuristic",
+                    "covered": True,
                 }
             )
         language_files.setdefault(language, []).append(
@@ -193,6 +227,10 @@ def build_boundary_graph(target: Path) -> dict[str, Any]:
         key=lambda item: (str(item["path"]), str(item["kind"])),
     )
     special_surface_complete = all(item["covered"] for item in special_surfaces)
+    heuristic_surfaces = any(
+        item["analysis"] in {"heuristic", "inventory-only", "unsupported"}
+        for item in special_surfaces
+    )
     language_file_sets: dict[str, dict[str, Any]] = {}
     for language in sorted(language_files):
         ordered_files = sorted(
@@ -212,6 +250,7 @@ def build_boundary_graph(target: Path) -> dict[str, Any]:
         "truncated": truncated,
         "complete": not truncated and not errors and special_surface_complete,
         "semantic_complete": not heuristic_languages
+        and not heuristic_surfaces
         and not truncated
         and not errors
         and special_surface_complete,
@@ -249,9 +288,7 @@ def _python_edges(text: str, source: str) -> tuple[list[dict[str, Any]], str | N
         elif isinstance(node, ast.Call):
             name = _call_name(node.func)
             argument = _literal_argument(node)
-            if not argument:
-                continue
-            if name in {
+            if argument and name in {
                 "os.popen",
                 "os.system",
                 "subprocess.call",
@@ -263,23 +300,46 @@ def _python_edges(text: str, source: str) -> tuple[list[dict[str, Any]], str | N
                 edges.append(
                     _edge(source, node.lineno, "process-execution", argument, "python")
                 )
-            elif name in {"ctypes.CDLL", "ctypes.WinDLL", "cffi.dlopen"}:
+            elif argument and name in {"ctypes.CDLL", "ctypes.WinDLL", "cffi.dlopen"}:
                 edges.append(
                     _edge(source, node.lineno, "native-ffi", argument, "python")
                 )
-            elif name in {
-                "httpx.get",
-                "httpx.post",
-                "requests.get",
-                "requests.post",
-                "urllib.request.urlopen",
-            } and _http_origin(argument):
+            elif (
+                argument
+                and name
+                in {
+                    "httpx.get",
+                    "httpx.post",
+                    "requests.get",
+                    "requests.post",
+                    "urllib.request.urlopen",
+                }
+                and _http_origin(argument)
+            ):
                 edges.append(
                     _edge(
                         source,
                         node.lineno,
                         "network-endpoint",
                         _http_origin(argument) or argument,
+                        "python",
+                    )
+                )
+            elif name in {
+                "__import__",
+                "importlib.import_module",
+                "importlib.metadata.entry_points",
+                "pkg_resources.iter_entry_points",
+                "pkg_resources.load_entry_point",
+                "getattr",
+                "setattr",
+            }:
+                edges.append(
+                    _edge(
+                        source,
+                        node.lineno,
+                        "dynamic-dispatch",
+                        argument or "<computed>",
                         "python",
                     )
                 )
@@ -303,6 +363,214 @@ def _text_edges(text: str, source: str, language: str) -> list[dict[str, Any]]:
                 )
             )
     return edges
+
+
+def _analyze_special_surface(
+    payload: bytes, source: str, kind: str, path: Path
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    if kind == "notebook":
+        value = json.loads(payload.decode("utf-8"))
+        cells = value.get("cells") if isinstance(value, dict) else None
+        if not isinstance(cells, list):
+            raise ValueError("notebook cells are invalid")
+        edges: list[dict[str, Any]] = []
+        for index, cell in enumerate(cells):
+            if not isinstance(cell, dict) or cell.get("cell_type") != "code":
+                continue
+            raw = cell.get("source")
+            text = "".join(raw) if isinstance(raw, list) else str(raw or "")
+            cell_edges, error = _python_edges(text, f"{source}#cell-{index + 1}")
+            if error:
+                raise ValueError("notebook code cell is not valid Python")
+            edges.extend(cell_edges)
+        return _surface(source, kind, "semantic", True), edges
+    if kind == "template":
+        text = payload.decode("utf-8")
+        edges = _text_edges(text, source, "template")
+        include = re.compile(
+            r"{[%{]\s*(?:include|extends|import|from)\s+['\"]([^'\"]+)"
+        )
+        edges.extend(
+            _edge(
+                source,
+                text.count("\n", 0, match.start()) + 1,
+                "template-include",
+                match.group(1),
+                "template",
+            )
+            for match in include.finditer(text)
+        )
+        return _surface(source, kind, "heuristic", True), edges
+    if kind == "bytecode":
+        if len(payload) < 16 or payload[:4] != importlib.util.MAGIC_NUMBER:
+            raise ValueError("Python bytecode magic or header is invalid")
+        targets = sorted(
+            {
+                match.decode("ascii")
+                for match in re.findall(rb"[A-Za-z_][A-Za-z0-9_.]{2,120}", payload[16:])
+                if b"." in match
+            }
+        )[:1000]
+        return _surface(source, kind, "heuristic", True), [
+            _edge(source, 1, "dynamic-dispatch", target, "python-bytecode")
+            for target in targets
+        ]
+    if kind == "webassembly":
+        imports = _wasm_imports(payload)
+        return _surface(source, kind, "semantic", True), [
+            _edge(source, 1, "binary-import", name, "webassembly") for name in imports
+        ]
+    if kind == "native-extension":
+        imports = _native_imports(path, payload)
+        return _surface(source, kind, "semantic", True), [
+            _edge(source, 1, "binary-import", name, "native") for name in imports
+        ]
+    raise ValueError("special surface kind is unsupported")
+
+
+def _surface(path: str, kind: str, analysis: str, covered: bool) -> dict[str, Any]:
+    return {"path": path, "kind": kind, "analysis": analysis, "covered": covered}
+
+
+def _wasm_imports(payload: bytes) -> list[str]:
+    if not payload.startswith(b"\x00asm\x01\x00\x00\x00"):
+        raise ValueError("WebAssembly header is invalid")
+    offset = 8
+    imports: list[str] = []
+    while offset < len(payload):
+        section = payload[offset]
+        offset += 1
+        size, offset = _leb128(payload, offset)
+        end = offset + size
+        if end > len(payload):
+            raise ValueError("WebAssembly section exceeds the file")
+        if section == 2:
+            count, cursor = _leb128(payload, offset)
+            if count > 10_000:
+                raise ValueError("WebAssembly import table is oversized")
+            for _ in range(count):
+                module, cursor = _wasm_name(payload, cursor, end)
+                name, cursor = _wasm_name(payload, cursor, end)
+                if cursor >= end:
+                    raise ValueError("WebAssembly import descriptor is truncated")
+                descriptor = payload[cursor]
+                cursor += 1
+                cursor = _skip_wasm_descriptor(payload, cursor, end, descriptor)
+                imports.append(f"{module}.{name}")
+            if cursor != end:
+                raise ValueError("WebAssembly import section has trailing data")
+        offset = end
+    return sorted(set(imports))
+
+
+def _leb128(payload: bytes, offset: int) -> tuple[int, int]:
+    value = 0
+    for shift in range(0, 35, 7):
+        if offset >= len(payload):
+            raise ValueError("WebAssembly integer is truncated")
+        byte = payload[offset]
+        offset += 1
+        value |= (byte & 0x7F) << shift
+        if not byte & 0x80:
+            return value, offset
+    raise ValueError("WebAssembly integer is oversized")
+
+
+def _wasm_name(payload: bytes, offset: int, end: int) -> tuple[str, int]:
+    size, offset = _leb128(payload, offset)
+    if size > 4096 or offset + size > end:
+        raise ValueError("WebAssembly name is invalid")
+    try:
+        return payload[offset : offset + size].decode("utf-8"), offset + size
+    except UnicodeDecodeError as exc:
+        raise ValueError("WebAssembly name is not UTF-8") from exc
+
+
+def _skip_wasm_descriptor(payload: bytes, offset: int, end: int, kind: int) -> int:
+    if kind == 0:
+        _, offset = _leb128(payload, offset)
+        return offset
+    if kind == 1:
+        if offset >= end:
+            raise ValueError("WebAssembly table descriptor is truncated")
+        offset += 1
+        return _skip_wasm_limits(payload, offset)
+    if kind == 2:
+        return _skip_wasm_limits(payload, offset)
+    if kind == 3:
+        if offset + 2 > end:
+            raise ValueError("WebAssembly global descriptor is truncated")
+        return offset + 2
+    if kind == 4:
+        if offset >= end:
+            raise ValueError("WebAssembly tag descriptor is truncated")
+        _, offset = _leb128(payload, offset + 1)
+        return offset
+    raise ValueError("WebAssembly import kind is unsupported")
+
+
+def _skip_wasm_limits(payload: bytes, offset: int) -> int:
+    if offset >= len(payload):
+        raise ValueError("WebAssembly limits are truncated")
+    flags = payload[offset]
+    offset += 1
+    _, offset = _leb128(payload, offset)
+    if flags & 1:
+        _, offset = _leb128(payload, offset)
+    return offset
+
+
+def _native_imports(path: Path, payload: bytes) -> list[str]:
+    if payload[:2] == b"MZ":
+        import pefile  # type: ignore[import-untyped]
+
+        try:
+            pe = pefile.PE(str(path), fast_load=True)
+            pe.parse_data_directories(
+                directories=[pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_IMPORT"]]
+            )
+            return sorted(
+                {
+                    entry.dll.decode("utf-8", errors="strict")
+                    for entry in getattr(pe, "DIRECTORY_ENTRY_IMPORT", ())
+                }
+            )
+        except pefile.PEFormatError as exc:
+            raise ValueError("PE import table is invalid") from exc
+        finally:
+            if "pe" in locals():
+                pe.close()
+    if payload.startswith(b"\x7fELF"):
+        from elftools.elf.elffile import ELFFile  # type: ignore[import-untyped]
+
+        names: set[str] = set()
+        with path.open("rb") as handle:
+            elf = ELFFile(handle)
+            for segment in elf.iter_segments():
+                if segment.header.p_type == "PT_DYNAMIC":
+                    names.update(
+                        str(tag.needed)
+                        for tag in segment.iter_tags()  # type: ignore[attr-defined]
+                        if tag.entry.d_tag == "DT_NEEDED"
+                    )
+        return sorted(names)
+    if payload[:4] in {
+        b"\xca\xfe\xba\xbe",
+        b"\xce\xfa\xed\xfe",
+        b"\xcf\xfa\xed\xfe",
+        b"\xfe\xed\xfa\xce",
+        b"\xfe\xed\xfa\xcf",
+    }:
+        from macholib.MachO import MachO  # type: ignore[import-untyped]
+
+        return sorted(
+            {
+                filename
+                for header in MachO(str(path)).headers
+                for _index, _command, filename in header.walkRelocatables()
+            }
+        )
+    raise ValueError("native extension format is unsupported")
 
 
 def _call_name(node: ast.expr) -> str:

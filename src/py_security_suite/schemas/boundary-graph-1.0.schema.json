@@ -20,7 +20,7 @@
     "special_surface_complete": {"type": "boolean"},
     "errors": {"type": "array", "maxItems": 100, "items": {"type": "object", "additionalProperties": false, "required": ["path", "reason"], "properties": {"path": {"type": "string"}, "reason": {"type": "string"}}}},
     "omitted_errors": {"type": "integer", "minimum": 0},
-    "edges": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["source", "line", "kind", "target", "language"], "properties": {"source": {"type": "string"}, "line": {"type": "integer", "minimum": 1}, "kind": {"enum": ["module-import", "process-execution", "network-endpoint", "native-ffi"]}, "target": {"type": "string", "maxLength": 500}, "language": {"type": "string"}}}},
+    "edges": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["source", "line", "kind", "target", "language"], "properties": {"source": {"type": "string"}, "line": {"type": "integer", "minimum": 1}, "kind": {"enum": ["module-import", "process-execution", "network-endpoint", "native-ffi", "dynamic-dispatch", "binary-import", "template-include"]}, "target": {"type": "string", "maxLength": 500}, "language": {"type": "string"}}}},
     "summary": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}},
     "graph_sha256": {"$ref": "#/$defs/digest"}
   },

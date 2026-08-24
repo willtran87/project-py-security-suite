@@ -17,12 +17,14 @@ try:
     from companion.strict_json import loads as strict_loads
     from companion.deep_qualification import verify_area_receipt
     from companion.evidence_authority import verify_authority_quorum
+    from companion.trusted_time import verify_rfc3161
 except ModuleNotFoundError:  # Direct script execution.
     from strict_json import canonical_bytes  # type: ignore[import-not-found,no-redef]
     from strict_json import dumps as strict_dumps  # type: ignore[import-not-found,no-redef]
     from strict_json import loads as strict_loads  # type: ignore[import-not-found,no-redef]
     from deep_qualification import verify_area_receipt  # type: ignore[import-not-found,no-redef]
     from evidence_authority import verify_authority_quorum  # type: ignore[import-not-found,no-redef]
+    from trusted_time import verify_rfc3161  # type: ignore[import-not-found,no-redef]
 
 
 _MAX_INPUT_BYTES = 64 * 1024 * 1024
@@ -1302,7 +1304,11 @@ def _native_independent_validation(
     value: object, *, context: Path, subject_context: dict[str, Any]
 ) -> dict[str, Any]:
     required = {"engine", "query_pack_sha256", "boundaries_sha256", "flows_sha256"}
-    governed = required | {"minimum_authority_signatures", "authorities"}
+    governed = required | {
+        "minimum_authority_signatures",
+        "authorities",
+        "trusted_time",
+    }
     if not isinstance(value, dict) or set(value) not in {
         frozenset(required),
         frozenset(governed),
@@ -1323,6 +1329,9 @@ def _native_independent_validation(
         "collectors": [],
         "organizations": [],
         "subject_sha256": "",
+        "observed_at": "",
+        "trusted_time_sha256": "",
+        "receipts": [],
     }
     if set(value) == governed:
         threshold = _safe_integer(value["minimum_authority_signatures"])
@@ -1332,25 +1341,41 @@ def _native_independent_validation(
             **subject_context,
             "independent_result": result,
         }
+        subject_sha256 = hashlib.sha256(canonical_bytes(subject)).hexdigest()
+        trusted = verify_rfc3161(
+            context,
+            value["trusted_time"],
+            subject_sha256,
+            require_advanced=True,
+        )
+        observed_at = datetime.fromisoformat(
+            trusted["trusted_time_observed_at"].replace("Z", "+00:00")
+        ).astimezone(UTC)
         verified = verify_authority_quorum(
             context,
             value["authorities"],
             purpose="independent-semantic-validation",
             subject=subject,
             minimum_signatures=threshold,
-            at=datetime.now(UTC),
+            at=observed_at,
         )
         if any(item["schema_version"] != "2.0" for item in verified):
             raise ValueError(
                 "independent semantic authorities must use lifecycle-bound v2 receipts"
             )
+        receipts = [item.get("portable_receipt") for item in verified]
+        if any(not isinstance(item, dict) for item in receipts):
+            raise ValueError("independent semantic authority lacks portable receipts")
         authority = {
             "validated": True,
             "minimum_signatures": threshold,
             "signers": sorted({item["signer_id"] for item in verified}),
             "collectors": sorted({item["collector_id"] for item in verified}),
             "organizations": sorted({item["organization"] for item in verified}),
-            "subject_sha256": hashlib.sha256(canonical_bytes(subject)).hexdigest(),
+            "subject_sha256": subject_sha256,
+            "observed_at": observed_at.isoformat(),
+            "trusted_time_sha256": trusted["trusted_time_sha256"],
+            "receipts": sorted(receipts, key=lambda item: str(item["receipt_sha256"])),
         }
     return {**result, "authority": authority}
 

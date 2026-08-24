@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 from datetime import UTC, datetime
 from pathlib import Path
@@ -64,6 +65,7 @@ def security_requirements_coverage_artifact(
                 ),
                 "verification_scope": verification_scope,
                 "evidence": retained,
+                "assessment": None,
             }
         )
 
@@ -197,8 +199,26 @@ def security_requirements_coverage_artifact(
                         else "not-applicable"
                     ),
                     "evidence": evidence,
+                    "assessment": None,
                 }
             )
+        assessments = _organization_requirement_assessments(policy, artifacts)
+        for record in records:
+            identity = (
+                str(record["standard"]),
+                str(record["version"]),
+                str(record["requirement"]),
+            )
+            assessment = assessments.get(identity)
+            if assessment is not None:
+                record["assessment"] = assessment
+                record["status"] = str(assessment["status"])
+                record["evidence"] = sorted(
+                    {
+                        str(assertion["artifact"])
+                        for assertion in assessment["assertions"]
+                    }
+                )
         mapped = {(item["standard"], item["version"]): 0 for item in policy["catalogs"]}
         for item in records:
             mapped[(item["standard"], item["version"])] += 1
@@ -211,7 +231,14 @@ def security_requirements_coverage_artifact(
         ]
         organization_approved = True
     applicable = [record for record in records if record["applicable"]]
-    gaps = [record["requirement"] for record in applicable if record["status"] == "gap"]
+    gaps = [
+        record["requirement"]
+        for record in applicable
+        if record["status"] not in {"evidence-collected", "passed"}
+    ]
+    assessment_complete = bool(applicable) and all(
+        record["status"] == "passed" for record in applicable
+    )
     automation_complete = not gaps
     full_catalog_coverage = all(
         isinstance(item["requirements_in_catalog"], int)
@@ -239,16 +266,17 @@ def security_requirements_coverage_artifact(
         },
         "applicable_requirements": len(applicable),
         "evidenced_requirements": sum(
-            record["status"] == "evidence-collected" for record in applicable
+            record["status"] in {"evidence-collected", "passed", "failed"}
+            for record in applicable
         ),
         "gaps": sorted(gaps),
         "automation_complete": automation_complete,
         "full_catalog_coverage": full_catalog_coverage,
-        "complete": automation_complete
+        "complete": assessment_complete
         and full_catalog_coverage
         and organization_approved,
         "limitations": [
-            "Evidence-collected is not a claim of standards conformance; each requirement still needs a requirement-specific pass/fail assessment.",
+            "Artifact presence is not a claim of conformance; only deployment-pinned, requirement-specific assertions can establish assessed pass or fail.",
             "Full catalog coverage and organization-approved applicability are required before this artifact can become complete.",
         ],
     }
@@ -314,12 +342,14 @@ def _organization_requirements_policy() -> dict[str, Any] | None:
     ):
         raise ValueError("organization requirements authority threshold is invalid")
     subject = {name: value[name] for name in required - {"authorities"}}
+    from .trusted_observation import scan_observed_at
+
     verify_governance_quorum(
         path,
         value.get("authorities"),
         subject,
         threshold,
-        datetime.now(UTC),
+        scan_observed_at(),
         purpose="security-requirements-applicability",
     )
     return {
@@ -420,3 +450,309 @@ def _policy_requirements(
             "organization requirements policy does not cover every catalog requirement"
         )
     return result
+
+
+def _organization_requirement_assessments(
+    policy: dict[str, Any], artifacts: dict[str, Any]
+) -> dict[tuple[str, str, str], dict[str, Any]]:
+    raw_path = os.environ.get("PYSEC_REQUIREMENTS_ASSESSMENT_PATH", "").strip()
+    expected = (
+        os.environ.get("PYSEC_REQUIREMENTS_ASSESSMENT_SHA256", "").strip().casefold()
+    )
+    if not raw_path and not expected:
+        return {}
+    if not raw_path or not _digest(expected):
+        raise ValueError(
+            "organization requirements assessment configuration is incomplete"
+        )
+    path = Path(raw_path).expanduser().resolve()
+    if sha256_file(path) != expected:
+        raise ValueError("organization requirements assessment SHA-256 does not match")
+    _, payload = read_regular_file(
+        path, "organization requirements assessment", maximum_bytes=32 * 1024 * 1024
+    )
+    value = strict_loads(payload)
+    required = {
+        "schema_version",
+        "catalogs",
+        "assessments",
+        "minimum_authority_signatures",
+        "authorities",
+    }
+    if (
+        not isinstance(value, dict)
+        or set(value) != required
+        or value.get("schema_version") != "1.0"
+    ):
+        raise ValueError("organization requirements assessment fields do not match")
+    catalogs = _verified_catalog_snapshots(path, value["catalogs"])
+    expected_identities = {
+        (str(item["standard"]), str(item["version"]), str(item["requirement"]))
+        for item in policy["requirements"]
+    }
+    if expected_identities != {
+        (standard, version, requirement)
+        for (standard, version), requirements in catalogs.items()
+        for requirement in requirements
+    }:
+        raise ValueError("pinned requirements catalogs do not match the signed policy")
+    from .trusted_observation import scan_observed_at
+
+    observed_at = scan_observed_at()
+    threshold = value["minimum_authority_signatures"]
+    if (
+        isinstance(threshold, bool)
+        or not isinstance(threshold, int)
+        or not 2 <= threshold <= 16
+    ):
+        raise ValueError(
+            "organization requirements assessment authority threshold is invalid"
+        )
+    subject = {name: value[name] for name in required - {"authorities"}}
+    verify_governance_quorum(
+        path,
+        value["authorities"],
+        subject,
+        threshold,
+        observed_at,
+        purpose="security-requirements-assessment",
+    )
+    entries = value["assessments"]
+    if not isinstance(entries, list) or len(entries) != len(expected_identities):
+        raise ValueError("organization requirements assessments are incomplete")
+    result: dict[tuple[str, str, str], dict[str, Any]] = {}
+    applicability = {
+        (
+            str(item["standard"]),
+            str(item["version"]),
+            str(item["requirement"]),
+        ): bool(item["applicable"])
+        for item in policy["requirements"]
+    }
+    for item in entries:
+        assessment = _requirement_assessment(item, artifacts, observed_at)
+        identity = assessment.pop("identity")
+        if identity not in expected_identities or identity in result:
+            raise ValueError("organization requirement assessment identity is invalid")
+        applicable = applicability[identity]
+        status = str(assessment["result"])
+        if applicable == (status == "not-applicable"):
+            raise ValueError("requirement assessment applicability is inconsistent")
+        assessment["status"] = (
+            "passed"
+            if status == "pass"
+            else "failed"
+            if status == "fail"
+            else "not-tested"
+            if status == "not-tested"
+            else "not-applicable"
+        )
+        result[identity] = assessment
+    return result
+
+
+def _verified_catalog_snapshots(
+    context: Path, value: object
+) -> dict[tuple[str, str], set[str]]:
+    if not isinstance(value, list) or len(value) != 3:
+        raise ValueError("requirements assessment catalogs are invalid")
+    raw_policy = os.environ.get("PYSEC_REQUIREMENTS_CATALOG_SHA256", "")
+    try:
+        trust_policy = json.loads(raw_policy)
+    except json.JSONDecodeError as exc:
+        raise ValueError("requirements catalog deployment policy is invalid") from exc
+    if not isinstance(trust_policy, dict) or not trust_policy:
+        raise ValueError("requirements catalog deployment policy is unavailable")
+    result: dict[tuple[str, str], set[str]] = {}
+    required = {
+        "standard",
+        "version",
+        "source_revision",
+        "requirements_file",
+        "requirements_file_sha256",
+    }
+    for item in value:
+        if not isinstance(item, dict) or set(item) != required:
+            raise ValueError("requirements assessment catalog fields do not match")
+        identity = (str(item["standard"]), str(item["version"]))
+        digest = str(item["requirements_file_sha256"]).casefold()
+        key = f"{identity[0]}@{identity[1]}"
+        if (
+            identity in result
+            or not _digest(digest)
+            or trust_policy.get(key) != digest
+            or len(str(item["source_revision"])) != 40
+        ):
+            raise ValueError("requirements assessment catalog is not deployment-pinned")
+        relative = Path(str(item["requirements_file"] or ""))
+        if relative.is_absolute() or not relative.parts or ".." in relative.parts:
+            raise ValueError("requirements assessment catalog path is unsafe")
+        catalog = (context.parent / relative).resolve()
+        if catalog.parent != context.parent.resolve():
+            raise ValueError("requirements assessment catalog must be adjacent")
+        _, payload = read_regular_file(
+            catalog,
+            "requirements catalog snapshot",
+            maximum_bytes=16 * 1024 * 1024,
+            boundary=context.parent.resolve(),
+        )
+        if hashlib.sha256(payload).hexdigest() != digest:
+            raise ValueError("requirements catalog snapshot SHA-256 does not match")
+        identifiers = strict_loads(payload)
+        if (
+            not isinstance(identifiers, list)
+            or not identifiers
+            or identifiers != sorted(set(identifiers))
+            or any(
+                not isinstance(identifier, str) or not identifier
+                for identifier in identifiers
+            )
+        ):
+            raise ValueError("requirements catalog IDs are not canonical")
+        result[identity] = set(identifiers)
+    return result
+
+
+def _requirement_assessment(
+    value: object, artifacts: dict[str, Any], observed_at: datetime
+) -> dict[str, Any]:
+    fields = {
+        "standard",
+        "version",
+        "requirement",
+        "result",
+        "method",
+        "assessor",
+        "assessed_at",
+        "assertions",
+    }
+    if not isinstance(value, dict) or set(value) != fields:
+        raise ValueError("requirement assessment fields do not match")
+    identity = (
+        _text(value["standard"], "assessment standard", 100),
+        _text(value["version"], "assessment version", 30),
+        _text(value["requirement"], "assessment requirement", 100),
+    )
+    declared = str(value["result"])
+    if declared not in {"pass", "fail", "not-tested", "not-applicable"}:
+        raise ValueError("requirement assessment result is invalid")
+    assessed_at = _timestamp(value["assessed_at"], "assessment assessed_at")
+    if assessed_at > observed_at:
+        raise ValueError("requirement assessment is later than trusted scan time")
+    assertions = value["assertions"]
+    if not isinstance(assertions, list) or len(assertions) > 100:
+        raise ValueError("requirement assessment assertions are invalid")
+    normalized = [_assessment_assertion(item) for item in assertions]
+    if declared in {"pass", "fail"} and not normalized:
+        raise ValueError("assessed pass or fail requires replayable assertions")
+    if declared in {"not-tested", "not-applicable"} and normalized:
+        raise ValueError("unassessed requirement cannot contain assertions")
+    if normalized:
+        outcomes = [_replay_assertion(item, artifacts) for item in normalized]
+        observed_result = "pass" if all(outcomes) else "fail"
+        if declared != observed_result:
+            raise ValueError(
+                "declared requirement result does not match replayed assertions"
+            )
+    return {
+        "identity": identity,
+        "result": declared,
+        "method": _text(value["method"], "assessment method", 200),
+        "assessor": _text(value["assessor"], "assessment assessor", 200),
+        "assessed_at": assessed_at.isoformat(),
+        "assertions": normalized,
+    }
+
+
+def _assessment_assertion(value: object) -> dict[str, Any]:
+    fields = {"artifact", "sha256", "pointer", "operator", "expected"}
+    if not isinstance(value, dict) or set(value) != fields:
+        raise ValueError("requirement assertion fields do not match")
+    artifact = _text(value["artifact"], "assessment artifact", 500)
+    digest = str(value["sha256"])
+    pointer = str(value["pointer"])
+    operator = str(value["operator"])
+    if not _digest(digest) or not pointer.startswith("/") or len(pointer) > 1000:
+        raise ValueError("requirement assertion identity is invalid")
+    if operator not in {"equals", "not-equals", "gte", "lte", "exists"}:
+        raise ValueError("requirement assertion operator is unsupported")
+    expected = value["expected"]
+    if isinstance(expected, (dict, list)):
+        raise ValueError("requirement assertion expected value must be scalar")
+    return {
+        "artifact": artifact,
+        "sha256": digest,
+        "pointer": pointer,
+        "operator": operator,
+        "expected": expected,
+    }
+
+
+def _replay_assertion(assertion: dict[str, Any], artifacts: dict[str, Any]) -> bool:
+    artifact = artifacts.get(assertion["artifact"])
+    if (
+        artifact is None
+        or hashlib.sha256(canonical_bytes(artifact)).hexdigest() != assertion["sha256"]
+    ):
+        return False
+    found, observed = _json_pointer(artifact, assertion["pointer"])
+    operator = assertion["operator"]
+    expected = assertion["expected"]
+    if operator == "exists":
+        return found is bool(expected)
+    if not found:
+        return False
+    if operator == "equals":
+        return observed == expected
+    if operator == "not-equals":
+        return observed != expected
+    if (
+        isinstance(observed, bool)
+        or isinstance(expected, bool)
+        or not isinstance(observed, (int, float))
+        or not isinstance(expected, (int, float))
+    ):
+        return False
+    return observed >= expected if operator == "gte" else observed <= expected
+
+
+def _json_pointer(value: object, pointer: str) -> tuple[bool, object]:
+    current = value
+    for raw in pointer.split("/")[1:]:
+        token = raw.replace("~1", "/").replace("~0", "~")
+        if isinstance(current, dict) and token in current:
+            current = current[token]
+        elif (
+            isinstance(current, list) and token.isdigit() and int(token) < len(current)
+        ):
+            current = current[int(token)]
+        else:
+            return False, None
+    return True, current
+
+
+def _timestamp(value: object, label: str) -> datetime:
+    try:
+        result = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError(f"{label} is invalid") from exc
+    if result.tzinfo is None:
+        raise ValueError(f"{label} must include a timezone")
+    return result.astimezone(UTC)
+
+
+def _text(value: object, label: str, maximum: int) -> str:
+    result = str(value).strip()
+    if (
+        not result
+        or len(result) > maximum
+        or any(ord(character) < 32 for character in result)
+    ):
+        raise ValueError(f"{label} is invalid")
+    return result
+
+
+def _digest(value: str) -> bool:
+    return len(value) == 64 and all(
+        character in "0123456789abcdef" for character in value
+    )

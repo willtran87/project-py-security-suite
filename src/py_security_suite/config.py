@@ -6,7 +6,6 @@ import os
 import re
 import tomllib
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
 from importlib.resources import files
 from pathlib import Path
 from typing import Any
@@ -2387,9 +2386,11 @@ def load_config(
         and attestation_configured
     ):
         try:
+            from .trusted_observation import scan_observed_at
+
             validate_organization_policy_attestation(
                 policy_digest,
-                observed_at=datetime.now(UTC),
+                observed_at=scan_observed_at(),
                 environment=os.environ,
             )
             config.organization_policy_attestation_validated = True

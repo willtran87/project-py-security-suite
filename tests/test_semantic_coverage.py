@@ -129,6 +129,12 @@ class SemanticCoverageTests(unittest.TestCase):
                                         "collectors": ["collector-a", "collector-b"],
                                         "organizations": ["org-a", "org-b"],
                                         "subject_sha256": "f" * 64,
+                                        "observed_at": "2026-08-24T00:00:00+00:00",
+                                        "trusted_time_sha256": "a" * 64,
+                                        "receipts": [
+                                            {"receipt_sha256": "1" * 64},
+                                            {"receipt_sha256": "2" * 64},
+                                        ],
                                     },
                                 },
                             }

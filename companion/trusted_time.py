@@ -17,7 +17,11 @@ except ModuleNotFoundError:  # Direct script execution.
 
 
 def verify_rfc3161(
-    context_path: Path, value: object, challenge_sha256: str
+    context_path: Path,
+    value: object,
+    challenge_sha256: str,
+    *,
+    require_advanced: bool = False,
 ) -> dict[str, str]:
     v1_required = {
         "format",
@@ -48,9 +52,16 @@ def verify_rfc3161(
             raise ValueError(
                 "advanced RFC 3161 verification requires the locked py-security-suite runtime"
             ) from exc
-        return verify_full(context_path, value, challenge_sha256)
+        return verify_full(
+            context_path,
+            value,
+            challenge_sha256,
+            require_advanced=require_advanced,
+        )
     if set(value) != v1_required:
         raise ValueError("trusted_time fields do not match the RFC 3161 contract")
+    if require_advanced:
+        raise ValueError("this operation requires the advanced RFC 3161 trust contract")
     if value.get("format") != "rfc3161":
         raise ValueError("trusted_time format must be rfc3161")
     authority = _text(value.get("authority"), "trusted-time authority", 200)

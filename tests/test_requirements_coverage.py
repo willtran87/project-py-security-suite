@@ -5,6 +5,7 @@ import hashlib
 import os
 import tempfile
 import unittest
+from datetime import UTC, datetime
 from importlib.resources import files
 from pathlib import Path
 from unittest.mock import patch
@@ -16,6 +17,7 @@ from py_security_suite.artifact_validation import validate_governed_artifacts
 from py_security_suite.requirements_coverage import (
     security_requirements_coverage_artifact,
 )
+from py_security_suite.strict_json import canonical_bytes
 
 
 class SecurityRequirementsCoverageTests(unittest.TestCase):
@@ -111,6 +113,10 @@ class SecurityRequirementsCoverageTests(unittest.TestCase):
             with (
                 patch.dict(os.environ, environment),
                 patch(
+                    "py_security_suite.trusted_observation.scan_observed_at",
+                    return_value=datetime.now(UTC),
+                ),
+                patch(
                     "py_security_suite.requirements_coverage.verify_governance_quorum"
                 ) as verifier,
             ):
@@ -128,5 +134,138 @@ class SecurityRequirementsCoverageTests(unittest.TestCase):
                 )
         verifier.assert_called_once()
         self.assertTrue(artifact["full_catalog_coverage"])
+        self.assertFalse(artifact["complete"])
+        validate_governed_artifacts({"security-requirements-coverage.json": artifact})
+
+    def test_pinned_catalogs_and_replayed_assertions_establish_assessed_coverage(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            policy_path = root / "requirements-policy.json"
+            standards = ("OWASP-ASVS", "OWASP-MASVS", "OWASP-TCASVS")
+            catalogs = [
+                {
+                    "standard": standard,
+                    "version": "1.0.0",
+                    "source": f"https://example.invalid/{standard}",
+                    "source_revision": str(index + 1) * 40,
+                    "catalog_sha256": str(index + 1) * 64,
+                    "requirements_in_catalog": 1,
+                }
+                for index, standard in enumerate(standards)
+            ]
+            requirements = [
+                {
+                    "standard": standard,
+                    "version": "1.0.0",
+                    "requirement": f"REQ-{index}",
+                    "applicable": index == 0,
+                    "verification_scope": "replayed requirement assertion",
+                    "evidence": ["result.json"] if index == 0 else [],
+                }
+                for index, standard in enumerate(standards)
+            ]
+            policy = {
+                "schema_version": "1.0",
+                "applicability": {
+                    "web_or_api": True,
+                    "mobile": False,
+                    "thick_client": False,
+                },
+                "catalogs": catalogs,
+                "requirements": requirements,
+                "minimum_authority_signatures": 2,
+                "authorities": [{"id": "policy-a"}, {"id": "policy-b"}],
+            }
+            policy_path.write_text(json.dumps(policy), encoding="utf-8")
+            pins: dict[str, str] = {}
+            assessment_catalogs = []
+            for index, standard in enumerate(standards):
+                catalog_path = root / f"catalog-{index}.json"
+                catalog_path.write_text(json.dumps([f"REQ-{index}"]), encoding="utf-8")
+                digest = hashlib.sha256(catalog_path.read_bytes()).hexdigest()
+                pins[f"{standard}@1.0.0"] = digest
+                assessment_catalogs.append(
+                    {
+                        "standard": standard,
+                        "version": "1.0.0",
+                        "source_revision": str(index + 1) * 40,
+                        "requirements_file": catalog_path.name,
+                        "requirements_file_sha256": digest,
+                    }
+                )
+            artifact_value = {"passed": True}
+            artifact_sha256 = hashlib.sha256(
+                canonical_bytes(artifact_value)
+            ).hexdigest()
+            assessed_at = datetime.now(UTC)
+            assessments = [
+                {
+                    "standard": standard,
+                    "version": "1.0.0",
+                    "requirement": f"REQ-{index}",
+                    "result": "pass" if index == 0 else "not-applicable",
+                    "method": "automated replay",
+                    "assessor": "security-assessor",
+                    "assessed_at": assessed_at.isoformat(),
+                    "assertions": (
+                        [
+                            {
+                                "artifact": "result.json",
+                                "sha256": artifact_sha256,
+                                "pointer": "/passed",
+                                "operator": "equals",
+                                "expected": True,
+                            }
+                        ]
+                        if index == 0
+                        else []
+                    ),
+                }
+                for index, standard in enumerate(standards)
+            ]
+            assessment_path = root / "requirements-assessment.json"
+            assessment_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "1.0",
+                        "catalogs": assessment_catalogs,
+                        "assessments": assessments,
+                        "minimum_authority_signatures": 2,
+                        "authorities": [
+                            {"id": "assessment-a"},
+                            {"id": "assessment-b"},
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            environment = {
+                "PYSEC_REQUIREMENTS_POLICY_PATH": str(policy_path),
+                "PYSEC_REQUIREMENTS_POLICY_SHA256": hashlib.sha256(
+                    policy_path.read_bytes()
+                ).hexdigest(),
+                "PYSEC_REQUIREMENTS_ASSESSMENT_PATH": str(assessment_path),
+                "PYSEC_REQUIREMENTS_ASSESSMENT_SHA256": hashlib.sha256(
+                    assessment_path.read_bytes()
+                ).hexdigest(),
+                "PYSEC_REQUIREMENTS_CATALOG_SHA256": json.dumps(pins),
+            }
+            with (
+                patch.dict(os.environ, environment),
+                patch(
+                    "py_security_suite.trusted_observation.scan_observed_at",
+                    return_value=assessed_at,
+                ),
+                patch(
+                    "py_security_suite.requirements_coverage.verify_governance_quorum"
+                ) as verifier,
+            ):
+                artifact = security_requirements_coverage_artifact(
+                    {"languages": {}, "edges": []}, [], {"result.json": artifact_value}
+                )
+        self.assertEqual(verifier.call_count, 2)
         self.assertTrue(artifact["complete"])
+        self.assertEqual(artifact["requirements"][0]["status"], "passed")
         validate_governed_artifacts({"security-requirements-coverage.json": artifact})

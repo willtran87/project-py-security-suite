@@ -42,20 +42,34 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     contract_bytes = _regular_bytes(args.contract)
     contract = strict_loads(contract_bytes)
-    if not isinstance(contract, dict) or set(contract) != {
+    base_fields = {
         "schema_version",
         "base_url",
         "roles",
         "cases",
         "state_cases",
+    }
+    if not isinstance(contract, dict) or set(contract) not in {
+        frozenset(base_fields),
+        frozenset(base_fields | {"oracle", "recovery_checks"}),
     }:
         raise TypeError("authorization contract root fields do not match")
-    if contract.get("schema_version") != "2.0":
-        raise ValueError("authorization contract schema_version must be 2.0")
+    version = str(contract.get("schema_version") or "")
+    advanced = {"oracle", "recovery_checks"}.issubset(contract)
+    if version not in {"2.0", "3.0"} or (version == "3.0") != advanced:
+        raise ValueError("authorization contract version and oracle are inconsistent")
     base_url = _loopback_url(str(contract.get("base_url") or ""))
     roles = _roles(contract.get("roles"))
+    oracle = (
+        _oracle(contract.get("oracle"), base_url, roles) if version == "3.0" else None
+    )
     cases = _cases(contract.get("cases"), roles)
     state_cases = _state_cases(contract.get("state_cases"), roles)
+    recovery_checks = (
+        _recovery_checks(contract.get("recovery_checks"), roles)
+        if version == "3.0"
+        else []
+    )
     findings: list[dict[str, Any]] = []
     requests = 0
     exercised = 0
@@ -98,8 +112,10 @@ def main(argv: list[str] | None = None) -> int:
             roles,
             findings,
             exercised_ids,
+            oracle,
         )
         exercised = len(exercised_ids)
+
         out_of_order = case["out_of_order"]
         out_of_order_step = case["steps"][out_of_order["step_index"]]
         out_of_order_status = _request(
@@ -128,6 +144,7 @@ def main(argv: list[str] | None = None) -> int:
             roles,
             findings,
             exercised_ids,
+            oracle,
         )
         exercised = len(exercised_ids)
         reset_status = _request(
@@ -151,6 +168,7 @@ def main(argv: list[str] | None = None) -> int:
             roles,
             findings,
             exercised_ids,
+            oracle,
         )
         exercised = len(exercised_ids)
         observed: list[int] = []
@@ -179,6 +197,7 @@ def main(argv: list[str] | None = None) -> int:
             roles,
             findings,
             exercised_ids,
+            oracle,
         )
         exercised = len(exercised_ids)
         replay = case["replay"]
@@ -206,6 +225,7 @@ def main(argv: list[str] | None = None) -> int:
             roles,
             findings,
             exercised_ids,
+            oracle,
         )
         exercised = len(exercised_ids)
         reset_status = _request(
@@ -231,6 +251,7 @@ def main(argv: list[str] | None = None) -> int:
             roles,
             findings,
             exercised_ids,
+            oracle,
         )
         exercised = len(exercised_ids)
         concurrent = case["concurrency"]
@@ -271,9 +292,71 @@ def main(argv: list[str] | None = None) -> int:
             roles,
             findings,
             exercised_ids,
+            oracle,
         )
         exercised = len(exercised_ids)
 
+    if recovery_checks and oracle is None:
+        raise ValueError("recovery checks require an independent state oracle")
+    for check in recovery_checks:
+        trigger = check["trigger"]
+        trigger_status = _request(
+            base_url,
+            trigger["path"],
+            roles[trigger["role"]],
+            method=trigger["method"],
+            body_env=trigger["body_env"],
+        )
+        requests += 1
+        exercised_ids.append(f"recovery:{check['phase']}:{check['id']}:trigger")
+        if trigger_status not in set(trigger["expected_status"]):
+            findings.append(
+                _workflow_finding(
+                    check["id"], check["phase"], "recovery-trigger", trigger_status
+                )
+            )
+        postcondition = check["postcondition"]
+        if oracle is None:
+            raise ValueError("recovery checks require an independent state oracle")
+        observed_status, response = _request_observation(
+            oracle["base_url"],
+            postcondition["path"],
+            oracle["role"],
+        )
+        requests += 1
+        exercised_ids.append(f"recovery:{check['phase']}:{check['id']}:postcondition")
+        if observed_status not in set(postcondition["expected_status"]):
+            findings.append(
+                _workflow_finding(
+                    check["id"],
+                    check["phase"],
+                    "recovery-postcondition-status",
+                    observed_status,
+                )
+            )
+            continue
+        try:
+            body = strict_loads(response)
+        except (TypeError, ValueError):
+            findings.append(
+                _workflow_finding(
+                    check["id"], check["phase"], "recovery-postcondition-json", 0
+                )
+            )
+            continue
+        for assertion in postcondition["assertions"]:
+            if not _assert_json(body, assertion):
+                findings.append(
+                    _workflow_finding(
+                        check["id"],
+                        check["phase"],
+                        "recovery-postcondition-invariant",
+                        0,
+                    )
+                )
+                break
+
+    exercised = len(exercised_ids)
     context = load_context(args.context, exercised_ids)
     generated = datetime.now(UTC)
     environment = "loopback-multi-role-http-contract"
@@ -282,14 +365,16 @@ def main(argv: list[str] | None = None) -> int:
         "schema_version": "2.0",
         "kind": "authorization-security",
         "producer": "pysec-authorization-contract",
-        "producer_version": "1",
+        "producer_version": "2",
         "producer_sha256": producer_sha256,
         "revision": _text(args.revision, "revision", 200),
         "generated_at": generated.isoformat(),
         "expires_at": (generated + timedelta(hours=args.valid_for_hours)).isoformat(),
         "run_id": _context_run_id(args.run_id, context["run_id"]),
         "artifact_sha256": "",
-        "ruleset_sha256": hashlib.sha256(b"authorization-contract-v2").hexdigest(),
+        "ruleset_sha256": hashlib.sha256(
+            f"authorization-contract-v{version}".encode()
+        ).hexdigest(),
         "config_sha256": hashlib.sha256(contract_bytes).hexdigest(),
         "environment": environment,
         "environment_sha256": hashlib.sha256(environment.encode()).hexdigest(),
@@ -316,10 +401,28 @@ def main(argv: list[str] | None = None) -> int:
                 "atomicity",
                 "business-logic-state-machine",
                 "state-reset-isolation",
-                "durable-postconditions",
-                "response-body-invariants",
+                *(
+                    (
+                        "durable-postconditions",
+                        "response-body-invariants",
+                        "independent-state-oracle",
+                        "process-restart-postconditions",
+                        "replica-failover-postconditions",
+                    )
+                    if oracle is not None
+                    else ()
+                ),
             ],
-            "skipped_checks": [],
+            "skipped_checks": (
+                []
+                if oracle is not None
+                else [
+                    "independent-state-oracle",
+                    "durable-postconditions",
+                    "process-restart-postconditions",
+                    "replica-failover-postconditions",
+                ]
+            ),
             "canaries_expected": 1,
             "canaries_observed": int(_boundary_canary()),
         },
@@ -352,6 +455,58 @@ def _loopback_url(value: str) -> str:
                 "base_url must use localhost or an explicit loopback"
             ) from exc
     return value.rstrip("/") + "/"
+
+
+def _oracle(
+    value: object,
+    application_url: str,
+    roles: dict[str, dict[str, str]],
+) -> dict[str, Any]:
+    required = {"base_url", "authorization_env", "identity_sha256"}
+    if not isinstance(value, dict) or set(value) != required:
+        raise ValueError("independent state oracle fields do not match")
+    base_url = _loopback_url(str(value["base_url"] or ""))
+    application = urlsplit(application_url)
+    observer = urlsplit(base_url)
+    if (application.scheme, application.hostname, application.port) == (
+        observer.scheme,
+        observer.hostname,
+        observer.port,
+    ):
+        raise ValueError("state oracle must use an independent network origin")
+    authorization_env = str(value["authorization_env"] or "")
+    if (
+        not authorization_env
+        or authorization_env.upper() != authorization_env
+        or not authorization_env.replace("_", "").isalnum()
+        or len(authorization_env) > 100
+    ):
+        raise ValueError("state oracle authorization environment is invalid")
+    if authorization_env in {
+        settings["authorization_env"]
+        for settings in roles.values()
+        if settings["authorization_env"]
+    }:
+        raise ValueError(
+            "state oracle must use credentials distinct from application roles"
+        )
+    identity = str(value["identity_sha256"] or "")
+    if len(identity) != 64 or any(
+        character not in "0123456789abcdef" for character in identity
+    ):
+        raise ValueError("state oracle deployment identity is invalid")
+    if (
+        os.environ.get("PYSEC_AUTHORIZATION_ORACLE_IDENTITY_SHA256", "")
+        .strip()
+        .casefold()
+        != identity
+    ):
+        raise ValueError("state oracle identity does not match its deployment pin")
+    return {
+        "base_url": base_url,
+        "role": {"authorization_env": authorization_env},
+        "identity_sha256": identity,
+    }
 
 
 def _roles(value: object) -> dict[str, dict[str, str]]:
@@ -464,6 +619,60 @@ def _state_cases(
             }
         )
     return result
+
+
+def _recovery_checks(
+    value: object, roles: dict[str, dict[str, str]]
+) -> list[dict[str, Any]]:
+    if not isinstance(value, list) or not 2 <= len(value) <= 20:
+        raise TypeError("recovery_checks must contain between 2 and 20 entries")
+    result: list[dict[str, Any]] = []
+    identifiers: set[str] = set()
+    phases: set[str] = set()
+    for item in value:
+        if not isinstance(item, dict) or set(item) != {
+            "id",
+            "phase",
+            "trigger",
+            "postcondition",
+        }:
+            raise TypeError("recovery check fields do not match the contract")
+        identifier = _label(item["id"], "recovery check id")
+        phase = _label(item["phase"], "recovery check phase")
+        if identifier in identifiers or phase not in {
+            "process-restart",
+            "replica-failover",
+        }:
+            raise ValueError("recovery check identity or phase is invalid")
+        trigger = _request_spec(item["trigger"], roles, "recovery trigger")
+        postcondition = _recovery_postcondition(item["postcondition"])
+        identifiers.add(identifier)
+        phases.add(phase)
+        result.append(
+            {
+                "id": identifier,
+                "phase": phase,
+                "trigger": trigger,
+                "postcondition": postcondition,
+            }
+        )
+    if phases != {"process-restart", "replica-failover"}:
+        raise ValueError("recovery_checks must exercise restart and replica failover")
+    return result
+
+
+def _recovery_postcondition(value: object) -> dict[str, Any]:
+    required = {"path", "expected_status", "assertions"}
+    if not isinstance(value, dict) or set(value) != required:
+        raise TypeError("recovery postcondition fields do not match the contract")
+    assertions = value["assertions"]
+    if not isinstance(assertions, list) or not 1 <= len(assertions) <= 100:
+        raise TypeError("recovery postcondition assertions must be bounded")
+    return {
+        "path": _relative_path(value["path"]),
+        "expected_status": _status_list(value["expected_status"]),
+        "assertions": [_json_assertion(assertion) for assertion in assertions],
+    }
 
 
 def _state_step(value: object, roles: dict[str, dict[str, str]]) -> dict[str, Any]:
@@ -635,15 +844,16 @@ def _evaluate_postconditions(
     roles: dict[str, dict[str, str]],
     findings: list[dict[str, Any]],
     exercised_ids: list[str],
+    oracle: dict[str, Any] | None,
 ) -> int:
     evaluated = 0
     for postcondition in case["postconditions"]:
         if postcondition["phase"] != phase:
             continue
         status, body = _request_observation(
-            base_url,
+            str(oracle["base_url"]) if oracle is not None else base_url,
             postcondition["path"],
-            roles[postcondition["role"]],
+            oracle["role"] if oracle is not None else roles[postcondition["role"]],
         )
         evaluated += 1
         exercised_ids.append(

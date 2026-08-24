@@ -209,8 +209,16 @@ still execute in dynamic or connected companion stages:
    mobile, transport, and polyglot evidence.
 5. **Multi-role authorization contracts** for explicit BOLA/IDOR and tenant
    boundaries plus state transitions, replay resistance, concurrency limits,
-   and approval ceilings. These complement, but cannot infer, human-reviewed
-   business rules and approval intent.
+   and approval ceilings. Contract schema 3.0 reads every durable postcondition
+   through a separately credentialed, deployment-identified observer on a
+   distinct network origin. It requires explicit process-restart and replica-
+   failover triggers and verifies their durable invariants through that observer;
+   the observer identity is deployment-pinned through
+   `PYSEC_AUTHORIZATION_ORACLE_IDENTITY_SHA256`, and its credential cannot be
+   shared with an application role;
+   schema 2.0 records these resilience, independent-oracle, and durable-
+   postcondition checks as skipped. These complement, but cannot infer, human-
+   reviewed business rules and approval intent.
 6. **Self-hosted OAST, RESTler, gRPC/WebSocket/TCP contracts, Fuzz
    Introspector, cloud attack-path correlation, and redacted provider secret
    receipts** for blind callbacks, stateful APIs, non-HTTP faults, harness
@@ -271,9 +279,14 @@ labels for each required tool. CWE, language, parser, boundary, severity, and
 mutation diversity minimums are enforced, and every required tool needs both
 positive and negative cases. Omitting CLI flags cannot disable this gate.
 `security-requirements-coverage.json` records pinned ASVS 5.0.0, MASVS 2.1.0,
-and TCASVS 5.0.0 catalog metadata and mapped evidence, but remains incomplete
-until the full catalog and an organization-approved applicability decision are
-present; it never equates selected mappings with standards conformance.
+and TCASVS 5.0.0 catalog metadata and mapped evidence. Full completion requires
+both the threshold-signed applicability policy and a separate threshold-signed
+assessment named by `PYSEC_REQUIREMENTS_ASSESSMENT_PATH`. The assessment must
+match exact, canonical requirement-ID snapshots pinned outside the evidence by
+`PYSEC_REQUIREMENTS_CATALOG_SHA256`; every applicable pass or fail carries an
+assessor, trusted assessment time, method, artifact SHA-256, JSON Pointer,
+operator, and expected value. The suite replays those assertions and derives
+the result. Artifact names or catalog counts alone cannot establish conformance.
 
 ## Promotion evidence
 

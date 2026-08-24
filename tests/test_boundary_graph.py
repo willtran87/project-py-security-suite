@@ -72,6 +72,24 @@ class BoundaryGraphTests(unittest.TestCase):
         self.assertFalse(graph["complete"])
         self.assertFalse(graph["semantic_complete"])
 
+    def test_notebook_wasm_and_dynamic_imports_are_analyzed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "analysis.ipynb").write_text(
+                '{"cells":[{"cell_type":"code","source":["importlib.import_module(\\"plugins.auth\\")\\n"]}]}',
+                encoding="utf-8",
+            )
+            # One function import: module "env", field "clock", type index 0.
+            (root / "module.wasm").write_bytes(
+                b"\0asm\x01\0\0\0\x02\x0d\x01\x03env\x05clock\x00\x00"
+            )
+            graph = build_boundary_graph(root)
+
+        self.assertTrue(graph["special_surface_complete"])
+        targets = {(edge["kind"], edge["target"]) for edge in graph["edges"]}
+        self.assertIn(("dynamic-dispatch", "plugins.auth"), targets)
+        self.assertIn(("binary-import", "env.clock"), targets)
+
 
 if __name__ == "__main__":
     unittest.main()

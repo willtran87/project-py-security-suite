@@ -389,14 +389,17 @@ contracts that complement scanner coverage:
   `diff-coverage.json`; and Checkov produces `checkov-iac.json`.
 - KICS produces `kics-iac.json`; git-sizer produces `git-sizer.json`; and
   pipdeptree produces `pipdeptree-summary.json`.
-- Checkov, git-sizer, and pipdeptree normalized artifacts retain the exact UTF-8
-  native payload alongside its byte count, record count, native SHA-256, and a
-  digest of the normalization subject. A verifier can therefore replay the
-  normalizer and detect either raw-payload or normalized-accounting tampering.
-- `boundary-graph.json` separately inventories notebooks, templates, bytecode,
-  native extensions, WebAssembly, generated source, and dynamic-code entry
-  points. Unsupported or heuristic-only special surfaces prevent complete or
-  semantic-complete claims instead of disappearing from the denominator.
+- Checkov, git-sizer, and pipdeptree normalized artifacts retain a deterministic
+  projection with every string value redacted, raw and redacted commitments,
+  classification, and replay
+  policy. When `PYSEC_RAW_EVIDENCE_DIRECTORY` and a digest-pinned 256-bit key are
+  configured, exact raw bytes are encrypted with AES-GCM in a content-addressed
+  sidecar; otherwise the public artifact is explicitly non-replayable.
+- `boundary-graph.json` parses Python notebook cells and WebAssembly imports,
+  validates and inventories Python bytecode, reads PE/ELF/Mach-O imports, models
+  template includes, and records reflection, plugin, entry-point, and dynamic
+  import dispatch. Malformed, unsupported, or heuristic-only surfaces prevent
+  complete or semantic-complete claims instead of disappearing from the denominator.
 - Trusted-lane evidence produces a bounded `<tool>-summary.json` and never
   forwards raw crash logs, process output, artifact bytes, or malware samples.
 - Every scan emits `sonarqube-external-issues.json` in addition to SARIF, so a

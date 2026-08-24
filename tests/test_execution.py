@@ -8,6 +8,7 @@ import subprocess  # nosec B404 - subprocess behavior is the test subject
 import sys
 import tempfile
 import unittest
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import MagicMock, call, patch
 
@@ -336,10 +337,12 @@ class IsolatedEnvironmentTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "runtime-plugin manifest"):
                 native_runtime_closure_sha256(executable, require_plugin_manifest=True)
 
+    @patch("py_security_suite.trusted_observation.scan_observed_at")
     @patch("py_security_suite.execution.verify_governance_quorum")
     def test_production_native_runtime_requires_loader_observation(
-        self, verify_authority: MagicMock
+        self, verify_authority: MagicMock, observed_at: MagicMock
     ) -> None:
+        observed_at.return_value = datetime.now(UTC)
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             executable = root / "scanner.bin"

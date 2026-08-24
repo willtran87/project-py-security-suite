@@ -454,8 +454,10 @@ scan used external attestation or a digest-pinned sandbox launcher.
 TCP/UDP, IPv4/IPv6, Unix-domain and raw sockets, cleared proxy and credential
 variables, unrelated host-secret read denial, root/nested target writes, link
 creation, named shared-memory IPC, parent-process access/PID visibility, and
-private scratch. Linux additionally records `NoNewPrivs`, effective
-capabilities, and seccomp mode and requires the first two enforced; Windows
+private scratch. Linux additionally requires `NoNewPrivs`, zero effective
+capabilities, seccomp filter mode with at least one filter, and the
+deployment-owned `PYSEC_SECCOMP_POLICY_SHA256` commitment. macOS requires the
+digest-bound production sandbox launcher, arguments, and runtime closure; Windows
 requires DEP, ASLR, dynamic-code prohibition, and child-process prohibition.
 Sandbox arguments may use
 `{PYSEC_PROBE_SECRET_PARENT}` to mask the per-run secret directory. Governance

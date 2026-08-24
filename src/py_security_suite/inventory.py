@@ -252,6 +252,7 @@ def _materialize_git_history(
     if git is None:
         raise ValueError("Git is unavailable while sealing repository history")
     _validate_git_repository_mode(git, target)
+    repository_state = _git_repository_state(git, target)
     work_root.mkdir(mode=0o700, parents=True)
     bundle = work_root / "repository.bundle"
     clone = work_root / "history"
@@ -275,6 +276,10 @@ def _materialize_git_history(
     )
     if created.exit_code != 0 or created.timed_out or not bundle.is_file():
         raise ValueError("Git history could not be sealed into a repository bundle")
+    if _git_repository_state(git, target) != repository_state:
+        raise ValueError(
+            "Git refs or repository security configuration changed while sealing history"
+        )
     if bundle.stat().st_size > 4 * 1024**3:
         raise ValueError("sealed Git history exceeds 4 GiB")
     verified = run_command(
@@ -286,6 +291,15 @@ def _materialize_git_history(
     )
     if verified.exit_code != 0 or verified.timed_out:
         raise ValueError("sealed Git history bundle failed prerequisite validation")
+    bundled_refs = _git_bundle_refs(git, bundle, target)
+    bundled_head = bundled_refs.pop("HEAD", None)
+    if bundled_refs != repository_state["refs"] or bundled_head not in {
+        None,
+        repository_state["head"],
+    }:
+        raise ValueError(
+            "sealed Git history bundle ref set does not match the qualified repository"
+        )
     cloned = run_command(
         [git, "clone", "--no-checkout", "--no-local", str(bundle), str(clone)],
         cwd=work_root,
@@ -313,6 +327,87 @@ def _materialize_git_history(
     if observed.exit_code != 0 or observed.stdout.strip().casefold() != revision:
         raise ValueError("sealed Git history does not match the inventoried revision")
     _copy_regular_tree(clone / ".git", snapshot / ".git")
+
+
+def _git_repository_state(git: str, target: Path) -> dict[str, Any]:
+    """Capture the complete ref namespace and security-sensitive Git state."""
+
+    def query(arguments: list[str], *, exits: frozenset[int] = frozenset({0})) -> str:
+        result = run_command(
+            [
+                git,
+                "-c",
+                f"safe.directory={target.resolve()}",
+                "-C",
+                str(target),
+                *arguments,
+            ],
+            cwd=target,
+            timeout_seconds=120,
+            max_output_bytes=4 * 1024 * 1024,
+        )
+        if result.timed_out or result.exit_code not in exits:
+            raise ValueError("Git repository state could not be captured atomically")
+        return result.stdout.strip()
+
+    refs = _parse_ref_lines(
+        query(["for-each-ref", "--format=%(objectname) %(refname)"])
+    )
+    head = query(["rev-parse", "--verify", "HEAD"]).casefold()
+    symbolic_head = query(["symbolic-ref", "-q", "HEAD"], exits=frozenset({0, 1}))
+    configuration = query(
+        [
+            "config",
+            "--null",
+            "--get-regexp",
+            r"^(extensions\.partialClone|core\.sparseCheckout|core\.sparseCheckoutCone|remote\..*\.promisor)$",
+        ],
+        exits=frozenset({0, 1}),
+    )
+    common = Path(query(["rev-parse", "--git-common-dir"]))
+    if not common.is_absolute():
+        common = target / common
+    alternates = common.resolve() / "objects" / "info" / "alternates"
+    alternates_sha256 = (
+        hashlib.sha256(alternates.read_bytes()).hexdigest()
+        if alternates.is_file()
+        else ""
+    )
+    return {
+        "refs": refs,
+        "head": head,
+        "symbolic_head": symbolic_head,
+        "replace_refs": query(["replace", "-l"]),
+        "security_config_sha256": hashlib.sha256(configuration.encode()).hexdigest(),
+        "alternates_sha256": alternates_sha256,
+    }
+
+
+def _git_bundle_refs(git: str, bundle: Path, target: Path) -> dict[str, str]:
+    listed = run_command(
+        [git, "bundle", "list-heads", str(bundle)],
+        cwd=target,
+        timeout_seconds=120,
+        max_output_bytes=4 * 1024 * 1024,
+    )
+    if listed.exit_code != 0 or listed.timed_out:
+        raise ValueError("sealed Git history bundle refs could not be inspected")
+    return _parse_ref_lines(listed.stdout.strip())
+
+
+def _parse_ref_lines(value: str) -> dict[str, str]:
+    refs: dict[str, str] = {}
+    for line in value.splitlines():
+        parts = line.split(maxsplit=1)
+        if len(parts) != 2 or len(parts[0]) not in {40, 64}:
+            raise ValueError("Git ref advertisement is invalid")
+        digest, name = parts[0].casefold(), parts[1]
+        if name in refs or any(
+            character not in "0123456789abcdef" for character in digest
+        ):
+            raise ValueError("Git ref advertisement is duplicated or invalid")
+        refs[name] = digest
+    return dict(sorted(refs.items()))
 
 
 def _validate_git_repository_mode(git: str, target: Path) -> None:

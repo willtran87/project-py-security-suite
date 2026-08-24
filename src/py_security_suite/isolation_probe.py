@@ -48,6 +48,7 @@ result = {
     "linux_no_new_privileges": not sys.platform.startswith("linux"),
     "linux_capabilities_dropped": not sys.platform.startswith("linux"),
     "linux_seccomp_mode": 0 if sys.platform.startswith("linux") else -1,
+    "linux_seccomp_filters": 0 if sys.platform.startswith("linux") else -1,
     "windows_policy_tested": os.name == "nt",
     "windows_dep_enabled": os.name != "nt", "windows_aslr_enabled": os.name != "nt",
     "windows_dynamic_code_prohibited": os.name != "nt",
@@ -75,6 +76,7 @@ if sys.platform.startswith("linux"):
         result["linux_no_new_privileges"] = status.get("NoNewPrivs") == "1"
         result["linux_capabilities_dropped"] = int(status.get("CapEff", "1"), 16) == 0
         result["linux_seccomp_mode"] = int(status.get("Seccomp", "0"))
+        result["linux_seccomp_filters"] = int(status.get("Seccomp_filters", "0"))
         visible = {int(item.name) for item in Path("/proc").iterdir() if item.name.isdigit()}
         result["process_namespace_isolated"] = parent_pid not in visible
     except (OSError, ValueError):
@@ -418,6 +420,7 @@ def probe_isolation_boundary(
             "linux_no_new_privileges",
             "linux_capabilities_dropped",
             "linux_seccomp_mode",
+            "linux_seccomp_filters",
             "windows_policy_tested",
             "windows_dep_enabled",
             "windows_aslr_enabled",
@@ -464,6 +467,10 @@ def probe_isolation_boundary(
             "capabilities_dropped": value["linux_capabilities_dropped"] is True,
             "seccomp_mode": value["linux_seccomp_mode"],
             "seccomp_active": value["linux_seccomp_mode"] in {1, 2},
+            "seccomp_filters": value["linux_seccomp_filters"],
+            "seccomp_policy_sha256": os.environ.get("PYSEC_SECCOMP_POLICY_SHA256", "")
+            .strip()
+            .casefold(),
         }
         if isinstance(locals().get("value"), dict)
         and value.get("linux_policy_tested") is True
@@ -477,14 +484,44 @@ def probe_isolation_boundary(
         }
         if isinstance(locals().get("value"), dict)
         and value.get("windows_policy_tested") is True
+        else {
+            "platform": "macos",
+            "sandbox_profile_sha256": hashlib.sha256(
+                canonical_bytes(
+                    {
+                        "sandbox_executable_sha256": config.sandbox_executable_sha256,
+                        "sandbox_runtime_closure_sha256": config.sandbox_runtime_closure_sha256,
+                        "sandbox_arguments": list(config.sandbox_arguments),
+                    }
+                )
+            ).hexdigest()
+            if config.sandbox_executable_sha256
+            and config.sandbox_runtime_closure_sha256
+            and config.sandbox_arguments
+            else "",
+        }
+        if sys.platform == "darwin"
         else {"platform": sys.platform, "policy_introspection_available": False}
     )
     if policy_observations.get("platform") == "linux":
+        seccomp_filters = policy_observations.get("seccomp_filters")
         capabilities["linux-no-new-privileges"] = (
             policy_observations["no_new_privileges"] is True
         )
         capabilities["linux-capabilities-dropped"] = (
             policy_observations["capabilities_dropped"] is True
+        )
+        capabilities["linux-seccomp-filter-enforced"] = (
+            policy_observations["seccomp_mode"] == 2
+            and isinstance(seccomp_filters, int)
+            and not isinstance(seccomp_filters, bool)
+            and seccomp_filters >= 1
+        )
+        capabilities["linux-seccomp-policy-bound"] = len(
+            str(policy_observations["seccomp_policy_sha256"])
+        ) == 64 and all(
+            character in "0123456789abcdef"
+            for character in str(policy_observations["seccomp_policy_sha256"])
         )
     elif policy_observations.get("platform") == "windows":
         capabilities["windows-dep-enabled"] = policy_observations["dep_enabled"] is True
@@ -496,6 +533,10 @@ def probe_isolation_boundary(
         )
         capabilities["windows-child-processes-prohibited"] = (
             policy_observations["child_processes_prohibited"] is True
+        )
+    elif policy_observations.get("platform") == "macos":
+        capabilities["macos-sandbox-profile-bound"] = (
+            len(str(policy_observations["sandbox_profile_sha256"])) == 64
         )
     complete = (
         execution.exit_code == 0

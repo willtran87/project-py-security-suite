@@ -1,6 +1,11 @@
 {
-  "schema_version": "2.0",
+  "schema_version": "3.0",
   "base_url": "http://127.0.0.1:8765/",
+  "oracle": {
+    "base_url": "http://127.0.0.1:8766/",
+    "authorization_env": "PYSEC_AUTHORIZATION_ORACLE_TOKEN",
+    "identity_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
   "roles": {
     "anonymous": {},
     "tenant_a": {"authorization_env": "PYSEC_TENANT_A_TOKEN"},
@@ -140,6 +145,46 @@
           ]
         }
       ]
+    }
+  ],
+  "recovery_checks": [
+    {
+      "id": "transfer-process-restart",
+      "phase": "process-restart",
+      "trigger": {
+        "path": "/api/test-fixtures/process/restart",
+        "role": "administrator",
+        "method": "POST",
+        "body_env": "",
+        "expected_status": [202, 204]
+      },
+      "postcondition": {
+        "path": "/api/test-fixtures/transfers/known-test-transfer/state",
+        "expected_status": [200],
+        "assertions": [
+          {"pointer": "/approved", "operator": "equals", "value": false},
+          {"pointer": "/approval_count", "operator": "lte", "value": 0}
+        ]
+      }
+    },
+    {
+      "id": "transfer-replica-failover",
+      "phase": "replica-failover",
+      "trigger": {
+        "path": "/api/test-fixtures/replicas/failover",
+        "role": "administrator",
+        "method": "POST",
+        "body_env": "",
+        "expected_status": [202, 204]
+      },
+      "postcondition": {
+        "path": "/api/test-fixtures/transfers/known-test-transfer/state",
+        "expected_status": [200],
+        "assertions": [
+          {"pointer": "/approved", "operator": "equals", "value": false},
+          {"pointer": "/approval_count", "operator": "lte", "value": 0}
+        ]
+      }
     }
   ]
 }

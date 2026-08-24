@@ -1,10 +1,19 @@
 from __future__ import annotations
 
 import hashlib
+import base64
+import os
+import ssl
 import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlsplit
+from urllib.request import Request, urlopen
+
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 from .assurance_profile import verify_governance_quorum
 from .execution import sha256_file
@@ -29,6 +38,11 @@ def evaluate_report_corpus(
     trusted_time: Path | None = None,
     trusted_time_sha256: str = "",
     replay_ledger: Path | None = None,
+    replay_service_url: str = "",
+    replay_service_token_env: str = "",
+    replay_service_receipt_key: Path | None = None,
+    replay_service_receipt_key_sha256: str = "",
+    replay_query_budget: int = 1,
 ) -> dict[str, Any]:
     """Measure a verified report against a digest-bound labeled corpus."""
     verification = verify_report(report)
@@ -73,6 +87,11 @@ def evaluate_report_corpus(
         observed_digest,
         time_authority,
         replay_ledger,
+        replay_service_url,
+        replay_service_token_env,
+        replay_service_receipt_key,
+        replay_service_receipt_key_sha256,
+        replay_query_budget,
     )
     _validate_clean_paths(labels, report_root)
     outcomes = [_evaluate_label(label, findings) for label in labels]
@@ -115,12 +134,17 @@ def evaluate_report_corpus(
             "specificity": _ratio(true_negative, true_negative + false_positive),
             "f1": _f1(true_positive, false_positive, false_negative),
         },
-        "failures": [
+        "feedback_policy": (
+            "aggregate-only" if document.get("schema_version") == "2.0" else "detailed"
+        ),
+        "failures": []
+        if document.get("schema_version") == "2.0"
+        else [
             outcome
             for outcome in outcomes
             if outcome["outcome"] in {"false_positive", "false_negative"}
         ],
-        "label_outcomes": outcomes,
+        "label_outcomes": [] if document.get("schema_version") == "2.0" else outcomes,
     }
 
 
@@ -343,18 +367,13 @@ def _consume_effectiveness_replay(
     corpus_sha256: str,
     time_authority: dict[str, Any],
     replay_ledger: Path | None,
+    replay_service_url: str,
+    replay_service_token_env: str,
+    replay_service_receipt_key: Path | None,
+    replay_service_receipt_key_sha256: str,
+    replay_query_budget: int,
 ) -> bool:
     governed = document.get("schema_version") == "2.0"
-    if replay_ledger is None:
-        if governed:
-            raise ValueError(
-                "governed effectiveness evaluation requires a replay ledger"
-            )
-        return False
-    ledger = replay_ledger.expanduser().resolve()
-    ledger.parent.mkdir(parents=True, exist_ok=True)
-    if ledger.is_symlink():
-        raise ValueError("effectiveness replay ledger must not be a symbolic link")
     replay_key = hashlib.sha256(
         canonical_bytes(
             {
@@ -365,6 +384,29 @@ def _consume_effectiveness_replay(
             }
         )
     ).hexdigest()
+    if governed:
+        if replay_ledger is not None:
+            raise ValueError(
+                "governed effectiveness evaluation cannot use a rollbackable local ledger"
+            )
+        _consume_remote_effectiveness_replay(
+            replay_key,
+            corpus_id=str(document.get("corpus_id") or ""),
+            holdout_sha256=str(document.get("holdout_labels_sha256") or ""),
+            observed_at=str(time_authority["observed_at"]),
+            service_url=replay_service_url,
+            token_env=replay_service_token_env,
+            receipt_key=replay_service_receipt_key,
+            receipt_key_sha256=replay_service_receipt_key_sha256,
+            query_budget=replay_query_budget,
+        )
+        return True
+    if replay_ledger is None:
+        return False
+    ledger = replay_ledger.expanduser().resolve()
+    ledger.parent.mkdir(parents=True, exist_ok=True)
+    if ledger.is_symlink():
+        raise ValueError("effectiveness replay ledger must not be a symbolic link")
     connection = sqlite3.connect(ledger, timeout=30, isolation_level=None)
     try:
         connection.execute("PRAGMA journal_mode=WAL")
@@ -388,6 +430,126 @@ def _consume_effectiveness_replay(
     finally:
         connection.close()
     return True
+
+
+def _consume_remote_effectiveness_replay(
+    replay_key: str,
+    *,
+    corpus_id: str,
+    holdout_sha256: str,
+    observed_at: str,
+    service_url: str,
+    token_env: str,
+    receipt_key: Path | None,
+    receipt_key_sha256: str,
+    query_budget: int,
+) -> None:
+    target = urlsplit(service_url)
+    if (
+        target.scheme != "https"
+        or not target.hostname
+        or target.username
+        or target.password
+        or target.query
+        or target.fragment
+    ):
+        raise ValueError(
+            "governed effectiveness replay service must be credential-free HTTPS"
+        )
+    if (
+        not token_env
+        or token_env.upper() != token_env
+        or not token_env.replace("_", "").isalnum()
+        or not os.environ.get(token_env)
+    ):
+        raise ValueError("governed effectiveness replay authentication is unavailable")
+    if (
+        receipt_key is None
+        or not _digest(receipt_key_sha256)
+        or not 1 <= query_budget <= 100
+    ):
+        raise ValueError("governed effectiveness replay receipt policy is incomplete")
+    _, public_bytes = read_regular_file(
+        receipt_key,
+        "effectiveness replay receipt key",
+        maximum_bytes=64 * 1024,
+    )
+    if hashlib.sha256(public_bytes).hexdigest() != receipt_key_sha256:
+        raise ValueError("effectiveness replay receipt key SHA-256 does not match")
+    public_key = serialization.load_pem_public_key(public_bytes)
+    if not isinstance(public_key, Ed25519PublicKey):
+        raise ValueError("effectiveness replay receipt key must use Ed25519")
+    request_subject = {
+        "schema_version": "1.0",
+        "replay_key": replay_key,
+        "corpus_id": corpus_id,
+        "holdout_labels_sha256": holdout_sha256,
+        "observed_at": observed_at,
+        "query_budget": query_budget,
+    }
+    request = Request(  # noqa: S310
+        service_url,
+        data=canonical_bytes(request_subject),
+        headers={
+            "Authorization": f"Bearer {os.environ[token_env]}",
+            "Content-Type": "application/json",
+            "User-Agent": "py-security-suite-effectiveness-replay/1",
+        },
+        method="POST",
+    )
+    try:
+        with urlopen(  # noqa: S310
+            request, timeout=10, context=ssl.create_default_context()
+        ) as response:
+            payload = response.read(64 * 1024 + 1)
+    except (HTTPError, URLError, TimeoutError) as exc:
+        raise ValueError(
+            "governed effectiveness replay service rejected consumption"
+        ) from exc
+    if len(payload) > 64 * 1024:
+        raise ValueError("governed effectiveness replay receipt is oversized")
+    try:
+        receipt = strict_loads(payload)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            "governed effectiveness replay receipt is invalid JSON"
+        ) from exc
+    fields = {
+        "schema_version",
+        "status",
+        "replay_key",
+        "sequence",
+        "holdout_uses",
+        "signature_base64",
+    }
+    if not isinstance(receipt, dict) or set(receipt) != fields:
+        raise ValueError("governed effectiveness replay receipt fields do not match")
+    signed = {name: receipt[name] for name in fields - {"signature_base64"}}
+    if (
+        receipt["schema_version"] != "1.0"
+        or receipt["status"] != "consumed"
+        or receipt["replay_key"] != replay_key
+        or isinstance(receipt["sequence"], bool)
+        or not isinstance(receipt["sequence"], int)
+        or receipt["sequence"] < 1
+        or isinstance(receipt["holdout_uses"], bool)
+        or not isinstance(receipt["holdout_uses"], int)
+        or not 1 <= receipt["holdout_uses"] <= query_budget
+    ):
+        raise ValueError("governed effectiveness replay receipt policy failed")
+    try:
+        signature = base64.b64decode(str(receipt["signature_base64"]), validate=True)
+        public_key.verify(signature, canonical_bytes(signed))
+    except Exception as exc:
+        raise ValueError(
+            "governed effectiveness replay receipt signature failed"
+        ) from exc
+
+
+def _digest(value: str) -> bool:
+    return len(value) == 64 and all(
+        character in "0123456789abcdef" for character in value
+    )
 
 
 def _diversity(labels: list[dict[str, Any]]) -> dict[str, int]:

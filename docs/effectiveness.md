@@ -121,12 +121,15 @@ positive and a negative case. A schema-1.0 evaluation, a self-signed corpus, a
 training/holdout digest collision, a stale authority, or diversity metadata
 that disagrees with the outcomes fails the production gate.
 
-Governed evaluation also requires an advanced RFC 3161 context and a durable
-replay ledger. The timestamp challenge binds the sealed report checksum, exact
+Governed evaluation also requires an advanced RFC 3161 context and a signed,
+remote consume-once service. The timestamp challenge binds the sealed report checksum, exact
 corpus digest, and holdout-label digest; the verified timestamp is then used as
-the authority-validation time. The replay ledger atomically consumes that
-report/corpus/time tuple, so an identical holdout evaluation cannot be silently
-reused. Release readiness requires both `time_authority.validated` and
+the authority-validation time. A rollbackable local SQLite ledger is rejected
+for schema 2.0. The service atomically consumes that report/corpus/time tuple,
+returns a deployment-pinned Ed25519 receipt and monotonic sequence, and enforces
+the configured holdout query budget. Governed output is aggregate-only: label
+identities and per-label failures are withheld to reduce tuning leakage. Release
+readiness requires both `time_authority.validated` and
 `replay_protected` in addition to the corpus quorum.
 
 Run the benchmark only after sealing and verifying the scan report:
@@ -137,7 +140,11 @@ pysec benchmark REPORT \
   --corpus-sha256 APPROVED_SHA256 \
   --trusted-time effectiveness-time.json \
   --trusted-time-sha256 APPROVED_TIME_CONTEXT_SHA256 \
-  --replay-ledger security-data/effectiveness-replay.sqlite3 \
+  --replay-service-url https://replay.security.example/v1/effectiveness/consume \
+  --replay-service-token-env PYSEC_EFFECTIVENESS_REPLAY_TOKEN \
+  --replay-service-receipt-key security-data/replay-receipt.pub.pem \
+  --replay-service-receipt-key-sha256 APPROVED_RECEIPT_KEY_SHA256 \
+  --replay-query-budget 1 \
   --format json \
   --output effectiveness-evaluation.json
 ```

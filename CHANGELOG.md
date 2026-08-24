@@ -1,5 +1,17 @@
 # Changelog
 
+- Reverify portable detached semantic-authority receipts at final manifest
+  admission; use one advanced RFC 3161 scan time for governed loader, policy,
+  catalog, and assessment decisions; compare complete Git refs and security
+  state across history sealing; require digest-bound seccomp and macOS launcher
+  policy; add independent authorization state oracles with mandatory process-
+  restart and replica-failover invariants; require remote signed
+  effectiveness replay with query budgets and aggregate-only feedback; replay
+  requirement-specific assertions against deployment-pinned standard catalogs;
+  analyze notebook, template, bytecode, native, WebAssembly, reflection, and
+  plugin surfaces; and move sensitive native payloads to redacted projections
+  with optional AES-GCM content-addressed storage.
+
 - Preserve verified Git history, recursive submodule history, and working-tree
   diff semantics in immutable scan snapshots; reject Git LFS pointer
   placeholders and symlink omissions; execute scanners against private,
