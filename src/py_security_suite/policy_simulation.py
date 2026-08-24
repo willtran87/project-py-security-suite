@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-import json
+
+from .strict_json import loads as strict_json_loads
 from collections import Counter
 from pathlib import Path
 from typing import Any
@@ -197,7 +198,7 @@ def _read(path: Path) -> dict[str, Any]:
     source = resolve_regular_file(path, "policy simulation input")
     if source.stat().st_size > _MAX_JSON_BYTES:
         raise ValueError("policy simulation input exceeds 128 MiB")
-    value = json.loads(source.read_bytes())
+    value = strict_json_loads(source.read_bytes())
     if not isinstance(value, dict):
         raise TypeError("policy simulation input root must be an object")
     return value

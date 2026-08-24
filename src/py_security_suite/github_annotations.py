@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-import json
+
+from .strict_json import loads as strict_json_loads
 from pathlib import Path
 from typing import Any
 
@@ -21,7 +22,7 @@ def build_github_annotations(
         raise ValueError("promotion plan does not match its SHA-256")
     if source.stat().st_size > _MAX_JSON_BYTES:
         raise ValueError("promotion plan exceeds 128 MiB")
-    document = json.loads(source.read_bytes())
+    document = strict_json_loads(source.read_bytes())
     if not isinstance(document, dict) or document.get("schema_version") not in {
         "1.1",
         "1.2",

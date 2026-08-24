@@ -10,12 +10,59 @@ from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import patch
 
-from py_security_suite.boundary_graph import build_boundary_graph
+from py_security_suite.boundary_graph import (
+    _compiler_semantic_differential,
+    build_boundary_graph,
+)
 from py_security_suite.strict_json import canonical_bytes
 from tests.deployment_authority import authority_environment, operation_receipt
 
 
 class BoundaryGraphTests(unittest.TestCase):
+    def test_compiler_differential_preserves_engine_unique_facts(self) -> None:
+        evidence = {
+            "frontends": [
+                {
+                    "language": "python",
+                    "engine": "engine-a",
+                    "secondary_engine": "engine-b",
+                    "semantic_ledger_sha256": "a" * 64,
+                    "secondary_semantic_ledger_sha256": "b" * 64,
+                }
+            ]
+        }
+        primary = {
+            "semantic_ledger": {
+                "symbols": [{"id": "shared"}, {"id": "primary"}],
+                "cfg_edges": [],
+                "dataflow_edges": [],
+                "interprocedural_edges": [],
+            },
+            "taint_paths": [{"id": "primary-path"}],
+        }
+        secondary = {
+            "semantic_ledger": {
+                "symbols": [{"id": "shared"}, {"id": "secondary"}],
+                "cfg_edges": [],
+                "dataflow_edges": [],
+                "interprocedural_edges": [],
+            },
+            "taint_paths": [{"id": "secondary-path"}],
+        }
+        with patch(
+            "py_security_suite.boundary_graph._verify_analysis_artifact",
+            side_effect=lambda _item, prefix: (
+                primary if prefix == "primary" else secondary
+            ),
+        ):
+            differential = _compiler_semantic_differential(evidence)
+        assert differential is not None
+        self.assertEqual(
+            differential["classification"], "engine-disagreement-review-required"
+        )
+        self.assertEqual(differential["primary_only"], 2)
+        self.assertEqual(differential["secondary_only"], 2)
+
     def test_python_parser_failure_marks_graph_incomplete(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             target = Path(directory)

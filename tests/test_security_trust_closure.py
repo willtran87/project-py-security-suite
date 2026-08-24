@@ -37,12 +37,49 @@ from py_security_suite.boundary_graph import _canary_results_valid
 from py_security_suite.native_evidence import _provider_audit_readback
 from py_security_suite.strict_json import canonical_bytes
 from py_security_suite.runtime_trace import _verify_raw_spans
-from py_security_suite.trust_policy import capture_trust_environment
+from py_security_suite.trust_policy import (
+    _advance_policy_state,
+    capture_trust_environment,
+)
 from py_security_suite.trusted_time import (
     _TRUSTED_TIME_STATE_GENESIS_SHA256,
     _advance_time_state,
 )
 from tests.deployment_authority import effective_policy_attestation, operation_receipt
+
+
+def test_explicit_policy_state_is_anchored_before_local_advance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    state = tmp_path / "policy-state.sqlite3"
+    monkeypatch.setenv("PYSEC_EXPLICIT_TRUST_POLICY_STATE_PATH", str(state))
+    monkeypatch.setenv("PYSEC_REQUIRE_EXTERNAL_POLICY_STATE_CHECKPOINT", "1")
+    captured: list[tuple[str, dict[str, object], bool]] = []
+
+    def checkpoint(
+        prefix: str, subject: dict[str, object], *, required: bool
+    ) -> dict[str, object]:
+        captured.append((prefix, subject, required))
+        return {"accepted": True}
+
+    with patch("py_security_suite.checkpoint_authority.publish_checkpoint", checkpoint):
+        _advance_policy_state(
+            {"generation": 1, "previous_policy_sha256": ""},
+            "a" * 64,
+            required=True,
+        )
+    assert captured == [
+        (
+            "PYSEC_TRUST_POLICY_STATE_CHECKPOINT",
+            {
+                "schema_version": "1.0",
+                "namespace": "explicit-trust-policy",
+                "previous": {"generation": 0, "policy_sha256": ""},
+                "proposed": {"generation": 1, "policy_sha256": "a" * 64},
+            },
+            True,
+        )
+    ]
 
 
 def test_operation_receipt_graph_rejects_forked_roots() -> None:
@@ -327,6 +364,36 @@ def test_tpm_attestation_requires_and_verifies_independent_raw_replay(
     }
     monkeypatch.setenv("PYSEC_REQUIRE_RAW_ATTESTATION_REPLAY", "1")
     monkeypatch.setenv("PYSEC_RAW_ATTESTATION_REPLAY_KEY_SHA256", key_sha256)
+    monkeypatch.setattr(
+        "py_security_suite.pinned_command.command_configured", lambda prefix: True
+    )
+
+    def native_replay(
+        prefix: str, request: dict[str, object], **_: object
+    ) -> dict[str, object]:
+        expected = request["expected_statement"]
+        assert isinstance(expected, dict)
+        return {
+            "schema_version": "1.0",
+            "verified": True,
+            "format": expected["format"],
+            "raw_evidence_sha256": expected["raw_evidence_sha256"],
+            "normalized_claims_sha256": expected["normalized_claims_sha256"],
+            "verification_statement_sha256": request["expected_statement_sha256"],
+            "verification_method": expected["verification_method"],
+            "trust_root_sha256": expected["trust_root_sha256"],
+            "_effective_policy_attestation": {
+                "subject": {"executable_sha256": "9" * 64}
+            },
+        }
+
+    monkeypatch.setattr(
+        "py_security_suite.pinned_command.run_pinned_json_command", native_replay
+    )
+    monkeypatch.setattr(
+        "py_security_suite.pinned_command.remote_attested_failure_domain",
+        lambda value: replay_domain,
+    )
     verify_format_evidence(
         canonical_bytes(evidence),
         format_name="tpm2-quote",

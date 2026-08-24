@@ -5,6 +5,8 @@ import base64
 import gzip
 import io
 import json
+
+from .strict_json import loads as strict_json_loads
 import os
 import tarfile
 import sqlite3
@@ -599,7 +601,7 @@ def _verified_catalog_snapshots(
         raise ValueError("requirements assessment catalogs are invalid")
     raw_policy = os.environ.get("PYSEC_REQUIREMENTS_CATALOG_SHA256", "")
     try:
-        trust_policy = json.loads(raw_policy)
+        trust_policy = strict_json_loads(raw_policy)
     except json.JSONDecodeError as exc:
         raise ValueError("requirements catalog deployment policy is invalid") from exc
     if not isinstance(trust_policy, dict) or not trust_policy:

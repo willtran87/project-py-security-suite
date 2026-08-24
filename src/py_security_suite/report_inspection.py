@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import hashlib
-import json
+
+from .strict_json import loads as strict_json_loads
 import re
 from collections import Counter
 from importlib.resources import files
@@ -462,7 +463,12 @@ def _read_object_payload(path: Path) -> tuple[dict[str, Any], bytes]:
     payload = path.read_bytes()
     if len(payload) > _MAX_JSON_BYTES:
         raise ValueError(f"report JSON is not a bounded regular file: {path}")
-    value = json.loads(payload, object_pairs_hook=_unique_json_object)
+    try:
+        value = strict_json_loads(payload)
+    except ValueError as exc:
+        if "duplicate property" in str(exc):
+            raise ValueError("report JSON contains a duplicate object key") from exc
+        raise
     if not isinstance(value, dict):
         raise ValueError(f"report JSON root must be an object: {path}")
     return value, payload

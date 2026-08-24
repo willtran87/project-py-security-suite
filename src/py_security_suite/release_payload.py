@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+
+from .strict_json import loads as strict_json_loads
 from pathlib import Path
 from typing import Any
 
@@ -181,7 +183,7 @@ def _read_object(path: Path, maximum: int) -> dict[str, Any]:
     source = resolve_regular_file(path, "JSON evidence")
     if source.stat().st_size > maximum:
         raise ValueError(f"JSON evidence exceeds {maximum} bytes")
-    value = json.loads(source.read_bytes())
+    value = strict_json_loads(source.read_bytes())
     if not isinstance(value, dict):
         raise TypeError("JSON evidence root must be an object")
     return value

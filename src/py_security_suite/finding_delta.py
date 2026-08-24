@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+
+from .strict_json import loads as strict_json_loads
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -304,7 +306,7 @@ def _load_baseline(
         raise ValueError("an approved baseline SHA-256 digest is required")
     if digest != approved:
         raise ValueError(f"SHA-256 {digest} does not match approved digest")
-    document = json.loads(data.decode("utf-8"))
+    document = strict_json_loads(data.decode("utf-8"))
     if not isinstance(document, dict) or document.get("schema_version") != "1.0":
         raise TypeError("baseline must be a findings.json schema_version 1.0 object")
     baseline_target = str(document.get("target") or "")

@@ -19,8 +19,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        builder: [a, b]
-    runs-on: ubuntu-latest
+        include:
+          - builder: a
+            runner: ubuntu-latest
+            platform: linux-x64
+          - builder: b
+            runner: windows-latest
+            platform: windows-x64
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 20
     permissions:
       contents: read
@@ -39,8 +45,12 @@ jobs:
       - name: Install locked build environment
         run: uv sync --locked --all-groups --python "3.13"
       - name: Derive source epoch from checked-out commit
-        shell: bash
-        run: echo "SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD)" >> "$GITHUB_ENV"
+        shell: pwsh
+        run: |
+          "SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD)" |
+            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "PYSEC_RELEASE_BUILDER_PLATFORM=${{ matrix.platform }}" |
+            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Build distribution
         run: uv build --no-sources --out-dir ".artifacts/release-${{ matrix.builder }}"
       - name: Attest exact builder subjects

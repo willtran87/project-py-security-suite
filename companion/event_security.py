@@ -5,7 +5,6 @@ import asyncio
 import base64
 import ipaddress
 import hashlib
-import json
 import os
 import ssl
 import tempfile
@@ -538,8 +537,8 @@ def _verify_live_schema_registry(schemas: dict[str, Any]) -> None:
         f"{registry['endpoint']}/config/{subject}", token, context
     )
     try:
-        registered_schema = json.loads(str(schema_record["schema"]))
-    except (KeyError, TypeError, json.JSONDecodeError) as exc:
+        registered_schema = strict_loads(str(schema_record["schema"]))
+    except (KeyError, TypeError, ValueError) as exc:
         raise ValueError("schema registry returned an invalid JSON Schema") from exc
     if (
         schema_record.get("id") != registry["schema_id"]
@@ -583,8 +582,8 @@ def _validate_payload(payload: bytes, schemas: dict[str, Any]) -> None:
     try:
         from jsonschema import Draft202012Validator  # type: ignore[import-untyped]
 
-        decoded = json.loads(payload)
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        decoded = strict_loads(payload)
+    except (UnicodeDecodeError, TypeError, ValueError) as exc:
         raise ValueError("event payload is not valid JSON") from exc
     validator = Draft202012Validator(schemas["payload_schema"])
     errors = sorted(validator.iter_errors(decoded), key=lambda error: list(error.path))

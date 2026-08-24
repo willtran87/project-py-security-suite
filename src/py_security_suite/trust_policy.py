@@ -32,6 +32,9 @@ _PINNED_COMMAND_SUFFIXES = {
     "EXECUTION_ATTESTATION_KEY_SHA256",
     "REMOTE_ATTESTATION_KEY_SHA256",
     "AUTHORITY_KEY_SHA256",
+    "FAILURE_DOMAIN_JSON",
+    "QUORUM_PREFIXES_JSON",
+    "QUORUM_THRESHOLD",
 }
 _TRUST_ACTIVATION_LOCK = threading.RLock()
 _PINNED_COMMAND_PREFIXES = {
@@ -39,10 +42,13 @@ _PINNED_COMMAND_PREFIXES = {
     "PYSEC_GIT_BUNDLE_CAS",
     "PYSEC_GIT_SECONDARY_VERIFIER",
     "PYSEC_OPERATION_RECEIPT_CHECKPOINT",
+    "PYSEC_FAILURE_DOMAIN_STATE_CHECKPOINT",
+    "PYSEC_RAW_ATTESTATION_NATIVE_REPLAY",
     "PYSEC_RAW_EVIDENCE_KMS",
     "PYSEC_RAW_EVIDENCE_PROVIDER_AUDIT_READBACK",
     "PYSEC_RAW_EVIDENCE_RECOVERY",
     "PYSEC_TRUSTED_TIME_CHECKPOINT",
+    "PYSEC_TRUST_POLICY_STATE_CHECKPOINT",
 }
 
 _EXPLICIT_POLICY_BOOTSTRAP = frozenset(
@@ -89,7 +95,9 @@ _TRUST_ENVIRONMENT = frozenset(
         "PYSEC_FAILURE_DOMAIN_LOG_WITNESS_KEYS_JSON",
         "PYSEC_FAILURE_DOMAIN_LOG_WITNESS_THRESHOLD",
         "PYSEC_FAILURE_DOMAIN_REGISTRY_STATE_PATH",
+        "PYSEC_REQUIRE_EXTERNAL_FAILURE_DOMAIN_STATE_CHECKPOINT",
         "PYSEC_REQUIRE_FRESH_FAILURE_DOMAIN_REGISTRY",
+        "PYSEC_REQUIRE_EXTERNAL_POLICY_STATE_CHECKPOINT",
         "PYSEC_GOVERNANCE_REPLAY_REQUIRE_REMOTE",
         "PYSEC_GOVERNANCE_REPLAY_SERVICE_CA",
         "PYSEC_GOVERNANCE_REPLAY_SERVICE_CA_SHA256",
@@ -158,6 +166,9 @@ _TRUST_ENVIRONMENT = frozenset(
         "PYSEC_GIT_PRIMARY_IMPLEMENTATION_SHA256",
         "PYSEC_GIT_PRIMARY_ORGANIZATION",
         "PYSEC_GIT_SECONDARY_VERIFIER_AUTHORITY_KEY_SHA256",
+        "PYSEC_FAILURE_DOMAIN_STATE_CHECKPOINT_FAILURE_DOMAIN_JSON",
+        "PYSEC_FAILURE_DOMAIN_STATE_CHECKPOINT_QUORUM_PREFIXES_JSON",
+        "PYSEC_FAILURE_DOMAIN_STATE_CHECKPOINT_QUORUM_THRESHOLD",
         "PYSEC_OPERATION_RECEIPT_CHECKPOINT_AUTHORITY_KEY_SHA256",
         "PYSEC_OPERATION_RECEIPT_CHECKPOINT_FAILURE_DOMAIN_JSON",
         "PYSEC_OPERATION_RECEIPT_CHECKPOINT_SHA256",
@@ -181,6 +192,9 @@ _TRUST_ENVIRONMENT = frozenset(
         "PYSEC_TRUSTED_TIME_CHECKPOINT_QUORUM_PREFIXES_JSON",
         "PYSEC_TRUSTED_TIME_CHECKPOINT_QUORUM_THRESHOLD",
         "PYSEC_TRUSTED_TIME_STATE_PATH",
+        "PYSEC_TRUST_POLICY_STATE_CHECKPOINT_FAILURE_DOMAIN_JSON",
+        "PYSEC_TRUST_POLICY_STATE_CHECKPOINT_QUORUM_PREFIXES_JSON",
+        "PYSEC_TRUST_POLICY_STATE_CHECKPOINT_QUORUM_THRESHOLD",
     }
 )
 
@@ -356,7 +370,11 @@ def _explicit_trust_environment() -> dict[str, str] | None:
             raise ValueError(
                 f"ambient trust setting {name} conflicts with signed policy"
             )
-    _advance_policy_state(signed, digest, required=required)
+    # The checkpoint command and its failure-domain pins are themselves part of
+    # the signed policy. Activate that exact snapshot while advancing state so
+    # bootstrap ambient variables cannot select the rollback authority.
+    with activated_trust_environment({**variables, **bootstrap}):
+        _advance_policy_state(signed, digest, required=required)
     return {**variables, **bootstrap}
 
 
@@ -449,6 +467,29 @@ def _advance_policy_state(
         if proposed[0] <= current[0] or previous != current[1]:
             connection.execute("ROLLBACK")
             raise ValueError("explicit trust policy rollback or fork detected")
+        from .checkpoint_authority import publish_checkpoint
+
+        publish_checkpoint(
+            "PYSEC_TRUST_POLICY_STATE_CHECKPOINT",
+            {
+                "schema_version": "1.0",
+                "namespace": "explicit-trust-policy",
+                "previous": {
+                    "generation": current[0],
+                    "policy_sha256": current[1],
+                },
+                "proposed": {
+                    "generation": proposed[0],
+                    "policy_sha256": proposed[1],
+                },
+            },
+            required=os.environ.get(
+                "PYSEC_REQUIRE_EXTERNAL_POLICY_STATE_CHECKPOINT", ""
+            ).strip()
+            == "1"
+            or os.environ.get("PYSEC_REQUIRE_HARDENED_RELEASE_EVIDENCE", "").strip()
+            == "1",
+        )
         connection.execute(
             "INSERT INTO policy(identity, generation, policy_sha256) VALUES (1, ?, ?) "
             "ON CONFLICT(identity) DO UPDATE SET generation=excluded.generation, "

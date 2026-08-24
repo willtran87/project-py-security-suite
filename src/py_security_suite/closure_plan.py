@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+
+from .strict_json import loads as strict_json_loads
 from collections import Counter
 from pathlib import Path
 from typing import Any
@@ -2969,7 +2971,7 @@ def _read_object(path: Path) -> dict[str, Any]:
     if len(payload) > _MAX_JSON_BYTES:
         raise ValueError(f"closure plan input exceeds 128 MiB: {source.name}")
     try:
-        value = json.loads(payload)
+        value = strict_json_loads(payload)
     except (json.JSONDecodeError, UnicodeDecodeError) as exc:
         raise ValueError(f"closure plan input is invalid JSON: {source.name}") from exc
     if not isinstance(value, dict):

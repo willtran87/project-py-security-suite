@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import re
 from datetime import UTC, datetime
 from typing import Any
+
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 from .strict_json import canonical_bytes
 
@@ -28,6 +33,10 @@ _SOURCE_FIELDS = {
     "server_signer_id",
     "server_organization",
     "collected_at",
+    "collector_subject",
+    "collector_receipt",
+    "server_subject",
+    "server_receipt",
 }
 
 
@@ -92,11 +101,13 @@ def verify_surface_proof(execution: object) -> dict[str, Any]:
             source.get("liveness_probes"),
         )
         try:
-            datetime.fromisoformat(str(source.get("collected_at"))).astimezone(UTC)
+            collected_at = datetime.fromisoformat(str(source.get("collected_at")))
         except (TypeError, ValueError) as exc:
             raise TypeError(
                 "surface reconciliation collection time is invalid"
             ) from exc
+        if collected_at.tzinfo is None:
+            raise TypeError("surface reconciliation collection time lacks a timezone")
         if (
             kind not in {"runtime", "gateway", "service-mesh", "cloud-control-plane"}
             or kind in kinds
@@ -127,8 +138,129 @@ def verify_surface_proof(execution: object) -> dict[str, Any]:
             or source["server_total_records"] != source["records_observed"]
         ):
             raise TypeError("surface reconciliation source proof is invalid")
+        observed_at = collected_at.astimezone(UTC)
+        collector_receipt = _verify_portable_authority(
+            source["collector_receipt"],
+            purpose=f"surface-inventory:{kind}",
+            subject=source["collector_subject"],
+            at=observed_at,
+        )
+        server_receipt = _verify_portable_authority(
+            source["server_receipt"],
+            purpose=f"surface-server-response:{kind}",
+            subject=source["server_subject"],
+            at=observed_at,
+        )
+        if (
+            collector_receipt["signer_id"] != collector_signer
+            or collector_receipt["collector_id"] != collector
+            or server_receipt["signer_id"] != server_signer
+            or server_receipt["collector_id"] != server_collector
+        ):
+            raise TypeError("surface reconciliation authority receipt is detached")
         kinds.add(kind)
         collectors.update((collector, server_collector))
         signers.update((collector_signer, server_signer))
         organizations.update((collector_org, server_org))
     return proof
+
+
+def _verify_portable_authority(
+    value: object, *, purpose: str, subject: object, at: datetime
+) -> dict[str, str]:
+    fields = {
+        "schema_version",
+        "statement",
+        "public_key_pem_base64",
+        "public_key_sha256",
+        "signature_base64",
+        "signature_sha256",
+        "receipt_sha256",
+    }
+    if not isinstance(value, dict) or set(value) != fields:
+        raise TypeError("surface authority receipt fields do not match")
+    receipt_subject = {name: value[name] for name in fields - {"receipt_sha256"}}
+    if (
+        value.get("schema_version") != "1.0"
+        or value.get("receipt_sha256")
+        != hashlib.sha256(canonical_bytes(receipt_subject)).hexdigest()
+    ):
+        raise TypeError("surface authority receipt commitment does not match")
+    try:
+        public_bytes = base64.b64decode(
+            str(value["public_key_pem_base64"]), validate=True
+        )
+        signature = base64.b64decode(str(value["signature_base64"]), validate=True)
+        public = serialization.load_pem_public_key(public_bytes)
+    except (TypeError, ValueError) as exc:
+        raise TypeError("surface authority receipt encoding is invalid") from exc
+    statement = value.get("statement")
+    base_fields = {
+        "schema_version",
+        "purpose",
+        "subject_sha256",
+        "signer_id",
+        "collector_id",
+        "signed_at",
+        "expires_at",
+    }
+    if (
+        not isinstance(statement, dict)
+        or set(statement)
+        not in {frozenset(base_fields), frozenset(base_fields | {"algorithm"})}
+        or statement.get("purpose") != purpose
+        or statement.get("subject_sha256")
+        != hashlib.sha256(canonical_bytes(subject)).hexdigest()
+        or not 1 <= len(public_bytes) <= 1024 * 1024
+        or not 1 <= len(signature) <= 4096
+        or hashlib.sha256(public_bytes).hexdigest() != value.get("public_key_sha256")
+        or hashlib.sha256(signature).hexdigest() != value.get("signature_sha256")
+    ):
+        raise TypeError("surface authority receipt binding is invalid")
+    try:
+        signed_at = datetime.fromisoformat(str(statement["signed_at"]))
+        expires_at = datetime.fromisoformat(str(statement["expires_at"]))
+    except (TypeError, ValueError) as exc:
+        raise TypeError("surface authority receipt time is invalid") from exc
+    if signed_at.tzinfo is None or expires_at.tzinfo is None:
+        raise TypeError("surface authority receipt time lacks a timezone")
+    signed_at = signed_at.astimezone(UTC)
+    expires_at = expires_at.astimezone(UTC)
+    if not signed_at <= at <= expires_at or expires_at <= signed_at:
+        raise TypeError("surface authority receipt is outside its validity window")
+    algorithm = (
+        "ed25519"
+        if statement.get("schema_version") == "1.0"
+        else str(statement.get("algorithm") or "")
+    )
+    try:
+        if algorithm == "ed25519" and isinstance(public, Ed25519PublicKey):
+            public.verify(signature, canonical_bytes(statement))
+        elif (
+            algorithm == "ecdsa-p256-sha256"
+            and isinstance(public, ec.EllipticCurvePublicKey)
+            and isinstance(public.curve, ec.SECP256R1)
+        ):
+            public.verify(
+                signature, canonical_bytes(statement), ec.ECDSA(hashes.SHA256())
+            )
+        else:
+            raise TypeError("surface authority receipt algorithm is unsupported")
+    except Exception as exc:
+        raise TypeError("surface authority receipt signature is invalid") from exc
+    if isinstance(public, Ed25519PublicKey):
+        identity_bytes = public.public_bytes(
+            serialization.Encoding.Raw, serialization.PublicFormat.Raw
+        )
+    else:
+        identity_bytes = public.public_bytes(
+            serialization.Encoding.DER,
+            serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+    signer_id = hashlib.sha256(identity_bytes).hexdigest()
+    if statement.get("signer_id") != signer_id:
+        raise TypeError("surface authority receipt signer identity is invalid")
+    return {
+        "signer_id": signer_id,
+        "collector_id": str(statement.get("collector_id") or ""),
+    }

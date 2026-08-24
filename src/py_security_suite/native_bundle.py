@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+
+from .strict_json import loads as strict_json_loads
 import os
 import re
 import stat
@@ -227,7 +229,7 @@ def _expected_digest(value: str) -> str:
 
 def _read_manifest(payload: bytes) -> dict[str, Any]:
     try:
-        value = json.loads(payload, object_pairs_hook=_unique_object)
+        value = strict_json_loads(payload)
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise ValueError("bundle manifest is not valid UTF-8 JSON") from exc
     if not isinstance(value, dict):
@@ -529,7 +531,7 @@ def _resolve_environment(
         resolved = 0
         if passed:
             try:
-                report_value = json.loads(report.read_bytes())
+                report_value = strict_json_loads(report.read_bytes())
                 installs = report_value.get("install", [])
                 if not isinstance(installs, list):
                     raise ValueError

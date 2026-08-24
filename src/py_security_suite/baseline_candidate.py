@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-import json
+
+from .strict_json import loads as strict_json_loads
 from pathlib import Path
 from typing import Any
 
@@ -18,7 +19,7 @@ def build_baseline_candidate(report: Path) -> dict[str, Any]:
     source = resolve_regular_file(root / "findings.json", "baseline candidate")
     if source.stat().st_size > _MAX_JSON_BYTES:
         raise ValueError("baseline candidate exceeds 128 MiB")
-    findings = json.loads(source.read_bytes())
+    findings = strict_json_loads(source.read_bytes())
     if not isinstance(findings, dict):
         raise TypeError("findings report root must be an object")
     revision = str(findings.get("vcs_revision") or "")

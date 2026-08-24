@@ -17,6 +17,7 @@ from ..models import (
     normalize_repo_path,
 )
 from ..strict_json import loads as strict_json_loads
+from ..trusted_observation import governed_now
 from .artifacts import (
     configured_path,
     distribution_files,
@@ -211,9 +212,7 @@ def _grype_database_freshness_error(root: Path, maximum_age_days: float) -> str 
         built_at = datetime.fromisoformat(str(row[0]).replace("Z", "+00:00"))
         if built_at.tzinfo is None:
             built_at = built_at.replace(tzinfo=UTC)
-        age_days = (
-            datetime.now(UTC) - built_at.astimezone(UTC)
-        ).total_seconds() / 86400
+        age_days = (governed_now() - built_at.astimezone(UTC)).total_seconds() / 86400
     except (OSError, sqlite3.Error, ValueError) as exc:
         return f"offline Grype database metadata is invalid: {type(exc).__name__}"
     if age_days < -1:

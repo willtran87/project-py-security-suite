@@ -5,15 +5,17 @@ import gzip
 import hashlib
 import io
 import json
+
+from .strict_json import loads as strict_json_loads
 import re
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from .config import IntelligenceConfig
 from .models import Citation, Finding, json_ready
 from .path_safety import resolve_regular_file
+from .trusted_observation import governed_now
 
 _MAX_SNAPSHOT_BYTES = 128 * 1024 * 1024
 _MAX_DECOMPRESSED_BYTES = 256 * 1024 * 1024
@@ -165,7 +167,7 @@ def _validated_snapshot(
         raise ValueError("an approved SHA-256 digest is required")
     if digest != approved:
         raise ValueError(f"SHA-256 {digest} does not match approved digest")
-    age_days = (datetime.now(UTC).timestamp() - resolved.stat().st_mtime) / 86_400
+    age_days = (governed_now().timestamp() - resolved.stat().st_mtime) / 86_400
     if age_days < -1.0 or age_days > maximum_age_days:
         raise ValueError(
             f"snapshot age {age_days:.2f} days exceeds {maximum_age_days:.2f} days"
@@ -184,7 +186,7 @@ def _validated_snapshot(
 
 def _load_kev(data: bytes, suffix: str) -> tuple[dict[str, dict[str, Any]], str]:
     del suffix
-    document = json.loads(data.decode("utf-8"))
+    document = strict_json_loads(data.decode("utf-8"))
     if not isinstance(document, dict) or not isinstance(
         document.get("vulnerabilities"), list
     ):
@@ -246,7 +248,7 @@ def _load_epss(data: bytes, suffix: str) -> tuple[dict[str, dict[str, Any]], str
 
 def _load_vex(data: bytes, suffix: str) -> tuple[dict[str, dict[str, Any]], str]:
     del suffix
-    document = json.loads(data.decode("utf-8"))
+    document = strict_json_loads(data.decode("utf-8"))
     if not isinstance(document, dict) or not isinstance(
         document.get("vulnerabilities"), list
     ):

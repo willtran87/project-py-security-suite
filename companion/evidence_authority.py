@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import base64
-import json
 import os
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -15,8 +14,10 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 try:
     from companion.strict_json import canonical_bytes
+    from companion.strict_json import loads as strict_loads
 except ModuleNotFoundError:  # Direct script execution.
     from strict_json import canonical_bytes  # type: ignore[import-not-found,no-redef]
+    from strict_json import loads as strict_loads  # type: ignore[import-not-found,no-redef]
 
 
 def verify_authority(
@@ -327,8 +328,8 @@ def _verify_organizational_trust(signer_id: str, purpose: str) -> None:
     if not roles_raw:
         raise ValueError("organization authority role policy is not configured")
     try:
-        roles = json.loads(roles_raw)
-    except json.JSONDecodeError as exc:
+        roles = strict_loads(roles_raw)
+    except (TypeError, ValueError) as exc:
         raise ValueError("organization authority role policy is invalid") from exc
     allowed = roles.get(signer_id) if isinstance(roles, dict) else None
     if (
@@ -345,8 +346,8 @@ def _authority_organization(signer_id: str, *, required: bool) -> str:
     if not raw and not required:
         return "legacy-unscoped"
     try:
-        value = json.loads(raw)
-    except json.JSONDecodeError as exc:
+        value = strict_loads(raw)
+    except (TypeError, ValueError) as exc:
         raise ValueError("authority organization policy is invalid") from exc
     organization = value.get(signer_id) if isinstance(value, dict) else None
     if (
@@ -367,8 +368,8 @@ def _verify_key_lifecycle(
 ) -> None:
     raw = os.environ.get("PYSEC_AUTHORITY_KEY_LIFECYCLE", "")
     try:
-        value = json.loads(raw)
-    except json.JSONDecodeError as exc:
+        value = strict_loads(raw)
+    except (TypeError, ValueError) as exc:
         raise ValueError("authority key lifecycle policy is invalid") from exc
     record = value.get(signer_id) if isinstance(value, dict) else None
     if not isinstance(record, dict) or set(record) != {

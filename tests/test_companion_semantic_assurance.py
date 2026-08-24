@@ -4,6 +4,7 @@ import pytest
 
 from companion.semantic_assurance import REQUIRED_CONTROLS, analyze
 from companion.strict_json import dumps as strict_dumps
+from py_security_suite.control_proof import verify_control_proof
 import hashlib
 
 
@@ -38,6 +39,28 @@ def test_semantic_lanes_require_complete_control_coverage(kind: str) -> None:
     assert result["findings"] == []
     assert result["execution"]["coverage_percent"] == 100.0
     assert set(result["execution"]["features"]) == REQUIRED_CONTROLS[kind]
+    proof = verify_control_proof(
+        result["execution"]["control_proof"], REQUIRED_CONTROLS[kind]
+    )
+    assert proof["proof_sha256"]
+
+
+def test_semantic_control_proof_rejects_feature_label_tampering() -> None:
+    kind = "event-security"
+    cases = [_case(control) for control in sorted(REQUIRED_CONTROLS[kind])]
+    result = analyze(
+        {
+            "schema_version": "1.0",
+            "kind": kind,
+            "cases": cases,
+            "canary_id": cases[0]["id"],
+        },
+        kind,
+    )
+    proof = result["execution"]["control_proof"]
+    proof["controls"]["message-signing"]["cases"] = 2
+    with pytest.raises(ValueError, match="commitment"):
+        verify_control_proof(proof, REQUIRED_CONTROLS[kind])
 
 
 def test_semantic_lane_derives_findings_from_oracle_mismatch() -> None:

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+
+from .strict_json import loads as strict_json_loads
 import hashlib
 from collections import Counter
 from datetime import datetime, timedelta, timezone
@@ -1696,7 +1698,7 @@ def _read_object(path: Path) -> dict[str, Any]:
     source = resolve_regular_file(path, "promotion evidence")
     if source.stat().st_size > _MAX_JSON_BYTES:
         raise ValueError("promotion evidence exceeds the size limit")
-    value = json.loads(source.read_bytes())
+    value = strict_json_loads(source.read_bytes())
     if not isinstance(value, dict):
         raise TypeError("promotion evidence root must be an object")
     return value

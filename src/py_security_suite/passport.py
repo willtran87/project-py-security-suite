@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+
+from .strict_json import loads as strict_json_loads
 import re
 import shutil
 import tempfile
@@ -1249,7 +1251,7 @@ def _safe_relative(value: str) -> Path:
 def _read_json(path: Path) -> dict[str, Any]:
     if not path.is_file() or path.is_symlink() or path.stat().st_size > _MAX_FILE_BYTES:
         raise ValueError(f"JSON evidence is not a bounded regular file: {path}")
-    value = json.loads(path.read_text(encoding="utf-8"))
+    value = strict_json_loads(path.read_text(encoding="utf-8"))
     if not isinstance(value, dict):
         raise TypeError(f"JSON evidence root must be an object: {path}")
     return value

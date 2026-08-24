@@ -24,7 +24,21 @@ concurrency:
 
 jobs:
   parser-fuzz:
-    name: Fuzz strict JSON, SARIF, and adapter parsers
+    name: Fuzz ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - strict-json
+          - sarif
+          - adapter-0
+          - adapter-1
+          - adapter-2
+          - adapter-3
+          - adapter-4
+          - adapter-5
+          - adapter-6
+          - adapter-7
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -40,19 +54,43 @@ jobs:
           cache-dependency-glob: uv.lock
       - name: Install locked fuzzing environment
         run: uv sync --locked --all-groups --python "3.13"
+      - name: Find the previous successful corpus
+        id: previous
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          run_id="$(gh run list --workflow fuzz.yml --branch main --status success --limit 1 --json databaseId --jq '.[0].databaseId // empty')"
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+      - name: Restore previous evolved corpus
+        if: steps.previous.outputs.run_id != ''
+        continue-on-error: true
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        with:
+          name: parser-fuzz-corpus-${{ matrix.target }}
+          path: .fuzz-corpus/${{ matrix.target }}
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.previous.outputs.run_id }}
+      - name: Seed missing corpus entries
+        shell: bash
+        run: |
+          mkdir -p ".fuzz-corpus/${{ matrix.target }}"
+          cp -n fuzz/corpus/security-parsers/* ".fuzz-corpus/${{ matrix.target }}/" 2>/dev/null || true
       - name: Run coverage-guided parser fuzzing
         run: >-
           uv run --frozen python scripts/fuzz_security_parsers.py
+          --target=${{ matrix.target }}
           -max_total_time=300
           -timeout=10
           -rss_limit_mb=2048
+          -dict=fuzz/security-json.dict
           -print_final_stats=1
-          fuzz/corpus/security-parsers
+          .fuzz-corpus/${{ matrix.target }}
       - name: Retain fuzz failures
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: parser-fuzz-failures
+          name: parser-fuzz-failures-${{ matrix.target }}
           path: |
             crash-*
             leak-*
@@ -64,7 +102,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: parser-fuzz-corpus-${{ github.run_id }}
-          path: fuzz/corpus/security-parsers
+          name: parser-fuzz-corpus-${{ matrix.target }}
+          path: .fuzz-corpus/${{ matrix.target }}
           if-no-files-found: error
           retention-days: 14

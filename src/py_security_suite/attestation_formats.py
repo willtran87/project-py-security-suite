@@ -314,6 +314,58 @@ def _verify_raw_replay(
     except Exception as exc:
         raise ValueError("raw attestation replay signature is invalid") from exc
 
+    # A signed transcript proves what a verifier claimed it did, but it does not
+    # prove that this process independently replayed the vendor evidence.  In the
+    # hardened profile, execute a separately pinned verifier over the raw bytes and
+    # bind its attested response to the exact retained transcript.
+    from .pinned_command import (
+        command_configured,
+        remote_attested_failure_domain,
+        run_pinned_json_command,
+    )
+
+    prefix = "PYSEC_RAW_ATTESTATION_NATIVE_REPLAY"
+    if not command_configured(prefix):
+        if required:
+            raise ValueError("native raw attestation verifier is unavailable")
+        return
+    statement_sha256 = hashlib.sha256(canonical_bytes(expected_statement)).hexdigest()
+    response = run_pinned_json_command(
+        prefix,
+        {
+            "schema_version": "1.0",
+            "operation": "verify-raw-hardware-attestation",
+            "format": format_name,
+            "raw_evidence_base64": claims["raw_evidence_base64"],
+            "raw_evidence_sha256": expected_statement["raw_evidence_sha256"],
+            "expected_statement": expected_statement,
+            "expected_statement_sha256": statement_sha256,
+        },
+        timeout_seconds=60,
+        maximum_output_bytes=1024 * 1024,
+    )
+    attestation = response.pop("_effective_policy_attestation", None)
+    expected_response = {
+        "schema_version": "1.0",
+        "verified": True,
+        "format": format_name,
+        "raw_evidence_sha256": expected_statement["raw_evidence_sha256"],
+        "normalized_claims_sha256": expected_statement["normalized_claims_sha256"],
+        "verification_statement_sha256": statement_sha256,
+        "verification_method": method,
+        "trust_root_sha256": expected_statement["trust_root_sha256"],
+    }
+    attested_subject = (
+        attestation.get("subject") if isinstance(attestation, dict) else None
+    )
+    if (
+        response != expected_response
+        or not isinstance(attested_subject, dict)
+        or attested_subject.get("executable_sha256") != implementation_sha256
+        or remote_attested_failure_domain(attestation) != replay_domain
+    ):
+        raise ValueError("native raw attestation replay result is detached or invalid")
+
 
 def _trusted_root(variable: str, claims: dict[str, Any]) -> bool:
     claimed = str(claims.get("trust_root_sha256") or "")

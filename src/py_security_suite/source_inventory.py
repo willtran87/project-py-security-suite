@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+
+from .strict_json import loads as strict_json_loads
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -43,7 +45,7 @@ def load_source_inventory(path: Path) -> dict[str, Any]:
     if len(payload) > _MAX_DOCUMENT_BYTES:
         raise ValueError("source inventory exceeds the maximum document size")
     try:
-        value = json.loads(payload)
+        value = strict_json_loads(payload)
     except (json.JSONDecodeError, UnicodeDecodeError) as exc:
         raise ValueError(f"source inventory JSON is invalid: {exc}") from exc
     if not isinstance(value, dict):

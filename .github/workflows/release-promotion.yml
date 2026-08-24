@@ -11,6 +11,18 @@ on:
         description: Independently approved release manifest SHA-256
         required: true
         type: string
+      expected_head_sha:
+        description: Exact source commit that produced the evidence
+        required: true
+        type: string
+      expected_ref:
+        description: Exact source branch or tag recorded by the producer run
+        required: true
+        type: string
+      expected_workflow_name:
+        description: Exact approved producer workflow name
+        required: true
+        type: string
 
 permissions:
   actions: read
@@ -18,6 +30,7 @@ permissions:
 
 jobs:
   verify-closed-evidence:
+    environment: release-admission
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -25,6 +38,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          ref: ${{ inputs.expected_head_sha }}
       - name: Set up uv
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
@@ -36,8 +50,23 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           EVIDENCE_RUN_ID: ${{ inputs.evidence_run_id }}
+          EXPECTED_HEAD_SHA: ${{ inputs.expected_head_sha }}
+          EXPECTED_REF: ${{ inputs.expected_ref }}
+          EXPECTED_WORKFLOW_NAME: ${{ inputs.expected_workflow_name }}
         shell: bash
-        run: gh run download "$EVIDENCE_RUN_ID" --repo "$GITHUB_REPOSITORY" --name release-evidence --dir .promotion
+        run: |
+          set -euo pipefail
+          mkdir -p .promotion
+          gh run view "$EVIDENCE_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --json headSha,headBranch,event,conclusion,workflowName > .promotion/producer-run.json
+          jq -e \
+            --arg sha "$EXPECTED_HEAD_SHA" \
+            --arg ref "$EXPECTED_REF" \
+            --arg workflow "$EXPECTED_WORKFLOW_NAME" \
+            '.headSha == $sha and .headBranch == $ref and .workflowName == $workflow and .conclusion == "success" and (.event == "push" or .event == "workflow_dispatch")' \
+            .promotion/producer-run.json >/dev/null
+          gh run download "$EVIDENCE_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name release-evidence --dir .promotion
       - name: Verify every hardened evidence class and report binding
         env:
           PYSEC_REQUIRE_HARDENED_RELEASE_EVIDENCE: "1"
@@ -54,5 +83,7 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: release-evidence-admission-${{ github.run_id }}
-          path: .promotion/release-evidence-verification.json
+          path: |
+            .promotion/release-evidence-verification.json
+            .promotion/producer-run.json
           if-no-files-found: error

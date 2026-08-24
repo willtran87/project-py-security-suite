@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-import json
+
+from .strict_json import loads as strict_json_loads
 from pathlib import Path
 from typing import Any
 
@@ -98,7 +99,7 @@ def _graph(path: Path, expected_digest: str, label: str) -> dict[str, Any]:
     digest = sha256_file(source)
     if digest != expected_digest.casefold():
         raise ValueError(f"{label} does not match the approved SHA-256")
-    document = json.loads(source.read_bytes())
+    document = strict_json_loads(source.read_bytes())
     if not isinstance(document, dict):
         raise TypeError(f"{label} root must be an object")
     if document.get("schema_version") not in {"1.1", "1.2"}:

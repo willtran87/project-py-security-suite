@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-import json
+
+from .strict_json import loads as strict_json_loads
 from pathlib import Path
 from typing import Any
 
@@ -194,7 +195,7 @@ def _load(path: Path, expected_sha256: str, label: str) -> dict[str, Any]:
         raise ValueError(f"{label} exceeds {_MAX_BYTES} bytes")
     if not expected_sha256 or sha256_file(source) != expected_sha256.casefold():
         raise ValueError(f"{label} does not match the approved SHA-256")
-    value = json.loads(source.read_bytes())
+    value = strict_json_loads(source.read_bytes())
     if not isinstance(value, dict):
         raise TypeError(f"{label} root must be an object")
     if (

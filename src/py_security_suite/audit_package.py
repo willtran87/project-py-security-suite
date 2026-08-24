@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+
+from .strict_json import loads as strict_json_loads
 import os
 import re
 import tempfile
@@ -59,7 +61,7 @@ def create_audit_package(
         digest = _digest(expected, f"audit evidence {name} SHA-256")
         if hashlib.sha256(data).hexdigest() != digest:
             raise ValueError(f"audit evidence {name} does not match its SHA-256")
-        document = json.loads(data)
+        document = strict_json_loads(data)
         if (
             not isinstance(document, dict)
             or bound_report_digest(document) != verification["checksums_sha256"]
@@ -133,7 +135,9 @@ def verify_audit_package(package: Path, *, package_sha256: str) -> dict[str, Any
             raise ValueError("audit package expanded size exceeds 2 GiB")
         if "audit-manifest.json" not in names:
             raise ValueError("audit package manifest is missing")
-        manifest = json.loads(_bounded_archive_read(archive, "audit-manifest.json"))
+        manifest = strict_json_loads(
+            _bounded_archive_read(archive, "audit-manifest.json")
+        )
         _validate_manifest(manifest)
         declared = {str(value["path"]): value for value in manifest["files"]}
         actual = set(names) - {"audit-manifest.json"}

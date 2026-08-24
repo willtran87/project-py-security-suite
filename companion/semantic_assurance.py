@@ -113,6 +113,27 @@ def analyze(value: object, kind: str, *, context: Path | None = None) -> dict[st
         )
     targets = {case["target_id"] for case in normalized}
     coverage = round(100.0 * len(controls) / len(REQUIRED_CONTROLS[kind]), 6)
+    control_records = {}
+    for control in sorted(controls):
+        control_cases = [case for case in normalized if case["control"] == control]
+        subject = {
+            "cases": len(control_cases),
+            "failed_cases": sum(_failed(case) for case in control_cases),
+            "case_ids_sha256": hashlib.sha256(
+                strict_dumps(sorted(case["id"] for case in control_cases)).encode()
+            ).hexdigest(),
+            "observations_sha256": hashlib.sha256(
+                strict_dumps(control_cases).encode()
+            ).hexdigest(),
+        }
+        control_records[control] = subject
+    proof_subject = {"schema_version": "1.0", "controls": control_records}
+    control_proof = {
+        **proof_subject,
+        "proof_sha256": hashlib.sha256(
+            strict_dumps(proof_subject).encode()
+        ).hexdigest(),
+    }
     return {
         "execution": {
             "status": "completed",
@@ -126,6 +147,7 @@ def analyze(value: object, kind: str, *, context: Path | None = None) -> dict[st
             "skipped_checks": [],
             "canaries_expected": 1,
             "canaries_observed": 1,
+            "control_proof": control_proof,
         },
         "findings": findings,
     }

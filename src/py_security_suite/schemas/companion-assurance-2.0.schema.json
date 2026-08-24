@@ -219,7 +219,8 @@
           "type": "array", "maxItems": 2016,
           "items": {"$ref": "#/$defs/cross_language_matrix_entry"}
         },
-        "surface_proof": {"$ref": "#/$defs/surface_proof"}
+        "surface_proof": {"$ref": "#/$defs/surface_proof"},
+        "control_proof": {"$ref": "#/$defs/control_proof"}
       }
     },
     "evidence_binding": {
@@ -325,9 +326,30 @@
         "sources": {"type": "array", "minItems": 2, "maxItems": 16, "items": {"$ref": "#/$defs/surface_proof_source"}}
       }
     },
+    "control_proof": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schema_version", "controls", "proof_sha256"],
+      "properties": {
+        "schema_version": {"const": "1.0"},
+        "proof_sha256": {"$ref": "#/$defs/digest"},
+        "controls": {
+          "type": "object", "minProperties": 1, "maxProperties": 256,
+          "additionalProperties": {
+            "type": "object", "additionalProperties": false,
+            "required": ["cases", "failed_cases", "case_ids_sha256", "observations_sha256"],
+            "properties": {
+              "cases": {"type": "integer", "minimum": 1},
+              "failed_cases": {"type": "integer", "minimum": 0},
+              "case_ids_sha256": {"$ref": "#/$defs/digest"},
+              "observations_sha256": {"$ref": "#/$defs/digest"}
+            }
+          }
+        }
+      }
+    },
     "surface_proof_source": {
       "type": "object", "additionalProperties": false,
-      "required": ["kind", "snapshot_sha256", "collector_id", "collector_signer_id", "collector_organization", "adapter_sha256", "endpoint_identity_sha256", "query_sha256", "pages_expected", "pages_observed", "page_receipts_sha256", "server_total_records", "records_observed", "liveness_probes", "server_collector_id", "server_signer_id", "server_organization", "collected_at"],
+      "required": ["kind", "snapshot_sha256", "collector_id", "collector_signer_id", "collector_organization", "adapter_sha256", "endpoint_identity_sha256", "query_sha256", "pages_expected", "pages_observed", "page_receipts_sha256", "server_total_records", "records_observed", "liveness_probes", "server_collector_id", "server_signer_id", "server_organization", "collected_at", "collector_subject", "collector_receipt", "server_subject", "server_receipt"],
       "properties": {
         "kind": {"enum": ["runtime", "gateway", "service-mesh", "cloud-control-plane"]},
         "snapshot_sha256": {"$ref": "#/$defs/digest"},
@@ -346,7 +368,11 @@
         "server_collector_id": {"type": "string", "minLength": 1, "maxLength": 200},
         "server_signer_id": {"type": "string", "minLength": 1, "maxLength": 200},
         "server_organization": {"type": "string", "minLength": 1, "maxLength": 200},
-        "collected_at": {"type": "string", "format": "date-time", "maxLength": 100}
+        "collected_at": {"type": "string", "format": "date-time", "maxLength": 100},
+        "collector_subject": {"type": "object"},
+        "collector_receipt": {"type": "object"},
+        "server_subject": {"type": "object"},
+        "server_receipt": {"type": "object"}
       }
     },
     "cross_language_matrix_entry": {

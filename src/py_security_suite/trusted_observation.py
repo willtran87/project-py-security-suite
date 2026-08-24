@@ -56,6 +56,24 @@ def scan_time_identity(environment: Mapping[str, str] | None = None) -> str:
     return hashlib.sha256(f"{expected}:{challenge}".encode()).hexdigest()
 
 
+def governed_now(environment: Mapping[str, str] | None = None) -> datetime:
+    """Use trusted scan time whenever a governed or configured decision is made."""
+
+    values = os.environ if environment is None else environment
+    configured = any(
+        values.get(name, "").strip()
+        for name in (
+            "PYSEC_SCAN_TIME_CONTEXT_PATH",
+            "PYSEC_SCAN_TIME_CONTEXT_SHA256",
+            "PYSEC_SCAN_TIME_CHALLENGE_SHA256",
+        )
+    )
+    hardened = values.get("PYSEC_REQUIRE_HARDENED_RELEASE_EVIDENCE", "").strip() == "1"
+    if configured or hardened:
+        return scan_observed_at(values)
+    return datetime.now(UTC)
+
+
 def _digest(value: str) -> bool:
     return len(value) == 64 and all(
         character in "0123456789abcdef" for character in value

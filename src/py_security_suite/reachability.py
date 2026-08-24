@@ -3,6 +3,8 @@ from __future__ import annotations
 import ast
 import hashlib
 import json
+
+from .strict_json import loads as strict_json_loads
 import tomllib
 from collections import defaultdict, deque
 from dataclasses import asdict, dataclass, field
@@ -1608,7 +1610,7 @@ def _load_coverage_evidence(
         if size > _MAX_COVERAGE_BYTES:
             raise ValueError(f"coverage evidence exceeds {_MAX_COVERAGE_BYTES} bytes")
         payload = resolved.read_bytes()
-        document = json.loads(payload)
+        document = strict_json_loads(payload)
         if not isinstance(document, dict) or not isinstance(
             document.get("files"), dict
         ):

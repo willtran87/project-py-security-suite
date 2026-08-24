@@ -6,6 +6,8 @@ import hashlib
 import importlib.util
 import importlib.metadata
 import json
+
+from .strict_json import loads as strict_json_loads
 import os
 import re
 import sys
@@ -306,6 +308,7 @@ def build_boundary_graph(
             required=require_governed_parsers and bool(languages),
         )
     )
+    compiler_differential = _compiler_semantic_differential(compiler_evidence)
     subject = {
         "schema_version": "1.0",
         "analysis": "bounded-static-polyglot-boundary-graph",
@@ -328,9 +331,15 @@ def build_boundary_graph(
             ]
         ),
         "semantic_parser_provenance": parser_provenance,
-        "compiler_semantic_complete": compiler_evidence is not None
-        or not bool(languages),
+        "compiler_semantic_complete": (
+            not bool(languages)
+            or (
+                compiler_differential is not None
+                and compiler_differential["classification"] == "consensus"
+            )
+        ),
         "compiler_semantic_evidence": compiler_evidence,
+        "compiler_semantic_differential": compiler_differential,
         "compiler_semantic_authority_receipt": compiler_authority,
         "compiler_semantic_reexecution": compiler_reexecution,
         "heuristic_languages": heuristic_languages,
@@ -688,8 +697,7 @@ def verify_compiler_semantic_evidence(
             != hashlib.sha256(
                 canonical_bytes(item["secondary_semantic_ledger"])
             ).hexdigest()
-            or item["secondary_semantic_ledger_sha256"]
-            != item["semantic_ledger_sha256"]
+            or not isinstance(item["secondary_semantic_ledger"], dict)
             or item["taint_paths_sha256"]
             != hashlib.sha256(canonical_bytes(item["taint_paths"])).hexdigest()
             or any(
@@ -700,6 +708,12 @@ def verify_compiler_semantic_evidence(
             )
             or item["symbols"] < 1
             or sum(item[name] for name in counts[1:]) < 1
+            or len(item["secondary_semantic_ledger"].get("symbols", [])) < 1
+            or sum(
+                len(item["secondary_semantic_ledger"].get(name, []))
+                for name in counts[1:]
+            )
+            < 1
         ):
             raise ValueError("compiler semantic frontend evidence is invalid")
         _verify_semantic_ledger(
@@ -710,7 +724,9 @@ def verify_compiler_semantic_evidence(
         _verify_semantic_ledger(
             item["secondary_semantic_ledger"],
             language_file_sets[language],
-            expected_counts={name: item[name] for name in counts},
+            expected_counts={
+                name: len(item["secondary_semantic_ledger"][name]) for name in counts
+            },
         )
         primary_replay = _verify_analysis_artifact(item, "primary")
         secondary_replay = _verify_analysis_artifact(item, "secondary")
@@ -718,7 +734,6 @@ def verify_compiler_semantic_evidence(
             primary_replay["semantic_ledger"] != item["semantic_ledger"]
             or secondary_replay["semantic_ledger"] != item["secondary_semantic_ledger"]
             or primary_replay["taint_paths"] != item["taint_paths"]
-            or secondary_replay["taint_paths"] != item["taint_paths"]
         ):
             raise ValueError(
                 "compiler analysis replay disagrees with retained semantics"
@@ -738,9 +753,95 @@ def verify_compiler_semantic_evidence(
             labels=("primary compiler", "secondary compiler"),
         )
         _verify_taint_paths(item["taint_paths"], item["semantic_ledger"])
+        _verify_taint_paths(
+            secondary_replay["taint_paths"], item["secondary_semantic_ledger"]
+        )
         observed.add(language)
     if observed != expected_languages:
         raise ValueError("compiler semantic evidence omits a source language")
+
+
+def _compiler_semantic_differential(
+    evidence: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Retain consensus and engine-unique semantic facts without hiding drift."""
+
+    if evidence is None:
+        return None
+    languages: list[dict[str, Any]] = []
+    total_primary_only = 0
+    total_secondary_only = 0
+    for frontend in evidence["frontends"]:
+        primary_replay = _verify_analysis_artifact(frontend, "primary")
+        secondary_replay = _verify_analysis_artifact(frontend, "secondary")
+        categories: dict[str, dict[str, Any]] = {}
+        for name in (
+            "symbols",
+            "cfg_edges",
+            "dataflow_edges",
+            "interprocedural_edges",
+        ):
+            primary = {
+                hashlib.sha256(canonical_bytes(item)).hexdigest()
+                for item in primary_replay["semantic_ledger"][name]
+            }
+            secondary = {
+                hashlib.sha256(canonical_bytes(item)).hexdigest()
+                for item in secondary_replay["semantic_ledger"][name]
+            }
+            primary_only = sorted(primary - secondary)
+            secondary_only = sorted(secondary - primary)
+            total_primary_only += len(primary_only)
+            total_secondary_only += len(secondary_only)
+            categories[name] = {
+                "consensus": sorted(primary & secondary),
+                "primary_only": primary_only,
+                "secondary_only": secondary_only,
+                "union": sorted(primary | secondary),
+            }
+        primary_taint = {
+            hashlib.sha256(canonical_bytes(item)).hexdigest()
+            for item in primary_replay["taint_paths"]
+        }
+        secondary_taint = {
+            hashlib.sha256(canonical_bytes(item)).hexdigest()
+            for item in secondary_replay["taint_paths"]
+        }
+        taint_primary_only = sorted(primary_taint - secondary_taint)
+        taint_secondary_only = sorted(secondary_taint - primary_taint)
+        total_primary_only += len(taint_primary_only)
+        total_secondary_only += len(taint_secondary_only)
+        languages.append(
+            {
+                "language": frontend["language"],
+                "primary_engine": frontend["engine"],
+                "secondary_engine": frontend["secondary_engine"],
+                "primary_ledger_sha256": frontend["semantic_ledger_sha256"],
+                "secondary_ledger_sha256": frontend["secondary_semantic_ledger_sha256"],
+                "semantic_facts": categories,
+                "taint_paths": {
+                    "consensus": sorted(primary_taint & secondary_taint),
+                    "primary_only": taint_primary_only,
+                    "secondary_only": taint_secondary_only,
+                    "union": sorted(primary_taint | secondary_taint),
+                },
+            }
+        )
+    subject = {
+        "schema_version": "1.0",
+        "classification": (
+            "consensus"
+            if total_primary_only == 0 and total_secondary_only == 0
+            else "engine-disagreement-review-required"
+        ),
+        "primary_only": total_primary_only,
+        "secondary_only": total_secondary_only,
+        "languages": sorted(languages, key=lambda item: str(item["language"])),
+    }
+    return {
+        **subject,
+        "differential_sha256": hashlib.sha256(canonical_bytes(subject)).hexdigest(),
+    }
 
 
 def _verify_analysis_artifact(item: dict[str, Any], prefix: str) -> dict[str, Any]:
@@ -1227,7 +1328,7 @@ def _analyze_special_surface(
     payload: bytes, source: str, kind: str, path: Path
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     if kind == "notebook":
-        value = json.loads(payload.decode("utf-8"))
+        value = strict_json_loads(payload.decode("utf-8"))
         cells = value.get("cells") if isinstance(value, dict) else None
         if not isinstance(cells, list):
             raise ValueError("notebook cells are invalid")
@@ -1277,7 +1378,7 @@ def _analyze_special_surface(
         )
         if result.exit_code != 0 or result.timed_out or result.output_limit_exceeded:
             raise ValueError("Python bytecode semantic disassembly failed")
-        decoded = json.loads(result.stdout)
+        decoded = strict_json_loads(result.stdout)
         if not isinstance(decoded, list) or len(decoded) > 10_000:
             raise ValueError("Python bytecode semantic output is invalid")
         edges = []
@@ -1529,7 +1630,7 @@ def _native_imports(path: Path, payload: bytes) -> list[str]:
         or result.resource_limit_errors
     ):
         raise ValueError("resource-contained native binary parsing failed")
-    value = json.loads(result.stdout)
+    value = strict_json_loads(result.stdout)
     if (
         not isinstance(value, list)
         or len(value) > 100_000
@@ -1545,7 +1646,7 @@ def _parser_environment() -> CommandEnvironment:
     if not raw_prefix:
         return CommandEnvironment(max_scratch_bytes=16 * 1024 * 1024)
     try:
-        prefix = json.loads(raw_prefix)
+        prefix = strict_json_loads(raw_prefix)
     except json.JSONDecodeError as exc:
         raise ValueError("parser sandbox prefix is invalid JSON") from exc
     if (

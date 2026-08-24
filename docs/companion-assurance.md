@@ -223,6 +223,10 @@ against a signed baseline; and optional `ai-security` covers prompt injection,
 tool authorization, agency, memory, output handling, and exfiltration. Use
 `companion/semantic_assurance.py` to create normalized findings from strict
 oracle cases, then wrap them with `assurance_manifest.py`.
+Semantic execution now emits a canonical `control_proof` for every claimed
+feature, committing the exact case IDs, observations, case count, and failed
+case count. Governed ingestion requires those records for semantic lanes, so a
+feature label without executed-case commitments cannot satisfy admission.
 
 For higher-authority evidence, use the native drivers instead of hand-authored
 oracle outcomes: `surface_inventory.py` reconciles a declared catalog against at
@@ -318,7 +322,9 @@ The hardened contracts close the remaining authority and behavior gaps:
   ingestion verifies a signed structured reconciliation proof containing each
   collector/server identity, organization, snapshot, pagination receipt, total,
   liveness count, query/endpoint binding, and collection time; feature labels
-  alone cannot satisfy admission;
+  alone cannot satisfy admission. The proof embeds both original portable
+  collector and server authority envelopes plus their signed subjects, allowing
+  offline public-key and signature replay after the source files are gone;
 - AI v2 requires a signed calibrated judge, paired seeded scenarios across
   independent runs, multi-turn memory/tool isolation, drift baselines, and
   family-wise confidence control;

@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from ..models import Confidence, Severity
+from ..trusted_observation import governed_now
 
 
 def map_severity(value: Any, *, default: Severity = Severity.UNKNOWN) -> Severity:
@@ -39,7 +40,7 @@ def database_freshness_error(
         return f"offline database freshness marker {filename!r} was not found"
     newest = max(candidates, key=lambda path: path.stat().st_mtime)
     modified = datetime.fromtimestamp(newest.stat().st_mtime, tz=UTC)
-    age_days = (datetime.now(UTC) - modified).total_seconds() / 86400
+    age_days = (governed_now() - modified).total_seconds() / 86400
     if age_days > maximum_age_days:
         return (
             f"offline database is {age_days:.1f} days old; "

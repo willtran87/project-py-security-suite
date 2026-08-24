@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+
+from .strict_json import loads as strict_json_loads
 import platform
 from pathlib import Path
 from typing import Any
@@ -486,7 +488,7 @@ def _read_effectiveness_evaluation(
             "effectiveness evaluation digest does not match the approved SHA-256"
         )
     try:
-        document = json.loads(path.read_bytes(), object_pairs_hook=_unique_object)
+        document = strict_json_loads(path.read_bytes())
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise ValueError("effectiveness evaluation is not valid UTF-8 JSON") from exc
     if not isinstance(document, dict) or document.get("schema_version") != "1.0":
@@ -574,7 +576,7 @@ def _read_report_manifest(root: Path) -> dict[str, Any]:
     if source.stat().st_size > _MAX_EFFECTIVENESS_BYTES:
         raise ValueError("scan manifest exceeds the bounded size limit")
     try:
-        value = json.loads(source.read_bytes(), object_pairs_hook=_unique_object)
+        value = strict_json_loads(source.read_bytes())
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise ValueError("scan manifest is not valid UTF-8 JSON") from exc
     if not isinstance(value, dict):

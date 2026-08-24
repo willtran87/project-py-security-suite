@@ -4,6 +4,7 @@ import base64
 import hashlib
 import os
 import sqlite3
+import threading
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -12,6 +13,9 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 from .path_safety import read_regular_file
 from .strict_json import canonical_bytes, loads as strict_loads
+from .trusted_observation import governed_now
+
+_REGISTRY_ANCHOR = threading.local()
 
 _FIELDS = {
     "organization",
@@ -163,7 +167,7 @@ def _verify_fresh_registry(document: dict[str, object]) -> dict[str, object]:
         )
     issued = _timestamp(signed["issued_at"], "failure-domain registry issued_at")
     expires = _timestamp(signed["expires_at"], "failure-domain registry expires_at")
-    now = datetime.now(UTC)
+    now = governed_now()
     if issued > now or expires <= now or expires <= issued:
         raise ValueError("failure-domain registry is expired or not yet valid")
     registry_signers = _verify_registry_signatures(signed, signatures)
@@ -344,6 +348,43 @@ def _verify_transparency(
         )
     ):
         raise ValueError("failure-domain registry checkpoint consistency failed")
+    if getattr(_REGISTRY_ANCHOR, "active", False):
+        # A checkpoint authority's own hardware identity is verified against this
+        # registry.  Reentrant verification must validate the same transition but
+        # leave publication and mutation to the outer transaction.
+        return
+    required_anchor = (
+        os.environ.get(
+            "PYSEC_REQUIRE_EXTERNAL_FAILURE_DOMAIN_STATE_CHECKPOINT", ""
+        ).strip()
+        == "1"
+        or os.environ.get("PYSEC_REQUIRE_HARDENED_RELEASE_EVIDENCE", "").strip() == "1"
+    )
+    from .checkpoint_authority import publish_checkpoint
+
+    _REGISTRY_ANCHOR.active = True
+    try:
+        publish_checkpoint(
+            "PYSEC_FAILURE_DOMAIN_STATE_CHECKPOINT",
+            {
+                "schema_version": "1.0",
+                "namespace": "failure-domain-registry",
+                "log_id": str(value["log_id"]),
+                "previous": {
+                    "tree_size": previous_size,
+                    "root_sha256": previous_root,
+                    "generation": previous_generation,
+                },
+                "proposed": {
+                    "tree_size": current[0],
+                    "root_sha256": current[1],
+                    "generation": current[2],
+                },
+            },
+            required=required_anchor,
+        )
+    finally:
+        _REGISTRY_ANCHOR.active = False
     _advance_checkpoint_state(
         Path(state_path),
         str(value["log_id"]),

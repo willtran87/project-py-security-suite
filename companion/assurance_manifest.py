@@ -202,6 +202,7 @@ def _execution_summary(path: Path, *, kind: str = "") -> dict[str, Any]:
         "language_matrix",
         "cross_language_matrix",
         "surface_proof",
+        "control_proof",
     }
     if (
         not isinstance(payload, dict)
@@ -248,6 +249,7 @@ def _execution_summary(path: Path, *, kind: str = "") -> dict[str, Any]:
         payload.get("cross_language_matrix", [])
     )
     surface_proof = payload.get("surface_proof")
+    control_proof = payload.get("control_proof")
     if kind == "surface-inventory" and not isinstance(surface_proof, dict):
         raise ValueError("surface inventory requires a structured reconciliation proof")
     if kind != "surface-inventory" and surface_proof is not None:
@@ -273,6 +275,7 @@ def _execution_summary(path: Path, *, kind: str = "") -> dict[str, Any]:
             else {}
         ),
         **({"surface_proof": surface_proof} if surface_proof is not None else {}),
+        **({"control_proof": control_proof} if control_proof is not None else {}),
     }
 
 

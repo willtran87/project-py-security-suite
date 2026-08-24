@@ -4,6 +4,8 @@ import base64
 import hashlib
 import os
 import json
+
+from .strict_json import loads as strict_json_loads
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
@@ -869,7 +871,7 @@ def _coverage_policy(
     ):
         raise ValueError("runtime coverage policy fields do not match")
     try:
-        inventory_keys = json.loads(
+        inventory_keys = strict_json_loads(
             os.environ.get("PYSEC_RUNTIME_INVENTORY_KEYS_JSON", "")
         )
     except json.JSONDecodeError as exc:

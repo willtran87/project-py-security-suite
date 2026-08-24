@@ -12,6 +12,8 @@ import zipfile
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from py_security_suite.strict_json import loads as strict_loads
+
 MAX_ARCHIVE_BYTES = 512 * 1024 * 1024
 MAX_MEMBERS = 100_000
 MAX_RECORD_BYTES = 16 * 1024 * 1024
@@ -48,7 +50,7 @@ def validate_snapshot(archive: Path, expected_sha256: str) -> dict[str, Any]:
             expanded += member.file_size
             if expanded > MAX_EXPANDED_BYTES:
                 raise ValueError("OSV archive expanded size exceeds 2 GiB")
-            record = json.loads(bundle.read(member))
+            record = strict_loads(bundle.read(member))
             if not isinstance(record, dict):
                 raise ValueError(f"OSV record is not an object: {member.filename}")
             identifier = record.get("id")
@@ -130,7 +132,7 @@ def main() -> int:
     result: dict[str, object] = {}
     try:
         result = validate_snapshot(args.archive, args.expected_sha256)
-    except (OSError, ValueError, zipfile.BadZipFile, json.JSONDecodeError) as exc:
+    except (OSError, TypeError, ValueError, zipfile.BadZipFile) as exc:
         parser.exit(2, f"error: {exc}\n")
     print(json.dumps(result, sort_keys=True, separators=(",", ":")))
     return 0

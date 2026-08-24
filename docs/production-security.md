@@ -398,7 +398,11 @@ with the sandbox attestation; a `reexecuted-and-matched` assertion or digest
 echo alone is not accepted as execution. Compiler replay declarations require
 alias-, context-, field-, path-, interprocedural-, dynamic-dispatch-, and
 implicit-flow-sensitive analysis plus positive and negative canaries spanning
-multiple rule families.
+multiple rule families. Primary and secondary semantic ledgers no longer have
+to be byte-identical: the sealed boundary graph retains consensus,
+primary-only, secondary-only, and union commitments for symbols, edges, and
+taint paths. Any engine-unique fact marks compiler semantics review-required
+instead of silently discarding the disagreement.
 
 Remote sandbox evidence is never treated as an opaque quote. The retained,
 authority-signed normalized evidence is parsed according to TPM2 Quote, Nitro,
@@ -412,6 +416,12 @@ the normalized-evidence authority by both key and registered failure domain;
 the statement also binds the format-native verification method and exact
 verifier executable, runtime, configuration, transcript, and trust-root
 digests. Deployments can require
+`PYSEC_RAW_ATTESTATION_NATIVE_REPLAY_*`; hardened replay executes that separately
+pinned, sandboxed verifier over the retained raw bytes and requires its
+hardware-attested failure domain and executable digest to match the signed
+statement. A valid replay signature without this governed native execution is
+rejected.
+Deployments can require
 `PYSEC_FAILURE_DOMAIN_REGISTRY_{PATH,SHA256}` and
 `PYSEC_REQUIRE_REGISTERED_FAILURE_DOMAINS=1`; the pinned registry maps active
 authority keys to organization, host, control-plane, and measured
@@ -421,7 +431,10 @@ only v2 registries with an issued/expiry window, generation floor, threshold
 Ed25519 signatures from deployment-pinned roots, and a Merkle inclusion proof
 against `PYSEC_FAILURE_DOMAIN_LOG_ROOT_SHA256`. Witness-quorum checkpoint
 signatures, RFC 6962 consistency proofs, and a durable SQLite state path prevent
-equivocation, forks, and rollback between scans.
+equivocation, forks, and rollback between scans. Hardened mode also publishes
+each compare-and-advance transition to
+`PYSEC_FAILURE_DOMAIN_STATE_CHECKPOINT_*`; the external authority is the
+rollback root and the SQLite database is only a transactional cache.
 
 Deployments can set `PYSEC_REQUIRE_EXPLICIT_TRUST_POLICY=1` and provide one
 digest- and key-pinned signed policy through `PYSEC_EXPLICIT_TRUST_POLICY_*`.
@@ -429,6 +442,10 @@ The v2 policy is threshold-signed, generation-bounded, predecessor-chained, and
 expiring against trusted scan time. It rejects unsupported variables, unsigned
 ambient trust settings, and conflicts, persists fork-detecting state, and
 activates the exact environment only within the configuration/scan operation.
+`PYSEC_TRUST_POLICY_STATE_CHECKPOINT_*` performs the same externally attested
+compare-and-advance for policy generations. The explicit
+`PYSEC_REQUIRE_EXTERNAL_{POLICY,FAILURE_DOMAIN}_STATE_CHECKPOINT` switches make
+these controls mandatory outside the hardened release profile as well.
 
 Encrypted native evidence requires an authority-signed hardware-KMS envelope
 receipt binding the exact scan challenge and command request, plaintext object

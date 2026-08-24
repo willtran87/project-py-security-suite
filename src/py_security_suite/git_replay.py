@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import os
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +14,7 @@ from .failure_domain import (
 from .operation_receipt import verify_operation_receipt
 from .pinned_command import remote_attested_failure_domain, run_pinned_json_command
 from .strict_json import canonical_bytes
+from .trusted_observation import governed_now
 
 
 def externalize_and_reverify_bundle(
@@ -78,7 +79,7 @@ def externalize_and_reverify_bundle(
         storage["object_id"] != f"sha256:{bundle_sha256}"
         or not str(storage["object_version"]).strip()
         or not str(storage["immutable_uri"]).startswith("cas://")
-        or retention_until < datetime.now(UTC) + timedelta(days=30)
+        or retention_until < governed_now() + timedelta(days=30)
     ):
         raise ValueError("Git CAS object is not immutable and durably retained")
     secondary_request = {

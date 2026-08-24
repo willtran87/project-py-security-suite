@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+
+from .strict_json import loads as strict_json_loads
 import os
 import shutil
 import tempfile
@@ -772,7 +774,7 @@ def _write_json(path: Path, value: dict[str, Any]) -> None:
 def _read_object(path: Path, label: str) -> dict[str, Any]:
     if not path.is_file() or path.stat().st_size > _MAX_FILE_BYTES:
         raise ValueError(f"{label} is missing or too large: {path}")
-    value = json.loads(path.read_bytes())
+    value = strict_json_loads(path.read_bytes())
     if not isinstance(value, dict):
         raise TypeError(f"{label} root must be an object")
     return value

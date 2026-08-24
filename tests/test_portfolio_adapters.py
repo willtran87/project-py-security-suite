@@ -422,13 +422,7 @@ class PortfolioAdapterTests(unittest.TestCase):
             **subject,
             "proof_sha256": hashlib.sha256(canonical_bytes(subject)).hexdigest(),
         }
-        self.assertEqual(adapter.parse(json.dumps(document), Path.cwd()), [])
-        subject["sources"][0]["records_observed"] = 2
-        document["execution"]["surface_proof"] = {
-            **subject,
-            "proof_sha256": hashlib.sha256(canonical_bytes(subject)).hexdigest(),
-        }
-        with self.assertRaisesRegex(TypeError, "source proof is invalid"):
+        with self.assertRaisesRegex(TypeError, "source proof is malformed"):
             adapter.parse(json.dumps(document), Path.cwd())
 
     def test_runtime_evidence_applicability_fails_closed_for_matching_projects(

@@ -30,9 +30,11 @@ from defusedxml.common import DefusedXmlException  # type: ignore[import-untyped
 
 from . import __version__
 from .assurance_profile import enforce_assurance_profile, load_assurance_profile
+from .control_proof import verify_control_proof
 from .inventory import source_snapshot
 from .strict_json import canonical_bytes, dumps as strict_dumps, loads as strict_loads
 from .trusted_time import verify_rfc3161
+from .trusted_observation import governed_now
 
 _MAX_REPORT_BYTES = 64 * 1024 * 1024
 _MAX_JUNIT_REPORTS = 128
@@ -417,7 +419,7 @@ def _signed_binding(
     valid_for_hours: float,
     run_id: str,
 ) -> dict[str, Any]:
-    created = datetime.now(UTC)
+    created = governed_now()
     expires = created + timedelta(hours=valid_for_hours)
     requested_key_id = key_id.strip()
     if requested_key_id and len(private_keys) != 1:
@@ -936,7 +938,7 @@ def _validate_attestation_statement(
         raise ValueError("signed evidence binding source identity does not match")
     created = _timestamp(predicate.get("created_at"), "attestation created_at")
     expires = _timestamp(predicate.get("expires_at"), "attestation expires_at")
-    now = datetime.now(UTC)
+    now = governed_now()
     if created > now + timedelta(minutes=5):
         raise ValueError("signed evidence binding was created in the future")
     if expires <= created or expires < now:
@@ -1374,7 +1376,7 @@ def _consume_replay_token(document: dict[str, Any], ledger: Path) -> None:
                     token,
                     str(document["run_id"]),
                     str(document["kind"]),
-                    datetime.now(UTC).isoformat(),
+                    governed_now().isoformat(),
                 ),
             )
     except sqlite3.IntegrityError as exc:
@@ -1576,7 +1578,7 @@ def _verify_replay_receipt(
     if isinstance(sequence, bool) or not isinstance(sequence, int) or sequence < 1:
         raise ValueError("replay service receipt sequence is invalid")
     consumed_at = _timestamp(value.get("consumed_at"), "replay receipt consumed_at")
-    if abs((datetime.now(UTC) - consumed_at).total_seconds()) > 5 * 60:
+    if abs((governed_now() - consumed_at).total_seconds()) > 5 * 60:
         raise ValueError("replay service receipt is stale or in the future")
     previous = str(value.get("previous_receipt_sha256") or "")
     if previous and not _digest(previous):
@@ -1755,7 +1757,7 @@ def _assurance_v2_metadata(
             raise ValueError(f"assurance evidence v2 requires {name}")
     generated = _timestamp(payload.get("generated_at"), "generated_at")
     expires = _timestamp(payload.get("expires_at"), "expires_at")
-    now = datetime.now(UTC)
+    now = governed_now()
     if generated > now + timedelta(minutes=5):
         raise ValueError("assurance evidence generated_at is in the future")
     if now - generated > timedelta(days=maximum_age_days):
@@ -1955,8 +1957,9 @@ def _assurance_execution(
         "canaries_observed",
         "language_matrix",
         "cross_language_matrix",
+        "control_proof",
     }
-    required = allowed - {"language_matrix", "cross_language_matrix"}
+    required = allowed - {"language_matrix", "cross_language_matrix", "control_proof"}
     if set(value) - allowed or not required.issubset(value):
         raise ValueError("assurance execution fields do not match the v2 contract")
     if value.get("status") != "completed":
@@ -1975,6 +1978,7 @@ def _assurance_execution(
         raise ValueError("assurance execution canary coverage is incomplete")
     roles = _bounded_string_list(value.get("roles"), "roles", 64)
     features = _bounded_string_list(value.get("features"), "features", 256)
+    control_proof = value.get("control_proof")
     skipped = _bounded_string_list(value.get("skipped_checks"), "skipped_checks", 256)
     if skipped:
         raise ValueError("assurance execution contains skipped checks")
@@ -1994,6 +1998,7 @@ def _assurance_execution(
         "coverage_metric": metric,
         "roles": roles,
         "features": features,
+        **({"control_proof": control_proof} if control_proof is not None else {}),
         "skipped_checks": skipped,
         "canaries_expected": expected,
         "canaries_observed": observed,
@@ -2367,6 +2372,18 @@ def _assurance_kind_requirements(kind: str, execution: dict[str, Any]) -> None:
             f"{kind} evidence is missing required execution features: "
             + ", ".join(missing)
         )
+    if kind in {
+        "surface-inventory",
+        "event-security",
+        "database-security",
+        "ruleset-regression",
+        "ai-security",
+        "browser-security",
+        "authorization-security",
+        "cloud-attack-path",
+        "protocol-security",
+    }:
+        verify_control_proof(execution.get("control_proof"), required_features)
     if kind == "polyglot" and not execution.get("language_matrix"):
         raise ValueError("polyglot evidence requires an explicit language matrix")
     if (

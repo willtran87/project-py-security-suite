@@ -202,6 +202,13 @@ pysec release-check report --format json `
   --require-passport --output release-readiness.json
 ```
 
+The closed-admission workflow checks out and verifies the exact producer commit,
+requires the producer run's head SHA, ref, workflow name, event, and successful
+conclusion to match operator-approved inputs, and executes behind the
+`release-admission` GitHub Environment. Configure that environment with required
+reviewers and deployment-branch restrictions; an unprotected environment is not
+an independent approval boundary.
+
 Publish `release-readiness.json` beside—never inside—the sealed report. Export
 strict offline contracts with:
 

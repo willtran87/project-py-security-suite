@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import json
 import os
 import tempfile
 from datetime import UTC, datetime
@@ -60,7 +59,11 @@ def reconcile(path: Path) -> dict[str, Any]:
     ):
         raise ValueError("surface inventory fields do not match a supported contract")
     observed_at = (
-        _timestamp(root.get("observed_at"), "surface observed_at")
+        _timestamp(
+            root.get("observed_at"),
+            "surface observed_at",
+            enforce_fresh=version != "4.0",
+        )
         if version in {"2.0", "3.0", "4.0"}
         else None
     )
@@ -72,7 +75,9 @@ def reconcile(path: Path) -> dict[str, Any]:
         history = _verify_history(_read(history_path))
         trusted_time = verify_rfc3161(path, root.get("trusted_time"), history_digest)
         if observed_at != _timestamp(
-            trusted_time["trusted_time_observed_at"], "surface trusted time"
+            trusted_time["trusted_time_observed_at"],
+            "surface trusted time",
+            enforce_fresh=False,
         ):
             raise ValueError("surface observed_at is detached from trusted time")
     declared = _records(
@@ -135,7 +140,11 @@ def reconcile(path: Path) -> dict[str, Any]:
                     observed_pages != expected_pages
                 ):
                     raise ValueError("surface inventory pagination is incomplete")
-                collected_at = _timestamp(value.get("collected_at"), "collected_at")
+                collected_at = _timestamp(
+                    value.get("collected_at"),
+                    "collected_at",
+                    reference=observed_at,
+                )
                 organization = _label(
                     value.get("collector_organization"), "collector organization"
                 )
@@ -175,6 +184,7 @@ def reconcile(path: Path) -> dict[str, Any]:
                 subject=authority_subject,
                 at=observed_at,
             )
+            collector_subject = dict(authority_subject)
             if version in {"3.0", "4.0"}:
                 _verify_collector_organization(
                     authority["signer_id"],
@@ -202,6 +212,7 @@ def reconcile(path: Path) -> dict[str, Any]:
                     subject=authority_subject,
                     at=observed_at,
                 )
+                server_subject = dict(authority_subject)
                 if (
                     server["signer_id"] == authority["signer_id"]
                     or server["collector_id"] == authority["collector_id"]
@@ -245,6 +256,10 @@ def reconcile(path: Path) -> dict[str, Any]:
                     "server_signer_id": server["signer_id"],
                     "server_organization": server["organization"],
                     "collected_at": value["collected_at"],
+                    "collector_subject": collector_subject,
+                    "collector_receipt": authority["portable_receipt"],
+                    "server_subject": server_subject,
+                    "server_receipt": server["portable_receipt"],
                 }
             )
         for record in source_records:
@@ -254,7 +269,7 @@ def reconcile(path: Path) -> dict[str, Any]:
         current_ids = set(observed)
         last = history[-1]
         if set(last["record_ids"]) != current_ids or observed_at != _timestamp(
-            last["observed_at"], "history observed_at"
+            last["observed_at"], "history observed_at", enforce_fresh=False
         ):
             raise ValueError("surface history is detached from the current inventory")
     cases: list[dict[str, str]] = []
@@ -468,7 +483,13 @@ def _label(value: object, label: str) -> str:
     return result
 
 
-def _timestamp(value: object, label: str) -> datetime:
+def _timestamp(
+    value: object,
+    label: str,
+    *,
+    reference: datetime | None = None,
+    enforce_fresh: bool = True,
+) -> datetime:
     try:
         result = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
     except ValueError as exc:
@@ -476,7 +497,11 @@ def _timestamp(value: object, label: str) -> datetime:
     if result.tzinfo is None:
         raise ValueError(f"{label} must include a timezone")
     normalized = result.astimezone(UTC)
-    if abs((datetime.now(UTC) - normalized).total_seconds()) > 24 * 60 * 60:
+    if (
+        enforce_fresh
+        and abs(((reference or datetime.now(UTC)) - normalized).total_seconds())
+        > 24 * 60 * 60
+    ):
         raise ValueError(f"{label} is stale or in the future")
     return normalized
 
@@ -530,8 +555,8 @@ def _verify_page_receipts(context: Path, source: dict[str, Any], pages: int) -> 
 
 def _verify_collector_organization(signer_id: str, organization: str) -> None:
     try:
-        policy = json.loads(os.environ.get("PYSEC_AUTHORITY_ORGANIZATIONS", ""))
-    except json.JSONDecodeError as exc:
+        policy = strict_loads(os.environ.get("PYSEC_AUTHORITY_ORGANIZATIONS", ""))
+    except (TypeError, ValueError) as exc:
         raise ValueError("surface organization policy is invalid") from exc
     if not isinstance(policy, dict) or policy.get(signer_id) != organization:
         raise ValueError(

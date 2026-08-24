@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+
+from .strict_json import loads as strict_json_loads
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -33,7 +35,7 @@ def merge_coverage_scenarios(
         digest = _digest(expected)
         if sha256_file(source) != digest:
             raise ValueError(f"coverage scenario {name} does not match its SHA-256")
-        document = json.loads(source.read_bytes())
+        document = strict_json_loads(source.read_bytes())
         files = document.get("files") if isinstance(document, dict) else None
         if not isinstance(files, dict) or len(files) > _MAX_FILES:
             raise TypeError(f"coverage scenario {name} requires a bounded files object")
