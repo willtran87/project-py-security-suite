@@ -5,18 +5,39 @@ import hashlib
 import importlib.util
 import json
 import re
+import sys
 from collections import Counter
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
 from .path_safety import read_regular_file
+from .execution import run_command
 from .strict_json import canonical_bytes
 
 
 _MAX_FILE_BYTES = 1024 * 1024
 _MAX_FILES = 50_000
 _MAX_TOTAL_BYTES = 64 * 1024 * 1024
+_BYTECODE_ANALYZER = r"""
+import dis, json, marshal, sys, types
+data = open(sys.argv[1], "rb").read()
+root = marshal.loads(data[16:])
+if not isinstance(root, types.CodeType): raise ValueError("not a code object")
+seen, edges, stack = set(), set(), [root]
+while stack:
+    code = stack.pop()
+    if id(code) in seen: continue
+    seen.add(id(code))
+    for const in code.co_consts:
+        if isinstance(const, types.CodeType): stack.append(const)
+    for instruction in dis.get_instructions(code):
+        if instruction.opname == "IMPORT_NAME" and isinstance(instruction.argval, str):
+            edges.add((max(1, instruction.starts_line or code.co_firstlineno), "module-import", instruction.argval))
+        elif instruction.opname in {"LOAD_GLOBAL", "LOAD_NAME"} and instruction.argval in {"eval", "exec", "compile", "__import__"}:
+            edges.add((max(1, instruction.starts_line or code.co_firstlineno), "dynamic-dispatch", str(instruction.argval)))
+print(json.dumps(sorted(edges)))
+"""
 _IGNORED_PARTS = frozenset(
     {".git", ".hg", ".mypy_cache", ".pytest_cache", ".tox", ".venv", "node_modules"}
 )
@@ -404,48 +425,37 @@ def _analyze_special_surface(
         return _surface(source, kind, "semantic", True), edges
     if kind == "template":
         text = payload.decode("utf-8")
-        edges = _text_edges(text, source, "template")
-        include = re.compile(
-            r"{[%{]\s*(?:include|extends|import|from)\s+['\"]([^'\"]+)"
+        return _surface(source, kind, "semantic", True), _template_edges(
+            text, source, path.suffix.casefold()
         )
-        edges.extend(
-            _edge(
-                source,
-                text.count("\n", 0, match.start()) + 1,
-                "template-include",
-                match.group(1),
-                "template",
-            )
-            for match in include.finditer(text)
-        )
-        literal_starts = {match.start() for match in include.finditer(text)}
-        directive = re.compile(r"{[%{]\s*(?:include|extends|import|from)\b")
-        edges.extend(
-            _edge(
-                source,
-                text.count("\n", 0, match.start()) + 1,
-                "dynamic-dispatch",
-                "<computed-template>",
-                "template",
-            )
-            for match in directive.finditer(text)
-            if match.start() not in literal_starts
-        )
-        return _surface(source, kind, "heuristic", True), edges
     if kind == "bytecode":
         if len(payload) < 16 or payload[:4] != importlib.util.MAGIC_NUMBER:
             raise ValueError("Python bytecode magic or header is invalid")
-        targets = sorted(
-            {
-                match.decode("ascii")
-                for match in re.findall(rb"[A-Za-z_][A-Za-z0-9_.]{2,120}", payload[16:])
-                if b"." in match
-            }
-        )[:1000]
-        return _surface(source, kind, "heuristic", True), [
-            _edge(source, 1, "dynamic-dispatch", target, "python-bytecode")
-            for target in targets
-        ]
+        result = run_command(
+            [sys.executable, "-I", "-S", "-c", _BYTECODE_ANALYZER, str(path)],
+            cwd=path.parent,
+            timeout_seconds=10,
+            max_output_bytes=1024 * 1024,
+        )
+        if result.exit_code != 0 or result.timed_out or result.output_limit_exceeded:
+            raise ValueError("Python bytecode semantic disassembly failed")
+        decoded = json.loads(result.stdout)
+        if not isinstance(decoded, list) or len(decoded) > 10_000:
+            raise ValueError("Python bytecode semantic output is invalid")
+        edges = []
+        for item in decoded:
+            if (
+                not isinstance(item, list)
+                or len(item) != 3
+                or item[1] not in {"module-import", "dynamic-dispatch"}
+            ):
+                raise ValueError("Python bytecode semantic edge is invalid")
+            edges.append(
+                _edge(
+                    source, int(item[0]), str(item[1]), str(item[2]), "python-bytecode"
+                )
+            )
+        return _surface(source, kind, "semantic", True), edges
     if kind == "webassembly":
         imports = _wasm_imports(payload)
         return _surface(source, kind, "semantic", True), [
@@ -461,6 +471,44 @@ def _analyze_special_surface(
 
 def _surface(path: str, kind: str, analysis: str, covered: bool) -> dict[str, Any]:
     return {"path": path, "kind": kind, "analysis": analysis, "covered": covered}
+
+
+def _template_edges(text: str, source: str, suffix: str) -> list[dict[str, Any]]:
+    """Tokenize Jinja/Twig/Handlebars dependency directives without rendering."""
+
+    token = re.compile(r"{#.*?#}|{%.*?%}|{{.*?}}", re.DOTALL)
+    matches = list(token.finditer(text))
+    remainder = token.sub("", text)
+    if any(marker in remainder for marker in ("{#", "{%", "{{")):
+        raise ValueError("template directive is unterminated")
+    edges = _text_edges(text, source, "template")
+    for match in matches:
+        raw = match.group(0)
+        if raw.startswith(("{#", "{{!")):
+            continue
+        body = raw[2:-2].strip().rstrip("-").strip()
+        if suffix == ".hbs":
+            if not body.startswith(">"):
+                continue
+            argument = body[1:].strip().split(maxsplit=1)[0] if body[1:].strip() else ""
+            literal = argument if re.fullmatch(r"[A-Za-z0-9_./-]+", argument) else ""
+        else:
+            parts = body.split(maxsplit=1)
+            if not parts or parts[0] not in {"include", "extends", "import", "from"}:
+                continue
+            argument = parts[1].strip() if len(parts) == 2 else ""
+            quoted = re.match(r"(['\"])([^'\"]+)\1(?:\s|$)", argument)
+            literal = quoted.group(2) if quoted else ""
+        edges.append(
+            _edge(
+                source,
+                text.count("\n", 0, match.start()) + 1,
+                "template-include" if literal else "dynamic-dispatch",
+                literal or "<computed-template>",
+                "handlebars" if suffix == ".hbs" else "jinja-twig",
+            )
+        )
+    return edges
 
 
 def _wasm_imports(payload: bytes) -> list[str]:
@@ -560,13 +608,22 @@ def _native_imports(path: Path, payload: bytes) -> list[str]:
             pe.parse_data_directories(
                 directories=[pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_IMPORT"]]
             )
-            return sorted(
-                {
-                    f"{entry.dll.decode('utf-8', errors='strict')}!{symbol.name.decode('utf-8', errors='strict') if symbol.name else '#' + str(symbol.ordinal)}"
-                    for entry in getattr(pe, "DIRECTORY_ENTRY_IMPORT", ())
-                    for symbol in entry.imports
-                }
-            )
+            pe_names = {
+                f"{entry.dll.decode('utf-8', errors='strict')}!{symbol.name.decode('utf-8', errors='strict') if symbol.name else '#' + str(symbol.ordinal)}"
+                for entry in getattr(pe, "DIRECTORY_ENTRY_IMPORT", ())
+                for symbol in entry.imports
+            }
+            characteristics = int(pe.OPTIONAL_HEADER.DllCharacteristics)
+            for label, mask in (
+                ("aslr", 0x0040),
+                ("high-entropy-aslr", 0x0020),
+                ("dep", 0x0100),
+                ("control-flow-guard", 0x4000),
+            ):
+                pe_names.add(
+                    f"hardening:{label}={'enabled' if characteristics & mask else 'disabled'}"
+                )
+            return sorted(pe_names)
         except pefile.PEFormatError as exc:
             raise ValueError("PE import table is invalid") from exc
         finally:
@@ -575,24 +632,62 @@ def _native_imports(path: Path, payload: bytes) -> list[str]:
     if payload.startswith(b"\x7fELF"):
         from elftools.elf.elffile import ELFFile  # type: ignore[import-untyped]
 
-        names: set[str] = set()
+        elf_names: set[str] = set()
         with path.open("rb") as handle:
             elf = ELFFile(handle)
-            for segment in elf.iter_segments():
+            elf_names.add(
+                "hardening:position-independent="
+                + ("enabled" if elf.header["e_type"] == "ET_DYN" else "disabled")
+            )
+            segments = list(elf.iter_segments())
+            stack = next(
+                (
+                    segment
+                    for segment in segments
+                    if segment.header.p_type == "PT_GNU_STACK"
+                ),
+                None,
+            )
+            elf_names.add(
+                "hardening:nx-stack="
+                + (
+                    "enabled"
+                    if stack is not None and not int(stack.header.p_flags) & 1
+                    else "disabled"
+                )
+            )
+            elf_names.add(
+                "hardening:relro="
+                + (
+                    "enabled"
+                    if any(s.header.p_type == "PT_GNU_RELRO" for s in segments)
+                    else "disabled"
+                )
+            )
+            bind_now = False
+            for segment in segments:
                 if segment.header.p_type == "PT_DYNAMIC":
-                    names.update(
-                        str(tag.needed)
-                        for tag in segment.iter_tags()  # type: ignore[attr-defined]
-                        if tag.entry.d_tag == "DT_NEEDED"
-                    )
+                    for tag in segment.iter_tags():  # type: ignore[attr-defined]
+                        if tag.entry.d_tag == "DT_NEEDED":
+                            elf_names.add(str(tag.needed))
+                        if tag.entry.d_tag == "DT_BIND_NOW":
+                            bind_now = True
+                        if tag.entry.d_tag == "DT_FLAGS" and int(tag.entry.d_val) & 0x8:
+                            bind_now = True
+                        if (
+                            tag.entry.d_tag == "DT_FLAGS_1"
+                            and int(tag.entry.d_val) & 0x1
+                        ):
+                            bind_now = True
+            elf_names.add(f"hardening:bind-now={'enabled' if bind_now else 'disabled'}")
             symbols = elf.get_section_by_name(".dynsym")
             if symbols is not None:
-                names.update(
+                elf_names.update(
                     f"symbol:{symbol.name}"
                     for symbol in symbols.iter_symbols()  # type: ignore[attr-defined]
                     if symbol.name and symbol["st_shndx"] == "SHN_UNDEF"
                 )
-        return sorted(names)
+        return sorted(elf_names)
     if payload[:4] in {
         b"\xca\xfe\xba\xbe",
         b"\xce\xfa\xed\xfe",
@@ -602,13 +697,30 @@ def _native_imports(path: Path, payload: bytes) -> list[str]:
     }:
         from macholib.MachO import MachO  # type: ignore[import-untyped]
 
-        return sorted(
-            {
-                filename
-                for header in MachO(str(path)).headers
-                for _index, _command, filename in header.walkRelocatables()
-            }
+        binary = MachO(str(path))
+        macho_names = {
+            filename
+            for header in binary.headers
+            for _index, _command, filename in header.walkRelocatables()
+        }
+        flags = [int(header.header.flags) for header in binary.headers]
+        macho_names.add(
+            "hardening:pie="
+            + (
+                "enabled"
+                if flags and all(flag & 0x200000 for flag in flags)
+                else "disabled"
+            )
         )
+        macho_names.add(
+            "hardening:no-exec-heap="
+            + (
+                "enabled"
+                if flags and all(flag & 0x1000000 for flag in flags)
+                else "disabled"
+            )
+        )
+        return sorted(macho_names)
     raise ValueError("native extension format is unsupported")
 
 

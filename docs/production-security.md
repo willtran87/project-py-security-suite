@@ -291,7 +291,11 @@ assessor, trusted assessment time, method, artifact SHA-256, JSON Pointer,
 operator, and expected value. The suite replays those assertions and derives
 the result. A separately deployment-pinned requirements evidence policy limits
 the artifact names, methods, operators, and minimum assertions acceptable for
-every requirement. Artifact names or catalog counts alone cannot establish conformance.
+every requirement. It must be independently authorized through an Ed25519
+envelope under `PYSEC_REQUIREMENTS_EVIDENCE_POLICY_AUTHORITY`, and passing
+assessments must use the canonical `automated replay` procedure with at least
+one value-bearing assertion; an existence-only check cannot pass. Artifact
+names or catalog counts alone cannot establish conformance.
 
 ## Promotion evidence
 

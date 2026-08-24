@@ -8,6 +8,7 @@ from typing import Any
 from .execution import sha256_file
 from .passport import verify_report
 from .path_safety import resolve_regular_file
+from .artifact_validation import validate_governed_artifacts
 
 _MAX_JSON_BYTES = 128 * 1024 * 1024
 _GOVERNED_EFFECTIVENESS_MINIMUMS = {
@@ -53,6 +54,12 @@ _CONTROL_REMEDIATION = {
         "repository",
         "Run a digest-bound labeled corpus with the required minimum sample size and resolve misses.",
         ["pysec benchmark REPORT --corpus CORPUS --corpus-sha256 SHA256"],
+    ),
+    "runtime-trace-correlation": (
+        "application-security",
+        "platform-security",
+        "Provide signed, time-bounded traces bound to this deployment and static boundary graph.",
+        [],
     ),
     "signed-release-passport": (
         "release-approver",
@@ -153,6 +160,9 @@ def assess_release_readiness(
     trust = _entrypoint_trust(manifest)
     closure = _optional_object(root / "closure-plan.json")
     diff_coverage = _optional_object(root / "diff-coverage.json")
+    runtime_trace = _optional_object(root / "runtime-trace-correlation.json")
+    if runtime_trace:
+        validate_governed_artifacts({"runtime-trace-correlation.json": runtime_trace})
 
     findings = findings_document.get("findings")
     if not isinstance(findings, list):
@@ -187,6 +197,25 @@ def assess_release_readiness(
     )
     controls.append(_intelligence_control(intelligence, intelligence_approval))
     controls.append(_change_validation_control(closure, diff_coverage))
+    if governed_effectiveness_required:
+        runtime_valid = bool(
+            isinstance(runtime_trace, dict)
+            and runtime_trace.get("complete") is True
+            and runtime_trace.get("authority_receipt")
+            and int(runtime_trace.get("trace_count") or 0) > 0
+        )
+        controls.append(
+            _control(
+                "runtime-trace-correlation",
+                runtime_valid,
+                (
+                    "Signed deployment-bound runtime trace evidence is complete."
+                    if runtime_valid
+                    else "Signed deployment-bound runtime trace evidence is required."
+                ),
+                ["runtime-trace-correlation.json"],
+            )
+        )
     evaluation_control = _effectiveness_control(
         effectiveness_evaluation,
         effectiveness_sha256,

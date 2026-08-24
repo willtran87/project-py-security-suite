@@ -92,6 +92,8 @@ def validate_governed_artifacts(artifacts: dict[str, Any] | None) -> dict[str, s
             )
         if name == "security-requirements-coverage.json":
             _validate_requirements_crosswalk(value)
+        elif name == "runtime-trace-correlation.json":
+            _validate_runtime_trace_accounting(value)
         elif name == "checkov-iac.json":
             _validate_checkov_accounting(value)
         elif name == "git-sizer.json":
@@ -100,6 +102,38 @@ def validate_governed_artifacts(artifacts: dict[str, Any] | None) -> dict[str, s
             _validate_pipdeptree_accounting(value)
         validated[name] = schema_name
     return validated
+
+
+def _validate_runtime_trace_accounting(value: object) -> None:
+    if not isinstance(value, dict) or not isinstance(value.get("traces"), list):
+        raise TypeError("runtime trace artifact is invalid")
+    traces = value["traces"]
+    allow = sum(item.get("authorization_decision") == "allow" for item in traces)
+    deny = sum(item.get("authorization_decision") == "deny" for item in traces)
+    complete = value.get("complete") is True
+    identities = [item.get("trace_id") for item in traces]
+    if (
+        value.get("trace_count") != len(traces)
+        or value.get("allow_count") != allow
+        or value.get("deny_count") != deny
+        or len(identities) != len(set(identities))
+        or any(
+            (item.get("authorization_decision") == "allow")
+            is not (item.get("sink_observed") is True)
+            for item in traces
+        )
+    ):
+        raise ValueError("runtime trace accounting does not match")
+    evidence_fields = (
+        value.get("evidence_sha256"),
+        value.get("deployment_sha256"),
+        value.get("boundary_graph_sha256"),
+        value.get("authority_receipt"),
+    )
+    if complete is not bool(traces and all(evidence_fields)):
+        raise ValueError("runtime trace completeness does not match its evidence")
+    if complete == bool(value.get("limitations")):
+        raise ValueError("runtime trace limitations are inconsistent")
 
 
 def _is_companion_assurance(value: object) -> bool:

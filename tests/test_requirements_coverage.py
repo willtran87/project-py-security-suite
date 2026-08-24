@@ -18,6 +18,7 @@ from py_security_suite.requirements_coverage import (
     security_requirements_coverage_artifact,
 )
 from py_security_suite.strict_json import canonical_bytes
+from tests.deployment_authority import authority_environment
 
 
 class SecurityRequirementsCoverageTests(unittest.TestCase):
@@ -262,6 +263,12 @@ class SecurityRequirementsCoverageTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
+            evidence_policy_authority = authority_environment(
+                root,
+                json.loads(evidence_policy_path.read_text(encoding="utf-8")),
+                purpose="requirements-evidence-policy",
+                prefix="PYSEC_REQUIREMENTS_EVIDENCE_POLICY_AUTHORITY",
+            )
             environment = {
                 "PYSEC_REQUIREMENTS_POLICY_PATH": str(policy_path),
                 "PYSEC_REQUIREMENTS_POLICY_SHA256": hashlib.sha256(
@@ -276,6 +283,7 @@ class SecurityRequirementsCoverageTests(unittest.TestCase):
                 "PYSEC_REQUIREMENTS_EVIDENCE_POLICY_SHA256": hashlib.sha256(
                     evidence_policy_path.read_bytes()
                 ).hexdigest(),
+                **evidence_policy_authority,
             }
             with (
                 patch.dict(os.environ, environment),

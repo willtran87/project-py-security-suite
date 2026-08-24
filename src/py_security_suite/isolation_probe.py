@@ -11,13 +11,14 @@ from pathlib import Path
 from typing import Any
 
 from .config import IsolationConfig
+from .deployment_receipt import verify_deployment_receipt
 from .execution import CommandEnvironment, run_command, sha256_file
 from .path_safety import read_regular_file
 from .strict_json import canonical_bytes, loads as strict_loads
 
 
 _PROBE_SOURCE = r"""
-import json, os, socket, sys, tempfile
+import hashlib, json, os, socket, sys, tempfile
 from multiprocessing import shared_memory
 from pathlib import Path
 target = Path(sys.argv[1])
@@ -34,6 +35,7 @@ host_secret = Path(sys.argv[11])
 parent_pid = int(sys.argv[12])
 shared_memory_name = sys.argv[13]
 result = {
+    "process_id": os.getpid(), "kernel_identity_sha256": "",
     "tcp4_denied": False, "udp4_denied": False, "tcp6_denied": tcp6_port == 0,
     "host_tcp4_denied": host_tcp_port == 0, "host_udp4_denied": host_udp_port == 0,
     "udp6_denied": udp6_port == 0, "unix_socket_denied": not unix_path,
@@ -55,6 +57,19 @@ result = {
     "windows_dynamic_code_prohibited": os.name != "nt",
     "windows_child_processes_prohibited": os.name != "nt",
 }
+kernel_identity = {"pid": os.getpid(), "platform": sys.platform}
+if sys.platform.startswith("linux"):
+    try:
+        kernel_identity.update({
+            "boot_id": Path("/proc/sys/kernel/random/boot_id").read_text().strip(),
+            "pid_namespace_inode": os.stat("/proc/self/ns/pid").st_ino,
+            "cgroup": Path("/proc/self/cgroup").read_text().strip(),
+        })
+    except OSError:
+        pass
+result["kernel_identity_sha256"] = hashlib.sha256(
+    json.dumps(kernel_identity, sort_keys=True, separators=(",", ":")).encode()
+).hexdigest()
 try:
     host_secret.read_bytes()
 except OSError:
@@ -396,6 +411,8 @@ def probe_isolation_boundary(
     try:
         value = strict_loads(execution.stdout)
         expected = {
+            "process_id",
+            "kernel_identity_sha256",
             "tcp4_denied",
             "udp4_denied",
             "tcp6_denied",
@@ -428,7 +445,18 @@ def probe_isolation_boundary(
             "windows_dynamic_code_prohibited",
             "windows_child_processes_prohibited",
         }
-        if not isinstance(value, dict) or set(value) != expected:
+        if (
+            not isinstance(value, dict)
+            or set(value) != expected
+            or isinstance(value.get("process_id"), bool)
+            or not isinstance(value.get("process_id"), int)
+            or value["process_id"] < 1
+            or len(str(value.get("kernel_identity_sha256") or "")) != 64
+            or any(
+                character not in "0123456789abcdef"
+                for character in str(value.get("kernel_identity_sha256") or "")
+            )
+        ):
             raise ValueError("probe output fields do not match")
         capabilities = {
             "network-tcp4-denied": value["tcp4_denied"] is True,
@@ -464,6 +492,8 @@ def probe_isolation_boundary(
     policy_observations = (
         {
             "platform": "linux",
+            "process_id": value["process_id"],
+            "kernel_identity_sha256": value["kernel_identity_sha256"],
             "no_new_privileges": value["linux_no_new_privileges"] is True,
             "capabilities_dropped": value["linux_capabilities_dropped"] is True,
             "seccomp_mode": value["linux_seccomp_mode"],
@@ -477,6 +507,8 @@ def probe_isolation_boundary(
         and value.get("linux_policy_tested") is True
         else {
             "platform": "windows",
+            "process_id": value["process_id"],
+            "kernel_identity_sha256": value["kernel_identity_sha256"],
             "dep_enabled": value["windows_dep_enabled"] is True,
             "aslr_enabled": value["windows_aslr_enabled"] is True,
             "dynamic_code_prohibited": value["windows_dynamic_code_prohibited"] is True,
@@ -487,6 +519,8 @@ def probe_isolation_boundary(
         and value.get("windows_policy_tested") is True
         else {
             "platform": "macos",
+            "process_id": value["process_id"],
+            "kernel_identity_sha256": value["kernel_identity_sha256"],
             "sandbox_profile_sha256": hashlib.sha256(
                 canonical_bytes(
                     {
@@ -610,6 +644,8 @@ def _effective_policy_attestation(observations: dict[str, Any]) -> str:
         "effective_identity",
         "observations_sha256",
         "attestor",
+        "process_id",
+        "kernel_identity_sha256",
     }
     policy_sha256 = str(
         observations.get("seccomp_policy_sha256")
@@ -624,8 +660,16 @@ def _effective_policy_attestation(observations: dict[str, Any]) -> str:
         or value.get("policy_sha256") != policy_sha256
         or value.get("observations_sha256")
         != hashlib.sha256(canonical_bytes(observations)).hexdigest()
+        or value.get("process_id") != observations.get("process_id")
+        or value.get("kernel_identity_sha256")
+        != observations.get("kernel_identity_sha256")
         or not str(value.get("effective_identity") or "").strip()
         or not str(value.get("attestor") or "").strip()
     ):
         raise ValueError("effective sandbox attestation policy is invalid")
+    verify_deployment_receipt(
+        value,
+        purpose="effective-sandbox-policy",
+        environment_prefix="PYSEC_EFFECTIVE_SANDBOX_AUTHORITY",
+    )
     return expected

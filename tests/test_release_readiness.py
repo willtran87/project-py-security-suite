@@ -25,6 +25,7 @@ class ReleaseReadinessTests(unittest.TestCase):
             result = assess_release_readiness(report)
         self.assertEqual(result["decision"], "not_approved")
         self.assertIn("detection-effectiveness", result["blockers"])
+        self.assertIn("runtime-trace-correlation", result["blockers"])
 
     @patch("py_security_suite.release_readiness.verify_report")
     def test_production_rejects_legacy_unsigned_effectiveness_corpus(

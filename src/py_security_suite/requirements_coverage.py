@@ -9,6 +9,7 @@ from typing import Any
 
 from .models import ToolRun, ToolStatus
 from .assurance_profile import verify_governance_quorum
+from .deployment_receipt import verify_deployment_receipt
 from .execution import sha256_file
 from .path_safety import read_regular_file
 from .strict_json import canonical_bytes, loads as strict_loads
@@ -662,6 +663,8 @@ def _requirement_assessment(
         raise ValueError("requirement assessment violates its evidence policy")
     if declared in {"pass", "fail"} and not normalized:
         raise ValueError("assessed pass or fail requires replayable assertions")
+    if declared == "pass" and any(item["operator"] == "exists" for item in normalized):
+        raise ValueError("a passing assessment requires value-bearing assertions")
     if declared in {"not-tested", "not-applicable"} and normalized:
         raise ValueError("unassessed requirement cannot contain assertions")
     if normalized:
@@ -708,6 +711,14 @@ def _assessment_evidence_policy(
         or not isinstance(value.get("requirements"), list)
     ):
         raise ValueError("requirements evidence policy fields do not match")
+    from .trusted_observation import scan_observed_at
+
+    verify_deployment_receipt(
+        value,
+        purpose="requirements-evidence-policy",
+        environment_prefix="PYSEC_REQUIREMENTS_EVIDENCE_POLICY_AUTHORITY",
+        observed_at=scan_observed_at(),
+    )
     result: dict[tuple[str, str, str], dict[str, Any]] = {}
     fields = {
         "standard",
@@ -744,6 +755,7 @@ def _assessment_evidence_policy(
             or not set(lists["allowed_operators"]).issubset(
                 {"equals", "not-equals", "gte", "lte", "exists"}
             )
+            or lists["allowed_methods"] != ["automated replay"]
             or isinstance(minimum, bool)
             or not isinstance(minimum, int)
             or not 0 <= minimum <= 100

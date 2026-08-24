@@ -22,6 +22,8 @@ from jsonschema import (  # pylint: disable=import-error
 
 from py_security_suite.effectiveness_corpus import (
     _consume_remote_effectiveness_replay,
+    _verify_consistency,
+    _verify_inclusion,
     evaluate_report_corpus,
 )
 from py_security_suite.report_inspection import read_bundled_schema
@@ -99,26 +101,32 @@ class EffectivenessCorpusTests(unittest.TestCase):
             )
         )
         replay_key = "a" * 64
+        request_subject = {
+            "schema_version": "1.0",
+            "replay_key": replay_key,
+            "corpus_id": "holdout",
+            "holdout_labels_sha256": "b" * 64,
+            "observed_at": "2026-08-24T00:00:00+00:00",
+            "query_budget": 1,
+        }
+        leaf = hashlib.sha256(b"\x00" + canonical_bytes(request_subject)).hexdigest()
         signed = {
             "schema_version": "1.0",
             "status": "consumed",
             "replay_key": replay_key,
-            "sequence": 7,
+            "sequence": 1,
             "holdout_uses": 1,
             "request_sha256": hashlib.sha256(
-                canonical_bytes(
-                    {
-                        "schema_version": "1.0",
-                        "replay_key": replay_key,
-                        "corpus_id": "holdout",
-                        "holdout_labels_sha256": "b" * 64,
-                        "observed_at": "2026-08-24T00:00:00+00:00",
-                        "query_budget": 1,
-                    }
-                )
+                canonical_bytes(request_subject)
             ).hexdigest(),
-            "checkpoint_size": 7,
-            "checkpoint_root_sha256": "c" * 64,
+            "checkpoint_size": 1,
+            "checkpoint_root_sha256": leaf,
+            "leaf_index": 0,
+            "leaf_sha256": leaf,
+            "inclusion_proof_sha256": [],
+            "previous_checkpoint_size": 0,
+            "previous_checkpoint_root_sha256": "",
+            "consistency_proof_sha256": [],
         }
         receipt = {
             **signed,
@@ -156,7 +164,71 @@ class EffectivenessCorpusTests(unittest.TestCase):
                 query_budget=1,
             )
         self.assertEqual(result["mode"], "remote-signed-checkpoint")
-        self.assertEqual(result["sequence"], 7)
+        self.assertEqual(result["sequence"], 1)
+        self.assertEqual(result["signed_statement"], signed)
+
+    def test_transparency_proofs_cover_unbalanced_merkle_trees(self) -> None:
+        leaves = [
+            hashlib.sha256(b"\x00" + bytes([index])).digest() for index in range(4)
+        ]
+
+        def root(nodes: list[bytes]) -> bytes:
+            if len(nodes) == 1:
+                return nodes[0]
+            split = 1 << ((len(nodes) - 1).bit_length() - 1)
+            return hashlib.sha256(
+                b"\x01" + root(nodes[:split]) + root(nodes[split:])
+            ).digest()
+
+        def inclusion(index: int, nodes: list[bytes]) -> list[bytes]:
+            if len(nodes) == 1:
+                return []
+            split = 1 << ((len(nodes) - 1).bit_length() - 1)
+            if index < split:
+                return [*inclusion(index, nodes[:split]), root(nodes[split:])]
+            return [*inclusion(index - split, nodes[split:]), root(nodes[:split])]
+
+        def consistency(
+            old_size: int, nodes: list[bytes], include_old_root: bool
+        ) -> list[bytes]:
+            if old_size == len(nodes):
+                return [] if include_old_root else [root(nodes)]
+            split = 1 << ((len(nodes) - 1).bit_length() - 1)
+            if old_size <= split:
+                return [
+                    *consistency(old_size, nodes[:split], include_old_root),
+                    root(nodes[split:]),
+                ]
+            return [
+                *consistency(old_size - split, nodes[split:], False),
+                root(nodes[:split]),
+            ]
+
+        for size in range(1, 5):
+            for index in range(size):
+                proof = [item.hex() for item in inclusion(index, leaves[:size])]
+                self.assertTrue(
+                    _verify_inclusion(
+                        leaves[index].hex(),
+                        index,
+                        size,
+                        proof,
+                        root(leaves[:size]).hex(),
+                    )
+                )
+            for old_size in range(1, size):
+                proof = [
+                    item.hex() for item in consistency(old_size, leaves[:size], True)
+                ]
+                self.assertTrue(
+                    _verify_consistency(
+                        old_size,
+                        size,
+                        root(leaves[:old_size]).hex(),
+                        root(leaves[:size]).hex(),
+                        proof,
+                    )
+                )
 
     @staticmethod
     def _file_record(path: str, content: bytes) -> dict[str, Any]:

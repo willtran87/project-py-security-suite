@@ -439,6 +439,14 @@ def _consume_effectiveness_replay(
         "checkpoint_size": 0,
         "checkpoint_root_sha256": "",
         "signature_base64": "",
+        "signed_statement": None,
+        "public_key_pem_base64": "",
+        "leaf_sha256": "",
+        "leaf_index": 0,
+        "inclusion_proof_sha256": [],
+        "previous_checkpoint_size": 0,
+        "previous_checkpoint_root_sha256": "",
+        "consistency_proof_sha256": [],
     }
 
 
@@ -533,6 +541,12 @@ def _consume_remote_effectiveness_replay(
         "request_sha256",
         "checkpoint_size",
         "checkpoint_root_sha256",
+        "leaf_index",
+        "leaf_sha256",
+        "inclusion_proof_sha256",
+        "previous_checkpoint_size",
+        "previous_checkpoint_root_sha256",
+        "consistency_proof_sha256",
         "signature_base64",
     }
     if not isinstance(receipt, dict) or set(receipt) != fields:
@@ -554,8 +568,40 @@ def _consume_remote_effectiveness_replay(
         or not isinstance(receipt["checkpoint_size"], int)
         or receipt["checkpoint_size"] < receipt["sequence"]
         or not _digest(str(receipt["checkpoint_root_sha256"]))
+        or receipt["leaf_sha256"]
+        != hashlib.sha256(b"\x00" + canonical_bytes(request_subject)).hexdigest()
+        or receipt["leaf_index"] != receipt["sequence"] - 1
+        or not _proof(receipt["inclusion_proof_sha256"])
+        or not _checkpoint(receipt)
     ):
         raise ValueError("governed effectiveness replay receipt policy failed")
+    configured_previous_size = int(
+        os.environ.get("PYSEC_EFFECTIVENESS_PREVIOUS_CHECKPOINT_SIZE", "0")
+    )
+    configured_previous_root = (
+        os.environ.get("PYSEC_EFFECTIVENESS_PREVIOUS_CHECKPOINT_ROOT_SHA256", "")
+        .strip()
+        .casefold()
+    )
+    if (
+        receipt["previous_checkpoint_size"] != configured_previous_size
+        or receipt["previous_checkpoint_root_sha256"] != configured_previous_root
+        or not _verify_inclusion(
+            str(receipt["leaf_sha256"]),
+            int(receipt["leaf_index"]),
+            int(receipt["checkpoint_size"]),
+            receipt["inclusion_proof_sha256"],
+            str(receipt["checkpoint_root_sha256"]),
+        )
+        or not _verify_consistency(
+            int(receipt["previous_checkpoint_size"]),
+            int(receipt["checkpoint_size"]),
+            str(receipt["previous_checkpoint_root_sha256"]),
+            str(receipt["checkpoint_root_sha256"]),
+            receipt["consistency_proof_sha256"],
+        )
+    ):
+        raise ValueError("governed effectiveness transparency proof failed")
     try:
         signature = base64.b64decode(str(receipt["signature_base64"]), validate=True)
         public_key.verify(signature, canonical_bytes(signed))
@@ -573,7 +619,100 @@ def _consume_remote_effectiveness_replay(
         "checkpoint_size": int(receipt["checkpoint_size"]),
         "checkpoint_root_sha256": str(receipt["checkpoint_root_sha256"]),
         "signature_base64": str(receipt["signature_base64"]),
+        "signed_statement": signed,
+        "public_key_pem_base64": base64.b64encode(public_bytes).decode("ascii"),
+        "leaf_sha256": str(receipt["leaf_sha256"]),
+        "leaf_index": int(receipt["leaf_index"]),
+        "inclusion_proof_sha256": list(receipt["inclusion_proof_sha256"]),
+        "previous_checkpoint_size": int(receipt["previous_checkpoint_size"]),
+        "previous_checkpoint_root_sha256": str(
+            receipt["previous_checkpoint_root_sha256"]
+        ),
+        "consistency_proof_sha256": list(receipt["consistency_proof_sha256"]),
     }
+
+
+def _proof(value: object) -> bool:
+    return (
+        isinstance(value, list)
+        and len(value) <= 256
+        and all(isinstance(item, str) and _digest(item) for item in value)
+    )
+
+
+def _checkpoint(receipt: dict[str, Any]) -> bool:
+    old = receipt.get("previous_checkpoint_size")
+    old_root = receipt.get("previous_checkpoint_root_sha256")
+    return bool(
+        isinstance(receipt.get("leaf_index"), int)
+        and not isinstance(receipt.get("leaf_index"), bool)
+        and isinstance(old, int)
+        and not isinstance(old, bool)
+        and 0 <= old <= receipt["checkpoint_size"]
+        and ((old == 0 and old_root == "") or (old > 0 and _digest(str(old_root))))
+        and _proof(receipt.get("consistency_proof_sha256"))
+    )
+
+
+def _node(left: bytes, right: bytes) -> bytes:
+    return hashlib.sha256(b"\x01" + left + right).digest()
+
+
+def _verify_inclusion(
+    leaf: str, index: int, size: int, proof: list[str], root: str
+) -> bool:
+    if not 0 <= index < size:
+        return False
+    value = bytes.fromhex(leaf)
+    node_index, last = index, size - 1
+    for sibling_hex in proof:
+        sibling = bytes.fromhex(sibling_hex)
+        if node_index & 1 or node_index == last:
+            value = _node(sibling, value)
+            while node_index and not node_index & 1:
+                node_index >>= 1
+                last >>= 1
+        else:
+            value = _node(value, sibling)
+        node_index >>= 1
+        last >>= 1
+    return last == 0 and value.hex() == root
+
+
+def _verify_consistency(
+    old_size: int, new_size: int, old_root: str, new_root: str, proof: list[str]
+) -> bool:
+    if old_size == 0:
+        return not proof
+    if old_size == new_size:
+        return old_root == new_root and not proof
+    if not 0 < old_size < new_size or not proof:
+        return False
+    first, *remaining = [bytes.fromhex(item) for item in proof]
+    fn, sn = old_size - 1, new_size - 1
+    while fn & 1:
+        fn >>= 1
+        sn >>= 1
+    if fn == 0:
+        old_hash = bytes.fromhex(old_root)
+        new_hash = bytes.fromhex(old_root)
+        remaining = [first, *remaining]
+    else:
+        old_hash = new_hash = first
+    for sibling in remaining:
+        if sn == 0:
+            return False
+        if fn & 1 or fn == sn:
+            old_hash = _node(sibling, old_hash)
+            new_hash = _node(sibling, new_hash)
+            while fn and not fn & 1:
+                fn >>= 1
+                sn >>= 1
+        elif fn < sn:
+            new_hash = _node(new_hash, sibling)
+        fn >>= 1
+        sn >>= 1
+    return sn == 0 and old_hash.hex() == old_root and new_hash.hex() == new_root
 
 
 def _digest(value: str) -> bool:

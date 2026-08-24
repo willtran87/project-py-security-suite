@@ -334,6 +334,8 @@ class CompanionAuthorizationSecurityTests(unittest.TestCase):
             )
 
     def test_recovery_receipt_proves_instance_transition(self) -> None:
+        from datetime import UTC, datetime, timedelta
+
         with tempfile.TemporaryDirectory() as directory:
             key = Ed25519PrivateKey.generate()
             public_path = Path(directory) / "orchestrator.pem"
@@ -344,6 +346,7 @@ class CompanionAuthorizationSecurityTests(unittest.TestCase):
                 )
             )
             identity = hashlib.sha256(public_path.read_bytes()).hexdigest()
+            observed = datetime.now(UTC)
             signed = {
                 "schema_version": "1.0",
                 "check_id": "restart",
@@ -352,6 +355,14 @@ class CompanionAuthorizationSecurityTests(unittest.TestCase):
                 "before_instance_id": "instance-a",
                 "after_instance_id": "instance-b",
                 "orchestrator_identity_sha256": identity,
+                "run_id": "run-1",
+                "deployment_sha256": "a" * 64,
+                "challenge_sha256": "b" * 64,
+                "contract_sha256": "c" * 64,
+                "request_sha256": "d" * 64,
+                "oracle_identity_sha256": "e" * 64,
+                "issued_at": (observed - timedelta(minutes=1)).isoformat(),
+                "expires_at": (observed + timedelta(minutes=1)).isoformat(),
             }
             receipt = {
                 **signed,
@@ -370,6 +381,13 @@ class CompanionAuthorizationSecurityTests(unittest.TestCase):
                     canonical_bytes(receipt),
                     check_id="restart",
                     phase="process-restart",
+                    run_id="run-1",
+                    deployment_sha256="a" * 64,
+                    challenge_sha256="b" * 64,
+                    contract_sha256="c" * 64,
+                    request_sha256="d" * 64,
+                    oracle_identity_sha256="e" * 64,
+                    observed_at=observed.isoformat(),
                 )
 
 

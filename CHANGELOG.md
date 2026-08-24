@@ -1,5 +1,16 @@
 # Changelog
 
+- Replace digest-only deployment approvals with reusable, externally pinned
+  Ed25519 receipts bound to purpose, subject, scan challenge, validity window,
+  and anti-rollback generation; make signed runtime traces mandatory for
+  production/release admission and reconcile their exact deployment, boundary
+  graph, decisions, sinks, and counts. Retain run-bound recovery receipts;
+  verify portable effectiveness Merkle inclusion/consistency proofs; require
+  value-bearing canonical requirements replays; semantically disassemble
+  isolated Python bytecode; tokenize template dependencies; inventory native
+  ASLR/DEP/CFG/PIE/NX/RELRO/BIND_NOW state; and make Git object ledgers
+  canonical and truncation-failing.
+
 - Require deployment-pinned effective sandbox-policy attestations, signed
   restart/failover instance-transition receipts, portable effectiveness replay
   checkpoints, requirement-specific evidence allowlists, and encrypted raw

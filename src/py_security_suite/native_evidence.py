@@ -10,6 +10,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
+from .deployment_receipt import verify_deployment_receipt
 from .path_safety import read_regular_file
 from .strict_json import dumps as strict_dumps
 from .strict_json import loads as strict_loads
@@ -181,6 +182,11 @@ def _custody_receipt(root: Path, key_sha256: str) -> str:
         )
     ):
         raise ValueError("raw evidence custody receipt policy is invalid")
+    verify_deployment_receipt(
+        value,
+        purpose="raw-evidence-custody",
+        environment_prefix="PYSEC_RAW_EVIDENCE_CUSTODY_AUTHORITY",
+    )
     return expected
 
 

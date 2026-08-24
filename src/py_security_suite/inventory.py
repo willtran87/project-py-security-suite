@@ -309,6 +309,22 @@ def _materialize_git_history(
     )
     if cloned.exit_code != 0 or cloned.timed_out or not (clone / ".git").is_dir():
         raise ValueError("sealed Git history could not be materialized")
+    cloned_objects = run_command(
+        [git, "-C", str(clone), "rev-list", "--objects", "--all"],
+        cwd=clone,
+        timeout_seconds=120,
+        max_output_bytes=64 * 1024 * 1024,
+        environment=environment,
+    )
+    cloned_ledger = "\n".join(sorted(set(cloned_objects.stdout.strip().splitlines())))
+    if (
+        cloned_objects.exit_code != 0
+        or cloned_objects.timed_out
+        or cloned_objects.output_limit_exceeded
+        or hashlib.sha256(cloned_ledger.encode()).hexdigest()
+        != repository_state["reachable_objects_sha256"]
+    ):
+        raise ValueError("sealed Git bundle object ledger does not match its snapshot")
     indexed = run_command(
         [git, "-C", str(clone), "read-tree", "HEAD"],
         cwd=clone,
@@ -344,9 +360,13 @@ def _git_repository_state(git: str, target: Path) -> dict[str, Any]:
             ],
             cwd=target,
             timeout_seconds=120,
-            max_output_bytes=4 * 1024 * 1024,
+            max_output_bytes=64 * 1024 * 1024,
         )
-        if result.timed_out or result.exit_code not in exits:
+        if (
+            result.timed_out
+            or result.output_limit_exceeded
+            or result.exit_code not in exits
+        ):
             raise ValueError("Git repository state could not be captured atomically")
         return result.stdout.strip()
 
@@ -361,7 +381,9 @@ def _git_repository_state(git: str, target: Path) -> dict[str, Any]:
         raise ValueError(
             "Git object store contains unreachable or reflog-only objects that cannot be sealed"
         )
-    reachable_objects = query(["rev-list", "--objects", "--all"])
+    reachable_objects = "\n".join(
+        sorted(set(query(["rev-list", "--objects", "--all"]).splitlines()))
+    )
     head = query(["rev-parse", "--verify", "HEAD"]).casefold()
     symbolic_head = query(["symbolic-ref", "-q", "HEAD"], exits=frozenset({0, 1}))
     configuration = query(

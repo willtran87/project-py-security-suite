@@ -156,10 +156,13 @@ def _scan_sealed_project(
     derived_artifacts["boundary-graph.json"] = boundary_graph
     from .runtime_trace import runtime_trace_artifact
 
-    derived_artifacts["runtime-trace-correlation.json"] = runtime_trace_artifact(
-        boundary_graph
-    )
+    runtime_trace = runtime_trace_artifact(boundary_graph)
+    derived_artifacts["runtime-trace-correlation.json"] = runtime_trace
     context_errors: list[str] = []
+    if config.profile in {"production", "release"} and not runtime_trace["complete"]:
+        context_errors.append(
+            "signed deployment-bound runtime request-to-sink trace evidence is required"
+        )
     if (
         config.profile in {"production", "release"}
         and config.organization_policy_present

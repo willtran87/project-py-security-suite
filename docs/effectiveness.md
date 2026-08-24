@@ -131,9 +131,13 @@ the configured holdout query budget. Governed output is aggregate-only: label
 identities and per-label failures are withheld to reduce tuning leakage. Release
 readiness requires both `time_authority.validated` and
 `replay_protected` in addition to the corpus quorum.
-The evaluation retains the signed request commitment, service-key identity,
-sequence, holdout-use count, and append-only checkpoint root so an offline
-auditor can reverify consumption rather than trusting a boolean summary.
+The evaluation retains the exact signed statement, verification key, request
+commitment, service-key identity, sequence, holdout-use count, leaf identity,
+Merkle inclusion proof, prior checkpoint, and consistency proof so an offline
+auditor can reconstruct and reverify consumption. Governed clients pin the
+prior tree state with `PYSEC_EFFECTIVENESS_PREVIOUS_CHECKPOINT_SIZE` and
+`PYSEC_EFFECTIVENESS_PREVIOUS_CHECKPOINT_ROOT_SHA256`; the first checkpoint
+uses size zero and an empty root.
 
 Run the benchmark only after sealing and verifying the scan report:
 

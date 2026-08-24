@@ -76,6 +76,7 @@ def main(argv: list[str] | None = None) -> int:
         if version == "3.0"
         else []
     )
+    pending_recovery_receipts: list[tuple[bytes, dict[str, Any]]] = []
     findings: list[dict[str, Any]] = []
     requests = 0
     exercised = 0
@@ -322,19 +323,7 @@ def main(argv: list[str] | None = None) -> int:
                 )
             )
         else:
-            try:
-                _verify_recovery_receipt(
-                    trigger_response, check_id=check["id"], phase=check["phase"]
-                )
-            except ValueError:
-                findings.append(
-                    _workflow_finding(
-                        check["id"],
-                        check["phase"],
-                        "orchestration-receipt",
-                        0,
-                    )
-                )
+            pending_recovery_receipts.append((trigger_response, check))
         postcondition = check["postcondition"]
         if oracle is None:
             raise ValueError("recovery checks require an independent state oracle")
@@ -378,6 +367,35 @@ def main(argv: list[str] | None = None) -> int:
 
     exercised = len(exercised_ids)
     context = load_context(args.context, exercised_ids)
+    recovery_receipts: list[dict[str, Any]] = []
+    recovery_event_ids: set[str] = set()
+    for payload, check in pending_recovery_receipts:
+        try:
+            receipt = _verify_recovery_receipt(
+                payload,
+                check_id=check["id"],
+                phase=check["phase"],
+                run_id=context["run_id"],
+                deployment_sha256=context["deployment_sha256"],
+                challenge_sha256=context["challenge_sha256"],
+                contract_sha256=hashlib.sha256(contract_bytes).hexdigest(),
+                request_sha256=hashlib.sha256(
+                    canonical_bytes(check["trigger"])
+                ).hexdigest(),
+                oracle_identity_sha256=str((oracle or {}).get("identity_sha256") or ""),
+                observed_at=context["trusted_time_observed_at"],
+            )
+            event_id = str(receipt["statement"]["event_id"])
+            if event_id in recovery_event_ids:
+                raise ValueError("authorization orchestration event was replayed")
+            recovery_event_ids.add(event_id)
+            recovery_receipts.append(receipt)
+        except ValueError:
+            findings.append(
+                _workflow_finding(
+                    check["id"], check["phase"], "orchestration-receipt", 0
+                )
+            )
     generated = datetime.now(UTC)
     environment = "loopback-multi-role-http-contract"
     producer_sha256 = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
@@ -447,6 +465,7 @@ def main(argv: list[str] | None = None) -> int:
             ),
             "canaries_expected": 1,
             "canaries_observed": int(_boundary_canary()),
+            "recovery_receipts": recovery_receipts,
         },
         "findings": findings,
     }
@@ -697,7 +716,19 @@ def _recovery_postcondition(value: object) -> dict[str, Any]:
     }
 
 
-def _verify_recovery_receipt(payload: bytes, *, check_id: str, phase: str) -> None:
+def _verify_recovery_receipt(
+    payload: bytes,
+    *,
+    check_id: str,
+    phase: str,
+    run_id: str,
+    deployment_sha256: str,
+    challenge_sha256: str,
+    contract_sha256: str,
+    request_sha256: str,
+    oracle_identity_sha256: str,
+    observed_at: str,
+) -> dict[str, Any]:
     raw_key = os.environ.get("PYSEC_AUTHORIZATION_ORCHESTRATOR_KEY_PATH", "").strip()
     expected_key = (
         os.environ.get("PYSEC_AUTHORIZATION_ORCHESTRATOR_KEY_SHA256", "")
@@ -721,6 +752,14 @@ def _verify_recovery_receipt(payload: bytes, *, check_id: str, phase: str) -> No
         "before_instance_id",
         "after_instance_id",
         "orchestrator_identity_sha256",
+        "run_id",
+        "deployment_sha256",
+        "challenge_sha256",
+        "contract_sha256",
+        "request_sha256",
+        "oracle_identity_sha256",
+        "issued_at",
+        "expires_at",
         "signature_base64",
     }
     if not isinstance(value, dict) or set(value) != fields:
@@ -731,6 +770,12 @@ def _verify_recovery_receipt(payload: bytes, *, check_id: str, phase: str) -> No
         or value["check_id"] != check_id
         or value["phase"] != phase
         or value["orchestrator_identity_sha256"] != expected_key
+        or value["run_id"] != run_id
+        or value["deployment_sha256"] != deployment_sha256
+        or value["challenge_sha256"] != challenge_sha256
+        or value["contract_sha256"] != contract_sha256
+        or value["request_sha256"] != request_sha256
+        or value["oracle_identity_sha256"] != oracle_identity_sha256
         or not _label(value["event_id"], "orchestration event")
         or not _label(value["before_instance_id"], "before instance")
         or not _label(value["after_instance_id"], "after instance")
@@ -738,12 +783,36 @@ def _verify_recovery_receipt(payload: bytes, *, check_id: str, phase: str) -> No
     ):
         raise ValueError("authorization orchestration receipt policy failed")
     try:
+        issued = datetime.fromisoformat(str(value["issued_at"]).replace("Z", "+00:00"))
+        expires = datetime.fromisoformat(
+            str(value["expires_at"]).replace("Z", "+00:00")
+        )
+        observed = datetime.fromisoformat(observed_at.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError("authorization orchestration receipt time is invalid") from exc
+    if (
+        issued.tzinfo is None
+        or expires.tzinfo is None
+        or observed.tzinfo is None
+        or issued > observed
+        or expires <= issued
+        or expires - issued > timedelta(hours=24)
+        or observed > expires
+    ):
+        raise ValueError("authorization orchestration receipt is outside its window")
+    try:
         signature = base64.b64decode(str(value["signature_base64"]), validate=True)
         key.verify(signature, canonical_bytes(signed))
     except Exception as exc:
         raise ValueError(
             "authorization orchestration receipt signature failed"
         ) from exc
+    return {
+        "statement": signed,
+        "signature_base64": value["signature_base64"],
+        "public_key_pem_base64": base64.b64encode(key_bytes).decode("ascii"),
+        "receipt_sha256": hashlib.sha256(payload).hexdigest(),
+    }
 
 
 def _state_step(value: object, roles: dict[str, dict[str, str]]) -> dict[str, Any]:

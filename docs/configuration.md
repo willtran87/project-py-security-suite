@@ -463,6 +463,11 @@ Linux and macOS production completeness additionally requires an exact
 effective-policy receipt selected by `PYSEC_EFFECTIVE_SANDBOX_ATTESTATION_PATH`
 and `PYSEC_EFFECTIVE_SANDBOX_ATTESTATION_SHA256`. The receipt binds the observed
 kernel/launcher facts, effective identity, policy digest, platform, and attestor.
+That subject also requires an Ed25519 authority envelope configured through
+`PYSEC_EFFECTIVE_SANDBOX_AUTHORITY_{RECEIPT,KEY}_{PATH,SHA256}` and
+`PYSEC_EFFECTIVE_SANDBOX_AUTHORITY_MIN_GENERATION`. The signed statement binds
+the exact subject digest, purpose, scan challenge, issuance/expiry window,
+signer key, and monotonic generation.
 Sandbox arguments may use
 `{PYSEC_PROBE_SECRET_PARENT}` to mask the per-run secret directory. Governance
 v2 also requires host-filesystem, credential, process, device, and IPC
@@ -479,7 +484,12 @@ record named by `PYSEC_RAW_EVIDENCE_CUSTODY_RECEIPT_PATH` plus its SHA-256. The
 receipt binds provider, key ID/version, store identity, retention, and the
 master-key commitment. Deployment traces are admitted through
 `PYSEC_RUNTIME_TRACE_EVIDENCE_PATH` plus its SHA-256 and retained only when
-every source/target pair exists in `boundary-graph.json`.
+every source/target pair exists in `boundary-graph.json`. Custody requires the
+same authority-envelope variables under
+`PYSEC_RAW_EVIDENCE_CUSTODY_AUTHORITY`; traces use
+`PYSEC_RUNTIME_TRACE_AUTHORITY`, require `PYSEC_RUNTIME_DEPLOYMENT_SHA256`, and
+bind the exact boundary-graph digest. Production and release scans and
+`release-check` both fail closed without complete signed runtime correlation.
 `trust-policy.json` seals deployment trust variables by value digest, and its
 digest is included in the effective configuration identity. Production and
 release additionally require an externally quorum-signed trust-policy

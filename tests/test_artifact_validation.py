@@ -3,12 +3,14 @@ from __future__ import annotations
 import pytest
 import json
 import hashlib
+from datetime import UTC, datetime
 from unittest.mock import patch
 from pathlib import Path
 
 from py_security_suite.artifact_validation import validate_governed_artifacts
 from py_security_suite.adapters.portfolio import PipdeptreeAdapter
 from py_security_suite.config import ToolConfig
+from tests.deployment_authority import authority_environment
 
 
 @pytest.mark.parametrize(
@@ -111,6 +113,12 @@ def test_native_report_secrets_use_encrypted_content_addressed_storage(
         ),
         encoding="utf-8",
     )
+    custody_authority = authority_environment(
+        tmp_path,
+        json.loads(custody.read_text(encoding="utf-8")),
+        purpose="raw-evidence-custody",
+        prefix="PYSEC_RAW_EVIDENCE_CUSTODY_AUTHORITY",
+    )
     payload = json.dumps(
         {
             "total_packages": 0,
@@ -123,19 +131,26 @@ def test_native_report_secrets_use_encrypted_content_addressed_storage(
             "password": "do-not-publish",
         }
     )
-    with patch.dict(
-        "os.environ",
-        {
-            "PYSEC_RAW_EVIDENCE_DIRECTORY": str(raw_store),
-            "PYSEC_RAW_EVIDENCE_KEY_PATH": str(key),
-            "PYSEC_RAW_EVIDENCE_KEY_SHA256": hashlib.sha256(
-                key.read_bytes()
-            ).hexdigest(),
-            "PYSEC_RAW_EVIDENCE_CUSTODY_RECEIPT_PATH": str(custody),
-            "PYSEC_RAW_EVIDENCE_CUSTODY_RECEIPT_SHA256": hashlib.sha256(
-                custody.read_bytes()
-            ).hexdigest(),
-        },
+    with (
+        patch.dict(
+            "os.environ",
+            {
+                "PYSEC_RAW_EVIDENCE_DIRECTORY": str(raw_store),
+                "PYSEC_RAW_EVIDENCE_KEY_PATH": str(key),
+                "PYSEC_RAW_EVIDENCE_KEY_SHA256": hashlib.sha256(
+                    key.read_bytes()
+                ).hexdigest(),
+                "PYSEC_RAW_EVIDENCE_CUSTODY_RECEIPT_PATH": str(custody),
+                "PYSEC_RAW_EVIDENCE_CUSTODY_RECEIPT_SHA256": hashlib.sha256(
+                    custody.read_bytes()
+                ).hexdigest(),
+                **custody_authority,
+            },
+        ),
+        patch(
+            "py_security_suite.deployment_receipt._scan_observed_at",
+            return_value=datetime.now(UTC),
+        ),
     ):
         artifact = PipdeptreeAdapter(ToolConfig(), 4096).derived_artifacts(
             payload, tmp_path
@@ -159,7 +174,12 @@ def test_native_report_secrets_use_encrypted_content_addressed_storage(
                 "PYSEC_RAW_EVIDENCE_CUSTODY_RECEIPT_SHA256": hashlib.sha256(
                     custody.read_bytes()
                 ).hexdigest(),
+                **custody_authority,
             },
+        ),
+        patch(
+            "py_security_suite.deployment_receipt._scan_observed_at",
+            return_value=datetime.now(UTC),
         ),
         pytest.raises(ValueError, match="truncated"),
     ):

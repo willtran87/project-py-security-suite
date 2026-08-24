@@ -19,7 +19,8 @@ class IsolationProbeTests(unittest.TestCase):
             command=["probe"],
             exit_code=0,
             stdout=(
-                '{"tcp4_denied":true,"udp4_denied":true,"tcp6_denied":true,'
+                '{"process_id":123,"kernel_identity_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",'
+                '"tcp4_denied":true,"udp4_denied":true,"tcp6_denied":true,'
                 '"host_tcp4_denied":true,"host_udp4_denied":true,'
                 '"udp6_denied":true,"unix_socket_denied":true,'
                 '"raw_socket_denied":true,"proxy_environment_cleared":true,'
