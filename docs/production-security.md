@@ -372,15 +372,33 @@ Git executable, and runtime-closure digests are bound into the authority receipt
 Qualified history additionally requires the `PYSEC_GIT_BUNDLE_CAS` and
 `PYSEC_GIT_SECONDARY_VERIFIER` pinned-command families. The first publishes the
 actual bundle under its content digest; the second rechecks its complete object
-and signature ledgers. Their signed receipts must span three distinct
+and signature ledgers after fetching the CAS object ID and immutable version,
+then returns the digest of the bytes it actually read. CAS retention, immutable
+URI, storage receipt, and effective-policy attestation are all bound into the
+secondary verifier request. Their signed receipts must span three distinct
 organization, host, control-plane, and implementation failure domains with the
 primary Git verifier (`PYSEC_GIT_PRIMARY_*`).
 
 Governed compiler evidence retains both engines, configurations, runtime
 closures, arguments, sandbox policy, positive and negative canaries, and exact
 semantic and taint ledgers. `PYSEC_COMPILER_SEMANTIC_REPLAY` must then rerun
-those materials and return a signed matching result from a third remotely
-attested failure domain; digest agreement alone is not accepted as execution.
+those materials and return fresh normalized evidence plus exit/transcript,
+materialized-input, and canary-matrix digests from a third remotely attested
+failure domain. The signed result shares its request digest and execution nonce
+with the sandbox attestation; a `reexecuted-and-matched` assertion or digest
+echo alone is not accepted as execution. Compiler replay declarations require
+alias-, context-, field-, path-, interprocedural-, dynamic-dispatch-, and
+implicit-flow-sensitive analysis plus positive and negative canaries spanning
+multiple rule families.
+
+Remote sandbox evidence is never treated as an opaque quote. The retained,
+authority-signed normalized evidence is parsed according to TPM2 Quote, Nitro,
+or SEV-SNP rules and must bind the challenge, host, boot state, measurements,
+certificate-chain identity, signature-verification result, and applicable TCB
+floor. Deployments can require `PYSEC_FAILURE_DOMAIN_REGISTRY_{PATH,SHA256}` and
+`PYSEC_REQUIRE_REGISTERED_FAILURE_DOMAINS=1`; the pinned registry maps active
+authority keys to organization, host, control-plane, and measured
+implementation identities and rejects revoked identities.
 
 Encrypted native evidence requires an authority-signed hardware-KMS envelope
 receipt binding the exact scan challenge and command request, plaintext object
@@ -395,14 +413,31 @@ recovered plaintext digest. The recovery must also include an independently
 pinned provider audit receipt for the hardware unwrap, and the provider must
 not share the recovery executor's organization, host, control plane, or
 implementation identity. Signed operation receipts are checked as a single non-forking
+Production also configures the independently sandboxed
+`PYSEC_RAW_EVIDENCE_PROVIDER_AUDIT_READBACK` command family and sets its
+`_REQUIRED=1`. It retrieves the provider event by ID through a third failure
+domain, returns the exact event digest, and retains its own operation and
+effective-policy receipts.
+Signed operation receipts are checked as a single non-forking
 graph across all artifacts; deployments can set
 `PYSEC_OPERATION_RECEIPT_STATE_PATH` to reject receipt reuse across reports.
 Operation and trusted-time SQLite stores are hash chained and must be paired
 with deployment-owned minimum-sequence and checkpoint-digest anchors; production
 and release reject missing anchors, and rollback below an advanced anchor fails.
 They also reject configurations that do not publish both chains to separately
-attested external checkpoint authorities; local SQLite plus environment state
-is treated only as a cache, not an independent rollback root.
+attested external checkpoint authorities. Persisted acknowledgements are fully
+reverified on every idempotent read, and content-derived idempotency keys make a
+remote-accept/local-commit retry safe. N-of-M checkpoint deployments use
+`*_QUORUM_PREFIXES_JSON` and `*_QUORUM_THRESHOLD`; successful members must span
+independent failure domains. Local SQLite plus environment state is treated only
+as a cache, not an independent rollback root.
+
+Runtime observer evidence contains a boot identity, per-event monotonic
+sequence and timestamp, source-event commitments, a batch Merkle root, and an
+observer-only challenge canary. Runtime SBOM reconciliation validates
+CycloneDX component/reference integrity. Container procedure evidence must also
+retain every OCI descriptor blob, validate config diff IDs, safely parse each
+layer, and bind signature-envelope and provenance blobs.
 RFC 3161 contexts may provide two to five independent authorities; quorum mode
 requires `PYSEC_TRUSTED_TIME_STATE_PATH`, limits inter-authority skew to five
 seconds, and rejects clock rollback or same-challenge forks.

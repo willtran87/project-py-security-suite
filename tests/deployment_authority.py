@@ -56,7 +56,7 @@ def pinned_command_sandbox_environment(
         "platform_id={'linux':'linux','win32':'win32','darwin':'darwin'}[sys.platform]\n"
         "source={'linux':'linux-procfs-seccomp','win32':'windows-job-object-query','darwin':'macos-sandbox-audit'}[platform_id]\n"
         "measurement={'schema_version':'1.0','platform':platform_id,'child_process_id':child.pid,'child_exit_code':returncode,'kernel_identity_sha256':hashlib.sha256(platform.platform().encode()).hexdigest(),'sandbox_identity_sha256':subject['sandbox_identity_sha256'],'controls':controls}\n"
-        "quote=b'test-tpm2-quote-v1';remote_subject={'schema_version':'1.0','format':'tpm2-quote','purpose':'sandbox-effective-policy','challenge_sha256':os.environ['PYSEC_PINNED_ATTESTATION_CHALLENGE_SHA256'],'host_identity_sha256':hashlib.sha256(platform.node().encode()).hexdigest(),'organization':'independent-host-attestor','control_plane_sha256':hashlib.sha256(b'test-control-plane').hexdigest(),'implementation_sha256':hashlib.sha256(b'test-tpm-verifier').hexdigest(),'secure_boot':True,'measured_boot':True,'pcrs_sha256':hashlib.sha256(b'pcr0:pcr7').hexdigest(),'quote_base64':base64.b64encode(quote).decode(),'quote_sha256':hashlib.sha256(quote).hexdigest()}\n"
+        "challenge=os.environ['PYSEC_PINNED_ATTESTATION_CHALLENGE_SHA256'];host=hashlib.sha256(platform.node().encode()).hexdigest();pcrs=hashlib.sha256(b'pcr0:pcr7').hexdigest();implementation=hashlib.sha256(b'test-tpm-verifier').hexdigest();quote=canonical({'schema_version':'1.0','format':'tpm2-quote','challenge_sha256':challenge,'host_identity_sha256':host,'pcrs_sha256':pcrs,'secure_boot':True,'measured_boot':True,'claims':{'quote_type':'TPM_ST_ATTEST_QUOTE','hash_algorithm':'sha256','pcr_selection':[0,7],'event_log_sha256':hashlib.sha256(b'test-event-log').hexdigest(),'ak_certificate_chain_sha256':hashlib.sha256(b'test-ak-chain').hexdigest(),'signature_verified':True,'certificate_chain_verified':True,'revocation_checked':True,'event_log_replayed':True,'trust_root_sha256':hashlib.sha256(b'test-root').hexdigest(),'verifier_implementation_sha256':implementation}});remote_subject={'schema_version':'1.0','format':'tpm2-quote','purpose':'sandbox-effective-policy','challenge_sha256':challenge,'host_identity_sha256':host,'organization':'independent-host-attestor','control_plane_sha256':hashlib.sha256(b'test-control-plane').hexdigest(),'implementation_sha256':implementation,'secure_boot':True,'measured_boot':True,'pcrs_sha256':pcrs,'quote_base64':base64.b64encode(quote).decode(),'quote_sha256':hashlib.sha256(quote).hexdigest()}\n"
         "remote_private=serialization.load_pem_private_key(base64.b64decode(REMOTE_PRIVATE),password=None);remote_public=remote_private.public_key().public_bytes(serialization.Encoding.PEM,serialization.PublicFormat.SubjectPublicKeyInfo);now=datetime.now(UTC)\n"
         "remote_statement={'schema_version':'1.0','purpose':'sandbox-remote-attestation','subject_sha256':hashlib.sha256(canonical(remote_subject)).hexdigest(),'operation_id':'remote-'+subject['execution_nonce'],'previous_operation_sha256':'','challenge_sha256':os.environ['PYSEC_PINNED_ATTESTATION_CHALLENGE_SHA256'],'trusted_time_sha256':os.environ['PYSEC_SCAN_TIME_CONTEXT_SHA256'],'issued_at':now.isoformat(),'expires_at':(now+timedelta(minutes=5)).isoformat(),'signer_key_sha256':hashlib.sha256(remote_public).hexdigest()}\n"
         "remote_receipt={'schema_version':'1.0','statement':remote_statement,'signature_base64':base64.b64encode(remote_private.sign(canonical(remote_statement))).decode(),'public_key_pem_base64':base64.b64encode(remote_public).decode()}\n"
@@ -155,7 +155,10 @@ def operation_receipt(
 
 
 def effective_policy_attestation(
-    failure_domain: dict[str, str], *, challenge: str = "c" * 64
+    failure_domain: dict[str, str],
+    *,
+    challenge: str = "c" * 64,
+    attested_request: dict[str, object] | None = None,
 ) -> dict[str, object]:
     """Create a portable kernel and remote-attestation fixture."""
 
@@ -182,7 +185,32 @@ def effective_policy_attestation(
         "sandbox_identity_sha256": sandbox_identity,
         "controls": controls,
     }
-    quote = b"portable-test-tpm2-quote"
+    quote = canonical_bytes(
+        {
+            "schema_version": "1.0",
+            "format": "tpm2-quote",
+            "challenge_sha256": challenge,
+            "host_identity_sha256": failure_domain["host_identity_sha256"],
+            "pcrs_sha256": "7" * 64,
+            "secure_boot": True,
+            "measured_boot": True,
+            "claims": {
+                "quote_type": "TPM_ST_ATTEST_QUOTE",
+                "hash_algorithm": "sha256",
+                "pcr_selection": [0, 7],
+                "event_log_sha256": "5" * 64,
+                "ak_certificate_chain_sha256": "6" * 64,
+                "signature_verified": True,
+                "certificate_chain_verified": True,
+                "revocation_checked": True,
+                "event_log_replayed": True,
+                "trust_root_sha256": "a" * 64,
+                "verifier_implementation_sha256": failure_domain[
+                    "implementation_sha256"
+                ],
+            },
+        }
+    )
     remote_subject = {
         "schema_version": "1.0",
         "format": "tpm2-quote",
@@ -216,8 +244,18 @@ def effective_policy_attestation(
     }
     subject = {
         "schema_version": "1.0",
-        "request_sha256": "1" * 64,
-        "command_context_sha256": "2" * 64,
+        "request_sha256": (
+            hashlib.sha256(canonical_bytes(attested_request)).hexdigest()
+            if attested_request is not None
+            else "1" * 64
+        ),
+        "command_context_sha256": (
+            hashlib.sha256(
+                canonical_bytes(attested_request.get("command_context"))
+            ).hexdigest()
+            if attested_request is not None
+            else "2" * 64
+        ),
         "execution_nonce": "fixture-execution-nonce",
         "launcher_sha256": "3" * 64,
         "executable_sha256": "4" * 64,

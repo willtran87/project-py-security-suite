@@ -21,6 +21,7 @@ def verify_operation_receipt(
     observed_at: datetime,
     challenge_sha256: str,
     expected_key_sha256: str,
+    expected_trusted_time_sha256: str | None = None,
 ) -> dict[str, Any]:
     """Verify a compact signed receipt emitted by an external operation backend."""
 
@@ -57,9 +58,11 @@ def verify_operation_receipt(
     key_sha256 = hashlib.sha256(public_bytes).hexdigest()
     issued = _timestamp(statement.get("issued_at"), "operation issued_at")
     expires = _timestamp(statement.get("expires_at"), "operation expires_at")
-    expected_time = os.environ.get(
-        "PYSEC_SCAN_TIME_CONTEXT_SHA256", ""
-    ).strip().casefold() or str(statement.get("trusted_time_sha256") or "")
+    expected_time = (
+        expected_trusted_time_sha256
+        if expected_trusted_time_sha256 is not None
+        else os.environ.get("PYSEC_SCAN_TIME_CONTEXT_SHA256", "")
+    ).strip().casefold()
     now = _trusted_observed_at(observed_at)
     if (
         receipt.get("schema_version") != "1.0"

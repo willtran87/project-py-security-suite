@@ -6,11 +6,16 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import patch
+import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from py_security_suite.artifact_validation import validate_governed_artifacts
-from py_security_suite.runtime_trace import runtime_trace_artifact
+from py_security_suite.runtime_trace import (
+    _merkle_root,
+    _verify_independent_observer_config,
+    runtime_trace_artifact,
+)
 from py_security_suite.strict_json import canonical_bytes
 from tests.deployment_authority import authority_environment, operation_receipt
 
@@ -103,6 +108,27 @@ def test_runtime_trace_must_correlate_to_static_edge(tmp_path: Path) -> None:
         }
     ]
     independent_raw_spans = [dict(item) for item in raw_spans]
+    source_boot_id = "5" * 64
+    event_ledger = []
+    for sequence, span in enumerate(independent_raw_spans, start=1):
+        monotonic_ns = sequence * 1_000
+        event_ledger.append(
+            {
+                "sequence": sequence,
+                "trace_id": span["trace_id"],
+                "span_id": span["span_id"],
+                "monotonic_ns": monotonic_ns,
+                "source_event_sha256": hashlib.sha256(
+                    canonical_bytes(
+                        {
+                            "source_boot_id_sha256": source_boot_id,
+                            "monotonic_ns": monotonic_ns,
+                            "span": span,
+                        }
+                    )
+                ).hexdigest(),
+            }
+        )
     independent_observer_config = {
         "schema_version": "1.0",
         "channel": "kernel-audit",
@@ -115,7 +141,29 @@ def test_runtime_trace_must_correlate_to_static_edge(tmp_path: Path) -> None:
         "sequence_end": len(independent_raw_spans),
         "dropped_events": 0,
         "clock_source": "kernel-monotonic",
+        "source_boot_id_sha256": source_boot_id,
+        "event_ledger": event_ledger,
+        "event_ledger_sha256": hashlib.sha256(
+            canonical_bytes(event_ledger)
+        ).hexdigest(),
+        "batch_merkle_root_sha256": _merkle_root(
+            [item["source_event_sha256"] for item in event_ledger]
+        ),
+        "canary_event": {
+            "challenge_sha256": "c" * 64,
+            "source_event_sha256": "a" * 64,
+            "observed": True,
+        },
     }
+    tampered_observer_config = json.loads(json.dumps(independent_observer_config))
+    tampered_observer_config["event_ledger"][0]["sequence"] = 2
+    tampered_observer_config["event_ledger_sha256"] = hashlib.sha256(
+        canonical_bytes(tampered_observer_config["event_ledger"])
+    ).hexdigest()
+    with pytest.raises(ValueError, match="event sequence"):
+        _verify_independent_observer_config(
+            tampered_observer_config, independent_raw_spans, "b" * 64
+        )
     independent_subject = {
         "schema_version": "1.0",
         "deployment_sha256": "a" * 64,
@@ -275,4 +323,11 @@ def test_runtime_trace_must_correlate_to_static_edge(tmp_path: Path) -> None:
         artifact = runtime_trace_artifact(graph)
     assert artifact["complete"] is True
     assert artifact["allow_count"] == 1
-    validate_governed_artifacts({"runtime-trace-correlation.json": artifact})
+    with patch.dict(
+        "os.environ",
+        {
+            "PYSEC_SCAN_TIME_CHALLENGE_SHA256": "c" * 64,
+            "PYSEC_SCAN_TIME_CONTEXT_SHA256": "e" * 64,
+        },
+    ):
+        validate_governed_artifacts({"runtime-trace-correlation.json": artifact})

@@ -1,5 +1,15 @@
 # Changelog
 
+- Parse format-specific TPM2, Nitro, and SEV-SNP evidence instead of accepting
+  opaque quotes; require deployment-rooted offline receipt context and optional
+  registered failure-domain identities. Make secondary Git verification read
+  the immutable CAS version, reverify persisted checkpoint acknowledgements,
+  support independent checkpoint quorums, and cross-bind fresh compiler replay
+  outputs to attested requests. Add event-level runtime observer commitments,
+  independent KMS audit readback, CycloneDX graph and OCI layer/diff-ID checks,
+  replay-protected blinded secret commitments, and DSSE/JWS/COSE/Sigstore
+  envelope discovery.
+
 - Require governed compiler results to retain complete hermetic replay
   materials and pass a third, remotely attested reexecution; require runtime
   collectors and observers to differ by organization, host, control plane, and

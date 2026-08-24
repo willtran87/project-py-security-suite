@@ -18,6 +18,8 @@ from .execution import (
 from .operation_receipt import verify_operation_receipt
 from .path_safety import read_regular_file
 from .strict_json import canonical_bytes, loads as strict_loads
+from .attestation_formats import verify_format_evidence
+from .failure_domain import verify_registered_failure_domain
 
 
 def run_pinned_json_command(
@@ -350,8 +352,8 @@ def verify_retained_effective_policy_attestation(
         )
     except (KeyError, ValueError) as exc:
         raise ValueError("retained effective-policy time is invalid") from exc
-    challenge = os.environ.get("PYSEC_SCAN_TIME_CHALLENGE_SHA256", "").strip() or str(
-        (statement or {}).get("challenge_sha256") or ""
+    challenge = (
+        os.environ.get("PYSEC_SCAN_TIME_CHALLENGE_SHA256", "").strip().casefold()
     )
     verify_operation_receipt(
         subject,
@@ -395,8 +397,8 @@ def _verify_remote_attestation(
     except (TypeError, ValueError) as exc:
         raise ValueError("sandbox remote attestation quote is invalid") from exc
     expected_key = str(execution_subject.get("remote_attestation_key_sha256") or "")
-    challenge = os.environ.get("PYSEC_SCAN_TIME_CHALLENGE_SHA256", "").strip() or str(
-        subject.get("challenge_sha256") or ""
+    challenge = (
+        os.environ.get("PYSEC_SCAN_TIME_CHALLENGE_SHA256", "").strip().casefold()
     )
     if (
         subject.get("schema_version") != "1.0"
@@ -415,6 +417,24 @@ def _verify_remote_attestation(
         or not _digest(expected_key)
     ):
         raise ValueError("sandbox remote attestation trust binding is invalid")
+    verify_format_evidence(
+        quote,
+        format_name=str(subject["format"]),
+        challenge_sha256=challenge,
+        host_identity_sha256=str(subject["host_identity_sha256"]),
+        pcrs_sha256=str(subject["pcrs_sha256"]),
+        implementation_sha256=str(subject["implementation_sha256"]),
+    )
+    verify_registered_failure_domain(
+        {
+            "organization": subject["organization"],
+            "host_identity_sha256": subject["host_identity_sha256"],
+            "control_plane_sha256": subject["control_plane_sha256"],
+            "implementation_sha256": subject["implementation_sha256"],
+        },
+        expected_key,
+        "remote attestation authority",
+    )
     receipt = value["operation_receipt"]
     statement = receipt.get("statement") if isinstance(receipt, dict) else None
     try:

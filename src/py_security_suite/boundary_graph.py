@@ -21,7 +21,11 @@ from .execution import CommandEnvironment, run_command
 from .strict_json import canonical_bytes
 from .deployment_receipt import verify_deployment_receipt
 from .operation_receipt import verify_operation_receipt
-from .failure_domain import require_independent_failure_domains, verify_failure_domain
+from .failure_domain import (
+    require_independent_failure_domains,
+    verify_failure_domain,
+    verify_registered_failure_domain,
+)
 from .pinned_command import command_configured, run_pinned_json_command
 from .strict_json import loads as strict_loads
 
@@ -443,6 +447,7 @@ def _compiler_semantic_reexecution(
     response = run_pinned_json_command(prefix, request)
     attestation = response.pop("_effective_policy_attestation", None)
     response["effective_policy_attestation"] = attestation
+    response["reexecution_request"] = request
     verify_compiler_semantic_reexecution(response, evidence, language_file_sets)
     return response
 
@@ -457,6 +462,12 @@ def verify_compiler_semantic_reexecution(
         "language_file_sets_sha256",
         "frontends_sha256",
         "authority_key_sha256",
+        "request_sha256",
+        "execution_nonce",
+        "reexecution_request",
+        "fresh_evidence",
+        "fresh_evidence_sha256",
+        "execution_transcript",
         "failure_domain",
         "operation_receipt",
         "effective_policy_attestation",
@@ -474,11 +485,22 @@ def verify_compiler_semantic_reexecution(
         != hashlib.sha256(canonical_bytes(language_file_sets)).hexdigest()
         or value.get("frontends_sha256")
         != hashlib.sha256(canonical_bytes(evidence.get("frontends"))).hexdigest()
+        or value.get("fresh_evidence") != evidence
+        or value.get("fresh_evidence_sha256")
+        != hashlib.sha256(canonical_bytes(evidence)).hexdigest()
         or not _digest(str(value.get("authority_key_sha256") or ""))
+        or not _digest(str(value.get("request_sha256") or ""))
+        or not str(value.get("execution_nonce") or "").strip()
+        or not isinstance(value.get("reexecution_request"), dict)
     ):
         raise ValueError("compiler semantic hermetic reexecution is invalid")
     domain = verify_failure_domain(
         value["failure_domain"], "compiler reexecution authority"
+    )
+    verify_registered_failure_domain(
+        domain,
+        str(value["authority_key_sha256"]),
+        "compiler reexecution authority",
     )
     for frontend in evidence["frontends"]:
         require_independent_failure_domains(
@@ -497,6 +519,10 @@ def verify_compiler_semantic_reexecution(
         "evidence_sha256": value["evidence_sha256"],
         "language_file_sets_sha256": value["language_file_sets_sha256"],
         "frontends_sha256": value["frontends_sha256"],
+        "request_sha256": value["request_sha256"],
+        "execution_nonce": value["execution_nonce"],
+        "fresh_evidence_sha256": value["fresh_evidence_sha256"],
+        "execution_transcript": value["execution_transcript"],
         "failure_domain": domain,
     }
     receipt = value["operation_receipt"]
@@ -521,10 +547,69 @@ def verify_compiler_semantic_reexecution(
     )
     if not isinstance(attestation_subject, dict):
         raise ValueError("compiler reexecution policy attestation is invalid")
+    transcript = value["execution_transcript"]
+    materialized = {
+        "evidence_sha256": value["evidence_sha256"],
+        "language_file_sets_sha256": value["language_file_sets_sha256"],
+    }
+    if (
+        not isinstance(transcript, dict)
+        or set(transcript)
+        != {
+            "exit_code",
+            "stdout_sha256",
+            "stderr_sha256",
+            "materialized_inputs_sha256",
+            "canary_results_sha256",
+        }
+        or transcript.get("exit_code") != 0
+        or not _digest(str(transcript.get("stdout_sha256") or ""))
+        or transcript.get("stderr_sha256") != hashlib.sha256(b"").hexdigest()
+        or transcript.get("materialized_inputs_sha256")
+        != hashlib.sha256(canonical_bytes(materialized)).hexdigest()
+        or transcript.get("canary_results_sha256")
+        != hashlib.sha256(
+            canonical_bytes(_compiler_canary_results(evidence))
+        ).hexdigest()
+    ):
+        raise ValueError("compiler reexecution transcript is invalid")
+    if (
+        value["request_sha256"] != attestation_subject.get("request_sha256")
+        or value["execution_nonce"] != attestation_subject.get("execution_nonce")
+        or value["request_sha256"]
+        != hashlib.sha256(canonical_bytes(value["reexecution_request"])).hexdigest()
+        or value["reexecution_request"].get("evidence_sha256")
+        != value["evidence_sha256"]
+        or value["reexecution_request"].get("language_file_sets_sha256")
+        != value["language_file_sets_sha256"]
+        or value["reexecution_request"].get("frontends_sha256")
+        != value["frontends_sha256"]
+        or value["reexecution_request"].get("operation")
+        != "hermetic-compiler-reexecution"
+    ):
+        raise ValueError("compiler result is not bound to its attested execution")
     from .pinned_command import verify_retained_effective_policy_attestation
 
     if domain != verify_retained_effective_policy_attestation(attestation):
         raise ValueError("compiler reexecution failure domain is not attested")
+
+
+def _compiler_canary_results(evidence: dict[str, Any]) -> list[dict[str, Any]]:
+    results: list[dict[str, Any]] = []
+    for frontend in evidence["frontends"]:
+        for prefix in ("primary", "secondary"):
+            try:
+                payload = base64.b64decode(
+                    str(frontend[f"{prefix}_analysis_artifact_base64"]), validate=True
+                )
+                replay = strict_loads(payload)
+            except (KeyError, TypeError, ValueError) as exc:
+                raise ValueError("compiler canary replay material is invalid") from exc
+            canaries = replay.get("canary_results") if isinstance(replay, dict) else None
+            if not isinstance(canaries, dict) or not _canary_results_valid(canaries):
+                raise ValueError("compiler canary replay result is invalid")
+            results.append(dict(canaries))
+    return results
 
 
 def verify_compiler_semantic_evidence(
@@ -704,6 +789,7 @@ def _verify_analysis_artifact(item: dict[str, Any], prefix: str) -> dict[str, An
             "environment",
             "sandbox_policy",
             "canary_results",
+            "analysis_capabilities",
         }
         or replay.get("schema_version") != "1.0"
         or replay.get("engine") != item[engine_field]
@@ -745,6 +831,16 @@ def _verify_analysis_artifact(item: dict[str, Any], prefix: str) -> dict[str, An
             "credentials": "isolated",
         }
         or not _canary_results_valid(replay["canary_results"])
+        or replay["analysis_capabilities"]
+        != {
+            "alias_sensitive": True,
+            "context_sensitive": True,
+            "field_sensitive": True,
+            "path_sensitive": True,
+            "interprocedural": True,
+            "dynamic_dispatch": True,
+            "implicit_flows": True,
+        }
     ):
         raise ValueError("compiler hermetic reexecution materials are invalid")
     return replay
@@ -783,13 +879,44 @@ def _canary_results_valid(value: object) -> bool:
         "negative_fixture_sha256",
         "positive_detected",
         "negative_clean",
+        "cases",
     }:
         return False
+    cases = value["cases"]
+    if not isinstance(cases, list) or len(cases) < 4:
+        return False
+    identities: set[str] = set()
+    families: set[str] = set()
+    outcomes: set[bool] = set()
+    for case in cases:
+        if (
+            not isinstance(case, dict)
+            or set(case)
+            != {
+                "id",
+                "rule_family",
+                "fixture_sha256",
+                "expected_detected",
+                "detected",
+            }
+            or not str(case.get("id") or "")
+            or case["id"] in identities
+            or not str(case.get("rule_family") or "")
+            or not _digest(str(case.get("fixture_sha256") or ""))
+            or not isinstance(case.get("expected_detected"), bool)
+            or case.get("detected") is not case.get("expected_detected")
+        ):
+            return False
+        identities.add(case["id"])
+        families.add(case["rule_family"])
+        outcomes.add(case["expected_detected"])
     return bool(
         _digest(str(value["positive_fixture_sha256"]))
         and _digest(str(value["negative_fixture_sha256"]))
         and value["positive_detected"] is True
         and value["negative_clean"] is True
+        and len(families) >= 2
+        and outcomes == {False, True}
     )
 
 

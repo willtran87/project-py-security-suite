@@ -19,7 +19,11 @@ from .operation_receipt import verify_operation_receipt
 from .strict_json import dumps as strict_dumps
 from .strict_json import loads as strict_loads
 from .strict_json import canonical_bytes
-from .failure_domain import require_independent_failure_domains, verify_failure_domain
+from .failure_domain import (
+    require_independent_failure_domains,
+    verify_failure_domain,
+    verify_registered_failure_domain,
+)
 
 
 def protect_native_report(payload: str, *, adapter: str) -> dict[str, Any]:
@@ -234,6 +238,7 @@ def _external_recovery_drill(
         "recovered_plaintext_sha256",
         "replica_identity_sha256",
         "kms_unwrap_operation_id",
+        "execution_nonce",
         "recovery_operation_id",
         "recovery_authority_key_sha256",
         "recovery_operation_receipt",
@@ -255,6 +260,7 @@ def _external_recovery_drill(
         or response.get("replica_identity_sha256") == request["store_identity"]
         or not str(response.get("kms_unwrap_operation_id") or "")
         or not str(response.get("recovery_operation_id") or "")
+        or not str(response.get("execution_nonce") or "")
         or not _digest(expected_key)
         or response.get("recovery_authority_key_sha256") != expected_key
         or not isinstance(policy_attestation, dict)
@@ -268,6 +274,7 @@ def _external_recovery_drill(
         "recovered_plaintext_sha256": response["recovered_plaintext_sha256"],
         "replica_identity_sha256": response["replica_identity_sha256"],
         "kms_unwrap_operation_id": response["kms_unwrap_operation_id"],
+        "execution_nonce": response["execution_nonce"],
     }
     receipt = response["recovery_operation_receipt"]
     statement = receipt.get("statement") if isinstance(receipt, dict) else None
@@ -324,6 +331,7 @@ def _external_recovery_drill(
     ):
         raise ValueError("KMS provider audit event is invalid")
     audit_domain = verify_failure_domain(audit["failure_domain"], "KMS provider audit")
+    verify_registered_failure_domain(audit_domain, audit_key, "KMS provider audit")
     audit_subject = {
         name: audit[name] for name in audit_fields if name != "operation_receipt"
     }
@@ -346,6 +354,8 @@ def _external_recovery_drill(
         expected_key_sha256=audit_key,
     )
     attestation_subject = policy_attestation.get("subject", {})
+    if response["execution_nonce"] != attestation_subject.get("execution_nonce"):
+        raise ValueError("recovery result is detached from its attested execution")
     remote = attestation_subject.get("policy_observations", {}).get(
         "remote_attestation", {}
     )
@@ -368,18 +378,195 @@ def _external_recovery_drill(
         audit_domain,
         labels=("recovery executor", "KMS provider audit"),
     )
+    audit_readback = _provider_audit_readback(audit, audit_domain, challenge)
     return {
         "schema_version": "1.0",
         "mode": "external-clean-host-kms-restore",
         **subject,
+        "recovery_request": request,
         "recovery_operation_id": response["recovery_operation_id"],
         "recovery_authority_key_sha256": expected_key,
         "recovery_operation_receipt": verified,
         "provider_audit_authority_key_sha256": audit_key,
         "provider_audit_event": audit,
+        "provider_audit_readback": audit_readback,
         "effective_policy_attestation": policy_attestation,
         "verified": True,
     }
+
+
+def _provider_audit_readback(
+    audit: dict[str, Any], audit_domain: dict[str, str], challenge: str
+) -> dict[str, Any] | None:
+    prefix = "PYSEC_RAW_EVIDENCE_PROVIDER_AUDIT_READBACK"
+    required = os.environ.get(f"{prefix}_REQUIRED", "").strip() == "1"
+    if not command_configured(prefix):
+        if required:
+            raise ValueError("independent KMS provider audit readback is unavailable")
+        return None
+    request = {
+        "schema_version": "1.0",
+        "operation": "read-provider-audit-event",
+        "provider": audit["provider"],
+        "audit_event_id": audit["audit_event_id"],
+        "expected_event_sha256": hashlib.sha256(canonical_bytes(audit)).hexdigest(),
+        "challenge_sha256": challenge,
+    }
+    response = run_pinned_json_command(prefix, request)
+    attestation = response.pop("_effective_policy_attestation", None)
+    fields = {
+        "schema_version",
+        "provider",
+        "audit_event_id",
+        "audit_event",
+        "authority_key_sha256",
+        "execution_nonce",
+        "failure_domain",
+        "operation_receipt",
+    }
+    expected_key = os.environ.get(f"{prefix}_AUTHORITY_KEY_SHA256", "").strip().casefold()
+    if (
+        set(response) != fields
+        or response.get("schema_version") != "1.0"
+        or response.get("provider") != audit["provider"]
+        or response.get("audit_event_id") != audit["audit_event_id"]
+        or response.get("audit_event") != audit
+        or response.get("authority_key_sha256") != expected_key
+        or not _digest(expected_key)
+    ):
+        raise ValueError("independent KMS provider audit readback is invalid")
+    domain = verify_registered_failure_domain(
+        response["failure_domain"], expected_key, "KMS audit readback"
+    )
+    attestation_subject = attestation.get("subject") if isinstance(attestation, dict) else None
+    if (
+        not isinstance(attestation_subject, dict)
+        or response.get("execution_nonce")
+        != attestation_subject.get("execution_nonce")
+    ):
+        raise ValueError("KMS audit readback execution binding is invalid")
+    require_independent_failure_domains(
+        audit_domain,
+        domain,
+        labels=("KMS provider audit", "KMS audit readback"),
+    )
+    subject = {
+        **request,
+        "audit_event_sha256": hashlib.sha256(canonical_bytes(audit)).hexdigest(),
+        "execution_nonce": response["execution_nonce"],
+        "failure_domain": domain,
+    }
+    receipt = response["operation_receipt"]
+    statement = receipt.get("statement") if isinstance(receipt, dict) else None
+    try:
+        observed = datetime.fromisoformat(
+            str((statement or {})["issued_at"]).replace("Z", "+00:00")
+        )
+    except (KeyError, ValueError) as exc:
+        raise ValueError("KMS provider audit readback time is invalid") from exc
+    verify_operation_receipt(
+        subject,
+        receipt,
+        purpose="kms-provider-audit-readback",
+        observed_at=observed,
+        challenge_sha256=challenge,
+        expected_key_sha256=expected_key,
+    )
+    from .pinned_command import verify_retained_effective_policy_attestation
+
+    if domain != verify_retained_effective_policy_attestation(attestation):
+        raise ValueError("KMS provider audit readback domain is not attested")
+    return {
+        **response,
+        "effective_policy_attestation": attestation,
+        "readback_request": request,
+    }
+
+
+def verify_retained_provider_audit_readback(
+    value: object,
+    audit: dict[str, Any],
+    audit_domain: dict[str, str],
+    challenge: str,
+) -> None:
+    if not isinstance(value, dict) or set(value) != {
+        "schema_version",
+        "provider",
+        "audit_event_id",
+        "audit_event",
+        "authority_key_sha256",
+        "execution_nonce",
+        "failure_domain",
+        "operation_receipt",
+        "effective_policy_attestation",
+        "readback_request",
+    }:
+        raise ValueError("retained KMS audit readback fields do not match")
+    prefix = "PYSEC_RAW_EVIDENCE_PROVIDER_AUDIT_READBACK"
+    expected_key = os.environ.get(f"{prefix}_AUTHORITY_KEY_SHA256", "").strip().casefold()
+    if (
+        value.get("provider") != audit["provider"]
+        or value.get("audit_event_id") != audit["audit_event_id"]
+        or value.get("audit_event") != audit
+        or value.get("authority_key_sha256") != expected_key
+    ):
+        raise ValueError("retained KMS audit readback is detached")
+    domain = verify_registered_failure_domain(
+        value["failure_domain"], expected_key, "KMS audit readback"
+    )
+    require_independent_failure_domains(
+        audit_domain, domain, labels=("KMS provider audit", "KMS audit readback")
+    )
+    request = value["readback_request"]
+    expected_request = {
+        "schema_version": "1.0",
+        "operation": "read-provider-audit-event",
+        "provider": audit["provider"],
+        "audit_event_id": audit["audit_event_id"],
+        "expected_event_sha256": hashlib.sha256(canonical_bytes(audit)).hexdigest(),
+        "challenge_sha256": challenge,
+    }
+    if (
+        not isinstance(request, dict)
+        or any(request.get(name) != expected for name, expected in expected_request.items())
+        or not isinstance(request.get("command_context"), dict)
+    ):
+        raise ValueError("retained KMS audit readback request is detached")
+    subject = {
+        **request,
+        "audit_event_sha256": hashlib.sha256(canonical_bytes(audit)).hexdigest(),
+        "execution_nonce": value["execution_nonce"],
+        "failure_domain": domain,
+    }
+    receipt = value["operation_receipt"]
+    statement = receipt.get("statement") if isinstance(receipt, dict) else None
+    try:
+        observed = datetime.fromisoformat(
+            str((statement or {})["issued_at"]).replace("Z", "+00:00")
+        )
+    except (KeyError, ValueError) as exc:
+        raise ValueError("retained KMS audit readback time is invalid") from exc
+    verify_operation_receipt(
+        subject,
+        receipt,
+        purpose="kms-provider-audit-readback",
+        observed_at=observed,
+        challenge_sha256=challenge,
+        expected_key_sha256=expected_key,
+    )
+    from .pinned_command import verify_retained_effective_policy_attestation
+
+    attestation = value["effective_policy_attestation"]
+    attestation_subject = attestation.get("subject") if isinstance(attestation, dict) else None
+    if (
+        not isinstance(attestation_subject, dict)
+        or value["execution_nonce"] != attestation_subject.get("execution_nonce")
+    ):
+        raise ValueError("retained KMS audit readback execution binding is invalid")
+    if domain != verify_retained_effective_policy_attestation(
+        attestation
+    ):
+        raise ValueError("retained KMS audit readback domain is not attested")
 
 
 def _kms_data_key(

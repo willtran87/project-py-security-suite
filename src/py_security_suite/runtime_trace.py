@@ -12,7 +12,10 @@ from .path_safety import read_regular_file
 from .strict_json import canonical_bytes, loads as strict_loads
 from .deployment_receipt import verify_deployment_receipt
 from .operation_receipt import verify_operation_receipt
-from .failure_domain import require_independent_failure_domains
+from .failure_domain import (
+    require_independent_failure_domains,
+    verify_registered_failure_domain,
+)
 
 
 def runtime_trace_artifact(boundary_graph: dict[str, Any]) -> dict[str, Any]:
@@ -402,6 +405,11 @@ def _verify_independent_runtime_observations(
         == value["collector_identity_sha256"]
     ):
         raise ValueError("independent runtime observer is not deployment-pinned")
+    verify_registered_failure_domain(
+        value["independent_failure_domain"],
+        expected_key,
+        "runtime observer",
+    )
     subject = {
         "schema_version": "1.0",
         "deployment_sha256": deployment,
@@ -445,6 +453,11 @@ def _verify_independent_observer_config(
             "sequence_end",
             "dropped_events",
             "clock_source",
+            "source_boot_id_sha256",
+            "event_ledger",
+            "event_ledger_sha256",
+            "batch_merkle_root_sha256",
+            "canary_event",
         }
         or observer_config.get("schema_version") != "1.0"
         or observer_config.get("channel")
@@ -457,6 +470,7 @@ def _verify_independent_observer_config(
         or observer_config.get("sequence_end") != len(independent_spans)
         or observer_config.get("dropped_events") != 0
         or observer_config.get("clock_source") != "kernel-monotonic"
+        or not _digest(str(observer_config.get("source_boot_id_sha256") or ""))
     ):
         raise ValueError("independent runtime observer channel is invalid")
     try:
@@ -474,6 +488,84 @@ def _verify_independent_observer_config(
         != observer_config["configuration_sha256"]
     ):
         raise ValueError("independent runtime observer configuration is detached")
+    _verify_observer_event_ledger(observer_config, independent_spans)
+
+
+def _verify_observer_event_ledger(
+    observer_config: dict[str, Any], independent_spans: list[dict[str, Any]]
+) -> None:
+    ledger = observer_config["event_ledger"]
+    fields = {
+        "sequence",
+        "trace_id",
+        "span_id",
+        "monotonic_ns",
+        "source_event_sha256",
+    }
+    if (
+        not isinstance(ledger, list)
+        or len(ledger) != len(independent_spans)
+        or observer_config["event_ledger_sha256"]
+        != hashlib.sha256(canonical_bytes(ledger)).hexdigest()
+    ):
+        raise ValueError("independent runtime event ledger is detached")
+    boot_id = observer_config["source_boot_id_sha256"]
+    event_hashes: list[str] = []
+    previous_monotonic = -1
+    for sequence, (event, span) in enumerate(
+        zip(ledger, independent_spans, strict=True), start=1
+    ):
+        if (
+            not isinstance(event, dict)
+            or set(event) != fields
+            or event.get("sequence") != sequence
+            or event.get("trace_id") != span["trace_id"]
+            or event.get("span_id") != span["span_id"]
+            or isinstance(event.get("monotonic_ns"), bool)
+            or not isinstance(event.get("monotonic_ns"), int)
+            or event["monotonic_ns"] <= previous_monotonic
+        ):
+            raise ValueError("independent runtime event sequence is invalid")
+        expected = hashlib.sha256(
+            canonical_bytes(
+                {
+                    "source_boot_id_sha256": boot_id,
+                    "monotonic_ns": event["monotonic_ns"],
+                    "span": span,
+                }
+            )
+        ).hexdigest()
+        if event.get("source_event_sha256") != expected:
+            raise ValueError("independent runtime source event is detached")
+        previous_monotonic = event["monotonic_ns"]
+        event_hashes.append(expected)
+    if observer_config["batch_merkle_root_sha256"] != _merkle_root(event_hashes):
+        raise ValueError("independent runtime event batch root is invalid")
+    canary = observer_config["canary_event"]
+    challenge = os.environ.get("PYSEC_SCAN_TIME_CHALLENGE_SHA256", "").strip().casefold()
+    if (
+        not isinstance(canary, dict)
+        or set(canary) != {"challenge_sha256", "source_event_sha256", "observed"}
+        or canary.get("challenge_sha256") != challenge
+        or not _digest(str(canary.get("source_event_sha256") or ""))
+        or canary.get("observed") is not True
+        or canary["source_event_sha256"] in event_hashes
+    ):
+        raise ValueError("independent runtime observer canary is invalid")
+
+
+def _merkle_root(digests: list[str]) -> str:
+    nodes = [bytes.fromhex(item) for item in digests]
+    if not nodes:
+        return hashlib.sha256(b"").hexdigest()
+    while len(nodes) > 1:
+        if len(nodes) % 2:
+            nodes.append(nodes[-1])
+        nodes = [
+            hashlib.sha256(nodes[index] + nodes[index + 1]).digest()
+            for index in range(0, len(nodes), 2)
+        ]
+    return nodes[0].hex()
 
 
 def _artifact(

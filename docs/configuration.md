@@ -291,6 +291,13 @@ including command, executable/runtime/assets, sandbox, endpoint/mTLS,
 execution-attestation, remote-attestation, and authority-key pins. The external
 authority signs each next checkpoint and runs outside the local database, host,
 control plane, and implementation failure domain.
+For availability without weakening rollback protection, set the matching
+`PYSEC_*_CHECKPOINT_QUORUM_PREFIXES_JSON` to a sorted list of two or more pinned
+command prefixes and `PYSEC_*_CHECKPOINT_QUORUM_THRESHOLD` to an N-of-M threshold
+of at least two. Each successful authority is fully reverified and every pair
+must have different organization, host, control-plane, and implementation
+identities. Checkpoint requests carry content-derived idempotency keys; stored
+acknowledgements are cryptographically reverified on reuse.
 `replay_ledger_path` atomically consumes
 each authenticated evidence identity in SQLite, so a previously accepted
 receipt cannot authorize a later decision.
@@ -545,6 +552,11 @@ stream with
 `PYSEC_RAW_EVIDENCE_RECOVERY_PROVIDER_AUDIT_KEY_SHA256`; the unwrap result must
 include the provider, hardware-backed operation, wrapped-key commitment, audit
 event ID, and a failure domain independent from the recovery executor.
+Production additionally sets
+`PYSEC_RAW_EVIDENCE_PROVIDER_AUDIT_READBACK_REQUIRED=1` and configures the
+`PYSEC_RAW_EVIDENCE_PROVIDER_AUDIT_READBACK` pinned-command family. That service
+must fetch the provider-native event by ID, reproduce its exact digest, and run
+in a failure domain independent from the provider audit signer.
 Deployment traces are admitted through
 `PYSEC_RUNTIME_TRACE_EVIDENCE_PATH` plus its SHA-256 and retained only when
 every source/target pair exists in `boundary-graph.json`. Traces use
@@ -557,8 +569,10 @@ refused/failed exports and complete canary delivery and carry a receipt from
 union of independently signed API-contract, deployment-route, and authorization-
 policy inventories pinned by `PYSEC_RUNTIME_INVENTORY_KEYS_JSON`. The
 independent observer must additionally retain its raw parent-linked span stream
-and observer configuration; admission requires exact event-set agreement with
-the collector rather than accepting an observer summary alone. Production and release scans and
+and observer configuration, boot identity, monotonic event sequence, source
+event commitments, Merkle batch root, and challenge-bound observer-only canary;
+admission requires exact event-set agreement with the collector rather than
+accepting an observer summary alone. Production and release scans and
 `release-check` both fail closed without complete signed runtime correlation.
 `trust-policy.json` seals deployment trust variables by value digest, and its
 digest is included in the effective configuration identity. Production and
@@ -566,6 +580,24 @@ release additionally require an externally quorum-signed trust-policy
 attestation with expiry, generation anti-rollback, and replay consumption.
 Organization policy metadata can be authenticated the same way through
 `PYSEC_ORGANIZATION_POLICY_ATTESTATION` and its deployment-owned SHA-256.
+Set `PYSEC_FAILURE_DOMAIN_REGISTRY_PATH` and its SHA-256 together with
+`PYSEC_REQUIRE_REGISTERED_FAILURE_DOMAINS=1` to require active, key-bound
+organization/host/control-plane/implementation identities. Set
+`PYSEC_SEV_SNP_MIN_REPORTED_TCB` to the deployment-approved minimum SNP TCB.
+Production sets `PYSEC_REQUIRE_HARDWARE_ATTESTATION_ROOTS=1` and pins each used
+format with `PYSEC_{TPM2,NITRO,SEV_SNP}_ATTESTATION_ROOT_SHA256`. Normalized
+evidence must confirm native signature and certificate-chain verification,
+revocation checks, event-log replay or TCB checks, and the exact verifier
+implementation identity.
+Secret requirement commitments require
+`PYSEC_REQUIREMENTS_SECRET_NONCE_STATE_PATH`; reused nonces with a different
+commitment fail closed, and the signed blinded request must come from an
+attested, registered authority.
+Container procedure replay pins `PYSEC_REQUIREMENTS_OCI_BUILDER_ID` and
+`PYSEC_REQUIREMENTS_OCI_SIGNATURE_KEY_SHA256`. The retained signature envelope
+must sign the exact OCI config/layer/source subject and its normalized SLSA v1
+provenance digest; descriptor presence without cryptographic verification does
+not satisfy the procedure contract.
 
 Report publication verifies owner-only permissions before the atomic commit and
 records classification and a deletion deadline in `report-security.json`. For

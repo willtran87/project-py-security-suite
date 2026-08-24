@@ -247,6 +247,45 @@ class BoundaryGraphTests(unittest.TestCase):
                         "negative_fixture_sha256": "8" * 64,
                         "positive_detected": True,
                         "negative_clean": True,
+                        "cases": [
+                            {
+                                "id": f"{prefix}-injection-positive",
+                                "rule_family": "injection",
+                                "fixture_sha256": "7" * 64,
+                                "expected_detected": True,
+                                "detected": True,
+                            },
+                            {
+                                "id": f"{prefix}-injection-negative",
+                                "rule_family": "injection",
+                                "fixture_sha256": "8" * 64,
+                                "expected_detected": False,
+                                "detected": False,
+                            },
+                            {
+                                "id": f"{prefix}-authorization-positive",
+                                "rule_family": "authorization",
+                                "fixture_sha256": "9" * 64,
+                                "expected_detected": True,
+                                "detected": True,
+                            },
+                            {
+                                "id": f"{prefix}-authorization-negative",
+                                "rule_family": "authorization",
+                                "fixture_sha256": "a" * 64,
+                                "expected_detected": False,
+                                "detected": False,
+                            },
+                        ],
+                    },
+                    "analysis_capabilities": {
+                        "alias_sensitive": True,
+                        "context_sensitive": True,
+                        "field_sensitive": True,
+                        "path_sensitive": True,
+                        "interprocedural": True,
+                        "dynamic_dispatch": True,
+                        "implicit_flows": True,
                     },
                 }
                 replay["runtime_closure_sha256"] = hashlib.sha256(

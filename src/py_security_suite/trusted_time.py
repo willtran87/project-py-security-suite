@@ -15,7 +15,7 @@ from cryptography.x509.oid import ExtendedKeyUsageOID
 from pyasn1.codec.der import decoder as der_decoder  # type: ignore[import-untyped]
 from pyasn1_modules import rfc5035  # type: ignore[import-untyped]
 
-from .strict_json import canonical_bytes
+from .strict_json import canonical_bytes, loads as strict_loads
 
 
 _TRUSTED_TIME_STATE_GENESIS_SHA256 = hashlib.sha256(
@@ -349,11 +349,32 @@ def _advance_time_state(challenge_sha256: str, result: dict[str, str]) -> None:
             connection.execute("ROLLBACK")
             raise ValueError("trusted-time rollback or fork detected")
         if row is not None and challenge_sha256 == row[1] and digest == row[2]:
-            if os.environ.get(
+            external_required = os.environ.get(
                 "PYSEC_TRUSTED_TIME_REQUIRE_EXTERNAL_CHECKPOINT", ""
-            ).strip() == "1" and not bytes(row[5]):
+            ).strip() == "1"
+            external_bytes = bytes(row[5])
+            if external_required and not external_bytes:
                 connection.execute("ROLLBACK")
                 raise ValueError("trusted-time external checkpoint is absent")
+            if external_bytes:
+                from .checkpoint_authority import verify_retained_checkpoint
+
+                try:
+                    verify_retained_checkpoint(
+                        "PYSEC_TRUSTED_TIME_CHECKPOINT",
+                        strict_loads(external_bytes),
+                        {
+                            "schema_version": "1.0",
+                            "state_kind": "trusted-time",
+                            "sequence": sequence,
+                            "checkpoint_sha256": checkpoint,
+                            "challenge_sha256": challenge_sha256,
+                            "trusted_time_sha256": digest,
+                        },
+                    )
+                except (TypeError, ValueError):
+                    connection.execute("ROLLBACK")
+                    raise
             connection.execute("COMMIT")
             return
         sequence += 1

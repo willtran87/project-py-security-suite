@@ -2,8 +2,12 @@ from __future__ import annotations
 
 import hashlib
 import base64
+import gzip
+import io
 import json
 import os
+import tarfile
+import sqlite3
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -1182,7 +1186,9 @@ def _procedure_manifests_valid(execution: dict[str, Any]) -> bool:
             return False
     if not _runtime_sbom_covers_closure(sbom, runtime["closure_manifest"]):
         return False
-    if runtime["kind"] == "container" and not _oci_manifest_valid(image_manifest):
+    if runtime["kind"] == "container" and not _oci_manifest_valid(
+        image_manifest, runtime["closure_manifest"]
+    ):
         return False
     environment_names: set[str] = set()
     for item in environment:
@@ -1222,11 +1228,20 @@ def _procedure_manifests_valid(execution: dict[str, Any]) -> bool:
                 | {
                     "verification_authority_key_sha256",
                     "verification_operation_receipt",
+                    "verification_failure_domain",
+                    "verification_effective_policy_attestation",
+                    "blinded_request_sha256",
                 }
                 or item["commitment_algorithm"] != "hmac-sha256"
                 or not _digest(expected_key)
                 or item["commitment_key_sha256"] != expected_key
                 or not _digest(str(item["nonce_sha256"]))
+                or not _digest(str(item["blinded_request_sha256"]))
+                or not _consume_secret_nonce(
+                    str(item["name"]),
+                    str(item["nonce_sha256"]),
+                    str(item["value_commitment"]),
+                )
             ):
                 return False
             receipt = item["verification_operation_receipt"]
@@ -1237,8 +1252,24 @@ def _procedure_manifests_valid(execution: dict[str, Any]) -> bool:
                     (statement or {})["issued_at"],
                     "secret commitment verification issued_at",
                 )
+                from .failure_domain import verify_registered_failure_domain
+                from .pinned_command import verify_retained_effective_policy_attestation
+
+                domain = verify_registered_failure_domain(
+                    item["verification_failure_domain"],
+                    signer,
+                    "secret commitment authority",
+                )
+                if domain != verify_retained_effective_policy_attestation(
+                    item["verification_effective_policy_attestation"]
+                ):
+                    return False
                 verify_operation_receipt(
-                    {name: item[name] for name in common_fields},
+                    {
+                        **{name: item[name] for name in common_fields},
+                        "blinded_request_sha256": item["blinded_request_sha256"],
+                        "failure_domain": domain,
+                    },
                     receipt,
                     purpose="requirements-secret-commitment-verification",
                     observed_at=issued,
@@ -1261,6 +1292,44 @@ def _procedure_manifests_valid(execution: dict[str, Any]) -> bool:
     return True
 
 
+def _consume_secret_nonce(name: str, nonce_sha256: str, commitment: str) -> bool:
+    path = os.environ.get("PYSEC_REQUIREMENTS_SECRET_NONCE_STATE_PATH", "").strip()
+    if not path:
+        return False
+    connection = sqlite3.connect(path, isolation_level=None)
+    try:
+        connection.execute("PRAGMA journal_mode=WAL")
+        connection.execute("BEGIN IMMEDIATE")
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS secret_commitment_nonces "
+            "(name TEXT NOT NULL, nonce_sha256 TEXT NOT NULL, commitment TEXT NOT NULL, "
+            "PRIMARY KEY(name, nonce_sha256))"
+        )
+        row = connection.execute(
+            "SELECT commitment FROM secret_commitment_nonces "
+            "WHERE name = ? AND nonce_sha256 = ?",
+            (name, nonce_sha256),
+        ).fetchone()
+        if row is not None and row[0] != commitment:
+            connection.execute("ROLLBACK")
+            return False
+        if row is None:
+            connection.execute(
+                "INSERT INTO secret_commitment_nonces VALUES (?, ?, ?)",
+                (name, nonce_sha256, commitment),
+            )
+        connection.execute("COMMIT")
+    except sqlite3.Error:
+        try:
+            connection.execute("ROLLBACK")
+        except sqlite3.Error:
+            pass
+        return False
+    finally:
+        connection.close()
+    return True
+
+
 def _runtime_sbom_covers_closure(payload: bytes, closure: list[dict[str, Any]]) -> bool:
     """Require an explicit CycloneDX component for every retained runtime file."""
 
@@ -1273,12 +1342,36 @@ def _runtime_sbom_covers_closure(payload: bytes, closure: list[dict[str, Any]]) 
         or document.get("bomFormat") != "CycloneDX"
         or not isinstance(document.get("specVersion"), str)
         or not isinstance(document.get("components"), list)
+        or document.get("specVersion") not in {"1.4", "1.5", "1.6"}
     ):
         return False
     covered: dict[str, str] = {}
+    component_refs: set[str] = set()
     for component in document["components"]:
-        if not isinstance(component, dict):
+        if (
+            not isinstance(component, dict)
+            or not isinstance(component.get("name"), str)
+            or not component["name"]
+            or component.get("type")
+            not in {
+                "application",
+                "container",
+                "device",
+                "file",
+                "firmware",
+                "framework",
+                "library",
+                "machine-learning-model",
+                "operating-system",
+                "platform",
+            }
+        ):
             return False
+        bom_ref = component.get("bom-ref")
+        if bom_ref is not None:
+            if not isinstance(bom_ref, str) or not bom_ref or bom_ref in component_refs:
+                return False
+            component_refs.add(bom_ref)
         properties = component.get("properties", [])
         hashes = component.get("hashes", [])
         if not isinstance(properties, list) or not isinstance(hashes, list):
@@ -1300,12 +1393,32 @@ def _runtime_sbom_covers_closure(payload: bytes, closure: list[dict[str, Any]]) 
             if not digests or paths[0] in covered or not _digest(digests[0]):
                 return False
             covered[paths[0]] = digests[0]
+    dependencies = document.get("dependencies", [])
+    if not isinstance(dependencies, list):
+        return False
+    dependency_refs: set[str] = set()
+    for dependency in dependencies:
+        if (
+            not isinstance(dependency, dict)
+            or set(dependency) != {"ref", "dependsOn"}
+            or not isinstance(dependency.get("ref"), str)
+            or dependency["ref"] not in component_refs
+            or dependency["ref"] in dependency_refs
+            or not isinstance(dependency.get("dependsOn"), list)
+            or len(dependency["dependsOn"]) != len(set(dependency["dependsOn"]))
+            or dependency["ref"] in dependency["dependsOn"]
+            or any(item not in component_refs for item in dependency["dependsOn"])
+        ):
+            return False
+        dependency_refs.add(dependency["ref"])
     return covered == {
         str(item["path"]): str(item["sha256"]).casefold() for item in closure
     }
 
 
-def _oci_manifest_valid(payload: bytes) -> bool:
+def _oci_manifest_valid(
+    payload: bytes, closure: list[dict[str, Any]] | None = None
+) -> bool:
     try:
         manifest = strict_loads(payload)
     except (TypeError, ValueError):
@@ -1318,7 +1431,7 @@ def _oci_manifest_valid(payload: bytes) -> bool:
     ):
         return False
     descriptors = [manifest["config"], *manifest["layers"]]
-    return bool(manifest["layers"]) and all(
+    if not bool(manifest["layers"]) or not all(
         isinstance(item, dict)
         and isinstance(item.get("size"), int)
         and item["size"] >= 0
@@ -1328,7 +1441,173 @@ def _oci_manifest_valid(payload: bytes) -> bool:
         and item["digest"].startswith("sha256:")
         and _digest(item["digest"].removeprefix("sha256:").casefold())
         for item in descriptors
+    ):
+        return False
+    if closure is None:
+        return False
+    blobs: dict[str, bytes] = {}
+    for item in closure:
+        if not isinstance(item, dict):
+            return False
+        try:
+            content = base64.b64decode(str(item["content_base64"]), validate=True)
+        except (KeyError, TypeError, ValueError):
+            return False
+        digest = str(item.get("sha256") or "").casefold()
+        if not _digest(digest) or hashlib.sha256(content).hexdigest() != digest:
+            return False
+        blobs[digest] = content
+    if any(
+        descriptor["digest"].removeprefix("sha256:") not in blobs
+        or len(blobs[descriptor["digest"].removeprefix("sha256:")])
+        != descriptor["size"]
+        for descriptor in descriptors
+    ):
+        return False
+    try:
+        config = strict_loads(blobs[manifest["config"]["digest"].removeprefix("sha256:")])
+    except (TypeError, ValueError):
+        return False
+    diff_ids = (
+        config.get("rootfs", {}).get("diff_ids") if isinstance(config, dict) else None
     )
+    if not isinstance(diff_ids, list) or len(diff_ids) != len(manifest["layers"]):
+        return False
+    for descriptor, diff_id in zip(manifest["layers"], diff_ids, strict=True):
+        compressed = blobs[descriptor["digest"].removeprefix("sha256:")]
+        try:
+            unpacked = (
+                gzip.decompress(compressed)
+                if "gzip" in descriptor["mediaType"]
+                else compressed
+            )
+        except (OSError, EOFError):
+            return False
+        if (
+            not isinstance(diff_id, str)
+            or not diff_id.startswith("sha256:")
+            or hashlib.sha256(unpacked).hexdigest()
+            != diff_id.removeprefix("sha256:")
+            or not _safe_oci_layer(unpacked)
+        ):
+            return False
+    annotations = manifest.get("annotations")
+    if not isinstance(annotations, dict):
+        return False
+    for name in (
+        "org.opencontainers.image.source",
+        "pysec.signature-envelope-sha256",
+        "pysec.provenance-sha256",
+    ):
+        if not isinstance(annotations.get(name), str) or not annotations[name]:
+            return False
+    if not all(
+        annotations[name] in blobs
+        for name in ("pysec.signature-envelope-sha256", "pysec.provenance-sha256")
+    ):
+        return False
+    return _oci_attestations_valid(manifest, blobs)
+
+
+def _oci_attestations_valid(
+    manifest: dict[str, Any], blobs: dict[str, bytes]
+) -> bool:
+    annotations = manifest["annotations"]
+    signature_digest = annotations["pysec.signature-envelope-sha256"]
+    provenance_digest = annotations["pysec.provenance-sha256"]
+    image_subject = {
+        "config": manifest["config"],
+        "layers": manifest["layers"],
+        "source": annotations["org.opencontainers.image.source"],
+    }
+    image_subject_sha256 = hashlib.sha256(canonical_bytes(image_subject)).hexdigest()
+    materials_sha256 = hashlib.sha256(
+        canonical_bytes([manifest["config"], *manifest["layers"]])
+    ).hexdigest()
+    try:
+        provenance = strict_loads(blobs[provenance_digest])
+        signature = strict_loads(blobs[signature_digest])
+    except (KeyError, TypeError, ValueError):
+        return False
+    provenance_fields = {
+        "schema_version",
+        "predicate_type",
+        "builder_id",
+        "build_type",
+        "source_uri",
+        "image_subject_sha256",
+        "materials_sha256",
+    }
+    expected_builder = os.environ.get("PYSEC_REQUIREMENTS_OCI_BUILDER_ID", "").strip()
+    if (
+        not isinstance(provenance, dict)
+        or set(provenance) != provenance_fields
+        or provenance.get("schema_version") != "1.0"
+        or provenance.get("predicate_type") != "https://slsa.dev/provenance/v1"
+        or not str(provenance.get("builder_id") or "")
+        or (expected_builder and provenance.get("builder_id") != expected_builder)
+        or not str(provenance.get("build_type") or "")
+        or provenance.get("source_uri")
+        != annotations["org.opencontainers.image.source"]
+        or provenance.get("image_subject_sha256") != image_subject_sha256
+        or provenance.get("materials_sha256") != materials_sha256
+    ):
+        return False
+    signed_subject = {
+        "schema_version": "1.0",
+        "image_subject_sha256": image_subject_sha256,
+        "provenance_sha256": provenance_digest,
+        "builder_id": provenance["builder_id"],
+    }
+    if (
+        not isinstance(signature, dict)
+        or set(signature) != {"subject", "operation_receipt"}
+        or signature.get("subject") != signed_subject
+    ):
+        return False
+    expected_key = os.environ.get(
+        "PYSEC_REQUIREMENTS_OCI_SIGNATURE_KEY_SHA256", ""
+    ).strip().casefold()
+    receipt = signature["operation_receipt"]
+    statement = receipt.get("statement") if isinstance(receipt, dict) else None
+    try:
+        issued = _timestamp((statement or {})["issued_at"], "OCI signature issued_at")
+        verify_operation_receipt(
+            signed_subject,
+            receipt,
+            purpose="requirements-oci-image-signature",
+            observed_at=issued,
+            challenge_sha256=os.environ.get(
+                "PYSEC_SCAN_TIME_CHALLENGE_SHA256", ""
+            )
+            .strip()
+            .casefold(),
+            expected_key_sha256=expected_key,
+        )
+    except (KeyError, TypeError, ValueError):
+        return False
+    return True
+
+
+def _safe_oci_layer(payload: bytes) -> bool:
+    try:
+        with tarfile.open(fileobj=io.BytesIO(payload), mode="r:") as archive:
+            seen: set[str] = set()
+            for member in archive.getmembers():
+                path = Path(member.name)
+                if (
+                    path.is_absolute()
+                    or ".." in path.parts
+                    or member.name in seen
+                    or member.isdev()
+                    or (member.issym() and (Path(member.linkname).is_absolute() or ".." in Path(member.linkname).parts))
+                    or (member.islnk() and (Path(member.linkname).is_absolute() or ".." in Path(member.linkname).parts))
+                ):
+                    return False
+                seen.add(member.name)
+    except (tarfile.TarError, OSError):
+        return False
+    return True
 
 
 def _material_record_valid(

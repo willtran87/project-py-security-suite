@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import hashlib
 import os
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 from .failure_domain import (
     require_independent_failure_domains,
     verify_failure_domain,
+    verify_registered_failure_domain,
 )
 from .operation_receipt import verify_operation_receipt
 from .pinned_command import remote_attested_failure_domain, run_pinned_json_command
@@ -48,18 +49,58 @@ def externalize_and_reverify_bundle(
         response_fields={
             "schema_version",
             "object_id",
+            "object_version",
+            "immutable_uri",
+            "retention_until",
             "bundle_sha256",
             "bundle_size_bytes",
             "authority_key_sha256",
+            "execution_nonce",
             "failure_domain",
             "operation_receipt",
         },
         purpose="git-bundle-cas-publish",
-        subject_extra=("object_id",),
+        subject_extra=(
+            "object_id",
+            "object_version",
+            "immutable_uri",
+            "retention_until",
+            "execution_nonce",
+        ),
+    )
+    try:
+        retention_until = datetime.fromisoformat(
+            str(storage["retention_until"]).replace("Z", "+00:00")
+        )
+    except ValueError as exc:
+        raise ValueError("Git CAS retention is invalid") from exc
+    if (
+        storage["object_id"] != f"sha256:{bundle_sha256}"
+        or not str(storage["object_version"]).strip()
+        or not str(storage["immutable_uri"]).startswith("cas://")
+        or retention_until < datetime.now(UTC) + timedelta(days=30)
+    ):
+        raise ValueError("Git CAS object is not immutable and durably retained")
+    secondary_request = {
+        name: value for name, value in request.items() if name != "bundle_path"
+    }
+    secondary_request.update(
+        {
+            "cas_object_id": storage["object_id"],
+            "cas_object_version": storage["object_version"],
+            "cas_immutable_uri": storage["immutable_uri"],
+            "cas_authority_key_sha256": storage["authority_key_sha256"],
+            "cas_operation_receipt_sha256": hashlib.sha256(
+                canonical_bytes(storage["operation_receipt"])
+            ).hexdigest(),
+            "cas_effective_policy_attestation_sha256": hashlib.sha256(
+                canonical_bytes(storage["effective_policy_attestation"])
+            ).hexdigest(),
+        }
     )
     secondary = _invoke(
         "PYSEC_GIT_SECONDARY_VERIFIER",
-        request,
+        secondary_request,
         response_fields={
             "schema_version",
             "bundle_sha256",
@@ -69,14 +110,24 @@ def externalize_and_reverify_bundle(
             "allowed_signers_sha256",
             "verified_commits",
             "verified_tags",
+            "cas_object_id",
+            "cas_object_version",
+            "cas_bundle_read_sha256",
             "authority_key_sha256",
+            "execution_nonce",
             "failure_domain",
             "operation_receipt",
         },
         purpose="git-bundle-secondary-verification",
+        subject_extra=("cas_bundle_read_sha256", "execution_nonce"),
     )
-    for response in (storage, secondary):
-        for name, expected in request.items():
+    if secondary.get("cas_bundle_read_sha256") != bundle_sha256:
+        raise ValueError("secondary Git verifier did not read the retained CAS bytes")
+    for response, expected_request in (
+        (storage, request),
+        (secondary, secondary_request),
+    ):
+        for name, expected in expected_request.items():
             if (
                 name != "bundle_path"
                 and name in response
@@ -113,7 +164,8 @@ def _invoke(
     purpose: str,
     subject_extra: tuple[str, ...] = (),
 ) -> dict[str, Any]:
-    response = run_pinned_json_command(prefix, dict(request))
+    attested_request = dict(request)
+    response = run_pinned_json_command(prefix, attested_request)
     attestation = response.pop("_effective_policy_attestation", None)
     expected_key = os.environ.get(f"{prefix}_AUTHORITY_KEY_SHA256", "").strip()
     if (
@@ -124,7 +176,13 @@ def _invoke(
     ):
         raise ValueError("external Git replay authority response is invalid")
     failure_domain = verify_failure_domain(response["failure_domain"], prefix)
-    if failure_domain != remote_attested_failure_domain(attestation):
+    verify_registered_failure_domain(response["failure_domain"], expected_key, prefix)
+    attestation_subject = attestation.get("subject") if isinstance(attestation, dict) else None
+    if (
+        failure_domain != remote_attested_failure_domain(attestation)
+        or not isinstance(attestation_subject, dict)
+        or response.get("execution_nonce") != attestation_subject.get("execution_nonce")
+    ):
         raise ValueError("external Git authority failure domain is not attested")
     subject = {name: value for name, value in request.items() if name != "bundle_path"}
     subject.update({name: response[name] for name in subject_extra})
@@ -146,6 +204,7 @@ def _invoke(
         expected_key_sha256=expected_key,
     )
     response["effective_policy_attestation"] = attestation
+    response["attested_request"] = attested_request
     return response
 
 

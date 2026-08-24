@@ -6,7 +6,7 @@ import hashlib
 import base64
 import os
 import sys
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 from pathlib import Path
 
@@ -164,7 +164,11 @@ def test_retained_git_provenance_reverifies_signers_and_manifest(
     storage_key = Ed25519PrivateKey.generate()
     storage_subject = {
         **replay_base,
-        "object_id": "cas/git/bundle-object",
+        "object_id": f"sha256:{replay['bundle_sha256']}",
+        "object_version": "version-1",
+        "immutable_uri": f"cas://git/{replay['bundle_sha256']}",
+        "retention_until": (now + timedelta(days=365)).isoformat(),
+        "execution_nonce": "fixture-execution-nonce",
         "failure_domain": domains[1],
     }
     storage_receipt, storage_key_sha256 = operation_receipt(
@@ -173,30 +177,80 @@ def test_retained_git_provenance_reverifies_signers_and_manifest(
         operation_id="git-cas-1",
         private_key=storage_key,
     )
+    storage_attested_request = {
+        **replay_base,
+        "bundle_path": "C:/sealed/git.bundle",
+        "command_context": {},
+    }
+    storage_attestation = effective_policy_attestation(
+        domains[1], attested_request=storage_attested_request
+    )
     replay["bundle_storage"] = {
         "schema_version": "1.0",
         "object_id": storage_subject["object_id"],
+        "object_version": storage_subject["object_version"],
+        "immutable_uri": storage_subject["immutable_uri"],
+        "retention_until": storage_subject["retention_until"],
         "bundle_sha256": replay["bundle_sha256"],
         "bundle_size_bytes": 1024,
         "authority_key_sha256": storage_key_sha256,
+        "execution_nonce": "fixture-execution-nonce",
         "failure_domain": domains[1],
         "operation_receipt": storage_receipt,
-        "effective_policy_attestation": effective_policy_attestation(domains[1]),
+        "effective_policy_attestation": storage_attestation,
+        "attested_request": storage_attested_request,
     }
     verifier_key = Ed25519PrivateKey.generate()
-    verifier_subject = {**replay_base, "failure_domain": domains[2]}
+    verifier_subject = {
+        **replay_base,
+        "cas_object_id": storage_subject["object_id"],
+        "cas_object_version": storage_subject["object_version"],
+        "cas_immutable_uri": storage_subject["immutable_uri"],
+        "cas_authority_key_sha256": storage_key_sha256,
+        "cas_operation_receipt_sha256": hashlib.sha256(
+            canonical_bytes(storage_receipt)
+        ).hexdigest(),
+        "cas_effective_policy_attestation_sha256": hashlib.sha256(
+            canonical_bytes(storage_attestation)
+        ).hexdigest(),
+        "cas_bundle_read_sha256": replay["bundle_sha256"],
+        "execution_nonce": "fixture-execution-nonce",
+        "failure_domain": domains[2],
+    }
     verifier_receipt, verifier_key_sha256 = operation_receipt(
         verifier_subject,
         purpose="git-bundle-secondary-verification",
         operation_id="git-secondary-1",
         private_key=verifier_key,
     )
+    secondary_attested_request = {
+        **replay_base,
+        "cas_object_id": storage_subject["object_id"],
+        "cas_object_version": storage_subject["object_version"],
+        "cas_immutable_uri": storage_subject["immutable_uri"],
+        "cas_authority_key_sha256": storage_key_sha256,
+        "cas_operation_receipt_sha256": hashlib.sha256(
+            canonical_bytes(storage_receipt)
+        ).hexdigest(),
+        "cas_effective_policy_attestation_sha256": hashlib.sha256(
+            canonical_bytes(storage_attestation)
+        ).hexdigest(),
+        "command_context": {},
+    }
+    secondary_attestation = effective_policy_attestation(
+        domains[2], attested_request=secondary_attested_request
+    )
     replay["secondary_verification"] = {
         **replay_base,
+        "cas_object_id": storage_subject["object_id"],
+        "cas_object_version": storage_subject["object_version"],
+        "cas_bundle_read_sha256": replay["bundle_sha256"],
         "authority_key_sha256": verifier_key_sha256,
+        "execution_nonce": "fixture-execution-nonce",
         "failure_domain": domains[2],
         "operation_receipt": verifier_receipt,
-        "effective_policy_attestation": effective_policy_attestation(domains[2]),
+        "effective_policy_attestation": secondary_attestation,
+        "attested_request": secondary_attested_request,
     }
     environment = authority_environment(
         tmp_path,
@@ -233,7 +287,22 @@ def test_retained_git_provenance_reverifies_signers_and_manifest(
             }
         ],
     }
-    validate_governed_artifacts({"source-inventory.json": inventory})
+    with patch.dict(
+        os.environ,
+        {
+            "PYSEC_SCAN_TIME_CHALLENGE_SHA256": "c" * 64,
+            "PYSEC_SCAN_TIME_CONTEXT_SHA256": "e" * 64,
+        },
+    ):
+        validate_governed_artifacts({"source-inventory.json": inventory})
+        manifest["clean_replay"]["secondary_verification"][
+            "cas_bundle_read_sha256"
+        ] = "0" * 64
+        with pytest.raises(ValueError, match="external Git replay evidence"):
+            validate_governed_artifacts({"source-inventory.json": inventory})
+        manifest["clean_replay"]["secondary_verification"][
+            "cas_bundle_read_sha256"
+        ] = manifest["clean_replay"]["bundle_sha256"]
     original_object = manifest["signature_ledger"]["commits"][0]["object_base64"]
     manifest["signature_ledger"]["commits"][0]["object_base64"] = base64.b64encode(
         b"tampered commit object"
@@ -293,7 +362,14 @@ def test_native_report_replay_payload_is_digest_and_normalization_bound() -> Non
     artifact = PipdeptreeAdapter(ToolConfig(), 4096).derived_artifacts(
         payload, Path(".")
     )["pipdeptree-summary.json"]
-    validate_governed_artifacts({"pipdeptree-summary.json": artifact})
+    with patch.dict(
+        os.environ,
+        {
+            "PYSEC_SCAN_TIME_CHALLENGE_SHA256": "c" * 64,
+            "PYSEC_SCAN_TIME_CONTEXT_SHA256": "e" * 64,
+        },
+    ):
+        validate_governed_artifacts({"pipdeptree-summary.json": artifact})
     artifact["native_report_redacted_utf8"] += " "
     with pytest.raises(ValueError, match="redacted projection commitment"):
         validate_governed_artifacts({"pipdeptree-summary.json": artifact})
@@ -446,11 +522,11 @@ def test_native_report_secrets_use_encrypted_content_addressed_storage(
         f"PRIVATE=base64.b64decode({base64.b64encode(recovery_private_pem).decode()!r})\n"
         f"AUDIT_PRIVATE=base64.b64decode({base64.b64encode(audit_private_pem).decode()!r})\n"
         "canonical=lambda value:json.dumps(value,sort_keys=True,separators=(',',':'),ensure_ascii=False,allow_nan=False).encode()\n"
-        "request=json.loads(base64.b64decode(sys.argv[-1]));stored=(ROOT/request['object_id']).read_bytes()\n"
+        "request=json.loads(base64.b64decode(sys.argv[-1]));execution_subject=json.loads(base64.b64decode(os.environ['PYSEC_PINNED_ATTESTATION_SUBJECT_BASE64']));stored=(ROOT/request['object_id']).read_bytes()\n"
         "object_key=HKDF(algorithm=hashes.SHA256(),length=32,salt=bytes.fromhex(request['expected_plaintext_sha256']),info=b'pysec-native-evidence-object-v1').derive(KEY)\n"
         "plaintext=AESGCM(object_key).decrypt(stored[:12],stored[12:],request['expected_plaintext_sha256'].encode())\n"
         "private=serialization.load_pem_private_key(PRIVATE,password=None);public=private.public_key().public_bytes(serialization.Encoding.PEM,serialization.PublicFormat.SubjectPublicKeyInfo)\n"
-        "subject={'schema_version':'1.0','request_sha256':hashlib.sha256(canonical(request)).hexdigest(),'object_id':request['object_id'],'ciphertext_sha256':hashlib.sha256(stored).hexdigest(),'recovered_plaintext_sha256':hashlib.sha256(plaintext).hexdigest(),'replica_identity_sha256':hashlib.sha256(b'independent-test-replica').hexdigest(),'kms_unwrap_operation_id':'unwrap-test-1'}\n"
+        "subject={'schema_version':'1.0','request_sha256':hashlib.sha256(canonical(request)).hexdigest(),'object_id':request['object_id'],'ciphertext_sha256':hashlib.sha256(stored).hexdigest(),'recovered_plaintext_sha256':hashlib.sha256(plaintext).hexdigest(),'replica_identity_sha256':hashlib.sha256(b'independent-test-replica').hexdigest(),'kms_unwrap_operation_id':'unwrap-test-1','execution_nonce':execution_subject['execution_nonce']}\n"
         "now=datetime.now(UTC);statement={'schema_version':'1.0','purpose':'raw-evidence-clean-host-recovery','subject_sha256':hashlib.sha256(canonical(subject)).hexdigest(),'operation_id':'recovery-test-1','previous_operation_sha256':'','challenge_sha256':request['challenge_sha256'],'trusted_time_sha256':os.environ['PYSEC_SCAN_TIME_CONTEXT_SHA256'],'issued_at':now.isoformat(),'expires_at':(now+timedelta(minutes=5)).isoformat(),'signer_key_sha256':hashlib.sha256(public).hexdigest()}\n"
         "receipt={'schema_version':'1.0','statement':statement,'signature_base64':base64.b64encode(private.sign(canonical(statement))).decode(),'public_key_pem_base64':base64.b64encode(public).decode()}\n"
         "audit_private=serialization.load_pem_private_key(AUDIT_PRIVATE,password=None);audit_public=audit_private.public_key().public_bytes(serialization.Encoding.PEM,serialization.PublicFormat.SubjectPublicKeyInfo)\n"
@@ -458,7 +534,7 @@ def test_native_report_secrets_use_encrypted_content_addressed_storage(
         "audit_statement={'schema_version':'1.0','purpose':'kms-unwrap-provider-audit','subject_sha256':hashlib.sha256(canonical(audit_subject)).hexdigest(),'operation_id':'audit-test-1','previous_operation_sha256':'','challenge_sha256':request['challenge_sha256'],'trusted_time_sha256':os.environ['PYSEC_SCAN_TIME_CONTEXT_SHA256'],'issued_at':now.isoformat(),'expires_at':(now+timedelta(minutes=5)).isoformat(),'signer_key_sha256':hashlib.sha256(audit_public).hexdigest()}\n"
         "audit_receipt={'schema_version':'1.0','statement':audit_statement,'signature_base64':base64.b64encode(audit_private.sign(canonical(audit_statement))).decode(),'public_key_pem_base64':base64.b64encode(audit_public).decode()}\n"
         "audit_event={**audit_subject,'operation_receipt':audit_receipt}\n"
-        "print(json.dumps({'schema_version':'1.0','object_id':subject['object_id'],'ciphertext_sha256':subject['ciphertext_sha256'],'recovered_plaintext_sha256':subject['recovered_plaintext_sha256'],'replica_identity_sha256':subject['replica_identity_sha256'],'kms_unwrap_operation_id':subject['kms_unwrap_operation_id'],'recovery_operation_id':'recovery-test-1','recovery_authority_key_sha256':hashlib.sha256(public).hexdigest(),'recovery_operation_receipt':receipt,'provider_audit_authority_key_sha256':hashlib.sha256(audit_public).hexdigest(),'provider_audit_event':audit_event}))\n",
+        "print(json.dumps({'schema_version':'1.0','object_id':subject['object_id'],'ciphertext_sha256':subject['ciphertext_sha256'],'recovered_plaintext_sha256':subject['recovered_plaintext_sha256'],'replica_identity_sha256':subject['replica_identity_sha256'],'kms_unwrap_operation_id':subject['kms_unwrap_operation_id'],'execution_nonce':subject['execution_nonce'],'recovery_operation_id':'recovery-test-1','recovery_authority_key_sha256':hashlib.sha256(public).hexdigest(),'recovery_operation_receipt':receipt,'provider_audit_authority_key_sha256':hashlib.sha256(audit_public).hexdigest(),'provider_audit_event':audit_event}))\n",
         encoding="utf-8",
     )
     payload = json.dumps(
@@ -548,7 +624,14 @@ def test_native_report_secrets_use_encrypted_content_addressed_storage(
     assert "do-not-publish" not in artifact["native_report_redacted_utf8"]
     object_path = raw_store / artifact["native_report_storage"]["object_id"]
     assert object_path.is_file()
-    validate_governed_artifacts({"pipdeptree-summary.json": artifact})
+    with patch.dict(
+        os.environ,
+        {
+            "PYSEC_SCAN_TIME_CHALLENGE_SHA256": "c" * 64,
+            "PYSEC_SCAN_TIME_CONTEXT_SHA256": "e" * 64,
+        },
+    ):
+        validate_governed_artifacts({"pipdeptree-summary.json": artifact})
     object_path.write_bytes(b"corrupt")
     with (
         patch.dict(

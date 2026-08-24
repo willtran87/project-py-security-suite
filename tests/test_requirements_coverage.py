@@ -139,7 +139,16 @@ class SecurityRequirementsCoverageTests(unittest.TestCase):
         verifier.assert_called_once()
         self.assertTrue(artifact["full_catalog_coverage"])
         self.assertFalse(artifact["complete"])
-        validate_governed_artifacts({"security-requirements-coverage.json": artifact})
+        with patch.dict(
+            os.environ,
+            {
+                "PYSEC_SCAN_TIME_CHALLENGE_SHA256": "c" * 64,
+                "PYSEC_SCAN_TIME_CONTEXT_SHA256": "e" * 64,
+            },
+        ):
+            validate_governed_artifacts(
+                {"security-requirements-coverage.json": artifact}
+            )
 
     def test_pinned_catalogs_and_replayed_assertions_establish_assessed_coverage(
         self,
@@ -498,4 +507,13 @@ class SecurityRequirementsCoverageTests(unittest.TestCase):
         self.assertEqual(verifier.call_count, 2)
         self.assertTrue(artifact["complete"])
         self.assertEqual(artifact["requirements"][0]["status"], "passed")
-        validate_governed_artifacts({"security-requirements-coverage.json": artifact})
+        with patch.dict(
+            os.environ,
+            {
+                "PYSEC_SCAN_TIME_CHALLENGE_SHA256": "c" * 64,
+                "PYSEC_SCAN_TIME_CONTEXT_SHA256": "e" * 64,
+            },
+        ):
+            validate_governed_artifacts(
+                {"security-requirements-coverage.json": artifact}
+            )
