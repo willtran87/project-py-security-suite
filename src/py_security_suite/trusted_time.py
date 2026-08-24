@@ -296,7 +296,8 @@ def _advance_time_state(challenge_sha256: str, result: dict[str, str]) -> None:
             "(scope TEXT PRIMARY KEY, observed_at TEXT NOT NULL, "
             "challenge_sha256 TEXT NOT NULL, receipt_sha256 TEXT NOT NULL, "
             "sequence INTEGER NOT NULL DEFAULT 0, "
-            "checkpoint_sha256 TEXT NOT NULL DEFAULT '')"
+            "checkpoint_sha256 TEXT NOT NULL DEFAULT '', "
+            "external_receipt BLOB NOT NULL DEFAULT '')"
         )
         columns = {
             str(row[1])
@@ -312,10 +313,15 @@ def _advance_time_state(challenge_sha256: str, result: dict[str, str]) -> None:
                 "ALTER TABLE trusted_time_state ADD COLUMN checkpoint_sha256 TEXT "
                 "NOT NULL DEFAULT ''"
             )
+        if "external_receipt" not in columns:
+            connection.execute(
+                "ALTER TABLE trusted_time_state ADD COLUMN external_receipt BLOB "
+                "NOT NULL DEFAULT ''"
+            )
         connection.execute("BEGIN IMMEDIATE")
         row = connection.execute(
             "SELECT observed_at, challenge_sha256, receipt_sha256, sequence, "
-            "checkpoint_sha256 "
+            "checkpoint_sha256, external_receipt "
             "FROM trusted_time_state WHERE scope = 'global'"
         ).fetchone()
         if row is None:
@@ -343,6 +349,11 @@ def _advance_time_state(challenge_sha256: str, result: dict[str, str]) -> None:
             connection.execute("ROLLBACK")
             raise ValueError("trusted-time rollback or fork detected")
         if row is not None and challenge_sha256 == row[1] and digest == row[2]:
+            if os.environ.get(
+                "PYSEC_TRUSTED_TIME_REQUIRE_EXTERNAL_CHECKPOINT", ""
+            ).strip() == "1" and not bytes(row[5]):
+                connection.execute("ROLLBACK")
+                raise ValueError("trusted-time external checkpoint is absent")
             connection.execute("COMMIT")
             return
         sequence += 1
@@ -358,15 +369,45 @@ def _advance_time_state(challenge_sha256: str, result: dict[str, str]) -> None:
                 }
             )
         ).hexdigest()
+        # Import lazily: the checkpoint client uses the pinned-command runtime,
+        # whose trust bootstrap imports this module for RFC 3161 verification.
+        from .checkpoint_authority import publish_checkpoint
+
+        external_receipt = publish_checkpoint(
+            "PYSEC_TRUSTED_TIME_CHECKPOINT",
+            {
+                "schema_version": "1.0",
+                "state_kind": "trusted-time",
+                "sequence": sequence,
+                "checkpoint_sha256": checkpoint,
+                "challenge_sha256": challenge_sha256,
+                "trusted_time_sha256": digest,
+            },
+            required=os.environ.get(
+                "PYSEC_TRUSTED_TIME_REQUIRE_EXTERNAL_CHECKPOINT", ""
+            ).strip()
+            == "1",
+        )
+        external_bytes = (
+            canonical_bytes(external_receipt) if external_receipt is not None else b""
+        )
         connection.execute(
             "INSERT INTO trusted_time_state "
             "(scope, observed_at, challenge_sha256, receipt_sha256, sequence, "
-            "checkpoint_sha256) VALUES ('global', ?, ?, ?, ?, ?) "
+            "checkpoint_sha256, external_receipt) VALUES ('global', ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT(scope) DO UPDATE SET observed_at=excluded.observed_at, "
             "challenge_sha256=excluded.challenge_sha256, "
             "receipt_sha256=excluded.receipt_sha256, sequence=excluded.sequence, "
-            "checkpoint_sha256=excluded.checkpoint_sha256",
-            (observed, challenge_sha256, digest, sequence, checkpoint),
+            "checkpoint_sha256=excluded.checkpoint_sha256, "
+            "external_receipt=excluded.external_receipt",
+            (
+                observed,
+                challenge_sha256,
+                digest,
+                sequence,
+                checkpoint,
+                external_bytes,
+            ),
         )
         connection.execute("COMMIT")
     finally:

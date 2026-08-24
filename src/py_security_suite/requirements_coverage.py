@@ -1180,19 +1180,23 @@ def _procedure_manifests_valid(execution: dict[str, Any]) -> bool:
     for item in runtime["closure_manifest"]:
         if not _material_record_valid(item, closure_paths, "path"):
             return False
+    if not _runtime_sbom_covers_closure(sbom, runtime["closure_manifest"]):
+        return False
+    if runtime["kind"] == "container" and not _oci_manifest_valid(image_manifest):
+        return False
     environment_names: set[str] = set()
     for item in environment:
+        common_fields = {
+            "name",
+            "value_commitment",
+            "classification",
+            "commitment_algorithm",
+            "commitment_key_sha256",
+            "nonce_sha256",
+        }
         if (
             not isinstance(item, dict)
-            or set(item)
-            != {
-                "name",
-                "value_commitment",
-                "classification",
-                "commitment_algorithm",
-                "commitment_key_sha256",
-                "nonce_sha256",
-            }
+            or not common_fields.issubset(item)
             or not str(item["name"])
             or str(item["name"]) in environment_names
             or not _digest(str(item["value_commitment"]))
@@ -1200,7 +1204,8 @@ def _procedure_manifests_valid(execution: dict[str, Any]) -> bool:
         ):
             return False
         if item["classification"] == "public-commitment" and (
-            item["commitment_algorithm"] != "sha256"
+            set(item) != common_fields
+            or item["commitment_algorithm"] != "sha256"
             or item["commitment_key_sha256"] != ""
             or item["nonce_sha256"] != ""
         ):
@@ -1212,11 +1217,39 @@ def _procedure_manifests_valid(execution: dict[str, Any]) -> bool:
                 .casefold()
             )
             if (
-                item["commitment_algorithm"] != "hmac-sha256"
+                set(item)
+                != common_fields
+                | {
+                    "verification_authority_key_sha256",
+                    "verification_operation_receipt",
+                }
+                or item["commitment_algorithm"] != "hmac-sha256"
                 or not _digest(expected_key)
                 or item["commitment_key_sha256"] != expected_key
                 or not _digest(str(item["nonce_sha256"]))
             ):
+                return False
+            receipt = item["verification_operation_receipt"]
+            statement = receipt.get("statement") if isinstance(receipt, dict) else None
+            signer = str(item["verification_authority_key_sha256"])
+            try:
+                issued = _timestamp(
+                    (statement or {})["issued_at"],
+                    "secret commitment verification issued_at",
+                )
+                verify_operation_receipt(
+                    {name: item[name] for name in common_fields},
+                    receipt,
+                    purpose="requirements-secret-commitment-verification",
+                    observed_at=issued,
+                    challenge_sha256=os.environ.get(
+                        "PYSEC_SCAN_TIME_CHALLENGE_SHA256", ""
+                    )
+                    .strip()
+                    .casefold(),
+                    expected_key_sha256=signer,
+                )
+            except (KeyError, TypeError, ValueError):
                 return False
         environment_names.add(str(item["name"]))
     asset_names: set[str] = set()
@@ -1226,6 +1259,76 @@ def _procedure_manifests_valid(execution: dict[str, Any]) -> bool:
         ):
             return False
     return True
+
+
+def _runtime_sbom_covers_closure(payload: bytes, closure: list[dict[str, Any]]) -> bool:
+    """Require an explicit CycloneDX component for every retained runtime file."""
+
+    try:
+        document = strict_loads(payload)
+    except (TypeError, ValueError):
+        return False
+    if (
+        not isinstance(document, dict)
+        or document.get("bomFormat") != "CycloneDX"
+        or not isinstance(document.get("specVersion"), str)
+        or not isinstance(document.get("components"), list)
+    ):
+        return False
+    covered: dict[str, str] = {}
+    for component in document["components"]:
+        if not isinstance(component, dict):
+            return False
+        properties = component.get("properties", [])
+        hashes = component.get("hashes", [])
+        if not isinstance(properties, list) or not isinstance(hashes, list):
+            return False
+        paths = [
+            str(item.get("value"))
+            for item in properties
+            if isinstance(item, dict) and item.get("name") == "pysec:closure-path"
+        ]
+        digests = [
+            str(item.get("content", "")).casefold()
+            for item in hashes
+            if isinstance(item, dict)
+            and str(item.get("alg", "")).replace("-", "").casefold() == "sha256"
+        ]
+        if len(paths) > 1 or len(digests) > 1:
+            return False
+        if paths:
+            if not digests or paths[0] in covered or not _digest(digests[0]):
+                return False
+            covered[paths[0]] = digests[0]
+    return covered == {
+        str(item["path"]): str(item["sha256"]).casefold() for item in closure
+    }
+
+
+def _oci_manifest_valid(payload: bytes) -> bool:
+    try:
+        manifest = strict_loads(payload)
+    except (TypeError, ValueError):
+        return False
+    if (
+        not isinstance(manifest, dict)
+        or manifest.get("schemaVersion") != 2
+        or not isinstance(manifest.get("config"), dict)
+        or not isinstance(manifest.get("layers"), list)
+    ):
+        return False
+    descriptors = [manifest["config"], *manifest["layers"]]
+    return bool(manifest["layers"]) and all(
+        isinstance(item, dict)
+        and isinstance(item.get("size"), int)
+        and item["size"] >= 0
+        and isinstance(item.get("mediaType"), str)
+        and bool(item["mediaType"])
+        and isinstance(item.get("digest"), str)
+        and item["digest"].startswith("sha256:")
+        and _digest(item["digest"].removeprefix("sha256:").casefold())
+        for item in descriptors
+    )
 
 
 def _material_record_valid(

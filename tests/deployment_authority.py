@@ -31,11 +31,24 @@ def pinned_command_sandbox_environment(
     )
     attestor_key_sha256 = hashlib.sha256(attestor_public_bytes).hexdigest()
     embedded_private = base64.b64encode(attestor_private_bytes).decode("ascii")
+    remote_private = Ed25519PrivateKey.generate()
+    remote_private_bytes = remote_private.private_bytes(
+        serialization.Encoding.PEM,
+        serialization.PrivateFormat.PKCS8,
+        serialization.NoEncryption(),
+    )
+    remote_public_bytes = remote_private.public_key().public_bytes(
+        serialization.Encoding.PEM,
+        serialization.PublicFormat.SubjectPublicKeyInfo,
+    )
+    remote_key_sha256 = hashlib.sha256(remote_public_bytes).hexdigest()
+    embedded_remote_private = base64.b64encode(remote_private_bytes).decode("ascii")
     launcher.write_text(
         "import base64,hashlib,json,os,platform,subprocess,sys\n"
         "from datetime import UTC,datetime,timedelta\n"
         "from cryptography.hazmat.primitives import serialization\n"
         f"PRIVATE={embedded_private!r}\n"
+        f"REMOTE_PRIVATE={embedded_remote_private!r}\n"
         "canonical=lambda value: json.dumps(value,sort_keys=True,separators=(',',':'),ensure_ascii=False,allow_nan=False).encode()\n"
         "child=subprocess.Popen(sys.argv[1:]);returncode=child.wait()\n"
         "subject=json.loads(base64.b64decode(os.environ['PYSEC_PINNED_ATTESTATION_SUBJECT_BASE64']))\n"
@@ -43,11 +56,15 @@ def pinned_command_sandbox_environment(
         "platform_id={'linux':'linux','win32':'win32','darwin':'darwin'}[sys.platform]\n"
         "source={'linux':'linux-procfs-seccomp','win32':'windows-job-object-query','darwin':'macos-sandbox-audit'}[platform_id]\n"
         "measurement={'schema_version':'1.0','platform':platform_id,'child_process_id':child.pid,'child_exit_code':returncode,'kernel_identity_sha256':hashlib.sha256(platform.platform().encode()).hexdigest(),'sandbox_identity_sha256':subject['sandbox_identity_sha256'],'controls':controls}\n"
-        "policy={**controls,'measurement_source':source,'measurement_artifact':measurement,'measurement_artifact_sha256':hashlib.sha256(canonical(measurement)).hexdigest()}\n"
+        "quote=b'test-tpm2-quote-v1';remote_subject={'schema_version':'1.0','format':'tpm2-quote','purpose':'sandbox-effective-policy','challenge_sha256':os.environ['PYSEC_PINNED_ATTESTATION_CHALLENGE_SHA256'],'host_identity_sha256':hashlib.sha256(platform.node().encode()).hexdigest(),'organization':'independent-host-attestor','control_plane_sha256':hashlib.sha256(b'test-control-plane').hexdigest(),'implementation_sha256':hashlib.sha256(b'test-tpm-verifier').hexdigest(),'secure_boot':True,'measured_boot':True,'pcrs_sha256':hashlib.sha256(b'pcr0:pcr7').hexdigest(),'quote_base64':base64.b64encode(quote).decode(),'quote_sha256':hashlib.sha256(quote).hexdigest()}\n"
+        "remote_private=serialization.load_pem_private_key(base64.b64decode(REMOTE_PRIVATE),password=None);remote_public=remote_private.public_key().public_bytes(serialization.Encoding.PEM,serialization.PublicFormat.SubjectPublicKeyInfo);now=datetime.now(UTC)\n"
+        "remote_statement={'schema_version':'1.0','purpose':'sandbox-remote-attestation','subject_sha256':hashlib.sha256(canonical(remote_subject)).hexdigest(),'operation_id':'remote-'+subject['execution_nonce'],'previous_operation_sha256':'','challenge_sha256':os.environ['PYSEC_PINNED_ATTESTATION_CHALLENGE_SHA256'],'trusted_time_sha256':os.environ['PYSEC_SCAN_TIME_CONTEXT_SHA256'],'issued_at':now.isoformat(),'expires_at':(now+timedelta(minutes=5)).isoformat(),'signer_key_sha256':hashlib.sha256(remote_public).hexdigest()}\n"
+        "remote_receipt={'schema_version':'1.0','statement':remote_statement,'signature_base64':base64.b64encode(remote_private.sign(canonical(remote_statement))).decode(),'public_key_pem_base64':base64.b64encode(remote_public).decode()}\n"
+        "policy={**controls,'measurement_source':source,'measurement_artifact':measurement,'measurement_artifact_sha256':hashlib.sha256(canonical(measurement)).hexdigest(),'remote_attestation':{'subject':remote_subject,'operation_receipt':remote_receipt}}\n"
         "subject.update({'exit_code':returncode,'attestor_process_id':os.getpid(),'policy_observations':policy})\n"
         "private=serialization.load_pem_private_key(base64.b64decode(PRIVATE),password=None)\n"
         "public=private.public_key().public_bytes(serialization.Encoding.PEM,serialization.PublicFormat.SubjectPublicKeyInfo)\n"
-        "now=datetime.now(UTC);statement={'schema_version':'1.0','purpose':'pinned-command-effective-policy','subject_sha256':hashlib.sha256(canonical(subject)).hexdigest(),'operation_id':'pinned-'+subject['execution_nonce'],'previous_operation_sha256':'','challenge_sha256':os.environ['PYSEC_PINNED_ATTESTATION_CHALLENGE_SHA256'],'issued_at':now.isoformat(),'expires_at':(now+timedelta(minutes=5)).isoformat(),'signer_key_sha256':hashlib.sha256(public).hexdigest()}\n"
+        "now=datetime.now(UTC);statement={'schema_version':'1.0','purpose':'pinned-command-effective-policy','subject_sha256':hashlib.sha256(canonical(subject)).hexdigest(),'operation_id':'pinned-'+subject['execution_nonce'],'previous_operation_sha256':'','challenge_sha256':os.environ['PYSEC_PINNED_ATTESTATION_CHALLENGE_SHA256'],'trusted_time_sha256':os.environ['PYSEC_SCAN_TIME_CONTEXT_SHA256'],'issued_at':now.isoformat(),'expires_at':(now+timedelta(minutes=5)).isoformat(),'signer_key_sha256':hashlib.sha256(public).hexdigest()}\n"
         "receipt={'schema_version':'1.0','statement':statement,'signature_base64':base64.b64encode(private.sign(canonical(statement))).decode(),'public_key_pem_base64':base64.b64encode(public).decode()}\n"
         "open(os.environ['PYSEC_PINNED_ATTESTATION_PATH'],'wb').write(canonical({'subject':subject,'operation_receipt':receipt}))\n"
         "raise SystemExit(returncode)\n",
@@ -67,12 +84,14 @@ def pinned_command_sandbox_environment(
         )
     ).hexdigest()
     environment = {
+        "PYSEC_SCAN_TIME_CONTEXT_SHA256": "e" * 64,
         f"{prefix}_ALLOWED_ENDPOINTS_JSON": json.dumps(allowed_endpoints),
         f"{prefix}_MTLS_IDENTITY_SHA256": mtls_identity,
         f"{prefix}_SANDBOX_IDENTITY_SHA256": sandbox_identity,
         f"{prefix}_SANDBOX_COMMAND_JSON": json.dumps([sys.executable, *launcher_argv]),
         f"{prefix}_SANDBOX_EXECUTABLE_SHA256": executable_sha256,
         f"{prefix}_EXECUTION_ATTESTATION_KEY_SHA256": attestor_key_sha256,
+        f"{prefix}_REMOTE_ATTESTATION_KEY_SHA256": remote_key_sha256,
     }
     context: dict[str, object] = {
         "schema_version": "1.0",
@@ -83,6 +102,7 @@ def pinned_command_sandbox_environment(
         "sandbox_executable_sha256": executable_sha256,
         "sandbox_launcher_argv": launcher_argv,
         "effective_policy_attestor_key_sha256": attestor_key_sha256,
+        "remote_attestation_key_sha256": remote_key_sha256,
     }
     asset = {
         "path": str(launcher),
@@ -116,6 +136,7 @@ def operation_receipt(
         "operation_id": operation_id,
         "previous_operation_sha256": previous_operation_sha256,
         "challenge_sha256": challenge,
+        "trusted_time_sha256": "e" * 64,
         "issued_at": now.isoformat(),
         "expires_at": (now + timedelta(hours=1)).isoformat(),
         "signer_key_sha256": key_sha256,
@@ -131,6 +152,90 @@ def operation_receipt(
         },
         key_sha256,
     )
+
+
+def effective_policy_attestation(
+    failure_domain: dict[str, str], *, challenge: str = "c" * 64
+) -> dict[str, object]:
+    """Create a portable kernel and remote-attestation fixture."""
+
+    attestor = Ed25519PrivateKey.generate()
+    attestor_public = attestor.public_key().public_bytes(
+        serialization.Encoding.PEM,
+        serialization.PublicFormat.SubjectPublicKeyInfo,
+    )
+    remote = Ed25519PrivateKey.generate()
+    sandbox_identity = "9" * 64
+    controls = {
+        "network_allowlist_enforced": True,
+        "filesystem_read_only": True,
+        "credentials_isolated": True,
+        "child_process_confined": True,
+    }
+    platform_id = "win32"
+    measurement = {
+        "schema_version": "1.0",
+        "platform": platform_id,
+        "child_process_id": 1234,
+        "child_exit_code": 0,
+        "kernel_identity_sha256": "8" * 64,
+        "sandbox_identity_sha256": sandbox_identity,
+        "controls": controls,
+    }
+    quote = b"portable-test-tpm2-quote"
+    remote_subject = {
+        "schema_version": "1.0",
+        "format": "tpm2-quote",
+        "purpose": "sandbox-effective-policy",
+        "challenge_sha256": challenge,
+        **failure_domain,
+        "secure_boot": True,
+        "measured_boot": True,
+        "pcrs_sha256": "7" * 64,
+        "quote_base64": base64.b64encode(quote).decode(),
+        "quote_sha256": hashlib.sha256(quote).hexdigest(),
+    }
+    remote_receipt, remote_key = operation_receipt(
+        remote_subject,
+        purpose="sandbox-remote-attestation",
+        challenge=challenge,
+        operation_id="remote-attestation-fixture",
+        private_key=remote,
+    )
+    policy = {
+        **controls,
+        "measurement_source": "windows-job-object-query",
+        "measurement_artifact": measurement,
+        "measurement_artifact_sha256": hashlib.sha256(
+            canonical_bytes(measurement)
+        ).hexdigest(),
+        "remote_attestation": {
+            "subject": remote_subject,
+            "operation_receipt": remote_receipt,
+        },
+    }
+    subject = {
+        "schema_version": "1.0",
+        "request_sha256": "1" * 64,
+        "command_context_sha256": "2" * 64,
+        "execution_nonce": "fixture-execution-nonce",
+        "launcher_sha256": "3" * 64,
+        "executable_sha256": "4" * 64,
+        "attestor_key_sha256": hashlib.sha256(attestor_public).hexdigest(),
+        "sandbox_identity_sha256": sandbox_identity,
+        "remote_attestation_key_sha256": remote_key,
+        "exit_code": 0,
+        "attestor_process_id": 1233,
+        "policy_observations": policy,
+    }
+    receipt, _ = operation_receipt(
+        subject,
+        purpose="pinned-command-effective-policy",
+        challenge=challenge,
+        operation_id="effective-policy-fixture",
+        private_key=attestor,
+    )
+    return {"subject": subject, "operation_receipt": receipt}
 
 
 def authority_environment(
@@ -175,6 +280,7 @@ def authority_environment(
     )
     return {
         "PYSEC_SCAN_TIME_CHALLENGE_SHA256": challenge,
+        "PYSEC_SCAN_TIME_CONTEXT_SHA256": "e" * 64,
         f"{prefix}_RECEIPT_PATH": str(receipt),
         f"{prefix}_RECEIPT_SHA256": hashlib.sha256(receipt.read_bytes()).hexdigest(),
         f"{prefix}_KEY_PATH": str(public),

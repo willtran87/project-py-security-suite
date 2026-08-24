@@ -21,12 +21,22 @@ from .execution import CommandEnvironment, run_command
 from .strict_json import canonical_bytes
 from .deployment_receipt import verify_deployment_receipt
 from .operation_receipt import verify_operation_receipt
+from .failure_domain import require_independent_failure_domains, verify_failure_domain
+from .pinned_command import command_configured, run_pinned_json_command
 from .strict_json import loads as strict_loads
 
 
 _MAX_FILE_BYTES = 1024 * 1024
 _MAX_FILES = 50_000
 _MAX_TOTAL_BYTES = 64 * 1024 * 1024
+
+
+def _digest(value: str) -> bool:
+    return len(value) == 64 and all(
+        character in "0123456789abcdef" for character in value
+    )
+
+
 _BYTECODE_ANALYZER = r"""
 import dis, json, marshal, sys, types
 data = open(sys.argv[1], "rb").read()
@@ -286,9 +296,11 @@ def build_boundary_graph(
             "files_sha256": hashlib.sha256(canonical_bytes(ordered_files)).hexdigest(),
         }
     parser_provenance = _semantic_parser_provenance(languages)
-    compiler_evidence, compiler_authority = _compiler_semantic_evidence(
-        language_file_sets,
-        required=require_governed_parsers and bool(languages),
+    compiler_evidence, compiler_authority, compiler_reexecution = (
+        _compiler_semantic_evidence(
+            language_file_sets,
+            required=require_governed_parsers and bool(languages),
+        )
     )
     subject = {
         "schema_version": "1.0",
@@ -316,6 +328,7 @@ def build_boundary_graph(
         or not bool(languages),
         "compiler_semantic_evidence": compiler_evidence,
         "compiler_semantic_authority_receipt": compiler_authority,
+        "compiler_semantic_reexecution": compiler_reexecution,
         "heuristic_languages": heuristic_languages,
         "special_surfaces": special_surfaces,
         "special_surface_complete": special_surface_complete,
@@ -369,9 +382,9 @@ def _semantic_parser_provenance(languages: Counter[str]) -> list[dict[str, str]]
 
 def _compiler_semantic_evidence(
     language_file_sets: dict[str, dict[str, Any]], *, required: bool
-) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None, dict[str, Any] | None]:
     if not required:
-        return None, None
+        return None, None, None
     raw_path = os.environ.get("PYSEC_COMPILER_SEMANTIC_EVIDENCE_PATH", "").strip()
     expected = (
         os.environ.get("PYSEC_COMPILER_SEMANTIC_EVIDENCE_SHA256", "").strip().casefold()
@@ -400,7 +413,118 @@ def _compiler_semantic_evidence(
         purpose="compiler-semantic-evidence",
         environment_prefix="PYSEC_COMPILER_SEMANTIC_AUTHORITY",
     )
-    return value, authority
+    reexecution = _compiler_semantic_reexecution(value, language_file_sets, path)
+    return value, authority, reexecution
+
+
+def _compiler_semantic_reexecution(
+    evidence: dict[str, Any],
+    language_file_sets: dict[str, dict[str, Any]],
+    evidence_path: Path,
+) -> dict[str, Any]:
+    prefix = "PYSEC_COMPILER_SEMANTIC_REPLAY"
+    if not command_configured(prefix):
+        raise ValueError("compiler semantic hermetic reexecution is unavailable")
+    expected = {
+        "schema_version": "1.0",
+        "evidence_sha256": hashlib.sha256(canonical_bytes(evidence)).hexdigest(),
+        "language_file_sets_sha256": hashlib.sha256(
+            canonical_bytes(language_file_sets)
+        ).hexdigest(),
+        "frontends_sha256": hashlib.sha256(
+            canonical_bytes(evidence["frontends"])
+        ).hexdigest(),
+    }
+    request = {
+        **expected,
+        "operation": "hermetic-compiler-reexecution",
+        "evidence_path": str(evidence_path),
+    }
+    response = run_pinned_json_command(prefix, request)
+    attestation = response.pop("_effective_policy_attestation", None)
+    response["effective_policy_attestation"] = attestation
+    verify_compiler_semantic_reexecution(response, evidence, language_file_sets)
+    return response
+
+
+def verify_compiler_semantic_reexecution(
+    value: object, evidence: object, language_file_sets: object
+) -> None:
+    fields = {
+        "schema_version",
+        "status",
+        "evidence_sha256",
+        "language_file_sets_sha256",
+        "frontends_sha256",
+        "authority_key_sha256",
+        "failure_domain",
+        "operation_receipt",
+        "effective_policy_attestation",
+    }
+    if (
+        not isinstance(value, dict)
+        or set(value) != fields
+        or value.get("schema_version") != "1.0"
+        or value.get("status") != "reexecuted-and-matched"
+        or not isinstance(evidence, dict)
+        or not isinstance(language_file_sets, dict)
+        or value.get("evidence_sha256")
+        != hashlib.sha256(canonical_bytes(evidence)).hexdigest()
+        or value.get("language_file_sets_sha256")
+        != hashlib.sha256(canonical_bytes(language_file_sets)).hexdigest()
+        or value.get("frontends_sha256")
+        != hashlib.sha256(canonical_bytes(evidence.get("frontends"))).hexdigest()
+        or not _digest(str(value.get("authority_key_sha256") or ""))
+    ):
+        raise ValueError("compiler semantic hermetic reexecution is invalid")
+    domain = verify_failure_domain(
+        value["failure_domain"], "compiler reexecution authority"
+    )
+    for frontend in evidence["frontends"]:
+        require_independent_failure_domains(
+            frontend["primary_failure_domain"],
+            domain,
+            labels=("primary compiler", "reexecution authority"),
+        )
+        require_independent_failure_domains(
+            frontend["secondary_failure_domain"],
+            domain,
+            labels=("secondary compiler", "reexecution authority"),
+        )
+    subject = {
+        "schema_version": "1.0",
+        "status": value["status"],
+        "evidence_sha256": value["evidence_sha256"],
+        "language_file_sets_sha256": value["language_file_sets_sha256"],
+        "frontends_sha256": value["frontends_sha256"],
+        "failure_domain": domain,
+    }
+    receipt = value["operation_receipt"]
+    statement = receipt.get("statement") if isinstance(receipt, dict) else None
+    try:
+        observed = datetime.fromisoformat(
+            str((statement or {})["issued_at"]).replace("Z", "+00:00")
+        )
+    except (KeyError, ValueError) as exc:
+        raise ValueError("compiler reexecution authority time is invalid") from exc
+    verify_operation_receipt(
+        subject,
+        receipt,
+        purpose="compiler-semantic-hermetic-reexecution",
+        observed_at=observed,
+        challenge_sha256=os.environ.get("PYSEC_SCAN_TIME_CHALLENGE_SHA256", "").strip(),
+        expected_key_sha256=str(value["authority_key_sha256"]),
+    )
+    attestation = value["effective_policy_attestation"]
+    attestation_subject = (
+        attestation.get("subject") if isinstance(attestation, dict) else None
+    )
+    if not isinstance(attestation_subject, dict):
+        raise ValueError("compiler reexecution policy attestation is invalid")
+    from .pinned_command import verify_retained_effective_policy_attestation
+
+    if domain != verify_retained_effective_policy_attestation(attestation):
+        raise ValueError("compiler reexecution failure domain is not attested")
 
 
 def verify_compiler_semantic_evidence(
@@ -440,8 +564,10 @@ def verify_compiler_semantic_evidence(
             "secondary_analysis_artifact_base64",
             "secondary_analysis_artifact_sha256",
             "primary_authority_key_sha256",
+            "primary_failure_domain",
             "primary_operation_receipt",
             "secondary_authority_key_sha256",
+            "secondary_failure_domain",
             "secondary_operation_receipt",
             "taint_paths",
             "taint_paths_sha256",
@@ -519,6 +645,11 @@ def verify_compiler_semantic_evidence(
             raise ValueError(
                 "compiler analysis engines require independent authorities"
             )
+        require_independent_failure_domains(
+            item["primary_failure_domain"],
+            item["secondary_failure_domain"],
+            labels=("primary compiler", "secondary compiler"),
+        )
         _verify_taint_paths(item["taint_paths"], item["semantic_ledger"])
         observed.add(language)
     if observed != expected_languages:
@@ -565,6 +696,14 @@ def _verify_analysis_artifact(item: dict[str, Any], prefix: str) -> dict[str, An
             "files_sha256",
             "semantic_ledger",
             "taint_paths",
+            "engine_base64",
+            "configuration_base64",
+            "runtime_closure",
+            "runtime_closure_sha256",
+            "argv",
+            "environment",
+            "sandbox_policy",
+            "canary_results",
         }
         or replay.get("schema_version") != "1.0"
         or replay.get("engine") != item[engine_field]
@@ -573,7 +712,85 @@ def _verify_analysis_artifact(item: dict[str, Any], prefix: str) -> dict[str, An
         or replay.get("files_sha256") != item["files_sha256"]
     ):
         raise ValueError("compiler analysis replay artifact contract is invalid")
+    try:
+        engine_bytes = base64.b64decode(str(replay["engine_base64"]), validate=True)
+        configuration_bytes = base64.b64decode(
+            str(replay["configuration_base64"]), validate=True
+        )
+    except (TypeError, ValueError) as exc:
+        raise ValueError("compiler replay materials are invalid") from exc
+    if (
+        not engine_bytes
+        or len(engine_bytes) > 16 * 1024 * 1024
+        or hashlib.sha256(engine_bytes).hexdigest() != replay["engine_sha256"]
+        or not configuration_bytes
+        or len(configuration_bytes) > 16 * 1024 * 1024
+        or hashlib.sha256(configuration_bytes).hexdigest()
+        != replay["configuration_sha256"]
+        or not isinstance(replay["runtime_closure"], list)
+        or replay["runtime_closure_sha256"]
+        != hashlib.sha256(canonical_bytes(replay["runtime_closure"])).hexdigest()
+        or not _replay_materials_valid(replay["runtime_closure"])
+        or not isinstance(replay["argv"], list)
+        or not replay["argv"]
+        or any(
+            not isinstance(argument, str) or not argument for argument in replay["argv"]
+        )
+        or not isinstance(replay["environment"], list)
+        or replay["sandbox_policy"]
+        != {
+            "network": "deny",
+            "filesystem": "read-only",
+            "process": "confined",
+            "credentials": "isolated",
+        }
+        or not _canary_results_valid(replay["canary_results"])
+    ):
+        raise ValueError("compiler hermetic reexecution materials are invalid")
     return replay
+
+
+def _replay_materials_valid(value: list[object]) -> bool:
+    identities: set[str] = set()
+    for item in value:
+        if not isinstance(item, dict) or set(item) != {
+            "path",
+            "sha256",
+            "content_base64",
+        }:
+            return False
+        path = str(item["path"])
+        try:
+            content = base64.b64decode(str(item["content_base64"]), validate=True)
+        except (TypeError, ValueError):
+            return False
+        if (
+            not path
+            or path.startswith("/")
+            or ".." in Path(path).parts
+            or path in identities
+            or len(content) > 16 * 1024 * 1024
+            or hashlib.sha256(content).hexdigest() != item["sha256"]
+        ):
+            return False
+        identities.add(path)
+    return bool(identities)
+
+
+def _canary_results_valid(value: object) -> bool:
+    if not isinstance(value, dict) or set(value) != {
+        "positive_fixture_sha256",
+        "negative_fixture_sha256",
+        "positive_detected",
+        "negative_clean",
+    }:
+        return False
+    return bool(
+        _digest(str(value["positive_fixture_sha256"]))
+        and _digest(str(value["negative_fixture_sha256"]))
+        and value["positive_detected"] is True
+        and value["negative_clean"] is True
+    )
 
 
 def _verify_engine_operation(
@@ -588,6 +805,7 @@ def _verify_engine_operation(
         "configuration_sha256": replay["configuration_sha256"],
         "files_sha256": replay["files_sha256"],
         "analysis_artifact_sha256": artifact_sha256,
+        "failure_domain": item[f"{prefix}_failure_domain"],
     }
     receipt = item[f"{prefix}_operation_receipt"]
     statement = receipt.get("statement") if isinstance(receipt, dict) else None

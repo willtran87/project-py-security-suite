@@ -412,6 +412,53 @@ def _scan_sealed_project(
                 "production replay and trusted-time state lacks deployment anchors: "
                 + ", ".join(missing_state)
             )
+        external_checkpoints = (
+            (
+                "PYSEC_OPERATION_RECEIPT_CHECKPOINT",
+                "PYSEC_OPERATION_RECEIPT_REQUIRE_EXTERNAL_CHECKPOINT",
+            ),
+            (
+                "PYSEC_TRUSTED_TIME_CHECKPOINT",
+                "PYSEC_TRUSTED_TIME_REQUIRE_EXTERNAL_CHECKPOINT",
+            ),
+        )
+        missing_external = [
+            prefix
+            for prefix, required_name in external_checkpoints
+            if os.environ.get(required_name) != "1"
+            or not os.environ.get(f"{prefix}_COMMAND_JSON")
+            or not os.environ.get(f"{prefix}_AUTHORITY_KEY_SHA256")
+            or not os.environ.get(f"{prefix}_FAILURE_DOMAIN_JSON")
+        ]
+        if missing_external:
+            context_errors.append(
+                "production monotonic state lacks independently attested external "
+                "checkpoint authorities: " + ", ".join(missing_external)
+            )
+        else:
+            try:
+                from .failure_domain import require_independent_failure_domains
+                from .strict_json import loads as strict_loads
+
+                operation_domain = strict_loads(
+                    os.environ["PYSEC_OPERATION_RECEIPT_CHECKPOINT_FAILURE_DOMAIN_JSON"]
+                )
+                time_domain = strict_loads(
+                    os.environ["PYSEC_TRUSTED_TIME_CHECKPOINT_FAILURE_DOMAIN_JSON"]
+                )
+                require_independent_failure_domains(
+                    operation_domain,
+                    time_domain,
+                    labels=(
+                        "operation checkpoint authority",
+                        "trusted-time checkpoint authority",
+                    ),
+                )
+            except (KeyError, TypeError, ValueError):
+                context_errors.append(
+                    "production checkpoint authorities do not span independent "
+                    "organization, host, control-plane, and implementation domains"
+                )
 
     (
         inventory.source_sha256_after,

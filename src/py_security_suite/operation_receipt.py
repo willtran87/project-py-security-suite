@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import os
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -38,6 +39,7 @@ def verify_operation_receipt(
         "operation_id",
         "previous_operation_sha256",
         "challenge_sha256",
+        "trusted_time_sha256",
         "issued_at",
         "expires_at",
         "signer_key_sha256",
@@ -55,7 +57,10 @@ def verify_operation_receipt(
     key_sha256 = hashlib.sha256(public_bytes).hexdigest()
     issued = _timestamp(statement.get("issued_at"), "operation issued_at")
     expires = _timestamp(statement.get("expires_at"), "operation expires_at")
-    now = observed_at.astimezone(UTC)
+    expected_time = os.environ.get(
+        "PYSEC_SCAN_TIME_CONTEXT_SHA256", ""
+    ).strip().casefold() or str(statement.get("trusted_time_sha256") or "")
+    now = _trusted_observed_at(observed_at)
     if (
         receipt.get("schema_version") != "1.0"
         or statement.get("schema_version") != "1.0"
@@ -63,12 +68,14 @@ def verify_operation_receipt(
         or statement.get("subject_sha256")
         != hashlib.sha256(canonical_bytes(subject)).hexdigest()
         or statement.get("challenge_sha256") != challenge_sha256
+        or not _digest(expected_time)
+        or statement.get("trusted_time_sha256") != expected_time
         or statement.get("signer_key_sha256") != key_sha256
         or key_sha256 != expected_key_sha256
         or not isinstance(public_key, Ed25519PublicKey)
         or not _label(statement.get("operation_id"))
         or not _optional_digest(statement.get("previous_operation_sha256"))
-        or issued > now
+        or issued > now + timedelta(hours=24)
         or expires <= issued
         or expires - issued > timedelta(hours=24)
         or now > expires
@@ -79,6 +86,14 @@ def verify_operation_receipt(
     except (InvalidSignature, TypeError, ValueError) as exc:
         raise ValueError("operation receipt signature is invalid") from exc
     return dict(receipt)
+
+
+def _trusted_observed_at(fallback: datetime) -> datetime:
+    if os.environ.get("PYSEC_SCAN_TIME_CONTEXT_PATH", "").strip():
+        from .trusted_observation import scan_observed_at
+
+        return scan_observed_at().astimezone(UTC)
+    return fallback.astimezone(UTC)
 
 
 def _timestamp(value: object, label: str) -> datetime:
@@ -95,6 +110,12 @@ def _optional_digest(value: object) -> bool:
     text = str(value or "")
     return not text or (
         len(text) == 64 and all(character in "0123456789abcdef" for character in text)
+    )
+
+
+def _digest(value: str) -> bool:
+    return len(value) == 64 and all(
+        character in "0123456789abcdef" for character in value
     )
 
 

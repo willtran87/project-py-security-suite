@@ -1,5 +1,17 @@
 # Changelog
 
+- Require governed compiler results to retain complete hermetic replay
+  materials and pass a third, remotely attested reexecution; require runtime
+  collectors and observers to differ by organization, host, control plane, and
+  implementation while binding lossless kernel-monotonic event sequencing.
+  Publish qualified Git bundles to an independently signed external CAS and
+  require a second verifier in a third failure domain. Bind privileged
+  operation receipts to the scan's trusted-time context, publish local replay
+  checkpoints to external monotonic authorities, require provider-signed KMS
+  unwrap audit events, reconcile procedure SBOMs with exact runtime closures,
+  require authority-verified secret commitments, and discover versioned signed
+  envelopes structurally so new receipt revisions cannot bypass validation.
+
 - Reproduce compiler semantic artifacts under two independently signed engine
   operations and verify every taint-path edge; replay Git signatures from the
   sealed bundle on a clean clone; require clean-host KMS recovery after local

@@ -23,6 +23,7 @@ from .execution import (
 from .models import Inventory
 from .path_safety import read_regular_file
 from .strict_json import canonical_bytes, loads as strict_loads
+from .git_replay import externalize_and_reverify_bundle
 
 
 _SKIP_DIRECTORIES = frozenset(
@@ -525,7 +526,7 @@ def _clean_git_signature_replay(
     }
     if observed_tags != expected_tags:
         raise ValueError("clean Git tag ledger differs from qualified history")
-    return {
+    replay: dict[str, Any] = {
         "schema_version": "1.0",
         "bundle_sha256": sha256_file(bundle),
         "reachable_objects_sha256": hashlib.sha256(
@@ -541,6 +542,17 @@ def _clean_git_signature_replay(
         "verified_commits": len(observed_commits),
         "verified_tags": len(observed_tags),
     }
+    replay.update(
+        externalize_and_reverify_bundle(
+            bundle,
+            reachable_objects_sha256=replay["reachable_objects_sha256"],
+            signature_ledger=expected_ledger,
+            allowed_signers_sha256=hashlib.sha256(allowed_signers).hexdigest(),
+            verified_commits=len(observed_commits),
+            verified_tags=len(observed_tags),
+        )
+    )
+    return replay
 
 
 def _git_repository_state(git: str, target: Path) -> dict[str, Any]:

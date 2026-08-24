@@ -369,6 +369,18 @@ repository, runs strict full-object integrity checks, and re-verifies every
 reachable commit and annotated-tag signature using only the retained
 allowed-signers material. The clean replay's bundle, object, signature-ledger,
 Git executable, and runtime-closure digests are bound into the authority receipt.
+Qualified history additionally requires the `PYSEC_GIT_BUNDLE_CAS` and
+`PYSEC_GIT_SECONDARY_VERIFIER` pinned-command families. The first publishes the
+actual bundle under its content digest; the second rechecks its complete object
+and signature ledgers. Their signed receipts must span three distinct
+organization, host, control-plane, and implementation failure domains with the
+primary Git verifier (`PYSEC_GIT_PRIMARY_*`).
+
+Governed compiler evidence retains both engines, configurations, runtime
+closures, arguments, sandbox policy, positive and negative canaries, and exact
+semantic and taint ledgers. `PYSEC_COMPILER_SEMANTIC_REPLAY` must then rerun
+those materials and return a signed matching result from a third remotely
+attested failure domain; digest agreement alone is not accepted as execution.
 
 Encrypted native evidence requires an authority-signed hardware-KMS envelope
 receipt binding the exact scan challenge and command request, plaintext object
@@ -379,12 +391,18 @@ are accompanied by the pinned helper's signed effective-policy attestation and
 an external clean-host recovery drill that uses a distinct replica identity,
 performs a fresh KMS unwrap after local key zeroization, and returns signed
 recovery and sandbox-measurement receipts bound to the encrypted object and
-recovered plaintext digest. Signed operation receipts are checked as a single non-forking
+recovered plaintext digest. The recovery must also include an independently
+pinned provider audit receipt for the hardware unwrap, and the provider must
+not share the recovery executor's organization, host, control plane, or
+implementation identity. Signed operation receipts are checked as a single non-forking
 graph across all artifacts; deployments can set
 `PYSEC_OPERATION_RECEIPT_STATE_PATH` to reject receipt reuse across reports.
 Operation and trusted-time SQLite stores are hash chained and must be paired
 with deployment-owned minimum-sequence and checkpoint-digest anchors; production
 and release reject missing anchors, and rollback below an advanced anchor fails.
+They also reject configurations that do not publish both chains to separately
+attested external checkpoint authorities; local SQLite plus environment state
+is treated only as a cache, not an independent rollback root.
 RFC 3161 contexts may provide two to five independent authorities; quorum mode
 requires `PYSEC_TRUSTED_TIME_STATE_PATH`, limits inter-authority skew to five
 seconds, and rejects clock rollback or same-challenge forks.

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import os
 import json
@@ -11,6 +12,7 @@ from .path_safety import read_regular_file
 from .strict_json import canonical_bytes, loads as strict_loads
 from .deployment_receipt import verify_deployment_receipt
 from .operation_receipt import verify_operation_receipt
+from .failure_domain import require_independent_failure_domains
 
 
 def runtime_trace_artifact(boundary_graph: dict[str, Any]) -> dict[str, Any]:
@@ -39,6 +41,7 @@ def runtime_trace_artifact(boundary_graph: dict[str, Any]) -> dict[str, Any]:
             "deployment_sha256",
             "boundary_graph_sha256",
             "collector_identity_sha256",
+            "collector_failure_domain",
             "instrumented_build_sha256",
             "instrumentation_sha256",
             "sampling_rate",
@@ -53,6 +56,7 @@ def runtime_trace_artifact(boundary_graph: dict[str, Any]) -> dict[str, Any]:
             "raw_spans",
             "raw_spans_sha256",
             "independent_observer_identity_sha256",
+            "independent_failure_domain",
             "independent_observations",
             "independent_raw_spans",
             "independent_raw_spans_sha256",
@@ -258,6 +262,7 @@ def runtime_trace_artifact(boundary_graph: dict[str, Any]) -> dict[str, Any]:
         "deployment_sha256": deployment,
         "boundary_graph_sha256": graph_digest,
         "collector_identity_sha256": value["collector_identity_sha256"],
+        "failure_domain": value["collector_failure_domain"],
         "metrics": metrics,
         "traces_sha256": hashlib.sha256(canonical_bytes(value["traces"])).hexdigest(),
     }
@@ -345,24 +350,20 @@ def _verify_independent_runtime_observations(
 ) -> None:
     observations = value["independent_observations"]
     independent_spans = value["independent_raw_spans"]
+    require_independent_failure_domains(
+        value["collector_failure_domain"],
+        value["independent_failure_domain"],
+        labels=("runtime collector", "runtime observer"),
+    )
     _verify_raw_spans(independent_spans, traces)
     if {canonical_bytes(item) for item in independent_spans} != {
         canonical_bytes(item) for item in value["raw_spans"]
     }:
         raise ValueError("independent raw telemetry disagrees with collector spans")
     observer_config = value["independent_observer_config"]
-    if (
-        not isinstance(observer_config, dict)
-        or set(observer_config)
-        != {"schema_version", "channel", "collector_identity_sha256"}
-        or observer_config.get("schema_version") != "1.0"
-        or observer_config.get("channel")
-        not in {"kernel-audit", "service-mesh-tap", "independent-otlp"}
-        or not _digest(str(observer_config.get("collector_identity_sha256") or ""))
-        or observer_config["collector_identity_sha256"]
-        == value["collector_identity_sha256"]
-    ):
-        raise ValueError("independent runtime observer channel is invalid")
+    _verify_independent_observer_config(
+        observer_config, independent_spans, value["collector_identity_sha256"]
+    )
     fields = {
         "trace_id",
         "span_count",
@@ -412,6 +413,7 @@ def _verify_independent_runtime_observations(
         ).hexdigest(),
         "raw_spans_sha256": value["independent_raw_spans_sha256"],
         "observer_config_sha256": value["independent_observer_config_sha256"],
+        "failure_domain": value["independent_failure_domain"],
     }
     verify_operation_receipt(
         subject,
@@ -421,6 +423,57 @@ def _verify_independent_runtime_observations(
         challenge_sha256=challenge,
         expected_key_sha256=expected_key,
     )
+
+
+def _verify_independent_observer_config(
+    observer_config: object,
+    independent_spans: list[dict[str, Any]],
+    collector_identity_sha256: str,
+) -> None:
+    if (
+        not isinstance(observer_config, dict)
+        or set(observer_config)
+        != {
+            "schema_version",
+            "channel",
+            "collector_identity_sha256",
+            "observer_executable_sha256",
+            "observer_runtime_sha256",
+            "configuration_base64",
+            "configuration_sha256",
+            "sequence_start",
+            "sequence_end",
+            "dropped_events",
+            "clock_source",
+        }
+        or observer_config.get("schema_version") != "1.0"
+        or observer_config.get("channel")
+        not in {"kernel-audit", "service-mesh-tap", "independent-otlp"}
+        or not _digest(str(observer_config.get("collector_identity_sha256") or ""))
+        or observer_config["collector_identity_sha256"] == collector_identity_sha256
+        or not _digest(str(observer_config.get("observer_executable_sha256") or ""))
+        or not _digest(str(observer_config.get("observer_runtime_sha256") or ""))
+        or observer_config.get("sequence_start") != 1
+        or observer_config.get("sequence_end") != len(independent_spans)
+        or observer_config.get("dropped_events") != 0
+        or observer_config.get("clock_source") != "kernel-monotonic"
+    ):
+        raise ValueError("independent runtime observer channel is invalid")
+    try:
+        observer_configuration = base64.b64decode(
+            str(observer_config["configuration_base64"]), validate=True
+        )
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            "independent runtime observer configuration is invalid"
+        ) from exc
+    if (
+        not observer_configuration
+        or len(observer_configuration) > 1024 * 1024
+        or hashlib.sha256(observer_configuration).hexdigest()
+        != observer_config["configuration_sha256"]
+    ):
+        raise ValueError("independent runtime observer configuration is detached")
 
 
 def _artifact(

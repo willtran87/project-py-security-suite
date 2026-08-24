@@ -64,6 +64,9 @@ def run_pinned_json_command(
         .strip()
         .casefold()
     )
+    remote_attestation_key_sha256 = (
+        os.environ.get(f"{prefix}_REMOTE_ATTESTATION_KEY_SHA256", "").strip().casefold()
+    )
     try:
         allowed_endpoints = strict_loads(raw_endpoints)
         sandbox_command = strict_loads(raw_sandbox)
@@ -81,6 +84,8 @@ def run_pinned_json_command(
         or any(not isinstance(item, str) or not item for item in sandbox_command)
         or not _digest(sandbox_executable_sha256)
         or not _digest(attestor_key_sha256)
+        or not _digest(remote_attestation_key_sha256)
+        or remote_attestation_key_sha256 == attestor_key_sha256
     ):
         raise ValueError(f"{prefix} transport and sandbox policy is incomplete")
     resolved_sandbox = resolve_executable(sandbox_command[0])
@@ -118,6 +123,7 @@ def run_pinned_json_command(
         "sandbox_executable_sha256": sandbox_executable_sha256,
         "sandbox_launcher_argv": [str(item) for item in sandbox_command[1:]],
         "effective_policy_attestor_key_sha256": attestor_key_sha256,
+        "remote_attestation_key_sha256": remote_attestation_key_sha256,
     }
     encoded_request = base64.b64encode(canonical_bytes(request)).decode("ascii")
     nonce = os.urandom(32).hex()
@@ -132,6 +138,7 @@ def run_pinned_json_command(
         "executable_sha256": expected_executable,
         "attestor_key_sha256": attestor_key_sha256,
         "sandbox_identity_sha256": sandbox_identity,
+        "remote_attestation_key_sha256": remote_attestation_key_sha256,
     }
     with tempfile.TemporaryDirectory(prefix="pysec-pinned-attestation-") as temporary:
         attestation_path = Path(temporary) / "effective-policy.json"
@@ -148,6 +155,9 @@ def run_pinned_json_command(
                     ).decode("ascii"),
                     "PYSEC_PINNED_ATTESTATION_CHALLENGE_SHA256": os.environ.get(
                         "PYSEC_SCAN_TIME_CHALLENGE_SHA256", ""
+                    ),
+                    "PYSEC_SCAN_TIME_CONTEXT_SHA256": os.environ.get(
+                        "PYSEC_SCAN_TIME_CONTEXT_SHA256", ""
                     ),
                 },
                 sandbox_prefix=tuple(str(item) for item in sandbox_command),
@@ -249,6 +259,7 @@ def verify_effective_policy_subject(subject: object) -> None:
         "measurement_source",
         "measurement_artifact",
         "measurement_artifact_sha256",
+        "remote_attestation",
     }:
         raise ValueError("effective-policy measurements are incomplete")
     controls = {
@@ -258,6 +269,7 @@ def verify_effective_policy_subject(subject: object) -> None:
         "child_process_confined": policy["child_process_confined"],
     }
     measurement = policy["measurement_artifact"]
+    remote_attestation = policy["remote_attestation"]
     expected_source = {
         "linux": "linux-procfs-seccomp",
         "win32": "windows-job-object-query",
@@ -292,6 +304,133 @@ def verify_effective_policy_subject(subject: object) -> None:
         != hashlib.sha256(canonical_bytes(measurement)).hexdigest()
     ):
         raise ValueError("effective-policy kernel measurement is invalid")
+    _verify_remote_attestation(subject, remote_attestation)
+
+
+def remote_attested_failure_domain(attestation: object) -> dict[str, str]:
+    """Return the hardware-attested host failure domain for a pinned execution."""
+
+    subject = attestation.get("subject") if isinstance(attestation, dict) else None
+    if not isinstance(subject, dict):
+        raise ValueError("effective-policy attestation subject is invalid")
+    verify_effective_policy_subject(subject)
+    policy = subject["policy_observations"]
+    remote = policy["remote_attestation"]
+    remote_subject = remote["subject"]
+    return {
+        name: str(remote_subject[name]).strip().casefold()
+        for name in (
+            "organization",
+            "host_identity_sha256",
+            "control_plane_sha256",
+            "implementation_sha256",
+        )
+    }
+
+
+def verify_retained_effective_policy_attestation(
+    attestation: object,
+) -> dict[str, str]:
+    """Fully reverify a retained execution and its hardware-attested domain."""
+
+    if not isinstance(attestation, dict) or set(attestation) != {
+        "subject",
+        "operation_receipt",
+    }:
+        raise ValueError("retained effective-policy attestation is invalid")
+    subject = attestation["subject"]
+    if not isinstance(subject, dict):
+        raise ValueError("retained effective-policy subject is invalid")
+    verify_effective_policy_subject(subject)
+    receipt = attestation["operation_receipt"]
+    statement = receipt.get("statement") if isinstance(receipt, dict) else None
+    try:
+        observed = datetime.fromisoformat(
+            str((statement or {})["issued_at"]).replace("Z", "+00:00")
+        )
+    except (KeyError, ValueError) as exc:
+        raise ValueError("retained effective-policy time is invalid") from exc
+    challenge = os.environ.get("PYSEC_SCAN_TIME_CHALLENGE_SHA256", "").strip() or str(
+        (statement or {}).get("challenge_sha256") or ""
+    )
+    verify_operation_receipt(
+        subject,
+        receipt,
+        purpose="pinned-command-effective-policy",
+        observed_at=observed,
+        challenge_sha256=challenge,
+        expected_key_sha256=str(subject.get("attestor_key_sha256") or ""),
+    )
+    return remote_attested_failure_domain(attestation)
+
+
+def _verify_remote_attestation(
+    execution_subject: dict[str, Any], value: object
+) -> None:
+    if not isinstance(value, dict) or set(value) != {
+        "subject",
+        "operation_receipt",
+    }:
+        raise ValueError("sandbox remote attestation fields do not match")
+    subject = value["subject"]
+    fields = {
+        "schema_version",
+        "format",
+        "purpose",
+        "challenge_sha256",
+        "host_identity_sha256",
+        "organization",
+        "control_plane_sha256",
+        "implementation_sha256",
+        "secure_boot",
+        "measured_boot",
+        "pcrs_sha256",
+        "quote_base64",
+        "quote_sha256",
+    }
+    if not isinstance(subject, dict) or set(subject) != fields:
+        raise ValueError("sandbox remote attestation subject is invalid")
+    try:
+        quote = base64.b64decode(str(subject["quote_base64"]), validate=True)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("sandbox remote attestation quote is invalid") from exc
+    expected_key = str(execution_subject.get("remote_attestation_key_sha256") or "")
+    challenge = os.environ.get("PYSEC_SCAN_TIME_CHALLENGE_SHA256", "").strip() or str(
+        subject.get("challenge_sha256") or ""
+    )
+    if (
+        subject.get("schema_version") != "1.0"
+        or subject.get("format") not in {"tpm2-quote", "nitro-attestation", "sev-snp"}
+        or subject.get("purpose") != "sandbox-effective-policy"
+        or subject.get("challenge_sha256") != challenge
+        or not _digest(str(subject.get("host_identity_sha256") or ""))
+        or not str(subject.get("organization") or "").strip()
+        or not _digest(str(subject.get("control_plane_sha256") or ""))
+        or not _digest(str(subject.get("implementation_sha256") or ""))
+        or subject.get("secure_boot") is not True
+        or subject.get("measured_boot") is not True
+        or not _digest(str(subject.get("pcrs_sha256") or ""))
+        or not quote
+        or hashlib.sha256(quote).hexdigest() != subject.get("quote_sha256")
+        or not _digest(expected_key)
+    ):
+        raise ValueError("sandbox remote attestation trust binding is invalid")
+    receipt = value["operation_receipt"]
+    statement = receipt.get("statement") if isinstance(receipt, dict) else None
+    try:
+        observed = datetime.fromisoformat(
+            str((statement or {})["issued_at"]).replace("Z", "+00:00")
+        )
+    except (KeyError, ValueError) as exc:
+        raise ValueError("sandbox remote attestation time is invalid") from exc
+    verify_operation_receipt(
+        subject,
+        receipt,
+        purpose="sandbox-remote-attestation",
+        observed_at=observed,
+        challenge_sha256=challenge,
+        expected_key_sha256=expected_key,
+    )
 
 
 def command_configured(prefix: str) -> bool:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 from datetime import UTC, datetime
@@ -58,6 +59,12 @@ def test_runtime_trace_must_correlate_to_static_edge(tmp_path: Path) -> None:
         "deployment_sha256": "a" * 64,
         "boundary_graph_sha256": graph_sha256,
         "collector_identity_sha256": "b" * 64,
+        "failure_domain": {
+            "organization": "collector-org",
+            "host_identity_sha256": "1" * 64,
+            "control_plane_sha256": "2" * 64,
+            "implementation_sha256": "3" * 64,
+        },
         "metrics": metrics,
         "traces_sha256": hashlib.sha256(canonical_bytes(traces)).hexdigest(),
     }
@@ -100,6 +107,14 @@ def test_runtime_trace_must_correlate_to_static_edge(tmp_path: Path) -> None:
         "schema_version": "1.0",
         "channel": "kernel-audit",
         "collector_identity_sha256": "6" * 64,
+        "observer_executable_sha256": "7" * 64,
+        "observer_runtime_sha256": "8" * 64,
+        "configuration_base64": base64.b64encode(b"observer-config-v1").decode(),
+        "configuration_sha256": hashlib.sha256(b"observer-config-v1").hexdigest(),
+        "sequence_start": 1,
+        "sequence_end": len(independent_raw_spans),
+        "dropped_events": 0,
+        "clock_source": "kernel-monotonic",
     }
     independent_subject = {
         "schema_version": "1.0",
@@ -116,6 +131,12 @@ def test_runtime_trace_must_correlate_to_static_edge(tmp_path: Path) -> None:
         "observer_config_sha256": hashlib.sha256(
             canonical_bytes(independent_observer_config)
         ).hexdigest(),
+        "failure_domain": {
+            "organization": "observer-org",
+            "host_identity_sha256": "4" * 64,
+            "control_plane_sha256": "5" * 64,
+            "implementation_sha256": "6" * 64,
+        },
     }
     independent_receipt, independent_key = operation_receipt(
         independent_subject,
@@ -127,6 +148,7 @@ def test_runtime_trace_must_correlate_to_static_edge(tmp_path: Path) -> None:
         "deployment_sha256": "a" * 64,
         "boundary_graph_sha256": graph_sha256,
         "collector_identity_sha256": "b" * 64,
+        "collector_failure_domain": collector_subject["failure_domain"],
         "instrumented_build_sha256": "d" * 64,
         "instrumentation_sha256": "e" * 64,
         "sampling_rate": 1.0,
@@ -145,6 +167,7 @@ def test_runtime_trace_must_correlate_to_static_edge(tmp_path: Path) -> None:
         "raw_spans": raw_spans,
         "raw_spans_sha256": hashlib.sha256(canonical_bytes(raw_spans)).hexdigest(),
         "independent_observer_identity_sha256": "c" * 64,
+        "independent_failure_domain": independent_subject["failure_domain"],
         "independent_observations": independent_observations,
         "independent_raw_spans": independent_raw_spans,
         "independent_raw_spans_sha256": independent_subject["raw_spans_sha256"],

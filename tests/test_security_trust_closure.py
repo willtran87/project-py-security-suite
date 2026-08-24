@@ -15,6 +15,9 @@ from py_security_suite.artifact_validation import (
     _validate_operation_receipt_graph,
 )
 from py_security_suite.requirements_coverage import _procedure_manifests_valid
+from py_security_suite.requirements_coverage import _runtime_sbom_covers_closure
+from py_security_suite.checkpoint_authority import publish_checkpoint
+from py_security_suite.strict_json import canonical_bytes
 from py_security_suite.runtime_trace import _verify_raw_spans
 from py_security_suite.trusted_time import (
     _TRUSTED_TIME_STATE_GENESIS_SHA256,
@@ -44,6 +47,34 @@ def test_operation_receipt_validator_discovery_is_structural() -> None:
     )
     assert _contains_operation_receipt({"nested": [{"receipt": receipt}]}) is True
     assert _contains_operation_receipt({"nested": [{"receipt": {}}]}) is False
+    receipt["revision_metadata"] = {"format": "v2"}
+    assert _contains_operation_receipt({"nested": [{"receipt": receipt}]}) is True
+
+
+def test_external_checkpoint_fails_closed_when_required(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("PYSEC_TEST_CHECKPOINT_COMMAND_JSON", raising=False)
+    with pytest.raises(ValueError, match="unavailable"):
+        publish_checkpoint(
+            "PYSEC_TEST_CHECKPOINT",
+            {"schema_version": "1.0", "checkpoint_sha256": "a" * 64},
+            required=True,
+        )
+
+
+def test_requirements_sbom_must_cover_exact_runtime_closure() -> None:
+    closure = [
+        {
+            "path": "runtime/library.bin",
+            "sha256": "a" * 64,
+            "content_base64": "",
+        }
+    ]
+    empty_sbom = canonical_bytes(
+        {"bomFormat": "CycloneDX", "specVersion": "1.6", "components": []}
+    )
+    assert _runtime_sbom_covers_closure(empty_sbom, closure) is False
 
 
 def test_operation_receipt_state_rejects_cross_report_replay(

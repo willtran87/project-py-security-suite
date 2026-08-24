@@ -3,7 +3,7 @@
   "$id": "urn:project-py-security-suite:schema:boundary-graph:1.0",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "analysis", "languages", "language_file_sets", "scanned_files", "scanned_bytes", "truncated", "complete", "semantic_complete", "semantic_parsers", "semantic_parser_provenance", "compiler_semantic_complete", "compiler_semantic_evidence", "compiler_semantic_authority_receipt", "heuristic_languages", "special_surfaces", "special_surface_complete", "errors", "omitted_errors", "edges", "summary", "graph_sha256"],
+  "required": ["schema_version", "analysis", "languages", "language_file_sets", "scanned_files", "scanned_bytes", "truncated", "complete", "semantic_complete", "semantic_parsers", "semantic_parser_provenance", "compiler_semantic_complete", "compiler_semantic_evidence", "compiler_semantic_authority_receipt", "compiler_semantic_reexecution", "heuristic_languages", "special_surfaces", "special_surface_complete", "errors", "omitted_errors", "edges", "summary", "graph_sha256"],
   "properties": {
     "schema_version": {"const": "1.0"},
     "analysis": {"const": "bounded-static-polyglot-boundary-graph"},
@@ -19,6 +19,7 @@
     "compiler_semantic_complete": {"type": "boolean"},
     "compiler_semantic_evidence": {"type": ["object", "null"]},
     "compiler_semantic_authority_receipt": {"type": ["object", "null"]},
+    "compiler_semantic_reexecution": {"type": ["object", "null"]},
     "heuristic_languages": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
     "special_surfaces": {"type": "array", "maxItems": 50000, "items": {"type": "object", "additionalProperties": false, "required": ["path", "kind", "analysis", "covered"], "properties": {"path": {"type": "string", "minLength": 1, "maxLength": 1000}, "kind": {"enum": ["notebook", "template", "bytecode", "native-extension", "webassembly", "generated-source", "dynamic-code"]}, "analysis": {"enum": ["unsupported", "semantic", "heuristic", "inventory-only"]}, "covered": {"type": "boolean"}}}},
     "special_surface_complete": {"type": "boolean"},

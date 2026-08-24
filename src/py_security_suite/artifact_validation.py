@@ -18,6 +18,8 @@ from .strict_json import loads as strict_loads
 from .strict_json import canonical_bytes
 from .deployment_receipt import verify_portable_receipt
 from .operation_receipt import verify_operation_receipt
+from .checkpoint_authority import publish_checkpoint
+from .failure_domain import require_independent_failure_domains, verify_failure_domain
 
 
 _ARTIFACT_SCHEMAS = {
@@ -217,6 +219,7 @@ def _validate_runtime_trace_accounting(value: object) -> None:
             "deployment_sha256": evidence["deployment_sha256"],
             "boundary_graph_sha256": evidence["boundary_graph_sha256"],
             "collector_identity_sha256": evidence["collector_identity_sha256"],
+            "failure_domain": evidence["collector_failure_domain"],
             "metrics": evidence["collector_metrics"],
             "traces_sha256": hashlib.sha256(
                 canonical_bytes(evidence["traces"])
@@ -248,6 +251,7 @@ def _validate_runtime_trace_accounting(value: object) -> None:
             ).hexdigest(),
             "raw_spans_sha256": evidence["independent_raw_spans_sha256"],
             "observer_config_sha256": evidence["independent_observer_config_sha256"],
+            "failure_domain": evidence["independent_failure_domain"],
         }
         _reverify_operation(
             independent_subject,
@@ -256,7 +260,18 @@ def _validate_runtime_trace_accounting(value: object) -> None:
             observed_at,
             str(evidence["independent_authority_key_sha256"]),
         )
-        from .runtime_trace import _runtime_source_artifact_valid, _verify_raw_spans
+        from .runtime_trace import (
+            _runtime_source_artifact_valid,
+            _verify_independent_observer_config,
+            _verify_raw_spans,
+        )
+        from .failure_domain import require_independent_failure_domains
+
+        require_independent_failure_domains(
+            evidence["collector_failure_domain"],
+            evidence["independent_failure_domain"],
+            labels=("runtime collector", "runtime observer"),
+        )
 
         _verify_raw_spans(evidence["raw_spans"], evidence["traces"])
         _verify_raw_spans(evidence["independent_raw_spans"], evidence["traces"])
@@ -274,6 +289,11 @@ def _validate_runtime_trace_accounting(value: object) -> None:
             ).hexdigest()
         ):
             raise ValueError("independent runtime observer config is detached")
+        _verify_independent_observer_config(
+            evidence["independent_observer_config"],
+            evidence["independent_raw_spans"],
+            evidence["collector_identity_sha256"],
+        )
         if {canonical_bytes(item) for item in evidence["independent_raw_spans"]} != {
             canonical_bytes(item) for item in evidence["raw_spans"]
         }:
@@ -391,6 +411,7 @@ def _validate_operation_receipt_graph(
         "operation_id",
         "previous_operation_sha256",
         "challenge_sha256",
+        "trusted_time_sha256",
         "issued_at",
         "expires_at",
         "signer_key_sha256",
@@ -459,6 +480,12 @@ def _validate_operation_receipt_graph(
 
 
 def _contains_operation_receipt(value: object) -> bool:
+    """Discover versioned cryptographic envelopes by structure, not one schema.
+
+    Exact v1 operation receipts remain recognized, while portable deployment
+    receipts and future signed-statement revisions cannot silently bypass a
+    semantic validator merely by adding or renaming non-security metadata.
+    """
     receipt_fields = {
         "schema_version",
         "statement",
@@ -472,6 +499,7 @@ def _contains_operation_receipt(value: object) -> bool:
         "operation_id",
         "previous_operation_sha256",
         "challenge_sha256",
+        "trusted_time_sha256",
         "issued_at",
         "expires_at",
         "signer_key_sha256",
@@ -482,6 +510,26 @@ def _contains_operation_receipt(value: object) -> bool:
             set(value) == receipt_fields
             and isinstance(statement, dict)
             and set(statement) == statement_fields
+        ):
+            return True
+        signed_statement = value.get("signed_statement")
+        if (
+            isinstance(value.get("signature_base64"), str)
+            and bool(value["signature_base64"])
+            and (
+                isinstance(statement, dict)
+                or isinstance(signed_statement, dict)
+                or isinstance(value.get("receipt_payload_base64"), str)
+            )
+            and any(
+                isinstance(value.get(name), str) and bool(value[name])
+                for name in (
+                    "public_key_pem_base64",
+                    "signer_key_sha256",
+                    "service_key_sha256",
+                    "observer_identity_sha256",
+                )
+            )
         ):
             return True
         return any(_contains_operation_receipt(item) for item in value.values())
@@ -520,8 +568,19 @@ def _consume_operation_receipts(
         connection.execute(
             "CREATE TABLE IF NOT EXISTS operation_receipt_checkpoint "
             "(scope TEXT PRIMARY KEY, sequence INTEGER NOT NULL, "
-            "checkpoint_sha256 TEXT NOT NULL)"
+            "checkpoint_sha256 TEXT NOT NULL, external_receipt BLOB NOT NULL DEFAULT '')"
         )
+        checkpoint_columns = {
+            str(row[1])
+            for row in connection.execute(
+                "PRAGMA table_info(operation_receipt_checkpoint)"
+            )
+        }
+        if "external_receipt" not in checkpoint_columns:
+            connection.execute(
+                "ALTER TABLE operation_receipt_checkpoint ADD COLUMN "
+                "external_receipt BLOB NOT NULL DEFAULT ''"
+            )
         connection.execute("BEGIN IMMEDIATE")
         pending: list[tuple[str, str, str, str]] = []
         for receipt in receipts:
@@ -541,11 +600,9 @@ def _consume_operation_receipts(
                 raise ValueError("operation receipt replay across reports detected")
             if row is None:
                 pending.append((*identity, receipt_sha256, report_sha256))
-        if not pending:
-            connection.execute("COMMIT")
-            return
         checkpoint_row = connection.execute(
-            "SELECT sequence, checkpoint_sha256 FROM operation_receipt_checkpoint "
+            "SELECT sequence, checkpoint_sha256, external_receipt "
+            "FROM operation_receipt_checkpoint "
             "WHERE scope = 'global'"
         ).fetchone()
         if checkpoint_row is None:
@@ -569,6 +626,19 @@ def _consume_operation_receipts(
                 raise ValueError(
                     "operation receipt state deletion or rollback detected"
                 )
+        if not pending:
+            if checkpoint_row is None:
+                connection.execute("ROLLBACK")
+                raise ValueError(
+                    "operation receipt state deletion or rollback detected"
+                )
+            if os.environ.get(
+                "PYSEC_OPERATION_RECEIPT_REQUIRE_EXTERNAL_CHECKPOINT", ""
+            ).strip() == "1" and not bytes(checkpoint_row[2]):
+                connection.execute("ROLLBACK")
+                raise ValueError("operation receipt external checkpoint is absent")
+            connection.execute("COMMIT")
+            return
         for record in pending:
             connection.execute(
                 "INSERT INTO operation_receipts VALUES (?, ?, ?, ?)", record
@@ -585,11 +655,31 @@ def _consume_operation_receipts(
                 }
             )
         ).hexdigest()
+        external_receipt = publish_checkpoint(
+            "PYSEC_OPERATION_RECEIPT_CHECKPOINT",
+            {
+                "schema_version": "1.0",
+                "state_kind": "operation-receipts",
+                "sequence": sequence,
+                "checkpoint_sha256": checkpoint,
+                "report_sha256": report_sha256,
+            },
+            required=os.environ.get(
+                "PYSEC_OPERATION_RECEIPT_REQUIRE_EXTERNAL_CHECKPOINT", ""
+            ).strip()
+            == "1",
+        )
+        external_bytes = (
+            canonical_bytes(external_receipt) if external_receipt is not None else b""
+        )
         connection.execute(
-            "INSERT INTO operation_receipt_checkpoint VALUES ('global', ?, ?) "
+            "INSERT INTO operation_receipt_checkpoint "
+            "(scope, sequence, checkpoint_sha256, external_receipt) "
+            "VALUES ('global', ?, ?, ?) "
             "ON CONFLICT(scope) DO UPDATE SET sequence=excluded.sequence, "
-            "checkpoint_sha256=excluded.checkpoint_sha256",
-            (sequence, checkpoint),
+            "checkpoint_sha256=excluded.checkpoint_sha256, "
+            "external_receipt=excluded.external_receipt",
+            (sequence, checkpoint, external_bytes),
         )
         connection.execute("COMMIT")
     finally:
@@ -613,7 +703,8 @@ def _validate_boundary_graph_receipts(value: object) -> None:
         raise TypeError("boundary graph must be an object")
     evidence = value.get("compiler_semantic_evidence")
     receipt = value.get("compiler_semantic_authority_receipt")
-    if bool(evidence) != bool(receipt):
+    reexecution = value.get("compiler_semantic_reexecution")
+    if bool(evidence) != bool(receipt) or bool(evidence) != bool(reexecution):
         raise ValueError("compiler semantic authority receipt is incomplete")
     subject = {name: item for name, item in value.items() if name != "graph_sha256"}
     if (
@@ -632,9 +723,13 @@ def _validate_boundary_graph_receipts(value: object) -> None:
         ):
             raise ValueError("boundary graph language file ledger is detached")
     if evidence:
-        from .boundary_graph import verify_compiler_semantic_evidence
+        from .boundary_graph import (
+            verify_compiler_semantic_evidence,
+            verify_compiler_semantic_reexecution,
+        )
 
         verify_compiler_semantic_evidence(evidence, file_sets)
+        verify_compiler_semantic_reexecution(reexecution, evidence, file_sets)
         _reverify_portable(evidence, receipt, "compiler-semantic-evidence")
 
 
@@ -904,6 +999,9 @@ def _validate_clean_git_replay(manifest: dict[str, Any]) -> None:
         "git_runtime_closure_sha256",
         "verified_commits",
         "verified_tags",
+        "primary_failure_domain",
+        "bundle_storage",
+        "secondary_verification",
     }:
         raise ValueError("retained clean Git replay fields do not match")
     if (
@@ -931,6 +1029,130 @@ def _validate_clean_git_replay(manifest: dict[str, Any]) -> None:
         or replay.get("verified_tags") != len(ledger.get("tags", []))
     ):
         raise ValueError("retained clean Git replay is detached or invalid")
+    _validate_external_git_replay(manifest, replay)
+
+
+def _validate_external_git_replay(
+    manifest: dict[str, Any], replay: dict[str, Any]
+) -> None:
+    storage = replay["bundle_storage"]
+    secondary = replay["secondary_verification"]
+    primary = verify_failure_domain(
+        replay["primary_failure_domain"], "primary Git verifier"
+    )
+    storage_fields = {
+        "schema_version",
+        "object_id",
+        "bundle_sha256",
+        "bundle_size_bytes",
+        "authority_key_sha256",
+        "failure_domain",
+        "operation_receipt",
+        "effective_policy_attestation",
+    }
+    secondary_fields = {
+        "schema_version",
+        "bundle_sha256",
+        "bundle_size_bytes",
+        "reachable_objects_sha256",
+        "signature_ledger_sha256",
+        "allowed_signers_sha256",
+        "verified_commits",
+        "verified_tags",
+        "authority_key_sha256",
+        "failure_domain",
+        "operation_receipt",
+        "effective_policy_attestation",
+    }
+    if (
+        not isinstance(storage, dict)
+        or set(storage) != storage_fields
+        or not isinstance(secondary, dict)
+        or set(secondary) != secondary_fields
+        or storage.get("schema_version") != "1.0"
+        or secondary.get("schema_version") != "1.0"
+        or not str(storage.get("object_id") or "")
+        or isinstance(storage.get("bundle_size_bytes"), bool)
+        or not isinstance(storage.get("bundle_size_bytes"), int)
+        or storage["bundle_size_bytes"] < 1
+        or secondary.get("bundle_size_bytes") != storage["bundle_size_bytes"]
+    ):
+        raise ValueError("external Git replay evidence is invalid")
+    base = {
+        "schema_version": "1.0",
+        "bundle_sha256": replay["bundle_sha256"],
+        "bundle_size_bytes": storage["bundle_size_bytes"],
+        "reachable_objects_sha256": replay["reachable_objects_sha256"],
+        "signature_ledger_sha256": replay["signature_ledger_sha256"],
+        "allowed_signers_sha256": manifest["allowed_signers_file_sha256"],
+        "verified_commits": replay["verified_commits"],
+        "verified_tags": replay["verified_tags"],
+    }
+    for name, expected in base.items():
+        if name in storage and storage[name] != expected:
+            raise ValueError("external Git bundle storage is detached")
+        if name in secondary and secondary[name] != expected:
+            raise ValueError("secondary Git verification is detached")
+    storage_domain = verify_failure_domain(
+        storage["failure_domain"], "Git CAS authority"
+    )
+    secondary_domain = verify_failure_domain(
+        secondary["failure_domain"], "secondary Git verifier"
+    )
+    from .pinned_command import verify_retained_effective_policy_attestation
+
+    if storage_domain != verify_retained_effective_policy_attestation(
+        storage["effective_policy_attestation"]
+    ):
+        raise ValueError("Git CAS failure domain is not hardware-attested")
+    if secondary_domain != verify_retained_effective_policy_attestation(
+        secondary["effective_policy_attestation"]
+    ):
+        raise ValueError("secondary Git failure domain is not hardware-attested")
+    require_independent_failure_domains(
+        primary,
+        storage_domain,
+        labels=("primary Git verifier", "Git CAS authority"),
+    )
+    require_independent_failure_domains(
+        primary,
+        secondary_domain,
+        labels=("primary Git verifier", "secondary Git verifier"),
+    )
+    require_independent_failure_domains(
+        storage_domain,
+        secondary_domain,
+        labels=("Git CAS authority", "secondary Git verifier"),
+    )
+    _verify_git_authority_receipt(
+        {
+            **base,
+            "object_id": storage["object_id"],
+            "failure_domain": storage_domain,
+        },
+        storage,
+        "git-bundle-cas-publish",
+    )
+    _verify_git_authority_receipt(
+        {**base, "failure_domain": secondary_domain},
+        secondary,
+        "git-bundle-secondary-verification",
+    )
+
+
+def _verify_git_authority_receipt(
+    subject: dict[str, Any], response: dict[str, Any], purpose: str
+) -> None:
+    key = str(response.get("authority_key_sha256") or "")
+    receipt = response.get("operation_receipt")
+    statement = receipt.get("statement") if isinstance(receipt, dict) else None
+    try:
+        issued = datetime.fromisoformat(
+            str((statement or {})["issued_at"]).replace("Z", "+00:00")
+        )
+    except (KeyError, ValueError) as exc:
+        raise ValueError("external Git replay receipt time is invalid") from exc
+    _reverify_operation(subject, receipt, purpose, issued, key)
 
 
 def _is_companion_assurance(value: object) -> bool:
@@ -1392,6 +1614,8 @@ def _validate_native_normalization(value: dict[str, Any], records: int) -> None:
                 "recovery_operation_id",
                 "recovery_authority_key_sha256",
                 "recovery_operation_receipt",
+                "provider_audit_authority_key_sha256",
+                "provider_audit_event",
                 "effective_policy_attestation",
                 "verified",
             }
@@ -1444,6 +1668,56 @@ def _validate_native_normalization(value: dict[str, Any], records: int) -> None:
             "recovery_operation_id"
         ):
             raise ValueError("retained recovery operation identity is detached")
+        audit = drill["provider_audit_event"]
+        audit_fields = {
+            "schema_version",
+            "provider",
+            "audit_event_id",
+            "object_id",
+            "ciphertext_sha256",
+            "recovered_plaintext_sha256",
+            "wrapped_key_sha256",
+            "kms_unwrap_operation_id",
+            "hardware_backed",
+            "failure_domain",
+            "operation_receipt",
+        }
+        if (
+            not isinstance(audit, dict)
+            or set(audit) != audit_fields
+            or audit.get("schema_version") != "1.0"
+            or not str(audit.get("provider") or "")
+            or not str(audit.get("audit_event_id") or "")
+            or audit.get("object_id") != drill["object_id"]
+            or audit.get("ciphertext_sha256") != drill["ciphertext_sha256"]
+            or audit.get("recovered_plaintext_sha256")
+            != drill["recovered_plaintext_sha256"]
+            or audit.get("wrapped_key_sha256") != custody["wrapped_key_sha256"]
+            or audit.get("kms_unwrap_operation_id") != drill["kms_unwrap_operation_id"]
+            or audit.get("hardware_backed") is not True
+            or not _digest(str(drill["provider_audit_authority_key_sha256"]))
+        ):
+            raise ValueError("retained KMS provider audit event is invalid")
+        audit_subject = {
+            name: audit[name] for name in audit_fields if name != "operation_receipt"
+        }
+        audit_receipt = audit["operation_receipt"]
+        audit_statement = (
+            audit_receipt.get("statement") if isinstance(audit_receipt, dict) else None
+        )
+        try:
+            audit_issued = datetime.fromisoformat(
+                str((audit_statement or {})["issued_at"]).replace("Z", "+00:00")
+            )
+        except (KeyError, ValueError) as exc:
+            raise ValueError("retained KMS provider audit time is invalid") from exc
+        _reverify_operation(
+            audit_subject,
+            audit_receipt,
+            "kms-unwrap-provider-audit",
+            audit_issued,
+            str(drill["provider_audit_authority_key_sha256"]),
+        )
         recovery_attestation = drill["effective_policy_attestation"]
         recovery_attestation_subject = (
             recovery_attestation.get("subject")
@@ -1457,6 +1731,23 @@ def _validate_native_normalization(value: dict[str, Any], records: int) -> None:
         ):
             raise ValueError("retained recovery attestation is invalid")
         verify_effective_policy_subject(recovery_attestation_subject)
+        remote = recovery_attestation_subject["policy_observations"][
+            "remote_attestation"
+        ]["subject"]
+        recovery_domain = {
+            name: remote[name]
+            for name in (
+                "organization",
+                "host_identity_sha256",
+                "control_plane_sha256",
+                "implementation_sha256",
+            )
+        }
+        require_independent_failure_domains(
+            recovery_domain,
+            audit["failure_domain"],
+            labels=("recovery executor", "KMS provider audit"),
+        )
         recovery_attestation_receipt = (
             recovery_attestation.get("operation_receipt")
             if isinstance(recovery_attestation, dict)
@@ -1513,6 +1804,7 @@ def _validate_custody_transport(custody: dict[str, Any]) -> None:
         "sandbox_executable_sha256",
         "sandbox_launcher_argv",
         "effective_policy_attestor_key_sha256",
+        "remote_attestation_key_sha256",
     }:
         raise ValueError("retained KMS command context is invalid")
     endpoints = context["allowed_endpoints"]

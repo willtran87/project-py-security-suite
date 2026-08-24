@@ -24,6 +24,8 @@ from py_security_suite.inventory import allowed_signer_fingerprints
 from py_security_suite.strict_json import canonical_bytes
 from tests.deployment_authority import (
     authority_environment,
+    effective_policy_attestation,
+    operation_receipt,
     pinned_command_sandbox_environment,
 )
 
@@ -137,6 +139,64 @@ def test_retained_git_provenance_reverifies_signers_and_manifest(
         "git_runtime_closure_sha256": "f" * 64,
         "verified_commits": 2,
         "verified_tags": 0,
+    }
+    replay = manifest["clean_replay"]
+    domains = [
+        {
+            "organization": f"git-domain-{index}",
+            "host_identity_sha256": f"{index}" * 64,
+            "control_plane_sha256": f"{index + 3}" * 64,
+            "implementation_sha256": f"{index + 6}" * 64,
+        }
+        for index in (1, 2, 3)
+    ]
+    replay["primary_failure_domain"] = domains[0]
+    replay_base = {
+        "schema_version": "1.0",
+        "bundle_sha256": replay["bundle_sha256"],
+        "bundle_size_bytes": 1024,
+        "reachable_objects_sha256": replay["reachable_objects_sha256"],
+        "signature_ledger_sha256": replay["signature_ledger_sha256"],
+        "allowed_signers_sha256": manifest["allowed_signers_file_sha256"],
+        "verified_commits": 2,
+        "verified_tags": 0,
+    }
+    storage_key = Ed25519PrivateKey.generate()
+    storage_subject = {
+        **replay_base,
+        "object_id": "cas/git/bundle-object",
+        "failure_domain": domains[1],
+    }
+    storage_receipt, storage_key_sha256 = operation_receipt(
+        storage_subject,
+        purpose="git-bundle-cas-publish",
+        operation_id="git-cas-1",
+        private_key=storage_key,
+    )
+    replay["bundle_storage"] = {
+        "schema_version": "1.0",
+        "object_id": storage_subject["object_id"],
+        "bundle_sha256": replay["bundle_sha256"],
+        "bundle_size_bytes": 1024,
+        "authority_key_sha256": storage_key_sha256,
+        "failure_domain": domains[1],
+        "operation_receipt": storage_receipt,
+        "effective_policy_attestation": effective_policy_attestation(domains[1]),
+    }
+    verifier_key = Ed25519PrivateKey.generate()
+    verifier_subject = {**replay_base, "failure_domain": domains[2]}
+    verifier_receipt, verifier_key_sha256 = operation_receipt(
+        verifier_subject,
+        purpose="git-bundle-secondary-verification",
+        operation_id="git-secondary-1",
+        private_key=verifier_key,
+    )
+    replay["secondary_verification"] = {
+        **replay_base,
+        "authority_key_sha256": verifier_key_sha256,
+        "failure_domain": domains[2],
+        "operation_receipt": verifier_receipt,
+        "effective_policy_attestation": effective_policy_attestation(domains[2]),
     }
     environment = authority_environment(
         tmp_path,
@@ -363,9 +423,20 @@ def test_native_report_secrets_use_encrypted_content_addressed_storage(
         serialization.PublicFormat.SubjectPublicKeyInfo,
     )
     recovery_key_sha256 = hashlib.sha256(recovery_public).hexdigest()
+    audit_private = Ed25519PrivateKey.generate()
+    audit_private_pem = audit_private.private_bytes(
+        serialization.Encoding.PEM,
+        serialization.PrivateFormat.PKCS8,
+        serialization.NoEncryption(),
+    )
+    audit_public = audit_private.public_key().public_bytes(
+        serialization.Encoding.PEM,
+        serialization.PublicFormat.SubjectPublicKeyInfo,
+    )
+    audit_key_sha256 = hashlib.sha256(audit_public).hexdigest()
     recovery_script = tmp_path / "recover.py"
     recovery_script.write_text(
-        "import base64,hashlib,json,pathlib,sys\n"
+        "import base64,hashlib,json,os,pathlib,sys\n"
         "from datetime import UTC,datetime,timedelta\n"
         "from cryptography.hazmat.primitives import hashes,serialization\n"
         "from cryptography.hazmat.primitives.ciphers.aead import AESGCM\n"
@@ -373,15 +444,21 @@ def test_native_report_secrets_use_encrypted_content_addressed_storage(
         f"ROOT=pathlib.Path({str(raw_store.resolve())!r})\n"
         f"KEY=base64.b64decode({base64.b64encode(key_bytes).decode()!r})\n"
         f"PRIVATE=base64.b64decode({base64.b64encode(recovery_private_pem).decode()!r})\n"
+        f"AUDIT_PRIVATE=base64.b64decode({base64.b64encode(audit_private_pem).decode()!r})\n"
         "canonical=lambda value:json.dumps(value,sort_keys=True,separators=(',',':'),ensure_ascii=False,allow_nan=False).encode()\n"
         "request=json.loads(base64.b64decode(sys.argv[-1]));stored=(ROOT/request['object_id']).read_bytes()\n"
         "object_key=HKDF(algorithm=hashes.SHA256(),length=32,salt=bytes.fromhex(request['expected_plaintext_sha256']),info=b'pysec-native-evidence-object-v1').derive(KEY)\n"
         "plaintext=AESGCM(object_key).decrypt(stored[:12],stored[12:],request['expected_plaintext_sha256'].encode())\n"
         "private=serialization.load_pem_private_key(PRIVATE,password=None);public=private.public_key().public_bytes(serialization.Encoding.PEM,serialization.PublicFormat.SubjectPublicKeyInfo)\n"
         "subject={'schema_version':'1.0','request_sha256':hashlib.sha256(canonical(request)).hexdigest(),'object_id':request['object_id'],'ciphertext_sha256':hashlib.sha256(stored).hexdigest(),'recovered_plaintext_sha256':hashlib.sha256(plaintext).hexdigest(),'replica_identity_sha256':hashlib.sha256(b'independent-test-replica').hexdigest(),'kms_unwrap_operation_id':'unwrap-test-1'}\n"
-        "now=datetime.now(UTC);statement={'schema_version':'1.0','purpose':'raw-evidence-clean-host-recovery','subject_sha256':hashlib.sha256(canonical(subject)).hexdigest(),'operation_id':'recovery-test-1','previous_operation_sha256':'','challenge_sha256':request['challenge_sha256'],'issued_at':now.isoformat(),'expires_at':(now+timedelta(minutes=5)).isoformat(),'signer_key_sha256':hashlib.sha256(public).hexdigest()}\n"
+        "now=datetime.now(UTC);statement={'schema_version':'1.0','purpose':'raw-evidence-clean-host-recovery','subject_sha256':hashlib.sha256(canonical(subject)).hexdigest(),'operation_id':'recovery-test-1','previous_operation_sha256':'','challenge_sha256':request['challenge_sha256'],'trusted_time_sha256':os.environ['PYSEC_SCAN_TIME_CONTEXT_SHA256'],'issued_at':now.isoformat(),'expires_at':(now+timedelta(minutes=5)).isoformat(),'signer_key_sha256':hashlib.sha256(public).hexdigest()}\n"
         "receipt={'schema_version':'1.0','statement':statement,'signature_base64':base64.b64encode(private.sign(canonical(statement))).decode(),'public_key_pem_base64':base64.b64encode(public).decode()}\n"
-        "print(json.dumps({'schema_version':'1.0','object_id':subject['object_id'],'ciphertext_sha256':subject['ciphertext_sha256'],'recovered_plaintext_sha256':subject['recovered_plaintext_sha256'],'replica_identity_sha256':subject['replica_identity_sha256'],'kms_unwrap_operation_id':subject['kms_unwrap_operation_id'],'recovery_operation_id':'recovery-test-1','recovery_authority_key_sha256':hashlib.sha256(public).hexdigest(),'recovery_operation_receipt':receipt}))\n",
+        "audit_private=serialization.load_pem_private_key(AUDIT_PRIVATE,password=None);audit_public=audit_private.public_key().public_bytes(serialization.Encoding.PEM,serialization.PublicFormat.SubjectPublicKeyInfo)\n"
+        "audit_subject={'schema_version':'1.0','provider':'test-kms','audit_event_id':'audit-test-1','object_id':subject['object_id'],'ciphertext_sha256':subject['ciphertext_sha256'],'recovered_plaintext_sha256':subject['recovered_plaintext_sha256'],'wrapped_key_sha256':request['wrapped_key_sha256'],'kms_unwrap_operation_id':subject['kms_unwrap_operation_id'],'hardware_backed':True,'failure_domain':{'organization':'external-test-kms-provider','host_identity_sha256':'a'*64,'control_plane_sha256':'b'*64,'implementation_sha256':'d'*64}}\n"
+        "audit_statement={'schema_version':'1.0','purpose':'kms-unwrap-provider-audit','subject_sha256':hashlib.sha256(canonical(audit_subject)).hexdigest(),'operation_id':'audit-test-1','previous_operation_sha256':'','challenge_sha256':request['challenge_sha256'],'trusted_time_sha256':os.environ['PYSEC_SCAN_TIME_CONTEXT_SHA256'],'issued_at':now.isoformat(),'expires_at':(now+timedelta(minutes=5)).isoformat(),'signer_key_sha256':hashlib.sha256(audit_public).hexdigest()}\n"
+        "audit_receipt={'schema_version':'1.0','statement':audit_statement,'signature_base64':base64.b64encode(audit_private.sign(canonical(audit_statement))).decode(),'public_key_pem_base64':base64.b64encode(audit_public).decode()}\n"
+        "audit_event={**audit_subject,'operation_receipt':audit_receipt}\n"
+        "print(json.dumps({'schema_version':'1.0','object_id':subject['object_id'],'ciphertext_sha256':subject['ciphertext_sha256'],'recovered_plaintext_sha256':subject['recovered_plaintext_sha256'],'replica_identity_sha256':subject['replica_identity_sha256'],'kms_unwrap_operation_id':subject['kms_unwrap_operation_id'],'recovery_operation_id':'recovery-test-1','recovery_authority_key_sha256':hashlib.sha256(public).hexdigest(),'recovery_operation_receipt':receipt,'provider_audit_authority_key_sha256':hashlib.sha256(audit_public).hexdigest(),'provider_audit_event':audit_event}))\n",
         encoding="utf-8",
     )
     payload = json.dumps(
@@ -437,6 +514,7 @@ def test_native_report_secrets_use_encrypted_content_addressed_storage(
             ]
         ),
         "PYSEC_RAW_EVIDENCE_RECOVERY_AUTHORITY_KEY_SHA256": recovery_key_sha256,
+        "PYSEC_RAW_EVIDENCE_RECOVERY_PROVIDER_AUDIT_KEY_SHA256": audit_key_sha256,
         **recovery_sandbox,
     }
     with (

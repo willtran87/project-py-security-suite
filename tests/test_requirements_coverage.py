@@ -224,7 +224,30 @@ class SecurityRequirementsCoverageTests(unittest.TestCase):
                 }
             ]
             sbom_bytes = canonical_bytes(
-                {"bomFormat": "CycloneDX", "specVersion": "1.6", "components": []}
+                {
+                    "bomFormat": "CycloneDX",
+                    "specVersion": "1.6",
+                    "components": [
+                        {
+                            "type": "file",
+                            "name": "runtime/library.bin",
+                            "properties": [
+                                {
+                                    "name": "pysec:closure-path",
+                                    "value": "runtime/library.bin",
+                                }
+                            ],
+                            "hashes": [
+                                {
+                                    "alg": "SHA-256",
+                                    "content": hashlib.sha256(
+                                        b"runtime-library"
+                                    ).hexdigest(),
+                                }
+                            ],
+                        }
+                    ],
+                }
             )
             runtime_manifest = {
                 "kind": "native",

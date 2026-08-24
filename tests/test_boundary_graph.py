@@ -134,8 +134,10 @@ class BoundaryGraphTests(unittest.TestCase):
                     {
                         "language": "c",
                         "engine": "clang-static-analyzer",
-                        "engine_sha256": "a" * 64,
-                        "configuration_sha256": "b" * 64,
+                        "engine_sha256": hashlib.sha256(b"primary-engine").hexdigest(),
+                        "configuration_sha256": hashlib.sha256(
+                            b"primary-configuration"
+                        ).hexdigest(),
                         "files_sha256": hashlib.sha256(
                             canonical_bytes(files)
                         ).hexdigest(),
@@ -158,8 +160,12 @@ class BoundaryGraphTests(unittest.TestCase):
                         },
                         "semantic_ledger_sha256": "",
                         "secondary_engine": "codeql",
-                        "secondary_engine_sha256": "c" * 64,
-                        "secondary_configuration_sha256": "d" * 64,
+                        "secondary_engine_sha256": hashlib.sha256(
+                            b"secondary-engine"
+                        ).hexdigest(),
+                        "secondary_configuration_sha256": hashlib.sha256(
+                            b"secondary-configuration"
+                        ).hexdigest(),
                         "secondary_semantic_ledger": {},
                         "secondary_semantic_ledger_sha256": "",
                         "primary_analysis_artifact_base64": "",
@@ -167,8 +173,20 @@ class BoundaryGraphTests(unittest.TestCase):
                         "secondary_analysis_artifact_base64": "",
                         "secondary_analysis_artifact_sha256": "",
                         "primary_authority_key_sha256": "",
+                        "primary_failure_domain": {
+                            "organization": "compiler-org-primary",
+                            "host_identity_sha256": "1" * 64,
+                            "control_plane_sha256": "2" * 64,
+                            "implementation_sha256": "3" * 64,
+                        },
                         "primary_operation_receipt": {},
                         "secondary_authority_key_sha256": "",
+                        "secondary_failure_domain": {
+                            "organization": "compiler-org-secondary",
+                            "host_identity_sha256": "4" * 64,
+                            "control_plane_sha256": "5" * 64,
+                            "implementation_sha256": "6" * 64,
+                        },
                         "secondary_operation_receipt": {},
                         "taint_paths": [],
                         "taint_paths_sha256": "",
@@ -200,7 +218,40 @@ class BoundaryGraphTests(unittest.TestCase):
                         f"{engine_prefix}semantic_ledger"
                     ],
                     "taint_paths": [],
+                    "engine_base64": base64.b64encode(
+                        f"{prefix}-engine".encode()
+                    ).decode(),
+                    "configuration_base64": base64.b64encode(
+                        f"{prefix}-configuration".encode()
+                    ).decode(),
+                    "runtime_closure": [
+                        {
+                            "path": "runtime/library.bin",
+                            "sha256": hashlib.sha256(b"runtime-library").hexdigest(),
+                            "content_base64": base64.b64encode(
+                                b"runtime-library"
+                            ).decode(),
+                        }
+                    ],
+                    "runtime_closure_sha256": "",
+                    "argv": ["analyze", "native.c"],
+                    "environment": [],
+                    "sandbox_policy": {
+                        "network": "deny",
+                        "filesystem": "read-only",
+                        "process": "confined",
+                        "credentials": "isolated",
+                    },
+                    "canary_results": {
+                        "positive_fixture_sha256": "7" * 64,
+                        "negative_fixture_sha256": "8" * 64,
+                        "positive_detected": True,
+                        "negative_clean": True,
+                    },
                 }
+                replay["runtime_closure_sha256"] = hashlib.sha256(
+                    canonical_bytes(replay["runtime_closure"])
+                ).hexdigest()
                 payload = canonical_bytes(replay)
                 evidence["frontends"][0][f"{prefix}_analysis_artifact_base64"] = (
                     base64.b64encode(payload).decode()
@@ -216,6 +267,9 @@ class BoundaryGraphTests(unittest.TestCase):
                     "configuration_sha256": replay["configuration_sha256"],
                     "files_sha256": replay["files_sha256"],
                     "analysis_artifact_sha256": hashlib.sha256(payload).hexdigest(),
+                    "failure_domain": evidence["frontends"][0][
+                        f"{prefix}_failure_domain"
+                    ],
                 }
                 receipt, key = operation_receipt(
                     engine_subject,
@@ -248,6 +302,10 @@ class BoundaryGraphTests(unittest.TestCase):
                 patch(
                     "py_security_suite.deployment_receipt._scan_observed_at",
                     return_value=datetime.now(UTC),
+                ),
+                patch(
+                    "py_security_suite.boundary_graph._compiler_semantic_reexecution",
+                    return_value={"status": "reexecuted-and-matched"},
                 ),
             ):
                 graph = build_boundary_graph(root, require_governed_parsers=True)

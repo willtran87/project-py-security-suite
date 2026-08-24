@@ -284,6 +284,13 @@ trusted-time genesis checkpoint is
 `4cbacab216fed4d37f4e23cb97a948b17784b5c8ef6919c48f3ef7adfcc14143`;
 after promotion, advance the deployment anchor from the store's checkpoint row.
 A missing, restored, or truncated database below that anchor fails closed.
+Production and release also set
+`PYSEC_{OPERATION_RECEIPT,TRUSTED_TIME}_REQUIRE_EXTERNAL_CHECKPOINT=1` and
+configure the corresponding `PYSEC_*_CHECKPOINT` pinned-command family,
+including command, executable/runtime/assets, sandbox, endpoint/mTLS,
+execution-attestation, remote-attestation, and authority-key pins. The external
+authority signs each next checkpoint and runs outside the local database, host,
+control plane, and implementation failure domain.
 `replay_ledger_path` atomically consumes
 each authenticated evidence identity in SQLite, so a previously accepted
 receipt cannot authorize a later decision.
@@ -533,7 +540,12 @@ requires the independently pinned `PYSEC_RAW_EVIDENCE_RECOVERY` command family
 and `PYSEC_RAW_EVIDENCE_RECOVERY_AUTHORITY_KEY_SHA256`. It must restore through
 a distinct replica identity, perform a real KMS unwrap, and return a signed
 operation receipt for the recovered plaintext digest after the writer has
-zeroized its local data key. Deployment traces are admitted through
+zeroized its local data key. Pin the KMS provider's independently signed audit
+stream with
+`PYSEC_RAW_EVIDENCE_RECOVERY_PROVIDER_AUDIT_KEY_SHA256`; the unwrap result must
+include the provider, hardware-backed operation, wrapped-key commitment, audit
+event ID, and a failure domain independent from the recovery executor.
+Deployment traces are admitted through
 `PYSEC_RUNTIME_TRACE_EVIDENCE_PATH` plus its SHA-256 and retained only when
 every source/target pair exists in `boundary-graph.json`. Traces use
 `PYSEC_RUNTIME_TRACE_AUTHORITY`, require `PYSEC_RUNTIME_DEPLOYMENT_SHA256`, and

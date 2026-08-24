@@ -19,6 +19,7 @@ from .operation_receipt import verify_operation_receipt
 from .strict_json import dumps as strict_dumps
 from .strict_json import loads as strict_loads
 from .strict_json import canonical_bytes
+from .failure_domain import require_independent_failure_domains, verify_failure_domain
 
 
 def protect_native_report(payload: str, *, adapter: str) -> dict[str, Any]:
@@ -236,6 +237,8 @@ def _external_recovery_drill(
         "recovery_operation_id",
         "recovery_authority_key_sha256",
         "recovery_operation_receipt",
+        "provider_audit_authority_key_sha256",
+        "provider_audit_event",
     }
     expected_key = (
         os.environ.get("PYSEC_RAW_EVIDENCE_RECOVERY_AUTHORITY_KEY_SHA256", "")
@@ -284,6 +287,87 @@ def _external_recovery_drill(
     )
     if verified["statement"]["operation_id"] != response["recovery_operation_id"]:
         raise ValueError("clean-host recovery operation identity is detached")
+    audit_key = (
+        os.environ.get("PYSEC_RAW_EVIDENCE_RECOVERY_PROVIDER_AUDIT_KEY_SHA256", "")
+        .strip()
+        .casefold()
+    )
+    audit = response["provider_audit_event"]
+    audit_fields = {
+        "schema_version",
+        "provider",
+        "audit_event_id",
+        "object_id",
+        "ciphertext_sha256",
+        "recovered_plaintext_sha256",
+        "wrapped_key_sha256",
+        "kms_unwrap_operation_id",
+        "hardware_backed",
+        "failure_domain",
+        "operation_receipt",
+    }
+    if (
+        not isinstance(audit, dict)
+        or set(audit) != audit_fields
+        or audit.get("schema_version") != "1.0"
+        or not str(audit.get("provider") or "")
+        or not str(audit.get("audit_event_id") or "")
+        or audit.get("object_id") != response["object_id"]
+        or audit.get("ciphertext_sha256") != response["ciphertext_sha256"]
+        or audit.get("recovered_plaintext_sha256")
+        != response["recovered_plaintext_sha256"]
+        or audit.get("wrapped_key_sha256") != request["wrapped_key_sha256"]
+        or audit.get("kms_unwrap_operation_id") != response["kms_unwrap_operation_id"]
+        or audit.get("hardware_backed") is not True
+        or response.get("provider_audit_authority_key_sha256") != audit_key
+        or not _digest(audit_key)
+    ):
+        raise ValueError("KMS provider audit event is invalid")
+    audit_domain = verify_failure_domain(audit["failure_domain"], "KMS provider audit")
+    audit_subject = {
+        name: audit[name] for name in audit_fields if name != "operation_receipt"
+    }
+    audit_receipt = audit["operation_receipt"]
+    audit_statement = (
+        audit_receipt.get("statement") if isinstance(audit_receipt, dict) else None
+    )
+    try:
+        audit_observed_at = datetime.fromisoformat(
+            str((audit_statement or {})["issued_at"]).replace("Z", "+00:00")
+        )
+    except (KeyError, ValueError) as exc:
+        raise ValueError("KMS provider audit time is invalid") from exc
+    verify_operation_receipt(
+        audit_subject,
+        audit_receipt,
+        purpose="kms-unwrap-provider-audit",
+        observed_at=audit_observed_at,
+        challenge_sha256=challenge,
+        expected_key_sha256=audit_key,
+    )
+    attestation_subject = policy_attestation.get("subject", {})
+    remote = attestation_subject.get("policy_observations", {}).get(
+        "remote_attestation", {}
+    )
+    remote_subject = remote.get("subject") if isinstance(remote, dict) else None
+    recovery_domain = (
+        {
+            name: remote_subject.get(name)
+            for name in (
+                "organization",
+                "host_identity_sha256",
+                "control_plane_sha256",
+                "implementation_sha256",
+            )
+        }
+        if isinstance(remote_subject, dict)
+        else None
+    )
+    require_independent_failure_domains(
+        recovery_domain,
+        audit_domain,
+        labels=("recovery executor", "KMS provider audit"),
+    )
     return {
         "schema_version": "1.0",
         "mode": "external-clean-host-kms-restore",
@@ -291,6 +375,8 @@ def _external_recovery_drill(
         "recovery_operation_id": response["recovery_operation_id"],
         "recovery_authority_key_sha256": expected_key,
         "recovery_operation_receipt": verified,
+        "provider_audit_authority_key_sha256": audit_key,
+        "provider_audit_event": audit,
         "effective_policy_attestation": policy_attestation,
         "verified": True,
     }
