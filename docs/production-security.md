@@ -21,13 +21,22 @@ The repository runs a connected GitHub validation lane on every push and pull
 request. It complements the isolated production gate without claiming that a
 hosted runner is the production isolation boundary:
 
+The containment matrix now executes real platform-boundary canaries on all
+three hosted operating systems: a default-deny Bubblewrap mount/PID/IPC/network
+namespace on Linux, a default-deny Seatbelt profile on macOS, and a
+zero-capability AppContainer process on Windows. The Windows lane reads the
+launched process token to prove AppContainer membership and zero capabilities,
+then proves denial of multiple host-file canaries and loopback network access;
+Job Object resource controls remain a separate availability mechanism.
+
 - the locked test environment runs on Python 3.11, 3.12, and 3.13;
 - an explicit Ruff baseline covers correctness, async hazards, common bugs,
   broad exception handling, and Bandit-derived security rules;
 - zizmor audits every GitHub workflow with its pedantic ruleset;
 - mypy checks production source and the Pages audit hooks;
-- `pip-audit` evaluates a hash-pinned export of the complete locked dependency
-  graph while excluding only the unpublished local project itself;
+- `pip-audit` evaluates platform-resolved, hash-pinned exports of both the
+  scanner and companion locked dependency graphs on Linux, Windows, and macOS
+  with Python 3.11 and 3.13, excluding only the unpublished local projects;
 - distributions are built from the locked checkout; and
 - CodeQL runs the Python `security-extended` query suite and uploads SARIF to
   GitHub code scanning.
@@ -42,7 +51,7 @@ they never retain the candidate value.
 Every third-party action is commit-SHA pinned, checkout credentials are not
 persisted, jobs use explicit least-privilege permissions and timeouts, and
 concurrency cancels superseded work. Dependabot covers GitHub Actions, the root
-Python lock, and the separately hashed documentation environment with a
+Python lock, the companion runtime lock, and the separately hashed documentation environment with a
 seven-day version-update cooldown. Security updates are not a replacement for
 the locked dependency audit.
 
@@ -89,6 +98,16 @@ valuable integrity evidence, but cannot authorize its own scanner.
 The suite fails closed when these integrity claims are absent in production or
 release profiles. The enterprise runner should still mount the checkout
 read-only where possible; change detection is evidence, not access control.
+Each scan first copies the exact regular-file inventory into a private read-only
+snapshot and runs every analyzer against that copy. Exact size and SHA-256 are
+checked while copying, the snapshot is rehashed before the decision, and the
+verified revision is materialized through a hook-free Git bundle/clone inside
+the read-only snapshot so history and diff scanners retain exact history. Any
+source symlink is counted and makes source integrity incomplete instead of
+being silently omitted. Scanner rules and offline databases are independently
+digest-sealed before and after execution. The original checkout is rehashed
+afterward. Any race or mutation makes the result
+`INCOMPLETE`; analyzers never combine pre-change and post-change files.
 
 After the approved build has produced `dist/`, run the `release` profile
 against the same immutable checkout. Stage each PyPI Integrity API provenance
@@ -129,14 +148,14 @@ Passport evidence. See [Governed release readiness](release-readiness.md).
 | Python source and structure | Bandit, Semgrep, Ruff, Pylint, mypy, Pyright, deptry, Vulture, Radon, Tach, reachability, Pysa, CodeQL through `run-codeql` | Review configured dynamic roots, unreachable-island candidates, sensitive business logic, authorization, and intentional architecture changes |
 | Secrets | detect-secrets, Gitleaks, and TruffleHog | Full history, rotation workflow, and secret-manager controls |
 | Sensitive-data disclosure | Semgrep taint/configuration rules, organization Pysa/CodeQL models, Graphify, reachability, and SDK/sink inventory | Logging, telemetry, request-body, URL-query, client-error, and automatic-PII minimization; approved transforms, third-party boundaries, retention, and synthetic-canary verification |
-| Dependencies | OSV-Scanner, GuardDog, CycloneDX | Governed lock updates, advisory freshness SLA, and dependency-owner review |
-| CI, IaC, deployment | zizmor, actionlint, Hadolint, Checkov, Trivy, PSScriptAnalyzer, and ShellCheck | Scan the exact deployment definitions, scripts, generated plans, and final container/image |
+| Dependencies | OSV-Scanner, GuardDog, CycloneDX | Governed lock updates, advisory freshness SLA, dependency-owner review, and a raw-output-bound OSV receipt naming and hashing every covered manifest |
+| CI, IaC, deployment | zizmor, actionlint, Hadolint, Checkov, Trivy, PSScriptAnalyzer, ShellCheck, Kubescape, read-only Prowler, and redacted cloud attack-path evidence | Scan the exact deployment definitions, live cloud/cluster inventory, identity/network paths, drift, scripts, generated plans, and final container/image |
 | License and component origin | ScanCode, Trivy, and opt-in REUSE metadata compliance | Legal policy and exceptions |
 | Test evidence | Passive coverage.py, diff-cover, and JUnit ingestion | Execute unit, integration, property, and fuzz tests in disposable companion lanes and bind their reports to the same revision |
 | Built artifact | `release`: Syft, Grype, wheel-content checks, Twine, offline PyPI attestation verification, and Cosign | Source-to-build reproducibility and organization release signature |
 | Final OCI image | Bounded `oci-image` findings and digest evidence | Scan the immutable image archive with staged Syft, Grype, and Trivy databases; never pull during the isolated gate |
 | Repository governance | Validated OpenSSF Scorecard JSON | Generate the JSON in a separately authorized connected lane and bind it to the scanned revision |
-| Runtime behavior | Hypothesis and Schemathesis JUnit plus Atheris, mutmut, and ZAP evidence are normalized; target behavior is deliberately not executed by the scanner | Sandboxed unit/integration, abuse-case, fuzz, API, and DAST execution |
+| Runtime behavior | Hypothesis and Schemathesis JUnit plus Atheris, ClusterFuzzLite, Fuzz Introspector, ZAP, Nuclei, self-hosted OAST, RESTler, browser, authorization, protocol contracts, IAST, Falco, RASP, native-sanitizer, MobSF, TLS, and connected secret-verification evidence are normalized; target behavior is deliberately not executed by the scanner | Sandboxed multi-role/state/replay/concurrency abuse cases, fuzz-depth analysis, API/GraphQL state machines, authenticated and out-of-band DAST, non-HTTP fault cases, instrumentation-health, runtime-rule, prevention, mobile, transport, and provider-verification canaries |
 | Design risk | OWASP pytm threats are normalized when a model exists | Human threat-model and architecture review plus time-bounded risk acceptance |
 
 The generated `assurance-case.md` records these boundaries for each run. Its
@@ -184,15 +203,77 @@ still execute in dynamic or connected companion stages:
 3. **OWASP pytm** for model-as-code threats, **in-toto** for authorized build
    steps, reproducible-build comparison, and **YARA** for local organization
    malware rules.
+4. **Nuclei, Prowler, Falco, Kubescape, RASP, native sanitizers, MobSF,
+   an approved TLS scanner, and language-specific CodeQL/Semgrep packs** for independent DAST,
+   deployed posture and drift, workload behavior, prevention, memory safety,
+   mobile, transport, and polyglot evidence.
+5. **Multi-role authorization contracts** for explicit BOLA/IDOR and tenant
+   boundaries plus state transitions, replay resistance, concurrency limits,
+   and approval ceilings. These complement, but cannot infer, human-reviewed
+   business rules and approval intent.
+6. **Self-hosted OAST, RESTler, gRPC/WebSocket/TCP contracts, Fuzz
+   Introspector, cloud attack-path correlation, and redacted provider secret
+   receipts** for blind callbacks, stateful APIs, non-HTTP faults, harness
+   quality, composed cloud exposure, and live credential status.
 
 Production now fails closed without completed Hypothesis, CrossHair, Atheris,
 mutmut, pytm, and Scorecard evidence. Release additionally requires
 check-manifest, ClamAV, GitHub attestation, in-toto, reproducibility, YARA,
 final OCI-image evidence, and offline PyPI attestation verification.
+Applicable web, OpenAPI/protocol, authorization-contract, fuzz-target, cloud,
+secret-verification, container, Kubernetes, native, mobile, TLS, and non-Python
+shapes additionally require their corresponding v2 runtime evidence; absence
+is `INCOMPLETE`, not a clean pass.
 
 Dynamic tools execute application behavior and must use disposable test
 credentials, synthetic data, resource limits, and a network policy appropriate
 to the test target.
+The CI integration lane exercises actual default-deny Bubblewrap on Linux and
+`sandbox-exec` on macOS; Windows separately exercises a token-inspected,
+zero-capability AppContainer plus Job Object assignment and limits. The active
+boundary probe checks TCP and UDP over IPv4 and IPv6, a non-loopback host
+interface, Unix-domain and raw sockets, host IPC, parent-process visibility,
+the host device namespace, ambient proxy removal, target-root/nested/link
+immutability, and private scratch access. Host IPC is a separate named
+shared-memory canary rather than an alias for Unix sockets. The child also
+introspects Linux `NoNewPrivs`, effective capabilities, and seccomp state or
+Windows DEP, ASLR, dynamic-code, and child-process mitigation policy; missing
+required policy fails the boundary proof.
+Governed profiles require an externally enforced file-write quota in addition
+to local CPU, memory, process, descriptor, output, and POSIX file-size limits.
+Their bounded outputs use companion-assurance v2 and are rejected unless fresh,
+complete, canary-verified, source-bound, and authenticated by a SHA-pinned
+Ed25519 DSSE/in-toto producer identity.
+
+Production assurance evidence additionally requires an exact checkpointed
+assurance profile. Profile metadata is inserted before source binding, and the
+normalized result records a governed digest over the evidence, source, and
+profile digests so profile substitution or detachment changes the admitted
+identity. Deep qualification uses RFC 3161 time, lifecycle-bound independent
+authorities, and consume-once replay protection; use the central HTTPS/mTLS
+replay-service mode whenever more than one runner can admit the same receipt.
+Every derived publication artifact is looked up in a closed schema registry.
+Unknown filenames fail publication, normalized suite artifacts use
+artifact-specific bounded schemas, and companion v2 evidence must satisfy its
+strict contract before checksums are sealed.
+Cross-language results carry canonical digest-bound boundary and flow ledgers,
+exact file/line/language membership, and a second-engine reproduction receipt;
+both engines' ledger digests must match while their engine and query-pack
+identities must differ.
+Checkov, pipdeptree, and git-sizer outputs are normalized into suite-owned,
+additional-properties-closed contracts.
+
+Production and release decisions always require schema-2.0 labeled-corpus
+effectiveness evidence with a distinct training digest, an exact holdout-label
+digest, a lifecycle-valid quorum from at least two trusted organizations, at
+least 25 labels, 10 positive labels, 10 negative labels, two tools, and five
+labels for each required tool. CWE, language, parser, boundary, severity, and
+mutation diversity minimums are enforced, and every required tool needs both
+positive and negative cases. Omitting CLI flags cannot disable this gate.
+`security-requirements-coverage.json` records pinned ASVS 5.0.0, MASVS 2.1.0,
+and TCASVS 5.0.0 catalog metadata and mapped evidence, but remains incomplete
+until the full catalog and an organization-approved applicability decision are
+present; it never equates selected mappings with standards conformance.
 
 ## Promotion evidence
 

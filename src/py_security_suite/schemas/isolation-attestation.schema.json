@@ -4,10 +4,25 @@
   "title": "Externally enforced network-isolation validation receipt",
   "oneOf": [
     {"$ref": "#/$defs/validated"},
+    {"$ref": "#/$defs/validatedV2"},
     {"$ref": "#/$defs/unvalidated"}
   ],
   "$defs": {
     "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "authority": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schema_version", "signer_id", "collector_id", "public_key_file", "public_key_sha256", "signature_file", "signature_sha256", "signed_at", "expires_at"],
+      "properties": {
+        "schema_version": {"const": "1.0"}, "signer_id": {"$ref": "#/$defs/digest"},
+        "collector_id": {"type": "string", "minLength": 1, "maxLength": 500},
+        "public_key_file": {"type": "string", "minLength": 1, "maxLength": 500},
+        "public_key_sha256": {"$ref": "#/$defs/digest"},
+        "signature_file": {"type": "string", "minLength": 1, "maxLength": 500},
+        "signature_sha256": {"$ref": "#/$defs/digest"},
+        "signed_at": {"type": "string", "format": "date-time"},
+        "expires_at": {"type": "string", "format": "date-time"}
+      }
+    },
     "validated": {
       "type": "object",
       "additionalProperties": false,
@@ -32,6 +47,65 @@
         "validated": {"const": true},
         "organization_approved": {"type": "boolean"},
         "evidence_sha256": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "validatedV2": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "status", "network_policy", "target", "source_sha256", "issuer", "runner_id", "policy_id", "policy_sha256", "approved_by", "valid_from", "valid_until", "trust_root_sha256", "generation", "nonce", "capabilities", "minimum_authority_signatures", "authorities", "configured", "validated", "organization_approved", "evidence_sha256", "governance_contract", "authority_signers", "authority_collectors", "authority_organizations", "replay_backend", "trusted_consumed_at"],
+      "properties": {
+        "schema_version": {"const": "2.0"},
+        "status": {"const": "enforced"},
+        "network_policy": {"const": "deny"},
+        "target": {"type": "string", "minLength": 1, "maxLength": 500},
+        "source_sha256": {"$ref": "#/$defs/digest"},
+        "issuer": {"type": "string", "minLength": 1, "maxLength": 500},
+        "runner_id": {"type": "string", "minLength": 1, "maxLength": 500},
+        "policy_id": {"type": "string", "minLength": 1, "maxLength": 500},
+        "policy_sha256": {"$ref": "#/$defs/digest"},
+        "approved_by": {"type": "string", "minLength": 1, "maxLength": 500},
+        "valid_from": {"type": "string", "format": "date-time"},
+        "valid_until": {"type": "string", "format": "date-time"},
+        "trust_root_sha256": {"$ref": "#/$defs/digest"},
+        "generation": {"type": "integer", "minimum": 1},
+        "nonce": {"type": "string", "minLength": 16, "maxLength": 500},
+        "capabilities": {
+          "type": "array", "uniqueItems": true, "maxItems": 32, "items": {"type": "string"},
+          "allOf": [
+            {"contains": {"const": "network-deny-all"}},
+            {"contains": {"const": "target-read-only"}},
+            {"contains": {"const": "resource-limits"}},
+            {"contains": {"const": "process-tree-termination"}},
+            {"contains": {"const": "file-write-quota"}},
+            {"contains": {"const": "host-filesystem-read-deny"}},
+            {"contains": {"const": "credential-isolation"}},
+            {"contains": {"const": "process-isolation"}},
+            {"contains": {"const": "device-isolation"}},
+            {"contains": {"const": "ipc-isolation"}}
+          ],
+          "anyOf": [
+            {"contains": {"const": "linux-user-mount-network-namespaces"}},
+            {"contains": {"const": "macos-seatbelt"}},
+            {"contains": {"const": "windows-appcontainer"}},
+            {"contains": {"const": "microvm-boundary"}}
+          ]
+        },
+        "minimum_authority_signatures": {"type": "integer", "minimum": 2, "maximum": 16},
+        "authorities": {"type": "array", "minItems": 2, "maxItems": 16, "items": {"$ref": "#/$defs/authority"}},
+        "configured": {"const": true},
+        "validated": {"const": true},
+        "organization_approved": {"type": "boolean"},
+        "evidence_sha256": {"$ref": "#/$defs/digest"},
+        "governance_contract": {"const": "v2-quorum"},
+        "authority_signers": {"type": "array", "minItems": 2, "uniqueItems": true, "items": {"$ref": "#/$defs/digest"}},
+        "authority_collectors": {"type": "array", "minItems": 2, "uniqueItems": true, "items": {"type": "string"}},
+        "authority_organizations": {"type": "array", "minItems": 2, "uniqueItems": true, "items": {"type": "string"}},
+        "replay_backend": {"enum": ["local-sqlite", "remote-mtls-monotonic"]},
+        "replay_token_sha256": {"$ref": "#/$defs/digest"},
+        "replay_receipt_sequence": {"type": "integer", "minimum": 1},
+        "replay_receipt_sha256": {"$ref": "#/$defs/digest"},
+        "replay_receipt_key_id": {"$ref": "#/$defs/digest"},
+        "trusted_consumed_at": {"type": ["string", "null"], "format": "date-time"}
       }
     },
     "unvalidated": {

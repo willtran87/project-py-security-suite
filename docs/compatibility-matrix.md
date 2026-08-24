@@ -68,12 +68,15 @@ closed instead of hiding findings.
 | Finding lifecycle | Yes | Bounded prior `findings.json` and mandatory approved SHA-256 | New, existing, regressed, and resolved evidence |
 | CODEOWNERS routing | Yes | Repository-local bounded file | Owner metadata in reports and SARIF |
 | Effectiveness summary | Yes | Current normalized findings, tool runs, primary/helper executable identities, trust approval, and continuity | Attribution, actionability, corroboration, tool contribution, and exact per-tool evidence posture consumed by risk routes; not a precision/recall or finding-truth claim |
-| Labeled effectiveness benchmark | Yes | Verified report plus reviewed corpus bound by approved SHA-256 | TP/TN/FP/FN, precision, recall, specificity, F1, and exact failed labels |
+| Labeled effectiveness benchmark | Yes | Verified report plus digest-bound corpus; production/release require schema 2.0, separate training/holdout identities, and lifecycle-valid signatures from two trusted organizations | TP/TN/FP/FN, precision, recall, specificity, F1, exact failed labels, and enforced CWE/language/parser/boundary/severity/mutation diversity |
 | Operational domain scorecard | Yes | Applicable tool status, normalized findings, policy reasons, and executable identity | Separate A-F execution, observed-risk, and evidence grades across 12 domains; release disposition and N/A remain distinct |
 | Conditional-control activation | Yes | Not-applicable reason and selected adapter identity | Owner, activation trigger, concrete action, required closure evidence, and tool reference |
 | Scanner trust catalog | Yes | Organization-approved catalog bound by SHA-256, platform, role, version, source, approver, and expiry | Reusable executable approval with per-entry audit evidence and explicit-pin precedence |
 | SSDF claims | Yes | Current manifest and generated evidence | Machine-readable claim-to-evidence status |
 | External isolation receipt | Yes | Digest-bound, time-bounded evidence authorized in organization policy and tied to target/source digest | Separates structural validation, organization authorization, and the operator isolation assertion |
+| Active isolation canaries | Yes | Actual scanner boundary with TCP/UDP IPv4/IPv6, host-interface, Unix/raw-socket, host IPC, process visibility, device namespace, proxy, target/link, and scratch probes | Unsupported or reachable channels remain incomplete; CI exercises default-deny Bubblewrap and Seatbelt plus a token-verified zero-capability Windows AppContainer and Job Objects |
+| Immutable analysis snapshot | Yes | Exact regular-file path, size, and SHA-256 inventory copied race-safely to a private read-only tree; Git histories and nested submodule histories are bundled, and unresolved LFS pointers fail closed | Prevents mixed-version analyzer results and fails closed on snapshot or original-tree mutation |
+| Derived artifact schemas | Yes | Closed filename registry plus artifact-specific bounded JSON Schema validation | Unknown or shape-invalid evidence cannot be sealed into a report |
 | Intelligence approval receipt | Yes | Organization-policy-bound approval listing the exact KEV/EPSS/VEX digests consumed | Prevents an unapproved snapshot refresh from inheriting an earlier approval |
 | Reachability regression gate | Yes | Two schema-1.1/1.2 graphs, each bound to an explicit SHA-256 | New disconnected code, new reportable islands, state regressions, and lost observations |
 | Cross-tool evidence fusion | Yes | Normalized findings, tool status, source/artifact SBOMs, pipdeptree environment health, graph, reachability, coverage, bounded test-case ledgers, complexity, structural synthesis, CODEOWNERS, source inventory, artifact manifest, scanner fix records, and approved KEV/EPSS/VEX | Per-finding review reasons, semantic/cross-stage corroboration, package lineage drift, bounded introducing-root paths, digest agreement, compound hotspots, alias-aware advisory decisions with attributed fix candidates, exposure ownership/test execution/change-risk feedback, SDK-package disclosure-boundary joins, and evidence-lane gaps |
@@ -150,6 +153,30 @@ performed.
 | ClamAV evidence | Malware scanning of vendored/release bytes | Scanner and signed database run in a separate bounded artifact lane | artifact and broader | Yes |
 | GitHub attestation evidence | Offline GitHub artifact-attestation verification | Verification bundle and trusted root are collected separately; bounded result ingestion | artifact and broader | Yes |
 | OWASP ZAP evidence | Dynamic web vulnerability testing | Native Java automation runs against an isolated local service; bounded JSON ingestion | repo, comprehensive, production, release when applicable | Yes |
+| Browser security evidence | Authenticated browser response, cookie, navigation, WebSocket proxying, runtime sink use, and egress assertions | Pinned Playwright browser against explicit loopback only; non-loopback requests blocked; page and credential content never retained; real Chromium CI qualification | runtime, repo, comprehensive, production, release when applicable | Yes |
+| Authorization security evidence | Multi-role BOLA/IDOR, tenant, state-transition, replay, concurrency, and approval-limit contracts | Explicit loopback service; bearer tokens and request bodies are read from named environment variables and never retained; activates only when a project-owned contract exists | runtime and broader when configured | Yes |
+| IAST evidence | Runtime-confirmed Python source-to-sink data flow | Optional `ddtrace` 4.x companion instrumentation and separately administered agent; only bounded exported findings are imported | runtime, repo, comprehensive, production, release when a Python web surface exists | Yes |
+| ClusterFuzzLite evidence | Continuous change and scheduled coverage-guided fuzzing | Linux/Docker companion lane; crash corpus and reproducers remain outside bounded JSON | runtime, repo, comprehensive, production, release when configured | Yes |
+| Falco evidence | Runtime host, container, and Kubernetes behavior | Native Linux runtime lane; bounded normalized alerts only | runtime, repo, comprehensive, production, release when container inputs exist | Yes |
+| Kubescape evidence | Deployed Kubernetes posture and runtime threat detection | Read-only cluster/agent lane; bounded normalized findings only | runtime, repo, comprehensive, production, release when Kubernetes inputs exist | Yes |
+| Nuclei evidence | Independent targeted DAST and technology-aware workflows | Signed local templates only; update and Interactsh disabled; raw request/response and encoded templates omitted | runtime and broader when a web surface exists | Yes |
+| OAST evidence | Correlated DNS/HTTP/SMTP/LDAP callbacks | Self-hosted service and explicitly approved egress scope only; callback bodies and network payloads are rejected from normalized evidence | runtime and broader when a web surface exists | Yes |
+| RESTler evidence | Stateful producer/consumer REST API sequence exploration | Disposable API target; only successfully replayed bug buckets and bounded execution coverage are accepted | runtime and broader when an OpenAPI surface exists | Yes |
+| Protocol security evidence | gRPC, WebSocket, and TCP contract plus fault cases | Bundled producer permits loopback endpoints only and never retains environment-supplied request bytes | runtime and broader when `.proto` or a protocol contract exists | Yes |
+| Fuzz Introspector evidence | Static reachability, dynamic coverage, corpus health, and blockers | Bounded summary only; fuzz corpora, crashes, and process output remain in the companion lane | runtime and broader when fuzz targets exist | Yes |
+| Prowler evidence | Live cloud posture and declared-to-deployed drift | Read-only provider identity; account/project/region scope retained without credentials or raw resource objects | runtime and broader when cloud IaC exists | Yes |
+| Cloud attack-path evidence | Public-entry to sensitive-asset paths across identity/network edges and IaC/live drift | Read-only bounded graph; raw node/resource identities are hashed and removed from findings | runtime and broader when cloud IaC exists | Yes |
+| Secret-verification evidence | Provider-side active/revoked/invalid credential status | Authorized connected verifier; secret values, tokens, credentials, and request/response content are structurally rejected | runtime and broader when a verification policy exists | Yes |
+| RASP evidence | Runtime exploit prevention effectiveness | Observe and block-mode canaries in a disposable lane; never changes production enforcement | runtime and broader when a web surface exists | Yes |
+| Native sanitizer evidence | ASan, UBSan, libFuzzer, and binary hardening | Native-source projects only; reproducers and process output remain outside bounded evidence | runtime and broader when native source exists | Yes |
+| MobSF evidence | Mobile static and emulator-backed dynamic security | Mobile projects only; application and emulator bytes stay in the companion lane | runtime and broader when mobile shape exists | Yes |
+| TLS scan evidence | Certificate, protocol, and cipher behavior | Explicitly authorized ephemeral endpoint; bounded metadata only | runtime and broader when a web surface exists | Yes |
+| Polyglot evidence | Language-specific semantic/data-flow packs | Native gosec, Cargo Audit, and npm Audit plus SARIF 2.1.0 from ESLint, SpotBugs, Detekt, Brakeman, and govulncheck; exact raw-report and normalizer provenance | runtime and broader when non-Python source exists | Yes |
+| Surface inventory evidence | Declared, observed, retired, versioned, owned, and shadow API/service surfaces | Schema v3 binds independent organization, collector, signer, adapter, endpoint, query, freshness, and pagination-completeness evidence; opaque identities only | runtime and broader | Yes |
+| Event security evidence | Producer/consumer authorization, transactional commit/abort, message signing, replay, idempotency, schema, dead-letter, and poison-message behavior | Native `aiokafka` driver forces TLS hostname verification, idempotent production, and read-committed consumption against an explicit loopback disposable broker; timeouts are inconclusive | runtime and broader when configured | Yes |
+| Database security evidence | Least privilege, FORCE RLS, migration, query-boundary, restore, negotiated TLS, and audit behavior | Native Psycopg driver attests the negotiated TLS protocol/cipher, rejects superuser/BYPASSRLS/owner RLS oracles, and uses read-only canary transactions | runtime and broader when configured | Yes |
+| Ruleset regression evidence | TP/TN, parser variants, false-positive budget, and mutation sensitivity | Exact corpus/ruleset digests, minimum samples, confidence level, point scores, and Wilson intervals are compared with the signed baseline | runtime and broader | Yes |
+| AI security evidence | Prompt injection, tool authorization, agency, memory, output handling, and exfiltration | Repeated sanitized trials bind model/provider/prompt/dataset digests and enforce per-control sample sizes plus confidence-bounded failure policy | runtime and broader when configured | Yes |
 | OWASP pytm evidence | Threat model, DFD, trust boundaries, and enumerated threats | Model executes in a design lane; reviewed threats are ingested | repo, comprehensive, production, release when a model exists | Yes |
 | in-toto evidence | Authorized build steps, materials, products, and functionaries | Offline layout/link verification in the release lane | artifact, comprehensive, release | Yes |
 | Reproducible-build evidence | Independent build equivalence and explained differences | `reprotest`/`diffoscope` execute in a build lane | artifact, comprehensive, release | Yes |
@@ -297,7 +324,17 @@ No Docker image is required for any suite adapter.
 | KubeLinter | No Kubernetes-shaped YAML or Helm chart exists |
 | Hypothesis | No evidence exists; for a Python target this remains applicable and fails closed |
 | Schemathesis | No OpenAPI schema and no pre-generated Schemathesis JUnit exists |
-| CrossHair, Atheris, mutmut, ZAP, pytm | The corresponding pre-generated evidence is absent and no project-specific opt-in input exists |
+| CrossHair, Atheris, mutmut, pytm | The corresponding pre-generated evidence is absent and no project-specific opt-in input exists |
+| Authorization security | No project-owned authorization contract and no pre-generated evidence exists |
+| Nuclei, OAST, RASP, TLS scan | No web application surface and no pre-generated evidence exists |
+| RESTler | No OpenAPI surface and no pre-generated evidence exists |
+| Protocol security | No `.proto` file, protocol contract, or pre-generated evidence exists |
+| Fuzz Introspector | No fuzz-target declaration and no pre-generated evidence exists |
+| Prowler, cloud attack paths | No cloud deployment/IaC shape and no pre-generated evidence exists |
+| Secret verification | No verification policy and no pre-generated evidence exists |
+| Native sanitizers | No native source and no pre-generated evidence exists |
+| MobSF | No mobile application shape and no pre-generated evidence exists |
+| Polyglot | No supported non-Python source and no pre-generated evidence exists |
 | in-toto, reproducible-build, YARA | The corresponding release evidence is absent |
 | check-manifest, ClamAV, GitHub attestation | The corresponding packaging/release evidence is absent |
 | REUSE | No `REUSE.toml`, `.reuse/dep5`, or `LICENSES` opt-in marker exists |
@@ -352,6 +389,14 @@ contracts that complement scanner coverage:
   `diff-coverage.json`; and Checkov produces `checkov-iac.json`.
 - KICS produces `kics-iac.json`; git-sizer produces `git-sizer.json`; and
   pipdeptree produces `pipdeptree-summary.json`.
+- Checkov, git-sizer, and pipdeptree normalized artifacts retain the exact UTF-8
+  native payload alongside its byte count, record count, native SHA-256, and a
+  digest of the normalization subject. A verifier can therefore replay the
+  normalizer and detect either raw-payload or normalized-accounting tampering.
+- `boundary-graph.json` separately inventories notebooks, templates, bytecode,
+  native extensions, WebAssembly, generated source, and dynamic-code entry
+  points. Unsupported or heuristic-only special surfaces prevent complete or
+  semantic-complete claims instead of disappearing from the denominator.
 - Trusted-lane evidence produces a bounded `<tool>-summary.json` and never
   forwards raw crash logs, process output, artifact bytes, or malware samples.
 - Every scan emits `sonarqube-external-issues.json` in addition to SARIF, so a

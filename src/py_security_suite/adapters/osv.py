@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import re
 from pathlib import Path
 from typing import Any
 
 from ..execution import CommandEnvironment
+from ..path_safety import read_regular_file
+from ..strict_json import canonical_bytes
 from ..models import (
     Citation,
     Confidence,
@@ -88,6 +91,46 @@ class OsvScannerAdapter(ScannerAdapter):
             for package_result in packages:
                 findings.extend(self._package_findings(package_result, path))
         return findings
+
+    def derived_artifacts(self, payload: str, target: Path) -> dict[str, Any]:
+        """Retain source records emitted by OSV instead of inferring scan scope."""
+        document = json.loads(payload)
+        results = document.get("results") or []
+        if not isinstance(results, list):
+            raise TypeError("results must be a list")
+        manifests: dict[str, dict[str, str]] = {}
+        for result in results:
+            if not isinstance(result, dict):
+                raise TypeError("OSV result must be an object")
+            source = result.get("source")
+            source_path = source.get("path") if isinstance(source, dict) else None
+            if not isinstance(source_path, str) or not source_path.strip():
+                continue
+            relative = normalize_repo_path(target, source_path)
+            if relative in {".", "<outside-target>"}:
+                continue
+            try:
+                _, raw = read_regular_file(
+                    target / relative,
+                    "OSV-reported dependency manifest",
+                    maximum_bytes=256 * 1024 * 1024,
+                    boundary=target,
+                )
+            except (OSError, ValueError):
+                continue
+            manifests[relative] = {
+                "manifest": relative,
+                "manifest_sha256": hashlib.sha256(raw).hexdigest(),
+            }
+        receipt = {
+            "schema_version": "1.0",
+            "analysis": "osv-scanner-manifest-output-receipts",
+            "tool": self.name,
+            "raw_output_sha256": hashlib.sha256(payload.encode("utf-8")).hexdigest(),
+            "manifests": [manifests[path] for path in sorted(manifests)],
+        }
+        receipt["receipt_sha256"] = hashlib.sha256(canonical_bytes(receipt)).hexdigest()
+        return {"osv-manifest-receipts.json": receipt}
 
     def _package_findings(self, package_result: Any, path: str) -> list[Finding]:
         if not isinstance(package_result, dict):

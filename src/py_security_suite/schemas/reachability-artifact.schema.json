@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:reachability-artifact:1.0",
+  "type": "object",
+  "required": ["schema_version", "analysis", "summary", "entry_points", "representative_sequences", "islands", "nodes", "edges", "dynamic_features", "warnings", "errors"],
+  "properties": {
+    "schema_version": {"enum": ["1.1", "1.2"]},
+    "analysis": {"type": "object", "required": ["confidence"], "properties": {"confidence": {"type": "string"}}},
+    "summary": {"type": "object", "required": ["entry_points"], "properties": {"entry_points": {"type": "integer", "minimum": 0}}},
+    "entry_points": {"type": "array", "maxItems": 10000},
+    "representative_sequences": {"type": "array", "maxItems": 100000},
+    "islands": {"type": "array", "maxItems": 250000, "items": {"type": "object"}},
+    "nodes": {"type": "array", "maxItems": 750000},
+    "edges": {"type": "array", "maxItems": 2000000},
+    "dynamic_features": {"type": "array", "maxItems": 100000, "items": {"type": "string"}},
+    "precision_features": {"type": "array", "maxItems": 100000, "items": {"type": "string"}},
+    "warnings": {"type": "array", "maxItems": 100000, "items": {"type": "string"}},
+    "errors": {"type": "array", "maxItems": 100000, "items": {"type": "string"}}
+  }
+}

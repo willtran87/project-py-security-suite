@@ -5,7 +5,7 @@ import re
 import time
 from pathlib import Path
 
-from ..execution import run_command, sanitize_diagnostic
+from ..execution import run_command, sanitize_diagnostic, sha256_file
 from ..models import Citation, Confidence, Finding, Location, Severity, Source
 from ..models import ToolRun, ToolStatus, finding_identity, normalize_repo_path
 from .artifacts import artifact_identity_evidence, configured_path, distribution_files
@@ -51,8 +51,17 @@ class CosignAdapter(ScannerAdapter):
 
     def prerequisite_error(self) -> str | None:
         if self.config.public_key_path:
-            if not self.config.public_key_path.expanduser().resolve().is_file():
+            public_key = self.config.public_key_path.expanduser().resolve()
+            if not public_key.is_file() or public_key.is_symlink():
                 return "the configured Cosign public key does not exist"
+            if not self.config.public_key_sha256:
+                return "Cosign public-key verification requires public_key_sha256"
+            try:
+                observed = sha256_file(public_key)
+            except OSError:
+                return "the configured Cosign public key could not be hashed"
+            if observed != self.config.public_key_sha256:
+                return "the configured Cosign public key SHA-256 is not approved"
             return None
         if (
             not self.config.certificate_identity

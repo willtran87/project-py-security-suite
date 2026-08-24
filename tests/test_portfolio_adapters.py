@@ -6,8 +6,21 @@ import unittest
 from pathlib import Path
 
 from py_security_suite.adapters.assurance_evidence import (
+    BrowserSecurityAdapter,
+    AuthorizationSecurityAdapter,
+    ClusterFuzzLiteAdapter,
     CrossHairAdapter,
+    FalcoAdapter,
+    IastAdapter,
     InTotoAdapter,
+    KubescapeAdapter,
+    MobSfAdapter,
+    NativeSanitizersAdapter,
+    NucleiAdapter,
+    PolyglotAdapter,
+    ProwlerAdapter,
+    RaspAdapter,
+    TlsScanAdapter,
     OciImageAdapter,
     PyTmAdapter,
     ReproducibleBuildAdapter,
@@ -31,7 +44,7 @@ from py_security_suite.adapters.portfolio import (
     _number,
 )
 from py_security_suite.config import ToolConfig
-from py_security_suite.evidence_ingest import _assurance_document
+from py_security_suite.evidence_ingest import _assurance_document, _bind_evidence
 from py_security_suite.reports import render_sonarqube_external_issues
 
 
@@ -144,8 +157,21 @@ class PortfolioAdapterTests(unittest.TestCase):
             command = configured.build_command("pipdeptree", root)
             self.assertEqual(command[1:3], ["--python", "python-approved"])
             self.assertEqual(
-                configured.derived_artifacts("{}", root),
-                {"pipdeptree-summary.json": {}},
+                configured.derived_artifacts(
+                    json.dumps(
+                        {
+                            "total_packages": 1,
+                            "direct_dependencies": 1,
+                            "transitive_dependencies": 0,
+                            "max_depth": 1,
+                            "missing_dependencies": 0,
+                            "cyclic_dependencies": 0,
+                            "conflicting_dependencies": {"packages": 0, "edges": 0},
+                        }
+                    ),
+                    root,
+                )["pipdeptree-summary.json"]["total_packages"],
+                1,
             )
             with self.assertRaisesRegex(TypeError, "must be an object"):
                 configured.parse("[]", root)
@@ -191,10 +217,10 @@ class PortfolioAdapterTests(unittest.TestCase):
             self.assertEqual(len(findings), 1)
             self.assertEqual(findings[0].severity.value, "low")
             self.assertEqual(
-                adapter.derived_artifacts(payload, root)["git-sizer.json"]["history"][
+                adapter.derived_artifacts(payload, root)["git-sizer.json"]["metrics"][
                     0
                 ]["value"],
-                9,
+                "9",
             )
             with self.assertRaisesRegex(TypeError, "must be an object"):
                 adapter.parse("[]", root)
@@ -309,7 +335,10 @@ class PortfolioAdapterTests(unittest.TestCase):
 
     def test_assurance_ingestion_is_bounded_and_sanitized(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "crosshair.json"
+            root = Path(directory)
+            (root / "src").mkdir()
+            (root / "src" / "app.py").write_text("VALUE = 1\n", encoding="utf-8")
+            path = root / "crosshair.json"
             path.write_text(
                 json.dumps(
                     {
@@ -330,13 +359,97 @@ class PortfolioAdapterTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
+            _bind_evidence([path], source_root=root, overwrite=False)
             normalized = _assurance_document(path, "crosshair")
         finding = CrossHairAdapter(ToolConfig(), 4096).parse(
-            json.dumps(normalized), Path(".")
+            json.dumps(normalized), root
         )[0]
         self.assertEqual(finding.sources[0].tool, "crosshair")
         self.assertEqual(finding.locations[0].start_line, 12)
         self.assertEqual(finding.evidence["counterexample"], "value=-1")
+        self.assertTrue(finding.evidence["assurance_context"]["binding_verified"])
+
+    def test_runtime_evidence_applicability_fails_closed_for_matching_projects(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "uv.lock").write_text(
+                '[[package]]\nname = "fastapi"\nversion = "1.0"\n',
+                encoding="utf-8",
+            )
+            self.assertIn(
+                "no web application surface",
+                IastAdapter(ToolConfig(), 4096).not_applicable_reason(root) or "",
+            )
+            (root / "pyproject.toml").write_text(
+                '[project]\ndependencies = ["fastapi>=0.100"]\n',
+                encoding="utf-8",
+            )
+            web_adapters = (
+                IastAdapter(ToolConfig(), 4096),
+                BrowserSecurityAdapter(ToolConfig(), 4096),
+                ZapAdapter(ToolConfig(), 4096),
+                NucleiAdapter(ToolConfig(), 4096),
+                RaspAdapter(ToolConfig(), 4096),
+                TlsScanAdapter(ToolConfig(), 4096),
+            )
+            for adapter in web_adapters:
+                with self.subTest(tool=adapter.name):
+                    self.assertIsNone(adapter.not_applicable_reason(root))
+
+            (root / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
+            self.assertIsNone(
+                FalcoAdapter(ToolConfig(), 4096).not_applicable_reason(root)
+            )
+
+            (root / "pod.yaml").write_text(
+                "apiVersion: v1\nkind: Pod\n", encoding="utf-8"
+            )
+            self.assertIsNone(
+                KubescapeAdapter(ToolConfig(), 4096).not_applicable_reason(root)
+            )
+
+            fuzz = ClusterFuzzLiteAdapter(ToolConfig(), 4096)
+            self.assertIn("configuration", fuzz.not_applicable_reason(root) or "")
+            (root / ".clusterfuzzlite").mkdir()
+            self.assertIsNone(fuzz.not_applicable_reason(root))
+
+            self.assertIn(
+                "authorization contract",
+                AuthorizationSecurityAdapter(ToolConfig(), 4096).not_applicable_reason(
+                    root
+                )
+                or "",
+            )
+            (root / "security").mkdir()
+            (root / "security" / "authorization-contract.json").write_text(
+                "{}", encoding="utf-8"
+            )
+            self.assertIsNone(
+                AuthorizationSecurityAdapter(ToolConfig(), 4096).not_applicable_reason(
+                    root
+                )
+            )
+
+            (root / "main.tf").write_text("terraform {}\n", encoding="utf-8")
+            self.assertIsNone(
+                ProwlerAdapter(ToolConfig(), 4096).not_applicable_reason(root)
+            )
+            (root / "extension.c").write_text("int value;\n", encoding="utf-8")
+            self.assertIsNone(
+                NativeSanitizersAdapter(ToolConfig(), 4096).not_applicable_reason(root)
+            )
+            (root / "AndroidManifest.xml").write_text(
+                "<manifest />\n", encoding="utf-8"
+            )
+            self.assertIsNone(
+                MobSfAdapter(ToolConfig(), 4096).not_applicable_reason(root)
+            )
+            (root / "app.ts").write_text("export const value = 1;\n", encoding="utf-8")
+            self.assertIsNone(
+                PolyglotAdapter(ToolConfig(), 4096).not_applicable_reason(root)
+            )
 
     def test_property_and_api_junit_preserve_producer_attribution(self) -> None:
         payload = json.dumps(
@@ -381,6 +494,11 @@ class PortfolioAdapterTests(unittest.TestCase):
             payload = json.dumps(
                 {
                     "kind": adapter.evidence_kind,
+                    "source_sha256": "a" * 64,
+                    "evidence_binding": {
+                        "verified": True,
+                        "evidence_sha256": "b" * 64,
+                    },
                     "findings": [
                         {
                             "rule_id": "evidence-failure",
@@ -394,6 +512,30 @@ class PortfolioAdapterTests(unittest.TestCase):
             self.assertEqual(finding.domain, domain)
             self.assertEqual(finding.area, area)
             self.assertEqual(finding.sources[0].tool, adapter.name)
+
+    def test_assurance_parser_defends_v2_and_signature_requirements(self) -> None:
+        adapter = NucleiAdapter(
+            ToolConfig(
+                require_evidence_contract_v2=True,
+                require_signed_evidence=True,
+            ),
+            4096,
+        )
+        document = {
+            "kind": "nuclei",
+            "source_sha256": "a" * 64,
+            "evidence_binding": {
+                "verified": True,
+                "authenticated": False,
+                "evidence_sha256": "b" * 64,
+            },
+            "findings": [],
+        }
+        with self.assertRaisesRegex(TypeError, "contract version 2.0"):
+            adapter.parse(json.dumps(document), Path("."))
+        document["schema_version"] = "2.0"
+        with self.assertRaisesRegex(TypeError, "authenticated binding"):
+            adapter.parse(json.dumps(document), Path("."))
 
     def test_sonarqube_export_has_engine_rule_location_and_action(self) -> None:
         finding = ValeAdapter(ToolConfig(), 4096).parse(

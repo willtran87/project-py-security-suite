@@ -334,16 +334,18 @@ flowchart TD
 The orchestrator runs only scanners selected by the active profile. Each
 adapter owns command construction, prerequisite checks, entry-point digest
 verification, version detection, timeout handling, output parsing,
-classification mapping, and scanner-specific remediation guidance. The
-entry point is rehashed after execution; a mismatch or mid-scan change fails
-closed.
+classification mapping, and scanner-specific remediation guidance. The entry
+point is rehashed after execution; a mismatch or mid-scan change fails closed.
+Python console scanners can additionally pin and recheck the complete
+recursively installed distribution closure.
 
-Subprocesses receive a reduced environment and a disposable private home,
-app-data, and cache root. Ambient proxy variables and user site packages are
-not forwarded. A timeout or interruption terminates the scanner's complete
-process tree and waits for cleanup, preventing orphaned child analyzers. Raw
-scanner output is not retained in the report; evidence contains sanitized tool
-health and output digests.
+Subprocesses receive a reduced environment, deterministic executable search
+path, and a disposable private home, app-data, and cache root. Ambient proxy,
+loader, Python import, and user-site configuration are not forwarded. Output is
+spooled to private temporary files and the complete process tree is terminated
+as soon as either stream exceeds its byte limit, so truncation cannot follow an
+unbounded in-memory capture. A configured digest-pinned sandbox launcher wraps
+both version and scan commands.
 
 ### Enforced suite architecture
 
@@ -652,7 +654,7 @@ additional perspectives:
 | Deep IaC | Checkov plus Trivy, Hadolint, actionlint, and zizmor | Graph-aware cloud/IaC policies plus independent deployment and pipeline perspectives |
 | Governance evidence | OpenSSF Scorecard evidence ingestion | Repository-host controls generated in a separately authorized connected lane |
 | Repository insight | Conftest, KICS, pipdeptree, git-sizer, validate-pyproject, Vale, KubeLinter | Organization policy, IaC diversity, environment health, Git scale, packaging metadata, prose, and Kubernetes readiness |
-| Trusted-lane evidence | Hypothesis, Schemathesis, CrossHair, Atheris, mutmut, ZAP, pytm, check-manifest, ClamAV, GitHub attestations, in-toto, reproducible builds, final OCI image, YARA | Bounded results from execution- or release-sensitive companion controls |
+| Trusted-lane evidence | Hypothesis, Schemathesis, CrossHair, Atheris, ClusterFuzzLite, mutmut, ZAP, Nuclei, browser and authorization contracts, IAST, Falco, Kubescape, Prowler, RASP, native sanitizers, MobSF, TLS, polyglot analysis, pytm, check-manifest, ClamAV, GitHub attestations, in-toto, reproducible builds, final OCI image, YARA | Fresh, coverage-bearing, canary-verified, signed bounded results from execution- or release-sensitive companion controls |
 | Production | Source/repository portfolio plus strict readiness checks | Fail-closed pre-release source gate |
 | Release | Comprehensive portfolio plus a required built distribution | Fail-closed artifact promotion gate |
 
@@ -1014,16 +1016,18 @@ See [configuration.md](configuration.md) for the complete supported schema.
 
 - Network egress denial and proof of that boundary.
 - CPU, memory, process, and wall-clock quotas beyond per-tool timeouts.
-- File-system permissions and read-only source mounts. The suite detects
-  content changes but does not itself make a native target read-only.
+- Read-only source mounts. The suite detects content changes and creates report
+  directories/files with private 0700/0600 modes, but the enterprise boundary
+  still controls the source mount and platform ACL inheritance.
 - Bundle transport, provenance, malware inspection, and approval.
 - Artifact retention, access control, signing, and audit logging.
 
 ### Residual risks
 
 - SHA-256 manifests and entry-point bindings detect substitution relative to
-  an approved digest but are not publisher signatures. A Python console-script
-  digest does not cover every imported package file.
+  an approved digest but are not publisher signatures. Python console scripts
+  can close the imported-package gap with `runtime_closure_sha256`; native
+  dynamic-library closure still depends on the approved sandbox image/bundle.
 - Database refresh still depends on the connected update lane, while maximum
   accepted age is enforced during isolated execution.
 - Local rules and advisory snapshots define the achievable coverage.
@@ -1036,7 +1040,7 @@ See [configuration.md](configuration.md) for the complete supported schema.
 
 The native Windows self-scan process verifies:
 
-- the `comprehensive` profile selects all 64 adapters;
+- the `comprehensive` profile selects all 88 adapters;
 - the latest readiness assessment identifies 37 applicable controls and 26
   conditional or content-not-applicable controls, with no unavailable scanner;
 - Pylint, Radon, Ruff formatting, coverage, and JUnit adapters executed through

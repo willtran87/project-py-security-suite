@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from pathlib import Path
 from typing import Any
 
 from ..execution import CommandEnvironment
 from ..models import Citation, Confidence, Finding, Location, Severity, Source
 from ..models import finding_identity, normalize_repo_path
+from ..strict_json import canonical_bytes
 from .base import ScannerAdapter
 from .staging import maintained_repository_files
 
@@ -85,23 +87,67 @@ class CheckovAdapter(ScannerAdapter):
         ]
 
     def parse(self, payload: str, target: Path) -> list[Finding]:
-        document = json.loads(payload or "{}")
-        reports = document if isinstance(document, list) else [document]
+        reports = _reports(payload)
         findings: list[Finding] = []
         for report in reports:
             if not isinstance(report, dict):
                 raise TypeError("Checkov report must be an object")
-            results = report.get("results", {})
-            if not isinstance(results, dict):
-                raise TypeError("Checkov results must be an object")
-            failed = results.get("failed_checks", [])
-            if not isinstance(failed, list):
-                raise TypeError("Checkov failed_checks must be a list")
+            results = report["results"]
+            failed = results["failed_checks"]
             findings.extend(_finding(check, target) for check in failed)
         return findings
 
     def derived_artifacts(self, payload: str, target: Path) -> dict[str, Any]:
-        return {"checkov-iac.json": json.loads(payload or "{}")}
+        reports = _reports(payload)
+        checks = {
+            status: sum(len(report["results"][status]) for report in reports)
+            for status in ("passed_checks", "failed_checks", "skipped_checks")
+        }
+        frameworks = sorted(
+            {
+                str(check.get("check_type") or "unknown")[:100]
+                for report in reports
+                for status in ("passed_checks", "failed_checks", "skipped_checks")
+                for check in report["results"][status]
+                if isinstance(check, dict)
+            }
+        )
+        artifact: dict[str, Any] = {
+            "schema_version": "1.0",
+            "reports": len(reports),
+            **checks,
+            "total_checks": sum(checks.values()),
+            "frameworks": frameworks,
+            "native_report_sha256": hashlib.sha256(payload.encode("utf-8")).hexdigest(),
+            "native_report_size_bytes": len(payload.encode("utf-8")),
+            "native_report_records": sum(checks.values()),
+            "native_report_utf8": payload,
+        }
+        artifact["normalization_sha256"] = hashlib.sha256(
+            canonical_bytes(artifact)
+        ).hexdigest()
+        return {"checkov-iac.json": artifact}
+
+
+def _reports(payload: str) -> list[dict[str, Any]]:
+    if not payload.strip():
+        raise ValueError("Checkov emitted an empty report")
+    document = json.loads(payload)
+    raw_reports = document if isinstance(document, list) else [document]
+    if not raw_reports:
+        raise ValueError("Checkov report list must not be empty")
+    reports: list[dict[str, Any]] = []
+    for report in raw_reports:
+        if not isinstance(report, dict):
+            raise TypeError("Checkov report must be an object")
+        results = report.get("results")
+        if not isinstance(results, dict):
+            raise TypeError("Checkov results must be an object")
+        for status in ("passed_checks", "failed_checks", "skipped_checks"):
+            if not isinstance(results.get(status), list):
+                raise TypeError(f"Checkov {status} must be a list")
+        reports.append(report)
+    return reports
 
 
 def _finding(check: object, target: Path) -> Finding:

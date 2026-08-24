@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:git-sizer-artifact:1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "metrics", "concerning_metrics", "native_report_sha256", "native_report_size_bytes", "native_report_records", "native_report_utf8", "normalization_sha256"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "concerning_metrics": {"type": "integer", "minimum": 0, "maximum": 100000},
+    "metrics": {"type": "array", "maxItems": 100000, "items": {"type": "object", "additionalProperties": false, "required": ["path", "description", "value", "level_of_concern"], "properties": {"path": {"type": "string", "minLength": 1, "maxLength": 500}, "description": {"type": "string", "minLength": 1, "maxLength": 500}, "value": {"type": "string", "minLength": 1, "maxLength": 500}, "level_of_concern": {"type": "number", "minimum": 0, "maximum": 4}}}},
+    "native_report_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "native_report_size_bytes": {"type": "integer", "minimum": 1, "maximum": 1073741824},
+    "native_report_records": {"type": "integer", "minimum": 0, "maximum": 100000},
+    "native_report_utf8": {"type": "string", "minLength": 1, "maxLength": 67108864},
+    "normalization_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
+}

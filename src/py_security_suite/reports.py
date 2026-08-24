@@ -3,8 +3,11 @@ from __future__ import annotations
 import hashlib
 import html
 import json
+import os
 import re
+import csv
 import shutil
+import subprocess  # nosec B404 - fixed Windows ACL utilities only
 import tempfile
 from collections import Counter
 from pathlib import Path
@@ -12,6 +15,7 @@ from typing import Any
 from urllib.parse import quote, urlsplit
 
 from .admission import admission_decisions
+from .artifact_validation import validate_governed_artifacts
 from .models import (
     Citation,
     Finding,
@@ -29,6 +33,7 @@ from .passport import (
     build_security_passport_statement,
     verify_report,
 )
+from .path_safety import HeldParentDirectory, hold_parent_directory
 from .prioritization import finding_order_key, finding_priority
 from .portfolio_health import activation_recipe, portfolio_health_artifact
 from .source_context import redact_sensitive_snippets, source_language
@@ -96,11 +101,30 @@ _TOOL_REFERENCES = {
     "kube-linter": "https://docs.kubelinter.io/",
     "crosshair": "https://crosshair.readthedocs.io/",
     "atheris": "https://github.com/google/atheris",
+    "clusterfuzzlite": "https://google.github.io/clusterfuzzlite/",
     "mutmut": "https://mutmut.readthedocs.io/",
     "check-manifest": "https://github.com/mgedmin/check-manifest",
     "clamav": "https://docs.clamav.net/",
     "github-attestation": "https://docs.github.com/en/actions/security-guides/using-artifact-attestations-to-establish-provenance-for-builds",
     "zap": "https://www.zaproxy.org/docs/automate/automation-framework/",
+    "browser-security": "https://www.zaproxy.org/docs/desktop/addons/client-side-integration/",
+    "authorization-security": "https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/",
+    "iast": "https://docs.datadoghq.com/security/code_security/iast/",
+    "falco": "https://falco.org/docs/",
+    "kubescape": "https://kubescape.io/docs/scanning/",
+    "mobsf": "https://mobsf.github.io/docs/",
+    "native-sanitizers": "https://clang.llvm.org/docs/AddressSanitizer.html",
+    "nuclei": "https://docs.projectdiscovery.io/templates/reference/template-signing",
+    "oast": "https://docs.projectdiscovery.io/templates/reference/oob-testing",
+    "restler": "https://github.com/microsoft/restler-fuzzer",
+    "protocol-security": "https://grpc.io/docs/guides/auth/",
+    "fuzz-introspector": "https://google.github.io/oss-fuzz/advanced-topics/fuzz-introspector/",
+    "polyglot": "https://codeql.github.com/docs/codeql-overview/supported-languages-and-frameworks/",
+    "prowler": "https://docs.prowler.com/introduction",
+    "cloud-attack-path": "https://github.com/lyft/cartography",
+    "rasp": "https://coraza.io/docs/",
+    "tls-scan": "https://nabla-c0d3.github.io/sslyze/documentation/",
+    "secret-verification": "https://github.com/trufflesecurity/trufflehog",
     "pytm": "https://owasp.org/www-project-pytm/",
     "in-toto": "https://in-toto.io/docs/getting-started/",
     "oci-image": "https://opencontainers.org/",
@@ -120,12 +144,14 @@ def write_reports(
     replace_existing: bool = False,
 ) -> None:
     output = output.expanduser().absolute()
+    validate_governed_artifacts(derived_artifacts)
     if (output.exists() or output.is_symlink()) and not replace_existing:
         raise FileExistsError(f"report output already exists: {output}")
     output.parent.mkdir(parents=True, exist_ok=True)
     staging = Path(
         tempfile.mkdtemp(prefix=f".{output.name}.staging-", dir=output.parent)
     )
+    os.chmod(staging, 0o700)  # noqa: S103 - security artifact directory
     try:
         _write_report_contents(
             output=staging,
@@ -135,6 +161,7 @@ def write_reports(
             include_evidence=include_evidence,
             derived_artifacts=derived_artifacts,
         )
+        _harden_report_tree(staging)
         verify_report(staging)
         _publish_report(staging, output, replace_existing=replace_existing)
     finally:
@@ -160,11 +187,13 @@ def _publish_report(staging: Path, output: Path, *, replace_existing: bool) -> N
             f"report publication is already active or requires recovery: {lock}"
         ) from exc
     try:
-        _publish_report_locked(
-            staging,
-            output,
-            replace_existing=replace_existing,
-        )
+        with hold_parent_directory(output, "report publication") as parent:
+            _publish_report_locked(
+                staging,
+                output,
+                replace_existing=replace_existing,
+                held_parent=parent,
+            )
     finally:
         lock.rmdir()
 
@@ -174,9 +203,15 @@ def _publish_report_locked(
     output: Path,
     *,
     replace_existing: bool,
+    held_parent: HeldParentDirectory,
 ) -> None:
     if not output.exists() and not output.is_symlink():
-        staging.rename(output)
+        held_parent.rename(staging, output)
+        try:
+            _verify_report_permissions(output)
+        except BaseException:
+            held_parent.rename(output, staging)
+            raise
         return
     if not replace_existing:
         raise FileExistsError(f"report output appeared during generation: {output}")
@@ -189,13 +224,16 @@ def _publish_report_locked(
     backup = Path(tempfile.mkdtemp(prefix=f".{output.name}.backup-", dir=output.parent))
     backup.rmdir()
     published = False
-    output.rename(backup)
+    held_parent.rename(output, backup)
     try:
-        staging.rename(output)
+        held_parent.rename(staging, output)
+        _verify_report_permissions(output)
         published = True
     except BaseException:
+        if output.exists() and not staging.exists():
+            held_parent.rename(output, staging)
         if not output.exists() and not output.is_symlink():
-            backup.rename(output)
+            held_parent.rename(backup, output)
         raise
     finally:
         if published and backup.exists():
@@ -3992,6 +4030,7 @@ def render_assurance_case(
                 "conftest",
                 "kics",
                 "kube-linter",
+                "kubescape",
                 "psscriptanalyzer",
                 "shellcheck",
             ),
@@ -4126,9 +4165,22 @@ def render_assurance_case(
             _external_assurance_row(
                 manifest,
                 "Dynamic, API, and runtime behavior",
-                ("hypothesis", "schemathesis", "crosshair", "atheris", "mutmut", "zap"),
-                "Run property, fuzz, mutation, and applicable DAST/API security "
-                "tests in a separate disposable sandbox, then attach bounded evidence.",
+                (
+                    "hypothesis",
+                    "schemathesis",
+                    "crosshair",
+                    "atheris",
+                    "clusterfuzzlite",
+                    "mutmut",
+                    "zap",
+                    "browser-security",
+                    "iast",
+                    "falco",
+                    "kubescape",
+                ),
+                "Run property, fuzz, mutation, applicable DAST/API/IAST checks, and "
+                "runtime workload detection in separate disposable or deployed "
+                "lanes, then attach source-bound evidence.",
                 "Retain the attached companion evidence and rerun every applicable "
                 "dynamic lane for material behavior or API changes.",
                 "https://owasp.org/www-project-application-security-verification-standard/",
@@ -7007,7 +7059,114 @@ def _write_json(path: Path, value: Any) -> None:
 
 
 def _write_text(path: Path, value: str) -> None:
-    path.write_text(value, encoding="utf-8", newline="\n")
+    payload = value.replace("\r\n", "\n").replace("\r", "\n").encode("utf-8")
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_BINARY", 0)
+    descriptor = os.open(path, flags, 0o600)  # noqa: S103 - private report artifact
+    try:
+        with os.fdopen(descriptor, "wb", closefd=False) as handle:
+            handle.write(payload)
+            handle.flush()
+    finally:
+        os.close(descriptor)
+    os.chmod(path, 0o600)  # noqa: S103 - repair pre-existing staged permissions
+
+
+def _harden_report_tree(output: Path) -> None:
+    for path in output.rglob("*"):
+        os.chmod(
+            path,
+            0o700 if path.is_dir() else 0o600,
+        )  # noqa: S103 - private security evidence tree
+    os.chmod(output, 0o700)  # noqa: S103 - private security evidence tree
+    if os.name == "nt":
+        _harden_windows_acl(output)
+
+
+def _harden_windows_acl(output: Path) -> None:
+    system_root = Path(os.environ.get("SYSTEMROOT") or "C:/Windows").resolve()
+    whoami = system_root / "System32" / "whoami.exe"
+    icacls = system_root / "System32" / "icacls.exe"
+    if not whoami.is_file() or not icacls.is_file():
+        raise OSError("Windows ACL utilities are unavailable")
+    sid = _current_windows_sid(whoami)
+
+    subprocess.run(  # noqa: S603  # nosec B603
+        [
+            str(icacls),
+            str(output),
+            "/inheritance:r",
+            "/grant:r",
+            f"*{sid}:F",
+            "/T",
+            "/C",
+            "/Q",
+        ],
+        check=True,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        timeout=30,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+
+
+def _current_windows_sid(whoami: Path) -> str:
+    identity = subprocess.run(  # noqa: S603  # nosec B603
+        [str(whoami), "/user", "/fo", "csv", "/nh"],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=10,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    ).stdout.strip()
+    rows = list(csv.reader([identity]))
+    sid = rows[0][1] if len(rows) == 1 and len(rows[0]) == 2 else ""
+    if re.fullmatch(r"S-1-(?:\d+-)+\d+", sid) is None:
+        raise OSError("could not establish the current Windows security identifier")
+    return sid
+
+
+def _verify_report_permissions(output: Path) -> None:
+    if os.name != "nt":
+        exposed = [
+            path for path in (output, *output.rglob("*")) if path.stat().st_mode & 0o077
+        ]
+        if exposed:
+            raise PermissionError(
+                f"report permission postcondition failed for {exposed[0]}"
+            )
+        return
+    system_root = Path(os.environ.get("SYSTEMROOT") or "C:/Windows").resolve()
+    icacls = system_root / "System32" / "icacls.exe"
+    whoami = system_root / "System32" / "whoami.exe"
+    if not icacls.is_file() or not whoami.is_file():
+        raise OSError("Windows ACL verification utility is unavailable")
+    subprocess.run(  # noqa: S603  # nosec B603
+        [str(icacls), str(output), "/verify", "/T", "/C", "/Q"],
+        check=True,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        timeout=30,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+    sid = _current_windows_sid(whoami)
+    with tempfile.TemporaryDirectory(prefix="pysec-acl-verification-") as directory:
+        acl = Path(directory) / "report.acl"
+        subprocess.run(  # noqa: S603  # nosec B603
+            [str(icacls), str(output), "/save", str(acl), "/T", "/C", "/Q"],
+            check=True,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            timeout=30,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        raw = acl.read_bytes()
+    rendered = raw.decode("utf-16", errors="ignore")
+    observed_sids = set(re.findall(r"S-1-(?:\d+-)+\d+", rendered))
+    if observed_sids != {sid}:
+        raise PermissionError("report Windows ACL postcondition failed")
 
 
 def _write_checksums(output: Path) -> None:

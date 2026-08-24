@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import time
 import uuid
 from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+from datetime import timedelta
 from typing import Any
 
 from . import __version__
@@ -16,6 +18,7 @@ from .config import SuiteConfig
 from .closure_plan import closure_plan_artifact
 from .correlation import correlate_findings
 from .data_exposure import apply_data_exposure_fusion, build_data_exposure_synthesis
+from .dependency_surface import dependency_surface_artifact
 from .finding_delta import apply_finding_delta
 from .governance import (
     validate_intelligence_approval,
@@ -23,8 +26,14 @@ from .governance import (
 )
 from .graph_analysis import apply_graph_context
 from .effectiveness import assurance_claims_artifact, effectiveness_artifact
+from .execution import python_runtime_closure_sha256, resolve_executable
 from .evidence_fusion import build_evidence_fusion
-from .inventory import inventory_target_with_evidence, source_snapshot
+from .inventory import (
+    inventory_target_with_evidence,
+    sealed_source_snapshot,
+    source_snapshot,
+)
+from .isolation_probe import probe_isolation_boundary
 from .models import (
     Finding,
     ScanManifest,
@@ -38,14 +47,19 @@ from .models import (
 from .policy import evaluate_policy
 from .admission import admission_decisions
 from .advanced_analysis import build_advanced_analysis
+from .boundary_graph import build_boundary_graph
 from .portfolio_health import portfolio_health_artifact
 from .path_safety import resolve_regular_directory, resolve_unlinked_path
 from .reports import write_reports
 from .risk_intelligence import enrich_findings
 from .risk_paths import build_risk_paths
 from .source_context import attach_source_context, sanitize_secret_findings
+from .semantic_coverage import semantic_language_coverage_artifact
+from .requirements_coverage import security_requirements_coverage_artifact
 from .structural_synthesis import build_structural_synthesis
 from .trust_catalog import apply_trust_catalog
+from .trust_policy import snapshot_trust_policy
+from .trust_attestation import validate_trust_policy_attestation
 
 
 def scan_project(
@@ -65,18 +79,102 @@ def scan_project(
     if output.exists() and not replace_existing:
         raise ValueError(f"report output already exists: {output}")
     resolve_asset_paths(config, target)
-
-    started_at = utc_now()
-    started_clock = time.monotonic()
     selected = list(config.selected_tools)
     source_exclusions = (output, *_runtime_evidence_paths(config, selected))
     inventory, source_inventory = inventory_target_with_evidence(
         target, excluded_paths=source_exclusions
     )
+    with sealed_source_snapshot(
+        target,
+        source_inventory,
+        vcs_revision=(
+            inventory.vcs_revision if inventory.vcs_revision_verified else ""
+        ),
+    ) as scan_target:
+        return _scan_sealed_project(
+            target=target,
+            scan_target=scan_target,
+            output=output,
+            config=config,
+            network_isolation_attested=network_isolation_attested,
+            diagnostic_without_isolation=diagnostic_without_isolation,
+            adapter_types=adapter_types,
+            replace_existing=replace_existing,
+            selected=selected,
+            source_exclusions=source_exclusions,
+            inventory=inventory,
+            source_inventory=source_inventory,
+        )
+
+
+def _scan_sealed_project(
+    *,
+    target: Path,
+    scan_target: Path,
+    output: Path,
+    config: SuiteConfig,
+    network_isolation_attested: bool,
+    diagnostic_without_isolation: bool,
+    adapter_types: Mapping[str, type[ScannerAdapter]] | None,
+    replace_existing: bool,
+    selected: list[str],
+    source_exclusions: tuple[Path, ...],
+    inventory: Any,
+    source_inventory: dict[str, Any],
+) -> ScanResult:
+    """Execute every analysis stage against one verified read-only source copy."""
+    started_at = utc_now()
+    started_clock = time.monotonic()
     diagnostics: dict[str, dict[str, Any]] = {}
     derived_artifacts: dict[str, Any] = {}
+    trust_policy = snapshot_trust_policy(config.trust_environment)
+    derived_artifacts["trust-policy.json"] = trust_policy
     derived_artifacts["source-inventory.json"] = source_inventory
+    derived_artifacts["report-security.json"] = {
+        "schema_version": "1.0",
+        "classification": config.reports.classification,
+        "access_policy": "owner-only",
+        "permission_postcondition": "verified-before-atomic-publication",
+        "access_control_verification": (
+            "exact-current-user-sid" if os.name == "nt" else "mode-0700-0600"
+        ),
+        "retention_days": config.reports.retention_days,
+        "delete_after": isoformat(
+            started_at + timedelta(days=config.reports.retention_days)
+        ),
+        "retention_enforcement": "verified-expiry-atomic-purge",
+        "retention_time_authority": "rfc3161-deployment-pinned-timestamp",
+        "encryption_support": "X25519-HKDF-SHA256+A256GCM authenticated archive",
+        "key_custody": "external-recipient-private-key",
+        "key_lifecycle_enforcement": "signed-provider-receipt-and-cryptographic-erasure",
+        "plaintext_disposal": "optional-post-encryption-verified-purge",
+    }
+    derived_artifacts["dependency-surface.json"] = dependency_surface_artifact(
+        scan_target
+    )
+    boundary_graph = build_boundary_graph(scan_target)
+    derived_artifacts["boundary-graph.json"] = boundary_graph
     context_errors: list[str] = []
+    if (
+        config.profile in {"production", "release"}
+        and config.organization_policy_present
+        and not config.organization_policy_attestation_validated
+    ):
+        context_errors.append(
+            "organization policy lacks signed anti-rollback quorum metadata"
+        )
+    trust_attestation = validate_trust_policy_attestation(
+        config.trust,
+        trust_policy,
+        observed_at=started_at,
+        trust_environment=config.trust_environment,
+    )
+    context_errors.extend(trust_attestation.errors)
+    derived_artifacts["trust-policy-attestation.json"] = trust_attestation.artifact
+    if config.profile in {"production", "release"} and not boundary_graph["complete"]:
+        context_errors.append(
+            "polyglot boundary analysis was truncated or could not parse every source file"
+        )
     intelligence_artifact: dict[str, Any] = {}
     baseline_artifact: dict[str, Any] = {}
     trust = apply_trust_catalog(config)
@@ -87,12 +185,35 @@ def scan_project(
         target_name=target.name,
         source_sha256=inventory.source_sha256,
         observed_at=started_at,
+        trust_environment=config.trust_environment,
     )
     if network_isolation_attested:
         context_errors.extend(isolation.errors)
     elif config.isolation.require_evidence and not diagnostic_without_isolation:
         context_errors.append("approved external isolation evidence was not applied")
     derived_artifacts["isolation-attestation.json"] = isolation.artifact
+    derived_artifacts["isolation-boundary.json"] = {
+        "schema_version": "1.0",
+        "mode": config.isolation.enforcement_mode,
+        "network_policy": config.isolation.network,
+        "sandbox_launcher_configured": bool(config.isolation.sandbox_executable),
+        "sandbox_launcher_sha256": (config.isolation.sandbox_executable_sha256 or None),
+        "sandbox_launcher_organization_approved": (
+            config.isolation.sandbox_organization_approved
+        ),
+        "external_attestation_validated": bool(isolation.artifact.get("validated")),
+    }
+    isolation_probe, isolation_probe_errors = probe_isolation_boundary(
+        scan_target,
+        config.isolation,
+        required=(
+            config.profile in {"production", "release"}
+            and network_isolation_attested
+            and not diagnostic_without_isolation
+        ),
+    )
+    derived_artifacts["isolation-probe.json"] = isolation_probe
+    context_errors.extend(isolation_probe_errors)
 
     if (
         config.isolation.require_attestation
@@ -121,13 +242,40 @@ def scan_project(
         }
     else:
         findings, tool_runs, diagnostics, adapter_artifacts = _run_adapters(
-            target=target,
+            target=scan_target,
             config=config,
             selected=selected,
             adapter_types=adapter_types or ADAPTER_TYPES,
         )
         _annotate_tool_authority(tool_runs, diagnostics, config)
         derived_artifacts.update(adapter_artifacts)
+        semantic_coverage = semantic_language_coverage_artifact(
+            boundary_graph, derived_artifacts
+        )
+        derived_artifacts["semantic-language-coverage.json"] = semantic_coverage
+        if (
+            config.profile in {"production", "release"}
+            and not semantic_coverage["complete"]
+        ):
+            context_errors.append(
+                "non-Python boundary extraction requires authenticated, source-bound, complete semantic polyglot evidence"
+            )
+        dependency_surface = dependency_surface_artifact(
+            scan_target, tool_runs, derived_artifacts
+        )
+        derived_artifacts["dependency-surface.json"] = dependency_surface
+        if (
+            config.profile in {"production", "release"}
+            and not dependency_surface["complete"]
+        ):
+            uncovered = ", ".join(
+                item["ecosystem"]
+                for item in dependency_surface["coverage"]
+                if not item["covered"]
+            )
+            context_errors.append(
+                "multi-ecosystem dependency analysis is incomplete for: " + uncovered
+            )
         sanitize_secret_findings(findings)
         findings = correlate_findings(findings)
         intelligence = enrich_findings(findings, config.intelligence)
@@ -138,12 +286,13 @@ def scan_project(
             config.intelligence,
             intelligence.artifact,
             observed_at=started_at,
+            trust_environment=config.trust_environment,
         )
         context_errors.extend(intelligence_approval.errors)
         derived_artifacts["intelligence-approval.json"] = intelligence_approval.artifact
         delta = apply_finding_delta(
             findings,
-            target=target,
+            target=scan_target,
             baseline_path=config.reports.baseline_path,
             baseline_sha256=config.reports.baseline_sha256,
             current_profile=config.profile,
@@ -154,7 +303,7 @@ def scan_project(
         context_errors.extend(delta.errors)
         baseline_artifact = delta.artifact
         derived_artifacts["finding-delta.json"] = delta.artifact
-        attach_source_context(target, findings)
+        attach_source_context(scan_target, findings)
         graph_analysis = apply_graph_context(findings, derived_artifacts)
         if graph_analysis is not None:
             derived_artifacts["graph-analysis.json"] = graph_analysis
@@ -162,7 +311,7 @@ def scan_project(
         if structural_synthesis is not None:
             derived_artifacts["structural-synthesis.json"] = structural_synthesis
         derived_artifacts["data-exposure.json"] = build_data_exposure_synthesis(
-            target, findings, derived_artifacts
+            scan_target, findings, derived_artifacts
         )
         fusion = build_evidence_fusion(findings, derived_artifacts, tool_runs)
         derived_artifacts["evidence-fusion.json"] = fusion
@@ -176,7 +325,7 @@ def scan_project(
             findings, derived_artifacts
         )
         derived_artifacts["advanced-analysis.json"] = build_advanced_analysis(
-            target, findings, derived_artifacts
+            scan_target, findings, derived_artifacts
         )
         context_errors.extend(
             (
@@ -186,10 +335,49 @@ def scan_project(
             for contradiction in fusion["contradictions"]
         )
 
+    resource_assurance = _resource_limit_assurance(
+        tool_runs,
+        diagnostics,
+        isolation.artifact,
+        require_external_quota=config.profile in {"production", "release"},
+    )
+    derived_artifacts["resource-limits.json"] = resource_assurance
+    if (
+        config.profile in {"production", "release"}
+        and not resource_assurance["complete"]
+    ):
+        context_errors.append(
+            "OS resource limits were not proven for every executed scanner"
+        )
+    runtime_assurance = _runtime_closure_assurance(config, diagnostics)
+    derived_artifacts["runtime-closure.json"] = runtime_assurance
+    if (
+        config.profile in {"production", "release"}
+        and not runtime_assurance["complete"]
+    ):
+        context_errors.append(
+            "the complete Python scanner runtime closure was not stable"
+        )
+
     if "effectiveness.json" not in derived_artifacts:
         _annotate_tool_authority(tool_runs, diagnostics, config)
         derived_artifacts["effectiveness.json"] = effectiveness_artifact(
             findings, tool_runs
+        )
+    if "semantic-language-coverage.json" not in derived_artifacts:
+        derived_artifacts["semantic-language-coverage.json"] = (
+            semantic_language_coverage_artifact(boundary_graph, derived_artifacts)
+        )
+    requirements_coverage = security_requirements_coverage_artifact(
+        boundary_graph, tool_runs, derived_artifacts
+    )
+    derived_artifacts["security-requirements-coverage.json"] = requirements_coverage
+    if (
+        config.profile in {"production", "release"}
+        and not requirements_coverage["automation_complete"]
+    ):
+        context_errors.append(
+            "applicable mapped ASVS, MASVS, or TCASVS controls lack retained evidence"
         )
 
     (
@@ -197,10 +385,24 @@ def scan_project(
         inventory.hashed_files_after,
         inventory.hashed_bytes_after,
     ) = source_snapshot(target, excluded_paths=source_exclusions)
+    snapshot_after = source_snapshot(scan_target)
+    snapshot_integrity_verified = snapshot_after == (
+        inventory.source_sha256,
+        inventory.hashed_files,
+        inventory.hashed_bytes,
+    )
+    if not snapshot_integrity_verified:
+        context_errors.append("sealed scan snapshot changed during scanner execution")
+    if inventory.skipped_symlinks:
+        context_errors.append(
+            f"source inventory rejected {inventory.skipped_symlinks} symbolic link(s)"
+        )
     inventory.source_integrity_verified = (
         inventory.source_sha256 == inventory.source_sha256_after
         and inventory.hashed_files == inventory.hashed_files_after
         and inventory.hashed_bytes == inventory.hashed_bytes_after
+        and snapshot_integrity_verified
+        and inventory.skipped_symlinks == 0
     )
 
     decision = evaluate_policy(
@@ -264,7 +466,9 @@ def scan_project(
         finding_counts=counts,
         policy_reasons=decision.reasons,
         diagnostic_without_isolation=diagnostic_without_isolation,
-        configuration_sha256=_configuration_digest(config),
+        configuration_sha256=_configuration_digest(
+            config, trust_policy_sha256=trust_policy["policy_sha256"]
+        ),
         risk_acceptance_sha256=config.policy.risk_acceptance_sha256,
         intelligence=intelligence_artifact,
         baseline=baseline_artifact,
@@ -289,6 +493,117 @@ def scan_project(
         tool_runs=tool_runs,
         manifest=manifest,
     )
+
+
+def _resource_limit_assurance(
+    tool_runs: list[ToolRun],
+    diagnostics: dict[str, dict[str, Any]],
+    isolation: dict[str, Any],
+    *,
+    require_external_quota: bool,
+) -> dict[str, Any]:
+    external_capabilities = set(isolation.get("capabilities") or [])
+    external = isolation.get("validated") is True and {
+        "resource-limits",
+        "file-write-quota",
+    }.issubset(external_capabilities)
+    required = (
+        {
+            "kill-on-close",
+            "process-count",
+            "process-memory",
+            "job-memory",
+            "cpu-time",
+            "cpu-rate",
+            "pre-execution-assignment",
+            "bounded-output-pipes",
+            "bounded-private-scratch",
+        }
+        if os.name == "nt"
+        else {
+            "address-space",
+            "process-count",
+            "open-files",
+            "file-size",
+            "cpu-time",
+            "pre-execution-assignment",
+            "bounded-output-pipes",
+            "bounded-private-scratch",
+        }
+    )
+    scanners: list[dict[str, Any]] = []
+    for run in tool_runs:
+        if run.status is not ToolStatus.COMPLETED:
+            continue
+        diagnostic = diagnostics.get(run.tool, {})
+        enforced = set(diagnostic.get("resource_limits_enforced") or [])
+        errors = list(diagnostic.get("resource_limit_errors") or [])
+        locally_complete = required.issubset(enforced) and not errors
+        scanners.append(
+            {
+                "tool": run.tool,
+                "local_limits": sorted(enforced),
+                "local_errors": errors,
+                "external_containment": external,
+                "covered": locally_complete
+                and (external or not require_external_quota),
+            }
+        )
+    return {
+        "schema_version": "1.0",
+        "analysis": "os-enforced-scanner-resource-limits",
+        "required_local_limits": sorted(required),
+        "external_containment_validated": external,
+        "external_file_write_quota_required": require_external_quota,
+        "scanners": scanners,
+        "complete": all(item["covered"] for item in scanners),
+    }
+
+
+def _runtime_closure_assurance(
+    config: SuiteConfig, diagnostics: dict[str, dict[str, Any]]
+) -> dict[str, Any]:
+    governed = {
+        name: str(value.get("runtime_closure_sha256") or "")
+        for name, value in diagnostics.items()
+        if value.get("runtime_closure_sha256")
+        and config.tools[name].runtime_closure_scope == "environment"
+    }
+    if not governed:
+        return {
+            "schema_version": "1.0",
+            "scope": "complete-python-and-native-environment",
+            "applicable": False,
+            "complete": True,
+            "tools": [],
+        }
+    first = next(iter(governed))
+    executable = resolve_executable(config.tools[first].executable)
+    observed_after: str | None = None
+    error = ""
+    try:
+        if executable is None:
+            raise ValueError("scanner executable could not be resolved after execution")
+        observed_after = python_runtime_closure_sha256(
+            executable, include_environment=True, refresh=True
+        )
+    except (OSError, TypeError, ValueError) as exc:
+        error = str(exc)
+    stable = bool(observed_after) and all(
+        digest == observed_after for digest in governed.values()
+    )
+    for name in governed:
+        diagnostics[name]["runtime_closure_unchanged"] = stable
+    return {
+        "schema_version": "1.0",
+        "scope": "complete-python-and-native-environment",
+        "applicable": True,
+        "tools": sorted(governed),
+        "before_sha256": sorted(set(governed.values())),
+        "after_sha256": observed_after,
+        "error": error or None,
+        "complete": stable,
+    }
 
 
 def _annotate_tool_authority(
@@ -423,6 +738,14 @@ def resolve_asset_paths(config: SuiteConfig, target: Path) -> None:
             bundle_root=bundle_root,
             label="scanner trust catalog",
         )
+    trust_policy = config.trust.policy_path
+    if trust_policy is not None:
+        config.trust.policy_path = _resolve_configured_path(
+            trust_policy,
+            target=target,
+            bundle_root=bundle_root,
+            label="execution trust policy attestation",
+        )
 
 
 def _runtime_evidence_paths(
@@ -489,9 +812,15 @@ def _resolve_configured_path(
     return resolve_unlinked_path(candidate, label, boundary=target)
 
 
-def _configuration_digest(config: SuiteConfig) -> str:
+def _configuration_digest(config: SuiteConfig, *, trust_policy_sha256: str = "") -> str:
     payload = json.dumps(
-        json_ready(config), sort_keys=True, separators=(",", ":"), ensure_ascii=False
+        {
+            "configuration": json_ready(config),
+            "trust_policy_sha256": trust_policy_sha256,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
     )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 

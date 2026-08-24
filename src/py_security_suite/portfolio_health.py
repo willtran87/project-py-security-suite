@@ -25,7 +25,7 @@ DOMAINS = (
     CoverageDomain(
         "secrets",
         "Working-tree, archive, and history credential detection",
-        frozenset({"detect-secrets", "gitleaks", "trufflehog"}),
+        frozenset({"detect-secrets", "gitleaks", "trufflehog", "secret-verification"}),
     ),
     CoverageDomain(
         "dependencies",
@@ -55,7 +55,19 @@ DOMAINS = (
     CoverageDomain(
         "iac-containers",
         "Infrastructure, container, Kubernetes, and deployment hardening",
-        frozenset({"trivy", "checkov", "kics", "kube-linter", "hadolint", "oci-image"}),
+        frozenset(
+            {
+                "trivy",
+                "checkov",
+                "kics",
+                "kube-linter",
+                "kubescape",
+                "prowler",
+                "cloud-attack-path",
+                "hadolint",
+                "oci-image",
+            }
+        ),
     ),
     CoverageDomain(
         "delivery-governance",
@@ -94,14 +106,38 @@ DOMAINS = (
                 "schemathesis",
                 "crosshair",
                 "atheris",
+                "clusterfuzzlite",
+                "fuzz-introspector",
                 "mutmut",
             }
         ),
     ),
     CoverageDomain(
         "dynamic-threat-modeling",
-        "Runtime web testing and reviewed threat-model evidence",
-        frozenset({"zap", "pytm"}),
+        "Runtime web, IAST, workload detection, and reviewed threat-model evidence",
+        frozenset(
+            {
+                "zap",
+                "nuclei",
+                "oast",
+                "restler",
+                "protocol-security",
+                "browser-security",
+                "authorization-security",
+                "iast",
+                "falco",
+                "kubescape",
+                "prowler",
+                "rasp",
+                "native-sanitizers",
+                "mobsf",
+                "tls-scan",
+                "polyglot",
+                "pytm",
+                "cloud-attack-path",
+                "secret-verification",
+            }
+        ),
     ),
     CoverageDomain(
         "metadata-documentation",

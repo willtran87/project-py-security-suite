@@ -1,5 +1,50 @@
 # Changelog
 
+- Preserve verified Git history, recursive submodule history, and working-tree
+  diff semantics in immutable scan snapshots; reject Git LFS pointer
+  placeholders and symlink omissions; execute scanners against private,
+  before/after-verified rules and database snapshots; and require
+  independently authenticated loader-observed native plugin/OS runtime closure
+  manifests. Reject shallow/partial/promisor/sparse/replace/alternate Git
+  states and verify sealed bundle prerequisites. Add distinct process,
+  shared-memory IPC, device, host-read, credential, network, Linux policy, and
+  Windows mitigation canaries plus
+  token-verified zero-capability AppContainer governance. Require
+  multi-organization-signed, training-separated, diversity-checked release
+  effectiveness evidence with RFC 3161 time and atomic replay consumption;
+  retain replayable Checkov, pipdeptree, and git-sizer native reports with
+  byte/record/normalization commitments; independently authenticate reproduced
+  source-bound cross-language boundary/flow ledgers; support a threshold-signed
+  full-catalog ASVS/MASVS/TCASVS applicability crosswalk; inventory generated,
+  templated, bytecode, native, WebAssembly, and dynamic-code gaps; and exercise resettable business-logic
+  sequence, replay/idempotency, concurrency/atomicity, and durable-state
+  postcondition campaigns.
+
+- Add a threshold-signed, generation-pinned assurance profile that prevents
+  producer-contract and feature downgrades at admission. Compose SLSA,
+  Sigstore, VSA, and dependency-closure receipts; add P-256 authority support;
+  require independently signed deep-qualification receipts for browser,
+  Kafka, PostgreSQL, AI, SARIF, surface, CI, supply-chain, and distributed
+  checkpoint claims; preserve additional SARIF semantics with entropy-aware
+  redaction; add surface history/server-receipt v4, AI v5, event v5, and
+  database v3 gates; and exercise authenticated Chromium, Firefox, and WebKit
+  plus TLS/channel-bound PostgreSQL in CI.
+
+- Make assurance-profile attachment mandatory for assurance producers; bind
+  the profile into the governed evidence digest; add RFC 3161 time and signed
+  monotonic checkpoints; context-bind and atomically consume qualification
+  manifests through a locked ledger or HTTPS/mTLS replay service; validate
+  native AI and SARIF artifacts; require SLSA/VSA dependency closure and
+  Sigstore transparency entries; and exercise Kafka TLS 1.3, SCRAM, ACL denial,
+  transactions, and fencing with real authenticated browser sessions in CI.
+
+- Externally anchor RFC 3161 TSA roots/policies and SLSA builder identities;
+  serialize continuity checkpoints; require signed, CA-pinned mutual-TLS replay
+  receipts; correct AI result-signing chronology and paired-run uniqueness;
+  require authenticated Playwright role state; correlate Kafka transaction
+  canaries; constrain PostgreSQL oracles and restore manifests; hash-link
+  surface pagination; redact SARIF secrets; and pin the browser CI image.
+
 - Add least-privilege, SHA-pinned CI and CodeQL workflows; test the locked
   environment across Python 3.11–3.13; enforce explicit security linting,
   pedantic workflow auditing, typing, dependency auditing, and package builds;
@@ -25,6 +70,64 @@ for published releases.
 
 ## Unreleased
 
+- Gate scanner launch on successful OS quota assignment; add active isolation
+  canaries, Windows held-handle path traversal, mTLS monotonic governance replay
+  with trusted receipt time, per-manifest resolved dependency coverage, native
+  runtime closure, authenticated semantic language coverage, strict schemas for
+  every new assurance artifact, exact Windows report ACL verification, and
+  enforceable encrypted-report retention and purge commands.
+- Bound scanner output before it reaches memory, remove ambient loader/search
+  paths, add digest-pinned sandbox-launcher and Python runtime-closure checks,
+  independently verify governance documents with Ed25519, single-open governed
+  files, authenticate production organization policy, seal deployment trust
+  inputs, generate a unified polyglot boundary graph, privatize report ACLs,
+  and audit platform-resolved dependencies across Linux, Windows, and macOS.
+- Add full-chain/CRL/policy/ESS RFC 3161 verification and signature
+  countersigning, SLSA provenance v2 policy, externally signed DSSE envelopes,
+  root-signed compromise-aware keyrings, signed hash-chained replay receipts
+  with mTLS, signed independent discovery/judge/ruleset authorities, TLS/schema/
+  transaction Kafka oracles, TLS/channel-bound PostgreSQL oracles and disposable
+  restore drills, service-worker/WebSocket browser interception, statistical
+  drift/power/multiplicity controls, and richer privacy-bounded SARIF flows.
+- Require organization-issued context for v2 evidence and cryptographically
+  verify its RFC 3161 challenge imprint, nonce, timestamp signer, EKU, validity,
+  and pinned receipt. Bind raw native reports, normalizers, builders,
+  invocations, and materials into signed provenance and replay identity. Add
+  lifecycle-aware threshold Ed25519 keyrings and an authenticated HTTPS atomic
+  replay backend. Add native loopback Kafka and read-only PostgreSQL drivers,
+  independent multi-source surface reconciliation, statistical ruleset and AI
+  assurance, deeper browser DOM/WebSocket/mixed-content checks, and SARIF
+  normalizers for additional JavaScript, JVM, Ruby, Kotlin, and Go tools.
+- Enforce bounded I-JSON parsing and RFC 8785 canonicalization for signed
+  evidence, rejecting duplicate keys, non-finite numbers, unsafe integers, and
+  excessive structures. Bind v2 evidence to organization-issued target,
+  deployment, surface, challenge, and trusted-time identities. Add semantic
+  surface-inventory, event, database, ruleset-regression, and optional AI/agent
+  assurance lanes; deepen browser controls; and parse native gosec, Cargo Audit,
+  and npm Audit reports with independent canary output.
+- Add six fail-closed companion lanes for self-hosted OAST correlation,
+  stateful RESTler API exploration, loopback gRPC/WebSocket/TCP contracts,
+  Fuzz Introspector reachability and corpus quality, redacted cloud
+  identity/network attack paths, and provider-side secret-verification
+  receipts. Derive execution scope from native normalized output, require
+  state-transition/replay/concurrency/approval authorization cases, bind
+  evidence to expected run and environment identities, and atomically reject
+  authenticated evidence replay.
+- Add companion-assurance v2 with RFC 3339 freshness and expiry, producer,
+  ruleset, configuration, environment, source, and artifact identities;
+  execution scope and coverage; mandatory canaries; and Ed25519 DSSE/in-toto
+  authentication with SHA-pinned public keys. Add multi-role authorization,
+  Nuclei, Prowler, RASP, native-sanitizer, MobSF, TLS, and polyglot evidence
+  adapters, bounded Nuclei/ZAP/Prowler/Datadog-IAST/Falco normalizers, locked
+  boofuzz companion support, TLS-scanner evidence integration, and an executable
+  signed Nuclei workflow template.
+- Add a dedicated runtime profile and source-bound companion adapters for IAST,
+  authenticated browser assertions, ClusterFuzzLite, Falco, and Kubescape.
+  Preserve producer and revision identity through correlation, fail closed when
+  runtime evidence is applicable, and record bounded static/runtime
+  corroboration without claiming exploitability. Add a loopback-only Playwright
+  producer that blocks external browser requests and never retains cookie
+  names, values, authorization data, or page content.
 - Correlate complete multi-thread SARIF code flows by their global
   `executionOrder` instead of analyzing each thread in isolation. Cross-thread
   source/sink evidence is fused only when every bounded thread and step is

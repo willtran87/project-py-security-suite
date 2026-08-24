@@ -16,7 +16,7 @@ creates a GitHub-friendly report artifact.
 | Graph context | Graphify code-only topology joined to findings for blast radius, structural hotspots, and cross-tool neighborhoods |
 | Advanced analysis | Typed evidence graph with control dominance and bypass detection, scanner-confirmed SARIF taint paths, artifact activation parity, threat-control-test traceability, security mutation leverage, telemetry privacy topology, dependency trust routes, and digest-bound attack-surface regression comparison |
 | Risk routes | Bounded multi-entry exposure matrices from every retained declared interface to findings, sensitive sinks, and exact dependency-advisory importers. End-to-end sensitive-data route records join scanner-confirmed or inventory-only sink evidence to data classes, trust boundaries, protections, entry/runtime breadth, validation, scanner assurance, lifecycle, ownership, and applicable bounded citations. A separate secret-provenance ledger joins redacted credential candidates to source/graph/artifact membership, current-tree or history origin, verification, scanner trust, lifecycle, and owners. Exact-file and bounded Graphify-route intersections then highlight production secret candidates co-located with logging, telemetry, URL, or network sinks while explicitly remaining non-taint review evidence. Their validation handoff names candidate tests and joins retained execution, coverage, source binding, assurance, shared-test quality, findings, and ownership without claiming that a synthetic canary assertion already exists. When that same retained sensitive route also has an exact SDK-advisory intersection, a bounded compound ledger coordinates credential, boundary-protection, and dependency-remediation review without claiming disclosure or vulnerable-function execution. Routes also retain fail-closed source/artifact package lifecycle checks, comparable-baseline finding/change attribution, ordered CODEOWNERS handoffs, shared validation campaigns, shared-test quality, and explicit model gaps. Graph/source/artifact applicability fusion separates genuine Python route gaps from artifact, generated-evidence, test, and non-Python controls without dropping findings; exact structural-island joins then distinguish missing entry models, runtime conflicts, test-only scope, and dormant-capability retirement review without declaring code dead. |
-| Evidence fusion | Source-to-artifact package lineage, semantic finding links, changed-line/test/graph context, exact selected-test execution, digest-bound provenance joins, and feedback into owned exposure and SDK-package verification plans |
+| Evidence fusion | Source-to-artifact package lineage, semantic finding links, changed-line/test/graph context, exact selected-test execution, full-chain RFC 3161 run context and signature timestamps, threshold/external DSSE signatures, signed atomic replay receipts, downgrade-resistant assurance profiles, composed SLSA/Sigstore/VSA/dependency verification, and feedback into owned exposure and SDK-package verification plans |
 | Structural synthesis | Cross-validated dead code, island boundaries, structural orphans, import-cycle hotspots, change-risk scoring, graph-guided test targets, exact execution status, and test/changed-line coverage alignment |
 | Advisory fusion | Package-scoped CVE/GHSA/PYSEC/OSV alias clustering across source and artifact scanners, with distinct-risk/observation counts plus CycloneDX introducing-root paths, pipdeptree environment health, Graphify imports, reachability/runtime state, and deptry-use context |
 | Data exposure | CWE-grounded flows into logs, telemetry, URL queries, client errors, runtime-state dumps, and process streams; monorepo SDK/configuration inventory; owner-, graph-, change-risk-, runtime-, test-, and SDK-package-aware disclosure triage |
@@ -276,6 +276,12 @@ or atomically exports them for disconnected validators. Names are deliberately
 version-explicit; there is no network lookup and no ambiguous `latest` alias.
 Existing exports are preserved unless `--overwrite` is supplied.
 
+Scanner children are placed under OS-enforced CPU, memory, process-count,
+descriptor, and output quotas. On Windows, a trusted gate prevents the scanner
+from starting until Job Object assignment succeeds. Production isolation is
+also challenged with active network-denial and source-write canaries; a signed
+capability claim alone is not treated as proof that the current boundary works.
+
 Every report also includes `admission-decisions.json`, which separates source,
 test, dependency, built-artifact, and governance disposition so a missing
 signature is not presented as a source-code defect. The same five cards lead
@@ -311,10 +317,27 @@ pysec benchmark REPORT --corpus CORPUS.json \
 ```
 
 The strict contracts are exported offline with `pysec schema effectiveness-1.1`,
-`effectiveness-corpus-1.0`, and `effectiveness-evaluation-1.0`.
+`effectiveness-corpus-1.0`, and `effectiveness-evaluation-1.0`. The corpus
+contract accepts legacy schema 1.0 for non-governed benchmarking and governed
+schema 2.0 for production/release; production/release reject unsigned legacy
+evaluations.
+
+Confidential reports are published with a verified owner-only ACL and a sealed
+retention deadline. `pysec retention-status REPORT` evaluates that deadline;
+`pysec purge-expired-report REPORT --trusted-time-context CONTEXT.json` deletes
+only a verified, expired report after a deployment-pinned RFC 3161 receipt proves
+the deadline. Retention and encryption accept only advanced RFC 3161 evidence
+with the pinned TSA chain, policy, revocation snapshot, nonce, and challenge.
+The purge receipt is bound to the report checksum and action. `encrypt-report`
+also requires separately signed, digest-pinned key-lifecycle and provider
+attestations proving the exact non-exportable recipient generation, decrypt-only
+usage, and provider cryptographic-erasure capability. Trusted time binds both
+attestations to the recipient before authenticated X25519/AES-256-GCM
+encryption; `--delete-plaintext-after-encryption` removes the verified plaintext
+only after the encrypted output has been atomically committed.
 
 Turn the sealed scan, organization-authorized isolation and intelligence
-receipts, scanner trust, optional effectiveness benchmark, and signed Passport
+receipts, scanner trust, mandatory production/release effectiveness benchmark, and signed Passport
 verification into one fail-closed promotion decision:
 
 For the normal operator path, publish and verify the complete decision-support
@@ -530,7 +553,7 @@ uv run python -m pytest
 - `osv-scanner` plus a preloaded offline vulnerability database
 
 The stable `quick` and `standard` profiles retain their original contracts.
-Use `extended`, `deep`, `supply-chain`, `artifact`, `quality`, `iac-deep`,
+Use `extended`, `deep`, `supply-chain`, `artifact`, `quality`, `iac-deep`, `runtime`,
 `governance`, `repo-health`, `repo`, or `comprehensive` to select additional
 perspectives.
 `quality` runs correctness, formatting, typing, dead-code, entry-point
@@ -600,8 +623,15 @@ correctly yields `INCOMPLETE`.
 
 The native installer records SHA-256 bindings for installed scanner entry
 points. `production` and `release` require those approved digests, rehash the
-entry points after execution, and verify that the target source and built
-distributions have the same before/after content digest. A target mutation or
+entry points and transitive loader closure after execution, and verify that the
+target source and built distributions have the same before/after content digest.
+Scanners read a private, read-only copy of the exact inventoried files, so an
+in-scan source rewrite cannot create a mixed-version result. Native scanners
+may declare out-of-tree or dynamically loaded plugins in
+`SCANNER.runtime-closure.json`; every declared path and digest becomes part of
+the approved closure. Production requires a schema-1.2 loader observation with
+two independently signed, organization-pinned authority receipts. A source
+mutation, omitted/mismatched declared plugin, unauthenticated observation, or
 tool substitution produces `INCOMPLETE`, never a clean result.
 
 See the [native operations guide](docs/operations.md) for trust-boundary,
@@ -674,6 +704,16 @@ python-security-report/
 |-- reachability.json               # three-state topology, explained paths, coverage, and islands
 |-- graphify.json                    # validated code-only nodes, edges, and file topology
 |-- graph-analysis.json              # graph-aware finding context and hotspots
+|-- boundary-graph.json              # unified Python/JS/native process, network, import, and FFI boundaries
+|-- semantic-language-coverage.json  # exact per-language file ledgers plus pairwise cross-language data-flow coverage
+|-- isolation-boundary.json          # external-attested or digest-pinned sandbox enforcement mode
+|-- isolation-probe.json             # TCP/UDP v4/v6, host, Unix/raw-socket, proxy, target, link, and scratch canaries
+|-- security-requirements-coverage.json # versioned ASVS/MASVS/TCASVS evidence crosswalk and gaps
+|-- trust-policy.json                # redacted digest seal over deployment-owned trust inputs
+|-- dependency-surface.json          # digest-bound analyzer receipt for each dependency manifest
+|-- resource-limits.json             # per-scanner OS quotas; governed profiles also require external write quota
+|-- runtime-closure.json             # recursive native/plugin, interpreter, and platform loader closure
+|-- report-security.json             # classification, owner ACL, retention, and encryption policy
 |-- risk-paths.json                  # entry-to-risk routes, shared controls, campaigns, owners, and validation gaps
 |-- advanced-analysis.json           # typed controls, taint, artifact, threat, privacy, and dependency relationships
 |-- structural-synthesis.json        # dead code, island boundaries, change risk, and graph-guided tests
@@ -805,9 +845,19 @@ Binary artifact findings carry the exact SHA-256 and byte size in normalized
 JSON and render a copy-ready identity block in Markdown and HTML, so signing,
 rejection, and rebuild actions can target the precise wheel or source archive.
 
+Trusted runtime producers use companion-assurance v2. A clean document is
+accepted only when it is fresh, complete, coverage-bearing, canary-verified,
+bound to exact producer/rules/config/environment digests, and authenticated by
+an Ed25519 DSSE/in-toto signature whose public key is SHA-256 pinned. Conditional
+adapters add multi-role and stateful authorization, Nuclei, OAST, RESTler,
+non-HTTP protocol contracts, fuzz-harness depth, cloud attack paths, connected
+secret verification, Prowler, RASP, native sanitizers, MobSF, TLS, and polyglot
+semantic evidence without allowing the core scanner to execute target code or
+contact those targets.
+
 ## Current boundaries
 
-This is an alpha foundation. All 64 offline/static, evidence-ingestion, and
+This is an alpha foundation. All 88 offline/static, evidence-ingestion, and
 artifact adapters are
 implemented, but enterprise
 rollout still requires pinned approved assets, framework-specific Pysa models,
@@ -819,3 +869,7 @@ executables through the same CLI and report contract.
 No scanner portfolio can prove that software is vulnerability-free. Production
 approval must bind this report, an SBOM, the final artifact digest, test
 evidence, provenance, and governed risk acceptances to the same release.
+Encryption requires a signed KMS/HSM lifecycle receipt for the exact recipient
+key generation, a distinct provider-authority attestation of non-exportability,
+decrypt-only usage, and cryptographic erasure, plus advanced trusted time. These
+identities and validity evidence are carried inside the authenticated envelope.

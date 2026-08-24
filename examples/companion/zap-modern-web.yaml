@@ -1,0 +1,69 @@
+---
+env:
+  contexts:
+    - name: pysec-loopback
+      urls:
+        - http://127.0.0.1:8765
+      includePaths:
+        - http://127\.0\.0\.1:8765/.*
+      authentication:
+        method: browser
+        parameters:
+          loginPageUrl: http://127.0.0.1:8765/login
+          browserId: firefox-headless
+        verification:
+          method: autodetect
+      sessionManagement:
+        method: autodetect
+        parameters: {}
+      users:
+        - name: authenticated-security-role
+          credentials:
+            username: ${ZAP_SECURITY_USERNAME}
+            password: ${ZAP_SECURITY_PASSWORD}
+  failOnError: true
+  failOnWarning: false
+  progressToStdout: true
+jobs:
+  - type: passiveScan-config
+    parameters:
+      enableTags: true
+      maxAlertsPerRule: 100
+  - type: spiderClient
+    parameters:
+      context: pysec-loopback
+      url: http://127.0.0.1:8765/
+      maxDuration: 10
+      maxCrawlDepth: 10
+  - type: spiderClient
+    parameters:
+      context: pysec-loopback
+      user: authenticated-security-role
+      url: http://127.0.0.1:8765/
+      maxDuration: 10
+      maxCrawlDepth: 10
+  - type: passiveScan-wait
+    parameters:
+      maxDuration: 5
+  - type: activeScan
+    parameters:
+      context: pysec-loopback
+      policy: Default Policy
+      maxRuleDurationInMins: 5
+      maxScanDurationInMins: 15
+  - type: activeScan
+    parameters:
+      context: pysec-loopback
+      user: authenticated-security-role
+      policy: Default Policy
+      maxRuleDurationInMins: 5
+      maxScanDurationInMins: 15
+  - type: report
+    parameters:
+      template: traditional-json-plus
+      reportDir: .artifacts/runtime/raw
+      reportFile: zap
+  - type: exitStatus
+    parameters:
+      errorLevel: High
+      warnLevel: Medium

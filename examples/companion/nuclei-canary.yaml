@@ -1,0 +1,17 @@
+id: pysec-loopback-health-canary
+
+info:
+  name: Python Security Suite loopback health canary
+  author: project-py-security-suite
+  severity: info
+  description: Proves the approved Nuclei workflow issued and matched one bounded request.
+  tags: pysec,canary
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/health"
+    matchers:
+      - type: status
+        status:
+          - 200

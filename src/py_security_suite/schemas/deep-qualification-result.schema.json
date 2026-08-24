@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:deep-qualification-result:2.0",
+  "title": "Verified deep-assurance qualification result",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "status", "areas", "features", "manifest_sha256", "context", "context_sha256", "trusted_time"],
+  "properties": {"schema_version": {"const": "2.0"}, "status": {"const": "passed"}, "areas": {"type": "object", "minProperties": 9, "maxProperties": 9}, "features": {"type": "array", "minItems": 9, "maxItems": 9, "uniqueItems": true}, "manifest_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "context": {"type": "object"}, "context_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "trusted_time": {"type": "object"}}
+}

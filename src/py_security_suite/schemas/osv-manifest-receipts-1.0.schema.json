@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:osv-manifest-receipts:1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "analysis", "tool", "raw_output_sha256", "manifests", "receipt_sha256"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "analysis": {"const": "osv-scanner-manifest-output-receipts"},
+    "tool": {"const": "osv-scanner"},
+    "raw_output_sha256": {"$ref": "#/$defs/digest"},
+    "manifests": {
+      "type": "array", "maxItems": 1800,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["manifest", "manifest_sha256"],
+        "properties": {
+          "manifest": {"type": "string", "minLength": 1, "maxLength": 1000},
+          "manifest_sha256": {"$ref": "#/$defs/digest"}
+        }
+      }
+    },
+    "receipt_sha256": {"$ref": "#/$defs/digest"}
+  },
+  "$defs": {"digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}
+}

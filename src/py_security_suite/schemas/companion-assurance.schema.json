@@ -1,0 +1,139 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:companion-assurance:1.0",
+  "title": "Source-bound companion assurance evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "producer",
+    "revision",
+    "generated_at",
+    "artifact_sha256",
+    "environment",
+    "findings",
+    "source_sha256",
+    "evidence_binding"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "kind": {
+      "enum": [
+        "atheris",
+        "authorization-security",
+        "browser-security",
+        "check-manifest",
+        "clamav",
+        "cloud-attack-path",
+        "clusterfuzzlite",
+        "crosshair",
+        "falco",
+        "fuzz-introspector",
+        "github-attestation",
+        "iast",
+        "in-toto",
+        "kubescape",
+        "mobsf",
+        "mutmut",
+        "native-sanitizers",
+        "nuclei",
+        "oast",
+        "oci-image",
+        "polyglot",
+        "prowler",
+        "protocol-security",
+        "pytm",
+        "rasp",
+        "reproducible-build",
+        "restler",
+        "secret-verification",
+        "tls-scan",
+        "yara",
+        "zap"
+      ]
+    },
+    "producer": {"type": "string", "maxLength": 200},
+    "revision": {"type": "string", "maxLength": 200},
+    "generated_at": {"type": "string", "maxLength": 100},
+    "artifact_sha256": {
+      "type": "string",
+      "pattern": "^$|^[0-9a-f]{64}$"
+    },
+    "environment": {"type": "string", "maxLength": 200},
+    "source_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "evidence_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "evidence_sha256",
+        "binding_file",
+        "verified",
+        "authenticated"
+      ],
+      "properties": {
+        "schema_version": {"const": "1.0"},
+        "evidence_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "binding_file": {"type": "string", "minLength": 1, "maxLength": 500},
+        "verified": {"const": true},
+        "authenticated": {"const": false}
+      }
+    },
+    "findings": {
+      "type": "array",
+      "maxItems": 10000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "rule_id",
+          "title",
+          "message",
+          "path",
+          "line",
+          "severity",
+          "classification",
+          "citation",
+          "impact",
+          "remediation",
+          "area",
+          "domain",
+          "fingerprint",
+          "evidence"
+        ],
+        "properties": {
+          "rule_id": {"type": "string", "maxLength": 160},
+          "title": {"type": "string", "maxLength": 300},
+          "message": {"type": "string", "maxLength": 1000},
+          "path": {"type": "string", "maxLength": 500},
+          "line": {"type": ["integer", "null"], "minimum": 1, "maximum": 9007199254740991},
+          "severity": {
+            "enum": ["critical", "high", "medium", "low", "informational"]
+          },
+          "classification": {"type": "string", "maxLength": 160},
+          "citation": {
+            "type": "string",
+            "pattern": "^$|^https://",
+            "maxLength": 2048
+          },
+          "impact": {"type": "string", "maxLength": 1000},
+          "remediation": {"type": "string", "maxLength": 1000},
+          "area": {"type": "string", "maxLength": 100},
+          "domain": {"type": "string", "maxLength": 100},
+          "fingerprint": {"type": "string", "maxLength": 200},
+          "evidence": {
+            "type": "object",
+            "maxProperties": 50,
+            "additionalProperties": {
+              "type": ["string", "number", "boolean", "null"]
+            }
+          }
+        }
+      }
+    }
+  }
+}

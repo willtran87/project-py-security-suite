@@ -30,6 +30,15 @@ def qualify_bundle(
     required_effectiveness_tools: tuple[str, ...] = (),
 ) -> dict[str, Any]:
     """Join static adapter contracts and activation-free scanner readiness."""
+    if config.profile in {"production", "release"}:
+        minimum_effectiveness_labels = max(minimum_effectiveness_labels, 25)
+        minimum_effectiveness_tools = max(minimum_effectiveness_tools, 2)
+        selected = set(config.selected_tools)
+        required_effectiveness_tools = tuple(
+            sorted(
+                set(required_effectiveness_tools) | ({"bandit", "semgrep"} & selected)
+            )
+        )
     adapters = assess_adapter_conformance()
     readiness = assess_readiness(target=target, config=config)
     adapter_failures = [

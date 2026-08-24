@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import tomllib
+import hashlib
+import os
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
 from .config import load_config
-from .execution import sha256_file
-from .path_safety import resolve_regular_file
+from .path_safety import read_regular_file
 
 
 def build_config_provenance(
@@ -52,8 +53,11 @@ def build_config_provenance(
     }
     return {
         "schema_version": "1.0",
-        "authoritative": False,
-        "scope": "Value-redacted origin map for the validated effective configuration; organization authorization remains explicit in scan evidence.",
+        "authoritative": bool(
+            organization_policy
+            and os.environ.get("PYSEC_ORGANIZATION_POLICY_SHA256", "")
+        ),
+        "scope": "Value-redacted origin map for the validated effective configuration; production organization authority is bound to a deployment-owned digest pin.",
         "sources": {
             "organization": organization_source,
             "repository": repository_source,
@@ -78,13 +82,12 @@ def build_config_provenance(
 def _source(path: Path | None, label: str) -> tuple[dict[str, Any], dict[str, Any]]:
     if path is None:
         return {}, {"configured": False, "path": None, "sha256": None}
-    source = resolve_regular_file(path, label)
-    with source.open("rb") as handle:
-        value = tomllib.load(handle)
+    source, payload = read_regular_file(path, label, maximum_bytes=4 * 1024 * 1024)
+    value = tomllib.loads(payload.decode("utf-8"))
     return value, {
         "configured": True,
         "path": str(source),
-        "sha256": sha256_file(source),
+        "sha256": hashlib.sha256(payload).hexdigest(),
     }
 
 

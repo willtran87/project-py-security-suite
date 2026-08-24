@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import tempfile
 import unittest
@@ -281,6 +282,7 @@ class SpecializedAdapterRuntimeTests(unittest.TestCase):
                 artifacts_path=Path("dist"),
                 provenance_path=Path("dist"),
                 public_key_path=key,
+                public_key_sha256=hashlib.sha256(b"fixture-key").hexdigest(),
             ),
             4096,
         )

@@ -1130,7 +1130,7 @@ class OrchestratorTests(unittest.TestCase):
 
             self.assertEqual(result.outcome, Outcome.INCOMPLETE)
             self.assertFalse(result.manifest.inventory.source_integrity_verified)
-            self.assertNotEqual(
+            self.assertEqual(
                 result.manifest.inventory.source_sha256,
                 result.manifest.inventory.source_sha256_after,
             )

@@ -11,10 +11,13 @@ from ..config import ToolConfig
 from ..execution import (
     CommandEnvironment,
     RawExecution,
+    governed_asset_sha256,
     resolve_executable,
     run_command,
+    sealed_governed_assets,
     sanitize_diagnostic,
     sha256_file,
+    python_runtime_closure_sha256,
 )
 from ..models import Finding, ToolRun, ToolStatus
 
@@ -37,6 +40,8 @@ class ScannerReadiness:
     executable: str | None = None
     executable_sha256: str | None = None
     executable_integrity_verified: bool | None = None
+    runtime_closure_sha256: str | None = None
+    runtime_closure_integrity_verified: bool | None = None
 
 
 class ScannerAdapter(ABC):
@@ -50,6 +55,12 @@ class ScannerAdapter(ABC):
         self._executable_sha256: str | None = None
         self._executable_integrity_verified: bool | None = None
         self._executable_unchanged: bool | None = None
+        self._runtime_closure_sha256: str | None = None
+        self._runtime_closure_integrity_verified: bool | None = None
+        self._runtime_closure_unchanged: bool | None = None
+        self._asset_digests: dict[str, str] = {}
+        self._asset_unchanged: dict[str, bool] = {}
+        self._asset_snapshot_verified: dict[str, bool] = {}
 
     def prerequisite_error(self) -> str | None:
         return None
@@ -59,6 +70,26 @@ class ScannerAdapter(ABC):
 
     def environment(self) -> CommandEnvironment:
         return CommandEnvironment()
+
+    def execution_environment(self) -> CommandEnvironment:
+        environment = self.environment()
+        environment.extra.update(self.config.trust_environment)
+        if self.config.trust_policy_sha256:
+            environment.extra["PYSEC_TRUST_POLICY_SHA256"] = (
+                self.config.trust_policy_sha256
+            )
+        if self.config.sandbox_executable:
+            environment.sandbox_prefix = (
+                self.config.sandbox_executable,
+                *self.config.sandbox_arguments,
+            )
+            environment.sandbox_executable_sha256 = (
+                self.config.sandbox_executable_sha256
+            )
+            environment.sandbox_runtime_closure_sha256 = (
+                self.config.sandbox_runtime_closure_sha256
+            )
+        return environment
 
     def version_command(self, executable: str) -> list[str]:
         return [executable, "--version"]
@@ -112,6 +143,45 @@ class ScannerAdapter(ABC):
                 diagnostic=self._diagnostic(tool_run, None),
             )
 
+        assets = {
+            label: path
+            for label, path in (
+                ("rules", self.config.rules_path),
+                ("database", self.config.database_path),
+            )
+            if path is not None
+        }
+        try:
+            with sealed_governed_assets(assets, self._asset_digests) as copies:
+                originals = {
+                    "rules": self.config.rules_path,
+                    "database": self.config.database_path,
+                }
+                try:
+                    if "rules" in copies:
+                        self.config.rules_path = copies["rules"]
+                    if "database" in copies:
+                        self.config.database_path = copies["database"]
+                    self._asset_snapshot_verified = {label: True for label in copies}
+                    return self._run_ready(target, executable)
+                finally:
+                    self.config.rules_path = originals["rules"]
+                    self.config.database_path = originals["database"]
+        except (OSError, TypeError, ValueError) as exc:
+            tool_run = ToolRun(
+                tool=self.name,
+                status=ToolStatus.UNAVAILABLE,
+                command=[executable],
+                duration_seconds=0.0,
+                error=f"scanner assets could not be sealed: {exc}",
+            )
+            return AdapterResult(
+                findings=[],
+                tool_run=tool_run,
+                diagnostic=self._diagnostic(tool_run, None),
+            )
+
+    def _run_ready(self, target: Path, executable: str) -> AdapterResult:
         command = self.build_command(executable, target)
         version = self._detect_version(executable, target)
         execution = run_command(
@@ -119,9 +189,9 @@ class ScannerAdapter(ABC):
             cwd=target,
             timeout_seconds=self.config.timeout_seconds,
             max_output_bytes=self.max_output_bytes,
-            environment=self.environment(),
+            environment=self.execution_environment(),
         )
-        changed_error = self._executable_changed_error()
+        changed_error = self._executable_changed_error() or self._asset_changed_error()
         if changed_error:
             tool_run = self._tool_run(
                 execution,
@@ -139,6 +209,36 @@ class ScannerAdapter(ABC):
                 execution,
                 ToolStatus.TIMED_OUT,
                 error=f"timed out after {self.config.timeout_seconds} seconds",
+                version=version,
+            )
+            return AdapterResult(
+                findings=[],
+                tool_run=tool_run,
+                diagnostic=self._diagnostic(tool_run, execution),
+            )
+        if execution.output_limit_exceeded:
+            tool_run = self._tool_run(
+                execution,
+                ToolStatus.FAILED,
+                error=(
+                    "scanner output exceeded the configured byte limit and its "
+                    "process tree was terminated"
+                ),
+                version=version,
+            )
+            return AdapterResult(
+                findings=[],
+                tool_run=tool_run,
+                diagnostic=self._diagnostic(tool_run, execution),
+            )
+        if execution.scratch_limit_exceeded:
+            tool_run = self._tool_run(
+                execution,
+                ToolStatus.FAILED,
+                error=(
+                    "scanner private scratch space exceeded the configured byte "
+                    "limit and its process tree was terminated"
+                ),
                 version=version,
             )
             return AdapterResult(
@@ -214,6 +314,13 @@ class ScannerAdapter(ABC):
                 status="unavailable",
                 reason=prerequisite,
             )
+        asset_error = self._prepare_assets()
+        if asset_error:
+            return ScannerReadiness(
+                tool=self.name,
+                status="unavailable",
+                reason=asset_error,
+            )
         executable, integrity_error = self._prepare_executable()
         if integrity_error or executable is None:
             return ScannerReadiness(
@@ -224,6 +331,10 @@ class ScannerAdapter(ABC):
                 ),
                 executable_sha256=self._executable_sha256,
                 executable_integrity_verified=self._executable_integrity_verified,
+                runtime_closure_sha256=self._runtime_closure_sha256,
+                runtime_closure_integrity_verified=(
+                    self._runtime_closure_integrity_verified
+                ),
             )
         return ScannerReadiness(
             tool=self.name,
@@ -231,6 +342,10 @@ class ScannerAdapter(ABC):
             executable=executable,
             executable_sha256=self._executable_sha256,
             executable_integrity_verified=self._executable_integrity_verified,
+            runtime_closure_sha256=self._runtime_closure_sha256,
+            runtime_closure_integrity_verified=(
+                self._runtime_closure_integrity_verified
+            ),
         )
 
     def _tool_run(
@@ -275,7 +390,88 @@ class ScannerAdapter(ABC):
                 None,
                 "scanner executable SHA-256 does not match the approved digest",
             )
+        expected_runtime = self.config.runtime_closure_sha256
+        if expected_runtime or self.config.require_runtime_closure:
+            try:
+                runtime_digest = python_runtime_closure_sha256(
+                    executable,
+                    include_environment=(
+                        self.config.runtime_closure_scope == "environment"
+                    ),
+                    require_native_plugin_manifest=(
+                        self.config.require_runtime_closure
+                    ),
+                )
+            except (OSError, TypeError, ValueError) as exc:
+                return (
+                    None,
+                    f"scanner runtime closure could not be hashed: {exc}",
+                )
+            if runtime_digest is None and expected_runtime:
+                return (
+                    None,
+                    "scanner executable runtime closure could not be identified",
+                )
+            if runtime_digest is None:
+                return str(path), None
+            self._runtime_closure_sha256 = runtime_digest
+            if self.config.require_runtime_closure and not expected_runtime:
+                return (
+                    None,
+                    "production scanner requires an approved runtime_closure_sha256",
+                )
+            self._runtime_closure_integrity_verified = (
+                runtime_digest == expected_runtime
+            )
+            if runtime_digest != expected_runtime:
+                return (
+                    None,
+                    "scanner runtime closure does not match the approved digest",
+                )
         return str(path), None
+
+    def _prepare_assets(self) -> str | None:
+        self._asset_digests = {}
+        self._asset_unchanged = {}
+        self._asset_snapshot_verified = {}
+        for label, path, expected in (
+            ("rules", self.config.rules_path, self.config.rules_sha256),
+            ("database", self.config.database_path, self.config.database_sha256),
+        ):
+            if path is None:
+                continue
+            if self.config.require_asset_digests and not expected:
+                return f"production scanner requires an approved {label}_sha256"
+            if (
+                self.config.require_asset_digests
+                and not self.config.asset_digests_organization_approved
+            ):
+                return "production scanner asset digests lack organization approval"
+            try:
+                observed = governed_asset_sha256(path)
+            except (OSError, TypeError, ValueError) as exc:
+                return f"scanner {label} asset could not be hashed: {exc}"
+            self._asset_digests[label] = observed
+            if expected and observed != expected:
+                return (
+                    f"scanner {label} asset SHA-256 does not match the approved digest"
+                )
+        return None
+
+    def _asset_changed_error(self) -> str | None:
+        for label, initial in self._asset_digests.items():
+            path = getattr(self.config, f"{label}_path")
+            if path is None:
+                continue
+            try:
+                current = governed_asset_sha256(path)
+            except (OSError, TypeError, ValueError):
+                self._asset_unchanged[label] = False
+                return f"scanner {label} asset became unreadable during execution"
+            self._asset_unchanged[label] = current == initial
+            if current != initial:
+                return f"scanner {label} asset changed during execution"
+        return None
 
     def _executable_changed_error(self) -> str | None:
         path = self._executable_path
@@ -290,6 +486,31 @@ class ScannerAdapter(ABC):
         self._executable_unchanged = current == initial
         if not self._executable_unchanged:
             return "scanner executable changed during execution"
+        if self._runtime_closure_sha256 is not None:
+            if self.config.runtime_closure_scope == "environment":
+                # The orchestrator performs one scan-wide post-run rehash so
+                # dozens of Python entry points do not each hash the identical
+                # interpreter environment independently.
+                self._runtime_closure_unchanged = None
+                return None
+            try:
+                current_runtime = python_runtime_closure_sha256(
+                    str(path),
+                    include_environment=(
+                        self.config.runtime_closure_scope == "environment"
+                    ),
+                    require_native_plugin_manifest=(
+                        self.config.require_runtime_closure
+                    ),
+                )
+            except (OSError, TypeError, ValueError):
+                self._runtime_closure_unchanged = False
+                return "scanner runtime closure became unreadable during execution"
+            self._runtime_closure_unchanged = (
+                current_runtime == self._runtime_closure_sha256
+            )
+            if not self._runtime_closure_unchanged:
+                return "scanner runtime closure changed during execution"
         return None
 
     def _integrity_fields(self) -> dict[str, Any]:
@@ -305,7 +526,7 @@ class ScannerAdapter(ABC):
             cwd=target,
             timeout_seconds=min(self.config.timeout_seconds, 10),
             max_output_bytes=2048,
-            environment=self.environment(),
+            environment=self.execution_environment(),
         )
         if execution.exit_code != 0 or execution.timed_out:
             return "unknown"
@@ -339,4 +560,20 @@ class ScannerAdapter(ABC):
             "executable_sha256": tool_run.executable_sha256,
             "executable_integrity_verified": (tool_run.executable_integrity_verified),
             "executable_unchanged": tool_run.executable_unchanged,
+            "runtime_closure_sha256": self._runtime_closure_sha256,
+            "runtime_closure_integrity_verified": (
+                self._runtime_closure_integrity_verified
+            ),
+            "runtime_closure_unchanged": self._runtime_closure_unchanged,
+            "asset_digests": dict(sorted(self._asset_digests.items())),
+            "asset_unchanged": dict(sorted(self._asset_unchanged.items())),
+            "asset_snapshot_verified": dict(
+                sorted(self._asset_snapshot_verified.items())
+            ),
+            "resource_limits_enforced": (
+                list(execution.resource_limits_enforced) if execution else []
+            ),
+            "resource_limit_errors": (
+                list(execution.resource_limit_errors) if execution else []
+            ),
         }

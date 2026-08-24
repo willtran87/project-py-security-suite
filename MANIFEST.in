@@ -7,10 +7,11 @@ include pysec.example.toml
 include tach.toml
 include tox.toml
 include uv.lock
-recursive-include companion pyproject.toml uv.lock
+recursive-include companion *.py pyproject.toml uv.lock
+prune companion/.venv
 recursive-include containers *.toml Dockerfile
 recursive-include docs *.json *.md
-recursive-include examples *.yml
+recursive-include examples *.json *.yaml *.yml
 recursive-include scripts *.ps1
 recursive-include scripts *.py
 recursive-include security *.json

@@ -15,6 +15,60 @@ from py_security_suite.release_readiness import assess_release_readiness
 
 class ReleaseReadinessTests(unittest.TestCase):
     @patch("py_security_suite.release_readiness.verify_report")
+    def test_production_requires_effectiveness_evidence_without_cli_opt_in(
+        self, verify_report_mock
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            report = Path(directory)
+            _write_release_evidence(report, profile="production")
+            verify_report_mock.return_value = _verification()
+            result = assess_release_readiness(report)
+        self.assertEqual(result["decision"], "not_approved")
+        self.assertIn("detection-effectiveness", result["blockers"])
+
+    @patch("py_security_suite.release_readiness.verify_report")
+    def test_production_rejects_legacy_unsigned_effectiveness_corpus(
+        self, verify_report_mock
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            report = root / "report"
+            report.mkdir()
+            _write_release_evidence(report, profile="production")
+            verification = _verification()
+            verify_report_mock.return_value = verification
+            evaluation = root / "evaluation.json"
+            evaluation_digest = _write_json(
+                evaluation,
+                {
+                    "schema_version": "1.0",
+                    "verdict": "pass",
+                    "report": {"checksums_sha256": verification["checksums_sha256"]},
+                    "corpus": {"labels": 25},
+                    "label_outcomes": [
+                        {
+                            "expected": "finding" if index < 13 else "clean",
+                            "match": {"tool": "bandit" if index % 2 else "semgrep"},
+                        }
+                        for index in range(25)
+                    ],
+                },
+            )
+            result = assess_release_readiness(
+                report,
+                effectiveness_evaluation=evaluation,
+                effectiveness_sha256=evaluation_digest,
+            )
+        self.assertIn("detection-effectiveness", result["blockers"])
+        control = next(
+            item
+            for item in result["controls"]
+            if item["id"] == "detection-effectiveness"
+        )
+        self.assertIn("Governed corpus required: True", control["detail"])
+        self.assertIn("validated: False", control["detail"])
+
+    @patch("py_security_suite.release_readiness.verify_report")
     def test_complete_governed_evidence_is_approved(self, verify_report_mock) -> None:
         with tempfile.TemporaryDirectory() as directory:
             report = Path(directory)
@@ -629,7 +683,7 @@ def _write_release_evidence(
     trusted: bool = True,
     isolated: bool = True,
     intelligence_approved: bool = True,
-    profile: str = "production",
+    profile: str = "standard",
 ) -> None:
     documents: dict[str, dict[str, object]] = {
         "scan-manifest.json": {

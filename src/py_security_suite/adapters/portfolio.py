@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
 
 from ..execution import CommandEnvironment
+from ..strict_json import canonical_bytes
 from ..models import (
     Citation,
     Confidence,
@@ -183,7 +185,35 @@ class PipdeptreeAdapter(ScannerAdapter):
         return findings
 
     def derived_artifacts(self, payload: str, target: Path) -> dict[str, Any]:
-        return {"pipdeptree-summary.json": json.loads(payload)}
+        document = json.loads(payload)
+        if not isinstance(document, dict):
+            raise TypeError("pipdeptree summary must be an object")
+        conflicts = document.get("conflicting_dependencies")
+        if not isinstance(conflicts, dict):
+            raise TypeError("pipdeptree conflicting_dependencies must be an object")
+        artifact: dict[str, Any] = {
+            "schema_version": "1.0",
+            "total_packages": _bounded_count(document, "total_packages"),
+            "direct_dependencies": _bounded_count(document, "direct_dependencies"),
+            "transitive_dependencies": _bounded_count(
+                document, "transitive_dependencies"
+            ),
+            "max_depth": _bounded_count(document, "max_depth"),
+            "missing_dependencies": _bounded_count(document, "missing_dependencies"),
+            "cyclic_dependencies": _bounded_count(document, "cyclic_dependencies"),
+            "conflicting_dependencies": {
+                "packages": _bounded_count(conflicts, "packages"),
+                "edges": _bounded_count(conflicts, "edges"),
+            },
+            "native_report_sha256": hashlib.sha256(payload.encode("utf-8")).hexdigest(),
+            "native_report_size_bytes": len(payload.encode("utf-8")),
+            "native_report_records": _bounded_count(document, "total_packages"),
+            "native_report_utf8": payload,
+        }
+        artifact["normalization_sha256"] = hashlib.sha256(
+            canonical_bytes(artifact)
+        ).hexdigest()
+        return {"pipdeptree-summary.json": artifact}
 
 
 class GitSizerAdapter(ScannerAdapter):
@@ -224,7 +254,38 @@ class GitSizerAdapter(ScannerAdapter):
         return findings
 
     def derived_artifacts(self, payload: str, target: Path) -> dict[str, Any]:
-        return {"git-sizer.json": json.loads(payload)}
+        document = json.loads(payload)
+        if not isinstance(document, dict):
+            raise TypeError("git-sizer JSON must be an object")
+        metrics = [
+            {
+                "path": path[:500],
+                "description": str(
+                    metric.get("description") or path.rsplit(".", 1)[-1]
+                )[:500],
+                "value": str(metric.get("value", "unknown"))[:500],
+                "level_of_concern": _number(
+                    metric.get("levelOfConcern", metric.get("level_of_concern"))
+                ),
+            }
+            for path, metric in _concern_metrics(document)
+        ]
+        metrics.sort(key=lambda item: str(item["path"]))
+        artifact: dict[str, Any] = {
+            "schema_version": "1.0",
+            "metrics": metrics,
+            "concerning_metrics": sum(
+                _number(item["level_of_concern"]) >= 1 for item in metrics
+            ),
+            "native_report_sha256": hashlib.sha256(payload.encode("utf-8")).hexdigest(),
+            "native_report_size_bytes": len(payload.encode("utf-8")),
+            "native_report_records": len(metrics),
+            "native_report_utf8": payload,
+        }
+        artifact["normalization_sha256"] = hashlib.sha256(
+            canonical_bytes(artifact)
+        ).hexdigest()
+        return {"git-sizer.json": artifact}
 
 
 class ValidatePyprojectAdapter(ScannerAdapter):
@@ -533,6 +594,13 @@ def _integer(value: object) -> int:
         return int(str(value or 0))
     except (TypeError, ValueError):
         return 0
+
+
+def _bounded_count(value: dict[str, Any], name: str) -> int:
+    raw = value.get(name)
+    if isinstance(raw, bool) or not isinstance(raw, int) or not 0 <= raw <= 10_000_000:
+        raise ValueError(f"{name} must be an integer between 0 and 10000000")
+    return raw
 
 
 def _number(value: object) -> float:

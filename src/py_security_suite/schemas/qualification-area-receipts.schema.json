@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:qualification-area-receipts:2.0",
+  "title": "Deep qualification area receipts",
+  "oneOf": [
+    {"$ref": "#/$defs/ai"}, {"$ref": "#/$defs/browser"}, {"$ref": "#/$defs/ci"},
+    {"$ref": "#/$defs/kafka"}, {"$ref": "#/$defs/postgresql"}, {"$ref": "#/$defs/sarif"},
+    {"$ref": "#/$defs/supplyChain"}, {"$ref": "#/$defs/surface"}, {"$ref": "#/$defs/trustState"}
+  ],
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "object": {"type": "object"},
+    "array": {"type": "array", "minItems": 1},
+    "ai": {"type": "object", "required": ["schema_version", "independence_dimensions", "attestation_file", "attestation_sha256", "inter_rater_kappa", "adjudication_rate", "per_control_confusion", "calibration_windows", "adjudication_file", "adjudication_sha256", "calibration_file", "calibration_sha256"], "properties": {"schema_version": {"const": "1.0"}, "attestation_sha256": {"$ref": "#/$defs/digest"}, "adjudication_sha256": {"$ref": "#/$defs/digest"}, "calibration_sha256": {"$ref": "#/$defs/digest"}}},
+    "browser": {"type": "object", "required": ["schema_version", "engines", "authenticated_roles", "probes"], "properties": {"schema_version": {"const": "1.0"}, "engines": {"$ref": "#/$defs/array"}, "probes": {"$ref": "#/$defs/array"}}},
+    "ci": {"type": "object", "required": ["schema_version", "runner_isolation_attested", "egress_policy_attested", "image_signatures_verified", "sboms_verified", "build_provenance_verified", "fault_injection_scenarios"], "properties": {"schema_version": {"const": "1.0"}, "fault_injection_scenarios": {"$ref": "#/$defs/array"}}},
+    "kafka": {"type": "object", "required": ["schema_version", "tls_version", "sasl_mechanism", "acl_resources", "durability", "tests", "schema_formats", "key_and_headers_validated"], "properties": {"schema_version": {"const": "1.0"}, "tls_version": {"const": "TLSv1.3"}, "sasl_mechanism": {"const": "SCRAM-SHA-512"}, "tests": {"$ref": "#/$defs/array"}}},
+    "postgresql": {"type": "object", "required": ["schema_version", "sslmode", "channel_binding", "audits", "rls_tests", "recovery_tests"], "properties": {"schema_version": {"const": "1.0"}, "sslmode": {"const": "verify-full"}, "channel_binding": {"const": "require"}}},
+    "sarif": {"type": "object", "required": ["schema_version", "official_schema_file", "official_schema_sha256", "runs", "native_results", "normalized_results", "exit_status_reconciled", "preserved_semantics", "redaction_detectors", "native_report_file", "native_report_sha256", "normalized_report_file", "normalized_report_sha256", "process_exit_code"], "properties": {"schema_version": {"const": "2.1.0"}, "official_schema_sha256": {"$ref": "#/$defs/digest"}, "native_report_sha256": {"$ref": "#/$defs/digest"}, "normalized_report_sha256": {"$ref": "#/$defs/digest"}, "process_exit_code": {"const": 0}}},
+    "supplyChain": {"type": "object", "required": ["schema_version", "artifact_sha256", "slsa_level", "verifiers", "container_images", "recursive_dependencies"], "properties": {"schema_version": {"const": "1.0"}, "artifact_sha256": {"$ref": "#/$defs/digest"}, "slsa_level": {"type": "integer", "minimum": 3, "maximum": 3}, "recursive_dependencies": {"const": true}}},
+    "surface": {"type": "object", "required": ["schema_version", "server_signed_pages", "trusted_time_sha256", "tombstones", "history_windows", "signed_total_count", "liveness_probes"], "properties": {"schema_version": {"const": "1.0"}, "trusted_time_sha256": {"$ref": "#/$defs/digest"}, "signed_total_count": {"const": true}}},
+    "trustState": {"type": "object", "required": ["schema_version", "backend", "cas_verified", "append_only_verified", "transparency_proof_sha256", "checkpoint_sequence", "authority_quorum", "rotation_tested", "algorithms"], "properties": {"schema_version": {"const": "1.0"}, "transparency_proof_sha256": {"$ref": "#/$defs/digest"}, "cas_verified": {"const": true}, "append_only_verified": {"const": true}, "rotation_tested": {"const": true}}}
+  }
+}

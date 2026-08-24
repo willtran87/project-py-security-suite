@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:coverage-artifact:1.0",
+  "type": "object",
+  "required": ["kind", "totals", "files", "finding_hotspot_limit"],
+  "properties": {
+    "kind": {"const": "coverage"},
+    "source_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "totals": {"type": "object"},
+    "files": {"type": "array", "maxItems": 250000, "items": {"type": "object"}},
+    "finding_hotspot_limit": {"type": "integer", "minimum": 1, "maximum": 1000}
+  }
+}

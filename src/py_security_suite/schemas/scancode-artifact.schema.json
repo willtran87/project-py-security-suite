@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:scancode-artifact:1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "files"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "files": {
+      "type": "array",
+      "maxItems": 250000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "licenses", "packages"],
+        "properties": {
+          "path": {"type": "string", "minLength": 1, "maxLength": 4096},
+          "licenses": {"type": "array", "maxItems": 10000},
+          "packages": {"type": "array", "maxItems": 10000}
+        }
+      }
+    }
+  }
+}

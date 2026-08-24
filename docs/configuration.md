@@ -68,7 +68,8 @@ catalog_path = "security-data/scanner-trust.json"
 catalog_sha256 = "<organization-approved-catalog-sha256>"
 ```
 
-The catalog records the exact primary or auxiliary executable SHA-256, tool
+The catalog records the exact primary, auxiliary, or Python runtime-closure
+SHA-256, tool
 version, provenance source, approver, expiry, and applicable platforms. Its
 `status` must be `approved`; drafts are rejected. Expired, malformed,
 digest-mismatched, or duplicate entries fail closed. An explicit per-tool
@@ -78,6 +79,18 @@ organization-approved catalog digest.
 Export the strict contract with `pysec schema scanner-trust-catalog-1.0`.
 Every scan retains applied, ignored, and invalid catalog decisions in
 `scanner-trust.json`.
+
+Native closure calculation recursively includes executable-directory DLL,
+PYD, SO, and dylib plugins and transitive PE, ELF, or Mach-O imports. A scanner
+with dynamically loaded files outside that tree must ship an exact sidecar named
+`SCANNER.runtime-closure.json` beside its executable. Schema `1.0` contains a
+`plugins` list of safe relative `path` and lowercase `sha256` pairs; the sidecar
+and every declared file are hashed into the runtime closure. Production policy
+requires schema `1.2`: it adds the exact loader-observed plugin/OS-component
+ledger, the digest-pinned collector, and at least two lifecycle-bound authority
+receipts from distinct signers, collectors, and organizations. The receipts
+sign a subject that also binds the scanner executable. Changing the scanner,
+collector, component set, plugin bytes, or declaration fails closed.
 
 Digest origin is retained separately from digest matching. A tool pin in
 repository configuration can fail closed on an unexpected binary, but it does
@@ -102,10 +115,11 @@ introduced binaries.
 | `quality` | Existing correctness/structure/test tools plus Conftest, KICS, pipdeptree, git-sizer, validate-pyproject, Vale, and KubeLinter |
 | `iac-deep` | Checkov, Trivy, Hadolint, actionlint, zizmor, Conftest, KICS, and KubeLinter |
 | `governance` | Validated OpenSSF Scorecard evidence, REUSE, zizmor, and actionlint |
+| `runtime` | Schemathesis, CrossHair, Atheris, ClusterFuzzLite, ZAP, authenticated browser, IAST, Falco, and Kubescape companion evidence |
 | `repo-health` | Conftest, KICS, pipdeptree, git-sizer, validate-pyproject, Vale, and KubeLinter |
 | `repo` | Production source scanners plus the quality profile; excludes built-artifact controls |
-| `comprehensive` | Every implemented offline/static or artifact adapter |
-| `production` | Strict source-security set, including actionlint, Hadolint, DevSkim, Flawfinder, TruffleHog, and `run-codeql` |
+| `comprehensive` | Every implemented offline/static, companion-evidence, or artifact adapter |
+| `production` | Strict source-security set plus fail-closed applicable runtime evidence, including actionlint, Hadolint, DevSkim, Flawfinder, TruffleHog, and `run-codeql` |
 | `release` | Comprehensive plus production completeness rules and a required built distribution |
 
 If `policy.required_scanners` is empty, every selected and applicable tool is
@@ -190,6 +204,7 @@ require release evidence.
 | `kube-linter` | `kube-linter` | Kubernetes YAML or Helm chart |
 | `hypothesis`, `schemathesis` | `pysec-evidence` | Bounded pre-generated JUnit XML at `artifacts_path` |
 | `crosshair`, `atheris`, `mutmut`, `zap`, `pytm` | `pysec-evidence` | Bounded pre-generated JSON at `artifacts_path` |
+| `nuclei`, `oast`, `restler`, `protocol-security`, `fuzz-introspector`, `prowler`, `cloud-attack-path`, `secret-verification`, `rasp`, `native-sanitizers`, `mobsf`, `tls-scan`, `polyglot` | `pysec-evidence` | Signed contract-v2 companion evidence; conditionally applicable to web, API/protocol, fuzz-target, cloud, secret-verification, native, mobile, deployed TLS, or non-Python source shapes |
 | `in-toto`, `reproducible-build`, `oci-image`, `yara` | `pysec-evidence` | Bounded release-assurance JSON at `artifacts_path` |
 | `check-manifest`, `clamav`, `github-attestation` | `pysec-evidence` | Bounded pre-generated packaging/release JSON at `artifacts_path` |
 
@@ -201,7 +216,9 @@ executable = "tool-name-or-approved-absolute-path"
 executable_sha256 = "64-lowercase-or-uppercase-hexadecimal-characters"
 timeout_seconds = 300
 rules_path = "optional/local/rules"
+rules_sha256 = "approved-rules-file-or-tree-sha256"
 database_path = "optional/local/database-or-cache"
+database_sha256 = "approved-database-file-or-tree-sha256"
 artifacts_path = "optional/local/distribution-directory"
 provenance_path = "optional/local-provenance-directory"
 auxiliary_executable = "optional-required-helper-executable"
@@ -211,6 +228,7 @@ minimum_coverage_percent = 80.0
 maximum_database_age_days = 10
 compare_branch = "origin/main"
 public_key_path = "optional/local/cosign-public-key"
+public_key_sha256 = "approved-public-key-sha256"
 certificate_identity = "optional-expected-signing-identity"
 certificate_oidc_issuer = "optional-expected-oidc-issuer"
 minimum_island_loc = 100
@@ -218,24 +236,116 @@ entry_points = ["optional.module:callable"]
 source_roots = ["src"]
 discover_framework_roots = true
 coverage_path = "optional/coverage.json"
+maximum_evidence_age_days = 7
+require_evidence_contract_v2 = true
+require_signed_evidence = true
+expected_run_id = "organization-issued-run-id"
+expected_environment_sha256 = "approved-environment-sha256"
+expected_context_path = "security-data/organization-issued-context.json"
+replay_ledger_path = "security-data/evidence-replay.sqlite3"
+# For multi-party evidence signing, use a digest-pinned lifecycle keyring instead:
+# public_keyring_path = "security-data/evidence-keyring.json"
+# public_keyring_sha256 = "<sha256>"
+# For atomic replay consumption across runners, replace replay_ledger_path with:
+# replay_service_url = "https://replay.security.example/v1/consume"
+# replay_service_token_env = "PYSEC_REPLAY_SERVICE_TOKEN"
+# replay_service_ca_path = "security-data/replay-service-ca.pem"
+# replay_service_ca_sha256 = "<sha256>"
 ```
 
 Only use keys meaningful to that adapter. Relative asset paths are resolved
 against the scan target. See [`pysec.example.toml`](../pysec.example.toml) for
 a complete configuration containing all implemented tools.
 
-The final five settings belong to `reachability`. `coverage_path` is optional,
+The final evidence settings bind companion trust. Evidence adapters require
+contract v2 and signed bindings by default; the public key must be pinned by
+SHA-256 and should come from organization policy. A repository cannot increase
+the maximum age or disable an organization-required contract or signature.
+`expected_context_path` is mandatory for contract-v2 assurance and binds the target manifest, exact exercised target set,
+deployment, external surface inventory, challenge, and trusted-time receipt.
+`expected_run_id` and `expected_environment_sha256` add explicit orchestrator
+checks. Its trusted-time object must contain an RFC 3161 response, nonce, and
+digest-pinned timestamping certificate; the verifier checks the message imprint,
+nonce, signature, timestamping EKU, certificate validity, and issued time.
+`replay_ledger_path` atomically consumes
+each authenticated evidence identity in SQLite, so a previously accepted
+receipt cannot authorize a later decision.
+
+`replay_service_url` provides the same consume-once contract through an HTTPS
+service for distributed runners. Authentication is read from the configured
+environment variable. An organization-pinned CA, receipt public key, client
+certificate, and client key are mandatory; an unsigned or empty HTTP 201 is
+rejected. The local ledger and central service are mutually exclusive. Set
+`PYSEC_REPLAY_RECEIPT_KEY_SHA256` to the canonical raw Ed25519 key digest and
+use `PYSEC_REPLAY_STATE_FILE` plus `PYSEC_REPLAY_MIN_SEQUENCE` for a durable,
+externally anchored checkpoint. Every replay trust file has a matching
+`*_sha256` setting.
+
+Governance v2 receipts (isolation, intelligence, execution trust, and the
+organization policy itself) can use the same deployment-owned monotonic
+service. Set `PYSEC_GOVERNANCE_REPLAY_SERVICE_URL`,
+`PYSEC_GOVERNANCE_REPLAY_SERVICE_TOKEN_ENV`, the `..._CA`, `..._RECEIPT_KEY`,
+`..._CLIENT_CERT`, and `..._CLIENT_KEY` paths, plus each matching `..._SHA256`.
+Set `PYSEC_GOVERNANCE_REPLAY_REQUIRE_REMOTE=true` to forbid fallback to the
+local SQLite ledger. Signed receipt time is rechecked against the governance
+validity window, and `PYSEC_GOVERNANCE_REPLAY_SERVICE_STATE_FILE` retains the
+monotonic hash-chain checkpoint.
+
+A public keyring can set a threshold across distinct Ed25519 signers and assign
+each key an active, retired, or revoked lifecycle state with validity dates.
+Revoked or out-of-window keys never contribute to the threshold.
+Keyring schema 2 adds an offline-root signature, monotonic generation,
+`previous_keyring_sha256`, and `compromised_key_ids`. Configure
+`allowed_builder_ids`, `expected_build_type`, and
+`expected_source_repository` to reject otherwise valid evidence built by an
+unapproved SLSA builder or source.
+
+`require_assurance_profile = true` makes the high-assurance admission root
+mandatory; this is the default for assurance-evidence tools. Such a tool is
+rejected before execution unless both `assurance_profile_path` and
+`assurance_profile_sha256` select the exact external profile. The profile requires a
+quorum of independently collected organization-trusted signatures, a monotonic
+generation, an expiry, RFC 3161 trusted time, a signed remote append-only
+checkpoint with an exact predecessor, minimum contract
+versions, required execution features, a minimum SLSA level, and required
+provenance verifiers. Configure `PYSEC_ASSURANCE_PROFILE_MIN_GENERATION` and
+`PYSEC_ASSURANCE_PROFILE_MIN_CHECKPOINT_SEQUENCE` as deployment-owned rollback
+floors. Configure `PYSEC_ASSURANCE_PROFILE_SIGNATURE_THRESHOLD`,
+`PYSEC_AUTHORITY_ORGANIZATIONS`, and `PYSEC_AUTHORITY_KEY_LIFECYCLE` outside the
+repository; a
+repository cannot replace either the approved profile path or digest.
+
+Profile-governed provenance uses schema 3 and composes the independently
+verified SLSA envelope, Sigstore bundle and trusted root, VSA policy, and exact
+resolved-dependency closure. A valid older contract, a missing feature, or a
+missing verifier is a rejection rather than a lower-confidence pass.
+
+Deep-qualification manifests bind all nine receipts to one run, environment,
+target, source, profile generation, trusted-time window, and nonce. For a
+single runner, set `PYSEC_QUALIFICATION_REPLAY_LEDGER` to a protected local
+file. Distributed runners instead set
+`PYSEC_QUALIFICATION_REPLAY_SERVICE_URL`,
+`PYSEC_QUALIFICATION_REPLAY_SERVICE_TOKEN_ENV`,
+`PYSEC_QUALIFICATION_REPLAY_SERVICE_CA`,
+`PYSEC_QUALIFICATION_REPLAY_SERVICE_CLIENT_CERT`, and
+`PYSEC_QUALIFICATION_REPLAY_SERVICE_CLIENT_KEY`. The endpoint must atomically
+create a consume receipt or return HTTP 409; credentials in URLs, unpinned CAs,
+missing mutual TLS, malformed receipts, and replay are rejected.
+
+The reachability-specific settings are `minimum_island_loc`, `entry_points`,
+`source_roots`, `discover_framework_roots`, and `coverage_path`. Coverage is optional,
 bounded coverage.py JSON generated in a separate test lane; organization policy
 can bind its location. See
 [Python reachability and code islands](reachability.md) for root discovery,
 policy-strength rules, output interpretation, and dynamic-language limits.
 
 `executable_sha256` binds the exact resolved executable or console-script
-entry point. It does not by itself authenticate the publisher or hash every
-file imported by a Python entry point. Approve the connected-lane bundle,
-retain its manifest and package lock evidence, and transfer it through the
-enterprise artifact trust process. The native installer calculates these
-entry-point digests and writes them to `pysec.native.toml`.
+entry point. For Python console scripts, `runtime_closure_sha256` additionally
+hashes every file in the owning installed distribution and its recursively
+installed dependency closure. Organization policy can approve either value;
+the closure is checked before and after execution. Approve the connected-lane
+bundle, retain its manifest and package lock evidence, and transfer it through
+the enterprise artifact trust process.
 
 ## Core schema
 
@@ -248,11 +358,21 @@ bundle_root = ".pysec-tools"
 
 [isolation]
 network = "deny"
+enforcement_mode = "external-attested"
 require_attestation = true
 require_evidence = false
 execute_target_code = false
 # evidence_path = "security-data/isolation-attestation.json"
 # evidence_sha256 = "<organization-approved-sha256>"
+# evidence_public_key_path = "security-data/governance-ed25519.pem"
+# evidence_public_key_sha256 = "<organization-approved-key-sha256>"
+# evidence_signature_path = "security-data/isolation-attestation.sig"
+# For local enforcement instead of an external runner:
+# enforcement_mode = "sandbox-launcher"
+# sandbox_executable = "/usr/bin/bwrap"
+# sandbox_executable_sha256 = "<organization-approved-launcher-sha256>"
+# sandbox_runtime_closure_sha256 = "<launcher-and-transitive-native-closure-sha256>"
+# sandbox_arguments = ["--unshare-net", "--die-with-parent", "--"]
 
 [execution]
 max_workers = 4
@@ -269,6 +389,8 @@ incomplete_is_blocking = true
 
 [reports]
 include_sanitized_evidence = true
+classification = "confidential"
+retention_days = 30
 # baseline_path = "security-data/previous/findings.json"
 # baseline_sha256 = "<approved-sha256>"
 
@@ -281,6 +403,9 @@ include_sanitized_evidence = true
 # vex_sha256 = "<approved-sha256>"
 # approval_path = "security-data/intelligence/approval.json"
 # approval_sha256 = "<organization-approved-sha256>"
+# approval_public_key_path = "security-data/governance-ed25519.pem"
+# approval_public_key_sha256 = "<organization-approved-key-sha256>"
+# approval_signature_path = "security-data/intelligence/approval.sig"
 require_approval = false
 maximum_age_days = 3
 epss_high_probability = 0.10
@@ -307,19 +432,60 @@ and native schema before enrichment. Invalid configured evidence makes the scan
 `INCOMPLETE`. VEX never suppresses a finding automatically; a not-affected
 decision still requires the governed risk-acceptance workflow.
 
-`production` and `release` force `isolation.require_evidence = true`. The
+`production` and `release` force `isolation.require_evidence = true`. Governance
+v2 evidence is required in those profiles and binds containment capabilities,
+a signed generation and nonce, two or more independent organizations and
+collectors, key lifecycle/revocation policy, and an atomic replay ledger. The
 evidence is accepted only when its path and digest originate in the separate
 organization policy; a repository-local binding is recorded but is not treated
 as enterprise authorization. It must assert egress denial, match the immutable
 source digest and target, cover scan start with its validity window, and record
-the external signature verifier and trust-root digest.
+the external signature verifier and trust-root digest. The suite independently
+verifies the exact JSON bytes with the configured, digest-pinned Ed25519 key; a
+self-asserted `signature_verified` field is insufficient.
 
 When production or release consumes KEV, EPSS, or VEX, it likewise requires a
 digest-bound approval manifest from the organization policy. The manifest must
 list exactly the snapshot kinds and SHA-256 values consumed by the scan. These
 decisions are sealed in `isolation-attestation.json` and
-`intelligence-approval.json`; neither boolean substitutes for enforcement or
-signature verification by the enterprise control plane.
+`intelligence-approval.json`. `isolation-boundary.json` records whether the
+scan used external attestation or a digest-pinned sandbox launcher.
+`isolation-probe.json` independently exercises loopback and host-interface
+TCP/UDP, IPv4/IPv6, Unix-domain and raw sockets, cleared proxy and credential
+variables, unrelated host-secret read denial, root/nested target writes, link
+creation, named shared-memory IPC, parent-process access/PID visibility, and
+private scratch. Linux additionally records `NoNewPrivs`, effective
+capabilities, and seccomp mode and requires the first two enforced; Windows
+requires DEP, ASLR, dynamic-code prohibition, and child-process prohibition.
+Sandbox arguments may use
+`{PYSEC_PROBE_SECRET_PARENT}` to mask the per-run secret directory. Governance
+v2 also requires host-filesystem, credential, process, device, and IPC
+isolation; Windows evidence must additionally assert `windows-appcontainer`
+because a Job Object alone is not a security boundary. Unsupported host
+canaries remain explicitly untested and cannot satisfy required capability
+coverage. `resource-limits.json` records CPU, memory, process, open-file, output,
+and scratch controls; production/release additionally require an external
+`file-write-quota` capability, because post-run directory polling is not a hard
+write limit.
+`trust-policy.json` seals deployment trust variables by value digest, and its
+digest is included in the effective configuration identity. Production and
+release additionally require an externally quorum-signed trust-policy
+attestation with expiry, generation anti-rollback, and replay consumption.
+Organization policy metadata can be authenticated the same way through
+`PYSEC_ORGANIZATION_POLICY_ATTESTATION` and its deployment-owned SHA-256.
+
+Report publication verifies owner-only permissions before the atomic commit and
+records classification and a deletion deadline in `report-security.json`. For
+encrypted transport or storage, `pysec encrypt-report` requires the recipient
+public key and digest plus `--key-lifecycle-receipt`, its digest,
+`--key-authority-public-key`, its digest, and `--key-lifecycle-signature`;
+`--provider-attestation`, its digest, `--provider-authority-public-key`, its
+digest, `--provider-attestation-signature`, and `--trusted-time-context` are
+also mandatory. The independent provider statement proves the exact key
+generation is non-exportable, decrypt-only, and supports cryptographic erasure;
+advanced RFC 3161 time binds both signed statements and the recipient digest.
+`pysec decrypt-report` authenticates, safely extracts, and re-verifies the
+report. The envelope uses X25519, HKDF-SHA256, and AES-256-GCM.
 
 ## Constraints
 
@@ -330,12 +496,18 @@ signature verification by the enterprise control plane.
 | `isolation.network` | Must be `"deny"` |
 | `isolation.execute_target_code` | Must be `false` |
 | `isolation.evidence_path` / `evidence_sha256` | Paired; organization-policy binding required for production/release |
+| Governance public-key path / SHA-256 / signature path | Required with isolation or intelligence governance evidence; Ed25519 only |
+| `isolation.enforcement_mode` | `external-attested` or `sandbox-launcher`; launcher mode requires a digest-pinned executable |
 | `intelligence.approval_path` / `approval_sha256` | Paired; required for consumed production/release snapshots |
 | `execution.max_workers` | 1 through 16 |
 | `execution.max_output_bytes` | At least 1024 |
+| `reports.classification` | `confidential` or `restricted` |
+| `reports.retention_days` | 1 through 3650 |
 | `policy.block_severities` | Valid normalized severity values |
 | Tool timeout | Positive integer seconds |
 | Tool executable digest | Exactly 64 hexadecimal characters when supplied |
+| Tool runtime closure digest | Required organization-approved exact Python distribution/dependency-closure SHA-256 in production/release; native tools additionally require an adjacent schema-1.2 manifest whose loader-observation collector and exact plugin/OS-component closure have a two-organization authority quorum |
+| Tool rules/database digest | Each configured `rules_path` or `database_path` requires a matching organization-approved SHA-256 in production/release; file or canonical symlink-free directory digests are checked before and after execution, while the scanner receives only a private per-run snapshot verified before and after use |
 | `minimum_coverage_percent` | Numeric value from 0 through 100 |
 | `maximum_database_age_days` | Numeric value from 0.1 through 3650; enforced for staged OSV and Grype databases |
 | `policy.risk_acceptance_sha256` | Exactly 64 hexadecimal characters when supplied |
@@ -344,6 +516,10 @@ Supported severities are `critical`, `high`, `medium`, `low`,
 `informational`, and `unknown`.
 
 ## Protected organization policy
+
+For `production` and `release`, `--policy` is accepted only when
+`PYSEC_ORGANIZATION_POLICY_SHA256` matches the exact policy bytes. This pin is
+owned by the deployment/runner, not by the repository being scanned.
 
 A repository cannot:
 
@@ -358,6 +534,15 @@ A repository cannot:
 - make organization-blocking incomplete scans non-blocking.
 
 Required applicable scanners cannot be disabled.
+
+An optional full standards/applicability policy is deployment-owned through
+`PYSEC_REQUIREMENTS_POLICY_PATH` and
+`PYSEC_REQUIREMENTS_POLICY_SHA256`. Export its contract with `pysec schema
+security-requirements-policy-1.0`. It must enumerate every requirement from
+each pinned ASVS, MASVS, and TCASVS catalog and carry at least two approved
+`security-requirements-applicability` authority signatures. Missing catalog
+items, duplicate decisions, unknown evidence names, or an unverified policy
+keep `security-requirements-coverage.json` incomplete.
 
 ## CLI reference
 
@@ -599,3 +784,17 @@ The stable error codes are `configuration_error`, `io_error`, and
 
 Completeness is evaluated before severity. An unavailable applicable scanner
 cannot be masked by an otherwise empty finding set.
+Encryption additionally requires digest-pinned, Ed25519-signed key-lifecycle
+and provider-attestation receipts from distinct configured authorities. The
+receipts name the KMS/HSM provider, key ID and generation, active validity
+window, exact X25519 recipient public-key digest, non-exportability,
+decrypt-report usage, and cryptographic-erasure capability. Advanced RFC 3161
+time—not the local clock—establishes the active lifecycle window. These fields,
+receipt/authority digests, and timestamp receipt are authenticated inside the
+encrypted envelope.
+
+Expired-report deletion requires `pysec purge-expired-report REPORT
+--trusted-time-context CONTEXT.json`. The RFC 3161 timestamp challenge binds the
+exact report checksum, sealed deletion deadline, and purge action; the local
+wall clock and legacy signer-only timestamp receipts are not accepted as
+deletion authority.

@@ -2,12 +2,17 @@ from __future__ import annotations
 
 import hashlib
 import os
+import shutil
+import tempfile
 import tomllib
+from contextlib import contextmanager
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
-from .execution import resolve_executable, run_command
+from .execution import CommandEnvironment, resolve_executable, run_command
 from .models import Inventory
+from .path_safety import read_regular_file
 
 
 _SKIP_DIRECTORIES = frozenset(
@@ -146,6 +151,378 @@ def source_snapshot(
     return digest, len(files), total_bytes
 
 
+@contextmanager
+def sealed_source_snapshot(
+    target: Path,
+    source_inventory: dict[str, Any],
+    *,
+    vcs_revision: str = "",
+) -> Iterator[Path]:
+    """Copy the exact inventoried source set into a private read-only scan root."""
+    expected_digest = str(source_inventory.get("source_sha256") or "")
+    records = source_inventory.get("files")
+    if not isinstance(records, list) or not expected_digest:
+        raise ValueError("source inventory cannot create a sealed scan snapshot")
+    temporary_parent = Path(tempfile.mkdtemp(prefix="pysec-source-snapshot-"))
+    snapshot = temporary_parent / target.name
+    snapshot.mkdir(mode=0o700)
+    try:
+        _reject_lfs_pointer_records(target, records)
+        for record in records:
+            if not isinstance(record, dict):
+                raise ValueError("source inventory contains an invalid file record")
+            relative = Path(str(record.get("path") or ""))
+            if (
+                not relative.parts
+                or relative.is_absolute()
+                or ".." in relative.parts
+                or relative.as_posix() != str(record.get("path"))
+            ):
+                raise ValueError("source inventory contains an unsafe snapshot path")
+            size = record.get("size_bytes")
+            digest = str(record.get("sha256") or "")
+            if isinstance(size, bool) or not isinstance(size, int) or size < 0:
+                raise ValueError("source inventory contains an invalid snapshot size")
+            _, payload = read_regular_file(
+                target / relative,
+                "source snapshot member",
+                maximum_bytes=max(1, size),
+                boundary=target,
+            )
+            if len(payload) != size or hashlib.sha256(payload).hexdigest() != digest:
+                raise ValueError("source changed while the sealed snapshot was created")
+            destination = snapshot / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            with destination.open("xb") as handle:
+                handle.write(payload)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.chmod(destination, 0o400)
+        if vcs_revision:
+            _seal_git_history(target, snapshot, vcs_revision, temporary_parent)
+        observed, count, total = source_snapshot(snapshot)
+        if (
+            observed != expected_digest
+            or count != source_inventory.get("total_files")
+            or total != source_inventory.get("total_bytes")
+        ):
+            raise ValueError("sealed scan snapshot does not match the source inventory")
+        for directory in sorted(
+            (path for path in snapshot.rglob("*") if path.is_dir()), reverse=True
+        ):
+            os.chmod(directory, 0o500)
+        os.chmod(snapshot, 0o500)
+        yield snapshot
+    finally:
+        for path in (
+            [temporary_parent, *temporary_parent.rglob("*")]
+            if temporary_parent.exists()
+            else []
+        ):
+            try:
+                os.chmod(path, 0o700 if path.is_dir() else 0o600)
+            except OSError:
+                pass
+        shutil.rmtree(temporary_parent, ignore_errors=False)
+
+
+def _seal_git_history(
+    target: Path, snapshot: Path, revision: str, temporary_parent: Path
+) -> None:
+    """Materialize a hook-free, read-only Git history beside the source snapshot."""
+    if not (target / ".git").exists():
+        raise ValueError("verified Git revision has no repository metadata")
+    git = resolve_executable("git")
+    if git is None:
+        raise ValueError("Git is unavailable while sealing repository history")
+    _materialize_git_history(
+        target,
+        snapshot,
+        revision,
+        temporary_parent / "superproject",
+    )
+    _seal_submodule_histories(target, snapshot, temporary_parent)
+
+
+def _materialize_git_history(
+    target: Path, snapshot: Path, revision: str, work_root: Path
+) -> None:
+    """Bundle and materialize one exact repository without hooks or worktree files."""
+    git = resolve_executable("git")
+    if git is None:
+        raise ValueError("Git is unavailable while sealing repository history")
+    _validate_git_repository_mode(git, target)
+    work_root.mkdir(mode=0o700, parents=True)
+    bundle = work_root / "repository.bundle"
+    clone = work_root / "history"
+    environment = CommandEnvironment(max_scratch_bytes=4 * 1024**3)
+    created = run_command(
+        [
+            git,
+            "-c",
+            f"safe.directory={target.resolve()}",
+            "-C",
+            str(target),
+            "bundle",
+            "create",
+            str(bundle),
+            "--all",
+        ],
+        cwd=target,
+        timeout_seconds=300,
+        max_output_bytes=64 * 1024,
+        environment=environment,
+    )
+    if created.exit_code != 0 or created.timed_out or not bundle.is_file():
+        raise ValueError("Git history could not be sealed into a repository bundle")
+    if bundle.stat().st_size > 4 * 1024**3:
+        raise ValueError("sealed Git history exceeds 4 GiB")
+    verified = run_command(
+        [git, "bundle", "verify", str(bundle)],
+        cwd=target,
+        timeout_seconds=300,
+        max_output_bytes=64 * 1024,
+        environment=environment,
+    )
+    if verified.exit_code != 0 or verified.timed_out:
+        raise ValueError("sealed Git history bundle failed prerequisite validation")
+    cloned = run_command(
+        [git, "clone", "--no-checkout", "--no-local", str(bundle), str(clone)],
+        cwd=work_root,
+        timeout_seconds=300,
+        max_output_bytes=64 * 1024,
+        environment=environment,
+    )
+    if cloned.exit_code != 0 or cloned.timed_out or not (clone / ".git").is_dir():
+        raise ValueError("sealed Git history could not be materialized")
+    indexed = run_command(
+        [git, "-C", str(clone), "read-tree", "HEAD"],
+        cwd=clone,
+        timeout_seconds=30,
+        max_output_bytes=4096,
+        environment=environment,
+    )
+    if indexed.exit_code != 0 or indexed.timed_out:
+        raise ValueError("sealed Git history index could not be materialized")
+    observed = run_command(
+        [git, "-C", str(clone), "rev-parse", "--verify", "HEAD"],
+        cwd=clone,
+        timeout_seconds=10,
+        max_output_bytes=4096,
+    )
+    if observed.exit_code != 0 or observed.stdout.strip().casefold() != revision:
+        raise ValueError("sealed Git history does not match the inventoried revision")
+    _copy_regular_tree(clone / ".git", snapshot / ".git")
+
+
+def _validate_git_repository_mode(git: str, target: Path) -> None:
+    """Reject repository modes that can hide or rewrite reachable history."""
+
+    def query(arguments: list[str], *, exits: frozenset[int] = frozenset({0})) -> str:
+        result = run_command(
+            [
+                git,
+                "-c",
+                f"safe.directory={target.resolve()}",
+                "-C",
+                str(target),
+                *arguments,
+            ],
+            cwd=target,
+            timeout_seconds=120,
+            max_output_bytes=64 * 1024,
+        )
+        if result.timed_out or result.exit_code not in exits:
+            raise ValueError("Git repository qualification command failed")
+        return result.stdout.strip()
+
+    if query(["rev-parse", "--is-shallow-repository"]).casefold() != "false":
+        raise ValueError(
+            "shallow Git history cannot provide complete repository evidence"
+        )
+    if query(["config", "--get", "extensions.partialClone"], exits=frozenset({0, 1})):
+        raise ValueError("partial-clone Git repositories are not supported")
+    promisor = query(
+        ["config", "--get-regexp", r"^remote\..*\.promisor$"],
+        exits=frozenset({0, 1}),
+    )
+    if any(
+        line.rsplit(maxsplit=1)[-1].casefold() == "true"
+        for line in promisor.splitlines()
+    ):
+        raise ValueError(
+            "promisor-remotes can omit Git objects from repository evidence"
+        )
+    for setting in ("core.sparseCheckout", "core.sparseCheckoutCone"):
+        if (
+            query(
+                ["config", "--bool", "--get", setting],
+                exits=frozenset({0, 1}),
+            ).casefold()
+            == "true"
+        ):
+            raise ValueError("sparse-checkout Git repositories are not supported")
+    if query(["replace", "-l"]):
+        raise ValueError("Git replace refs can rewrite repository evidence")
+    common_dir_text = query(["rev-parse", "--git-common-dir"])
+    common_dir = Path(common_dir_text)
+    if not common_dir.is_absolute():
+        common_dir = target / common_dir
+    alternates = common_dir.resolve() / "objects" / "info" / "alternates"
+    if alternates.is_file() and alternates.stat().st_size:
+        raise ValueError(
+            "Git object alternates make repository evidence non-self-contained"
+        )
+    integrity = run_command(
+        [
+            git,
+            "-c",
+            f"safe.directory={target.resolve()}",
+            "-C",
+            str(target),
+            "fsck",
+            "--full",
+            "--strict",
+            "--no-dangling",
+        ],
+        cwd=target,
+        timeout_seconds=300,
+        max_output_bytes=64 * 1024,
+    )
+    if integrity.exit_code != 0 or integrity.timed_out:
+        raise ValueError("Git object database failed full integrity validation")
+
+
+def _seal_submodule_histories(
+    target: Path, snapshot: Path, temporary_parent: Path
+) -> None:
+    """Recursively seal every initialized gitlink at its indexed revision."""
+    gitmodules = target / ".gitmodules"
+    if not gitmodules.is_file():
+        return
+    git = resolve_executable("git")
+    if git is None:
+        raise ValueError("Git is unavailable while sealing submodule history")
+    listing = run_command(
+        [
+            git,
+            "-c",
+            f"safe.directory={target.resolve()}",
+            "-C",
+            str(target),
+            "config",
+            "--file",
+            ".gitmodules",
+            "--get-regexp",
+            r"^submodule\..*\.path$",
+        ],
+        cwd=target,
+        timeout_seconds=30,
+        max_output_bytes=64 * 1024,
+    )
+    if listing.timed_out or listing.exit_code not in {0, 1}:
+        raise ValueError("Git submodule declarations could not be enumerated")
+    declarations = [
+        line.split(maxsplit=1) for line in listing.stdout.splitlines() if line
+    ]
+    if len(declarations) > 128:
+        raise ValueError("source repository exceeds 128 submodules")
+    for index, declaration in enumerate(declarations):
+        if len(declaration) != 2:
+            raise ValueError("Git submodule declaration is malformed")
+        relative = Path(declaration[1])
+        if relative.is_absolute() or not relative.parts or ".." in relative.parts:
+            raise ValueError("Git submodule path escapes the source root")
+        source = (target / relative).resolve()
+        try:
+            source.relative_to(target.resolve())
+        except ValueError as exc:
+            raise ValueError("Git submodule path escapes the source root") from exc
+        indexed = run_command(
+            [git, "-C", str(target), "ls-files", "--stage", "--", relative.as_posix()],
+            cwd=target,
+            timeout_seconds=10,
+            max_output_bytes=4096,
+        )
+        fields = indexed.stdout.strip().split(maxsplit=3)
+        if indexed.exit_code != 0 or len(fields) < 3 or fields[0] != "160000":
+            raise ValueError("declared Git submodule is not an indexed gitlink")
+        expected_revision = fields[1].casefold()
+        observed_revision, verified = _vcs_revision(source)
+        if not verified or observed_revision != expected_revision:
+            raise ValueError("Git submodule is absent or at the wrong indexed revision")
+        destination = snapshot / relative
+        destination.mkdir(parents=True, exist_ok=True)
+        _materialize_git_history(
+            source,
+            destination,
+            observed_revision,
+            temporary_parent / f"submodule-{index}",
+        )
+        _seal_submodule_histories(
+            source,
+            destination,
+            temporary_parent / f"submodule-{index}-nested",
+        )
+
+
+def _reject_lfs_pointer_records(target: Path, records: list[object]) -> None:
+    """Reject Git LFS pointer placeholders in place of analyzable object bytes."""
+    marker = b"version https://git-lfs.github.com/spec/v1\n"
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        size = record.get("size_bytes")
+        if isinstance(size, bool) or not isinstance(size, int) or size > 4096:
+            continue
+        relative = Path(str(record.get("path") or ""))
+        _, payload = read_regular_file(
+            target / relative,
+            "source snapshot LFS materialization check",
+            maximum_bytes=4096,
+            boundary=target,
+        )
+        normalized = payload.replace(b"\r\n", b"\n")
+        if normalized.startswith(marker) and b"\noid sha256:" in normalized:
+            raise ValueError(
+                f"Git LFS object is not materialized in the source snapshot: {relative.as_posix()}"
+            )
+
+
+def _copy_regular_tree(source: Path, destination: Path) -> None:
+    files = 0
+    total_bytes = 0
+    destination.mkdir(mode=0o700)
+    for root, directories, names in os.walk(source, followlinks=False):
+        root_path = Path(root)
+        relative_root = root_path.relative_to(source)
+        for directory in sorted(directories):
+            candidate = root_path / directory
+            if candidate.is_symlink():
+                raise ValueError("sealed Git history contains a symbolic link")
+            (destination / relative_root / directory).mkdir(mode=0o700)
+        for name in sorted(names):
+            candidate = root_path / name
+            if candidate.is_symlink():
+                raise ValueError("sealed Git history contains a symbolic link")
+            _, payload = read_regular_file(
+                candidate,
+                "sealed Git history member",
+                maximum_bytes=1024 * 1024**2,
+                boundary=source,
+            )
+            files += 1
+            total_bytes += len(payload)
+            if files > 1_000_000 or total_bytes > 8 * 1024**3:
+                raise ValueError("sealed Git history exceeds its copy limits")
+            output = destination / relative_root / name
+            with output.open("xb") as handle:
+                handle.write(payload)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.chmod(output, 0o400)
+
+
 def _maintained_files(
     target: Path,
     excluded_paths: tuple[Path, ...],
@@ -168,6 +545,10 @@ def _maintained_files(
         directories[:] = kept_directories
         for filename in sorted(filenames):
             path = root_path / filename
+            if filename == ".git":
+                # A submodule's .git pointer may reference the original host
+                # checkout. Exact nested history is materialized separately.
+                continue
             if path.is_symlink():
                 skipped_symlinks += 1
                 continue

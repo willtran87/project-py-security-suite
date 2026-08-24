@@ -21,9 +21,9 @@ class AdapterConformanceTests(unittest.TestCase):
         self.assertEqual(document["status"], "pass")
         self.assertEqual(document["registry"]["missing"], [])
         self.assertEqual(document["registry"]["unexpected"], [])
-        self.assertEqual(document["summary"]["adapters"], 64)
+        self.assertEqual(document["summary"]["adapters"], 88)
         self.assertEqual(document["summary"]["failed"], 0)
-        self.assertEqual(document["summary"]["checks"], 320)
+        self.assertEqual(document["summary"]["checks"], 440)
         self.assertTrue(all(len(row["checks"]) == 5 for row in document["adapters"]))
 
         schema = json.loads(read_bundled_schema("adapter-conformance-1.0"))
@@ -33,7 +33,7 @@ class AdapterConformanceTests(unittest.TestCase):
     def test_text_is_decision_first_and_scope_bounded(self) -> None:
         rendered = render_adapter_conformance(assess_adapter_conformance())
         self.assertTrue(rendered.startswith("PASS: adapter conformance"))
-        self.assertIn("64/64 passed; 320 checks", rendered)
+        self.assertIn("88/88 passed; 440 checks", rendered)
         self.assertIn("does not establish scanner availability", rendered)
 
     def test_failure_rendering_and_missing_instance_contract(self) -> None:

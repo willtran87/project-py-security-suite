@@ -8,7 +8,8 @@ from pathlib import Path
 from typing import Any
 
 from .models import Finding, FindingStatus
-from .path_safety import resolve_regular_file
+from .path_safety import read_regular_file
+from .strict_json import loads as strict_loads
 
 
 _MAX_FILE_BYTES = 1024 * 1024
@@ -118,11 +119,10 @@ def validate_risk_acceptances(
 
 
 def _load_document(path: Path) -> tuple[dict[str, Any], str]:
-    resolved = resolve_regular_file(path, "risk-acceptance file")
-    data = resolved.read_bytes()
-    if len(data) > _MAX_FILE_BYTES:
-        raise ValueError("risk-acceptance file exceeds 1 MiB")
-    value = json.loads(data.decode("utf-8"))
+    _, data = read_regular_file(
+        path, "risk-acceptance file", maximum_bytes=_MAX_FILE_BYTES
+    )
+    value = strict_loads(data)
     if not isinstance(value, dict):
         raise TypeError("risk-acceptance root must be an object")
     return value, hashlib.sha256(data).hexdigest()

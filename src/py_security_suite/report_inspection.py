@@ -25,6 +25,16 @@ _REPORT_VERIFICATION_SCHEMA_ID = (
     "urn:project-py-security-suite:schema:report-verification:1.0"
 )
 BUNDLED_SCHEMA_RESOURCES = {
+    "boundary-graph-1.0": "boundary-graph-1.0.schema.json",
+    "dependency-surface-1.1": "dependency-surface-1.1.schema.json",
+    "isolation-probe-1.0": "isolation-probe-1.0.schema.json",
+    "isolation-boundary-1.0": "isolation-boundary-1.0.schema.json",
+    "report-security-1.0": "report-security-1.0.schema.json",
+    "resource-limits-1.0": "resource-limits-1.0.schema.json",
+    "runtime-closure-1.0": "runtime-closure-1.0.schema.json",
+    "semantic-language-coverage-1.0": "semantic-language-coverage-1.0.schema.json",
+    "trust-policy-1.0": "trust-policy-1.0.schema.json",
+    "trust-policy-attestation-1.0": "trust-policy-attestation-1.0.schema.json",
     "advanced-analysis-1.0": "advanced-analysis.schema.json",
     "advanced-analysis-delta-1.0": "advanced-analysis-delta.schema.json",
     "data-exposure-1.0": "data-exposure-1.0.schema.json",
@@ -44,6 +54,8 @@ BUNDLED_SCHEMA_RESOURCES = {
     "structural-synthesis-1.1": "structural-synthesis-1.1.schema.json",
     "structural-synthesis-1.2": "structural-synthesis-1.2.schema.json",
     "adapter-conformance-1.0": "adapter-conformance.schema.json",
+    "companion-assurance-1.0": "companion-assurance.schema.json",
+    "companion-assurance-2.0": "companion-assurance-2.0.schema.json",
     "bundle-qualification-1.0": "bundle-qualification.schema.json",
     "bundle-qualification-1.1": "bundle-qualification-1.1.schema.json",
     "native-bundle-verification-1.0": "native-bundle-verification.schema.json",
@@ -59,6 +71,7 @@ BUNDLED_SCHEMA_RESOURCES = {
     "baseline-candidate-1.0": "baseline-candidate.schema.json",
     "effectiveness-corpus-1.0": "effectiveness-corpus.schema.json",
     "effectiveness-evaluation-1.0": "effectiveness-evaluation.schema.json",
+    "security-requirements-policy-1.0": "security-requirements-policy-1.0.schema.json",
     "effectiveness-1.1": "effectiveness-1.1.schema.json",
     "scanner-trust-catalog-1.0": "scanner-trust-catalog.schema.json",
     "portfolio-health-1.0": "portfolio-health.schema.json",

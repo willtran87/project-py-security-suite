@@ -102,12 +102,42 @@ file identities, unsorted records, excessive size/count, aggregate mismatch,
 or disagreement with the scan manifest. Rule-wide clean labels do not require a path but still require the
 named scanner's unchanged executable identity at bundle qualification.
 
+Schema 1.0 remains available for local and standard-profile regression work.
+Production and release require corpus schema 2.0. Its root additionally carries
+`training_corpus_sha256`, the RFC 8785 digest of the exact holdout labels,
+`minimum_authority_signatures`, and detached authority records. At least two
+independent collectors, signers, and organizations must sign the domain-separated
+`effectiveness-corpus` subject inside their configured key lifecycles. The
+deployment supplies the trusted key IDs, allowed roles, organization mapping,
+and lifecycle policy through the same protected authority environment used by
+the assurance profile; corpus files cannot authorize their own signers.
+
+Every governed label also declares CWE, language, parser variant, boundary
+type, severity, and mutation operator. Release readiness recomputes those
+strata from the exact label outcomes and requires at least five CWEs, two
+languages, two parser variants, three boundary types, three severities, and two
+non-`none` mutation operators. Every named required tool must have both a
+positive and a negative case. A schema-1.0 evaluation, a self-signed corpus, a
+training/holdout digest collision, a stale authority, or diversity metadata
+that disagrees with the outcomes fails the production gate.
+
+Governed evaluation also requires an advanced RFC 3161 context and a durable
+replay ledger. The timestamp challenge binds the sealed report checksum, exact
+corpus digest, and holdout-label digest; the verified timestamp is then used as
+the authority-validation time. The replay ledger atomically consumes that
+report/corpus/time tuple, so an identical holdout evaluation cannot be silently
+reused. Release readiness requires both `time_authority.validated` and
+`replay_protected` in addition to the corpus quorum.
+
 Run the benchmark only after sealing and verifying the scan report:
 
 ```text
 pysec benchmark REPORT \
   --corpus effectiveness-corpus.json \
   --corpus-sha256 APPROVED_SHA256 \
+  --trusted-time effectiveness-time.json \
+  --trusted-time-sha256 APPROVED_TIME_CONTEXT_SHA256 \
+  --replay-ledger security-data/effectiveness-replay.sqlite3 \
   --format json \
   --output effectiveness-evaluation.json
 ```

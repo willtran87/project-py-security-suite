@@ -4,9 +4,9 @@
   "title": "Scanner effectiveness evaluation",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "verdict", "report", "corpus", "confusion_matrix", "metrics", "failures", "label_outcomes"],
+  "required": ["schema_version", "verdict", "report", "corpus", "time_authority", "replay_protected", "confusion_matrix", "metrics", "failures", "label_outcomes"],
   "properties": {
-    "schema_version": {"const": "1.0"},
+    "schema_version": {"enum": ["1.0", "2.0"]},
     "verdict": {"enum": ["pass", "fail"]},
     "report": {
       "type": "object",
@@ -27,9 +27,13 @@
         "id": {"type": "string", "minLength": 1, "maxLength": 200},
         "revision": {"type": "string", "maxLength": 200},
         "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-        "labels": {"type": "integer", "minimum": 1, "maximum": 10000}
+        "labels": {"type": "integer", "minimum": 1, "maximum": 10000},
+        "authority": {"type": "object"},
+        "diversity": {"type": "object", "additionalProperties": false, "required": ["cwe", "language", "parser_variant", "boundary_type", "severity", "mutation_operator"], "properties": {"cwe": {"type": "integer", "minimum": 0}, "language": {"type": "integer", "minimum": 0}, "parser_variant": {"type": "integer", "minimum": 0}, "boundary_type": {"type": "integer", "minimum": 0}, "severity": {"type": "integer", "minimum": 0}, "mutation_operator": {"type": "integer", "minimum": 0}}}
       }
     },
+    "time_authority": {"type": "object", "additionalProperties": false, "required": ["validated", "observed_at", "trusted_time_sha256", "receipt_sha256"], "properties": {"validated": {"type": "boolean"}, "observed_at": {"type": "string"}, "trusted_time_sha256": {"type": "string", "pattern": "^$|^[0-9a-f]{64}$"}, "receipt_sha256": {"type": "string", "pattern": "^$|^[0-9a-f]{64}$"}}},
+    "replay_protected": {"type": "boolean"},
     "confusion_matrix": {
       "type": "object",
       "additionalProperties": false,
@@ -96,7 +100,8 @@
           "maxItems": 20,
           "items": {"type": "string", "minLength": 1, "maxLength": 200}
         },
-        "matching_findings_omitted": {"type": "integer", "minimum": 0}
+        "matching_findings_omitted": {"type": "integer", "minimum": 0},
+        "strata": {"type": "object", "additionalProperties": false, "required": ["cwe", "language", "parser_variant", "boundary_type", "severity", "mutation_operator"], "properties": {"cwe": {"type": "string", "minLength": 1, "maxLength": 160}, "language": {"type": "string", "minLength": 1, "maxLength": 160}, "parser_variant": {"type": "string", "minLength": 1, "maxLength": 160}, "boundary_type": {"type": "string", "minLength": 1, "maxLength": 160}, "severity": {"type": "string", "minLength": 1, "maxLength": 160}, "mutation_operator": {"type": "string", "minLength": 1, "maxLength": 160}}}
       }
     }
   }

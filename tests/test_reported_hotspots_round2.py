@@ -624,6 +624,31 @@ class CorrelationTests(unittest.TestCase):
         self.assertEqual(len(result), 2)
         self.assertEqual(result[0], singleton)
 
+    def test_correlation_marks_runtime_corroboration_without_claiming_exploitability(
+        self,
+    ) -> None:
+        static = self._finding(
+            "codeql",
+            "py/sql-injection",
+            severity=Severity.HIGH,
+            confidence=Confidence.HIGH,
+            classification="CWE-89",
+        )
+        runtime = self._finding(
+            "iast",
+            "sql-injection",
+            severity=Severity.HIGH,
+            confidence=Confidence.HIGH,
+            classification="CWE-89",
+        )
+
+        merged = correlate_findings([static, runtime])[0]
+
+        corroboration = merged.evidence["cross_tool_corroboration"]
+        self.assertTrue(corroboration["runtime_observed"])
+        self.assertEqual(corroboration["dynamic_tools"], ["iast"])
+        self.assertIn("does not by itself prove", corroboration["claim_boundary"])
+
 
 if __name__ == "__main__":
     unittest.main()

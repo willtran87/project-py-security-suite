@@ -40,6 +40,9 @@ def production_runs(suite: SuiteConfig) -> list[ToolRun]:
     for name in suite.required_tools:
         suite.tools[name].executable_sha256 = "a" * 64
         suite.tools[name].executable_organization_approved = True
+        if suite.tools[name].require_assurance_profile:
+            suite.tools[name].assurance_profile_path = Path("profile-v2.json")
+            suite.tools[name].assurance_profile_sha256 = "c" * 64
         runs.append(
             ToolRun(
                 tool=name,
@@ -378,6 +381,34 @@ class PolicyTests(unittest.TestCase):
             ),
         )
         self.assertEqual(decision.outcome, Outcome.FAIL)
+
+    def test_production_gate_requires_only_applicable_runtime_evidence(self) -> None:
+        config = load_config(profile_override="production")
+        runs = production_runs(config)
+        iast = next(run for run in runs if run.tool == "iast")
+        iast.status = ToolStatus.FAILED
+        falco = next(run for run in runs if run.tool == "falco")
+        falco.status = ToolStatus.SKIPPED
+        falco.applicable = False
+
+        decision = evaluate_policy(
+            config=config,
+            findings=[],
+            tool_runs=runs,
+            network_isolation_attested=True,
+            inventory=Inventory(
+                python_files=1,
+                dependency_files=[],
+                total_files=1,
+                skipped_symlinks=0,
+                vcs_history_available=True,
+            ),
+        )
+
+        reasons = " ".join(decision.reasons)
+        self.assertEqual(decision.outcome, Outcome.INCOMPLETE)
+        self.assertIn("iast evidence for this repository shape", reasons)
+        self.assertNotIn("falco evidence", reasons)
 
 
 if __name__ == "__main__":

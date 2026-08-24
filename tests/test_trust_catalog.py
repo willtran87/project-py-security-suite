@@ -73,6 +73,7 @@ class TrustCatalogTests(unittest.TestCase):
             path = Path(directory) / "trust.json"
             entries = [
                 _entry("bandit", role="auxiliary", digest="b" * 64),
+                _entry("bandit", role="runtime", digest="d" * 64),
                 _entry("semgrep", platforms=["definitely-not-this-platform"]),
                 _entry("detect-secrets", digest="c" * 64),
             ]
@@ -85,6 +86,7 @@ class TrustCatalogTests(unittest.TestCase):
 
         self.assertEqual(result.errors, [])
         self.assertEqual(config.tools["bandit"].auxiliary_executable_sha256, "b" * 64)
+        self.assertEqual(config.tools["bandit"].runtime_closure_sha256, "d" * 64)
         self.assertEqual(
             {item["reason"] for item in result.artifact["ignored"]},
             {"platform_not_applicable", "tool_not_configured"},

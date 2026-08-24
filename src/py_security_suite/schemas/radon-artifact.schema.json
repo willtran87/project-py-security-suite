@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:radon-artifact:1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "minimum_reported_rank", "files"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "minimum_reported_rank": {"const": "C"},
+    "files": {"type": "object", "maxProperties": 250000, "additionalProperties": {"type": "array", "maxItems": 250000}}
+  }
+}

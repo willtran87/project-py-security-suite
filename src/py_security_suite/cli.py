@@ -30,6 +30,8 @@ from .config_advisor import (
     render_config_advice_markdown,
 )
 from .config_provenance import build_config_provenance
+from .confidential_archive import decrypt_report, encrypt_report
+from .report_retention import purge_verified_report, retention_status
 from .doctor import assess_readiness, render_readiness, render_readiness_markdown
 from .evidence_draft import build_governance_evidence_draft
 from .evidence_pack import create_evidence_pack, verify_evidence_pack
@@ -204,6 +206,50 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="append summary.md to GITHUB_STEP_SUMMARY after report generation",
     )
+
+    encrypt = subparsers.add_parser(
+        "encrypt-report", help="encrypt a verified report for X25519 transport"
+    )
+    encrypt.add_argument("report", type=Path)
+    encrypt.add_argument("--output", type=Path, required=True)
+    encrypt.add_argument("--recipient-public-key", type=Path, required=True)
+    encrypt.add_argument("--recipient-public-key-sha256", required=True)
+    encrypt.add_argument("--key-lifecycle-receipt", type=Path, required=True)
+    encrypt.add_argument("--key-lifecycle-receipt-sha256", required=True)
+    encrypt.add_argument("--key-authority-public-key", type=Path, required=True)
+    encrypt.add_argument("--key-authority-public-key-sha256", required=True)
+    encrypt.add_argument("--key-lifecycle-signature", type=Path, required=True)
+    encrypt.add_argument("--provider-attestation", type=Path, required=True)
+    encrypt.add_argument("--provider-attestation-sha256", required=True)
+    encrypt.add_argument("--provider-authority-public-key", type=Path, required=True)
+    encrypt.add_argument("--provider-authority-public-key-sha256", required=True)
+    encrypt.add_argument("--provider-attestation-signature", type=Path, required=True)
+    encrypt.add_argument("--trusted-time-context", type=Path, required=True)
+    encrypt.add_argument("--overwrite", action="store_true")
+    encrypt.add_argument(
+        "--delete-plaintext-after-encryption",
+        action="store_true",
+        help="delete the verified plaintext report after authenticated encryption",
+    )
+
+    decrypt = subparsers.add_parser(
+        "decrypt-report", help="decrypt and verify an X25519 report archive"
+    )
+    decrypt.add_argument("encrypted", type=Path)
+    decrypt.add_argument("--output", type=Path, required=True)
+    decrypt.add_argument("--recipient-private-key", type=Path, required=True)
+    decrypt.add_argument("--recipient-private-key-sha256", required=True)
+
+    retention = subparsers.add_parser(
+        "retention-status", help="verify a report and evaluate its retention deadline"
+    )
+    retention.add_argument("report", type=Path)
+    purge = subparsers.add_parser(
+        "purge-expired-report",
+        help="delete a verified report after its retention deadline",
+    )
+    purge.add_argument("report", type=Path)
+    purge.add_argument("--trusted-time-context", type=Path, required=True)
 
     doctor = subparsers.add_parser(
         "doctor",
@@ -603,6 +649,9 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark.add_argument("report", type=Path, metavar="REPORT_DIRECTORY")
     benchmark.add_argument("--corpus", type=Path, required=True)
     benchmark.add_argument("--corpus-sha256", required=True)
+    benchmark.add_argument("--trusted-time", type=Path)
+    benchmark.add_argument("--trusted-time-sha256", default="")
+    benchmark.add_argument("--replay-ledger", type=Path)
     benchmark.add_argument("--format", choices=("text", "json"), default="text")
     benchmark.add_argument(
         "--output",
@@ -1095,8 +1144,69 @@ def _dispatch_command(args: argparse.Namespace) -> int:
         "verify-inspection": _verify_inspection_command,
         "inspect": _inspect_command,
         "scan": _scan_command,
+        "encrypt-report": _encrypt_report_command,
+        "decrypt-report": _decrypt_report_command,
+        "retention-status": _retention_status_command,
+        "purge-expired-report": _purge_expired_report_command,
     }
     return handlers[args.command](args)
+
+
+def _encrypt_report_command(args: argparse.Namespace) -> int:
+    result = encrypt_report(
+        args.report,
+        args.output,
+        recipient_public_key=args.recipient_public_key,
+        recipient_public_key_sha256=args.recipient_public_key_sha256,
+        key_lifecycle_receipt=args.key_lifecycle_receipt,
+        key_lifecycle_receipt_sha256=args.key_lifecycle_receipt_sha256,
+        key_authority_public_key=args.key_authority_public_key,
+        key_authority_public_key_sha256=args.key_authority_public_key_sha256,
+        key_lifecycle_signature=args.key_lifecycle_signature,
+        provider_attestation=args.provider_attestation,
+        provider_attestation_sha256=args.provider_attestation_sha256,
+        provider_authority_public_key=args.provider_authority_public_key,
+        provider_authority_public_key_sha256=(
+            args.provider_authority_public_key_sha256
+        ),
+        provider_attestation_signature=args.provider_attestation_signature,
+        trusted_time_context=args.trusted_time_context,
+        overwrite=args.overwrite,
+    )
+    if args.delete_plaintext_after_encryption:
+        purge = purge_verified_report(args.report, require_expired=False)
+        result["plaintext_purged"] = purge["purged"]
+    print(json.dumps(result, indent=2, sort_keys=True))
+    return 0
+
+
+def _decrypt_report_command(args: argparse.Namespace) -> int:
+    result = decrypt_report(
+        args.encrypted,
+        args.output,
+        recipient_private_key=args.recipient_private_key,
+        recipient_private_key_sha256=args.recipient_private_key_sha256,
+    )
+    print(json.dumps(result, indent=2, sort_keys=True))
+    return 0
+
+
+def _retention_status_command(args: argparse.Namespace) -> int:
+    print(json.dumps(retention_status(args.report), indent=2, sort_keys=True))
+    return 0
+
+
+def _purge_expired_report_command(args: argparse.Namespace) -> int:
+    print(
+        json.dumps(
+            purge_verified_report(
+                args.report, trusted_time_context=args.trusted_time_context
+            ),
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    return 0
 
 
 def _init_command(args: argparse.Namespace) -> int:
@@ -1653,6 +1763,9 @@ def _benchmark_command(args: argparse.Namespace) -> int:
         args.report,
         args.corpus,
         corpus_sha256=args.corpus_sha256,
+        trusted_time=args.trusted_time,
+        trusted_time_sha256=args.trusted_time_sha256,
+        replay_ledger=args.replay_ledger,
     )
     rendered_json = json.dumps(result, indent=2, sort_keys=True)
     if args.output:

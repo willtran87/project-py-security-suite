@@ -346,6 +346,7 @@ class CosignRuntimeTests(unittest.TestCase):
                 artifacts_path=Path("dist"),
                 provenance_path=Path("dist"),
                 public_key_path=self.key,
+                public_key_sha256=hashlib.sha256(b"fixture").hexdigest(),
             )
         return CosignAdapter(config, 4096)
 

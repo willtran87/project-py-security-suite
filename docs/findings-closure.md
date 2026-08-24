@@ -109,7 +109,7 @@ the suite prepares and verifies evidence but cannot approve itself.
 | 70 | Relocatable scanner bundle | Implemented explicit `[paths] bundle_root`, traversal-safe `@bundle/...` resolution, and portable native installer output |
 | 71 | Offline provisioning plan | Implemented non-mutating text, strict JSON, Markdown, atomic output, ordered batches, and argument-array verification |
 | 72 | Multi-axis admission decision | Implemented first-class source, test, dependency, artifact, and governance cards plus a strict derived artifact |
-| 73 | Adapter SDK qualification | Implemented non-executing registry, concrete-type, identity, configuration, exit-code, and environment checks for all 64 adapters |
+| 73 | Adapter SDK qualification | Implemented non-executing registry, concrete-type, identity, configuration, exit-code, and environment checks for all 88 adapters |
 | 74 | CI workflow generation | Implemented pinned-action, no-install GitHub workflow scaffold with explicit isolation verification and deferred policy exit |
 | 75 | Local developer integration | Implemented local-only pre-commit adapter and readiness diagnostics with an explicit non-gate scope |
 | 76 | Bundle qualification | Implemented activation-free join over registry contracts, profile prerequisites, executable identities, applicability, and trust state |

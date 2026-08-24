@@ -1,0 +1,145 @@
+{
+  "schema_version": "2.0",
+  "base_url": "http://127.0.0.1:8765/",
+  "roles": {
+    "anonymous": {},
+    "tenant_a": {"authorization_env": "PYSEC_TENANT_A_TOKEN"},
+    "tenant_b": {"authorization_env": "PYSEC_TENANT_B_TOKEN"},
+    "administrator": {"authorization_env": "PYSEC_ADMIN_TOKEN"}
+  },
+  "cases": [
+    {
+      "id": "tenant-a-record",
+      "path": "/api/tenants/a/records/known-test-record",
+      "allow": ["tenant_a", "administrator"],
+      "deny": ["anonymous", "tenant_b"],
+      "allowed_status": [200],
+      "denied_status": [401, 403, 404]
+    }
+  ],
+  "state_cases": [
+    {
+      "id": "bounded-transfer-approval",
+      "steps": [
+        {
+          "id": "create-transfer",
+          "path": "/api/transfers",
+          "role": "tenant_a",
+          "method": "POST",
+          "body_env": "PYSEC_TRANSFER_BODY",
+          "expected_status": [201, 202],
+          "control": "state-transition"
+        },
+        {
+          "id": "reject-over-limit-approval",
+          "path": "/api/transfers/known-test-transfer/approve",
+          "role": "tenant_a",
+          "method": "POST",
+          "body_env": "",
+          "expected_status": [403, 409, 422],
+          "control": "approval-limit"
+        }
+      ],
+      "replay": {
+        "step_index": 0,
+        "expected_status": [409, 422]
+      },
+      "out_of_order": {
+        "step_index": 1,
+        "expected_status": [403, 409, 422]
+      },
+      "concurrency": {
+        "step_index": 1,
+        "attempts": 2,
+        "maximum_successes": 0,
+        "success_status": [200, 201, 202, 204]
+      },
+      "reset": {
+        "path": "/api/test-fixtures/transfers/reset",
+        "role": "administrator",
+        "method": "POST",
+        "body_env": "",
+        "expected_status": [204]
+      },
+      "postconditions": [
+        {
+          "id": "reset-before-order-test",
+          "phase": "after-reset-out-of-order",
+          "path": "/api/test-fixtures/transfers/known-test-transfer/state",
+          "role": "administrator",
+          "expected_status": [200],
+          "assertions": [
+            {"pointer": "/approved", "operator": "equals", "value": false},
+            {"pointer": "/approval_count", "operator": "lte", "value": 0}
+          ]
+        },
+        {
+          "id": "out-of-order-state-remains-clean",
+          "phase": "after-out-of-order",
+          "path": "/api/test-fixtures/transfers/known-test-transfer/state",
+          "role": "administrator",
+          "expected_status": [200],
+          "assertions": [
+            {"pointer": "/approved", "operator": "equals", "value": false},
+            {"pointer": "/approval_count", "operator": "lte", "value": 0}
+          ]
+        },
+        {
+          "id": "reset-before-sequence-test",
+          "phase": "after-reset-sequence",
+          "path": "/api/test-fixtures/transfers/known-test-transfer/state",
+          "role": "administrator",
+          "expected_status": [200],
+          "assertions": [
+            {"pointer": "/approved", "operator": "equals", "value": false},
+            {"pointer": "/approval_count", "operator": "lte", "value": 0}
+          ]
+        },
+        {
+          "id": "sequence-state-remains-bounded",
+          "phase": "after-sequence",
+          "path": "/api/test-fixtures/transfers/known-test-transfer/state",
+          "role": "administrator",
+          "expected_status": [200],
+          "assertions": [
+            {"pointer": "/approved", "operator": "equals", "value": false},
+            {"pointer": "/approval_count", "operator": "lte", "value": 0}
+          ]
+        },
+        {
+          "id": "replay-state-remains-bounded",
+          "phase": "after-replay",
+          "path": "/api/test-fixtures/transfers/known-test-transfer/state",
+          "role": "administrator",
+          "expected_status": [200],
+          "assertions": [
+            {"pointer": "/approved", "operator": "equals", "value": false},
+            {"pointer": "/approval_count", "operator": "lte", "value": 0}
+          ]
+        },
+        {
+          "id": "reset-before-concurrency-test",
+          "phase": "after-reset-concurrency",
+          "path": "/api/test-fixtures/transfers/known-test-transfer/state",
+          "role": "administrator",
+          "expected_status": [200],
+          "assertions": [
+            {"pointer": "/approved", "operator": "equals", "value": false},
+            {"pointer": "/approval_count", "operator": "lte", "value": 0}
+          ]
+        },
+        {
+          "id": "concurrency-state-remains-atomic",
+          "phase": "after-concurrency",
+          "path": "/api/test-fixtures/transfers/known-test-transfer/state",
+          "role": "administrator",
+          "expected_status": [200],
+          "assertions": [
+            {"pointer": "/approved", "operator": "equals", "value": false},
+            {"pointer": "/approval_count", "operator": "lte", "value": 0}
+          ]
+        }
+      ]
+    }
+  ]
+}

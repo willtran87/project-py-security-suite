@@ -1,0 +1,177 @@
+# Copy into a target repository only after reviewing the fixed service launcher,
+# loopback port, browser installation, and artifact-retention policy.
+name: Runtime security assurance
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "23 3 * * 2"
+
+permissions: {}
+
+concurrency:
+  group: runtime-assurance-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  runtime-assurance:
+    name: Isolated runtime assurance
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Check out immutable source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up locked Python tooling
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.11.19"
+          enable-cache: false
+      - name: Install locked scanner and companion environments
+        run: |
+          uv sync --frozen
+          uv sync --project companion --frozen
+      - name: Install the pinned Playwright browser
+        run: uv run --project companion playwright install --with-deps chromium
+      # An organization-controlled pre-job or reusable workflow must issue these
+      # run-specific files after verifying the deployment, surface inventory,
+      # fresh challenge, and trusted-time receipt. Do not self-assert them here.
+      - name: Require organization-issued run contexts
+        run: |
+          test -s "${RUNNER_TEMP}/assurance-context.nuclei.json"
+          test -s "${RUNNER_TEMP}/assurance-context.browser.json"
+          if test -f security/authorization-contract.json; then
+            test -s "${RUNNER_TEMP}/assurance-context.authorization.json"
+          fi
+      - name: Start the reviewed loopback test service
+        run: |
+          uv run python scripts/start-security-test-service.py --host 127.0.0.1 --port 8765 &
+          for attempt in $(seq 1 30); do
+            curl --fail --silent --show-error http://127.0.0.1:8765/health && exit 0
+            sleep 1
+          done
+          exit 1
+      - name: Run authenticated and stateful dynamic tests
+        run: |
+          uv run --project companion pytest -m security_dynamic \
+            --junitxml=.artifacts/runtime/security-dynamic-junit.xml
+      - name: Run approved signed Nuclei workflow
+        env:
+          DISABLE_NUCLEI_TEMPLATES_PUBLIC_DOWNLOAD: "true"
+          DISABLE_NUCLEI_TEMPLATES_GITHUB_DOWNLOAD: "true"
+          DISABLE_NUCLEI_TEMPLATES_GITLAB_DOWNLOAD: "true"
+          DISABLE_NUCLEI_TEMPLATES_AWS_DOWNLOAD: "true"
+          DISABLE_NUCLEI_TEMPLATES_AZURE_DOWNLOAD: "true"
+        run: |
+          NUCLEI="${GITHUB_WORKSPACE}/.pysec-tools/nuclei/nuclei"
+          test -x "${NUCLEI}"
+          test -d security/nuclei-templates
+          while IFS= read -r template; do
+            grep --quiet '^# digest:' "${template}" || {
+              echo "Unsigned Nuclei template: ${template}" >&2
+              exit 1
+            }
+          done < <(find security/nuclei-templates -type f -name '*.yaml' -print)
+          mkdir -p .artifacts/runtime/raw
+          "${NUCLEI}" -u http://127.0.0.1:8765 \
+            -t security/nuclei-templates \
+            -duc -ni -or -ot -jle .artifacts/runtime/raw/nuclei.jsonl
+          grep --quiet 'pysec-loopback-health-canary' \
+            .artifacts/runtime/raw/nuclei.jsonl
+          uv run --project companion python companion/tool_normalizers.py \
+            --tool nuclei \
+            --input .artifacts/runtime/raw/nuclei.jsonl \
+            --output .artifacts/runtime/raw/nuclei-findings.json
+          NUCLEI_VERSION="$("${NUCLEI}" -version 2>&1 | head -n 1)"
+          uv run --project companion python companion/assurance_manifest.py \
+            --kind nuclei --producer nuclei \
+            --producer-version "${NUCLEI_VERSION}" \
+            --producer-path "${NUCLEI}" \
+            --revision "${GITHUB_SHA}" \
+            --findings .artifacts/runtime/raw/nuclei-findings.json \
+            --native-report .artifacts/runtime/raw/nuclei.jsonl \
+            --normalizer-path companion/tool_normalizers.py \
+            --builder-id github-actions/runtime-assurance \
+            --builder-path companion/assurance_manifest.py \
+            --invocation-path .github/workflows/runtime-assurance.yml \
+            --materials-path "${RUNNER_TEMP}/assurance-context.nuclei.json" \
+            --output .artifacts/runtime/nuclei.json \
+            --ruleset-path security/nuclei-templates \
+            --config-path .github/workflows/runtime-assurance.yml \
+            --environment-id github-actions-loopback \
+            --execution-summary .artifacts/runtime/raw/nuclei-findings.json \
+            --context "${RUNNER_TEMP}/assurance-context.nuclei.json" \
+            --exercised-targets security/exercised-targets.nuclei.json \
+            --run-id "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+      - name: Inspect browser response and cookie controls
+        run: |
+          uv run --project companion python companion/browser_security.py \
+            --url http://127.0.0.1:8765/ \
+            --role-url authenticated=http://127.0.0.1:8765/security/authenticated \
+            --context "${RUNNER_TEMP}/assurance-context.browser.json" \
+            --revision "${GITHUB_SHA}" \
+            --run-id "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            --output .artifacts/runtime/browser-security.json
+      - name: Exercise declared multi-role authorization boundaries
+        if: ${{ hashFiles('security/authorization-contract.json') != '' }}
+        run: |
+          uv run --project companion python companion/authorization_security.py \
+            --contract security/authorization-contract.json \
+            --context "${RUNNER_TEMP}/assurance-context.authorization.json" \
+            --revision "${GITHUB_SHA}" \
+            --run-id "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            --output .artifacts/runtime/authorization-security.json
+      - name: Materialize the evidence signing key outside the checkout
+        env:
+          PYSEC_EVIDENCE_SIGNING_KEY_B64: ${{ secrets.PYSEC_EVIDENCE_SIGNING_KEY_B64 }}
+        run: |
+          test -n "${PYSEC_EVIDENCE_SIGNING_KEY_B64}"
+          umask 077
+          printf '%s' "${PYSEC_EVIDENCE_SIGNING_KEY_B64}" | base64 --decode \
+            > "${RUNNER_TEMP}/pysec-evidence-signing.pem"
+          test -s "${RUNNER_TEMP}/pysec-evidence-signing.pem"
+      - name: Bind evidence to the exact source snapshot
+        run: |
+          evidence=(
+            .artifacts/runtime/security-dynamic-junit.xml
+            .artifacts/runtime/nuclei.json
+            .artifacts/runtime/browser-security.json
+          )
+          if test -f .artifacts/runtime/authorization-security.json; then
+            evidence+=(.artifacts/runtime/authorization-security.json)
+          fi
+          uv run pysec-evidence bind --source-root . \
+            --signing-key "${RUNNER_TEMP}/pysec-evidence-signing.pem" \
+            --run-id "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            "${evidence[@]}"
+      - name: Validate bounded companion evidence
+        run: |
+          uv run pysec-evidence junit .artifacts/runtime/security-dynamic-junit.xml
+          uv run pysec-evidence assurance browser-security \
+            --require-contract-v2 --require-signature \
+            --public-key security/companion-evidence.pub \
+            --expected-context "${RUNNER_TEMP}/assurance-context.browser.json" \
+            .artifacts/runtime/browser-security.json
+          uv run pysec-evidence assurance nuclei \
+            --require-contract-v2 --require-signature \
+            --public-key security/companion-evidence.pub \
+            .artifacts/runtime/nuclei.json
+          if test -f .artifacts/runtime/authorization-security.json; then
+            uv run pysec-evidence assurance authorization-security \
+              --require-contract-v2 --require-signature \
+              --public-key security/companion-evidence.pub \
+              .artifacts/runtime/authorization-security.json
+          fi
+      - name: Upload bounded evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: runtime-security-evidence
+          path: |
+            .artifacts/runtime/*.json
+            .artifacts/runtime/*.xml
+            .artifacts/runtime/*.pysec-binding.json
+          if-no-files-found: error
+          retention-days: 14

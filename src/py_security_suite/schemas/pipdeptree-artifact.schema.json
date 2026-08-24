@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:pipdeptree-artifact:1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "total_packages", "direct_dependencies", "transitive_dependencies", "max_depth", "missing_dependencies", "cyclic_dependencies", "conflicting_dependencies", "native_report_sha256", "native_report_size_bytes", "native_report_records", "native_report_utf8", "normalization_sha256"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "total_packages": {"$ref": "#/$defs/count"},
+    "direct_dependencies": {"$ref": "#/$defs/count"},
+    "transitive_dependencies": {"$ref": "#/$defs/count"},
+    "max_depth": {"$ref": "#/$defs/count"},
+    "missing_dependencies": {"$ref": "#/$defs/count"},
+    "cyclic_dependencies": {"$ref": "#/$defs/count"},
+    "conflicting_dependencies": {"type": "object", "additionalProperties": false, "required": ["packages", "edges"], "properties": {"packages": {"$ref": "#/$defs/count"}, "edges": {"$ref": "#/$defs/count"}}},
+    "native_report_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "native_report_size_bytes": {"type": "integer", "minimum": 1, "maximum": 1073741824},
+    "native_report_records": {"$ref": "#/$defs/count"},
+    "native_report_utf8": {"type": "string", "minLength": 1, "maxLength": 67108864},
+    "normalization_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  },
+  "$defs": {"count": {"type": "integer", "minimum": 0, "maximum": 10000000}}
+}

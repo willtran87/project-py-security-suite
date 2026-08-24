@@ -15,6 +15,29 @@ _PRODUCTION_EVIDENCE = (
     "pytm",
     "scorecard",
 )
+_CONDITIONAL_PRODUCTION_EVIDENCE = (
+    "schemathesis",
+    "clusterfuzzlite",
+    "zap",
+    "nuclei",
+    "oast",
+    "restler",
+    "protocol-security",
+    "fuzz-introspector",
+    "browser-security",
+    "authorization-security",
+    "iast",
+    "falco",
+    "kubescape",
+    "prowler",
+    "cloud-attack-path",
+    "rasp",
+    "native-sanitizers",
+    "mobsf",
+    "tls-scan",
+    "polyglot",
+    "secret-verification",
+)
 _RELEASE_EVIDENCE = (
     "check-manifest",
     "clamav",
@@ -56,6 +79,11 @@ def evaluate_policy(
         reasons.append(
             "required external network-isolation attestation was not provided"
         )
+    if (
+        config.isolation.enforcement_mode == "sandbox-launcher"
+        and not config.isolation.sandbox_organization_approved
+    ):
+        reasons.append("sandbox launcher is not bound by the organization policy")
 
     if (
         inventory is not None
@@ -175,9 +203,23 @@ def _production_integrity_reasons(
                 f"production scan could not verify the approved executable "
                 f"digest and post-execution integrity for {tool}"
             )
+        if config.tools[tool].runtime_closure_sha256 and not (
+            config.tools[tool].runtime_closure_organization_approved
+        ):
+            reasons.append(
+                "production scan requires the configured runtime_closure_sha256 "
+                f"to be organization-approved for {tool}"
+            )
         if str(run.version or "unknown").casefold() == "unknown":
             reasons.append(
                 f"production scan could not establish the version of required scanner {tool}"
+            )
+        if config.tools[tool].require_assurance_profile and (
+            config.tools[tool].assurance_profile_path is None
+            or not config.tools[tool].assurance_profile_sha256
+        ):
+            reasons.append(
+                f"production assurance evidence from {tool} lacks a checkpointed assurance profile"
             )
     for tool in config.required_tools:
         run = by_tool.get(tool)
@@ -253,5 +295,16 @@ def _required_evidence_reasons(profile: str, by_tool: dict[str, ToolRun]) -> lis
         if run is None or not run.applicable or run.status is not ToolStatus.COMPLETED:
             reasons.append(
                 f"{profile} assurance requires completed, revision-bound {tool} evidence"
+            )
+    for tool in _CONDITIONAL_PRODUCTION_EVIDENCE:
+        run = by_tool.get(tool)
+        if run is None:
+            reasons.append(
+                f"{profile} assurance could not establish {tool} applicability"
+            )
+        elif run.applicable and run.status is not ToolStatus.COMPLETED:
+            reasons.append(
+                f"{profile} assurance requires completed, revision-bound {tool} "
+                "evidence for this repository shape"
             )
     return reasons

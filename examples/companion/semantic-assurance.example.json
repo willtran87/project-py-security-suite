@@ -1,0 +1,15 @@
+{
+  "schema_version": "1.0",
+  "kind": "event-security",
+  "canary_id": "event-canary",
+  "cases": [
+    {"id": "event-canary", "target_id": "orders-v2", "role": "test-producer", "control": "producer-authorization", "expected": "block", "observed": "block", "severity": "high", "classification": "CWE-862"},
+    {"id": "consumer-authz", "target_id": "orders-v2", "role": "test-consumer", "control": "consumer-authorization", "expected": "block", "observed": "block", "severity": "high", "classification": "CWE-862"},
+    {"id": "message-signature", "target_id": "orders-v2", "role": "test-producer", "control": "message-signing", "expected": "block", "observed": "block", "severity": "high", "classification": "CWE-347"},
+    {"id": "message-replay", "target_id": "orders-v2", "role": "test-producer", "control": "replay-resistance", "expected": "block", "observed": "block", "severity": "high", "classification": "CWE-294"},
+    {"id": "idempotency", "target_id": "orders-v2", "role": "test-producer", "control": "idempotency", "expected": "pass", "observed": "pass", "severity": "medium", "classification": "CWE-841"},
+    {"id": "schema", "target_id": "orders-v2", "role": "test-producer", "control": "schema-enforcement", "expected": "block", "observed": "block", "severity": "medium", "classification": "CWE-20"},
+    {"id": "dead-letter", "target_id": "orders-v2-dlq", "role": "test-consumer", "control": "dead-letter-isolation", "expected": "pass", "observed": "pass", "severity": "medium", "classification": "CWE-284"},
+    {"id": "poison-message", "target_id": "orders-v2", "role": "test-consumer", "control": "poison-message-containment", "expected": "pass", "observed": "pass", "severity": "high", "classification": "CWE-400"}
+  ]
+}

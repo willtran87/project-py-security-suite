@@ -1,13 +1,18 @@
 from __future__ import annotations
 
-import json
+import hashlib
+import sqlite3
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from .assurance_profile import verify_governance_quorum
 from .execution import sha256_file
 from .passport import verify_report
-from .path_safety import resolve_regular_file
+from .path_safety import read_regular_file, resolve_regular_file
 from .source_inventory import verify_source_inventory_file
+from .strict_json import canonical_bytes, loads as strict_loads
+from .trusted_time import verify_rfc3161
 
 
 _MAX_CORPUS_BYTES = 16 * 1024 * 1024
@@ -21,6 +26,9 @@ def evaluate_report_corpus(
     corpus: Path,
     *,
     corpus_sha256: str,
+    trusted_time: Path | None = None,
+    trusted_time_sha256: str = "",
+    replay_ledger: Path | None = None,
 ) -> dict[str, Any]:
     """Measure a verified report against a digest-bound labeled corpus."""
     verification = verify_report(report)
@@ -45,6 +53,27 @@ def evaluate_report_corpus(
         )
     document = _read_object(corpus_path, _MAX_CORPUS_BYTES)
     labels = _labels(document)
+    time_authority = _effectiveness_time(
+        document,
+        corpus_path,
+        verification,
+        observed_digest,
+        trusted_time,
+        trusted_time_sha256,
+    )
+    authority_time = (
+        datetime.fromisoformat(time_authority["observed_at"])
+        if time_authority["validated"]
+        else datetime.now(UTC)
+    )
+    authority = _corpus_authority(document, corpus_path, authority_time)
+    replay_protected = _consume_effectiveness_replay(
+        document,
+        verification,
+        observed_digest,
+        time_authority,
+        replay_ledger,
+    )
     _validate_clean_paths(labels, report_root)
     outcomes = [_evaluate_label(label, findings) for label in labels]
     counts = {
@@ -61,7 +90,7 @@ def evaluate_report_corpus(
     false_negative = counts["false_negative"]
     true_negative = counts["true_negative"]
     return {
-        "schema_version": "1.0",
+        "schema_version": str(document["schema_version"]),
         "verdict": "pass" if not false_positive and not false_negative else "fail",
         "report": {
             "scan_id": verification["scan_id"],
@@ -74,7 +103,11 @@ def evaluate_report_corpus(
             "revision": str(document.get("revision") or ""),
             "sha256": observed_digest,
             "labels": len(labels),
+            "authority": authority,
+            "diversity": _diversity(labels),
         },
+        "time_authority": time_authority,
+        "replay_protected": replay_protected,
         "confusion_matrix": counts,
         "metrics": {
             "precision": _ratio(true_positive, true_positive + false_positive),
@@ -92,12 +125,14 @@ def evaluate_report_corpus(
 
 
 def _read_object(path: Path, maximum: int) -> dict[str, Any]:
-    source = resolve_regular_file(path, "JSON evidence")
-    if source.stat().st_size > maximum:
-        raise ValueError(f"JSON evidence exceeds {maximum} bytes")
+    _, payload = read_regular_file(
+        path,
+        "JSON evidence",
+        maximum_bytes=maximum,
+    )
     try:
-        value = json.loads(source.read_bytes())
-    except json.JSONDecodeError as exc:
+        value = strict_loads(payload)
+    except (TypeError, ValueError) as exc:
         raise ValueError(f"JSON evidence is invalid: {exc}") from exc
     if not isinstance(value, dict):
         raise TypeError("JSON evidence root must be an object")
@@ -105,8 +140,9 @@ def _read_object(path: Path, maximum: int) -> dict[str, Any]:
 
 
 def _labels(document: dict[str, Any]) -> list[dict[str, Any]]:
-    if document.get("schema_version") != "1.0":
-        raise ValueError("effectiveness corpus schema_version must be '1.0'")
+    version = document.get("schema_version")
+    if version not in {"1.0", "2.0"}:
+        raise ValueError("effectiveness corpus schema_version must be '1.0' or '2.0'")
     values = document.get("labels")
     if not isinstance(values, list) or not values:
         raise TypeError("effectiveness corpus requires a non-empty labels array")
@@ -146,8 +182,235 @@ def _labels(document: dict[str, Any]) -> list[dict[str, Any]]:
         ):
             raise ValueError("effectiveness corpus paths must be repository-relative")
         identifiers.add(identifier)
-        labels.append({"id": identifier, "expected": expectation, "match": normalized})
+        label = {"id": identifier, "expected": expectation, "match": normalized}
+        if version == "2.0":
+            required = {
+                "id",
+                "expected",
+                "match",
+                "cwe",
+                "language",
+                "parser_variant",
+                "boundary_type",
+                "severity",
+                "mutation_operator",
+            }
+            if set(value) != required:
+                raise ValueError("governed effectiveness label fields do not match")
+            strata = {
+                name: str(value.get(name) or "").strip().casefold()
+                for name in (
+                    "cwe",
+                    "language",
+                    "parser_variant",
+                    "boundary_type",
+                    "severity",
+                    "mutation_operator",
+                )
+            }
+            if any(not item or len(item) > 160 for item in strata.values()):
+                raise ValueError("governed effectiveness label strata are invalid")
+            label["strata"] = strata
+        labels.append(label)
     return labels
+
+
+def _corpus_authority(
+    document: dict[str, Any], path: Path, authority_time: datetime
+) -> dict[str, Any]:
+    if document.get("schema_version") != "2.0":
+        return {"validated": False, "organization_approved": False}
+    required = {
+        "schema_version",
+        "corpus_id",
+        "revision",
+        "training_corpus_sha256",
+        "holdout_labels_sha256",
+        "minimum_authority_signatures",
+        "authorities",
+        "labels",
+    }
+    if set(document) != required:
+        raise ValueError("governed effectiveness corpus fields do not match")
+    label_digest = hashlib.sha256(canonical_bytes(document["labels"])).hexdigest()
+    training = str(document.get("training_corpus_sha256") or "")
+    holdout = str(document.get("holdout_labels_sha256") or "")
+    if (
+        holdout != label_digest
+        or training == holdout
+        or any(
+            len(digest) != 64
+            or any(character not in "0123456789abcdef" for character in digest)
+            for digest in (training, holdout)
+        )
+    ):
+        raise ValueError("effectiveness training/holdout identity is invalid")
+    threshold = document.get("minimum_authority_signatures")
+    if (
+        isinstance(threshold, bool)
+        or not isinstance(threshold, int)
+        or not 2 <= threshold <= 16
+    ):
+        raise ValueError("effectiveness authority threshold is invalid")
+    subject = {
+        "schema_version": "2.0",
+        "corpus_id": document["corpus_id"],
+        "revision": document["revision"],
+        "training_corpus_sha256": training,
+        "holdout_labels_sha256": holdout,
+    }
+    verified = verify_governance_quorum(
+        path,
+        document["authorities"],
+        subject,
+        threshold,
+        authority_time,
+        purpose="effectiveness-corpus",
+    )
+    return {
+        "validated": True,
+        "organization_approved": True,
+        "minimum_authority_signatures": threshold,
+        "authority_signers": sorted({item[0] for item in verified}),
+        "authority_collectors": sorted({item[1] for item in verified}),
+        "authority_organizations": sorted({item[2] for item in verified}),
+        "holdout_labels_sha256": holdout,
+        "training_corpus_sha256": training,
+    }
+
+
+def _effectiveness_time(
+    document: dict[str, Any],
+    corpus_path: Path,
+    verification: dict[str, Any],
+    corpus_sha256: str,
+    trusted_time: Path | None,
+    trusted_time_sha256: str,
+) -> dict[str, Any]:
+    governed = document.get("schema_version") == "2.0"
+    if trusted_time is None:
+        if governed:
+            raise ValueError("governed effectiveness evaluation requires trusted time")
+        return {
+            "validated": False,
+            "observed_at": "",
+            "trusted_time_sha256": "",
+            "receipt_sha256": "",
+        }
+    expected = trusted_time_sha256.strip().casefold()
+    if len(expected) != 64 or any(
+        character not in "0123456789abcdef" for character in expected
+    ):
+        raise ValueError(
+            "trusted-time SHA-256 must be exactly 64 hexadecimal characters"
+        )
+    path = resolve_regular_file(trusted_time, "effectiveness trusted-time context")
+    if sha256_file(path) != expected:
+        raise ValueError("effectiveness trusted-time context digest does not match")
+    context = _read_object(path, 8 * 1024 * 1024)
+    if (
+        set(context) != {"schema_version", "trusted_time"}
+        or context.get("schema_version") != "1.0"
+    ):
+        raise ValueError("effectiveness trusted-time context fields do not match")
+    challenge = hashlib.sha256(
+        canonical_bytes(
+            {
+                "purpose": "effectiveness-holdout-evaluation",
+                "report_checksums_sha256": verification["checksums_sha256"],
+                "corpus_sha256": corpus_sha256,
+                "holdout_labels_sha256": document.get("holdout_labels_sha256", ""),
+            }
+        )
+    ).hexdigest()
+    receipt = verify_rfc3161(
+        path,
+        context["trusted_time"],
+        challenge,
+        require_advanced=governed,
+    )
+    return {
+        "validated": True,
+        "observed_at": receipt["trusted_time_observed_at"],
+        "trusted_time_sha256": receipt["trusted_time_sha256"],
+        "receipt_sha256": receipt["trusted_time_receipt_sha256"],
+    }
+
+
+def _consume_effectiveness_replay(
+    document: dict[str, Any],
+    verification: dict[str, Any],
+    corpus_sha256: str,
+    time_authority: dict[str, Any],
+    replay_ledger: Path | None,
+) -> bool:
+    governed = document.get("schema_version") == "2.0"
+    if replay_ledger is None:
+        if governed:
+            raise ValueError(
+                "governed effectiveness evaluation requires a replay ledger"
+            )
+        return False
+    ledger = replay_ledger.expanduser().resolve()
+    ledger.parent.mkdir(parents=True, exist_ok=True)
+    if ledger.is_symlink():
+        raise ValueError("effectiveness replay ledger must not be a symbolic link")
+    replay_key = hashlib.sha256(
+        canonical_bytes(
+            {
+                "purpose": "effectiveness-holdout-evaluation",
+                "report_checksums_sha256": verification["checksums_sha256"],
+                "corpus_sha256": corpus_sha256,
+                "trusted_time_sha256": time_authority["trusted_time_sha256"],
+            }
+        )
+    ).hexdigest()
+    connection = sqlite3.connect(ledger, timeout=30, isolation_level=None)
+    try:
+        connection.execute("PRAGMA journal_mode=WAL")
+        connection.execute("PRAGMA synchronous=FULL")
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS effectiveness_replay "
+            "(replay_key TEXT PRIMARY KEY, observed_at TEXT NOT NULL)"
+        )
+        connection.execute("BEGIN IMMEDIATE")
+        try:
+            connection.execute(
+                "INSERT INTO effectiveness_replay(replay_key, observed_at) VALUES (?, ?)",
+                (replay_key, str(time_authority["observed_at"])),
+            )
+        except sqlite3.IntegrityError as exc:
+            connection.execute("ROLLBACK")
+            raise ValueError(
+                "effectiveness evaluation replay was already consumed"
+            ) from exc
+        connection.execute("COMMIT")
+    finally:
+        connection.close()
+    return True
+
+
+def _diversity(labels: list[dict[str, Any]]) -> dict[str, int]:
+    names = ("cwe", "language", "parser_variant", "boundary_type", "severity")
+    result = {
+        name: len(
+            {
+                str(label.get("strata", {}).get(name) or "")
+                for label in labels
+                if label.get("strata", {}).get(name)
+            }
+        )
+        for name in names
+    }
+    result["mutation_operator"] = len(
+        {
+            str(label.get("strata", {}).get("mutation_operator") or "")
+            for label in labels
+            if label.get("strata", {}).get("mutation_operator")
+            not in {None, "", "none"}
+        }
+    )
+    return result
 
 
 def _validate_clean_paths(labels: list[dict[str, Any]], report: Path) -> None:
@@ -202,6 +465,7 @@ def _evaluate_label(
         "outcome": outcome,
         "matching_finding_ids": matching[:_MAX_MATCHES_PER_LABEL],
         "matching_findings_omitted": max(0, len(matching) - _MAX_MATCHES_PER_LABEL),
+        **({"strata": label["strata"]} if "strata" in label else {}),
     }
 
 

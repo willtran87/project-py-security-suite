@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import re
 import sys
 from dataclasses import dataclass
@@ -8,8 +9,8 @@ from datetime import date
 from typing import Any
 
 from .config import SUPPORTED_TOOLS, SuiteConfig
-from .execution import sha256_file
-from .path_safety import resolve_regular_file
+from .path_safety import read_regular_file
+from .strict_json import loads as strict_loads
 
 
 _MAXIMUM_CATALOG_BYTES = 16 * 1024 * 1024
@@ -43,19 +44,18 @@ def apply_trust_catalog(config: SuiteConfig) -> TrustCatalogResult:
     metadata: dict[str, str] = {}
     observed_digest = ""
     try:
-        source = resolve_regular_file(path, "scanner trust catalog")
-        size = source.stat().st_size
-        if size > _MAXIMUM_CATALOG_BYTES:
-            raise ValueError(
-                f"scanner trust catalog exceeds {_MAXIMUM_CATALOG_BYTES} bytes"
-            )
-        observed_digest = sha256_file(source)
+        _, payload = read_regular_file(
+            path,
+            "scanner trust catalog",
+            maximum_bytes=_MAXIMUM_CATALOG_BYTES,
+        )
+        observed_digest = hashlib.sha256(payload).hexdigest()
         if observed_digest != config.trust.catalog_sha256:
             raise ValueError(
                 "scanner trust catalog SHA-256 mismatch: "
                 f"expected {config.trust.catalog_sha256}, observed {observed_digest}"
             )
-        document = json.loads(source.read_bytes())
+        document = strict_loads(payload)
         entries, metadata = _validate_document(document)
         seen: set[tuple[str, str]] = set()
         for index, entry in enumerate(entries):
@@ -87,11 +87,11 @@ def apply_trust_catalog(config: SuiteConfig) -> TrustCatalogResult:
                     {"tool": tool, "role": role, "reason": "tool_not_configured"}
                 )
                 continue
-            setting = (
-                "executable_sha256"
-                if role == "primary"
-                else "auxiliary_executable_sha256"
-            )
+            setting = {
+                "primary": "executable_sha256",
+                "auxiliary": "auxiliary_executable_sha256",
+                "runtime": "runtime_closure_sha256",
+            }[role]
             current = str(getattr(config.tools[tool], setting) or "")
             if current:
                 ignored.append(
@@ -99,11 +99,11 @@ def apply_trust_catalog(config: SuiteConfig) -> TrustCatalogResult:
                 )
                 continue
             setattr(config.tools[tool], setting, digest)
-            authority_setting = (
-                "executable_organization_approved"
-                if role == "primary"
-                else "auxiliary_executable_organization_approved"
-            )
+            authority_setting = {
+                "primary": "executable_organization_approved",
+                "auxiliary": "auxiliary_executable_organization_approved",
+                "runtime": "runtime_closure_organization_approved",
+            }[role]
             setattr(
                 config.tools[tool],
                 authority_setting,
@@ -194,9 +194,9 @@ def _validate_entry(
 ) -> None:
     if tool not in SUPPORTED_TOOLS:
         raise ValueError(f"scanner trust entry {index} has unsupported tool {tool!r}")
-    if role not in {"primary", "auxiliary"}:
+    if role not in {"primary", "auxiliary", "runtime"}:
         raise ValueError(
-            f"scanner trust entry {index} role must be primary or auxiliary"
+            f"scanner trust entry {index} role must be primary, auxiliary, or runtime"
         )
     if not _SHA256.fullmatch(digest):
         raise ValueError(

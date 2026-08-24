@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import hashlib
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from py_security_suite.config import ConfigurationError, load_config
 
@@ -24,13 +27,35 @@ class ConfigTests(unittest.TestCase):
             ("bandit", "semgrep", "detect-secrets", "osv-scanner"),
         )
 
+    def test_production_organization_policy_requires_deployment_digest_pin(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            policy = Path(directory) / "organization.toml"
+            payload = b'profile = "production"\n'
+            policy.write_bytes(payload)
+            with self.assertRaisesRegex(
+                ConfigurationError, "PYSEC_ORGANIZATION_POLICY_SHA256"
+            ):
+                load_config(organization_policy=policy)
+            with patch.dict(
+                os.environ,
+                {
+                    "PYSEC_ORGANIZATION_POLICY_SHA256": hashlib.sha256(
+                        payload
+                    ).hexdigest()
+                },
+            ):
+                config = load_config(organization_policy=policy)
+        self.assertEqual(config.profile, "production")
+
     def test_quick_profile_override_changes_derived_required_tools(self) -> None:
         config = load_config(profile_override="quick")
         self.assertEqual(config.required_tools, ("bandit", "detect-secrets"))
 
     def test_comprehensive_profile_selects_every_implemented_tool(self) -> None:
         config = load_config(profile_override="comprehensive")
-        self.assertEqual(len(config.selected_tools), 64)
+        self.assertEqual(len(config.selected_tools), 88)
         self.assertEqual(config.required_tools, config.selected_tools)
         self.assertIn("cyclonedx-py", config.selected_tools)
         self.assertIn("codeql", config.selected_tools)
@@ -52,10 +77,15 @@ class ConfigTests(unittest.TestCase):
         self.assertIn("conftest", config.selected_tools)
         self.assertIn("git-sizer", config.selected_tools)
         self.assertIn("crosshair", config.selected_tools)
+        self.assertIn("clusterfuzzlite", config.selected_tools)
         self.assertIn("github-attestation", config.selected_tools)
         self.assertIn("hypothesis", config.selected_tools)
         self.assertIn("schemathesis", config.selected_tools)
         self.assertIn("zap", config.selected_tools)
+        self.assertIn("browser-security", config.selected_tools)
+        self.assertIn("iast", config.selected_tools)
+        self.assertIn("falco", config.selected_tools)
+        self.assertIn("kubescape", config.selected_tools)
         self.assertIn("pytm", config.selected_tools)
         self.assertIn("in-toto", config.selected_tools)
         self.assertIn("reproducible-build", config.selected_tools)
@@ -66,7 +96,7 @@ class ConfigTests(unittest.TestCase):
     def test_production_profile_blocks_medium_and_selects_full_suite(self) -> None:
         config = load_config(profile_override="production")
         self.assertEqual(config.required_tools, config.selected_tools)
-        self.assertEqual(len(config.selected_tools), 51)
+        self.assertEqual(len(config.selected_tools), 75)
         self.assertIn(
             "medium", {severity.value for severity in config.policy.block_severities}
         )
@@ -77,7 +107,7 @@ class ConfigTests(unittest.TestCase):
 
     def test_release_profile_adds_artifact_assurance(self) -> None:
         config = load_config(profile_override="release")
-        self.assertEqual(len(config.selected_tools), 64)
+        self.assertEqual(len(config.selected_tools), 88)
         self.assertIn("grype", config.required_tools)
         self.assertIn("check-wheel-contents", config.required_tools)
         self.assertIn("cosign", config.required_tools)
@@ -86,7 +116,7 @@ class ConfigTests(unittest.TestCase):
         quality = load_config(profile_override="quality")
         repo = load_config(profile_override="repo")
         self.assertEqual(len(quality.selected_tools), 26)
-        self.assertEqual(len(repo.selected_tools), 54)
+        self.assertEqual(len(repo.selected_tools), 78)
         self.assertIn("ruff-quality", quality.selected_tools)
         self.assertIn("mypy", repo.selected_tools)
         self.assertIn("tach", quality.selected_tools)
@@ -205,8 +235,14 @@ class ConfigTests(unittest.TestCase):
             settings = (
                 f'[isolation]\nevidence_path = "isolation.json"\n'
                 f'evidence_sha256 = "{"a" * 64}"\n'
+                f'evidence_public_key_path = "governance.pem"\n'
+                f'evidence_public_key_sha256 = "{"c" * 64}"\n'
+                f'evidence_signature_path = "isolation.sig"\n'
                 f'[intelligence]\napproval_path = "approval.json"\n'
                 f'approval_sha256 = "{"b" * 64}"\n'
+                f'approval_public_key_path = "governance.pem"\n'
+                f'approval_public_key_sha256 = "{"c" * 64}"\n'
+                f'approval_signature_path = "approval.sig"\n'
             )
             repository.write_text(settings, encoding="utf-8")
             organization.write_text(settings, encoding="utf-8")
@@ -285,6 +321,73 @@ class ConfigTests(unittest.TestCase):
                     organization_policy=policy_path,
                     repository_config=config_path,
                 )
+
+    def test_companion_evidence_trust_defaults_and_policy_cannot_be_weakened(
+        self,
+    ) -> None:
+        runtime = load_config(profile_override="runtime")
+        for name in (
+            "zap",
+            "nuclei",
+            "iast",
+            "prowler",
+            "native-sanitizers",
+            "mobsf",
+            "tls-scan",
+            "polyglot",
+            "oast",
+            "restler",
+            "protocol-security",
+            "fuzz-introspector",
+            "cloud-attack-path",
+            "secret-verification",
+        ):
+            with self.subTest(tool=name):
+                self.assertTrue(runtime.tools[name].require_evidence_contract_v2)
+                self.assertTrue(runtime.tools[name].require_signed_evidence)
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            policy_path = root / "policy.toml"
+            config_path = root / "pysec.toml"
+            policy_path.write_text(
+                "[tools.nuclei]\n"
+                "maximum_evidence_age_days = 2\n"
+                "require_evidence_contract_v2 = true\n"
+                "require_signed_evidence = true\n"
+                'public_key_path = "trusted.pub"\n'
+                f'public_key_sha256 = "{"a" * 64}"\n'
+                'expected_run_id = "orchestrator-42"\n'
+                f'expected_environment_sha256 = "{"c" * 64}"\n'
+                'replay_ledger_path = "security-data/replay.sqlite3"\n',
+                encoding="utf-8",
+            )
+            cases = (
+                ("maximum_evidence_age_days = 3\n", "maximum evidence age"),
+                ("require_evidence_contract_v2 = false\n", "cannot disable"),
+                ("require_signed_evidence = false\n", "cannot disable"),
+                (f'public_key_sha256 = "{"b" * 64}"\n', "public_key_sha256"),
+                ('expected_run_id = "other-run"\n', "expected_run_id"),
+                (
+                    f'expected_environment_sha256 = "{"d" * 64}"\n',
+                    "expected_environment_sha256",
+                ),
+                (
+                    'replay_ledger_path = "elsewhere/replay.sqlite3"\n',
+                    "replay_ledger_path",
+                ),
+            )
+            for settings, message in cases:
+                with self.subTest(message=message):
+                    config_path.write_text(
+                        "[tools.nuclei]\n" + settings,
+                        encoding="utf-8",
+                    )
+                    with self.assertRaisesRegex(ConfigurationError, message):
+                        load_config(
+                            organization_policy=policy_path,
+                            repository_config=config_path,
+                        )
 
     def test_reachability_scope_and_threshold_are_governed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

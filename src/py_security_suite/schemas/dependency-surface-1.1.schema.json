@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:dependency-surface:1.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "analysis", "manifests", "ecosystem_count", "coverage_evaluated", "coverage", "complete"],
+  "properties": {
+    "schema_version": {"const": "1.1"},
+    "analysis": {"const": "multi-ecosystem-dependency-surface"},
+    "manifests": {"type": "object", "maxProperties": 9, "additionalProperties": {"type": "array", "maxItems": 200, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 1000}}},
+    "ecosystem_count": {"type": "integer", "minimum": 0, "maximum": 9},
+    "coverage_evaluated": {"type": "boolean"},
+    "coverage": {
+      "type": "array", "maxItems": 1800,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["ecosystem", "manifest", "manifest_sha256", "vulnerability_tools", "semantic_tools", "semantic_analysis_required", "resolved_dependency_identity", "resolution_basis", "execution_receipts", "covered"],
+        "properties": {
+          "ecosystem": {"type": "string", "minLength": 1, "maxLength": 30},
+          "manifest": {"type": "string", "minLength": 1, "maxLength": 1000},
+          "manifest_sha256": {"$ref": "#/$defs/digest"},
+          "vulnerability_tools": {"$ref": "#/$defs/tools"},
+          "semantic_tools": {"$ref": "#/$defs/tools"},
+          "semantic_analysis_required": {"type": "boolean"},
+          "resolved_dependency_identity": {"type": "boolean"},
+          "resolution_basis": {"enum": ["lock-or-checksum-manifest", "paired-lock-or-checksum-manifest", "source-bound-built-artifact"]},
+          "execution_receipts": {
+            "type": "array", "maxItems": 4,
+            "items": {
+              "type": "object", "additionalProperties": false,
+              "required": ["tool", "command_sha256", "status", "coverage_scope", "coverage_basis", "manifest_reported", "manifest_sha256", "output_receipt_sha256"],
+              "properties": {
+                "tool": {"type": "string", "minLength": 1, "maxLength": 100},
+                "command_sha256": {"$ref": "#/$defs/digest"},
+                "status": {"const": "completed"},
+                "coverage_scope": {"enum": ["source-tree", "source-bound-external-evidence", "source-bound-built-artifact", "declared-command"]},
+                "coverage_basis": {"enum": ["recursive-lockfile-and-manifest-scan", "repository-semantic-database", "authenticated-source-bound-language-matrix", "authenticated-source-bound-built-artifact", "completed-analyzer-command"]},
+                "manifest_reported": {"type": "boolean"},
+                "manifest_sha256": {"type": "string", "pattern": "^$|^[0-9a-f]{64}$"},
+                "output_receipt_sha256": {"type": "string", "pattern": "^$|^[0-9a-f]{64}$"}
+              }
+            }
+          },
+          "covered": {"type": "boolean"}
+        }
+      }
+    },
+    "complete": {"type": "boolean"}
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "tools": {"type": "array", "maxItems": 4, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 100}}
+  }
+}

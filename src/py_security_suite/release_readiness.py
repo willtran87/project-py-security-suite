@@ -10,6 +10,13 @@ from .passport import verify_report
 from .path_safety import resolve_regular_file
 
 _MAX_JSON_BYTES = 128 * 1024 * 1024
+_GOVERNED_EFFECTIVENESS_MINIMUMS = {
+    "labels": 25,
+    "positive_labels": 10,
+    "negative_labels": 10,
+    "tools": 2,
+    "labels_per_tool": 5,
+}
 _CONTROL_REMEDIATION = {
     "scan-policy": (
         "release-engineering",
@@ -102,6 +109,41 @@ def assess_release_readiness(
     verification = verify_report(report)
     root = report.expanduser().resolve()
     manifest = _read_object(root / "scan-manifest.json")
+    governed_effectiveness_required = manifest.get("profile") in {
+        "production",
+        "release",
+    }
+    if governed_effectiveness_required:
+        minimum_effectiveness_labels = max(
+            minimum_effectiveness_labels,
+            _GOVERNED_EFFECTIVENESS_MINIMUMS["labels"],
+        )
+        minimum_effectiveness_positive_labels = max(
+            minimum_effectiveness_positive_labels,
+            _GOVERNED_EFFECTIVENESS_MINIMUMS["positive_labels"],
+        )
+        minimum_effectiveness_negative_labels = max(
+            minimum_effectiveness_negative_labels,
+            _GOVERNED_EFFECTIVENESS_MINIMUMS["negative_labels"],
+        )
+        minimum_effectiveness_tools = max(
+            minimum_effectiveness_tools,
+            _GOVERNED_EFFECTIVENESS_MINIMUMS["tools"],
+        )
+        minimum_effectiveness_labels_per_tool = max(
+            minimum_effectiveness_labels_per_tool,
+            _GOVERNED_EFFECTIVENESS_MINIMUMS["labels_per_tool"],
+        )
+        run_names = {
+            str(run.get("tool") or "")
+            for run in (manifest.get("tools") or manifest.get("tool_runs") or [])
+            if isinstance(run, dict)
+        }
+        required_effectiveness_tools = tuple(
+            sorted(
+                set(required_effectiveness_tools) | ({"bandit", "semgrep"} & run_names)
+            )
+        )
     findings_document = _read_object(root / "findings.json")
     claims = _read_object(root / "assurance-claims.json")
     portfolio = _read_object(root / "portfolio-health.json")
@@ -155,6 +197,7 @@ def assess_release_readiness(
         minimum_effectiveness_labels_per_tool,
         required_effectiveness_tools,
         verification,
+        governed_effectiveness_required,
     )
     if evaluation_control is not None:
         controls.append(evaluation_control)
@@ -785,6 +828,7 @@ def _effectiveness_control(
     minimum_labels_per_tool: int,
     required_tools: tuple[str, ...],
     report_verification: dict[str, Any],
+    require_governed_authority: bool,
 ) -> dict[str, Any] | None:
     normalized_required_tools = tuple(
         sorted({tool.strip() for tool in required_tools if tool.strip()})
@@ -840,8 +884,68 @@ def _effectiveness_control(
         for item in outcomes
         if isinstance((match := item.get("match")), dict) and match.get("tool")
     }
+    corpus_authority = corpus.get("authority") if isinstance(corpus, dict) else None
+    declared_diversity = corpus.get("diversity") if isinstance(corpus, dict) else None
+    strata_names = (
+        "cwe",
+        "language",
+        "parser_variant",
+        "boundary_type",
+        "severity",
+        "mutation_operator",
+    )
+    observed_diversity = {
+        name: len(
+            {
+                str(item.get("strata", {}).get(name) or "")
+                for item in outcomes
+                if isinstance(item.get("strata"), dict)
+                and item["strata"].get(name)
+                and not (
+                    name == "mutation_operator" and item["strata"].get(name) == "none"
+                )
+            }
+        )
+        for name in strata_names
+    }
+    minimum_diversity = {
+        "cwe": 5,
+        "language": 2,
+        "parser_variant": 2,
+        "boundary_type": 3,
+        "severity": 3,
+        "mutation_operator": 2,
+    }
+    diversity_passed = all(
+        observed_diversity[name] >= minimum
+        for name, minimum in minimum_diversity.items()
+    )
+    tool_expectations = {
+        tool: {
+            str(item.get("expected"))
+            for item in outcomes
+            if isinstance(item.get("match"), dict) and item["match"].get("tool") == tool
+        }
+        for tool in normalized_required_tools
+    }
+    tools_have_positive_and_negative = all(
+        expectations >= {"finding", "clean"}
+        for expectations in tool_expectations.values()
+    )
+    governed = bool(
+        evaluation.get("schema_version") == "2.0"
+        and isinstance(corpus_authority, dict)
+        and corpus_authority.get("validated") is True
+        and corpus_authority.get("organization_approved") is True
+        and isinstance(evaluation.get("time_authority"), dict)
+        and evaluation["time_authority"].get("validated") is True
+        and evaluation.get("replay_protected") is True
+        and declared_diversity == observed_diversity
+        and diversity_passed
+        and tools_have_positive_and_negative
+    )
     passed = (
-        evaluation.get("schema_version") == "1.0"
+        evaluation.get("schema_version") in {"1.0", "2.0"}
         and evaluation.get("verdict") == "pass"
         and isinstance(report, dict)
         and report.get("checksums_sha256") == report_verification["checksums_sha256"]
@@ -850,6 +954,7 @@ def _effectiveness_control(
         and negative_labels >= minimum_negative_labels
         and len(covered_tools) >= minimum_tools
         and not missing_required_tools
+        and (governed or not require_governed_authority)
     )
     return _control(
         "detection-effectiveness",
@@ -861,7 +966,9 @@ def _effectiveness_control(
             f"{minimum_positive_labels} positive, {minimum_negative_labels} negative, "
             f"{minimum_tools} tools with {minimum_labels_per_tool} labels each. "
             f"Required tools: {list(normalized_required_tools)}; missing: "
-            f"{missing_required_tools}."
+            f"{missing_required_tools}. Governed corpus required: "
+            f"{require_governed_authority}; validated: {governed}; diversity: "
+            f"{observed_diversity}."
         ),
         [str(path)],
     )

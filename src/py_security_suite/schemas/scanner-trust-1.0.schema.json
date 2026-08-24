@@ -1,0 +1,7 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:scanner-trust:1.0",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "configured", "applied", "errors"],
+  "properties": {"schema_version": {"const": "1.0"}, "configured": {"type": "boolean"}, "catalog": {"type": "object"}, "platform": {"type": "string"}, "applied": {"type": "array", "maxItems": 5000, "items": {"type": "object"}}, "ignored": {"type": "array", "maxItems": 5000, "items": {"type": "object"}}, "errors": {"type": "array", "items": {"type": "string"}}}
+}
