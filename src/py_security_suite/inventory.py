@@ -133,7 +133,7 @@ def _vcs_revision(target: Path) -> tuple[str, bool]:
     verified = (
         not result.timed_out
         and result.exit_code == 0
-        and len(revision) == 40
+        and len(revision) in {40, 64}
         and all(character in "0123456789abcdef" for character in revision)
     )
     return (revision if verified else ""), verified
@@ -309,6 +309,18 @@ def _materialize_git_history(
     )
     if cloned.exit_code != 0 or cloned.timed_out or not (clone / ".git").is_dir():
         raise ValueError("sealed Git history could not be materialized")
+    cloned_format = run_command(
+        [git, "-C", str(clone), "rev-parse", "--show-object-format"],
+        cwd=clone,
+        timeout_seconds=10,
+        max_output_bytes=4096,
+    )
+    if (
+        cloned_format.exit_code != 0
+        or cloned_format.timed_out
+        or cloned_format.stdout.strip().casefold() != repository_state["object_format"]
+    ):
+        raise ValueError("sealed Git history changed its object format")
     cloned_objects = run_command(
         [git, "-C", str(clone), "rev-list", "--objects", "--all"],
         cwd=clone,
@@ -373,8 +385,23 @@ def _git_repository_state(git: str, target: Path) -> dict[str, Any]:
     refs = _parse_ref_lines(
         query(["for-each-ref", "--format=%(objectname) %(refname)"])
     )
+    object_format = query(["rev-parse", "--show-object-format"]).casefold()
+    digest_length = (
+        40 if object_format == "sha1" else 64 if object_format == "sha256" else 0
+    )
+    if not digest_length or any(
+        len(digest) != digest_length for digest in refs.values()
+    ):
+        raise ValueError("Git repository object format is inconsistent")
     unreachable = query(
-        ["fsck", "--unreachable", "--no-reflogs", "--no-progress"],
+        [
+            "fsck",
+            "--full",
+            "--strict",
+            "--unreachable",
+            "--no-reflogs",
+            "--no-progress",
+        ],
         exits=frozenset({0}),
     )
     if unreachable:
@@ -406,6 +433,7 @@ def _git_repository_state(git: str, target: Path) -> dict[str, Any]:
     )
     return {
         "refs": refs,
+        "object_format": object_format,
         "head": head,
         "symbolic_head": symbolic_head,
         "replace_refs": query(["replace", "-l"]),

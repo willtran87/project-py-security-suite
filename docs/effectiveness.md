@@ -134,10 +134,15 @@ readiness requires both `time_authority.validated` and
 The evaluation retains the exact signed statement, verification key, request
 commitment, service-key identity, sequence, holdout-use count, leaf identity,
 Merkle inclusion proof, prior checkpoint, and consistency proof so an offline
-auditor can reconstruct and reverify consumption. Governed clients pin the
-prior tree state with `PYSEC_EFFECTIVENESS_PREVIOUS_CHECKPOINT_SIZE` and
-`PYSEC_EFFECTIVENESS_PREVIOUS_CHECKPOINT_ROOT_SHA256`; the first checkpoint
-uses size zero and an empty root.
+auditor can reconstruct and reverify consumption. Governed clients keep the
+prior tree state in the durable SQLite ledger named by
+`PYSEC_EFFECTIVENESS_CHECKPOINT_STATE_PATH`; an immediate transaction rejects
+rollback, forks, and concurrent advancement. Every checkpoint must also carry
+valid signatures from at least two independent Ed25519 witnesses pinned by
+`PYSEC_EFFECTIVENESS_WITNESS_KEYS_JSON` (a JSON object mapping each public-key
+SHA-256 to its PEM path). This witness quorum makes a service split view
+detectable outside the service's own signing key. The first checkpoint uses
+size zero and an empty root.
 
 Run the benchmark only after sealing and verifying the scan report:
 

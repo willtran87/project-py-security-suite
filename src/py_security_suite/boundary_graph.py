@@ -4,6 +4,7 @@ import ast
 import hashlib
 import importlib.util
 import json
+import os
 import re
 import sys
 from collections import Counter
@@ -12,7 +13,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from .path_safety import read_regular_file
-from .execution import run_command
+from .execution import CommandEnvironment, run_command
 from .strict_json import canonical_bytes
 
 
@@ -436,6 +437,7 @@ def _analyze_special_surface(
             cwd=path.parent,
             timeout_seconds=10,
             max_output_bytes=1024 * 1024,
+            environment=_parser_environment(),
         )
         if result.exit_code != 0 or result.timed_out or result.output_limit_exceeded:
             raise ValueError("Python bytecode semantic disassembly failed")
@@ -459,12 +461,30 @@ def _analyze_special_surface(
     if kind == "webassembly":
         imports = _wasm_imports(payload)
         return _surface(source, kind, "semantic", True), [
-            _edge(source, 1, "binary-import", name, "webassembly") for name in imports
+            _edge(
+                source,
+                1,
+                "binary-hardening"
+                if name.startswith("hardening:")
+                else "binary-import",
+                name,
+                "webassembly",
+            )
+            for name in imports
         ]
     if kind == "native-extension":
         imports = _native_imports(path, payload)
         return _surface(source, kind, "semantic", True), [
-            _edge(source, 1, "binary-import", name, "native") for name in imports
+            _edge(
+                source,
+                1,
+                "binary-hardening"
+                if name.startswith("hardening:")
+                else "binary-import",
+                name,
+                "native",
+            )
+            for name in imports
         ]
     raise ValueError("special surface kind is unsupported")
 
@@ -482,6 +502,23 @@ def _template_edges(text: str, source: str, suffix: str) -> list[dict[str, Any]]
     if any(marker in remainder for marker in ("{#", "{%", "{{")):
         raise ValueError("template directive is unterminated")
     edges = _text_edges(text, source, "template")
+    security_patterns = (
+        (r"\|\s*safe\b", "escaping-bypass:safe-filter"),
+        (r"{%\s*autoescape\s+false\s*%}", "escaping-bypass:autoescape-disabled"),
+        (r"{%\s*raw\s*%}", "escaping-bypass:raw-block"),
+        (r"{{{", "escaping-bypass:unescaped-handlebars"),
+    )
+    for pattern, target in security_patterns:
+        for finding in re.finditer(pattern, text, re.IGNORECASE):
+            edges.append(
+                _edge(
+                    source,
+                    text.count("\n", 0, finding.start()) + 1,
+                    "security-control",
+                    target,
+                    "template",
+                )
+            )
     for match in matches:
         raw = match.group(0)
         if raw.startswith(("{#", "{{!")):
@@ -538,6 +575,28 @@ def _wasm_imports(payload: bytes) -> list[str]:
                 imports.append(f"{module}.{name}")
             if cursor != end:
                 raise ValueError("WebAssembly import section has trailing data")
+        elif section == 5:
+            count, cursor = _leb128(payload, offset)
+            if count > 100:
+                raise ValueError("WebAssembly memory table is oversized")
+            for _ in range(count):
+                flags = payload[cursor] if cursor < end else 0xFF
+                cursor = _skip_wasm_limits(payload, cursor)
+                imports.append(
+                    "hardening:memory-maximum="
+                    + ("enabled" if flags & 1 else "disabled")
+                )
+                imports.append(
+                    "hardening:shared-memory="
+                    + ("enabled" if flags & 2 else "disabled")
+                )
+            if cursor != end:
+                raise ValueError("WebAssembly memory section has trailing data")
+        elif section == 8:
+            _, cursor = _leb128(payload, offset)
+            if cursor != end:
+                raise ValueError("WebAssembly start section is invalid")
+            imports.append("hardening:start-function=present")
         offset = end
     return sorted(set(imports))
 
@@ -600,6 +659,74 @@ def _skip_wasm_limits(payload: bytes, offset: int) -> int:
 
 
 def _native_imports(path: Path, payload: bytes) -> list[str]:
+    if not (
+        payload[:2] == b"MZ"
+        or payload.startswith(b"\x7fELF")
+        or payload[:4]
+        in {
+            b"\xca\xfe\xba\xbe",
+            b"\xce\xfa\xed\xfe",
+            b"\xcf\xfa\xed\xfe",
+            b"\xfe\xed\xfa\xce",
+            b"\xfe\xed\xfa\xcf",
+        }
+    ):
+        raise ValueError("native extension format is unsupported")
+    worker = Path(__file__).with_name("native_parser_worker.py")
+    result = run_command(
+        [sys.executable, "-I", str(worker), str(path)],
+        cwd=path.parent,
+        timeout_seconds=15,
+        max_output_bytes=4 * 1024 * 1024,
+        environment=_parser_environment(),
+    )
+    if (
+        result.exit_code != 0
+        or result.timed_out
+        or result.output_limit_exceeded
+        or result.resource_limit_errors
+    ):
+        raise ValueError("resource-contained native binary parsing failed")
+    value = json.loads(result.stdout)
+    if (
+        not isinstance(value, list)
+        or len(value) > 100_000
+        or any(not isinstance(item, str) or not item for item in value)
+        or value != sorted(set(value))
+    ):
+        raise ValueError("native binary parser output is invalid")
+    return value
+
+
+def _parser_environment() -> CommandEnvironment:
+    raw_prefix = os.environ.get("PYSEC_PARSER_SANDBOX_PREFIX_JSON", "").strip()
+    if not raw_prefix:
+        return CommandEnvironment(max_scratch_bytes=16 * 1024 * 1024)
+    try:
+        prefix = json.loads(raw_prefix)
+    except json.JSONDecodeError as exc:
+        raise ValueError("parser sandbox prefix is invalid JSON") from exc
+    if (
+        not isinstance(prefix, list)
+        or not prefix
+        or any(not isinstance(item, str) or not item for item in prefix)
+    ):
+        raise ValueError("parser sandbox prefix must be an argument array")
+    return CommandEnvironment(
+        sandbox_prefix=tuple(prefix),
+        sandbox_executable_sha256=os.environ.get("PYSEC_PARSER_SANDBOX_SHA256", "")
+        .strip()
+        .casefold(),
+        sandbox_runtime_closure_sha256=os.environ.get(
+            "PYSEC_PARSER_SANDBOX_RUNTIME_SHA256", ""
+        )
+        .strip()
+        .casefold(),
+        max_scratch_bytes=16 * 1024 * 1024,
+    )
+
+
+def _native_imports_in_process(path: Path, payload: bytes) -> list[str]:
     if payload[:2] == b"MZ":
         import pefile  # type: ignore[import-untyped]
 

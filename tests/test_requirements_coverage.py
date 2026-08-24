@@ -208,6 +208,7 @@ class SecurityRequirementsCoverageTests(unittest.TestCase):
                     "requirement": f"REQ-{index}",
                     "result": "pass" if index == 0 else "not-applicable",
                     "method": "automated replay",
+                    "procedure_id": "artifact-value-replay-v1",
                     "assessor": "security-assessor",
                     "assessed_at": assessed_at.isoformat(),
                     "assertions": (
@@ -218,7 +219,20 @@ class SecurityRequirementsCoverageTests(unittest.TestCase):
                                 "pointer": "/passed",
                                 "operator": "equals",
                                 "expected": True,
-                            }
+                                "polarity": "positive",
+                                "observed_at": assessed_at.isoformat(),
+                                "producer_sha256": "a" * 64,
+                            },
+                            {
+                                "artifact": "result.json",
+                                "sha256": artifact_sha256,
+                                "pointer": "/passed",
+                                "operator": "not-equals",
+                                "expected": False,
+                                "polarity": "negative-control",
+                                "observed_at": assessed_at.isoformat(),
+                                "producer_sha256": "a" * 64,
+                            },
                         ]
                         if index == 0
                         else []
@@ -254,8 +268,12 @@ class SecurityRequirementsCoverageTests(unittest.TestCase):
                                 "requirement": f"REQ-{index}",
                                 "allowed_artifacts": ["result.json"],
                                 "allowed_methods": ["automated replay"],
-                                "allowed_operators": ["equals"],
-                                "minimum_assertions": 1 if index == 0 else 0,
+                                "allowed_operators": ["equals", "not-equals"],
+                                "allowed_producer_sha256": ["a" * 64],
+                                "minimum_assertions": 2 if index == 0 else 0,
+                                "minimum_negative_assertions": 1 if index == 0 else 0,
+                                "maximum_evidence_age_hours": 24,
+                                "procedure_id": "artifact-value-replay-v1",
                             }
                             for index, standard in enumerate(standards)
                         ],
@@ -289,7 +307,7 @@ class SecurityRequirementsCoverageTests(unittest.TestCase):
                 patch.dict(os.environ, environment),
                 patch(
                     "py_security_suite.trusted_observation.scan_observed_at",
-                    return_value=assessed_at,
+                    return_value=datetime.now(UTC),
                 ),
                 patch(
                     "py_security_suite.requirements_coverage.verify_governance_quorum"

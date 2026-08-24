@@ -2,12 +2,17 @@ from __future__ import annotations
 
 from importlib.resources import files
 import hashlib
+import base64
+from datetime import datetime
 from typing import Any
 
 from jsonschema import Draft202012Validator, FormatChecker  # type: ignore[import-untyped]
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 from .strict_json import loads as strict_loads
 from .strict_json import canonical_bytes
+from .deployment_receipt import verify_portable_receipt
 
 
 _ARTIFACT_SCHEMAS = {
@@ -94,12 +99,16 @@ def validate_governed_artifacts(artifacts: dict[str, Any] | None) -> dict[str, s
             _validate_requirements_crosswalk(value)
         elif name == "runtime-trace-correlation.json":
             _validate_runtime_trace_accounting(value)
+        elif name == "isolation-probe.json":
+            _validate_isolation_receipt(value)
         elif name == "checkov-iac.json":
             _validate_checkov_accounting(value)
         elif name == "git-sizer.json":
             _validate_git_sizer_accounting(value)
         elif name == "pipdeptree-summary.json":
             _validate_pipdeptree_accounting(value)
+        if _is_companion_assurance(value):
+            _validate_companion_recovery_receipts(value)
         validated[name] = schema_name
     return validated
 
@@ -129,11 +138,74 @@ def _validate_runtime_trace_accounting(value: object) -> None:
         value.get("deployment_sha256"),
         value.get("boundary_graph_sha256"),
         value.get("authority_receipt"),
+        value.get("evidence"),
     )
     if complete is not bool(traces and all(evidence_fields)):
         raise ValueError("runtime trace completeness does not match its evidence")
     if complete == bool(value.get("limitations")):
         raise ValueError("runtime trace limitations are inconsistent")
+    if complete:
+        evidence = value["evidence"]
+        if (
+            not isinstance(evidence, dict)
+            or evidence.get("deployment_sha256") != value.get("deployment_sha256")
+            or evidence.get("boundary_graph_sha256")
+            != value.get("boundary_graph_sha256")
+            or evidence.get("coverage_requirements")
+            != value.get("coverage_requirements")
+            or not isinstance(evidence.get("traces"), list)
+            or any(not isinstance(item, dict) for item in evidence.get("traces", []))
+            or sorted(
+                evidence.get("traces") or [], key=lambda item: str(item.get("trace_id"))
+            )
+            != traces
+        ):
+            raise ValueError("runtime trace artifact is not bound to signed evidence")
+        if (
+            value.get("coverage_required")
+            != len(value.get("coverage_requirements") or [])
+            or value.get("coverage_observed") != value.get("coverage_required")
+            or value.get("coverage_percent") != 100.0
+        ):
+            raise ValueError("runtime trace coverage accounting does not match")
+        _reverify_portable(
+            evidence,
+            value["authority_receipt"],
+            "runtime-trace-evidence",
+        )
+
+
+def _validate_isolation_receipt(value: object) -> None:
+    if not isinstance(value, dict):
+        raise TypeError("isolation probe must be an object")
+    observations = value.get("policy_observations")
+    if not isinstance(observations, dict):
+        return
+    attestation = observations.get("effective_policy_attestation")
+    receipt = observations.get("effective_policy_authority_receipt")
+    if bool(attestation) != bool(receipt):
+        raise ValueError("effective sandbox portable receipt is incomplete")
+    if attestation:
+        _reverify_portable(attestation, receipt, "effective-sandbox-policy")
+
+
+def _reverify_portable(subject: object, receipt: object, purpose: str) -> None:
+    if not isinstance(receipt, dict) or not isinstance(receipt.get("statement"), dict):
+        raise ValueError("portable authority receipt is absent")
+    statement = receipt["statement"]
+    try:
+        observed = datetime.fromisoformat(
+            str(statement["issued_at"]).replace("Z", "+00:00")
+        )
+    except (KeyError, ValueError) as exc:
+        raise ValueError("portable authority receipt time is invalid") from exc
+    verify_portable_receipt(
+        subject,
+        receipt,
+        purpose=purpose,
+        observed_at=observed,
+        challenge_sha256=str(statement.get("challenge_sha256") or ""),
+    )
 
 
 def _is_companion_assurance(value: object) -> bool:
@@ -144,6 +216,53 @@ def _is_companion_assurance(value: object) -> bool:
         and isinstance(value.get("execution"), dict)
         and isinstance(value.get("kind"), str)
     )
+
+
+def _validate_companion_recovery_receipts(value: object) -> None:
+    if not isinstance(value, dict) or not isinstance(value.get("execution"), dict):
+        return
+    receipts = value["execution"].get("recovery_receipts")
+    if not isinstance(receipts, list):
+        return
+    event_ids: set[str] = set()
+    for receipt in receipts:
+        if not isinstance(receipt, dict) or not isinstance(
+            receipt.get("statement"), dict
+        ):
+            raise ValueError("portable recovery receipt is invalid")
+        statement = receipt["statement"]
+        try:
+            payload = base64.b64decode(
+                str(receipt["receipt_payload_base64"]), validate=True
+            )
+            original = strict_loads(payload)
+            key_bytes = base64.b64decode(
+                str(receipt["public_key_pem_base64"]), validate=True
+            )
+            signature = base64.b64decode(
+                str(receipt["signature_base64"]), validate=True
+            )
+            key = serialization.load_pem_public_key(key_bytes)
+            if not isinstance(key, Ed25519PublicKey):
+                raise ValueError("recovery receipt key is not Ed25519")
+            key.verify(signature, canonical_bytes(statement))
+        except Exception as exc:
+            raise ValueError("portable recovery receipt signature is invalid") from exc
+        event_id = str(statement.get("event_id") or "")
+        if (
+            not event_id
+            or event_id in event_ids
+            or statement.get("run_id") != value.get("run_id")
+            or statement.get("deployment_sha256")
+            != value.get("context", {}).get("deployment_sha256")
+            or statement.get("orchestrator_identity_sha256")
+            != hashlib.sha256(key_bytes).hexdigest()
+            or hashlib.sha256(payload).hexdigest() != receipt.get("receipt_sha256")
+            or original
+            != {**statement, "signature_base64": receipt["signature_base64"]}
+        ):
+            raise ValueError("portable recovery receipt binding is invalid")
+        event_ids.add(event_id)
 
 
 def _validate_requirements_crosswalk(value: object) -> None:
@@ -189,6 +308,16 @@ def _validate_requirements_crosswalk(value: object) -> None:
         is not (assessment_complete and full_catalog and approved)
     ):
         raise ValueError("security requirements crosswalk accounting does not match")
+    evidence_policy = value.get("evidence_policy")
+    evidence_authority = value.get("evidence_policy_authority_receipt")
+    if bool(evidence_policy) != bool(evidence_authority):
+        raise ValueError("requirements evidence policy portable receipt is incomplete")
+    if evidence_policy:
+        _reverify_portable(
+            evidence_policy,
+            evidence_authority,
+            "requirements-evidence-policy",
+        )
 
 
 def _validate_checkov_accounting(value: object) -> None:
@@ -262,6 +391,9 @@ def _validate_native_normalization(value: dict[str, Any], records: int) -> None:
         "ciphertext_sha256",
         "key_sha256",
         "custody_receipt_sha256",
+        "custody_level",
+        "custody_receipt",
+        "custody_authority_receipt",
     }:
         raise ValueError("native report storage receipt is invalid")
     replayable = storage["mode"] == "encrypted-cas"
@@ -277,6 +409,23 @@ def _validate_native_normalization(value: dict[str, Any], records: int) -> None:
         )
     ):
         raise ValueError("encrypted native report storage receipt is incomplete")
+    if replayable and (
+        storage["custody_level"] != "hardware-kms-envelope"
+        or not isinstance(storage["custody_receipt"], dict)
+        or not isinstance(storage["custody_authority_receipt"], dict)
+    ):
+        raise ValueError("encrypted native evidence lacks hardware KMS custody")
+    if replayable:
+        _reverify_portable(
+            storage["custody_receipt"],
+            storage["custody_authority_receipt"],
+            "raw-evidence-custody",
+        )
+    if not replayable and any(
+        storage[name] is not None
+        for name in ("custody_receipt", "custody_authority_receipt")
+    ):
+        raise ValueError("inline native evidence cannot claim key custody")
     expected = value.get("normalization_sha256")
     subject = {
         key: item for key, item in value.items() if key != "normalization_sha256"

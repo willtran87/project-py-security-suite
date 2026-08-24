@@ -35,7 +35,7 @@ def authority_environment(
         "subject_sha256": hashlib.sha256(canonical_bytes(subject)).hexdigest(),
         "challenge_sha256": challenge,
         "generation": 1,
-        "issued_at": (now - timedelta(minutes=5)).isoformat(),
+        "issued_at": now.isoformat(),
         "expires_at": (now + timedelta(hours=1)).isoformat(),
         "signer_key_sha256": key_sha256,
     }
@@ -58,4 +58,5 @@ def authority_environment(
         f"{prefix}_KEY_PATH": str(public),
         f"{prefix}_KEY_SHA256": key_sha256,
         f"{prefix}_MIN_GENERATION": "1",
+        f"{prefix}_STATE_PATH": str(root / f"{purpose}.authority-state.sqlite3"),
     }

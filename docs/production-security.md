@@ -287,15 +287,42 @@ both the threshold-signed applicability policy and a separate threshold-signed
 assessment named by `PYSEC_REQUIREMENTS_ASSESSMENT_PATH`. The assessment must
 match exact, canonical requirement-ID snapshots pinned outside the evidence by
 `PYSEC_REQUIREMENTS_CATALOG_SHA256`; every applicable pass or fail carries an
-assessor, trusted assessment time, method, artifact SHA-256, JSON Pointer,
-operator, and expected value. The suite replays those assertions and derives
+assessor, trusted assessment time, exact procedure ID, artifact SHA-256, JSON
+Pointer, operator, expected value, observation time, polarity, and pinned
+producer identity. The suite replays those assertions and derives
 the result. A separately deployment-pinned requirements evidence policy limits
 the artifact names, methods, operators, and minimum assertions acceptable for
 every requirement. It must be independently authorized through an Ed25519
 envelope under `PYSEC_REQUIREMENTS_EVIDENCE_POLICY_AUTHORITY`, and passing
-assessments must use the canonical `automated replay` procedure with at least
-one value-bearing assertion; an existence-only check cannot pass. Artifact
+assessments must use `artifact-value-replay-v1`, satisfy bounded evidence-age
+rules, and include the policy's minimum positive and negative-control
+assertions; an existence-only check cannot pass. Artifact
 names or catalog counts alone cannot establish conformance.
+
+Deployment-pinned runtime traces retain their complete signed subject and
+portable authority receipt. Admission re-verifies the embedded Ed25519
+envelope, collector/build/instrumentation identities, 100% sampling claim,
+static-edge digests, allow-and-deny behavior, timestamps, and an explicit
+required-route matrix; every top-level trace and coverage field must equal the
+signed evidence. Sandbox, raw-evidence custody, and requirements-policy
+artifacts retain the same portable proof material for later verification.
+
+Native binary parsing runs in a resource-contained isolated worker, with an
+optional deployment-pinned OS sandbox prefix. PE, ELF, and Mach-O analysis
+retains import/symbol and hardening state; WebAssembly analysis validates
+bounded sections and records import, memory-limit/shared-memory, and start
+function controls. Templates record computed includes and explicit escaping
+bypasses, while notebooks and bytecode are parsed without executing target
+code. Git history qualification rejects shallow, partial, promisor, sparse,
+alternate, replace-ref, unreachable, or corrupt stores; it supports and binds
+both SHA-1 and SHA-256 object formats and rechecks the complete ref/object
+ledger after bundle creation and materialization.
+
+Encrypted native evidence requires an authority-signed hardware-KMS envelope
+receipt binding the ephemeral plaintext data-key digest, non-exportable
+wrapping-key and hardware assertions, wrapped-key digest, operation ID, store,
+and retention policy. The signed receipt and its portable authority envelope
+are retained with the ciphertext commitment.
 
 ## Promotion evidence
 

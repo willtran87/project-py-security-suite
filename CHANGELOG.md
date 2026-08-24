@@ -1,5 +1,15 @@
 # Changelog
 
+- Retain and independently revalidate complete portable authority receipts,
+  back deployment generations with durable fork-detecting state, require
+  signed hardware-KMS envelope custody, and bind runtime traces to pinned
+  collectors, instrumented builds, exact static edges, full sampling, and an
+  explicit route matrix. Add pre/post recovery oracle commitments, isolated
+  resource-contained native parsing, template/WebAssembly hardening signals,
+  witness-quorum transparency checkpoints, SHA-1/SHA-256 Git object-format
+  binding, and freshness-, producer-, procedure-, and negative-control-aware
+  requirements replay.
+
 - Replace digest-only deployment approvals with reusable, externally pinned
   Ed25519 receipts bound to purpose, subject, scan challenge, validity window,
   and anti-rollback generation; make signed runtime traces mandatory for

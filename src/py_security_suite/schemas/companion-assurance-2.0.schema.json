@@ -164,11 +164,11 @@
           "type": "array", "maxItems": 100,
           "items": {
             "type": "object", "additionalProperties": false,
-            "required": ["statement", "signature_base64", "public_key_pem_base64", "receipt_sha256"],
+            "required": ["statement", "signature_base64", "public_key_pem_base64", "receipt_payload_base64", "receipt_sha256"],
             "properties": {
               "statement": {
                 "type": "object", "additionalProperties": false,
-                "required": ["schema_version", "check_id", "phase", "event_id", "before_instance_id", "after_instance_id", "orchestrator_identity_sha256", "run_id", "deployment_sha256", "challenge_sha256", "contract_sha256", "request_sha256", "oracle_identity_sha256", "issued_at", "expires_at"],
+                "required": ["schema_version", "check_id", "phase", "event_id", "before_instance_id", "after_instance_id", "orchestrator_identity_sha256", "run_id", "deployment_sha256", "challenge_sha256", "contract_sha256", "request_sha256", "oracle_identity_sha256", "issued_at", "expires_at", "before_state_sha256", "after_state_sha256", "postcondition_response_sha256"],
                 "properties": {
                   "schema_version": {"const": "1.0"},
                   "check_id": {"$ref": "#/$defs/label"},
@@ -185,10 +185,14 @@
                   "oracle_identity_sha256": {"$ref": "#/$defs/digest"},
                   "issued_at": {"type": "string", "format": "date-time"},
                   "expires_at": {"type": "string", "format": "date-time"}
+                  ,"before_state_sha256": {"$ref": "#/$defs/digest"}
+                  ,"after_state_sha256": {"$ref": "#/$defs/digest"}
+                  ,"postcondition_response_sha256": {"$ref": "#/$defs/digest"}
                 }
               },
               "signature_base64": {"type": "string", "minLength": 1},
               "public_key_pem_base64": {"type": "string", "minLength": 1},
+              "receipt_payload_base64": {"type": "string", "minLength": 1},
               "receipt_sha256": {"$ref": "#/$defs/digest"}
             }
           }

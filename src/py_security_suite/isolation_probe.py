@@ -574,9 +574,13 @@ def probe_isolation_boundary(
             len(str(policy_observations["sandbox_profile_sha256"])) == 64
         )
     if policy_observations.get("platform") in {"linux", "macos"}:
-        attestation = _effective_policy_attestation(policy_observations)
-        policy_observations["effective_policy_attestation_sha256"] = attestation
-        capabilities["effective-kernel-policy-attested"] = bool(attestation)
+        attestation_sha, attestation, authority = _effective_policy_attestation(
+            policy_observations
+        )
+        policy_observations["effective_policy_attestation_sha256"] = attestation_sha
+        policy_observations["effective_policy_attestation"] = attestation
+        policy_observations["effective_policy_authority_receipt"] = authority
+        capabilities["effective-kernel-policy-attested"] = bool(attestation_sha)
     complete = (
         execution.exit_code == 0
         and not execution.timed_out
@@ -613,7 +617,9 @@ def probe_isolation_boundary(
     return artifact, errors
 
 
-def _effective_policy_attestation(observations: dict[str, Any]) -> str:
+def _effective_policy_attestation(
+    observations: dict[str, Any],
+) -> tuple[str, dict[str, Any] | None, dict[str, Any] | None]:
     raw_path = os.environ.get("PYSEC_EFFECTIVE_SANDBOX_ATTESTATION_PATH", "").strip()
     expected = (
         os.environ.get("PYSEC_EFFECTIVE_SANDBOX_ATTESTATION_SHA256", "")
@@ -621,7 +627,7 @@ def _effective_policy_attestation(observations: dict[str, Any]) -> str:
         .casefold()
     )
     if not raw_path and not expected:
-        return ""
+        return "", None, None
     if (
         not raw_path
         or len(expected) != 64
@@ -667,9 +673,9 @@ def _effective_policy_attestation(observations: dict[str, Any]) -> str:
         or not str(value.get("attestor") or "").strip()
     ):
         raise ValueError("effective sandbox attestation policy is invalid")
-    verify_deployment_receipt(
+    authority = verify_deployment_receipt(
         value,
         purpose="effective-sandbox-policy",
         environment_prefix="PYSEC_EFFECTIVE_SANDBOX_AUTHORITY",
     )
-    return expected
+    return expected, value, authority

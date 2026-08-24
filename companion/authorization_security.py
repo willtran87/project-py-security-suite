@@ -76,7 +76,7 @@ def main(argv: list[str] | None = None) -> int:
         if version == "3.0"
         else []
     )
-    pending_recovery_receipts: list[tuple[bytes, dict[str, Any]]] = []
+    pending_recovery_receipts: list[dict[str, Any]] = []
     findings: list[dict[str, Any]] = []
     requests = 0
     exercised = 0
@@ -306,6 +306,26 @@ def main(argv: list[str] | None = None) -> int:
     if recovery_checks and oracle is None:
         raise ValueError("recovery checks require an independent state oracle")
     for check in recovery_checks:
+        pending_receipt: dict[str, Any] | None = None
+        postcondition = check["postcondition"]
+        if oracle is None:
+            raise ValueError("recovery checks require an independent state oracle")
+        before_status, before_response = _request_observation(
+            oracle["base_url"], postcondition["path"], oracle["role"]
+        )
+        requests += 1
+        exercised_ids.append(f"recovery:{check['phase']}:{check['id']}:precondition")
+        before_valid = before_status in set(postcondition["expected_status"])
+        try:
+            strict_loads(before_response)
+        except (TypeError, ValueError):
+            before_valid = False
+        if not before_valid:
+            findings.append(
+                _workflow_finding(
+                    check["id"], check["phase"], "recovery-precondition-oracle", 0
+                )
+            )
         trigger = check["trigger"]
         trigger_status, trigger_response = _request_observation(
             base_url,
@@ -322,9 +342,14 @@ def main(argv: list[str] | None = None) -> int:
                     check["id"], check["phase"], "recovery-trigger", trigger_status
                 )
             )
-        else:
-            pending_recovery_receipts.append((trigger_response, check))
-        postcondition = check["postcondition"]
+        elif before_valid:
+            pending_receipt = {
+                "payload": trigger_response,
+                "check": check,
+                "precondition_response": before_response,
+                "postcondition_response": b"",
+            }
+            pending_recovery_receipts.append(pending_receipt)
         if oracle is None:
             raise ValueError("recovery checks require an independent state oracle")
         observed_status, response = _request_observation(
@@ -333,6 +358,8 @@ def main(argv: list[str] | None = None) -> int:
             oracle["role"],
         )
         requests += 1
+        if pending_receipt is not None:
+            pending_receipt["postcondition_response"] = response
         exercised_ids.append(f"recovery:{check['phase']}:{check['id']}:postcondition")
         if observed_status not in set(postcondition["expected_status"]):
             findings.append(
@@ -369,7 +396,9 @@ def main(argv: list[str] | None = None) -> int:
     context = load_context(args.context, exercised_ids)
     recovery_receipts: list[dict[str, Any]] = []
     recovery_event_ids: set[str] = set()
-    for payload, check in pending_recovery_receipts:
+    for pending in pending_recovery_receipts:
+        payload = pending["payload"]
+        check = pending["check"]
         try:
             receipt = _verify_recovery_receipt(
                 payload,
@@ -384,6 +413,8 @@ def main(argv: list[str] | None = None) -> int:
                 ).hexdigest(),
                 oracle_identity_sha256=str((oracle or {}).get("identity_sha256") or ""),
                 observed_at=context["trusted_time_observed_at"],
+                precondition_response=pending["precondition_response"],
+                postcondition_response=pending["postcondition_response"],
             )
             event_id = str(receipt["statement"]["event_id"])
             if event_id in recovery_event_ids:
@@ -728,6 +759,8 @@ def _verify_recovery_receipt(
     request_sha256: str,
     oracle_identity_sha256: str,
     observed_at: str,
+    precondition_response: bytes,
+    postcondition_response: bytes,
 ) -> dict[str, Any]:
     raw_key = os.environ.get("PYSEC_AUTHORIZATION_ORCHESTRATOR_KEY_PATH", "").strip()
     expected_key = (
@@ -760,6 +793,9 @@ def _verify_recovery_receipt(
         "oracle_identity_sha256",
         "issued_at",
         "expires_at",
+        "before_state_sha256",
+        "after_state_sha256",
+        "postcondition_response_sha256",
         "signature_base64",
     }
     if not isinstance(value, dict) or set(value) != fields:
@@ -776,12 +812,26 @@ def _verify_recovery_receipt(
         or value["contract_sha256"] != contract_sha256
         or value["request_sha256"] != request_sha256
         or value["oracle_identity_sha256"] != oracle_identity_sha256
+        or value["postcondition_response_sha256"]
+        != hashlib.sha256(postcondition_response).hexdigest()
         or not _label(value["event_id"], "orchestration event")
         or not _label(value["before_instance_id"], "before instance")
         or not _label(value["after_instance_id"], "after instance")
         or value["before_instance_id"] == value["after_instance_id"]
     ):
         raise ValueError("authorization orchestration receipt policy failed")
+    try:
+        precondition_state = strict_loads(precondition_response)
+        postcondition_state = strict_loads(postcondition_response)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("authorization postcondition response is invalid") from exc
+    if (
+        value["before_state_sha256"]
+        != hashlib.sha256(canonical_bytes(precondition_state)).hexdigest()
+        or value["after_state_sha256"]
+        != hashlib.sha256(canonical_bytes(postcondition_state)).hexdigest()
+    ):
+        raise ValueError("authorization recovery receipt does not bind oracle state")
     try:
         issued = datetime.fromisoformat(str(value["issued_at"]).replace("Z", "+00:00"))
         expires = datetime.fromisoformat(
@@ -811,8 +861,16 @@ def _verify_recovery_receipt(
         "statement": signed,
         "signature_base64": value["signature_base64"],
         "public_key_pem_base64": base64.b64encode(key_bytes).decode("ascii"),
+        "receipt_payload_base64": base64.b64encode(payload).decode("ascii"),
         "receipt_sha256": hashlib.sha256(payload).hexdigest(),
     }
+
+
+def _digest_label(value: object) -> bool:
+    digest = str(value or "")
+    return len(digest) == 64 and all(
+        character in "0123456789abcdef" for character in digest
+    )
 
 
 def _state_step(value: object, roles: dict[str, dict[str, str]]) -> dict[str, Any]:

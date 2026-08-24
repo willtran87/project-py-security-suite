@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import os
+import sqlite3
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -105,20 +106,154 @@ def verify_deployment_receipt(
         or now > expires
     ):
         raise ValueError("deployment authority receipt is outside its validity window")
-    try:
-        signature = base64.b64decode(
-            str(value.get("signature_base64") or ""), validate=True
-        )
-        key.verify(signature, canonical_bytes(statement))
-    except (InvalidSignature, ValueError, TypeError) as exc:
-        raise ValueError("deployment authority receipt signature is invalid") from exc
-    return {
+    portable = {
         "schema_version": "1.0",
         "statement": statement,
         "signature_base64": value["signature_base64"],
         "public_key_pem_base64": base64.b64encode(key_payload).decode("ascii"),
+        "receipt_payload_base64": base64.b64encode(receipt_payload).decode("ascii"),
         "receipt_sha256": receipt_digest,
     }
+    verify_portable_receipt(
+        subject,
+        portable,
+        purpose=purpose,
+        observed_at=now,
+        challenge_sha256=challenge,
+        expected_key_sha256=key_digest,
+    )
+    _advance_monotonic_state(
+        environment_prefix,
+        purpose=purpose,
+        generation=generation,
+        receipt_sha256=receipt_digest,
+    )
+    return portable
+
+
+def verify_portable_receipt(
+    subject: object,
+    receipt: object,
+    *,
+    purpose: str,
+    observed_at: datetime,
+    challenge_sha256: str,
+    expected_key_sha256: str = "",
+) -> dict[str, Any]:
+    """Reverify a retained authority envelope without its original files."""
+
+    if not isinstance(receipt, dict) or set(receipt) != {
+        "schema_version",
+        "statement",
+        "signature_base64",
+        "public_key_pem_base64",
+        "receipt_payload_base64",
+        "receipt_sha256",
+    }:
+        raise ValueError("portable deployment receipt fields do not match")
+    statement = receipt.get("statement")
+    fields = {
+        "schema_version",
+        "purpose",
+        "subject_sha256",
+        "challenge_sha256",
+        "generation",
+        "issued_at",
+        "expires_at",
+        "signer_key_sha256",
+    }
+    if not isinstance(statement, dict) or set(statement) != fields:
+        raise ValueError("portable deployment receipt statement is invalid")
+    try:
+        receipt_payload = base64.b64decode(
+            str(receipt.get("receipt_payload_base64") or ""), validate=True
+        )
+        original = strict_loads(receipt_payload)
+        key_bytes = base64.b64decode(
+            str(receipt.get("public_key_pem_base64") or ""), validate=True
+        )
+        key = serialization.load_pem_public_key(key_bytes)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("portable deployment receipt key is invalid") from exc
+    key_sha256 = hashlib.sha256(key_bytes).hexdigest()
+    issued = _timestamp(statement.get("issued_at"), "issued_at")
+    expires = _timestamp(statement.get("expires_at"), "expires_at")
+    now = observed_at.astimezone(UTC)
+    if (
+        receipt.get("schema_version") != "1.0"
+        or hashlib.sha256(receipt_payload).hexdigest() != receipt.get("receipt_sha256")
+        or original
+        != {
+            "schema_version": receipt["schema_version"],
+            "statement": statement,
+            "signature_base64": receipt["signature_base64"],
+        }
+        or statement.get("schema_version") != "1.0"
+        or statement.get("purpose") != purpose
+        or statement.get("subject_sha256")
+        != hashlib.sha256(canonical_bytes(subject)).hexdigest()
+        or statement.get("challenge_sha256") != challenge_sha256
+        or statement.get("signer_key_sha256") != key_sha256
+        or (expected_key_sha256 and key_sha256 != expected_key_sha256)
+        or not isinstance(key, Ed25519PublicKey)
+        or issued > now
+        or expires <= issued
+        or expires - issued > timedelta(days=7)
+        or now > expires
+    ):
+        raise ValueError("portable deployment receipt trust binding is invalid")
+    try:
+        signature = base64.b64decode(
+            str(receipt.get("signature_base64") or ""), validate=True
+        )
+        key.verify(signature, canonical_bytes(statement))
+    except (InvalidSignature, ValueError, TypeError) as exc:
+        raise ValueError("portable deployment receipt signature is invalid") from exc
+    return dict(receipt)
+
+
+def _advance_monotonic_state(
+    prefix: str, *, purpose: str, generation: int, receipt_sha256: str
+) -> None:
+    raw_path = os.environ.get(f"{prefix}_STATE_PATH", "").strip()
+    if not raw_path:
+        raise ValueError("deployment authority monotonic state is unavailable")
+    path = Path(raw_path).expanduser().resolve()
+    if path.is_symlink():
+        raise ValueError("deployment authority state must not be a symbolic link")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    connection = sqlite3.connect(path, timeout=30, isolation_level=None)
+    try:
+        connection.execute("PRAGMA journal_mode=WAL")
+        connection.execute("PRAGMA synchronous=FULL")
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS receipt_state "
+            "(purpose TEXT PRIMARY KEY, generation INTEGER NOT NULL, receipt_sha256 TEXT NOT NULL)"
+        )
+        connection.execute("BEGIN IMMEDIATE")
+        row = connection.execute(
+            "SELECT generation, receipt_sha256 FROM receipt_state WHERE purpose = ?",
+            (purpose,),
+        ).fetchone()
+        if row is not None and (
+            generation < int(row[0])
+            or (generation == int(row[0]) and receipt_sha256 != str(row[1]))
+        ):
+            connection.execute("ROLLBACK")
+            raise ValueError("deployment authority receipt rollback or fork detected")
+        connection.execute(
+            "INSERT INTO receipt_state(purpose, generation, receipt_sha256) VALUES (?, ?, ?) "
+            "ON CONFLICT(purpose) DO UPDATE SET generation=excluded.generation, "
+            "receipt_sha256=excluded.receipt_sha256",
+            (purpose, generation, receipt_sha256),
+        )
+        connection.execute("COMMIT")
+    finally:
+        connection.close()
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
 
 
 def _pair(prefix: str, kind: str) -> tuple[Path, str]:

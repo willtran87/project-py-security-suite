@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -174,6 +174,8 @@ def security_requirements_coverage_artifact(
         },
     ]
     organization_approved = False
+    evidence_policy: dict[str, Any] | None = None
+    evidence_policy_authority: dict[str, Any] | None = None
     policy = _organization_requirements_policy()
     if policy is not None:
         applicability_flags = policy["applicability"]
@@ -203,7 +205,9 @@ def security_requirements_coverage_artifact(
                     "assessment": None,
                 }
             )
-        assessments = _organization_requirement_assessments(policy, artifacts)
+        assessments, evidence_policy, evidence_policy_authority = (
+            _organization_requirement_assessments(policy, artifacts)
+        )
         for record in records:
             identity = (
                 str(record["standard"]),
@@ -273,6 +277,8 @@ def security_requirements_coverage_artifact(
         "gaps": sorted(gaps),
         "automation_complete": automation_complete,
         "full_catalog_coverage": full_catalog_coverage,
+        "evidence_policy": evidence_policy,
+        "evidence_policy_authority_receipt": evidence_policy_authority,
         "complete": assessment_complete
         and full_catalog_coverage
         and organization_approved,
@@ -455,13 +461,17 @@ def _policy_requirements(
 
 def _organization_requirement_assessments(
     policy: dict[str, Any], artifacts: dict[str, Any]
-) -> dict[tuple[str, str, str], dict[str, Any]]:
+) -> tuple[
+    dict[tuple[str, str, str], dict[str, Any]],
+    dict[str, Any] | None,
+    dict[str, Any] | None,
+]:
     raw_path = os.environ.get("PYSEC_REQUIREMENTS_ASSESSMENT_PATH", "").strip()
     expected = (
         os.environ.get("PYSEC_REQUIREMENTS_ASSESSMENT_SHA256", "").strip().casefold()
     )
     if not raw_path and not expected:
-        return {}
+        return {}, None, None
     if not raw_path or not _digest(expected):
         raise ValueError(
             "organization requirements assessment configuration is incomplete"
@@ -500,7 +510,9 @@ def _organization_requirement_assessments(
     from .trusted_observation import scan_observed_at
 
     observed_at = scan_observed_at()
-    evidence_policy = _assessment_evidence_policy(expected_identities)
+    evidence_policy, raw_evidence_policy, evidence_policy_authority = (
+        _assessment_evidence_policy(expected_identities)
+    )
     threshold = value["minimum_authority_signatures"]
     if (
         isinstance(threshold, bool)
@@ -552,7 +564,7 @@ def _organization_requirement_assessments(
             else "not-applicable"
         )
         result[identity] = assessment
-    return result
+    return result, raw_evidence_policy, evidence_policy_authority
 
 
 def _verified_catalog_snapshots(
@@ -629,6 +641,7 @@ def _requirement_assessment(
         "requirement",
         "result",
         "method",
+        "procedure_id",
         "assessor",
         "assessed_at",
         "assertions",
@@ -653,10 +666,14 @@ def _requirement_assessment(
     controls = evidence_policy[identity]
     if (
         str(value["method"]) not in controls["allowed_methods"]
+        or str(value["procedure_id"]) != controls["procedure_id"]
         or len(normalized) < controls["minimum_assertions"]
+        or sum(item["polarity"] == "negative-control" for item in normalized)
+        < controls["minimum_negative_assertions"]
         or any(
             assertion["artifact"] not in controls["allowed_artifacts"]
             or assertion["operator"] not in controls["allowed_operators"]
+            or assertion["producer_sha256"] not in controls["allowed_producer_sha256"]
             for assertion in normalized
         )
     ):
@@ -665,28 +682,44 @@ def _requirement_assessment(
         raise ValueError("assessed pass or fail requires replayable assertions")
     if declared == "pass" and any(item["operator"] == "exists" for item in normalized):
         raise ValueError("a passing assessment requires value-bearing assertions")
+    if declared == "pass" and any(
+        item["polarity"] == "negative-control" and item["operator"] != "not-equals"
+        for item in normalized
+    ):
+        raise ValueError("negative controls must demonstrate a rejected value")
     if declared in {"not-tested", "not-applicable"} and normalized:
         raise ValueError("unassessed requirement cannot contain assertions")
     if normalized:
+        maximum_age = timedelta(hours=controls["maximum_evidence_age_hours"])
+        if any(
+            item["observed_at"] > assessed_at
+            or assessed_at - item["observed_at"] > maximum_age
+            for item in normalized
+        ):
+            raise ValueError("requirement assertion evidence is stale or future-dated")
         outcomes = [_replay_assertion(item, artifacts) for item in normalized]
         observed_result = "pass" if all(outcomes) else "fail"
         if declared != observed_result:
             raise ValueError(
                 "declared requirement result does not match replayed assertions"
             )
+    retained_assertions = [
+        {**item, "observed_at": item["observed_at"].isoformat()} for item in normalized
+    ]
     return {
         "identity": identity,
         "result": declared,
         "method": _text(value["method"], "assessment method", 200),
+        "procedure_id": _text(value["procedure_id"], "assessment procedure", 200),
         "assessor": _text(value["assessor"], "assessment assessor", 200),
         "assessed_at": assessed_at.isoformat(),
-        "assertions": normalized,
+        "assertions": retained_assertions,
     }
 
 
 def _assessment_evidence_policy(
     identities: set[tuple[str, str, str]],
-) -> dict[tuple[str, str, str], dict[str, Any]]:
+) -> tuple[dict[tuple[str, str, str], dict[str, Any]], dict[str, Any], dict[str, Any]]:
     raw_path = os.environ.get("PYSEC_REQUIREMENTS_EVIDENCE_POLICY_PATH", "").strip()
     expected = (
         os.environ.get("PYSEC_REQUIREMENTS_EVIDENCE_POLICY_SHA256", "")
@@ -713,7 +746,7 @@ def _assessment_evidence_policy(
         raise ValueError("requirements evidence policy fields do not match")
     from .trusted_observation import scan_observed_at
 
-    verify_deployment_receipt(
+    authority = verify_deployment_receipt(
         value,
         purpose="requirements-evidence-policy",
         environment_prefix="PYSEC_REQUIREMENTS_EVIDENCE_POLICY_AUTHORITY",
@@ -727,7 +760,11 @@ def _assessment_evidence_policy(
         "allowed_artifacts",
         "allowed_methods",
         "allowed_operators",
+        "allowed_producer_sha256",
         "minimum_assertions",
+        "minimum_negative_assertions",
+        "maximum_evidence_age_hours",
+        "procedure_id",
     }
     for item in value["requirements"]:
         if not isinstance(item, dict) or set(item) != fields:
@@ -739,9 +776,16 @@ def _assessment_evidence_policy(
         )
         lists = {
             name: item[name]
-            for name in ("allowed_artifacts", "allowed_methods", "allowed_operators")
+            for name in (
+                "allowed_artifacts",
+                "allowed_methods",
+                "allowed_operators",
+                "allowed_producer_sha256",
+            )
         }
         minimum = item["minimum_assertions"]
+        minimum_negative = item["minimum_negative_assertions"]
+        maximum_age = item["maximum_evidence_age_hours"]
         if (
             identity not in identities
             or identity in result
@@ -755,21 +799,32 @@ def _assessment_evidence_policy(
             or not set(lists["allowed_operators"]).issubset(
                 {"equals", "not-equals", "gte", "lte", "exists"}
             )
+            or any(not _digest(digest) for digest in lists["allowed_producer_sha256"])
             or lists["allowed_methods"] != ["automated replay"]
+            or item["procedure_id"] != "artifact-value-replay-v1"
             or isinstance(minimum, bool)
             or not isinstance(minimum, int)
             or not 0 <= minimum <= 100
+            or isinstance(minimum_negative, bool)
+            or not isinstance(minimum_negative, int)
+            or not 0 <= minimum_negative <= minimum
+            or isinstance(maximum_age, bool)
+            or not isinstance(maximum_age, int)
+            or not 1 <= maximum_age <= 24 * 365
         ):
             raise ValueError("requirements evidence policy entry is invalid")
         result[identity] = {
             **lists,
             "minimum_assertions": minimum,
+            "minimum_negative_assertions": minimum_negative,
+            "maximum_evidence_age_hours": maximum_age,
+            "procedure_id": str(item["procedure_id"]),
         }
     if set(result) != identities:
         raise ValueError(
             "requirements evidence policy does not cover every requirement"
         )
-    return result
+    return result, value, authority
 
 
 def _hex_revision(value: str) -> bool:
@@ -779,14 +834,32 @@ def _hex_revision(value: str) -> bool:
 
 
 def _assessment_assertion(value: object) -> dict[str, Any]:
-    fields = {"artifact", "sha256", "pointer", "operator", "expected"}
+    fields = {
+        "artifact",
+        "sha256",
+        "pointer",
+        "operator",
+        "expected",
+        "polarity",
+        "observed_at",
+        "producer_sha256",
+    }
     if not isinstance(value, dict) or set(value) != fields:
         raise ValueError("requirement assertion fields do not match")
     artifact = _text(value["artifact"], "assessment artifact", 500)
     digest = str(value["sha256"])
     pointer = str(value["pointer"])
     operator = str(value["operator"])
-    if not _digest(digest) or not pointer.startswith("/") or len(pointer) > 1000:
+    producer = str(value["producer_sha256"])
+    polarity = str(value["polarity"])
+    observed_at = _timestamp(value["observed_at"], "assertion observed_at")
+    if (
+        not _digest(digest)
+        or not _digest(producer)
+        or polarity not in {"positive", "negative-control"}
+        or not pointer.startswith("/")
+        or len(pointer) > 1000
+    ):
         raise ValueError("requirement assertion identity is invalid")
     if operator not in {"equals", "not-equals", "gte", "lte", "exists"}:
         raise ValueError("requirement assertion operator is unsupported")
@@ -799,6 +872,9 @@ def _assessment_assertion(value: object) -> dict[str, Any]:
         "pointer": pointer,
         "operator": operator,
         "expected": expected,
+        "polarity": polarity,
+        "observed_at": observed_at,
+        "producer_sha256": producer,
     }
 
 

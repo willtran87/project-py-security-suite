@@ -128,8 +128,29 @@ class EffectivenessCorpusTests(unittest.TestCase):
             "previous_checkpoint_root_sha256": "",
             "consistency_proof_sha256": [],
         }
+        witness_policy: dict[str, str] = {}
+        witnesses = []
+        for index in range(2):
+            witness_private = Ed25519PrivateKey.generate()
+            witness_public = witness_private.public_key().public_bytes(
+                serialization.Encoding.PEM,
+                serialization.PublicFormat.SubjectPublicKeyInfo,
+            )
+            witness_path = self.root / f"witness-{index}.pub.pem"
+            witness_path.write_bytes(witness_public)
+            witness_digest = hashlib.sha256(witness_public).hexdigest()
+            witness_policy[witness_digest] = str(witness_path)
+            witnesses.append(
+                {
+                    "key_sha256": witness_digest,
+                    "signature_base64": base64.b64encode(
+                        witness_private.sign(canonical_bytes(signed))
+                    ).decode(),
+                }
+            )
         receipt = {
             **signed,
+            "witnesses": witnesses,
             "signature_base64": base64.b64encode(
                 private.sign(canonical_bytes(signed))
             ).decode(),
@@ -146,7 +167,16 @@ class EffectivenessCorpusTests(unittest.TestCase):
                 return canonical_bytes(receipt)
 
         with (
-            patch.dict(os.environ, {"PYSEC_REPLAY_TOKEN": "secret"}),
+            patch.dict(
+                os.environ,
+                {
+                    "PYSEC_REPLAY_TOKEN": "secret",
+                    "PYSEC_EFFECTIVENESS_CHECKPOINT_STATE_PATH": str(
+                        self.root / "effectiveness-checkpoint.sqlite3"
+                    ),
+                    "PYSEC_EFFECTIVENESS_WITNESS_KEYS_JSON": json.dumps(witness_policy),
+                },
+            ),
             patch(
                 "py_security_suite.effectiveness_corpus.urlopen",
                 return_value=Response(),

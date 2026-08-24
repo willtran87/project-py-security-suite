@@ -347,6 +347,8 @@ class CompanionAuthorizationSecurityTests(unittest.TestCase):
             )
             identity = hashlib.sha256(public_path.read_bytes()).hexdigest()
             observed = datetime.now(UTC)
+            precondition_response = canonical_bytes({"state": "active"})
+            postcondition_response = canonical_bytes({"state": "restored"})
             signed = {
                 "schema_version": "1.0",
                 "check_id": "restart",
@@ -363,6 +365,15 @@ class CompanionAuthorizationSecurityTests(unittest.TestCase):
                 "oracle_identity_sha256": "e" * 64,
                 "issued_at": (observed - timedelta(minutes=1)).isoformat(),
                 "expires_at": (observed + timedelta(minutes=1)).isoformat(),
+                "before_state_sha256": hashlib.sha256(
+                    canonical_bytes({"state": "active"})
+                ).hexdigest(),
+                "after_state_sha256": hashlib.sha256(
+                    canonical_bytes({"state": "restored"})
+                ).hexdigest(),
+                "postcondition_response_sha256": hashlib.sha256(
+                    postcondition_response
+                ).hexdigest(),
             }
             receipt = {
                 **signed,
@@ -388,6 +399,8 @@ class CompanionAuthorizationSecurityTests(unittest.TestCase):
                     request_sha256="d" * 64,
                     oracle_identity_sha256="e" * 64,
                     observed_at=observed.isoformat(),
+                    precondition_response=precondition_response,
+                    postcondition_response=postcondition_response,
                 )
 
 

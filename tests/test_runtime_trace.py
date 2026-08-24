@@ -16,11 +16,26 @@ def test_runtime_trace_must_correlate_to_static_edge(tmp_path: Path) -> None:
     evidence = tmp_path / "traces.json"
     graph = {"edges": [{"source": "api.py", "target": "db.py"}]}
     graph_sha256 = hashlib.sha256(canonical_bytes(graph["edges"])).hexdigest()
+    edge_sha256 = hashlib.sha256(canonical_bytes(graph["edges"][0])).hexdigest()
+    observed_at = datetime.now(UTC).isoformat()
+    requirement = {
+        "entry": "POST /transfer",
+        "authorization_decision": "allow",
+        "operation": "approve",
+        "sink": "database",
+        "source": "api.py",
+        "target": "db.py",
+    }
     evidence_value = json.dumps(
         {
             "schema_version": "1.0",
             "deployment_sha256": "a" * 64,
             "boundary_graph_sha256": graph_sha256,
+            "collector_identity_sha256": "b" * 64,
+            "instrumented_build_sha256": "d" * 64,
+            "instrumentation_sha256": "e" * 64,
+            "sampling_rate": 1.0,
+            "coverage_requirements": [requirement],
             "traces": [
                 {
                     "trace_id": "1" * 32,
@@ -33,6 +48,9 @@ def test_runtime_trace_must_correlate_to_static_edge(tmp_path: Path) -> None:
                     "source": "api.py",
                     "target": "db.py",
                     "span_count": 4,
+                    "edge_sha256": edge_sha256,
+                    "started_at": observed_at,
+                    "ended_at": observed_at,
                 }
             ],
         }
@@ -57,6 +75,9 @@ def test_runtime_trace_must_correlate_to_static_edge(tmp_path: Path) -> None:
                     evidence.read_bytes()
                 ).hexdigest(),
                 "PYSEC_RUNTIME_DEPLOYMENT_SHA256": "a" * 64,
+                "PYSEC_RUNTIME_TRACE_COLLECTOR_SHA256": "b" * 64,
+                "PYSEC_RUNTIME_TRACE_BUILD_SHA256": "d" * 64,
+                "PYSEC_RUNTIME_TRACE_INSTRUMENTATION_SHA256": "e" * 64,
                 **authority,
             },
         ),

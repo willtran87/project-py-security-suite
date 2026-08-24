@@ -203,6 +203,9 @@ def assess_release_readiness(
             and runtime_trace.get("complete") is True
             and runtime_trace.get("authority_receipt")
             and int(runtime_trace.get("trace_count") or 0) > 0
+            and runtime_trace.get("coverage_percent") == 100.0
+            and runtime_trace.get("coverage_observed")
+            == runtime_trace.get("coverage_required")
         )
         controls.append(
             _control(

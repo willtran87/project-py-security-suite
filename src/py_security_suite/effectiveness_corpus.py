@@ -547,11 +547,14 @@ def _consume_remote_effectiveness_replay(
         "previous_checkpoint_size",
         "previous_checkpoint_root_sha256",
         "consistency_proof_sha256",
+        "witnesses",
         "signature_base64",
     }
     if not isinstance(receipt, dict) or set(receipt) != fields:
         raise ValueError("governed effectiveness replay receipt fields do not match")
-    signed = {name: receipt[name] for name in fields - {"signature_base64"}}
+    signed = {
+        name: receipt[name] for name in fields - {"signature_base64", "witnesses"}
+    }
     if (
         receipt["schema_version"] != "1.0"
         or receipt["status"] != "consumed"
@@ -575,14 +578,13 @@ def _consume_remote_effectiveness_replay(
         or not _checkpoint(receipt)
     ):
         raise ValueError("governed effectiveness replay receipt policy failed")
-    configured_previous_size = int(
-        os.environ.get("PYSEC_EFFECTIVENESS_PREVIOUS_CHECKPOINT_SIZE", "0")
-    )
-    configured_previous_root = (
-        os.environ.get("PYSEC_EFFECTIVENESS_PREVIOUS_CHECKPOINT_ROOT_SHA256", "")
-        .strip()
-        .casefold()
-    )
+    checkpoint_state = os.environ.get(
+        "PYSEC_EFFECTIVENESS_CHECKPOINT_STATE_PATH", ""
+    ).strip()
+    if not checkpoint_state:
+        raise ValueError("effectiveness checkpoint state is unavailable")
+    state_path = Path(checkpoint_state).expanduser().resolve()
+    configured_previous_size, configured_previous_root = _checkpoint_state(state_path)
     if (
         receipt["previous_checkpoint_size"] != configured_previous_size
         or receipt["previous_checkpoint_root_sha256"] != configured_previous_root
@@ -609,6 +611,14 @@ def _consume_remote_effectiveness_replay(
         raise ValueError(
             "governed effectiveness replay receipt signature failed"
         ) from exc
+    _verify_checkpoint_witnesses(receipt["witnesses"], signed)
+    _advance_checkpoint_state(
+        state_path,
+        expected_size=configured_previous_size,
+        expected_root=configured_previous_root,
+        new_size=int(receipt["checkpoint_size"]),
+        new_root=str(receipt["checkpoint_root_sha256"]),
+    )
     return {
         "mode": "remote-signed-checkpoint",
         "replay_key": replay_key,
@@ -629,7 +639,64 @@ def _consume_remote_effectiveness_replay(
             receipt["previous_checkpoint_root_sha256"]
         ),
         "consistency_proof_sha256": list(receipt["consistency_proof_sha256"]),
+        "witnesses": list(receipt["witnesses"]),
     }
+
+
+def _verify_checkpoint_witnesses(value: object, statement: dict[str, Any]) -> None:
+    raw_policy = os.environ.get("PYSEC_EFFECTIVENESS_WITNESS_KEYS_JSON", "").strip()
+    try:
+        policy = strict_loads(raw_policy)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("effectiveness witness policy is invalid") from exc
+    if (
+        not isinstance(policy, dict)
+        or len(policy) < 2
+        or not isinstance(value, list)
+        or len(value) < 2
+    ):
+        raise ValueError("effectiveness checkpoint witness quorum is unavailable")
+    approved: dict[str, Ed25519PublicKey] = {}
+    for digest, raw_path in policy.items():
+        if (
+            not isinstance(digest, str)
+            or not _digest(digest)
+            or not isinstance(raw_path, str)
+        ):
+            raise ValueError("effectiveness witness policy is invalid")
+        path = Path(raw_path).expanduser().resolve()
+        _, payload = read_regular_file(
+            path, "effectiveness witness key", maximum_bytes=16 * 1024
+        )
+        if hashlib.sha256(payload).hexdigest() != digest:
+            raise ValueError("effectiveness witness key does not match its pin")
+        loaded_key = serialization.load_pem_public_key(payload)
+        if not isinstance(loaded_key, Ed25519PublicKey):
+            raise ValueError("effectiveness witness key is not Ed25519")
+        approved[digest] = loaded_key
+    observed: set[str] = set()
+    for witness in value:
+        if not isinstance(witness, dict) or set(witness) != {
+            "key_sha256",
+            "signature_base64",
+        }:
+            raise ValueError("effectiveness checkpoint witness is invalid")
+        digest = str(witness["key_sha256"])
+        witness_key = approved.get(digest)
+        if witness_key is None or digest in observed:
+            raise ValueError("effectiveness checkpoint witness is not approved")
+        try:
+            signature = base64.b64decode(
+                str(witness["signature_base64"]), validate=True
+            )
+            witness_key.verify(signature, canonical_bytes(statement))
+        except Exception as exc:
+            raise ValueError(
+                "effectiveness checkpoint witness signature failed"
+            ) from exc
+        observed.add(digest)
+    if len(observed) < 2:
+        raise ValueError("effectiveness checkpoint witness quorum was not met")
 
 
 def _proof(value: object) -> bool:
@@ -638,6 +705,59 @@ def _proof(value: object) -> bool:
         and len(value) <= 256
         and all(isinstance(item, str) and _digest(item) for item in value)
     )
+
+
+def _checkpoint_state(path: Path) -> tuple[int, str]:
+    if path.is_symlink():
+        raise ValueError("effectiveness checkpoint state must not be a symbolic link")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    connection = sqlite3.connect(path, timeout=30, isolation_level=None)
+    try:
+        connection.execute("PRAGMA journal_mode=WAL")
+        connection.execute("PRAGMA synchronous=FULL")
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS checkpoint "
+            "(identity INTEGER PRIMARY KEY CHECK(identity=1), size INTEGER NOT NULL, root TEXT NOT NULL)"
+        )
+        row = connection.execute(
+            "SELECT size, root FROM checkpoint WHERE identity=1"
+        ).fetchone()
+        return (0, "") if row is None else (int(row[0]), str(row[1]))
+    finally:
+        connection.close()
+
+
+def _advance_checkpoint_state(
+    path: Path,
+    *,
+    expected_size: int,
+    expected_root: str,
+    new_size: int,
+    new_root: str,
+) -> None:
+    connection = sqlite3.connect(path, timeout=30, isolation_level=None)
+    try:
+        connection.execute("PRAGMA synchronous=FULL")
+        connection.execute("BEGIN IMMEDIATE")
+        row = connection.execute(
+            "SELECT size, root FROM checkpoint WHERE identity=1"
+        ).fetchone()
+        current = (0, "") if row is None else (int(row[0]), str(row[1]))
+        if current != (expected_size, expected_root):
+            connection.execute("ROLLBACK")
+            raise ValueError("effectiveness checkpoint advanced concurrently")
+        connection.execute(
+            "INSERT INTO checkpoint(identity, size, root) VALUES (1, ?, ?) "
+            "ON CONFLICT(identity) DO UPDATE SET size=excluded.size, root=excluded.root",
+            (new_size, new_root),
+        )
+        connection.execute("COMMIT")
+    finally:
+        connection.close()
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
 
 
 def _checkpoint(receipt: dict[str, Any]) -> bool:

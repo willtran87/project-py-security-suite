@@ -108,7 +108,14 @@ def test_native_report_secrets_use_encrypted_content_addressed_storage(
                     str(raw_store.resolve()).encode()
                 ).hexdigest(),
                 "retention_days": 30,
-                "master_key_sha256": hashlib.sha256(key.read_bytes()).hexdigest(),
+                "plaintext_data_key_sha256": hashlib.sha256(
+                    key.read_bytes()
+                ).hexdigest(),
+                "key_origin": "kms-generated-data-key",
+                "wrapping_key_non_exportable": True,
+                "hardware_backed": True,
+                "wrapped_key_sha256": "b" * 64,
+                "encryption_operation_id": "kms-operation-1",
             }
         ),
         encoding="utf-8",
