@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +13,7 @@ from ..models import (
     finding_identity,
     normalize_repo_path,
 )
+from ..strict_json import loads as strict_json_loads
 from .artifacts import configured_path
 from .base import ScannerAdapter
 from .staging import maintained_files
@@ -333,7 +333,7 @@ def _coverage_finding(
 
 
 def _document(payload: str, kind: str) -> dict[str, Any]:
-    document = json.loads(payload)
+    document = strict_json_loads(payload)
     if not isinstance(document, dict) or document.get("kind") != kind:
         raise TypeError(f"validated {kind} evidence must be an object")
     return document

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -14,6 +13,7 @@ from ..models import (
     Source,
     finding_identity,
 )
+from ..strict_json import loads as strict_json_loads
 from .base import ScannerAdapter
 from .staging import maintained_files
 
@@ -94,7 +94,7 @@ class ReachabilityAdapter(ScannerAdapter):
 
 
 def _document(payload: str) -> dict[str, Any]:
-    document = json.loads(payload)
+    document = strict_json_loads(payload)
     if not isinstance(document, dict):
         raise TypeError("reachability output must be an object")
     if document.get("schema_version") not in {"1.1", "1.2"}:

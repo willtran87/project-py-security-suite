@@ -12,12 +12,12 @@ from ..execution import (
     CommandEnvironment,
     RawExecution,
     governed_asset_sha256,
+    python_runtime_closure_sha256,
     resolve_executable,
     run_command,
-    sealed_governed_assets,
     sanitize_diagnostic,
+    sealed_governed_assets,
     sha256_file,
-    python_runtime_closure_sha256,
 )
 from ..models import Finding, ToolRun, ToolStatus
 

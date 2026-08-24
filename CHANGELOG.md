@@ -1,5 +1,17 @@
 # Changelog
 
+- Eliminate the residual trust-boundary shortcuts: raw hardware attestation
+  replay now binds a digest-pinned native verifier in an independent registered
+  failure domain; registry transparency uses witness-quorum checkpoints,
+  consistency proofs, and durable fork/rollback state; explicit trust policy
+  uses threshold signatures, trusted scan time, durable predecessor state, and
+  operation-scoped activation. Kernel events now bind boot, program, runtime,
+  configuration, namespaces, loss accounting, and canonical source events.
+  Surface admission validates a signed structured reconciliation proof instead
+  of feature labels; every JSON scanner adapter uses the strict bounded parser;
+  Atheris covers the full adapter registry; and release builds run on two
+  independent runners before a closed hardened-evidence promotion gate.
+
 - Close eight residual assurance gaps: independently replay raw TPM2, Nitro,
   and SEV-SNP evidence; require fresh threshold-signed failure-domain registries
   with transparency inclusion; correlate runtime traces with independently

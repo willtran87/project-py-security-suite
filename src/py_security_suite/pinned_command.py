@@ -424,6 +424,13 @@ def _verify_remote_attestation(
         host_identity_sha256=str(subject["host_identity_sha256"]),
         pcrs_sha256=str(subject["pcrs_sha256"]),
         implementation_sha256=str(subject["implementation_sha256"]),
+        normalized_authority_key_sha256=expected_key,
+        normalized_failure_domain={
+            "organization": subject["organization"],
+            "host_identity_sha256": subject["host_identity_sha256"],
+            "control_plane_sha256": subject["control_plane_sha256"],
+            "implementation_sha256": subject["implementation_sha256"],
+        },
     )
     verify_registered_failure_domain(
         {

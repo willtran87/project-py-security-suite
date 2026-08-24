@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import tempfile
 import unittest
 from pathlib import Path
+
+from py_security_suite.strict_json import canonical_bytes
 
 from py_security_suite.adapters.assurance_evidence import (
     BrowserSecurityAdapter,
@@ -381,18 +384,52 @@ class PortfolioAdapterTests(unittest.TestCase):
         adapter = SurfaceInventoryAdapter(
             ToolConfig(require_assurance_profile=True), 4096
         )
-        with self.assertRaisesRegex(TypeError, "independent"):
+        with self.assertRaisesRegex(TypeError, "structured"):
             adapter.parse(json.dumps(document), Path.cwd())
 
-        document["execution"]["features"] = [
-            "independent-collectors",
-            "independent-signers",
-            "pagination-completeness",
-            "server-signed-page-chain",
-            "signed-total-count",
-            "liveness-probes",
-        ]
+        sources = []
+        for index, kind in enumerate(("runtime", "gateway"), start=1):
+            sources.append(
+                {
+                    "kind": kind,
+                    "snapshot_sha256": str(index) * 64,
+                    "collector_id": f"collector-{index}",
+                    "collector_signer_id": f"collector-signer-{index}",
+                    "collector_organization": f"collector-org-{index}",
+                    "adapter_sha256": "a" * 64,
+                    "endpoint_identity_sha256": "b" * 64,
+                    "query_sha256": "c" * 64,
+                    "pages_expected": 1,
+                    "pages_observed": 1,
+                    "page_receipts_sha256": "d" * 64,
+                    "server_total_records": 1,
+                    "records_observed": 1,
+                    "liveness_probes": 1,
+                    "server_collector_id": f"server-{index}",
+                    "server_signer_id": f"server-signer-{index}",
+                    "server_organization": f"server-org-{index}",
+                    "collected_at": "2026-01-01T00:00:00+00:00",
+                }
+            )
+        subject = {
+            "schema_version": "1.0",
+            "declared_sha256": "e" * 64,
+            "history_sha256": "f" * 64,
+            "trusted_time_sha256": "0" * 64,
+            "sources": sources,
+        }
+        document["execution"]["surface_proof"] = {
+            **subject,
+            "proof_sha256": hashlib.sha256(canonical_bytes(subject)).hexdigest(),
+        }
         self.assertEqual(adapter.parse(json.dumps(document), Path.cwd()), [])
+        subject["sources"][0]["records_observed"] = 2
+        document["execution"]["surface_proof"] = {
+            **subject,
+            "proof_sha256": hashlib.sha256(canonical_bytes(subject)).hexdigest(),
+        }
+        with self.assertRaisesRegex(TypeError, "source proof is invalid"):
+            adapter.parse(json.dumps(document), Path.cwd())
 
     def test_runtime_evidence_applicability_fails_closed_for_matching_projects(
         self,

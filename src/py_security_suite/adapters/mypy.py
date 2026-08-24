@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from ..models import (
@@ -13,6 +12,7 @@ from ..models import (
     finding_identity,
     normalize_repo_path,
 )
+from ..strict_json import loads as strict_json_loads
 from .base import ScannerAdapter
 from .staging import maintained_files
 
@@ -61,7 +61,7 @@ class MypyAdapter(ScannerAdapter):
         for line in payload.splitlines():
             if not line.strip():
                 continue
-            result = json.loads(line)
+            result = strict_json_loads(line)
             if not isinstance(result, dict):
                 raise TypeError("mypy JSON line must be an object")
             rule_id = str(result.get("code") or "type-checking")

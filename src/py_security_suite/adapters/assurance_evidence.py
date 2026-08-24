@@ -5,6 +5,7 @@ import tomllib
 from pathlib import Path
 from typing import Any, ClassVar
 
+from ..execution import sha256_file
 from ..models import (
     Citation,
     Confidence,
@@ -15,12 +16,11 @@ from ..models import (
     finding_identity,
     normalize_repo_path,
 )
-from ..execution import sha256_file
 from ..strict_json import loads as strict_json_loads
+from ..surface_proof import verify_surface_proof
 from .artifacts import configured_path
 from .base import ScannerAdapter
 from .staging import maintained_repository_files
-
 
 _WEB_DEPENDENCY = re.compile(
     r"(?im)^[^#\n]*(?:django|flask|fastapi|starlette|litestar|quart|sanic)"
@@ -561,25 +561,7 @@ class SurfaceInventoryAdapter(AssuranceEvidenceAdapter):
             execution = (
                 document.get("execution") if isinstance(document, dict) else None
             )
-            features = (
-                set(execution.get("features", []))
-                if isinstance(execution, dict)
-                and isinstance(execution.get("features"), list)
-                else set()
-            )
-            required = {
-                "independent-collectors",
-                "independent-signers",
-                "pagination-completeness",
-                "server-signed-page-chain",
-                "signed-total-count",
-                "liveness-probes",
-            }
-            if not required.issubset(features):
-                raise TypeError(
-                    "governed surface inventory lacks an independent, "
-                    "server-authenticated denominator"
-                )
+            verify_surface_proof(execution)
         return super().parse(payload, target)
 
 

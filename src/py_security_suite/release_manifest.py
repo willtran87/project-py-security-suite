@@ -9,6 +9,7 @@ from .execution import sha256_file
 from .passport import verify_report
 from .path_safety import resolve_regular_file
 from .strict_json import canonical_bytes, loads as strict_loads
+from .surface_proof import verify_surface_proof
 
 _MAX_JSON_BYTES = 128 * 1024 * 1024
 _DIGEST_LENGTH = 64
@@ -16,8 +17,25 @@ _HARDENED_RELEASE_EVIDENCE = {
     "clusterfuzzlite",
     "github-attestation",
     "in-toto",
+    "oci-image",
     "reproducible-build",
     "surface-inventory",
+    "yara",
+    "clamav",
+    "check-manifest",
+    "release-readiness",
+    "passport-verification",
+    "promotion-plan",
+}
+_HARDENED_COMPANION_EVIDENCE = {
+    "clusterfuzzlite",
+    "github-attestation",
+    "in-toto",
+    "oci-image",
+    "surface-inventory",
+    "yara",
+    "clamav",
+    "check-manifest",
 }
 
 
@@ -207,7 +225,35 @@ def _validate_hardened_evidence(name: str, document: dict[str, Any]) -> None:
         raise ValueError(
             "release reproducibility evidence does not demonstrate a match"
         )
-    if name not in _HARDENED_RELEASE_EVIDENCE - {"reproducible-build"}:
+    hardened = (
+        os.environ.get("PYSEC_REQUIRE_HARDENED_RELEASE_EVIDENCE", "").strip() == "1"
+    )
+    if name == "release-readiness":
+        if hardened and (
+            document.get("decision") != "approved" or document.get("blockers") != []
+        ):
+            raise ValueError("release readiness has not approved the candidate")
+        return
+    if name == "passport-verification":
+        if hardened and (
+            document.get("verified") is not True
+            or document.get("verification_status") != "verified"
+            or document.get("authentic") is not True
+            or document.get("report_integrity_verified") is not True
+            or (
+                document.get("release_artifacts_required") is True
+                and document.get("release_artifacts_verified") is not True
+            )
+        ):
+            raise ValueError("release passport is not authentic and fully verified")
+        return
+    if name == "promotion-plan":
+        if hardened and (
+            document.get("status") != "ready" or document.get("blockers") != []
+        ):
+            raise ValueError("release promotion plan is not ready")
+        return
+    if name not in _HARDENED_COMPANION_EVIDENCE:
         return
     binding = document.get("evidence_binding")
     execution = document.get("execution")
@@ -225,19 +271,12 @@ def _validate_hardened_evidence(name: str, document: dict[str, Any]) -> None:
             f"release evidence {name} lacks authenticated complete execution"
         )
     if name == "surface-inventory":
-        features = set(execution.get("features") or [])
-        required = {
-            "independent-collectors",
-            "independent-signers",
-            "pagination-completeness",
-            "server-signed-page-chain",
-            "signed-total-count",
-            "liveness-probes",
-        }
-        if not required.issubset(features):
+        try:
+            verify_surface_proof(execution)
+        except TypeError as exc:
             raise ValueError(
-                "release surface inventory lacks an independent denominator"
-            )
+                "release surface inventory lacks a verified reconciliation proof"
+            ) from exc
 
 
 def _validate_manifest_shape(document: dict[str, Any]) -> None:

@@ -1,13 +1,10 @@
 from __future__ import annotations
 
 import hashlib
-import json
 from pathlib import Path
 from typing import Any
 
 from ..execution import CommandEnvironment
-from ..strict_json import canonical_bytes
-from ..native_evidence import protect_native_report
 from ..models import (
     Citation,
     Confidence,
@@ -18,11 +15,13 @@ from ..models import (
     finding_identity,
     normalize_repo_path,
 )
+from ..native_evidence import protect_native_report
+from ..strict_json import canonical_bytes
+from ..strict_json import loads as strict_json_loads
 from .base import ScannerAdapter
 from .file_output import JsonFileScannerAdapter
 from .sarif import parse_sarif_findings
 from .staging import maintained_repository_files
-
 
 _IAC_SUFFIXES = {".tf", ".tf.json", ".yaml", ".yml", ".json"}
 
@@ -114,7 +113,7 @@ class KicsAdapter(JsonFileScannerAdapter):
         ]
 
     def parse(self, payload: str, target: Path) -> list[Finding]:
-        document = json.loads(payload)
+        document = strict_json_loads(payload)
         if not isinstance(document, dict) or not isinstance(
             document.get("queries", []), list
         ):
@@ -132,7 +131,7 @@ class KicsAdapter(JsonFileScannerAdapter):
         return findings
 
     def derived_artifacts(self, payload: str, target: Path) -> dict[str, Any]:
-        return {"kics-iac.json": json.loads(payload)}
+        return {"kics-iac.json": strict_json_loads(payload)}
 
 
 class PipdeptreeAdapter(ScannerAdapter):
@@ -158,7 +157,7 @@ class PipdeptreeAdapter(ScannerAdapter):
         ]
 
     def parse(self, payload: str, target: Path) -> list[Finding]:
-        document = json.loads(payload)
+        document = strict_json_loads(payload)
         if not isinstance(document, dict):
             raise TypeError("pipdeptree summary must be an object")
         findings: list[Finding] = []
@@ -186,7 +185,7 @@ class PipdeptreeAdapter(ScannerAdapter):
         return findings
 
     def derived_artifacts(self, payload: str, target: Path) -> dict[str, Any]:
-        document = json.loads(payload)
+        document = strict_json_loads(payload)
         if not isinstance(document, dict):
             raise TypeError("pipdeptree summary must be an object")
         conflicts = document.get("conflicting_dependencies")
@@ -227,7 +226,7 @@ class GitSizerAdapter(ScannerAdapter):
         return [executable, "--json", "--json-version", "2"]
 
     def parse(self, payload: str, target: Path) -> list[Finding]:
-        document = json.loads(payload)
+        document = strict_json_loads(payload)
         if not isinstance(document, dict):
             raise TypeError("git-sizer JSON must be an object")
         findings: list[Finding] = []
@@ -253,7 +252,7 @@ class GitSizerAdapter(ScannerAdapter):
         return findings
 
     def derived_artifacts(self, payload: str, target: Path) -> dict[str, Any]:
-        document = json.loads(payload)
+        document = strict_json_loads(payload)
         if not isinstance(document, dict):
             raise TypeError("git-sizer JSON must be an object")
         metrics = [
@@ -304,7 +303,7 @@ class ValidatePyprojectAdapter(ScannerAdapter):
 
     def parse(self, payload: str, target: Path) -> list[Finding]:
         if payload.lstrip().startswith("{"):
-            document = json.loads(payload)
+            document = strict_json_loads(payload)
             if not isinstance(document, dict):
                 raise TypeError("validated pyproject document must be an object")
             return []
@@ -349,7 +348,7 @@ class ValeAdapter(ScannerAdapter):
         ]
 
     def parse(self, payload: str, target: Path) -> list[Finding]:
-        document = json.loads(payload or "{}")
+        document = strict_json_loads(payload or "{}")
         if not isinstance(document, dict):
             raise TypeError("Vale output must be an object")
         findings: list[Finding] = []
@@ -398,7 +397,7 @@ class KubeLinterAdapter(ScannerAdapter):
         return [executable, "lint", str(target.resolve()), "--format", "json"]
 
     def parse(self, payload: str, target: Path) -> list[Finding]:
-        document = json.loads(payload or "{}")
+        document = strict_json_loads(payload or "{}")
         reports = (
             document.get("Reports", document.get("reports", []))
             if isinstance(document, dict)

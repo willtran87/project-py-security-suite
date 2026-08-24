@@ -14,16 +14,20 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  reproduce-attest:
-    name: Reproduce, exercise, and attest distributions
+  independent-build:
+    name: Independent builder ${{ matrix.builder }}
+    strategy:
+      fail-fast: false
+      matrix:
+        builder: [a, b]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
       contents: read
-      id-token: write # Exchange GitHub OIDC identity for the provenance signer.
-      attestations: write # Publish provenance for the exact built subjects.
+      id-token: write
+      attestations: write
     steps:
-      - name: Check out source
+      - name: Check out immutable source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -34,22 +38,53 @@ jobs:
           enable-cache: false
       - name: Install locked build environment
         run: uv sync --locked --all-groups --python "3.13"
-      - name: Build twice from the same immutable source epoch
-        env:
-          SOURCE_DATE_EPOCH: "1754784000"
-        run: |
-          uv build --no-sources --out-dir .artifacts/release-a
-          uv build --no-sources --out-dir .artifacts/release-b
-      - name: Require byte-for-byte reproducibility
+      - name: Derive source epoch from checked-out commit
         shell: bash
-        run: |
-          set -euo pipefail
-          find .artifacts/release-a -maxdepth 1 -type f -printf '%f\n' | sort > "$RUNNER_TEMP/a.names"
-          find .artifacts/release-b -maxdepth 1 -type f -printf '%f\n' | sort > "$RUNNER_TEMP/b.names"
-          diff -u "$RUNNER_TEMP/a.names" "$RUNNER_TEMP/b.names"
-          while IFS= read -r name; do
-            test "$(sha256sum ".artifacts/release-a/$name" | cut -d' ' -f1)" = "$(sha256sum ".artifacts/release-b/$name" | cut -d' ' -f1)"
-          done < "$RUNNER_TEMP/a.names"
+        run: echo "SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD)" >> "$GITHUB_ENV"
+      - name: Build distribution
+        run: uv build --no-sources --out-dir ".artifacts/release-${{ matrix.builder }}"
+      - name: Attest exact builder subjects
+        uses: actions/attest-build-provenance@43d14bc2b83dec42d39ecae14e916627a18bb661 # v3
+        with:
+          subject-path: .artifacts/release-${{ matrix.builder }}/*
+      - name: Retain independent builder output
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-builder-${{ matrix.builder }}
+          path: .artifacts/release-${{ matrix.builder }}
+          if-no-files-found: error
+
+  compare-and-exercise:
+    name: Compare independent builds and exercise exact wheel
+    needs: independent-build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out immutable source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.11.19"
+          enable-cache: false
+      - name: Install locked verification environment
+        run: uv sync --locked --all-groups --python "3.13"
+      - name: Download builder A
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        with:
+          name: release-builder-a
+          path: .artifacts/release-a
+      - name: Download builder B
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        with:
+          name: release-builder-b
+          path: .artifacts/release-b
+      - name: Require byte-for-byte reproducibility
+        run: >-
+          uv run pysec compare-builds .artifacts/release-a .artifacts/release-b
+          --format json --output .artifacts/reproducible-build.json
       - name: Create a closed dependency wheelhouse
         shell: bash
         run: |
@@ -65,13 +100,11 @@ jobs:
           -Wheel (Get-ChildItem .artifacts/release-a/*.whl).FullName
           -Wheelhouse .artifacts/wheelhouse
           -Python python
-      - name: Attest exact release subjects
-        uses: actions/attest-build-provenance@43d14bc2b83dec42d39ecae14e916627a18bb661 # v3
-        with:
-          subject-path: .artifacts/release-a/*
-      - name: Retain exact release artifacts
+      - name: Retain compared release and evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: release-artifacts
-          path: .artifacts/release-a
+          path: |
+            .artifacts/release-a
+            .artifacts/reproducible-build.json
           if-no-files-found: error

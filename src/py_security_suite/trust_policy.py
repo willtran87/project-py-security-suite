@@ -3,6 +3,10 @@ from __future__ import annotations
 import hashlib
 import base64
 import os
+import sqlite3
+import threading
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -29,6 +33,7 @@ _PINNED_COMMAND_SUFFIXES = {
     "REMOTE_ATTESTATION_KEY_SHA256",
     "AUTHORITY_KEY_SHA256",
 }
+_TRUST_ACTIVATION_LOCK = threading.RLock()
 _PINNED_COMMAND_PREFIXES = {
     "PYSEC_COMPILER_SEMANTIC_REPLAY",
     "PYSEC_GIT_BUNDLE_CAS",
@@ -47,6 +52,9 @@ _EXPLICIT_POLICY_BOOTSTRAP = frozenset(
         "PYSEC_EXPLICIT_TRUST_POLICY_KEY_SHA256",
         "PYSEC_EXPLICIT_TRUST_POLICY_MIN_GENERATION",
         "PYSEC_REQUIRE_EXPLICIT_TRUST_POLICY",
+        "PYSEC_EXPLICIT_TRUST_POLICY_ROOT_KEYS_JSON",
+        "PYSEC_EXPLICIT_TRUST_POLICY_SIGNATURE_THRESHOLD",
+        "PYSEC_EXPLICIT_TRUST_POLICY_STATE_PATH",
     }
 )
 
@@ -68,6 +76,9 @@ _TRUST_ENVIRONMENT = frozenset(
         "PYSEC_EXPLICIT_TRUST_POLICY_KEY_SHA256",
         "PYSEC_EXPLICIT_TRUST_POLICY_MIN_GENERATION",
         "PYSEC_REQUIRE_EXPLICIT_TRUST_POLICY",
+        "PYSEC_EXPLICIT_TRUST_POLICY_ROOT_KEYS_JSON",
+        "PYSEC_EXPLICIT_TRUST_POLICY_SIGNATURE_THRESHOLD",
+        "PYSEC_EXPLICIT_TRUST_POLICY_STATE_PATH",
         "PYSEC_GOVERNANCE_MIN_GENERATION",
         "PYSEC_FAILURE_DOMAIN_REGISTRY_PATH",
         "PYSEC_FAILURE_DOMAIN_REGISTRY_SHA256",
@@ -75,6 +86,9 @@ _TRUST_ENVIRONMENT = frozenset(
         "PYSEC_FAILURE_DOMAIN_REGISTRY_ROOT_KEYS_JSON",
         "PYSEC_FAILURE_DOMAIN_REGISTRY_SIGNATURE_THRESHOLD",
         "PYSEC_FAILURE_DOMAIN_LOG_ROOT_SHA256",
+        "PYSEC_FAILURE_DOMAIN_LOG_WITNESS_KEYS_JSON",
+        "PYSEC_FAILURE_DOMAIN_LOG_WITNESS_THRESHOLD",
+        "PYSEC_FAILURE_DOMAIN_REGISTRY_STATE_PATH",
         "PYSEC_REQUIRE_FRESH_FAILURE_DOMAIN_REGISTRY",
         "PYSEC_GOVERNANCE_REPLAY_REQUIRE_REMOTE",
         "PYSEC_GOVERNANCE_REPLAY_SERVICE_CA",
@@ -112,6 +126,9 @@ _TRUST_ENVIRONMENT = frozenset(
         "PYSEC_REQUIRE_KERNEL_RUNTIME_EVENTS",
         "PYSEC_RUNTIME_KERNEL_AUTHORITY_KEY_SHA256",
         "PYSEC_REQUIRE_HARDENED_RELEASE_EVIDENCE",
+        "PYSEC_SCAN_TIME_CHALLENGE_SHA256",
+        "PYSEC_SCAN_TIME_CONTEXT_PATH",
+        "PYSEC_SCAN_TIME_CONTEXT_SHA256",
         "PYSEC_SEV_SNP_ATTESTATION_ROOT_SHA256",
         "PYSEC_SEV_SNP_MIN_REPORTED_TCB",
         "PYSEC_TPM2_ATTESTATION_ROOT_SHA256",
@@ -185,6 +202,31 @@ def capture_trust_environment() -> dict[str, str]:
     }
 
 
+@contextmanager
+def activated_trust_environment(environment: Mapping[str, str]) -> Iterator[None]:
+    """Apply one immutable trust snapshot only for the active operation."""
+    with _TRUST_ACTIVATION_LOCK:
+        dynamic = {
+            name
+            for name in os.environ
+            if name.startswith("PYSEC_")
+            and any(name.endswith(f"_{suffix}") for suffix in _PINNED_COMMAND_SUFFIXES)
+        }
+        managed = set(_TRUST_ENVIRONMENT) | dynamic | set(environment)
+        previous = {name: os.environ.get(name) for name in managed}
+        try:
+            for name in managed:
+                os.environ.pop(name, None)
+            os.environ.update(environment)
+            yield
+        finally:
+            for name in managed:
+                os.environ.pop(name, None)
+            for name, value in previous.items():
+                if value is not None:
+                    os.environ[name] = value
+
+
 def _explicit_trust_environment() -> dict[str, str] | None:
     path_value = os.environ.get("PYSEC_EXPLICIT_TRUST_POLICY_PATH", "").strip()
     digest = os.environ.get("PYSEC_EXPLICIT_TRUST_POLICY_SHA256", "").strip().casefold()
@@ -201,22 +243,33 @@ def _explicit_trust_environment() -> dict[str, str] | None:
     if hashlib.sha256(payload).hexdigest() != digest:
         raise ValueError("explicit trust policy does not match its deployment pin")
     document = strict_loads(payload)
-    if not isinstance(document, dict) or set(document) != {"signed", "signature"}:
+    if not isinstance(document, dict) or set(document) not in (
+        {"signed", "signature"},
+        {"signed", "signatures"},
+    ):
         raise ValueError("explicit trust policy envelope is invalid")
     signed = document["signed"]
-    signature = document["signature"]
+    version = signed.get("schema_version") if isinstance(signed, dict) else None
+    expected_signed_fields = {
+        "schema_version",
+        "generation",
+        "issued_at",
+        "expires_at",
+        "variables",
+    }
+    if version == "2.0":
+        expected_signed_fields.add("previous_policy_sha256")
     if (
         not isinstance(signed, dict)
-        or set(signed)
-        != {"schema_version", "generation", "issued_at", "expires_at", "variables"}
-        or signed.get("schema_version") != "1.0"
+        or set(signed) != expected_signed_fields
+        or version not in {"1.0", "2.0"}
         or not isinstance(signed.get("generation"), int)
         or signed["generation"] < 1
         or not isinstance(signed.get("variables"), dict)
-        or not isinstance(signature, dict)
-        or set(signature) != {"key_sha256", "public_key_pem_base64", "signature_base64"}
     ):
         raise ValueError("explicit trust policy fields are invalid")
+    if required and version != "2.0":
+        raise ValueError("required explicit trust policy must use threshold schema 2.0")
     minimum = _integer_environment("PYSEC_EXPLICIT_TRUST_POLICY_MIN_GENERATION", 1)
     if signed["generation"] < minimum:
         raise ValueError(
@@ -224,9 +277,6 @@ def _explicit_trust_environment() -> dict[str, str] | None:
         )
     issued = _timestamp(signed["issued_at"], "explicit trust policy issued_at")
     expires = _timestamp(signed["expires_at"], "explicit trust policy expires_at")
-    now = datetime.now(UTC)
-    if issued > now or expires <= now or expires <= issued:
-        raise ValueError("explicit trust policy is not currently valid")
     variables: dict[str, str] = {}
     for raw_name, raw_value in signed["variables"].items():
         name = str(raw_name)
@@ -244,13 +294,40 @@ def _explicit_trust_environment() -> dict[str, str] | None:
         ):
             raise ValueError("explicit trust policy variables are invalid")
         variables[name] = raw_value
-    _verify_policy_signature(signed, signature)
+    if version == "2.0":
+        _verify_policy_signatures(signed, document.get("signatures"))
+        signing_key = hashlib.sha256(
+            os.environ.get("PYSEC_EXPLICIT_TRUST_POLICY_ROOT_KEYS_JSON", "").encode()
+        ).hexdigest()
+    else:
+        signature = document.get("signature")
+        if not isinstance(signature, dict):
+            raise ValueError("explicit trust policy signature is invalid")
+        _verify_policy_signature(signed, signature)
+        signing_key = str(signature["key_sha256"])
+    if required:
+        from .trusted_observation import scan_observed_at
+
+        now = scan_observed_at(variables)
+    else:
+        now = datetime.now(UTC)
+    if issued > now or expires <= now or expires <= issued:
+        raise ValueError("explicit trust policy is not currently valid")
     bootstrap = {
         "PYSEC_EXPLICIT_TRUST_POLICY_PATH": path_value,
         "PYSEC_EXPLICIT_TRUST_POLICY_SHA256": digest,
-        "PYSEC_EXPLICIT_TRUST_POLICY_KEY_SHA256": str(signature["key_sha256"]),
+        "PYSEC_EXPLICIT_TRUST_POLICY_KEY_SHA256": signing_key,
         "PYSEC_EXPLICIT_TRUST_POLICY_MIN_GENERATION": str(minimum),
         "PYSEC_REQUIRE_EXPLICIT_TRUST_POLICY": "1" if required else "0",
+        "PYSEC_EXPLICIT_TRUST_POLICY_ROOT_KEYS_JSON": os.environ.get(
+            "PYSEC_EXPLICIT_TRUST_POLICY_ROOT_KEYS_JSON", ""
+        ),
+        "PYSEC_EXPLICIT_TRUST_POLICY_SIGNATURE_THRESHOLD": os.environ.get(
+            "PYSEC_EXPLICIT_TRUST_POLICY_SIGNATURE_THRESHOLD", "2"
+        ),
+        "PYSEC_EXPLICIT_TRUST_POLICY_STATE_PATH": os.environ.get(
+            "PYSEC_EXPLICIT_TRUST_POLICY_STATE_PATH", ""
+        ),
     }
     ambient_names = {
         name
@@ -279,9 +356,112 @@ def _explicit_trust_environment() -> dict[str, str] | None:
             raise ValueError(
                 f"ambient trust setting {name} conflicts with signed policy"
             )
-    for name, value in variables.items():
-        os.environ[name] = value
+    _advance_policy_state(signed, digest, required=required)
     return {**variables, **bootstrap}
+
+
+def _verify_policy_signatures(signed: dict[str, Any], signatures: object) -> None:
+    raw_keys = os.environ.get("PYSEC_EXPLICIT_TRUST_POLICY_ROOT_KEYS_JSON", "").strip()
+    try:
+        records = strict_loads(raw_keys)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("explicit trust policy root keys are invalid") from exc
+    if not isinstance(records, list) or not 2 <= len(records) <= 16:
+        raise ValueError("explicit trust policy root key quorum is unavailable")
+    keys: dict[str, Ed25519PublicKey] = {}
+    for item in records:
+        if not isinstance(item, dict) or set(item) != {
+            "key_sha256",
+            "public_key_pem_base64",
+        }:
+            raise ValueError("explicit trust policy root key is invalid")
+        try:
+            public_bytes = base64.b64decode(
+                str(item["public_key_pem_base64"]), validate=True
+            )
+            public = serialization.load_pem_public_key(public_bytes)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("explicit trust policy root key is invalid") from exc
+        key_sha256 = hashlib.sha256(public_bytes).hexdigest()
+        if (
+            key_sha256 != item.get("key_sha256")
+            or key_sha256 in keys
+            or not isinstance(public, Ed25519PublicKey)
+        ):
+            raise ValueError("explicit trust policy root key is invalid")
+        keys[key_sha256] = public
+    threshold = _integer_environment(
+        "PYSEC_EXPLICIT_TRUST_POLICY_SIGNATURE_THRESHOLD", 2
+    )
+    if threshold > len(keys) or not isinstance(signatures, list):
+        raise ValueError("explicit trust policy signature threshold is unavailable")
+    verified: set[str] = set()
+    payload = canonical_bytes(signed)
+    for item in signatures:
+        if (
+            not isinstance(item, dict)
+            or set(item) != {"key_sha256", "signature_base64"}
+            or item.get("key_sha256") not in keys
+            or item["key_sha256"] in verified
+        ):
+            raise ValueError("explicit trust policy signature is invalid")
+        try:
+            signature = base64.b64decode(str(item["signature_base64"]), validate=True)
+            keys[str(item["key_sha256"])].verify(signature, payload)
+        except Exception as exc:
+            raise ValueError("explicit trust policy signature is invalid") from exc
+        verified.add(str(item["key_sha256"]))
+    if len(verified) < threshold:
+        raise ValueError("explicit trust policy signature threshold is not met")
+
+
+def _advance_policy_state(
+    signed: dict[str, Any], policy_sha256: str, *, required: bool
+) -> None:
+    raw_path = os.environ.get("PYSEC_EXPLICIT_TRUST_POLICY_STATE_PATH", "").strip()
+    if not raw_path:
+        if required:
+            raise ValueError("explicit trust policy durable state is required")
+        return
+    path = Path(raw_path).expanduser().resolve()
+    if path.is_symlink():
+        raise ValueError("explicit trust policy state must not be a symbolic link")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    connection = sqlite3.connect(path, timeout=30, isolation_level=None)
+    try:
+        connection.execute("PRAGMA journal_mode=WAL")
+        connection.execute("PRAGMA synchronous=FULL")
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS policy "
+            "(identity INTEGER PRIMARY KEY CHECK(identity=1), generation INTEGER NOT NULL, "
+            "policy_sha256 TEXT NOT NULL)"
+        )
+        connection.execute("BEGIN IMMEDIATE")
+        row = connection.execute(
+            "SELECT generation, policy_sha256 FROM policy WHERE identity=1"
+        ).fetchone()
+        current = (0, "") if row is None else (int(row[0]), str(row[1]))
+        proposed = (int(signed["generation"]), policy_sha256)
+        previous = str(signed.get("previous_policy_sha256") or "")
+        if proposed == current:
+            connection.execute("COMMIT")
+            return
+        if proposed[0] <= current[0] or previous != current[1]:
+            connection.execute("ROLLBACK")
+            raise ValueError("explicit trust policy rollback or fork detected")
+        connection.execute(
+            "INSERT INTO policy(identity, generation, policy_sha256) VALUES (1, ?, ?) "
+            "ON CONFLICT(identity) DO UPDATE SET generation=excluded.generation, "
+            "policy_sha256=excluded.policy_sha256",
+            proposed,
+        )
+        connection.execute("COMMIT")
+    finally:
+        connection.close()
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
 
 
 def _verify_policy_signature(signed: dict[str, Any], signature: dict[str, Any]) -> None:

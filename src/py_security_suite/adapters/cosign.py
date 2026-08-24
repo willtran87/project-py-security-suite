@@ -6,8 +6,19 @@ import time
 from pathlib import Path
 
 from ..execution import run_command, sanitize_diagnostic, sha256_file
-from ..models import Citation, Confidence, Finding, Location, Severity, Source
-from ..models import ToolRun, ToolStatus, finding_identity, normalize_repo_path
+from ..models import (
+    Citation,
+    Confidence,
+    Finding,
+    Location,
+    Severity,
+    Source,
+    ToolRun,
+    ToolStatus,
+    finding_identity,
+    normalize_repo_path,
+)
+from ..strict_json import loads as strict_json_loads
 from .artifacts import artifact_identity_evidence, configured_path, distribution_files
 from .base import AdapterResult, ScannerAdapter
 
@@ -26,7 +37,7 @@ class CosignAdapter(ScannerAdapter):
         if result.timed_out or result.exit_code != 0:
             return "unknown"
         try:
-            document = json.loads(result.stdout)
+            document = strict_json_loads(result.stdout)
         except json.JSONDecodeError:
             document = {}
         if isinstance(document, dict):

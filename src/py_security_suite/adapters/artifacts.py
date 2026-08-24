@@ -5,8 +5,8 @@ import stat
 import tarfile
 import tempfile
 import zipfile
-from contextlib import contextmanager
 from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import IO
 

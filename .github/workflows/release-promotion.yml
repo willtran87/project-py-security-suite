@@ -1,0 +1,58 @@
+name: Closed release evidence admission
+
+on:
+  workflow_dispatch:
+    inputs:
+      evidence_run_id:
+        description: Run ID containing the release-evidence artifact
+        required: true
+        type: string
+      manifest_sha256:
+        description: Independently approved release manifest SHA-256
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  verify-closed-evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out verifier
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.11.19"
+          enable-cache: false
+      - name: Install locked verifier
+        run: uv sync --locked --all-groups --python "3.13"
+      - name: Download externally assembled closed evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVIDENCE_RUN_ID: ${{ inputs.evidence_run_id }}
+        shell: bash
+        run: gh run download "$EVIDENCE_RUN_ID" --repo "$GITHUB_REPOSITORY" --name release-evidence --dir .promotion
+      - name: Verify every hardened evidence class and report binding
+        env:
+          PYSEC_REQUIRE_HARDENED_RELEASE_EVIDENCE: "1"
+          MANIFEST_SHA256: ${{ inputs.manifest_sha256 }}
+        shell: bash
+        run: >-
+          uv run pysec verify-release-manifest
+          .promotion/release-evidence-manifest.json
+          --manifest-sha256 "$MANIFEST_SHA256"
+          --report .promotion/report/report.json
+          --format json
+          --output .promotion/release-evidence-verification.json
+      - name: Retain admission receipt
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-evidence-admission-${{ github.run_id }}
+          path: .promotion/release-evidence-verification.json
+          if-no-files-found: error

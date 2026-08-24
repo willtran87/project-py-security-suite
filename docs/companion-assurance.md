@@ -315,8 +315,10 @@ The hardened contracts close the remaining authority and behavior gaps:
 - surface inventory v4 requires independent collector and signer organizations,
   signed hash-linked pagination receipts, server-signed page chains and totals,
   liveness probes, RFC 3161 collection history, and tombstones. Governed
-  ingestion refuses earlier evidence because it lacks an authoritative external
-  denominator;
+  ingestion verifies a signed structured reconciliation proof containing each
+  collector/server identity, organization, snapshot, pagination receipt, total,
+  liveness count, query/endpoint binding, and collection time; feature labels
+  alone cannot satisfy admission;
 - AI v2 requires a signed calibrated judge, paired seeded scenarios across
   independent runs, multi-turn memory/tool isolation, drift baselines, and
   family-wise confidence control;
@@ -347,9 +349,10 @@ The hardened contracts close the remaining authority and behavior gaps:
 These packages are test-only and do not expand the scanner process's trusted
 computing base. Their exact versions and transitive dependencies are recorded
 in `uv.lock`; acquire the locked wheels in the connected preparation lane.
-The pinned `Continuous parser fuzzing` workflow runs Atheris against the strict
-JSON and SARIF entry points on pull requests, pushes, and a daily schedule while
-retaining a seed corpus under `fuzz/corpus/security-parsers`.
+The pinned `Continuous parser fuzzing` workflow runs Atheris 3 against strict
+JSON, SARIF, and every registered scanner adapter parser on pull requests,
+pushes, and a daily schedule. It retains both the seed corpus and the evolved
+coverage corpus under `fuzz/corpus/security-parsers`.
 
 Package wheels, native archives, rules, databases, trusted roots, and Java
 runtime must be prepared in a connected update lane, checksum-verified, and

@@ -17,7 +17,6 @@ from ..models import (
 from .base import ScannerAdapter
 from .staging import maintained_files
 
-
 _ANSI = re.compile(r"\x1b\[[0-9;]*m")
 _VIOLATION = re.compile(
     r"^(?:\[[A-Z]+\]\s*)?(?P<path>.+?)"

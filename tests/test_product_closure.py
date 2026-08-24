@@ -209,6 +209,9 @@ class ProductClosureTests(unittest.TestCase):
                 evidence,
                 {
                     "schema_version": "1.2",
+                    "status": "candidate",
+                    "decision": "approved",
+                    "blockers": [],
                     "report": {"checksums_sha256": "f" * 64},
                 },
             )
@@ -239,7 +242,13 @@ class ProductClosureTests(unittest.TestCase):
             evidence = root / "readiness.json"
             _write(
                 evidence,
-                {"schema_version": "1.2", "report": {"checksums_sha256": "f" * 64}},
+                {
+                    "schema_version": "1.2",
+                    "status": "candidate",
+                    "decision": "approved",
+                    "blockers": [],
+                    "report": {"checksums_sha256": "f" * 64},
+                },
             )
             digest = hashlib.sha256(evidence.read_bytes()).hexdigest()
             verify_mock.return_value = _verification("scan-1", "f")
@@ -272,7 +281,7 @@ class ProductClosureTests(unittest.TestCase):
                 patch.dict(
                     "os.environ", {"PYSEC_REQUIRE_HARDENED_RELEASE_EVIDENCE": "1"}
                 ),
-                self.assertRaisesRegex(ValueError, "clusterfuzzlite"),
+                self.assertRaisesRegex(ValueError, "check-manifest"),
             ):
                 verify_release_evidence_manifest(
                     manifest_path,

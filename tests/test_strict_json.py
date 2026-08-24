@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import math
+from pathlib import Path
 
 import pytest
 
 from companion.strict_json import canonical_bytes as companion_canonical_bytes
 from companion.strict_json import loads as companion_loads
+from py_security_suite.adapters.bandit import BanditAdapter
+from py_security_suite.adapters.sarif import parse_sarif_findings
+from py_security_suite.config import ToolConfig
 from py_security_suite.evidence_ingest import _assurance_execution
 from py_security_suite.strict_json import canonical_bytes, dumps, loads
 
@@ -36,6 +40,21 @@ def test_strict_json_rejects_excessive_nesting() -> None:
         loads(payload)
     with pytest.raises(ValueError, match="safety"):
         companion_loads(payload)
+
+
+def test_scanner_adapters_reject_duplicate_json_properties() -> None:
+    target = Path("/strict-json-target")
+    with pytest.raises(ValueError, match="duplicate property"):
+        BanditAdapter(ToolConfig(), 1024).parse('{"results":[],"results":[]}', target)
+    with pytest.raises(ValueError, match="duplicate property"):
+        parse_sarif_findings(
+            '{"runs":[],"runs":[]}',
+            target,
+            tool_name="sarif",
+            default_area="security",
+            default_impact="impact",
+            default_remediation="remediation",
+        )
 
 
 def test_canonical_json_is_stable_across_implementations() -> None:

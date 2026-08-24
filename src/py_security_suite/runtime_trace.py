@@ -73,6 +73,8 @@ def runtime_trace_artifact(boundary_graph: dict[str, Any]) -> dict[str, Any]:
         "kernel_failure_domain",
         "kernel_operation_receipt",
         "kernel_authority_key_sha256",
+        "kernel_collection_manifest",
+        "kernel_collection_manifest_sha256",
     }
     observed_fields = set(value) if isinstance(value, dict) else set()
     if (
@@ -467,6 +469,8 @@ def _verify_kernel_runtime_events(
         "kernel_failure_domain",
         "kernel_operation_receipt",
         "kernel_authority_key_sha256",
+        "kernel_collection_manifest",
+        "kernel_collection_manifest_sha256",
     }
     present = set(value) & fields
     required = os.environ.get("PYSEC_REQUIRE_KERNEL_RUNTIME_EVENTS", "").strip() == "1"
@@ -477,12 +481,51 @@ def _verify_kernel_runtime_events(
     if present != fields:
         raise ValueError("kernel-origin runtime evidence fields are incomplete")
     events = value["kernel_events"]
+    manifest = value["kernel_collection_manifest"]
+    manifest_fields = {
+        "schema_version",
+        "source",
+        "source_boot_id_sha256",
+        "collector_program_sha256",
+        "collector_configuration_sha256",
+        "collector_runtime_sha256",
+        "sequence_start",
+        "sequence_end",
+        "dropped_events",
+        "clock_source",
+        "cgroup_scope_sha256",
+        "pid_namespace_sha256",
+        "collected_at",
+    }
     if (
         not isinstance(events, list)
         or not events
         or len(events) > 1_000_000
         or value["kernel_events_sha256"]
         != hashlib.sha256(canonical_bytes(events)).hexdigest()
+        or not isinstance(manifest, dict)
+        or set(manifest) != manifest_fields
+        or value["kernel_collection_manifest_sha256"]
+        != hashlib.sha256(canonical_bytes(manifest)).hexdigest()
+        or manifest.get("schema_version") != "1.0"
+        or manifest.get("source") not in {"ebpf-audit", "falco", "tetragon", "etw"}
+        or manifest.get("sequence_start") != 1
+        or manifest.get("sequence_end") != len(events)
+        or manifest.get("dropped_events") != 0
+        or manifest.get("clock_source") != "kernel-monotonic"
+        or any(
+            not _digest(str(manifest.get(name) or ""))
+            for name in (
+                "source_boot_id_sha256",
+                "collector_program_sha256",
+                "collector_configuration_sha256",
+                "collector_runtime_sha256",
+                "cgroup_scope_sha256",
+                "pid_namespace_sha256",
+            )
+        )
+        or _timestamp(str(manifest.get("collected_at")), "kernel collected_at")
+        > observed_at
     ):
         raise ValueError("kernel-origin runtime event ledger is invalid")
     event_fields = {
@@ -505,6 +548,20 @@ def _verify_kernel_runtime_events(
     previous_sequence = 0
     previous_monotonic = -1
     for event in events:
+        source_subject = {
+            "source_boot_id_sha256": manifest["source_boot_id_sha256"],
+            "sequence": event.get("sequence") if isinstance(event, dict) else None,
+            "monotonic_ns": event.get("monotonic_ns")
+            if isinstance(event, dict)
+            else None,
+            "event_type": event.get("event_type") if isinstance(event, dict) else None,
+            "trace_id": event.get("trace_id") if isinstance(event, dict) else None,
+            "process_identity_sha256": event.get("process_identity_sha256")
+            if isinstance(event, dict)
+            else None,
+            "resource": event.get("resource") if isinstance(event, dict) else None,
+            "outcome": event.get("outcome") if isinstance(event, dict) else None,
+        }
         if (
             not isinstance(event, dict)
             or set(event) != event_fields
@@ -519,6 +576,8 @@ def _verify_kernel_runtime_events(
             or not str(event.get("resource") or "").strip()
             or not _digest(str(event.get("process_identity_sha256") or ""))
             or not _digest(str(event.get("source_event_sha256") or ""))
+            or event.get("source_event_sha256")
+            != hashlib.sha256(canonical_bytes(source_subject)).hexdigest()
             or str(event.get("trace_id") or "") not in trace_records
             or event.get("process_identity_sha256")
             != process_identities.get(str(event.get("trace_id") or ""))
@@ -579,6 +638,7 @@ def _verify_kernel_runtime_events(
         "boundary_graph_sha256": graph_digest,
         "kernel_observer_identity_sha256": value["kernel_observer_identity_sha256"],
         "kernel_events_sha256": value["kernel_events_sha256"],
+        "kernel_collection_manifest_sha256": value["kernel_collection_manifest_sha256"],
         "failure_domain": value["kernel_failure_domain"],
     }
     verify_operation_receipt(

@@ -1,11 +1,19 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
-from ..models import Citation, Confidence, Finding, Location, Severity, Source
-from ..models import finding_identity, normalize_repo_path
+from ..models import (
+    Citation,
+    Confidence,
+    Finding,
+    Location,
+    Severity,
+    Source,
+    finding_identity,
+    normalize_repo_path,
+)
+from ..strict_json import loads as strict_json_loads
 from .artifacts import configured_path
 from .file_output import JsonFileScannerAdapter
 
@@ -40,7 +48,7 @@ class DiffCoverAdapter(JsonFileScannerAdapter):
         return command
 
     def parse(self, payload: str, target: Path) -> list[Finding]:
-        document = json.loads(payload)
+        document = strict_json_loads(payload)
         if not isinstance(document, dict):
             raise TypeError("diff-cover output must be an object")
         threshold = self.config.minimum_coverage_percent
@@ -87,7 +95,7 @@ class DiffCoverAdapter(JsonFileScannerAdapter):
         return findings
 
     def derived_artifacts(self, payload: str, target: Path) -> dict[str, Any]:
-        document = json.loads(payload)
+        document = strict_json_loads(payload)
         document["schema_version"] = "1.0"
         document["minimum_percent"] = self.config.minimum_coverage_percent
         return {"diff-coverage.json": document}

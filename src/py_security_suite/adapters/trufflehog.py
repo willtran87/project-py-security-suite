@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +13,7 @@ from ..models import (
     finding_identity,
     normalize_repo_path,
 )
+from ..strict_json import loads as strict_json_loads
 from .base import ScannerAdapter
 
 
@@ -52,7 +52,7 @@ class TruffleHogAdapter(ScannerAdapter):
         for line in payload.splitlines():
             if not line.strip():
                 continue
-            result = json.loads(line)
+            result = strict_json_loads(line)
             if not isinstance(result, dict):
                 raise TypeError("TruffleHog result must be an object")
             detector = str(

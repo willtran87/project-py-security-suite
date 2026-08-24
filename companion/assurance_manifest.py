@@ -198,7 +198,11 @@ def _execution_summary(path: Path, *, kind: str = "") -> dict[str, Any]:
         "canaries_expected",
         "canaries_observed",
     }
-    allowed = required | {"language_matrix", "cross_language_matrix"}
+    allowed = required | {
+        "language_matrix",
+        "cross_language_matrix",
+        "surface_proof",
+    }
     if (
         not isinstance(payload, dict)
         or set(payload) - allowed
@@ -243,6 +247,11 @@ def _execution_summary(path: Path, *, kind: str = "") -> dict[str, Any]:
     cross_language_matrix = _cross_language_matrix(
         payload.get("cross_language_matrix", [])
     )
+    surface_proof = payload.get("surface_proof")
+    if kind == "surface-inventory" and not isinstance(surface_proof, dict):
+        raise ValueError("surface inventory requires a structured reconciliation proof")
+    if kind != "surface-inventory" and surface_proof is not None:
+        raise ValueError("surface proof is only valid for surface inventory evidence")
     if kind == "polyglot" and not language_matrix:
         raise ValueError("polyglot execution requires an explicit language matrix")
     if kind == "polyglot" and len(language_matrix) > 1 and not cross_language_matrix:
@@ -263,6 +272,7 @@ def _execution_summary(path: Path, *, kind: str = "") -> dict[str, Any]:
             if cross_language_matrix
             else {}
         ),
+        **({"surface_proof": surface_proof} if surface_proof is not None else {}),
     }
 
 

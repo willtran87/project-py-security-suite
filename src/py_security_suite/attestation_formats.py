@@ -8,6 +8,10 @@ from typing import Any
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
+from .failure_domain import (
+    require_independent_failure_domains,
+    verify_registered_failure_domain,
+)
 from .strict_json import canonical_bytes, loads as strict_loads
 
 
@@ -17,6 +21,13 @@ _RAW_REPLAY_FIELDS = {
     "replay_statement",
     "replay_signature_base64",
     "replay_public_key_pem_base64",
+    "replay_failure_domain",
+}
+
+_VERIFICATION_METHODS = {
+    "tpm2-quote": "tpm2-checkquote-and-eventlog-v1",
+    "nitro-attestation": "nitro-cose-sign1-chain-v1",
+    "sev-snp": "sev-snp-report-signature-v1",
 }
 
 
@@ -28,6 +39,8 @@ def verify_format_evidence(
     host_identity_sha256: str,
     pcrs_sha256: str,
     implementation_sha256: str,
+    normalized_authority_key_sha256: str = "",
+    normalized_failure_domain: dict[str, object] | None = None,
 ) -> dict[str, Any]:
     """Parse format-specific, verifier-normalized hardware evidence.
 
@@ -81,6 +94,9 @@ def verify_format_evidence(
         challenge_sha256=challenge_sha256,
         host_identity_sha256=host_identity_sha256,
         pcrs_sha256=pcrs_sha256,
+        implementation_sha256=implementation_sha256,
+        normalized_authority_key_sha256=normalized_authority_key_sha256,
+        normalized_failure_domain=normalized_failure_domain,
     )
     return value
 
@@ -198,6 +214,9 @@ def _verify_raw_replay(
     challenge_sha256: str,
     host_identity_sha256: str,
     pcrs_sha256: str,
+    implementation_sha256: str,
+    normalized_authority_key_sha256: str,
+    normalized_failure_domain: dict[str, object] | None,
 ) -> None:
     present = set(claims) & _RAW_REPLAY_FIELDS
     required = os.environ.get("PYSEC_REQUIRE_RAW_ATTESTATION_REPLAY", "").strip() == "1"
@@ -224,6 +243,8 @@ def _verify_raw_replay(
     normalized = {
         name: value for name, value in claims.items() if name not in _RAW_REPLAY_FIELDS
     }
+    replay_domain = claims["replay_failure_domain"]
+    method = _VERIFICATION_METHODS[format_name]
     expected_statement = {
         "schema_version": "1.0",
         "format": format_name,
@@ -234,6 +255,26 @@ def _verify_raw_replay(
         "normalized_claims_sha256": hashlib.sha256(
             canonical_bytes(normalized)
         ).hexdigest(),
+        "normalized_authority_key_sha256": normalized_authority_key_sha256,
+        "verification_method": method,
+        "verifier_executable_sha256": implementation_sha256,
+        "verifier_runtime_sha256": str(
+            (claims["replay_statement"] or {}).get("verifier_runtime_sha256")
+        )
+        if isinstance(claims["replay_statement"], dict)
+        else "",
+        "verifier_configuration_sha256": str(
+            (claims["replay_statement"] or {}).get("verifier_configuration_sha256")
+        )
+        if isinstance(claims["replay_statement"], dict)
+        else "",
+        "verification_transcript_sha256": str(
+            (claims["replay_statement"] or {}).get("verification_transcript_sha256")
+        )
+        if isinstance(claims["replay_statement"], dict)
+        else "",
+        "trust_root_sha256": str(normalized.get("trust_root_sha256") or ""),
+        "failure_domain": replay_domain,
         "signature_verified": True,
         "certificate_chain_verified": True,
         "revocation_checked": True,
@@ -243,10 +284,31 @@ def _verify_raw_replay(
         or claims["raw_evidence_sha256"] != expected_statement["raw_evidence_sha256"]
         or claims["replay_statement"] != expected_statement
         or not _digest(replay_key)
+        or not _digest(normalized_authority_key_sha256)
+        or replay_key == normalized_authority_key_sha256
         or hashlib.sha256(public_bytes).hexdigest() != replay_key
         or not isinstance(public, Ed25519PublicKey)
+        or any(
+            not _digest(str(expected_statement[name]))
+            for name in (
+                "verifier_executable_sha256",
+                "verifier_runtime_sha256",
+                "verifier_configuration_sha256",
+                "verification_transcript_sha256",
+                "trust_root_sha256",
+            )
+        )
+        or normalized_failure_domain is None
     ):
         raise ValueError("raw attestation replay binding is invalid")
+    require_independent_failure_domains(
+        normalized_failure_domain,
+        replay_domain,
+        labels=("normalized attestation authority", "raw replay verifier"),
+    )
+    verify_registered_failure_domain(
+        replay_domain, replay_key, "raw attestation replay verifier"
+    )
     try:
         public.verify(signature, canonical_bytes(expected_statement))
     except Exception as exc:

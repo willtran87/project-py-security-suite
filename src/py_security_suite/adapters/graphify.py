@@ -1,16 +1,15 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import re
 from collections import Counter
 from pathlib import Path
 from typing import Any
 
 from ..models import Finding, normalize_repo_path
+from ..strict_json import loads as strict_json_loads
 from .file_output import JsonFileScannerAdapter
 from .staging import maintained_files
-
 
 _LINE = re.compile(r"(?:^|:)L(?P<line>\d+)(?:$|[-:])")
 _MAX_NODES = 250_000
@@ -57,7 +56,7 @@ class GraphifyAdapter(JsonFileScannerAdapter):
 
 
 def _normalized_document(payload: str, target: Path) -> dict[str, Any]:
-    document = json.loads(payload)
+    document = strict_json_loads(payload)
     if not isinstance(document, dict):
         raise TypeError("Graphify output must be an object")
     nodes = _list(document, "nodes", _MAX_NODES)

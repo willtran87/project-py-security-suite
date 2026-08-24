@@ -1132,12 +1132,16 @@ Every JSON input must bind the same report checksum seal. The manifest is still
 non-authoritative; the admission controller verifies and approves it.
 Set `PYSEC_REQUIRE_HARDENED_RELEASE_EVIDENCE=1` in that controller to require
 authenticated, complete ClusterFuzzLite, GitHub-attestation, in-toto,
-reproducible-build, and surface-inventory records. Reproducibility must be a
-byte-for-byte match, and surface evidence must carry the independent v4
-denominator features. The pinned `Release artifact assurance` workflow builds
-twice from one source epoch, compares exact bytes, exercises the wheel against a
-hash-locked offline wheelhouse, and issues GitHub build-provenance attestations
-for the exact retained release subjects.
+OCI-image, YARA, ClamAV, check-manifest, reproducible-build, surface-inventory,
+release-readiness, passport-verification, and promotion-plan records.
+Reproducibility must be a byte-for-byte match, and surface evidence must carry
+the structured independent v4 reconciliation proof. The pinned `Release
+artifact assurance` workflow builds on two independent runners from the commit
+epoch, separately attests both outputs, compares exact bytes, and exercises the
+retained wheel against a hash-locked offline wheelhouse. The manual `Closed
+release evidence admission` workflow downloads an externally assembled closed
+evidence artifact and verifies its independently approved manifest digest and
+all hardened evidence classes before emitting an admission receipt.
 
 Before release promotion, sign every distribution into a separate provenance
 directory:

@@ -1,10 +1,18 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
-from ..models import Citation, Confidence, Finding, Location, Severity, Source
-from ..models import finding_identity, normalize_repo_path
+from ..models import (
+    Citation,
+    Confidence,
+    Finding,
+    Location,
+    Severity,
+    Source,
+    finding_identity,
+    normalize_repo_path,
+)
+from ..strict_json import loads as strict_json_loads
 from .base import ScannerAdapter
 from .common import map_severity
 from .staging import maintained_files
@@ -55,7 +63,7 @@ class PyrightAdapter(ScannerAdapter):
         return command
 
     def parse(self, payload: str, target: Path) -> list[Finding]:
-        document = json.loads(payload)
+        document = strict_json_loads(payload)
         if not isinstance(document, dict):
             raise TypeError("Pyright output must be an object")
         diagnostics = document.get("generalDiagnostics", [])

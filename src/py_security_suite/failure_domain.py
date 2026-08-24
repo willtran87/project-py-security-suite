@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import os
+import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -94,8 +95,26 @@ def verify_registered_failure_domain(
     ):
         raise ValueError("failure-domain registry is invalid")
     matches = []
+    for item, registered in _registry_authorities(document["authorities"]):
+        if item["authority_key_sha256"] == authority_key_sha256:
+            matches.append((item, registered))
+    if (
+        len(matches) != 1
+        or matches[0][0]["status"] != "active"
+        or matches[0][1] != domain
+    ):
+        raise ValueError(f"{label} failure domain is not actively registered")
+    return domain
+
+
+def _registry_authorities(
+    authorities: object,
+) -> list[tuple[dict[str, object], dict[str, str]]]:
+    if not isinstance(authorities, list):
+        raise ValueError("failure-domain registry authorities are invalid")
+    records: list[tuple[dict[str, object], dict[str, str]]] = []
     seen: set[str] = set()
-    for item in document["authorities"]:
+    for item in authorities:
         if (
             not isinstance(item, dict)
             or set(item)
@@ -119,15 +138,8 @@ def verify_registered_failure_domain(
             != registered["implementation_sha256"]
         ):
             raise ValueError("registered implementation artifact is detached")
-        if item["authority_key_sha256"] == authority_key_sha256:
-            matches.append((item, registered))
-    if (
-        len(matches) != 1
-        or matches[0][0]["status"] != "active"
-        or matches[0][1] != domain
-    ):
-        raise ValueError(f"{label} failure domain is not actively registered")
-    return domain
+        records.append((item, registered))
+    return records
 
 
 def _verify_fresh_registry(document: dict[str, object]) -> dict[str, object]:
@@ -154,8 +166,9 @@ def _verify_fresh_registry(document: dict[str, object]) -> dict[str, object]:
     now = datetime.now(UTC)
     if issued > now or expires <= now or expires <= issued:
         raise ValueError("failure-domain registry is expired or not yet valid")
-    _verify_registry_signatures(signed, signatures)
-    _verify_transparency(signed, document["transparency"])
+    registry_signers = _verify_registry_signatures(signed, signatures)
+    _registry_authorities(signed["authorities"])
+    _verify_transparency(signed, document["transparency"], registry_signers)
     return {
         "schema_version": "1.0",
         "generation": signed["generation"],
@@ -165,7 +178,7 @@ def _verify_fresh_registry(document: dict[str, object]) -> dict[str, object]:
 
 def _verify_registry_signatures(
     signed: dict[str, object], signatures: list[object]
-) -> None:
+) -> set[str]:
     raw_keys = os.environ.get(
         "PYSEC_FAILURE_DOMAIN_REGISTRY_ROOT_KEYS_JSON", ""
     ).strip()
@@ -221,13 +234,24 @@ def _verify_registry_signatures(
         verified.add(str(item["key_sha256"]))
     if len(verified) < threshold:
         raise ValueError("failure-domain registry signature threshold is not met")
+    return verified
 
 
-def _verify_transparency(signed: dict[str, object], value: object) -> None:
+def _verify_transparency(
+    signed: dict[str, object], value: object, registry_signers: set[str]
+) -> None:
     if (
         not isinstance(value, dict)
         or set(value)
-        != {"log_id", "log_index", "tree_size", "audit_path", "root_sha256"}
+        != {
+            "log_id",
+            "log_index",
+            "tree_size",
+            "audit_path",
+            "root_sha256",
+            "checkpoint",
+            "consistency_path",
+        }
         or not str(value.get("log_id") or "").strip()
         or isinstance(value.get("log_index"), bool)
         or not isinstance(value.get("log_index"), int)
@@ -239,6 +263,7 @@ def _verify_transparency(signed: dict[str, object], value: object) -> None:
         or not isinstance(value.get("audit_path"), list)
         or any(not _digest(str(item)) for item in value["audit_path"])
         or len(value["audit_path"]) > 64
+        or not _proof(value.get("consistency_path"))
         or not _digest(str(value.get("root_sha256") or ""))
     ):
         raise ValueError("failure-domain registry transparency proof is invalid")
@@ -265,6 +290,221 @@ def _verify_transparency(signed: dict[str, object], value: object) -> None:
         last //= 2
     if last != 0 or index != 0 or node.hex() != expected:
         raise ValueError("failure-domain registry transparency inclusion proof failed")
+    checkpoint = value["checkpoint"]
+    if not isinstance(checkpoint, dict) or set(checkpoint) != {
+        "signed",
+        "signatures",
+    }:
+        raise ValueError("failure-domain registry log checkpoint is invalid")
+    checkpoint_subject = checkpoint["signed"]
+    if (
+        not isinstance(checkpoint_subject, dict)
+        or set(checkpoint_subject)
+        != {
+            "schema_version",
+            "log_id",
+            "tree_size",
+            "root_sha256",
+            "generation",
+            "previous_tree_size",
+            "previous_root_sha256",
+        }
+        or checkpoint_subject.get("schema_version") != "1.0"
+        or checkpoint_subject.get("log_id") != value["log_id"]
+        or checkpoint_subject.get("tree_size") != value["tree_size"]
+        or checkpoint_subject.get("root_sha256") != expected
+        or checkpoint_subject.get("generation") != signed["generation"]
+    ):
+        raise ValueError("failure-domain registry log checkpoint is detached")
+    _verify_log_witnesses(
+        checkpoint_subject, checkpoint["signatures"], registry_signers
+    )
+    state_path = os.environ.get("PYSEC_FAILURE_DOMAIN_REGISTRY_STATE_PATH", "").strip()
+    if not state_path:
+        raise ValueError("failure-domain registry durable checkpoint state is required")
+    state = _checkpoint_state(Path(state_path), str(value["log_id"]))
+    current = (
+        int(value["tree_size"]),
+        expected,
+        int(str(signed["generation"])),
+    )
+    if state == current:
+        return
+    previous_size, previous_root, previous_generation = state
+    if (
+        checkpoint_subject["previous_tree_size"] != previous_size
+        or checkpoint_subject["previous_root_sha256"] != previous_root
+        or current[2] <= previous_generation
+        or not _verify_consistency(
+            previous_size,
+            current[0],
+            previous_root,
+            current[1],
+            [str(item) for item in value["consistency_path"]],
+        )
+    ):
+        raise ValueError("failure-domain registry checkpoint consistency failed")
+    _advance_checkpoint_state(
+        Path(state_path),
+        str(value["log_id"]),
+        expected=state,
+        current=current,
+    )
+
+
+def _verify_log_witnesses(
+    subject: dict[str, object], signatures: object, registry_signers: set[str]
+) -> None:
+    raw_keys = os.environ.get("PYSEC_FAILURE_DOMAIN_LOG_WITNESS_KEYS_JSON", "").strip()
+    try:
+        records = strict_loads(raw_keys)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("failure-domain log witness keys are invalid") from exc
+    if not isinstance(records, list) or not 2 <= len(records) <= 16:
+        raise ValueError("failure-domain log witness quorum is unavailable")
+    keys: dict[str, Ed25519PublicKey] = {}
+    for item in records:
+        if not isinstance(item, dict) or set(item) != {
+            "key_sha256",
+            "public_key_pem_base64",
+        }:
+            raise ValueError("failure-domain log witness key is invalid")
+        try:
+            public_bytes = base64.b64decode(
+                str(item["public_key_pem_base64"]), validate=True
+            )
+            public = serialization.load_pem_public_key(public_bytes)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("failure-domain log witness key is invalid") from exc
+        digest = hashlib.sha256(public_bytes).hexdigest()
+        if (
+            digest != item.get("key_sha256")
+            or digest in keys
+            or digest in registry_signers
+            or not isinstance(public, Ed25519PublicKey)
+        ):
+            raise ValueError("failure-domain log witness independence is invalid")
+        keys[digest] = public
+    threshold = _positive_environment("PYSEC_FAILURE_DOMAIN_LOG_WITNESS_THRESHOLD", 2)
+    if threshold > len(keys) or not isinstance(signatures, list):
+        raise ValueError("failure-domain log witness threshold is unavailable")
+    verified: set[str] = set()
+    payload = canonical_bytes(subject)
+    for item in signatures:
+        if (
+            not isinstance(item, dict)
+            or set(item) != {"key_sha256", "signature_base64"}
+            or item.get("key_sha256") not in keys
+            or item["key_sha256"] in verified
+        ):
+            raise ValueError("failure-domain log witness signature is invalid")
+        try:
+            signature = base64.b64decode(str(item["signature_base64"]), validate=True)
+            keys[str(item["key_sha256"])].verify(signature, payload)
+        except Exception as exc:
+            raise ValueError("failure-domain log witness signature is invalid") from exc
+        verified.add(str(item["key_sha256"]))
+    if len(verified) < threshold:
+        raise ValueError("failure-domain log witness threshold is not met")
+
+
+def _checkpoint_state(path: Path, log_id: str) -> tuple[int, str, int]:
+    if path.is_symlink():
+        raise ValueError("failure-domain registry state must not be a symbolic link")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    connection = sqlite3.connect(path, timeout=30, isolation_level=None)
+    try:
+        connection.execute("PRAGMA journal_mode=WAL")
+        connection.execute("PRAGMA synchronous=FULL")
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS checkpoint "
+            "(log_id TEXT PRIMARY KEY, size INTEGER NOT NULL, root TEXT NOT NULL, "
+            "generation INTEGER NOT NULL)"
+        )
+        row = connection.execute(
+            "SELECT size, root, generation FROM checkpoint WHERE log_id=?", (log_id,)
+        ).fetchone()
+        return (0, "", 0) if row is None else (int(row[0]), str(row[1]), int(row[2]))
+    finally:
+        connection.close()
+
+
+def _advance_checkpoint_state(
+    path: Path,
+    log_id: str,
+    *,
+    expected: tuple[int, str, int],
+    current: tuple[int, str, int],
+) -> None:
+    connection = sqlite3.connect(path, timeout=30, isolation_level=None)
+    try:
+        connection.execute("PRAGMA synchronous=FULL")
+        connection.execute("BEGIN IMMEDIATE")
+        row = connection.execute(
+            "SELECT size, root, generation FROM checkpoint WHERE log_id=?", (log_id,)
+        ).fetchone()
+        observed = (
+            (0, "", 0) if row is None else (int(row[0]), str(row[1]), int(row[2]))
+        )
+        if observed != expected:
+            connection.execute("ROLLBACK")
+            raise ValueError("failure-domain registry state advanced concurrently")
+        connection.execute(
+            "INSERT INTO checkpoint(log_id, size, root, generation) VALUES (?, ?, ?, ?) "
+            "ON CONFLICT(log_id) DO UPDATE SET size=excluded.size, "
+            "root=excluded.root, generation=excluded.generation",
+            (log_id, *current),
+        )
+        connection.execute("COMMIT")
+    finally:
+        connection.close()
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
+
+
+def _verify_consistency(
+    old_size: int, new_size: int, old_root: str, new_root: str, proof: list[str]
+) -> bool:
+    if old_size == 0:
+        return not proof
+    if old_size == new_size:
+        return old_root == new_root and not proof
+    if not 0 < old_size < new_size or not proof:
+        return False
+    first, *remaining = [bytes.fromhex(item) for item in proof]
+    old_index, new_index = old_size - 1, new_size - 1
+    while old_index & 1:
+        old_index >>= 1
+        new_index >>= 1
+    if old_index == 0:
+        old_hash = new_hash = bytes.fromhex(old_root)
+        remaining = [first, *remaining]
+    else:
+        old_hash = new_hash = first
+    for sibling in remaining:
+        if new_index == 0:
+            return False
+        if old_index & 1 or old_index == new_index:
+            old_hash = hashlib.sha256(b"\x01" + sibling + old_hash).digest()
+            new_hash = hashlib.sha256(b"\x01" + sibling + new_hash).digest()
+            while old_index and not old_index & 1:
+                old_index >>= 1
+                new_index >>= 1
+        elif old_index < new_index:
+            new_hash = hashlib.sha256(b"\x01" + new_hash + sibling).digest()
+        old_index >>= 1
+        new_index >>= 1
+    return new_index == 0 and old_hash.hex() == old_root and new_hash.hex() == new_root
+
+
+def _proof(value: object) -> bool:
+    return (
+        isinstance(value, list)
+        and len(value) <= 256
+        and all(isinstance(item, str) and _digest(item) for item in value)
+    )
 
 
 def _timestamp(value: object, label: str) -> datetime:

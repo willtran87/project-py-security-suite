@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
 from ..execution import CommandEnvironment
 from ..models import Finding
+from ..strict_json import loads as strict_json_loads
 from .artifacts import (
     artifact_manifest,
     configured_path,
@@ -69,7 +69,7 @@ class SyftAdapter(ScannerAdapter):
 
 
 def _document(payload: str) -> dict[str, Any]:
-    value = json.loads(payload)
+    value = strict_json_loads(payload)
     if not isinstance(value, dict):
         raise TypeError("Syft output must be an object")
     return value

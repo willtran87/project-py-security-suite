@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from ..models import (
@@ -13,6 +12,7 @@ from ..models import (
     finding_identity,
     normalize_repo_path,
 )
+from ..strict_json import loads as strict_json_loads
 from .base import ScannerAdapter
 
 
@@ -60,7 +60,7 @@ class ActionlintAdapter(ScannerAdapter):
         ]
 
     def parse(self, payload: str, target: Path) -> list[Finding]:
-        results = json.loads(payload or "[]")
+        results = strict_json_loads(payload or "[]")
         if not isinstance(results, list):
             raise TypeError("actionlint output must be a JSON list")
         findings: list[Finding] = []

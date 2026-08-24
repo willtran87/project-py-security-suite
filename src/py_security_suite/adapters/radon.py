@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +13,7 @@ from ..models import (
     finding_identity,
     normalize_repo_path,
 )
+from ..strict_json import loads as strict_json_loads
 from .base import ScannerAdapter
 from .staging import maintained_files
 
@@ -41,7 +41,7 @@ class RadonAdapter(ScannerAdapter):
         ]
 
     def parse(self, payload: str, target: Path) -> list[Finding]:
-        document = json.loads(payload)
+        document = strict_json_loads(payload)
         if not isinstance(document, dict):
             raise TypeError("Radon JSON output must be an object")
         findings: list[Finding] = []
@@ -121,7 +121,7 @@ class RadonAdapter(ScannerAdapter):
             "radon-complexity.json": {
                 "schema_version": "1.0",
                 "minimum_reported_rank": "C",
-                "files": json.loads(payload),
+                "files": strict_json_loads(payload),
             }
         }
 

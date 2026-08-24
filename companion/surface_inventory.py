@@ -87,6 +87,7 @@ def reconcile(path: Path) -> dict[str, Any]:
     signer_ids: set[str] = set()
     organizations: set[str] = set()
     source_digests: set[str] = set()
+    source_proofs: list[dict[str, object]] = []
     observed: dict[str, list[dict[str, str]]] = {}
     for source in sources:
         value = _object(source, "observed source")
@@ -223,6 +224,29 @@ def reconcile(path: Path) -> dict[str, Any]:
             and len(source_records) != value["server_total_records"]
         ):
             raise ValueError("surface inventory server total does not match records")
+        if version == "4.0":
+            source_proofs.append(
+                {
+                    "kind": kind,
+                    "snapshot_sha256": digest,
+                    "collector_id": authority["collector_id"],
+                    "collector_signer_id": authority["signer_id"],
+                    "collector_organization": value["collector_organization"],
+                    "adapter_sha256": value["adapter_sha256"],
+                    "endpoint_identity_sha256": value["endpoint_identity_sha256"],
+                    "query_sha256": value["query_sha256"],
+                    "pages_expected": value["pages_expected"],
+                    "pages_observed": value["pages_observed"],
+                    "page_receipts_sha256": value["page_receipts_sha256"],
+                    "server_total_records": value["server_total_records"],
+                    "records_observed": len(source_records),
+                    "liveness_probes": value["liveness_probes"],
+                    "server_collector_id": server["collector_id"],
+                    "server_signer_id": server["signer_id"],
+                    "server_organization": server["organization"],
+                    "collected_at": value["collected_at"],
+                }
+            )
         for record in source_records:
             observed.setdefault(record["id"], []).append(record)
     declared_by_id = {record["id"]: record for record in declared}
@@ -331,6 +355,21 @@ def reconcile(path: Path) -> dict[str, Any]:
             ]
         )
     if version == "4.0":
+        if trusted_time is None:  # Defensive invariant for type narrowing.
+            raise ValueError("surface trusted time verification is unavailable")
+        proof_subject = {
+            "schema_version": "1.0",
+            "declared_sha256": root["declared_sha256"],
+            "history_sha256": root["history_sha256"],
+            "trusted_time_sha256": trusted_time["trusted_time_sha256"],
+            "sources": sorted(source_proofs, key=lambda item: str(item["kind"])),
+        }
+        result["execution"]["surface_proof"] = {
+            **proof_subject,
+            "proof_sha256": hashlib.sha256(
+                strict_dumps(proof_subject).encode("utf-8")
+            ).hexdigest(),
+        }
         result["execution"]["features"].extend(
             [
                 "server-signed-page-chain",

@@ -1,10 +1,18 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
-from ..models import Citation, Confidence, Finding, Location, Severity, Source
-from ..models import finding_identity, normalize_repo_path
+from ..models import (
+    Citation,
+    Confidence,
+    Finding,
+    Location,
+    Severity,
+    Source,
+    finding_identity,
+    normalize_repo_path,
+)
+from ..strict_json import loads as strict_json_loads
 from .base import ScannerAdapter
 from .common import map_severity
 from .staging import maintained_repository_files
@@ -48,7 +56,7 @@ class ShellCheckAdapter(ScannerAdapter):
         ]
 
     def parse(self, payload: str, target: Path) -> list[Finding]:
-        results = json.loads(payload or "[]")
+        results = strict_json_loads(payload or "[]")
         if not isinstance(results, list):
             raise TypeError("ShellCheck output must be a list")
         findings: list[Finding] = []

@@ -1,18 +1,25 @@
 from __future__ import annotations
 
-import json
 import hashlib
 from pathlib import Path
 from typing import Any
 
 from ..execution import CommandEnvironment
-from ..models import Citation, Confidence, Finding, Location, Severity, Source
-from ..models import finding_identity, normalize_repo_path
-from ..strict_json import canonical_bytes
+from ..models import (
+    Citation,
+    Confidence,
+    Finding,
+    Location,
+    Severity,
+    Source,
+    finding_identity,
+    normalize_repo_path,
+)
 from ..native_evidence import protect_native_report
+from ..strict_json import canonical_bytes
+from ..strict_json import loads as strict_json_loads
 from .base import ScannerAdapter
 from .staging import maintained_repository_files
-
 
 _IAC_NAMES = {
     "dockerfile",
@@ -131,7 +138,7 @@ class CheckovAdapter(ScannerAdapter):
 def _reports(payload: str) -> list[dict[str, Any]]:
     if not payload.strip():
         raise ValueError("Checkov emitted an empty report")
-    document = json.loads(payload)
+    document = strict_json_loads(payload)
     raw_reports = document if isinstance(document, list) else [document]
     if not raw_reports:
         raise ValueError("Checkov report list must not be empty")

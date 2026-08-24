@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from .actionlint import ActionlintAdapter
 from .assurance_evidence import (
-    AtherisAdapter,
     AiSecurityAdapter,
+    AtherisAdapter,
     AuthorizationSecurityAdapter,
     BrowserSecurityAdapter,
     CheckManifestAdapter,
@@ -26,13 +26,13 @@ from .assurance_evidence import (
     OastAdapter,
     OciImageAdapter,
     PolyglotAdapter,
-    ProwlerAdapter,
     ProtocolSecurityAdapter,
+    ProwlerAdapter,
     PyTmAdapter,
     RaspAdapter,
     ReproducibleBuildAdapter,
-    RulesetRegressionAdapter,
     RestlerAdapter,
+    RulesetRegressionAdapter,
     SecretVerificationAdapter,
     SurfaceInventoryAdapter,
     TlsScanAdapter,
@@ -40,14 +40,14 @@ from .assurance_evidence import (
     ZapAdapter,
 )
 from .bandit import BanditAdapter
-from .codeql import CodeQlAdapter
 from .checkov import CheckovAdapter
+from .codeql import CodeQlAdapter
 from .cosign import CosignAdapter
 from .cyclonedx import CycloneDxAdapter
-from .detect_secrets import DetectSecretsAdapter
 from .deptry import DeptryAdapter
-from .diff_cover import DiffCoverAdapter
+from .detect_secrets import DetectSecretsAdapter
 from .devskim import DevSkimAdapter
+from .diff_cover import DiffCoverAdapter
 from .flawfinder import FlawfinderAdapter
 from .gitleaks import GitleaksAdapter
 from .graphify import GraphifyAdapter
@@ -56,29 +56,29 @@ from .guarddog import GuardDogAdapter
 from .hadolint import HadolintAdapter
 from .mypy import MypyAdapter
 from .osv import OsvScannerAdapter
-from .pylint import PylintAdapter
-from .pysa import PysaAdapter
-from .psscriptanalyzer import PSScriptAnalyzerAdapter
-from .pyright import PyrightAdapter
-from .pypi_attestations import PyPiAttestationsAdapter
 from .portfolio import (
     ConftestAdapter,
     GitSizerAdapter,
     KicsAdapter,
     KubeLinterAdapter,
     PipdeptreeAdapter,
-    ValidatePyprojectAdapter,
     ValeAdapter,
+    ValidatePyprojectAdapter,
 )
-from .ruff import RuffAdapter
-from .ruff_quality import RuffQualityAdapter
-from .ruff_format import RuffFormatAdapter
+from .psscriptanalyzer import PSScriptAnalyzerAdapter
+from .pylint import PylintAdapter
+from .pypi_attestations import PyPiAttestationsAdapter
+from .pyright import PyrightAdapter
+from .pysa import PysaAdapter
 from .radon import RadonAdapter
 from .reachability import ReachabilityAdapter
 from .reuse import ReuseAdapter
+from .ruff import RuffAdapter
+from .ruff_format import RuffFormatAdapter
+from .ruff_quality import RuffQualityAdapter
 from .scancode import ScanCodeAdapter
-from .semgrep import SemgrepAdapter
 from .scorecard import ScorecardAdapter
+from .semgrep import SemgrepAdapter
 from .shellcheck import ShellCheckAdapter
 from .syft import SyftAdapter
 from .tach import TachAdapter

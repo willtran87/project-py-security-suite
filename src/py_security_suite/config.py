@@ -14,7 +14,11 @@ from urllib.parse import urlsplit
 
 from .models import Severity
 from .path_safety import read_regular_file
-from .trust_policy import capture_trust_environment, snapshot_trust_policy
+from .trust_policy import (
+    activated_trust_environment,
+    capture_trust_environment,
+    snapshot_trust_policy,
+)
 from .organization_policy_attestation import validate_organization_policy_attestation
 
 
@@ -2343,6 +2347,23 @@ def load_config(
     repository_config: Path | None = None,
     profile_override: str | None = None,
 ) -> SuiteConfig:
+    trust_environment = capture_trust_environment()
+    with activated_trust_environment(trust_environment):
+        return _load_config_active(
+            organization_policy=organization_policy,
+            repository_config=repository_config,
+            profile_override=profile_override,
+            trust_environment=trust_environment,
+        )
+
+
+def _load_config_active(
+    *,
+    organization_policy: Path | None,
+    repository_config: Path | None,
+    profile_override: str | None,
+    trust_environment: Mapping[str, str],
+) -> SuiteConfig:
     defaults = _default_mapping()
     policy_digest = os.environ.get("PYSEC_ORGANIZATION_POLICY_SHA256", "").casefold()
     _validate_digest("organization policy", "SHA-256", policy_digest)
@@ -2396,7 +2417,7 @@ def load_config(
             config.organization_policy_attestation_validated = True
         except (OSError, TypeError, ValueError, UnicodeError) as exc:
             raise ConfigurationError(str(exc)) from exc
-    config.trust_environment = capture_trust_environment()
+    config.trust_environment = dict(trust_environment)
     if config.profile in {"production", "release"}:
         config.trust_environment["PYSEC_GOVERNANCE_REPLAY_REQUIRE_REMOTE"] = "true"
     config.trust_policy_sha256 = snapshot_trust_policy(config.trust_environment)[

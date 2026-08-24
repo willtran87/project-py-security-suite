@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import math
 import re
 from pathlib import Path
@@ -18,8 +17,8 @@ from ..models import (
     normalize_repo_path,
 )
 from ..source_context import is_secret_bearing_scan, redact_sensitive_text
+from ..strict_json import loads as strict_json_loads
 from .common import map_confidence, map_severity, string_list
-
 
 _MAX_RESULT_LOCATIONS = 25
 _MAX_MESSAGE_ARGUMENTS = 100
@@ -67,7 +66,7 @@ def parse_sarif_findings(
     default_impact: str,
     default_remediation: str,
 ) -> list[Finding]:
-    document = json.loads(payload)
+    document = strict_json_loads(payload)
     findings: list[Finding] = []
     for run in _object_list(document.get("runs", []), "runs"):
         tool = _object(run.get("tool"))

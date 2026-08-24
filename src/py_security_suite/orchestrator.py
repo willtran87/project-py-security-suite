@@ -58,11 +58,33 @@ from .semantic_coverage import semantic_language_coverage_artifact
 from .requirements_coverage import security_requirements_coverage_artifact
 from .structural_synthesis import build_structural_synthesis
 from .trust_catalog import apply_trust_catalog
-from .trust_policy import snapshot_trust_policy
+from .trust_policy import activated_trust_environment, snapshot_trust_policy
 from .trust_attestation import validate_trust_policy_attestation
 
 
 def scan_project(
+    *,
+    target: Path,
+    output: Path,
+    config: SuiteConfig,
+    network_isolation_attested: bool,
+    diagnostic_without_isolation: bool = False,
+    adapter_types: Mapping[str, type[ScannerAdapter]] | None = None,
+    replace_existing: bool = False,
+) -> ScanResult:
+    with activated_trust_environment(config.trust_environment):
+        return _scan_project_active(
+            target=target,
+            output=output,
+            config=config,
+            network_isolation_attested=network_isolation_attested,
+            diagnostic_without_isolation=diagnostic_without_isolation,
+            adapter_types=adapter_types,
+            replace_existing=replace_existing,
+        )
+
+
+def _scan_project_active(
     *,
     target: Path,
     output: Path,

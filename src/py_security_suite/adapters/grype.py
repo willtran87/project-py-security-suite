@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import sqlite3
 import tempfile
 from contextlib import closing
@@ -17,6 +16,7 @@ from ..models import (
     finding_identity,
     normalize_repo_path,
 )
+from ..strict_json import loads as strict_json_loads
 from .artifacts import (
     configured_path,
     distribution_files,
@@ -85,7 +85,7 @@ class GrypeAdapter(ScannerAdapter):
                 self._scan_root = None
 
     def parse(self, payload: str, target: Path) -> list[Finding]:
-        document = json.loads(payload)
+        document = strict_json_loads(payload)
         matches = document.get("matches") or []
         if not isinstance(matches, list):
             raise TypeError("Grype matches must be a list")

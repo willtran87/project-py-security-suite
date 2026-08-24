@@ -408,7 +408,10 @@ floor. `PYSEC_REQUIRE_RAW_ATTESTATION_REPLAY=1` additionally requires the exact
 raw evidence bytes, their digest, normalized-claims digest, and a separately
 signed format-specific replay statement. The replay authority is deployment
 pinned with `PYSEC_RAW_ATTESTATION_REPLAY_KEY_SHA256` and must be distinct from
-the normalized-evidence authority. Deployments can require
+the normalized-evidence authority by both key and registered failure domain;
+the statement also binds the format-native verification method and exact
+verifier executable, runtime, configuration, transcript, and trust-root
+digests. Deployments can require
 `PYSEC_FAILURE_DOMAIN_REGISTRY_{PATH,SHA256}` and
 `PYSEC_REQUIRE_REGISTERED_FAILURE_DOMAINS=1`; the pinned registry maps active
 authority keys to organization, host, control-plane, and measured
@@ -416,13 +419,16 @@ implementation identities and rejects revoked identities.
 Fresh registry mode (`PYSEC_REQUIRE_FRESH_FAILURE_DOMAIN_REGISTRY=1`) accepts
 only v2 registries with an issued/expiry window, generation floor, threshold
 Ed25519 signatures from deployment-pinned roots, and a Merkle inclusion proof
-against `PYSEC_FAILURE_DOMAIN_LOG_ROOT_SHA256`.
+against `PYSEC_FAILURE_DOMAIN_LOG_ROOT_SHA256`. Witness-quorum checkpoint
+signatures, RFC 6962 consistency proofs, and a durable SQLite state path prevent
+equivocation, forks, and rollback between scans.
 
 Deployments can set `PYSEC_REQUIRE_EXPLICIT_TRUST_POLICY=1` and provide one
 digest- and key-pinned signed policy through `PYSEC_EXPLICIT_TRUST_POLICY_*`.
-The policy is generation-bounded and expiring, rejects unsupported variables,
-rejects unsigned ambient trust settings and conflicts, and supplies the exact
-trust environment used by later verifiers.
+The v2 policy is threshold-signed, generation-bounded, predecessor-chained, and
+expiring against trusted scan time. It rejects unsupported variables, unsigned
+ambient trust settings, and conflicts, persists fork-detecting state, and
+activates the exact environment only within the configuration/scan operation.
 
 Encrypted native evidence requires an authority-signed hardware-KMS envelope
 receipt binding the exact scan challenge and command request, plaintext object

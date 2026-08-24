@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +13,7 @@ from ..models import (
     finding_identity,
     normalize_repo_path,
 )
+from ..strict_json import loads as strict_json_loads
 from .base import ScannerAdapter
 
 
@@ -35,7 +35,7 @@ class ReuseAdapter(ScannerAdapter):
         return [executable, "lint", "--json"]
 
     def parse(self, payload: str, target: Path) -> list[Finding]:
-        document = json.loads(payload)
+        document = strict_json_loads(payload)
         if not isinstance(document, dict):
             raise TypeError("REUSE JSON output must be an object")
         findings: list[Finding] = []
@@ -93,7 +93,7 @@ class ReuseAdapter(ScannerAdapter):
         return findings
 
     def derived_artifacts(self, payload: str, target: Path) -> dict[str, Any]:
-        return {"reuse-compliance.json": json.loads(payload)}
+        return {"reuse-compliance.json": strict_json_loads(payload)}
 
 
 def _issues(document: dict[str, Any]) -> list[tuple[str, dict[str, str]]]:

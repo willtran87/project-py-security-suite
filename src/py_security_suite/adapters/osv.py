@@ -1,14 +1,11 @@
 from __future__ import annotations
 
-import json
 import hashlib
 import re
 from pathlib import Path
 from typing import Any
 
 from ..execution import CommandEnvironment
-from ..path_safety import read_regular_file
-from ..strict_json import canonical_bytes
 from ..models import (
     Citation,
     Confidence,
@@ -19,9 +16,11 @@ from ..models import (
     finding_identity,
     normalize_repo_path,
 )
+from ..path_safety import read_regular_file
+from ..strict_json import canonical_bytes
+from ..strict_json import loads as strict_json_loads
 from .base import ScannerAdapter
 from .common import database_freshness_error, map_severity
-
 
 _ADVISORY_IDENTIFIER = re.compile(r"^(?:CVE|GHSA|OSV|PYSEC)-[A-Z0-9._-]+$")
 
@@ -74,7 +73,7 @@ class OsvScannerAdapter(ScannerAdapter):
         ]
 
     def parse(self, payload: str, target: Path) -> list[Finding]:
-        document = json.loads(payload)
+        document = strict_json_loads(payload)
         results = document.get("results") or []
         if not isinstance(results, list):
             raise TypeError("results must be a list")
@@ -94,7 +93,7 @@ class OsvScannerAdapter(ScannerAdapter):
 
     def derived_artifacts(self, payload: str, target: Path) -> dict[str, Any]:
         """Retain source records emitted by OSV instead of inferring scan scope."""
-        document = json.loads(payload)
+        document = strict_json_loads(payload)
         results = document.get("results") or []
         if not isinstance(results, list):
             raise TypeError("results must be a list")

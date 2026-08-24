@@ -191,8 +191,24 @@ def test_runtime_trace_must_correlate_to_static_edge(tmp_path: Path) -> None:
         purpose="runtime-independent-observation",
         operation_id="independent-run-1",
     )
-    kernel_events = [
-        {
+    kernel_collection_manifest = {
+        "schema_version": "1.0",
+        "source": "tetragon",
+        "source_boot_id_sha256": "0" * 64,
+        "collector_program_sha256": "1" * 64,
+        "collector_configuration_sha256": "2" * 64,
+        "collector_runtime_sha256": "3" * 64,
+        "sequence_start": 1,
+        "sequence_end": 2,
+        "dropped_events": 0,
+        "clock_source": "kernel-monotonic",
+        "cgroup_scope_sha256": "4" * 64,
+        "pid_namespace_sha256": "5" * 64,
+        "collected_at": observed_at,
+    }
+    kernel_events = []
+    for index, event_type in enumerate(("process-exec", "sink-access"), start=1):
+        kernel_event = {
             "sequence": index,
             "monotonic_ns": index * 10_000,
             "event_type": event_type,
@@ -200,12 +216,22 @@ def test_runtime_trace_must_correlate_to_static_edge(tmp_path: Path) -> None:
             "process_identity_sha256": "7" * 64,
             "resource": "python" if event_type == "process-exec" else "database",
             "outcome": "allowed",
-            "source_event_sha256": hashlib.sha256(
-                f"kernel-event-{index}".encode()
-            ).hexdigest(),
         }
-        for index, event_type in enumerate(("process-exec", "sink-access"), start=1)
-    ]
+        kernel_events.append(
+            {
+                **kernel_event,
+                "source_event_sha256": hashlib.sha256(
+                    canonical_bytes(
+                        {
+                            "source_boot_id_sha256": kernel_collection_manifest[
+                                "source_boot_id_sha256"
+                            ],
+                            **kernel_event,
+                        }
+                    )
+                ).hexdigest(),
+            }
+        )
     kernel_failure_domain = {
         "organization": "kernel-observer-org",
         "host_identity_sha256": "a" * 64,
@@ -219,6 +245,9 @@ def test_runtime_trace_must_correlate_to_static_edge(tmp_path: Path) -> None:
         "kernel_observer_identity_sha256": "f" * 64,
         "kernel_events_sha256": hashlib.sha256(
             canonical_bytes(kernel_events)
+        ).hexdigest(),
+        "kernel_collection_manifest_sha256": hashlib.sha256(
+            canonical_bytes(kernel_collection_manifest)
         ).hexdigest(),
         "failure_domain": kernel_failure_domain,
     }
@@ -263,6 +292,10 @@ def test_runtime_trace_must_correlate_to_static_edge(tmp_path: Path) -> None:
         "independent_authority_key_sha256": independent_key,
         "kernel_events": kernel_events,
         "kernel_events_sha256": kernel_subject["kernel_events_sha256"],
+        "kernel_collection_manifest": kernel_collection_manifest,
+        "kernel_collection_manifest_sha256": kernel_subject[
+            "kernel_collection_manifest_sha256"
+        ],
         "kernel_observer_identity_sha256": "f" * 64,
         "kernel_failure_domain": kernel_failure_domain,
         "kernel_operation_receipt": kernel_receipt,

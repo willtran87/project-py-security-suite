@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import time
 from pathlib import Path
 
@@ -21,6 +20,7 @@ from ..models import (
     finding_identity,
     normalize_repo_path,
 )
+from ..strict_json import loads as strict_json_loads
 from .artifacts import artifact_identity_evidence, configured_path, distribution_files
 from .base import AdapterResult, ScannerAdapter
 
@@ -71,7 +71,7 @@ class PyPiAttestationsAdapter(ScannerAdapter):
 
     def parse(self, payload: str, target: Path) -> list[Finding]:
         if payload.strip():
-            json.loads(payload)
+            strict_json_loads(payload)
         return []
 
     def run(self, target: Path) -> AdapterResult:
