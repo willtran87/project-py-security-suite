@@ -212,7 +212,10 @@ still execute in dynamic or connected companion stages:
    and approval ceilings. Contract schema 3.0 reads every durable postcondition
    through a quorum of separately credentialed, deployment-identified observers
    on distinct network origins. It requires explicit process-restart and replica-
-   failover triggers and verifies their durable invariants through every observer;
+   failover triggers and verifies their durable invariants through every observer.
+   Each observer response is independently Ed25519-signed and binds its pinned
+   host, organization, request, observation ID, state, recovery epoch, and
+   fencing token;
    the quorum identity is deployment-pinned through
    `PYSEC_AUTHORIZATION_ORACLE_QUORUM_SHA256`, and credentials cannot be shared.
    Restart and failover trigger responses must
@@ -298,7 +301,10 @@ assessments must use `artifact-value-replay-v1`, satisfy bounded evidence-age
 rules, and include the policy's minimum positive and negative-control
 assertions; an existence-only check cannot pass. Every assertion also binds a
 retained procedure-execution record containing the pinned command, fixture,
-mutation, exit code, stdout/stderr digests, timestamps, and result digest.
+mutation, argv/environment/runtime/assets/sandbox identities, exit code,
+stdout/stderr digests, timestamps, and result digest. A policy-approved
+execution authority signs the whole record, and mutation operators link
+negative controls to their parent fixture.
 Positive and negative controls must come from distinct executions. Artifact
 names or catalog counts alone cannot establish conformance.
 
@@ -315,17 +321,24 @@ optional deployment-pinned OS sandbox prefix. PE, ELF, and Mach-O analysis
 retains import/symbol and hardening state; WebAssembly analysis validates
 bounded sections and records import, memory-limit/shared-memory, and start
 function controls. Tree-sitter grammars provide AST-bound import and call
-extraction for supported non-Python source. Templates record computed includes and explicit escaping
+extraction for supported non-Python source and retain the exact package version
+and parser-module digest. Governed polyglot admission additionally requires
+separately authorized compiler-frontend evidence, bound to each complete
+language file set, with symbol, CFG, dataflow, and interprocedural accounting.
+Templates record computed includes and explicit escaping
 bypasses, while notebooks and bytecode are parsed without executing target
 code. Git history qualification rejects shallow, partial, promisor, sparse,
 alternate, replace-ref, unreachable, or corrupt stores; it supports and binds
 both SHA-1 and SHA-256 object formats and rechecks the complete ref/object
 ledger after bundle creation and materialization. Production and release
-require SHA-256 Git objects and a good signature from an allowlisted fingerprint
-on every reachable commit.
+require SHA-256 Git objects, a pinned Git verifier and security configuration,
+lifecycle-valid signers from at least two approved organizations, a good
+signature on every reachable commit and tag, and a signed manifest of the full
+ref/object/configuration state.
 
 Encrypted native evidence requires an authority-signed hardware-KMS envelope
-receipt binding the ephemeral plaintext data-key digest, non-exportable
+receipt binding the exact scan challenge and command request, plaintext object
+and ephemeral data-key digests, non-exportable
 wrapping-key and hardware assertions, wrapped-key digest, operation ID, store,
 and retention policy. The signed receipt and its portable authority envelope
 are retained with the ciphertext commitment.

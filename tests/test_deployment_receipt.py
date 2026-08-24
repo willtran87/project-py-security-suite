@@ -10,12 +10,15 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from py_security_suite.deployment_receipt import (
     verify_deployment_receipt,
     verify_portable_receipt,
 )
-from tests.deployment_authority import authority_environment
+from py_security_suite.strict_json import canonical_bytes
+from tests.deployment_authority import authority_environment, operation_receipt
 
 
 def test_portable_receipt_revalidates_without_original_authority_files(
@@ -84,13 +87,58 @@ def test_external_monotonic_state_is_pinned_and_retained(tmp_path: Path) -> None
         purpose="external-state-test",
         prefix=prefix,
     )
+    private = Ed25519PrivateKey.generate()
+    public_bytes = private.public_key().public_bytes(
+        serialization.Encoding.PEM,
+        serialization.PublicFormat.SubjectPublicKeyInfo,
+    )
+    backend_identity = hashlib.sha256(public_bytes).hexdigest()
+    command_context = {
+        "schema_version": "1.0",
+        "executable_sha256": hashlib.sha256(
+            Path(sys.executable).read_bytes()
+        ).hexdigest(),
+        "allowed_endpoints": [],
+        "mtls_identity_sha256": "d" * 64,
+        "sandbox_identity_sha256": "e" * 64,
+    }
+    backend_request = {
+        "schema_version": "1.0",
+        "operation": "compare-and-advance",
+        "purpose": "external-state-test",
+        "generation": 1,
+        "receipt_sha256": environment[f"{prefix}_RECEIPT_SHA256"],
+        "challenge_sha256": "c" * 64,
+        "command_context": command_context,
+    }
+    request_sha256 = hashlib.sha256(canonical_bytes(backend_request)).hexdigest()
+    backend_subject = {
+        "schema_version": "1.0",
+        "operation": "compare-and-advance",
+        "purpose": "external-state-test",
+        "generation": 1,
+        "receipt_sha256": environment[f"{prefix}_RECEIPT_SHA256"],
+        "previous_generation": 0,
+        "previous_receipt_sha256": "",
+        "backend_identity_sha256": backend_identity,
+        "operation_id": "cas-42",
+        "request_sha256": request_sha256,
+    }
+    backend_receipt, _ = operation_receipt(
+        backend_subject,
+        purpose="monotonic-state-compare-and-advance",
+        operation_id="cas-42",
+        private_key=private,
+    )
     backend = tmp_path / "monotonic.py"
     backend.write_text(
         "import base64,json,sys\n"
         "r=json.loads(base64.b64decode(sys.argv[-1]))\n"
         "print(json.dumps({'schema_version':'1.0','accepted':True,"
         "'generation':r['generation'],'receipt_sha256':r['receipt_sha256'],"
-        "'backend_identity_sha256':'b'*64,'operation_id':'cas-42'}))\n",
+        f"'backend_identity_sha256':'{backend_identity}','operation_id':'cas-42',"
+        f"'previous_generation':0,'previous_receipt_sha256':'','backend_receipt':{backend_receipt!r},"
+        "'request_sha256':__import__('hashlib').sha256(__import__('json').dumps(r,separators=(',',':'),sort_keys=True).encode()).hexdigest()}))\n",
         encoding="utf-8",
     )
     environment.update(
@@ -109,6 +157,9 @@ def test_external_monotonic_state_is_pinned_and_retained(tmp_path: Path) -> None
                     }
                 ]
             ),
+            f"{prefix}_STATE_ALLOWED_ENDPOINTS_JSON": "[]",
+            f"{prefix}_STATE_MTLS_IDENTITY_SHA256": "d" * 64,
+            f"{prefix}_STATE_SANDBOX_IDENTITY_SHA256": "e" * 64,
         }
     )
     with patch.dict(os.environ, environment):
@@ -120,7 +171,11 @@ def test_external_monotonic_state_is_pinned_and_retained(tmp_path: Path) -> None
         )
     assert receipt["monotonic_state"] == {
         "mode": "external-command",
-        "backend_identity_sha256": "b" * 64,
+        "backend_identity_sha256": backend_identity,
         "operation_id": "cas-42",
         "generation": receipt["statement"]["generation"],
+        "previous_generation": 0,
+        "previous_receipt_sha256": "",
+        "backend_receipt": backend_receipt,
+        "request_sha256": request_sha256,
     }

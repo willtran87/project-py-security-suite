@@ -164,7 +164,7 @@
           "type": "array", "maxItems": 100,
           "items": {
             "type": "object", "additionalProperties": false,
-            "required": ["statement", "signature_base64", "public_key_pem_base64", "receipt_payload_base64", "receipt_sha256"],
+            "required": ["statement", "signature_base64", "public_key_pem_base64", "receipt_payload_base64", "receipt_sha256", "observer_receipts"],
             "properties": {
               "statement": {
                 "type": "object", "additionalProperties": false,
@@ -195,7 +195,15 @@
               "signature_base64": {"type": "string", "minLength": 1},
               "public_key_pem_base64": {"type": "string", "minLength": 1},
               "receipt_payload_base64": {"type": "string", "minLength": 1},
-              "receipt_sha256": {"$ref": "#/$defs/digest"}
+              "receipt_sha256": {"$ref": "#/$defs/digest"},
+              "observer_receipts": {
+                "type": "object", "additionalProperties": false,
+                "required": ["precondition", "postcondition"],
+                "properties": {
+                  "precondition": {"type": "array", "minItems": 2, "maxItems": 5, "items": {"type": "object"}},
+                  "postcondition": {"type": "array", "minItems": 2, "maxItems": 5, "items": {"type": "object"}}
+                }
+              }
             }
           }
         },

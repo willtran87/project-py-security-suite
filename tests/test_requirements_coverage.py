@@ -11,6 +11,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 from jsonschema import Draft202012Validator
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from py_security_suite.models import ToolRun, ToolStatus
 from py_security_suite.artifact_validation import validate_governed_artifacts
@@ -18,7 +20,7 @@ from py_security_suite.requirements_coverage import (
     security_requirements_coverage_artifact,
 )
 from py_security_suite.strict_json import canonical_bytes
-from tests.deployment_authority import authority_environment
+from tests.deployment_authority import authority_environment, operation_receipt
 
 
 class SecurityRequirementsCoverageTests(unittest.TestCase):
@@ -205,12 +207,18 @@ class SecurityRequirementsCoverageTests(unittest.TestCase):
             fixture_sha256 = "f" * 64
             procedure_artifacts: dict[str, object] = {}
             execution_assertion_fields: list[dict[str, object]] = []
+            execution_private = Ed25519PrivateKey.generate()
+            execution_public = execution_private.public_key().public_bytes(
+                serialization.Encoding.PEM,
+                serialization.PublicFormat.SubjectPublicKeyInfo,
+            )
+            execution_authority_sha256 = hashlib.sha256(execution_public).hexdigest()
             for polarity, mutation_sha256 in (
                 ("positive", "1" * 64),
                 ("negative-control", "2" * 64),
             ):
                 name = f"procedure-{polarity}.json"
-                execution = {
+                execution_subject = {
                     "schema_version": "1.0",
                     "procedure_id": "artifact-value-replay-v1",
                     "producer_sha256": "a" * 64,
@@ -224,6 +232,27 @@ class SecurityRequirementsCoverageTests(unittest.TestCase):
                     "result_sha256": artifact_sha256,
                     "started_at": assessed_at.isoformat(),
                     "finished_at": assessed_at.isoformat(),
+                    "argv_sha256": "3" * 64,
+                    "environment_sha256": "4" * 64,
+                    "runtime_sha256": "5" * 64,
+                    "assets_sha256": "6" * 64,
+                    "sandbox_identity_sha256": "7" * 64,
+                    "mutation_operator": (
+                        "baseline"
+                        if polarity == "positive"
+                        else "negative-control-mutation"
+                    ),
+                    "mutation_parent_sha256": fixture_sha256,
+                }
+                execution_receipt, _ = operation_receipt(
+                    execution_subject,
+                    purpose="requirements-procedure-execution",
+                    operation_id=f"procedure-{polarity}",
+                    private_key=execution_private,
+                )
+                execution = {
+                    **execution_subject,
+                    "execution_authority_receipt": execution_receipt,
                 }
                 procedure_artifacts[name] = execution
                 execution_assertion_fields.append(
@@ -313,6 +342,9 @@ class SecurityRequirementsCoverageTests(unittest.TestCase):
                                 "allowed_methods": ["automated replay"],
                                 "allowed_operators": ["equals", "not-equals"],
                                 "allowed_producer_sha256": ["a" * 64],
+                                "allowed_execution_authority_key_sha256": [
+                                    execution_authority_sha256
+                                ],
                                 "minimum_assertions": 2 if index == 0 else 0,
                                 "minimum_negative_assertions": 1 if index == 0 else 0,
                                 "maximum_evidence_age_hours": 24,

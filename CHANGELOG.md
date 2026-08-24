@@ -1,5 +1,14 @@
 # Changelog
 
+- Require exact request-bound receipts from monotonic-state and KMS backends,
+  bind pinned helper execution to endpoint, mTLS, sandbox, and executable
+  identities, and retain predecessor state for offline fork verification. Add
+  independently signed recovery observers, compiler-semantic frontends,
+  requirements procedure runs, runtime source inventories, collector
+  accounting, and gossip checkpoints. Pin Git verifier/configuration state,
+  enforce signer lifecycle and organizational diversity, verify signed tags,
+  and authorize the complete ref/object manifest.
+
 - Retain and independently revalidate complete portable authority receipts,
   back deployment generations with durable fork-detecting state, require
   signed hardware-KMS envelope custody, and bind runtime traces to pinned

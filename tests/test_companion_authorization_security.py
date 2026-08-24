@@ -266,11 +266,15 @@ class CompanionAuthorizationSecurityTests(unittest.TestCase):
                             "base_url": "http://127.0.0.1:8766/",
                             "authorization_env": "PYSEC_ORACLE_TOKEN",
                             "identity_sha256": "a" * 64,
+                            "organization": "org-a",
+                            "host_identity_sha256": "c" * 64,
                         },
                         {
                             "base_url": "http://127.0.0.1:8767/",
                             "authorization_env": "PYSEC_ORACLE_WITNESS_TOKEN",
                             "identity_sha256": "b" * 64,
+                            "organization": "org-b",
+                            "host_identity_sha256": "d" * 64,
                         },
                     ],
                 },
@@ -296,11 +300,15 @@ class CompanionAuthorizationSecurityTests(unittest.TestCase):
                             "base_url": "http://127.0.0.1:8765/observer",
                             "authorization_env": "PYSEC_ORACLE_TOKEN",
                             "identity_sha256": "a" * 64,
+                            "organization": "org-a",
+                            "host_identity_sha256": "c" * 64,
                         },
                         {
                             "base_url": "http://127.0.0.1:8767/",
                             "authorization_env": "PYSEC_ORACLE_WITNESS_TOKEN",
                             "identity_sha256": "b" * 64,
+                            "organization": "org-b",
+                            "host_identity_sha256": "d" * 64,
                         },
                     ],
                 },
@@ -325,11 +333,15 @@ class CompanionAuthorizationSecurityTests(unittest.TestCase):
                             "base_url": "http://127.0.0.1:8766/",
                             "authorization_env": "PYSEC_USER_TOKEN",
                             "identity_sha256": "a" * 64,
+                            "organization": "org-a",
+                            "host_identity_sha256": "c" * 64,
                         },
                         {
                             "base_url": "http://127.0.0.1:8767/",
                             "authorization_env": "PYSEC_ORACLE_WITNESS_TOKEN",
                             "identity_sha256": "b" * 64,
+                            "organization": "org-b",
+                            "host_identity_sha256": "d" * 64,
                         },
                     ],
                 },
@@ -423,6 +435,26 @@ class CompanionAuthorizationSecurityTests(unittest.TestCase):
                     key.sign(canonical_bytes(signed))
                 ).decode(),
             }
+            before_observers = [
+                {
+                    "observer_identity_sha256": marker * 64,
+                    "observation_id": f"before-{marker}",
+                    "recovery_epoch": 41,
+                    "fencing_token_sha256": "0" * 64,
+                    "state": {"state": "active"},
+                }
+                for marker in ("1", "2")
+            ]
+            after_observers = [
+                {
+                    "observer_identity_sha256": marker * 64,
+                    "observation_id": f"after-{marker}",
+                    "recovery_epoch": 42,
+                    "fencing_token_sha256": "f" * 64,
+                    "state": {"state": "restored"},
+                }
+                for marker in ("1", "2")
+            ]
             with patch.dict(
                 "os.environ",
                 {
@@ -443,6 +475,8 @@ class CompanionAuthorizationSecurityTests(unittest.TestCase):
                     observed_at=observed.isoformat(),
                     precondition_response=precondition_response,
                     postcondition_response=postcondition_response,
+                    precondition_observers=before_observers,
+                    postcondition_observers=after_observers,
                 )
 
 

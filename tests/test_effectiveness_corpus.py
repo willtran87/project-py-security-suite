@@ -161,6 +161,20 @@ class EffectivenessCorpusTests(unittest.TestCase):
                 private.sign(canonical_bytes(signed))
             ).decode(),
         }
+        gossip = self.root / "gossip-checkpoint.json"
+        gossip.write_bytes(
+            canonical_bytes(
+                {
+                    "schema_version": "1.0",
+                    "log_identity_sha256": "9" * 64,
+                    "checkpoint_size": 1,
+                    "checkpoint_root_sha256": leaf,
+                    "observed_at": "2026-08-24T00:00:00+00:00",
+                    "minimum_authority_signatures": 2,
+                    "authorities": [{"id": "gossip-a"}, {"id": "gossip-b"}],
+                }
+            )
+        )
 
         class Response:
             def __enter__(self):
@@ -181,20 +195,19 @@ class EffectivenessCorpusTests(unittest.TestCase):
                         self.root / "effectiveness-checkpoint.sqlite3"
                     ),
                     "PYSEC_EFFECTIVENESS_WITNESS_KEYS_JSON": json.dumps(witness_policy),
-                    "PYSEC_EFFECTIVENESS_GOSSIP_CHECKPOINTS_JSON": json.dumps(
-                        {
-                            "9" * 64: {
-                                "checkpoint_size": 1,
-                                "checkpoint_root_sha256": leaf,
-                            }
-                        }
-                    ),
+                    "PYSEC_EFFECTIVENESS_GOSSIP_CHECKPOINT_PATH": str(gossip),
+                    "PYSEC_EFFECTIVENESS_GOSSIP_CHECKPOINT_SHA256": hashlib.sha256(
+                        gossip.read_bytes()
+                    ).hexdigest(),
                 },
             ),
             patch(
                 "py_security_suite.effectiveness_corpus.urlopen",
                 return_value=Response(),
             ),
+            patch(
+                "py_security_suite.effectiveness_corpus.verify_governance_quorum"
+            ) as gossip_quorum,
         ):
             result = _consume_remote_effectiveness_replay(
                 replay_key,
@@ -210,6 +223,7 @@ class EffectivenessCorpusTests(unittest.TestCase):
         self.assertEqual(result["mode"], "remote-signed-checkpoint")
         self.assertEqual(result["sequence"], 1)
         self.assertEqual(result["signed_statement"], signed)
+        gossip_quorum.assert_called_once()
 
     def test_transparency_proofs_cover_unbalanced_merkle_trees(self) -> None:
         leaves = [

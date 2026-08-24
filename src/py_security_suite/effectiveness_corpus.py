@@ -5,7 +5,7 @@ import base64
 import os
 import ssl
 import sqlite3
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -617,7 +617,7 @@ def _consume_remote_effectiveness_replay(
     _verify_checkpoint_witnesses(
         receipt["witnesses"], signed, _receipt_time(request_subject["observed_at"])
     )
-    _verify_gossip_checkpoint(signed)
+    _verify_gossip_checkpoint(signed, _receipt_time(request_subject["observed_at"]))
     _advance_checkpoint_state(
         state_path,
         expected_size=configured_previous_size,
@@ -716,23 +716,56 @@ def _verify_checkpoint_witnesses(
         raise ValueError("effectiveness checkpoint witness quorum was not met")
 
 
-def _verify_gossip_checkpoint(statement: dict[str, Any]) -> None:
-    raw = os.environ.get("PYSEC_EFFECTIVENESS_GOSSIP_CHECKPOINTS_JSON", "").strip()
-    try:
-        checkpoints = strict_loads(raw)
-    except (TypeError, ValueError) as exc:
-        raise ValueError("effectiveness gossip checkpoint policy is invalid") from exc
-    identity = str(statement["log_identity_sha256"])
-    expected = checkpoints.get(identity) if isinstance(checkpoints, dict) else None
+def _verify_gossip_checkpoint(statement: dict[str, Any], observed_at: datetime) -> None:
+    raw_path = os.environ.get("PYSEC_EFFECTIVENESS_GOSSIP_CHECKPOINT_PATH", "").strip()
+    expected_digest = (
+        os.environ.get("PYSEC_EFFECTIVENESS_GOSSIP_CHECKPOINT_SHA256", "")
+        .strip()
+        .casefold()
+    )
+    if not raw_path or not _digest(expected_digest):
+        raise ValueError("effectiveness gossip checkpoint policy is invalid")
+    path = Path(raw_path).expanduser().resolve()
+    _, payload = read_regular_file(
+        path, "effectiveness gossip checkpoint", maximum_bytes=1024 * 1024
+    )
+    if hashlib.sha256(payload).hexdigest() != expected_digest:
+        raise ValueError("effectiveness gossip checkpoint does not match its pin")
+    expected = strict_loads(payload)
     if (
         not isinstance(expected, dict)
-        or set(expected) != {"checkpoint_size", "checkpoint_root_sha256"}
+        or set(expected)
+        != {
+            "schema_version",
+            "log_identity_sha256",
+            "checkpoint_size",
+            "checkpoint_root_sha256",
+            "observed_at",
+            "minimum_authority_signatures",
+            "authorities",
+        }
+        or expected.get("schema_version") != "1.0"
+        or expected.get("log_identity_sha256") != statement["log_identity_sha256"]
         or expected["checkpoint_size"] != statement["checkpoint_size"]
         or expected["checkpoint_root_sha256"] != statement["checkpoint_root_sha256"]
+        or _receipt_time(expected["observed_at"]) > observed_at
+        or observed_at - _receipt_time(expected["observed_at"]) > timedelta(hours=24)
+        or isinstance(expected["minimum_authority_signatures"], bool)
+        or not isinstance(expected["minimum_authority_signatures"], int)
+        or expected["minimum_authority_signatures"] < 2
     ):
         raise ValueError(
             "effectiveness checkpoint is absent from external gossip state"
         )
+    subject = {name: value for name, value in expected.items() if name != "authorities"}
+    verify_governance_quorum(
+        path,
+        expected["authorities"],
+        subject,
+        expected["minimum_authority_signatures"],
+        observed_at,
+        purpose="effectiveness-gossip-checkpoint",
+    )
 
 
 def _receipt_time(value: object) -> datetime:

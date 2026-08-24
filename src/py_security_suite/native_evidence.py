@@ -176,14 +176,19 @@ def _store_encrypted_sidecar(
 def _kms_data_key(
     root: Path, raw_sha256: str
 ) -> tuple[bytearray, str, dict[str, Any], dict[str, Any]]:
+    challenge = (
+        os.environ.get("PYSEC_SCAN_TIME_CHALLENGE_SHA256", "").strip().casefold()
+    )
+    request = {
+        "schema_version": "1.0",
+        "operation": "generate-data-key",
+        "store_identity": hashlib.sha256(str(root).encode()).hexdigest(),
+        "object_plaintext_sha256": raw_sha256,
+        "challenge_sha256": challenge,
+    }
     response = run_pinned_json_command(
         "PYSEC_RAW_EVIDENCE_KMS",
-        {
-            "schema_version": "1.0",
-            "operation": "generate-data-key",
-            "store_identity": hashlib.sha256(str(root).encode()).hexdigest(),
-            "object_plaintext_sha256": raw_sha256,
-        },
+        request,
     )
     if (
         set(response)
@@ -232,6 +237,9 @@ def _kms_data_key(
         "hardware_backed",
         "wrapped_key_sha256",
         "encryption_operation_id",
+        "request_sha256",
+        "object_plaintext_sha256",
+        "challenge_sha256",
     }
     if (
         not isinstance(value, dict)
@@ -245,6 +253,10 @@ def _kms_data_key(
         or value.get("hardware_backed") is not True
         or value.get("wrapped_key_sha256") != hashlib.sha256(wrapped).hexdigest()
         or value.get("encryption_operation_id") != operation_id
+        or value.get("request_sha256")
+        != hashlib.sha256(canonical_bytes(request)).hexdigest()
+        or value.get("object_plaintext_sha256") != raw_sha256
+        or value.get("challenge_sha256") != challenge
         or not isinstance(value.get("retention_days"), int)
         or isinstance(value.get("retention_days"), bool)
         or not 1 <= value["retention_days"] <= 3650
@@ -257,9 +269,6 @@ def _kms_data_key(
             plaintext[index] = 0
         raise ValueError("raw evidence custody receipt policy is invalid")
     statement = authority.get("statement") if isinstance(authority, dict) else None
-    challenge = (
-        os.environ.get("PYSEC_SCAN_TIME_CHALLENGE_SHA256", "").strip().casefold()
-    )
     expected_key = (
         os.environ.get("PYSEC_RAW_EVIDENCE_CUSTODY_AUTHORITY_KEY_SHA256", "")
         .strip()

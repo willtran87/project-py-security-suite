@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from .models import ToolRun, ToolStatus
+from .operation_receipt import verify_operation_receipt
 from .assurance_profile import verify_governance_quorum
 from .deployment_receipt import verify_deployment_receipt
 from .execution import sha256_file
@@ -704,7 +705,13 @@ def _requirement_assessment(
         ):
             raise ValueError("requirement assertion evidence is stale or future-dated")
         for item in normalized:
-            _verify_procedure_execution(item, artifacts, str(value["procedure_id"]))
+            _verify_procedure_execution(
+                item,
+                artifacts,
+                str(value["procedure_id"]),
+                controls,
+                observed_at,
+            )
         if declared == "pass":
             positive_runs = {
                 (item["fixture_sha256"], item["mutation_sha256"])
@@ -785,6 +792,7 @@ def _assessment_evidence_policy(
         "allowed_methods",
         "allowed_operators",
         "allowed_producer_sha256",
+        "allowed_execution_authority_key_sha256",
         "minimum_assertions",
         "minimum_negative_assertions",
         "maximum_evidence_age_hours",
@@ -806,6 +814,7 @@ def _assessment_evidence_policy(
                 "allowed_methods",
                 "allowed_operators",
                 "allowed_producer_sha256",
+                "allowed_execution_authority_key_sha256",
             )
         }
         minimum = item["minimum_assertions"]
@@ -825,6 +834,10 @@ def _assessment_evidence_policy(
                 {"equals", "not-equals", "gte", "lte", "exists"}
             )
             or any(not _digest(digest) for digest in lists["allowed_producer_sha256"])
+            or any(
+                not _digest(digest)
+                for digest in lists["allowed_execution_authority_key_sha256"]
+            )
             or lists["allowed_methods"] != ["automated replay"]
             or item["procedure_id"] != "artifact-value-replay-v1"
             or isinstance(minimum, bool)
@@ -926,7 +939,11 @@ def _assessment_assertion(value: object) -> dict[str, Any]:
 
 
 def _verify_procedure_execution(
-    assertion: dict[str, Any], artifacts: dict[str, Any], procedure_id: str
+    assertion: dict[str, Any],
+    artifacts: dict[str, Any],
+    procedure_id: str,
+    controls: dict[str, Any],
+    observed_at: datetime,
 ) -> None:
     execution = artifacts.get(assertion["execution_artifact"])
     fields = {
@@ -943,6 +960,14 @@ def _verify_procedure_execution(
         "result_sha256",
         "started_at",
         "finished_at",
+        "argv_sha256",
+        "environment_sha256",
+        "runtime_sha256",
+        "assets_sha256",
+        "sandbox_identity_sha256",
+        "mutation_operator",
+        "mutation_parent_sha256",
+        "execution_authority_receipt",
     }
     if (
         not isinstance(execution, dict)
@@ -958,9 +983,29 @@ def _verify_procedure_execution(
         or execution["exit_code"] != assertion["exit_code"]
         or execution["result_artifact"] != assertion["artifact"]
         or execution["result_sha256"] != assertion["sha256"]
+        or execution["stdout_sha256"] != execution["result_sha256"]
         or any(
             not _digest(str(execution[name]))
-            for name in ("stdout_sha256", "stderr_sha256")
+            for name in (
+                "stdout_sha256",
+                "stderr_sha256",
+                "argv_sha256",
+                "environment_sha256",
+                "runtime_sha256",
+                "assets_sha256",
+                "sandbox_identity_sha256",
+                "mutation_parent_sha256",
+            )
+        )
+        or execution["mutation_operator"]
+        not in {"baseline", "negative-control-mutation"}
+        or (
+            assertion["polarity"] == "positive"
+            and execution["mutation_operator"] != "baseline"
+        )
+        or (
+            assertion["polarity"] == "negative-control"
+            and execution["mutation_operator"] != "negative-control-mutation"
         )
     ):
         raise ValueError("requirement procedure execution is invalid or unbound")
@@ -968,6 +1013,27 @@ def _verify_procedure_execution(
     finished = _timestamp(execution["finished_at"], "procedure finished_at")
     if finished < started or finished - started > timedelta(hours=24):
         raise ValueError("requirement procedure execution duration is invalid")
+    subject = {
+        name: value
+        for name, value in execution.items()
+        if name != "execution_authority_receipt"
+    }
+    receipt = execution["execution_authority_receipt"]
+    statement = receipt.get("statement") if isinstance(receipt, dict) else None
+    signer = str((statement or {}).get("signer_key_sha256") or "")
+    challenge = (
+        os.environ.get("PYSEC_SCAN_TIME_CHALLENGE_SHA256", "").strip().casefold()
+    )
+    if signer not in controls["allowed_execution_authority_key_sha256"]:
+        raise ValueError("requirement execution authority is not policy-approved")
+    verify_operation_receipt(
+        subject,
+        receipt,
+        purpose="requirements-procedure-execution",
+        observed_at=observed_at,
+        challenge_sha256=challenge,
+        expected_key_sha256=signer,
+    )
 
 
 def _replay_assertion(assertion: dict[str, Any], artifacts: dict[str, Any]) -> bool:

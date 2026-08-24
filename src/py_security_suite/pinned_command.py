@@ -43,12 +43,40 @@ def run_pinned_json_command(
     if resolved is None or sha256_file(Path(resolved)) != expected_executable:
         raise ValueError(f"{prefix} executable does not match its deployment pin")
     _verify_assets(prefix)
+    raw_endpoints = os.environ.get(f"{prefix}_ALLOWED_ENDPOINTS_JSON", "").strip()
+    mtls_identity = (
+        os.environ.get(f"{prefix}_MTLS_IDENTITY_SHA256", "").strip().casefold()
+    )
+    sandbox_identity = (
+        os.environ.get(f"{prefix}_SANDBOX_IDENTITY_SHA256", "").strip().casefold()
+    )
+    try:
+        allowed_endpoints = strict_loads(raw_endpoints)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{prefix} transport policy is invalid") from exc
+    if (
+        not isinstance(allowed_endpoints, list)
+        or allowed_endpoints != sorted(set(allowed_endpoints))
+        or any(not isinstance(item, str) or not item for item in allowed_endpoints)
+        or not _digest(mtls_identity)
+        or not _digest(sandbox_identity)
+    ):
+        raise ValueError(f"{prefix} transport and sandbox policy is incomplete")
     runtime_pin = os.environ.get(f"{prefix}_RUNTIME_SHA256", "").strip().casefold()
     if runtime_pin and (
         not _digest(runtime_pin)
         or native_runtime_closure_sha256(Path(resolved)) != runtime_pin
     ):
         raise ValueError(f"{prefix} runtime closure does not match its deployment pin")
+    if "command_context" in request:
+        raise ValueError(f"{prefix} request reserved fields are already present")
+    request["command_context"] = {
+        "schema_version": "1.0",
+        "executable_sha256": expected_executable,
+        "allowed_endpoints": allowed_endpoints,
+        "mtls_identity_sha256": mtls_identity,
+        "sandbox_identity_sha256": sandbox_identity,
+    }
     encoded_request = base64.b64encode(canonical_bytes(request)).decode("ascii")
     result = run_command(
         [str(resolved), *command[1:], encoded_request],

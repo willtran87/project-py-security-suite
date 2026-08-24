@@ -5,12 +5,14 @@ import os
 import shutil
 import tempfile
 import tomllib
+from datetime import datetime
 from contextlib import contextmanager
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
-from .execution import CommandEnvironment, resolve_executable, run_command
+from .deployment_receipt import verify_deployment_receipt
+from .execution import CommandEnvironment, resolve_executable, run_command, sha256_file
 from .models import Inventory
 from .path_safety import read_regular_file
 from .strict_json import loads as strict_loads
@@ -279,6 +281,17 @@ def _materialize_git_history(
         git, target, require_signed_provenance=require_signed_git_provenance
     )
     repository_state = _git_repository_state(git, target)
+    if require_signed_git_provenance:
+        git_sha256 = sha256_file(Path(git).resolve())
+        verify_deployment_receipt(
+            {
+                "schema_version": "1.0",
+                "git_executable_sha256": git_sha256,
+                "repository_state": repository_state,
+            },
+            purpose="git-ref-manifest",
+            environment_prefix="PYSEC_GIT_REF_MANIFEST_AUTHORITY",
+        )
     work_root.mkdir(mode=0o700, parents=True)
     bundle = work_root / "repository.bundle"
     clone = work_root / "history"
@@ -444,7 +457,7 @@ def _git_repository_state(git: str, target: Path) -> dict[str, Any]:
             "config",
             "--null",
             "--get-regexp",
-            r"^(extensions\.partialClone|core\.sparseCheckout|core\.sparseCheckoutCone|remote\..*\.promisor)$",
+            r"^(extensions\.partialClone|core\.sparseCheckout|core\.sparseCheckoutCone|remote\..*\.promisor|gpg\..*|user\.signingKey|commit\.gpgSign|tag\.gpgSign)$",
         ],
         exits=frozenset({0, 1}),
     )
@@ -583,6 +596,23 @@ def _validate_git_repository_mode(
     if require_signed_provenance:
         if query(["rev-parse", "--show-object-format"]).casefold() != "sha256":
             raise ValueError("production Git provenance requires SHA-256 objects")
+        git_sha256 = sha256_file(Path(git).resolve())
+        expected_git = (
+            os.environ.get("PYSEC_GIT_EXECUTABLE_SHA256", "").strip().casefold()
+        )
+        if not _sha256_digest(expected_git) or git_sha256 != expected_git:
+            raise ValueError(
+                "production Git verifier executable is not deployment-pinned"
+            )
+        state = _git_repository_state(git, target)
+        expected_config = (
+            os.environ.get("PYSEC_GIT_SECURITY_CONFIG_SHA256", "").strip().casefold()
+        )
+        if (
+            not _sha256_digest(expected_config)
+            or state["security_config_sha256"] != expected_config
+        ):
+            raise ValueError("production Git security configuration is not pinned")
         raw_signers = os.environ.get(
             "PYSEC_GIT_ALLOWED_SIGNER_FINGERPRINTS_JSON", ""
         ).strip()
@@ -592,27 +622,67 @@ def _validate_git_repository_mode(
             raise ValueError("production Git signer policy is invalid") from exc
         if not isinstance(signer_value, list) or not signer_value:
             raise ValueError("production Git signer policy is unavailable")
-        signers = {
-            str(item).strip().casefold()
-            for item in signer_value
-            if isinstance(item, str) and 16 <= len(item.strip()) <= 128
-        }
-        if len(signers) != len(signer_value):
+        signers: dict[str, tuple[str, datetime, datetime]] = {}
+        for item in signer_value:
+            if not isinstance(item, dict) or set(item) != {
+                "fingerprint",
+                "organization",
+                "not_before",
+                "not_after",
+            }:
+                raise ValueError("production Git signer policy has invalid identities")
+            fingerprint = str(item["fingerprint"]).strip().casefold()
+            try:
+                not_before = datetime.fromisoformat(
+                    str(item["not_before"]).replace("Z", "+00:00")
+                )
+                not_after = datetime.fromisoformat(
+                    str(item["not_after"]).replace("Z", "+00:00")
+                )
+            except ValueError as exc:
+                raise ValueError("production Git signer lifecycle is invalid") from exc
+            organization = str(item["organization"]).strip()
+            if (
+                not 16 <= len(fingerprint) <= 128
+                or not organization
+                or not_before.tzinfo is None
+                or not_after.tzinfo is None
+                or not_before >= not_after
+                or fingerprint in signers
+            ):
+                raise ValueError("production Git signer policy has invalid identities")
+            signers[fingerprint] = organization, not_before, not_after
+        if len({item[0] for item in signers.values()}) < 2:
             raise ValueError("production Git signer policy has invalid identities")
-        ledger = query(["log", "--all", "--format=%H%x00%G?%x00%GF"])
+        ledger = query(["log", "--all", "--format=%H%x00%G?%x00%GF%x00%cI"])
         commits = 0
         for line in ledger.splitlines():
             fields = line.split("\x00")
-            if len(fields) != 3:
+            if len(fields) != 4:
                 raise ValueError("Git commit provenance ledger is malformed")
-            _, grade, fingerprint = fields
-            if grade != "G" or fingerprint.strip().casefold() not in signers:
+            _, grade, fingerprint, committed_at = fields
+            signer = signers.get(fingerprint.strip().casefold())
+            try:
+                committed = datetime.fromisoformat(committed_at.replace("Z", "+00:00"))
+            except ValueError as exc:
+                raise ValueError("Git commit timestamp is invalid") from exc
+            if (
+                grade != "G"
+                or signer is None
+                or committed.tzinfo is None
+                or not signer[1] <= committed <= signer[2]
+            ):
                 raise ValueError(
                     "every reachable Git commit must have a trusted allowed signature"
                 )
             commits += 1
         if not commits:
             raise ValueError("Git commit provenance ledger is empty")
+        tags = query(["tag", "--list"])
+        for tag in tags.splitlines():
+            if not tag:
+                continue
+            query(["tag", "-v", tag], exits=frozenset({0}))
 
 
 def _seal_submodule_histories(
@@ -799,6 +869,12 @@ def _is_excluded(path: Path, excluded: tuple[Path, ...]) -> bool:
         except ValueError:
             continue
     return False
+
+
+def _sha256_digest(value: str) -> bool:
+    return len(value) == 64 and all(
+        character in "0123456789abcdef" for character in value
+    )
 
 
 def _source_digest(target: Path, paths: list[Path]) -> tuple[str, int]:

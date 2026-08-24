@@ -2,9 +2,16 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+import hashlib
+import json
+import os
+from datetime import UTC, datetime
 from pathlib import Path
+from unittest.mock import patch
 
 from py_security_suite.boundary_graph import build_boundary_graph
+from py_security_suite.strict_json import canonical_bytes
+from tests.deployment_authority import authority_environment
 
 
 class BoundaryGraphTests(unittest.TestCase):
@@ -104,6 +111,69 @@ class BoundaryGraphTests(unittest.TestCase):
         targets = {(edge["kind"], edge["target"]) for edge in graph["edges"]}
         self.assertIn(("dynamic-dispatch", "plugins.auth"), targets)
         self.assertIn(("binary-import", "env.clock"), targets)
+
+    def test_governed_polyglot_analysis_requires_compiler_semantic_evidence(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            payload = b"int main(void) { return 0; }\n"
+            (root / "native.c").write_bytes(payload)
+            files = [
+                {
+                    "path": "native.c",
+                    "size_bytes": len(payload),
+                    "sha256": hashlib.sha256(payload).hexdigest(),
+                    "line_count": 1,
+                }
+            ]
+            evidence = {
+                "schema_version": "1.0",
+                "frontends": [
+                    {
+                        "language": "c",
+                        "engine": "clang-static-analyzer",
+                        "engine_sha256": "a" * 64,
+                        "configuration_sha256": "b" * 64,
+                        "files_sha256": hashlib.sha256(
+                            canonical_bytes(files)
+                        ).hexdigest(),
+                        "symbols": 1,
+                        "cfg_edges": 1,
+                        "dataflow_edges": 0,
+                        "interprocedural_edges": 0,
+                    }
+                ],
+            }
+            evidence_path = root / "compiler-semantics.json"
+            evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
+            environment = authority_environment(
+                root,
+                evidence,
+                purpose="compiler-semantic-evidence",
+                prefix="PYSEC_COMPILER_SEMANTIC_AUTHORITY",
+            )
+            environment.update(
+                {
+                    "PYSEC_COMPILER_SEMANTIC_EVIDENCE_PATH": str(evidence_path),
+                    "PYSEC_COMPILER_SEMANTIC_EVIDENCE_SHA256": hashlib.sha256(
+                        evidence_path.read_bytes()
+                    ).hexdigest(),
+                }
+            )
+            with (
+                patch.dict(os.environ, environment),
+                patch(
+                    "py_security_suite.deployment_receipt._scan_observed_at",
+                    return_value=datetime.now(UTC),
+                ),
+            ):
+                graph = build_boundary_graph(root, require_governed_parsers=True)
+        self.assertTrue(graph["compiler_semantic_complete"])
+        self.assertEqual(
+            graph["compiler_semantic_evidence"]["frontends"][0]["engine"],
+            "clang-static-analyzer",
+        )
 
 
 if __name__ == "__main__":

@@ -310,7 +310,7 @@ def main(argv: list[str] | None = None) -> int:
         postcondition = check["postcondition"]
         if oracle is None:
             raise ValueError("recovery checks require an independent state oracle")
-        before_status, before_response = _oracle_quorum_observation(
+        before_status, before_response, before_observers = _oracle_quorum_observation(
             oracle, postcondition["path"]
         )
         requests += len(oracle["observers"])
@@ -348,16 +348,19 @@ def main(argv: list[str] | None = None) -> int:
                 "check": check,
                 "precondition_response": before_response,
                 "postcondition_response": b"",
+                "precondition_observers": before_observers,
+                "postcondition_observers": [],
             }
             pending_recovery_receipts.append(pending_receipt)
         if oracle is None:
             raise ValueError("recovery checks require an independent state oracle")
-        observed_status, response = _oracle_quorum_observation(
+        observed_status, response, post_observers = _oracle_quorum_observation(
             oracle, postcondition["path"]
         )
         requests += len(oracle["observers"])
         if pending_receipt is not None:
             pending_receipt["postcondition_response"] = response
+            pending_receipt["postcondition_observers"] = post_observers
         exercised_ids.append(f"recovery:{check['phase']}:{check['id']}:postcondition")
         if observed_status not in set(postcondition["expected_status"]):
             findings.append(
@@ -413,6 +416,8 @@ def main(argv: list[str] | None = None) -> int:
                 observed_at=context["trusted_time_observed_at"],
                 precondition_response=pending["precondition_response"],
                 postcondition_response=pending["postcondition_response"],
+                precondition_observers=pending["precondition_observers"],
+                postcondition_observers=pending["postcondition_observers"],
             )
             event_id = str(receipt["statement"]["event_id"])
             if event_id in recovery_event_ids:
@@ -550,7 +555,13 @@ def _oracle(
         if settings["authorization_env"]
     }
     for raw in raw_observers:
-        fields = {"base_url", "authorization_env", "identity_sha256"}
+        fields = {
+            "base_url",
+            "authorization_env",
+            "identity_sha256",
+            "organization",
+            "host_identity_sha256",
+        }
         if not isinstance(raw, dict) or set(raw) != fields:
             raise ValueError("state oracle observer fields do not match")
         base_url = _loopback_url(str(raw["base_url"] or ""))
@@ -574,6 +585,8 @@ def _oracle(
                 "state oracle must use credentials distinct from application roles and observers"
             )
         identity = str(raw["identity_sha256"] or "").casefold()
+        organization = _label(raw["organization"], "oracle organization")
+        host_identity = str(raw["host_identity_sha256"] or "").casefold()
         if (
             len(identity) != 64
             or any(character not in "0123456789abcdef" for character in identity)
@@ -582,6 +595,8 @@ def _oracle(
             raise ValueError(
                 "state oracle deployment identity is invalid or duplicated"
             )
+        if not _digest_label(host_identity):
+            raise ValueError("state oracle host identity is invalid")
         origins.add(origin)
         credentials.add(authorization_env)
         identities.add(identity)
@@ -590,7 +605,15 @@ def _oracle(
                 "base_url": base_url,
                 "role": {"authorization_env": authorization_env},
                 "identity_sha256": identity,
+                "organization": organization,
+                "host_identity_sha256": host_identity,
             }
+        )
+    if len({item["organization"] for item in observers}) != len(observers) or len(
+        {item["host_identity_sha256"] for item in observers}
+    ) != len(observers):
+        raise ValueError(
+            "state oracle observers must use independent hosts and organizations"
         )
     identity = hashlib.sha256(canonical_bytes(sorted(identities))).hexdigest()
     if (
@@ -608,21 +631,104 @@ def _oracle(
     }
 
 
-def _oracle_quorum_observation(oracle: dict[str, Any], path: str) -> tuple[int, bytes]:
+def _oracle_quorum_observation(
+    oracle: dict[str, Any], path: str
+) -> tuple[int, bytes, list[dict[str, Any]]]:
     observations = [
         _request_observation(observer["base_url"], path, observer["role"])
         for observer in oracle["observers"]
     ]
-    statuses = {status for status, _ in observations}
+    verified: list[dict[str, Any]] = []
+    statuses: set[int] = set()
     canonical_responses: set[bytes] = set()
     try:
-        for _, response in observations:
-            canonical_responses.add(canonical_bytes(strict_loads(response)))
+        for observer, (_, response) in zip(
+            oracle["observers"], observations, strict=True
+        ):
+            envelope = _verify_oracle_envelope(observer, path, response)
+            statuses.add(int(envelope["status"]))
+            canonical_responses.add(canonical_bytes(envelope["state"]))
+            verified.append(envelope)
     except (TypeError, ValueError):
-        return (next(iter(statuses)) if len(statuses) == 1 else 0), b""
-    if len(statuses) != 1 or len(canonical_responses) != 1:
-        return 0, b""
-    return statuses.pop(), canonical_responses.pop()
+        return 0, b"", []
+    if (
+        len(statuses) != 1
+        or len(canonical_responses) != 1
+        or len({item["observation_id"] for item in verified}) != len(verified)
+        or len({item["recovery_epoch"] for item in verified}) != 1
+        or len({item["fencing_token_sha256"] for item in verified}) != 1
+    ):
+        return 0, b"", []
+    return statuses.pop(), canonical_responses.pop(), verified
+
+
+def _verify_oracle_envelope(
+    observer: dict[str, Any], path: str, payload: bytes
+) -> dict[str, Any]:
+    value = strict_loads(payload)
+    fields = {
+        "schema_version",
+        "observer_identity_sha256",
+        "organization",
+        "host_identity_sha256",
+        "request_sha256",
+        "observation_id",
+        "status",
+        "state",
+        "recovery_epoch",
+        "fencing_token_sha256",
+        "observed_at",
+        "expires_at",
+        "public_key_pem_base64",
+        "signature_base64",
+    }
+    if not isinstance(value, dict) or set(value) != fields:
+        raise ValueError("state oracle observation fields do not match")
+    try:
+        key_bytes = base64.b64decode(value["public_key_pem_base64"], validate=True)
+        key = serialization.load_pem_public_key(key_bytes)
+        observed = datetime.fromisoformat(
+            str(value["observed_at"]).replace("Z", "+00:00")
+        )
+        expires = datetime.fromisoformat(
+            str(value["expires_at"]).replace("Z", "+00:00")
+        )
+    except (TypeError, ValueError) as exc:
+        raise ValueError("state oracle observation encoding is invalid") from exc
+    signed = {name: value[name] for name in fields - {"signature_base64"}}
+    now = datetime.now(UTC)
+    if (
+        not isinstance(key, Ed25519PublicKey)
+        or hashlib.sha256(key_bytes).hexdigest() != observer["identity_sha256"]
+        or value["observer_identity_sha256"] != observer["identity_sha256"]
+        or value["organization"] != observer["organization"]
+        or value["host_identity_sha256"] != observer["host_identity_sha256"]
+        or value["request_sha256"]
+        != hashlib.sha256(canonical_bytes({"method": "GET", "path": path})).hexdigest()
+        or not _label(value["observation_id"], "oracle observation")
+        or isinstance(value["status"], bool)
+        or not isinstance(value["status"], int)
+        or not 100 <= value["status"] <= 599
+        or isinstance(value["recovery_epoch"], bool)
+        or not isinstance(value["recovery_epoch"], int)
+        or value["recovery_epoch"] < 1
+        or not _digest_label(value["fencing_token_sha256"])
+        or observed.tzinfo is None
+        or expires.tzinfo is None
+        or observed > now
+        or expires <= observed
+        or expires - observed > timedelta(minutes=5)
+        or now > expires
+    ):
+        raise ValueError("state oracle observation policy failed")
+    try:
+        key.verify(
+            base64.b64decode(value["signature_base64"], validate=True),
+            canonical_bytes(signed),
+        )
+    except Exception as exc:
+        raise ValueError("state oracle observation signature failed") from exc
+    return value
 
 
 def _roles(value: object) -> dict[str, dict[str, str]]:
@@ -805,6 +911,8 @@ def _verify_recovery_receipt(
     observed_at: str,
     precondition_response: bytes,
     postcondition_response: bytes,
+    precondition_observers: list[dict[str, Any]],
+    postcondition_observers: list[dict[str, Any]],
 ) -> dict[str, Any]:
     raw_key = os.environ.get("PYSEC_AUTHORIZATION_ORCHESTRATOR_KEY_PATH", "").strip()
     expected_key = (
@@ -868,6 +976,21 @@ def _verify_recovery_receipt(
         or not _label(value["before_instance_id"], "before instance")
         or not _label(value["after_instance_id"], "after instance")
         or value["before_instance_id"] == value["after_instance_id"]
+        or len(precondition_observers) < 2
+        or len(postcondition_observers) != len(precondition_observers)
+        or any(
+            int(item.get("recovery_epoch") or -1) > value["recovery_epoch"]
+            for item in precondition_observers
+        )
+        or any(
+            item.get("recovery_epoch") != value["recovery_epoch"]
+            or item.get("fencing_token_sha256") != value["fencing_token_sha256"]
+            for item in postcondition_observers
+        )
+        or {item.get("observer_identity_sha256") for item in precondition_observers}
+        != {item.get("observer_identity_sha256") for item in postcondition_observers}
+        or {item.get("observation_id") for item in precondition_observers}
+        & {item.get("observation_id") for item in postcondition_observers}
     ):
         raise ValueError("authorization orchestration receipt policy failed")
     try:
@@ -880,6 +1003,12 @@ def _verify_recovery_receipt(
         != hashlib.sha256(canonical_bytes(precondition_state)).hexdigest()
         or value["after_state_sha256"]
         != hashlib.sha256(canonical_bytes(postcondition_state)).hexdigest()
+        or any(
+            item.get("state") != precondition_state for item in precondition_observers
+        )
+        or any(
+            item.get("state") != postcondition_state for item in postcondition_observers
+        )
     ):
         raise ValueError("authorization recovery receipt does not bind oracle state")
     try:
@@ -913,6 +1042,10 @@ def _verify_recovery_receipt(
         "public_key_pem_base64": base64.b64encode(key_bytes).decode("ascii"),
         "receipt_payload_base64": base64.b64encode(payload).decode("ascii"),
         "receipt_sha256": hashlib.sha256(payload).hexdigest(),
+        "observer_receipts": {
+            "precondition": precondition_observers,
+            "postcondition": postcondition_observers,
+        },
     }
 
 

@@ -866,6 +866,13 @@ measured false-positive policy. The current automated native bundle is Windows
 x86-64 and Python 3.11; other platforms can use organization-managed native
 executables through the same CLI and report contract.
 
+Governed polyglot scans can require signed compiler-semantic evidence in
+addition to the bundled syntax ASTs. Runtime coverage uses three independently
+signed route inventories and separately signed collector accounting; recovery
+drills retain signed, host- and organization-bound observer quorums. External
+KMS and monotonic-state helpers sign exact request/challenge receipts that also
+bind their endpoint, mTLS, sandbox, and executable identities.
+
 No scanner portfolio can prove that software is vulnerability-free. Production
 approval must bind this report, an SBOM, the final artifact digest, test
 evidence, provenance, and governed risk acceptances to the same release.

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import json
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
@@ -9,6 +10,7 @@ from typing import Any
 from .path_safety import read_regular_file
 from .strict_json import canonical_bytes, loads as strict_loads
 from .deployment_receipt import verify_deployment_receipt
+from .operation_receipt import verify_operation_receipt
 
 
 def runtime_trace_artifact(boundary_graph: dict[str, Any]) -> dict[str, Any]:
@@ -42,6 +44,7 @@ def runtime_trace_artifact(boundary_graph: dict[str, Any]) -> dict[str, Any]:
             "sampling_rate",
             "coverage_requirements",
             "collector_metrics",
+            "collector_operation_receipt",
             "traces",
         }
         or value.get("schema_version") != "1.0"
@@ -206,6 +209,32 @@ def runtime_trace_artifact(boundary_graph: dict[str, Any]) -> dict[str, Any]:
         or metrics["canary_observed"] != metrics["canary_expected"]
     ):
         raise ValueError("runtime collector loss and canary accounting is incomplete")
+    challenge = (
+        os.environ.get("PYSEC_SCAN_TIME_CHALLENGE_SHA256", "").strip().casefold()
+    )
+    collector_key = (
+        os.environ.get("PYSEC_RUNTIME_COLLECTOR_AUTHORITY_KEY_SHA256", "")
+        .strip()
+        .casefold()
+    )
+    collector_subject = {
+        "schema_version": "1.0",
+        "deployment_sha256": deployment,
+        "boundary_graph_sha256": graph_digest,
+        "collector_identity_sha256": value["collector_identity_sha256"],
+        "metrics": metrics,
+        "traces_sha256": hashlib.sha256(canonical_bytes(value["traces"])).hexdigest(),
+    }
+    if not _digest(collector_key):
+        raise ValueError("runtime collector authority is not deployment-pinned")
+    verify_operation_receipt(
+        collector_subject,
+        value["collector_operation_receipt"],
+        purpose="runtime-collector-accounting",
+        observed_at=authority_issued,
+        challenge_sha256=challenge,
+        expected_key_sha256=collector_key,
+    )
     return _artifact(
         sorted(traces, key=lambda item: str(item["trace_id"])),
         expected,
@@ -289,19 +318,81 @@ def _coverage_policy(
             "boundary_graph_sha256",
             "producer_identity_sha256",
             "requirements",
+            "source_inventories",
         }
         or value.get("schema_version") != "1.0"
         or value.get("deployment_sha256") != deployment_sha256
         or value.get("boundary_graph_sha256") != boundary_graph_sha256
         or value.get("producer_identity_sha256") != producer
         or not isinstance(value.get("requirements"), list)
+        or not isinstance(value.get("source_inventories"), list)
+        or len(value["source_inventories"]) != 3
     ):
         raise ValueError("runtime coverage policy fields do not match")
+    try:
+        inventory_keys = json.loads(
+            os.environ.get("PYSEC_RUNTIME_INVENTORY_KEYS_JSON", "")
+        )
+    except json.JSONDecodeError as exc:
+        raise ValueError("runtime inventory authority pins are invalid") from exc
     authority = verify_deployment_receipt(
         value,
         purpose="runtime-coverage-policy",
         environment_prefix="PYSEC_RUNTIME_COVERAGE_AUTHORITY",
     )
+    kinds = {"api-contract", "deployment-route", "authorization-policy"}
+    inventory_requirements: set[bytes] = set()
+    seen: set[str] = set()
+    challenge = (
+        os.environ.get("PYSEC_SCAN_TIME_CHALLENGE_SHA256", "").strip().casefold()
+    )
+    observed_at = _timestamp(
+        str(authority["statement"]["issued_at"]),
+        "runtime coverage authority issued_at",
+    )
+    for inventory in value["source_inventories"]:
+        fields = {
+            "schema_version",
+            "kind",
+            "artifact_sha256",
+            "producer_identity_sha256",
+            "requirements",
+            "operation_receipt",
+        }
+        if (
+            not isinstance(inventory, dict)
+            or set(inventory) != fields
+            or inventory.get("schema_version") != "1.0"
+            or inventory.get("kind") not in kinds
+            or inventory["kind"] in seen
+            or not _digest(str(inventory.get("artifact_sha256") or ""))
+            or not _digest(str(inventory.get("producer_identity_sha256") or ""))
+            or not isinstance(inventory.get("requirements"), list)
+            or not isinstance(inventory_keys, dict)
+            or not _digest(str(inventory_keys.get(inventory["kind"]) or ""))
+        ):
+            raise ValueError("runtime source inventory is invalid")
+        subject = {
+            name: item
+            for name, item in inventory.items()
+            if name != "operation_receipt"
+        }
+        verify_operation_receipt(
+            subject,
+            inventory["operation_receipt"],
+            purpose=f"runtime-route-inventory:{inventory['kind']}",
+            observed_at=observed_at,
+            challenge_sha256=challenge,
+            expected_key_sha256=str(inventory_keys[inventory["kind"]]),
+        )
+        seen.add(str(inventory["kind"]))
+        inventory_requirements.update(
+            canonical_bytes(item) for item in inventory["requirements"]
+        )
+    if seen != kinds or inventory_requirements != {
+        canonical_bytes(item) for item in value["requirements"]
+    }:
+        raise ValueError("runtime denominator omits or adds inventoried routes")
     return value, authority
 
 

@@ -13,6 +13,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from cryptography.exceptions import InvalidSignature
 
 from .path_safety import read_regular_file
+from .operation_receipt import verify_operation_receipt
 from .pinned_command import command_configured, run_pinned_json_command
 from .strict_json import canonical_bytes, loads as strict_loads
 
@@ -112,6 +113,8 @@ def verify_deployment_receipt(
         purpose=purpose,
         generation=generation,
         receipt_sha256=receipt_digest,
+        observed_at=now,
+        challenge_sha256=challenge,
     )
     portable = {
         "schema_version": "1.0",
@@ -187,11 +190,25 @@ def verify_portable_receipt(
         receipt.get("schema_version") != "1.0"
         or not isinstance(monotonic_state, dict)
         or set(monotonic_state)
-        != {"mode", "backend_identity_sha256", "operation_id", "generation"}
+        != {
+            "mode",
+            "backend_identity_sha256",
+            "operation_id",
+            "generation",
+            "previous_generation",
+            "previous_receipt_sha256",
+            "backend_receipt",
+            "request_sha256",
+        }
         or monotonic_state.get("mode") not in {"external-command", "local-sqlite"}
         or not _digest(str(monotonic_state.get("backend_identity_sha256") or ""))
         or not str(monotonic_state.get("operation_id") or "")
         or monotonic_state.get("generation") != statement.get("generation")
+        or not isinstance(monotonic_state.get("previous_generation"), int)
+        or monotonic_state["previous_generation"] < 0
+        or monotonic_state["previous_generation"] > monotonic_state["generation"]
+        or not _optional_digest(monotonic_state.get("previous_receipt_sha256"))
+        or not _optional_digest(monotonic_state.get("request_sha256"))
         or hashlib.sha256(receipt_payload).hexdigest() != receipt.get("receipt_sha256")
         or original
         != {
@@ -213,6 +230,36 @@ def verify_portable_receipt(
         or now > expires
     ):
         raise ValueError("portable deployment receipt trust binding is invalid")
+    if monotonic_state["mode"] == "external-command":
+        backend_subject = _monotonic_backend_subject(
+            purpose=purpose,
+            generation=int(statement["generation"]),
+            receipt_sha256=str(receipt["receipt_sha256"]),
+            previous_generation=int(monotonic_state["previous_generation"]),
+            previous_receipt_sha256=str(
+                monotonic_state["previous_receipt_sha256"] or ""
+            ),
+            backend_identity_sha256=str(monotonic_state["backend_identity_sha256"]),
+            operation_id=str(monotonic_state["operation_id"]),
+            request_sha256=str(monotonic_state["request_sha256"]),
+        )
+        verified_backend = verify_operation_receipt(
+            backend_subject,
+            monotonic_state["backend_receipt"],
+            purpose="monotonic-state-compare-and-advance",
+            observed_at=now,
+            challenge_sha256=challenge_sha256,
+            expected_key_sha256=str(monotonic_state["backend_identity_sha256"]),
+        )
+        if (
+            verified_backend["statement"]["operation_id"]
+            != monotonic_state["operation_id"]
+            or verified_backend["statement"]["previous_operation_sha256"]
+            != monotonic_state["previous_receipt_sha256"]
+        ):
+            raise ValueError("monotonic backend receipt chain is invalid")
+    elif monotonic_state["backend_receipt"] is not None:
+        raise ValueError("local monotonic state must not claim an external receipt")
     try:
         signature = base64.b64decode(
             str(receipt.get("signature_base64") or ""), validate=True
@@ -224,19 +271,27 @@ def verify_portable_receipt(
 
 
 def _advance_monotonic_state(
-    prefix: str, *, purpose: str, generation: int, receipt_sha256: str
+    prefix: str,
+    *,
+    purpose: str,
+    generation: int,
+    receipt_sha256: str,
+    observed_at: datetime,
+    challenge_sha256: str,
 ) -> dict[str, Any]:
     command_prefix = f"{prefix}_STATE"
     if command_configured(command_prefix):
+        request = {
+            "schema_version": "1.0",
+            "operation": "compare-and-advance",
+            "purpose": purpose,
+            "generation": generation,
+            "receipt_sha256": receipt_sha256,
+            "challenge_sha256": challenge_sha256,
+        }
         response = run_pinned_json_command(
             command_prefix,
-            {
-                "schema_version": "1.0",
-                "operation": "compare-and-advance",
-                "purpose": purpose,
-                "generation": generation,
-                "receipt_sha256": receipt_sha256,
-            },
+            request,
         )
         if (
             set(response)
@@ -247,6 +302,10 @@ def _advance_monotonic_state(
                 "receipt_sha256",
                 "backend_identity_sha256",
                 "operation_id",
+                "previous_generation",
+                "previous_receipt_sha256",
+                "backend_receipt",
+                "request_sha256",
             }
             or response.get("schema_version") != "1.0"
             or response.get("accepted") is not True
@@ -254,13 +313,47 @@ def _advance_monotonic_state(
             or response.get("receipt_sha256") != receipt_sha256
             or not _digest(str(response.get("backend_identity_sha256") or ""))
             or not str(response.get("operation_id") or "")
+            or not isinstance(response.get("previous_generation"), int)
+            or response["previous_generation"] < 0
+            or response["previous_generation"] > generation
+            or not _optional_digest(response.get("previous_receipt_sha256"))
+            or response.get("request_sha256")
+            != hashlib.sha256(canonical_bytes(request)).hexdigest()
         ):
             raise ValueError("external monotonic state rejected receipt advancement")
+        backend_subject = _monotonic_backend_subject(
+            purpose=purpose,
+            generation=generation,
+            receipt_sha256=receipt_sha256,
+            previous_generation=response["previous_generation"],
+            previous_receipt_sha256=str(response["previous_receipt_sha256"] or ""),
+            backend_identity_sha256=str(response["backend_identity_sha256"]),
+            operation_id=str(response["operation_id"]),
+            request_sha256=str(response["request_sha256"]),
+        )
+        verified_backend = verify_operation_receipt(
+            backend_subject,
+            response["backend_receipt"],
+            purpose="monotonic-state-compare-and-advance",
+            observed_at=observed_at,
+            challenge_sha256=challenge_sha256,
+            expected_key_sha256=str(response["backend_identity_sha256"]),
+        )
+        if (
+            verified_backend["statement"]["operation_id"] != response["operation_id"]
+            or verified_backend["statement"]["previous_operation_sha256"]
+            != response["previous_receipt_sha256"]
+        ):
+            raise ValueError("external monotonic state receipt chain is invalid")
         return {
             "mode": "external-command",
             "backend_identity_sha256": response["backend_identity_sha256"],
             "operation_id": response["operation_id"],
             "generation": generation,
+            "previous_generation": response["previous_generation"],
+            "previous_receipt_sha256": response["previous_receipt_sha256"],
+            "backend_receipt": response["backend_receipt"],
+            "request_sha256": response["request_sha256"],
         }
     raw_path = os.environ.get(f"{prefix}_STATE_PATH", "").strip()
     if not raw_path:
@@ -282,6 +375,8 @@ def _advance_monotonic_state(
             "SELECT generation, receipt_sha256 FROM receipt_state WHERE purpose = ?",
             (purpose,),
         ).fetchone()
+        previous_generation = int(row[0]) if row is not None else 0
+        previous_receipt_sha256 = str(row[1]) if row is not None else ""
         if row is not None and (
             generation < int(row[0])
             or (generation == int(row[0]) and receipt_sha256 != str(row[1]))
@@ -306,6 +401,35 @@ def _advance_monotonic_state(
         "backend_identity_sha256": hashlib.sha256(str(path).encode()).hexdigest(),
         "operation_id": "sqlite-immediate-transaction",
         "generation": generation,
+        "previous_generation": previous_generation,
+        "previous_receipt_sha256": previous_receipt_sha256,
+        "backend_receipt": None,
+        "request_sha256": "",
+    }
+
+
+def _monotonic_backend_subject(
+    *,
+    purpose: str,
+    generation: int,
+    receipt_sha256: str,
+    previous_generation: int,
+    previous_receipt_sha256: str,
+    backend_identity_sha256: str,
+    operation_id: str,
+    request_sha256: str,
+) -> dict[str, Any]:
+    return {
+        "schema_version": "1.0",
+        "operation": "compare-and-advance",
+        "purpose": purpose,
+        "generation": generation,
+        "receipt_sha256": receipt_sha256,
+        "previous_generation": previous_generation,
+        "previous_receipt_sha256": previous_receipt_sha256,
+        "backend_identity_sha256": backend_identity_sha256,
+        "operation_id": operation_id,
+        "request_sha256": request_sha256,
     }
 
 
@@ -337,3 +461,8 @@ def _scan_observed_at() -> datetime:
 
 def _digest(value: str) -> bool:
     return len(value) == 64 and all(c in "0123456789abcdef" for c in value)
+
+
+def _optional_digest(value: object) -> bool:
+    text = str(value or "")
+    return not text or _digest(text)

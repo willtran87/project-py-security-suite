@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import hashlib
 import importlib.util
+import importlib.metadata
 import json
 import os
 import re
@@ -15,6 +16,7 @@ from urllib.parse import urlsplit
 from .path_safety import read_regular_file
 from .execution import CommandEnvironment, run_command
 from .strict_json import canonical_bytes
+from .deployment_receipt import verify_deployment_receipt
 
 
 _MAX_FILE_BYTES = 1024 * 1024
@@ -278,6 +280,11 @@ def build_boundary_graph(
             "files": ordered_files,
             "files_sha256": hashlib.sha256(canonical_bytes(ordered_files)).hexdigest(),
         }
+    parser_provenance = _semantic_parser_provenance(languages)
+    compiler_evidence, compiler_authority = _compiler_semantic_evidence(
+        language_file_sets,
+        required=require_governed_parsers and bool(set(languages) - {"python"}),
+    )
     subject = {
         "schema_version": "1.0",
         "analysis": "bounded-static-polyglot-boundary-graph",
@@ -299,6 +306,11 @@ def build_boundary_graph(
                 for language in sorted(set(languages) - {"python"})
             ]
         ),
+        "semantic_parser_provenance": parser_provenance,
+        "compiler_semantic_complete": compiler_evidence is not None
+        or not bool(set(languages) - {"python"}),
+        "compiler_semantic_evidence": compiler_evidence,
+        "compiler_semantic_authority_receipt": compiler_authority,
         "heuristic_languages": heuristic_languages,
         "special_surfaces": special_surfaces,
         "special_surface_complete": special_surface_complete,
@@ -311,6 +323,115 @@ def build_boundary_graph(
         **subject,
         "graph_sha256": hashlib.sha256(canonical_bytes(subject)).hexdigest(),
     }
+
+
+def _semantic_parser_provenance(languages: Counter[str]) -> list[dict[str, str]]:
+    result: list[dict[str, str]] = []
+    if languages.get("python"):
+        result.append(
+            {
+                "language": "python",
+                "engine": "python-ast",
+                "version": sys.version.split()[0],
+                "module_sha256": hashlib.sha256(
+                    Path(ast.__file__).read_bytes()
+                ).hexdigest(),
+            }
+        )
+    for language in sorted(set(languages) - {"python"}):
+        module_name = {"csharp": "c_sharp"}.get(language, language)
+        package_name = {
+            "csharp": "tree-sitter-c-sharp",
+        }.get(language, f"tree-sitter-{language.replace('_', '-')}")
+        module = importlib.import_module(f"tree_sitter_{module_name}")
+        module_path = Path(str(module.__file__)).resolve()
+        result.append(
+            {
+                "language": language,
+                "engine": "tree-sitter",
+                "version": importlib.metadata.version(package_name),
+                "module_sha256": hashlib.sha256(module_path.read_bytes()).hexdigest(),
+            }
+        )
+    return result
+
+
+def _compiler_semantic_evidence(
+    language_file_sets: dict[str, dict[str, Any]], *, required: bool
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    if not required:
+        return None, None
+    raw_path = os.environ.get("PYSEC_COMPILER_SEMANTIC_EVIDENCE_PATH", "").strip()
+    expected = (
+        os.environ.get("PYSEC_COMPILER_SEMANTIC_EVIDENCE_SHA256", "").strip().casefold()
+    )
+    if not raw_path or len(expected) != 64:
+        raise ValueError("compiler semantic evidence configuration is incomplete")
+    path = Path(raw_path).expanduser().resolve()
+    _, payload = read_regular_file(
+        path, "compiler semantic evidence", maximum_bytes=16 * 1024 * 1024
+    )
+    if hashlib.sha256(payload).hexdigest() != expected:
+        raise ValueError("compiler semantic evidence does not match its pin")
+    from .strict_json import loads as strict_loads
+
+    value = strict_loads(payload)
+    if (
+        not isinstance(value, dict)
+        or set(value) != {"schema_version", "frontends"}
+        or value.get("schema_version") != "1.0"
+        or not isinstance(value.get("frontends"), list)
+    ):
+        raise ValueError("compiler semantic evidence fields do not match")
+    expected_languages = set(language_file_sets) - {"python"}
+    observed: set[str] = set()
+    for item in value.get("frontends", []):
+        fields = {
+            "language",
+            "engine",
+            "engine_sha256",
+            "configuration_sha256",
+            "files_sha256",
+            "symbols",
+            "cfg_edges",
+            "dataflow_edges",
+            "interprocedural_edges",
+        }
+        language = str(item.get("language") or "") if isinstance(item, dict) else ""
+        counts = ("symbols", "cfg_edges", "dataflow_edges", "interprocedural_edges")
+        if (
+            not isinstance(item, dict)
+            or set(item) != fields
+            or language not in expected_languages
+            or language in observed
+            or str(item["engine"]).casefold().startswith("tree-sitter")
+            or any(
+                len(str(item[name])) != 64
+                or any(
+                    character not in "0123456789abcdef" for character in str(item[name])
+                )
+                for name in ("engine_sha256", "configuration_sha256")
+            )
+            or item["files_sha256"] != language_file_sets[language]["files_sha256"]
+            or any(
+                isinstance(item[name], bool)
+                or not isinstance(item[name], int)
+                or item[name] < 0
+                for name in counts
+            )
+            or item["symbols"] < 1
+            or sum(item[name] for name in counts[1:]) < 1
+        ):
+            raise ValueError("compiler semantic frontend evidence is invalid")
+        observed.add(language)
+    if observed != expected_languages:
+        raise ValueError("compiler semantic evidence omits a source language")
+    authority = verify_deployment_receipt(
+        value,
+        purpose="compiler-semantic-evidence",
+        environment_prefix="PYSEC_COMPILER_SEMANTIC_AUTHORITY",
+    )
+    return value, authority
 
 
 def _python_edges(text: str, source: str) -> tuple[list[dict[str, Any]], str | None]:

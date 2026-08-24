@@ -14,6 +14,7 @@ from py_security_suite.artifact_validation import validate_governed_artifacts
 from py_security_suite.adapters.portfolio import PipdeptreeAdapter
 from py_security_suite.config import ToolConfig
 from py_security_suite.deployment_receipt import verify_deployment_receipt
+from py_security_suite.strict_json import canonical_bytes
 from tests.deployment_authority import authority_environment
 
 
@@ -100,6 +101,36 @@ def test_native_report_secrets_use_encrypted_content_addressed_storage(
     raw_store.mkdir()
     key_bytes = b"k" * 32
     wrapped_key = b"w" * 48
+    challenge = "c" * 64
+    request = {
+        "schema_version": "1.0",
+        "operation": "generate-data-key",
+        "store_identity": hashlib.sha256(str(raw_store.resolve()).encode()).hexdigest(),
+        "object_plaintext_sha256": hashlib.sha256(
+            json.dumps(
+                {
+                    "total_packages": 0,
+                    "direct_dependencies": 0,
+                    "transitive_dependencies": 0,
+                    "max_depth": 0,
+                    "missing_dependencies": 0,
+                    "cyclic_dependencies": 0,
+                    "conflicting_dependencies": {"packages": 0, "edges": 0},
+                    "password": "do-not-publish",
+                }
+            ).encode()
+        ).hexdigest(),
+        "challenge_sha256": challenge,
+        "command_context": {
+            "schema_version": "1.0",
+            "executable_sha256": hashlib.sha256(
+                Path(sys.executable).read_bytes()
+            ).hexdigest(),
+            "allowed_endpoints": ["https://kms.example.invalid:443"],
+            "mtls_identity_sha256": "d" * 64,
+            "sandbox_identity_sha256": "e" * 64,
+        },
+    }
     kms_script = tmp_path / "kms.py"
     custody = tmp_path / "custody.json"
     custody.write_text(
@@ -119,6 +150,9 @@ def test_native_report_secrets_use_encrypted_content_addressed_storage(
                 "hardware_backed": True,
                 "wrapped_key_sha256": hashlib.sha256(wrapped_key).hexdigest(),
                 "encryption_operation_id": "kms-operation-1",
+                "request_sha256": hashlib.sha256(canonical_bytes(request)).hexdigest(),
+                "object_plaintext_sha256": request["object_plaintext_sha256"],
+                "challenge_sha256": challenge,
             }
         ),
         encoding="utf-8",
@@ -128,6 +162,7 @@ def test_native_report_secrets_use_encrypted_content_addressed_storage(
         json.loads(custody.read_text(encoding="utf-8")),
         purpose="raw-evidence-custody",
         prefix="PYSEC_RAW_EVIDENCE_CUSTODY_AUTHORITY",
+        challenge=challenge,
     )
     with (
         patch.dict(os.environ, custody_authority),
@@ -184,6 +219,11 @@ def test_native_report_secrets_use_encrypted_content_addressed_storage(
                 }
             ]
         ),
+        "PYSEC_RAW_EVIDENCE_KMS_ALLOWED_ENDPOINTS_JSON": json.dumps(
+            ["https://kms.example.invalid:443"]
+        ),
+        "PYSEC_RAW_EVIDENCE_KMS_MTLS_IDENTITY_SHA256": "d" * 64,
+        "PYSEC_RAW_EVIDENCE_KMS_SANDBOX_IDENTITY_SHA256": "e" * 64,
     }
     with (
         patch.dict(
