@@ -379,7 +379,25 @@ def _analyze_special_surface(
                 continue
             raw = cell.get("source")
             text = "".join(raw) if isinstance(raw, list) else str(raw or "")
-            cell_edges, error = _python_edges(text, f"{source}#cell-{index + 1}")
+            transformed: list[str] = []
+            for line_number, line in enumerate(text.splitlines(), start=1):
+                stripped = line.lstrip()
+                if stripped.startswith(("%", "!")):
+                    edges.append(
+                        _edge(
+                            f"{source}#cell-{index + 1}",
+                            line_number,
+                            "dynamic-dispatch",
+                            stripped[:200],
+                            "notebook-magic",
+                        )
+                    )
+                    transformed.append("pass")
+                else:
+                    transformed.append(line)
+            cell_edges, error = _python_edges(
+                "\n".join(transformed), f"{source}#cell-{index + 1}"
+            )
             if error:
                 raise ValueError("notebook code cell is not valid Python")
             edges.extend(cell_edges)
@@ -399,6 +417,19 @@ def _analyze_special_surface(
                 "template",
             )
             for match in include.finditer(text)
+        )
+        literal_starts = {match.start() for match in include.finditer(text)}
+        directive = re.compile(r"{[%{]\s*(?:include|extends|import|from)\b")
+        edges.extend(
+            _edge(
+                source,
+                text.count("\n", 0, match.start()) + 1,
+                "dynamic-dispatch",
+                "<computed-template>",
+                "template",
+            )
+            for match in directive.finditer(text)
+            if match.start() not in literal_starts
         )
         return _surface(source, kind, "heuristic", True), edges
     if kind == "bytecode":
@@ -531,8 +562,9 @@ def _native_imports(path: Path, payload: bytes) -> list[str]:
             )
             return sorted(
                 {
-                    entry.dll.decode("utf-8", errors="strict")
+                    f"{entry.dll.decode('utf-8', errors='strict')}!{symbol.name.decode('utf-8', errors='strict') if symbol.name else '#' + str(symbol.ordinal)}"
                     for entry in getattr(pe, "DIRECTORY_ENTRY_IMPORT", ())
+                    for symbol in entry.imports
                 }
             )
         except pefile.PEFormatError as exc:
@@ -553,6 +585,13 @@ def _native_imports(path: Path, payload: bytes) -> list[str]:
                         for tag in segment.iter_tags()  # type: ignore[attr-defined]
                         if tag.entry.d_tag == "DT_NEEDED"
                     )
+            symbols = elf.get_section_by_name(".dynsym")
+            if symbols is not None:
+                names.update(
+                    f"symbol:{symbol.name}"
+                    for symbol in symbols.iter_symbols()  # type: ignore[attr-defined]
+                    if symbol.name and symbol["st_shndx"] == "SHN_UNDEF"
+                )
         return sorted(names)
     if payload[:4] in {
         b"\xca\xfe\xba\xbe",

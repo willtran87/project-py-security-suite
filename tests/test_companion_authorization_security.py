@@ -1,18 +1,25 @@
 from __future__ import annotations
 
 import json
+import base64
+import hashlib
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from companion.assurance_context import target_set_sha256
 from companion.authorization_security import (
     _loopback_url,
     _oracle,
     _recovery_checks,
+    _verify_recovery_receipt,
     main,
 )
+from companion.strict_json import canonical_bytes
 
 
 def _context(path: Path, target_ids: list[str]) -> None:
@@ -325,6 +332,45 @@ class CompanionAuthorizationSecurityTests(unittest.TestCase):
                 [check("process-restart"), check("process-restart") | {"id": "again"}],
                 roles,
             )
+
+    def test_recovery_receipt_proves_instance_transition(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            key = Ed25519PrivateKey.generate()
+            public_path = Path(directory) / "orchestrator.pem"
+            public_path.write_bytes(
+                key.public_key().public_bytes(
+                    serialization.Encoding.PEM,
+                    serialization.PublicFormat.SubjectPublicKeyInfo,
+                )
+            )
+            identity = hashlib.sha256(public_path.read_bytes()).hexdigest()
+            signed = {
+                "schema_version": "1.0",
+                "check_id": "restart",
+                "phase": "process-restart",
+                "event_id": "event-1",
+                "before_instance_id": "instance-a",
+                "after_instance_id": "instance-b",
+                "orchestrator_identity_sha256": identity,
+            }
+            receipt = {
+                **signed,
+                "signature_base64": base64.b64encode(
+                    key.sign(canonical_bytes(signed))
+                ).decode(),
+            }
+            with patch.dict(
+                "os.environ",
+                {
+                    "PYSEC_AUTHORIZATION_ORCHESTRATOR_KEY_PATH": str(public_path),
+                    "PYSEC_AUTHORIZATION_ORCHESTRATOR_KEY_SHA256": identity,
+                },
+            ):
+                _verify_recovery_receipt(
+                    canonical_bytes(receipt),
+                    check_id="restart",
+                    phase="process-restart",
+                )
 
 
 if __name__ == "__main__":

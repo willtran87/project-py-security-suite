@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import os
 from pathlib import Path
 from typing import Any
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 from .path_safety import read_regular_file
 from .strict_json import dumps as strict_dumps
@@ -57,6 +60,7 @@ def _encrypted_sidecar(payload: bytes, raw_sha256: str) -> dict[str, Any]:
             "object_id": "",
             "ciphertext_sha256": "",
             "key_sha256": "",
+            "custody_receipt_sha256": "",
         }
     if not raw_directory or not key_path_raw or not _digest(key_sha256):
         raise ValueError("encrypted raw evidence storage configuration is incomplete")
@@ -73,10 +77,20 @@ def _encrypted_sidecar(payload: bytes, raw_sha256: str) -> dict[str, Any]:
         raise ValueError(
             "raw evidence encryption key does not match its deployment pin"
         )
+    custody_sha256 = _custody_receipt(root, key_sha256)
+    object_key = HKDF(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=bytes.fromhex(raw_sha256),
+        info=b"pysec-native-evidence-object-v1",
+    ).derive(key)
     nonce = os.urandom(12)
-    ciphertext = nonce + AESGCM(key).encrypt(nonce, payload, raw_sha256.encode("ascii"))
+    ciphertext = nonce + AESGCM(object_key).encrypt(
+        nonce, payload, raw_sha256.encode("ascii")
+    )
     ciphertext_sha256 = hashlib.sha256(ciphertext).hexdigest()
-    object_id = f"sha256-{raw_sha256}.aesgcm"
+    opaque_id = hmac.new(key, raw_sha256.encode("ascii"), hashlib.sha256).hexdigest()
+    object_id = f"hmac-sha256-{opaque_id}.aesgcm"
     destination = (root / object_id).resolve()
     if destination.parent != root:
         raise ValueError("raw evidence object escaped its content-addressed store")
@@ -90,7 +104,7 @@ def _encrypted_sidecar(payload: bytes, raw_sha256: str) -> dict[str, Any]:
         if len(existing) < 28:
             raise ValueError("encrypted raw evidence object is truncated")
         try:
-            recovered = AESGCM(key).decrypt(
+            recovered = AESGCM(object_key).decrypt(
                 existing[:12], existing[12:], raw_sha256.encode("ascii")
             )
         except Exception as exc:
@@ -121,7 +135,53 @@ def _encrypted_sidecar(payload: bytes, raw_sha256: str) -> dict[str, Any]:
         "object_id": object_id,
         "ciphertext_sha256": ciphertext_sha256,
         "key_sha256": key_sha256,
+        "custody_receipt_sha256": custody_sha256,
     }
+
+
+def _custody_receipt(root: Path, key_sha256: str) -> str:
+    raw_path = os.environ.get("PYSEC_RAW_EVIDENCE_CUSTODY_RECEIPT_PATH", "").strip()
+    expected = (
+        os.environ.get("PYSEC_RAW_EVIDENCE_CUSTODY_RECEIPT_SHA256", "")
+        .strip()
+        .casefold()
+    )
+    if not raw_path or not _digest(expected):
+        raise ValueError("raw evidence custody receipt configuration is incomplete")
+    path = Path(raw_path).expanduser().resolve()
+    _, payload = read_regular_file(
+        path, "raw evidence custody receipt", maximum_bytes=64 * 1024
+    )
+    if hashlib.sha256(payload).hexdigest() != expected:
+        raise ValueError(
+            "raw evidence custody receipt does not match its deployment pin"
+        )
+    value = strict_loads(payload)
+    fields = {
+        "schema_version",
+        "provider",
+        "key_id",
+        "key_version",
+        "store_identity",
+        "retention_days",
+        "master_key_sha256",
+    }
+    if (
+        not isinstance(value, dict)
+        or set(value) != fields
+        or value.get("schema_version") != "1.0"
+        or value.get("master_key_sha256") != key_sha256
+        or value.get("store_identity") != hashlib.sha256(str(root).encode()).hexdigest()
+        or not isinstance(value.get("retention_days"), int)
+        or isinstance(value.get("retention_days"), bool)
+        or not 1 <= value["retention_days"] <= 3650
+        or not all(
+            str(value.get(name) or "").strip()
+            for name in ("provider", "key_id", "key_version")
+        )
+    ):
+        raise ValueError("raw evidence custody receipt policy is invalid")
+    return expected
 
 
 def _digest(value: str) -> bool:

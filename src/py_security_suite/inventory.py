@@ -353,6 +353,15 @@ def _git_repository_state(git: str, target: Path) -> dict[str, Any]:
     refs = _parse_ref_lines(
         query(["for-each-ref", "--format=%(objectname) %(refname)"])
     )
+    unreachable = query(
+        ["fsck", "--unreachable", "--no-reflogs", "--no-progress"],
+        exits=frozenset({0}),
+    )
+    if unreachable:
+        raise ValueError(
+            "Git object store contains unreachable or reflog-only objects that cannot be sealed"
+        )
+    reachable_objects = query(["rev-list", "--objects", "--all"])
     head = query(["rev-parse", "--verify", "HEAD"]).casefold()
     symbolic_head = query(["symbolic-ref", "-q", "HEAD"], exits=frozenset({0, 1}))
     configuration = query(
@@ -380,6 +389,9 @@ def _git_repository_state(git: str, target: Path) -> dict[str, Any]:
         "replace_refs": query(["replace", "-l"]),
         "security_config_sha256": hashlib.sha256(configuration.encode()).hexdigest(),
         "alternates_sha256": alternates_sha256,
+        "reachable_objects_sha256": hashlib.sha256(
+            reachable_objects.encode()
+        ).hexdigest(),
     }
 
 

@@ -459,6 +459,10 @@ capabilities, seccomp filter mode with at least one filter, and the
 deployment-owned `PYSEC_SECCOMP_POLICY_SHA256` commitment. macOS requires the
 digest-bound production sandbox launcher, arguments, and runtime closure; Windows
 requires DEP, ASLR, dynamic-code prohibition, and child-process prohibition.
+Linux and macOS production completeness additionally requires an exact
+effective-policy receipt selected by `PYSEC_EFFECTIVE_SANDBOX_ATTESTATION_PATH`
+and `PYSEC_EFFECTIVE_SANDBOX_ATTESTATION_SHA256`. The receipt binds the observed
+kernel/launcher facts, effective identity, policy digest, platform, and attestor.
 Sandbox arguments may use
 `{PYSEC_PROBE_SECRET_PARENT}` to mask the per-run secret directory. Governance
 v2 also requires host-filesystem, credential, process, device, and IPC
@@ -469,6 +473,13 @@ coverage. `resource-limits.json` records CPU, memory, process, open-file, output
 and scratch controls; production/release additionally require an external
 `file-write-quota` capability, because post-run directory polling is not a hard
 write limit.
+Optional exact native reports use `PYSEC_RAW_EVIDENCE_DIRECTORY`, the
+digest-pinned 256-bit key named by `PYSEC_RAW_EVIDENCE_KEY_PATH`, and a custody
+record named by `PYSEC_RAW_EVIDENCE_CUSTODY_RECEIPT_PATH` plus its SHA-256. The
+receipt binds provider, key ID/version, store identity, retention, and the
+master-key commitment. Deployment traces are admitted through
+`PYSEC_RUNTIME_TRACE_EVIDENCE_PATH` plus its SHA-256 and retained only when
+every source/target pair exists in `boundary-graph.json`.
 `trust-policy.json` seals deployment trust variables by value digest, and its
 digest is included in the effective configuration identity. Production and
 release additionally require an externally quorum-signed trust-policy

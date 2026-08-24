@@ -105,6 +105,20 @@ class EffectivenessCorpusTests(unittest.TestCase):
             "replay_key": replay_key,
             "sequence": 7,
             "holdout_uses": 1,
+            "request_sha256": hashlib.sha256(
+                canonical_bytes(
+                    {
+                        "schema_version": "1.0",
+                        "replay_key": replay_key,
+                        "corpus_id": "holdout",
+                        "holdout_labels_sha256": "b" * 64,
+                        "observed_at": "2026-08-24T00:00:00+00:00",
+                        "query_budget": 1,
+                    }
+                )
+            ).hexdigest(),
+            "checkpoint_size": 7,
+            "checkpoint_root_sha256": "c" * 64,
         }
         receipt = {
             **signed,
@@ -130,7 +144,7 @@ class EffectivenessCorpusTests(unittest.TestCase):
                 return_value=Response(),
             ),
         ):
-            _consume_remote_effectiveness_replay(
+            result = _consume_remote_effectiveness_replay(
                 replay_key,
                 corpus_id="holdout",
                 holdout_sha256="b" * 64,
@@ -141,6 +155,8 @@ class EffectivenessCorpusTests(unittest.TestCase):
                 receipt_key_sha256=hashlib.sha256(public_path.read_bytes()).hexdigest(),
                 query_budget=1,
             )
+        self.assertEqual(result["mode"], "remote-signed-checkpoint")
+        self.assertEqual(result["sequence"], 7)
 
     @staticmethod
     def _file_record(path: str, content: bytes) -> dict[str, Any]:
@@ -484,7 +500,18 @@ class EffectivenessCorpusTests(unittest.TestCase):
                 },
             ),
             patch(
-                "py_security_suite.effectiveness_corpus._consume_remote_effectiveness_replay"
+                "py_security_suite.effectiveness_corpus._consume_remote_effectiveness_replay",
+                return_value={
+                    "mode": "remote-signed-checkpoint",
+                    "replay_key": "e" * 64,
+                    "request_sha256": "f" * 64,
+                    "service_key_sha256": "1" * 64,
+                    "sequence": 1,
+                    "holdout_uses": 1,
+                    "checkpoint_size": 1,
+                    "checkpoint_root_sha256": "2" * 64,
+                    "signature_base64": "AA==",
+                },
             ) as replay_service,
         ):
             result = evaluate_report_corpus(

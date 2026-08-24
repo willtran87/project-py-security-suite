@@ -386,7 +386,7 @@ def _policy_catalogs(value: object) -> list[dict[str, Any]]:
             raise ValueError("organization requirements catalog identity is invalid")
         if (
             not str(item["source"]).startswith("https://")
-            or len(str(item["source_revision"])) != 40
+            or not _hex_revision(str(item["source_revision"]))
             or len(str(item["catalog_sha256"])) != 64
         ):
             raise ValueError("organization requirements catalog provenance is invalid")
@@ -499,6 +499,7 @@ def _organization_requirement_assessments(
     from .trusted_observation import scan_observed_at
 
     observed_at = scan_observed_at()
+    evidence_policy = _assessment_evidence_policy(expected_identities)
     threshold = value["minimum_authority_signatures"]
     if (
         isinstance(threshold, bool)
@@ -530,7 +531,9 @@ def _organization_requirement_assessments(
         for item in policy["requirements"]
     }
     for item in entries:
-        assessment = _requirement_assessment(item, artifacts, observed_at)
+        assessment = _requirement_assessment(
+            item, artifacts, observed_at, evidence_policy
+        )
         identity = assessment.pop("identity")
         if identity not in expected_identities or identity in result:
             raise ValueError("organization requirement assessment identity is invalid")
@@ -581,7 +584,7 @@ def _verified_catalog_snapshots(
             identity in result
             or not _digest(digest)
             or trust_policy.get(key) != digest
-            or len(str(item["source_revision"])) != 40
+            or not _hex_revision(str(item["source_revision"]))
         ):
             raise ValueError("requirements assessment catalog is not deployment-pinned")
         relative = Path(str(item["requirements_file"] or ""))
@@ -614,7 +617,10 @@ def _verified_catalog_snapshots(
 
 
 def _requirement_assessment(
-    value: object, artifacts: dict[str, Any], observed_at: datetime
+    value: object,
+    artifacts: dict[str, Any],
+    observed_at: datetime,
+    evidence_policy: dict[tuple[str, str, str], dict[str, Any]],
 ) -> dict[str, Any]:
     fields = {
         "standard",
@@ -643,6 +649,17 @@ def _requirement_assessment(
     if not isinstance(assertions, list) or len(assertions) > 100:
         raise ValueError("requirement assessment assertions are invalid")
     normalized = [_assessment_assertion(item) for item in assertions]
+    controls = evidence_policy[identity]
+    if (
+        str(value["method"]) not in controls["allowed_methods"]
+        or len(normalized) < controls["minimum_assertions"]
+        or any(
+            assertion["artifact"] not in controls["allowed_artifacts"]
+            or assertion["operator"] not in controls["allowed_operators"]
+            for assertion in normalized
+        )
+    ):
+        raise ValueError("requirement assessment violates its evidence policy")
     if declared in {"pass", "fail"} and not normalized:
         raise ValueError("assessed pass or fail requires replayable assertions")
     if declared in {"not-tested", "not-applicable"} and normalized:
@@ -662,6 +679,91 @@ def _requirement_assessment(
         "assessed_at": assessed_at.isoformat(),
         "assertions": normalized,
     }
+
+
+def _assessment_evidence_policy(
+    identities: set[tuple[str, str, str]],
+) -> dict[tuple[str, str, str], dict[str, Any]]:
+    raw_path = os.environ.get("PYSEC_REQUIREMENTS_EVIDENCE_POLICY_PATH", "").strip()
+    expected = (
+        os.environ.get("PYSEC_REQUIREMENTS_EVIDENCE_POLICY_SHA256", "")
+        .strip()
+        .casefold()
+    )
+    if not raw_path or not _digest(expected):
+        raise ValueError("requirements evidence policy configuration is incomplete")
+    path = Path(raw_path).expanduser().resolve()
+    _, payload = read_regular_file(
+        path, "requirements evidence policy", maximum_bytes=16 * 1024 * 1024
+    )
+    if hashlib.sha256(payload).hexdigest() != expected:
+        raise ValueError(
+            "requirements evidence policy does not match its deployment pin"
+        )
+    value = strict_loads(payload)
+    if (
+        not isinstance(value, dict)
+        or set(value) != {"schema_version", "requirements"}
+        or value.get("schema_version") != "1.0"
+        or not isinstance(value.get("requirements"), list)
+    ):
+        raise ValueError("requirements evidence policy fields do not match")
+    result: dict[tuple[str, str, str], dict[str, Any]] = {}
+    fields = {
+        "standard",
+        "version",
+        "requirement",
+        "allowed_artifacts",
+        "allowed_methods",
+        "allowed_operators",
+        "minimum_assertions",
+    }
+    for item in value["requirements"]:
+        if not isinstance(item, dict) or set(item) != fields:
+            raise ValueError("requirements evidence policy entry is invalid")
+        identity = (
+            str(item["standard"]),
+            str(item["version"]),
+            str(item["requirement"]),
+        )
+        lists = {
+            name: item[name]
+            for name in ("allowed_artifacts", "allowed_methods", "allowed_operators")
+        }
+        minimum = item["minimum_assertions"]
+        if (
+            identity not in identities
+            or identity in result
+            or any(
+                not isinstance(items, list)
+                or not items
+                or items != sorted(set(items))
+                or any(not isinstance(entry, str) or not entry for entry in items)
+                for items in lists.values()
+            )
+            or not set(lists["allowed_operators"]).issubset(
+                {"equals", "not-equals", "gte", "lte", "exists"}
+            )
+            or isinstance(minimum, bool)
+            or not isinstance(minimum, int)
+            or not 0 <= minimum <= 100
+        ):
+            raise ValueError("requirements evidence policy entry is invalid")
+        result[identity] = {
+            **lists,
+            "minimum_assertions": minimum,
+        }
+    if set(result) != identities:
+        raise ValueError(
+            "requirements evidence policy does not cover every requirement"
+        )
+    return result
+
+
+def _hex_revision(value: str) -> bool:
+    return len(value) in {40, 64} and all(
+        character in "0123456789abcdef" for character in value.casefold()
+    )
 
 
 def _assessment_assertion(value: object) -> dict[str, Any]:

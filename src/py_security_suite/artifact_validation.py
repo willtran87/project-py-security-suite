@@ -53,6 +53,7 @@ _ARTIFACT_SCHEMAS = {
     "resource-limits.json": "resource-limits-1.0.schema.json",
     "risk-paths.json": "risk-paths.schema.json",
     "runtime-closure.json": "runtime-closure-1.0.schema.json",
+    "runtime-trace-correlation.json": "runtime-trace-correlation-1.0.schema.json",
     "semantic-language-coverage.json": "semantic-language-coverage-1.0.schema.json",
     "security-requirements-coverage.json": "security-requirements-coverage-1.0.schema.json",
     "source-inventory.json": "source-inventory.schema.json",
@@ -226,6 +227,7 @@ def _validate_native_normalization(value: dict[str, Any], records: int) -> None:
         "object_id",
         "ciphertext_sha256",
         "key_sha256",
+        "custody_receipt_sha256",
     }:
         raise ValueError("native report storage receipt is invalid")
     replayable = storage["mode"] == "encrypted-cas"
@@ -233,7 +235,12 @@ def _validate_native_normalization(value: dict[str, Any], records: int) -> None:
         raise ValueError("native report storage and replay policy do not match")
     if replayable and not all(
         isinstance(storage[name], str) and storage[name]
-        for name in ("object_id", "ciphertext_sha256", "key_sha256")
+        for name in (
+            "object_id",
+            "ciphertext_sha256",
+            "key_sha256",
+            "custody_receipt_sha256",
+        )
     ):
         raise ValueError("encrypted native report storage receipt is incomplete")
     expected = value.get("normalization_sha256")

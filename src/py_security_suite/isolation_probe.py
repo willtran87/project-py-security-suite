@@ -12,6 +12,7 @@ from typing import Any
 
 from .config import IsolationConfig
 from .execution import CommandEnvironment, run_command, sha256_file
+from .path_safety import read_regular_file
 from .strict_json import canonical_bytes, loads as strict_loads
 
 
@@ -538,6 +539,10 @@ def probe_isolation_boundary(
         capabilities["macos-sandbox-profile-bound"] = (
             len(str(policy_observations["sandbox_profile_sha256"])) == 64
         )
+    if policy_observations.get("platform") in {"linux", "macos"}:
+        attestation = _effective_policy_attestation(policy_observations)
+        policy_observations["effective_policy_attestation_sha256"] = attestation
+        capabilities["effective-kernel-policy-attested"] = bool(attestation)
     complete = (
         execution.exit_code == 0
         and not execution.timed_out
@@ -572,3 +577,55 @@ def probe_isolation_boundary(
         ]
     )
     return artifact, errors
+
+
+def _effective_policy_attestation(observations: dict[str, Any]) -> str:
+    raw_path = os.environ.get("PYSEC_EFFECTIVE_SANDBOX_ATTESTATION_PATH", "").strip()
+    expected = (
+        os.environ.get("PYSEC_EFFECTIVE_SANDBOX_ATTESTATION_SHA256", "")
+        .strip()
+        .casefold()
+    )
+    if not raw_path and not expected:
+        return ""
+    if (
+        not raw_path
+        or len(expected) != 64
+        or any(character not in "0123456789abcdef" for character in expected)
+    ):
+        raise ValueError("effective sandbox attestation configuration is incomplete")
+    path = Path(raw_path).expanduser().resolve()
+    _, payload = read_regular_file(
+        path, "effective sandbox policy attestation", maximum_bytes=1024 * 1024
+    )
+    if hashlib.sha256(payload).hexdigest() != expected:
+        raise ValueError(
+            "effective sandbox attestation does not match its deployment pin"
+        )
+    value = strict_loads(payload)
+    fields = {
+        "schema_version",
+        "platform",
+        "policy_sha256",
+        "effective_identity",
+        "observations_sha256",
+        "attestor",
+    }
+    policy_sha256 = str(
+        observations.get("seccomp_policy_sha256")
+        or observations.get("sandbox_profile_sha256")
+        or ""
+    )
+    if (
+        not isinstance(value, dict)
+        or set(value) != fields
+        or value.get("schema_version") != "1.0"
+        or value.get("platform") != observations.get("platform")
+        or value.get("policy_sha256") != policy_sha256
+        or value.get("observations_sha256")
+        != hashlib.sha256(canonical_bytes(observations)).hexdigest()
+        or not str(value.get("effective_identity") or "").strip()
+        or not str(value.get("attestor") or "").strip()
+    ):
+        raise ValueError("effective sandbox attestation policy is invalid")
+    return expected

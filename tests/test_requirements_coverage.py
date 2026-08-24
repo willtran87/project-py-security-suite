@@ -241,6 +241,27 @@ class SecurityRequirementsCoverageTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
+            evidence_policy_path = root / "requirements-evidence-policy.json"
+            evidence_policy_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "1.0",
+                        "requirements": [
+                            {
+                                "standard": standard,
+                                "version": "1.0.0",
+                                "requirement": f"REQ-{index}",
+                                "allowed_artifacts": ["result.json"],
+                                "allowed_methods": ["automated replay"],
+                                "allowed_operators": ["equals"],
+                                "minimum_assertions": 1 if index == 0 else 0,
+                            }
+                            for index, standard in enumerate(standards)
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
             environment = {
                 "PYSEC_REQUIREMENTS_POLICY_PATH": str(policy_path),
                 "PYSEC_REQUIREMENTS_POLICY_SHA256": hashlib.sha256(
@@ -251,6 +272,10 @@ class SecurityRequirementsCoverageTests(unittest.TestCase):
                     assessment_path.read_bytes()
                 ).hexdigest(),
                 "PYSEC_REQUIREMENTS_CATALOG_SHA256": json.dumps(pins),
+                "PYSEC_REQUIREMENTS_EVIDENCE_POLICY_PATH": str(evidence_policy_path),
+                "PYSEC_REQUIREMENTS_EVIDENCE_POLICY_SHA256": hashlib.sha256(
+                    evidence_policy_path.read_bytes()
+                ).hexdigest(),
             }
             with (
                 patch.dict(os.environ, environment),

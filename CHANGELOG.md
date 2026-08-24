@@ -1,5 +1,13 @@
 # Changelog
 
+- Require deployment-pinned effective sandbox-policy attestations, signed
+  restart/failover instance-transition receipts, portable effectiveness replay
+  checkpoints, requirement-specific evidence allowlists, and encrypted raw
+  evidence custody receipts; use per-object HKDF keys and opaque HMAC object
+  identifiers; reject unreachable Git objects; deepen notebook, template, PE,
+  and ELF analysis; and correlate deployment-pinned request traces with exact
+  static request-to-sink edges.
+
 - Reverify portable detached semantic-authority receipts at final manifest
   admission; use one advanced RFC 3161 scan time for governed loader, policy,
   catalog, and assessment decisions; compare complete Git refs and security

@@ -4,7 +4,7 @@
   "title": "Scanner effectiveness evaluation",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "verdict", "report", "corpus", "time_authority", "replay_protected", "confusion_matrix", "metrics", "feedback_policy", "failures", "label_outcomes"],
+  "required": ["schema_version", "verdict", "report", "corpus", "time_authority", "replay_protected", "replay_receipt", "confusion_matrix", "metrics", "feedback_policy", "failures", "label_outcomes"],
   "properties": {
     "schema_version": {"enum": ["1.0", "2.0"]},
     "verdict": {"enum": ["pass", "fail"]},
@@ -34,6 +34,7 @@
     },
     "time_authority": {"type": "object", "additionalProperties": false, "required": ["validated", "observed_at", "trusted_time_sha256", "receipt_sha256"], "properties": {"validated": {"type": "boolean"}, "observed_at": {"type": "string"}, "trusted_time_sha256": {"type": "string", "pattern": "^$|^[0-9a-f]{64}$"}, "receipt_sha256": {"type": "string", "pattern": "^$|^[0-9a-f]{64}$"}}},
     "replay_protected": {"type": "boolean"},
+    "replay_receipt": {"anyOf": [{"type": "null"}, {"type": "object", "additionalProperties": false, "required": ["mode", "replay_key", "request_sha256", "service_key_sha256", "sequence", "holdout_uses", "checkpoint_size", "checkpoint_root_sha256", "signature_base64"], "properties": {"mode": {"enum": ["local-ledger", "remote-signed-checkpoint"]}, "replay_key": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "request_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "service_key_sha256": {"type": "string", "pattern": "^$|^[0-9a-f]{64}$"}, "sequence": {"type": "integer", "minimum": 0}, "holdout_uses": {"type": "integer", "minimum": 1}, "checkpoint_size": {"type": "integer", "minimum": 0}, "checkpoint_root_sha256": {"type": "string", "pattern": "^$|^[0-9a-f]{64}$"}, "signature_base64": {"type": "string"}}}]},
     "confusion_matrix": {
       "type": "object",
       "additionalProperties": false,

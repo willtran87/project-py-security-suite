@@ -215,7 +215,10 @@ still execute in dynamic or connected companion stages:
    failover triggers and verifies their durable invariants through that observer;
    the observer identity is deployment-pinned through
    `PYSEC_AUTHORIZATION_ORACLE_IDENTITY_SHA256`, and its credential cannot be
-   shared with an application role;
+   shared with an application role. Restart and failover trigger responses must
+   also carry an Ed25519 receipt under the deployment-pinned
+   `PYSEC_AUTHORIZATION_ORCHESTRATOR_KEY_PATH` key, with distinct before/after
+   instance identities and an event ID;
    schema 2.0 records these resilience, independent-oracle, and durable-
    postcondition checks as skipped. These complement, but cannot infer, human-
    reviewed business rules and approval intent.
@@ -286,7 +289,9 @@ match exact, canonical requirement-ID snapshots pinned outside the evidence by
 `PYSEC_REQUIREMENTS_CATALOG_SHA256`; every applicable pass or fail carries an
 assessor, trusted assessment time, method, artifact SHA-256, JSON Pointer,
 operator, and expected value. The suite replays those assertions and derives
-the result. Artifact names or catalog counts alone cannot establish conformance.
+the result. A separately deployment-pinned requirements evidence policy limits
+the artifact names, methods, operators, and minimum assertions acceptable for
+every requirement. Artifact names or catalog counts alone cannot establish conformance.
 
 ## Promotion evidence
 

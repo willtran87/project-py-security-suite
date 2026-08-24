@@ -394,12 +394,18 @@ contracts that complement scanner coverage:
   classification, and replay
   policy. When `PYSEC_RAW_EVIDENCE_DIRECTORY` and a digest-pinned 256-bit key are
   configured, exact raw bytes are encrypted with AES-GCM in a content-addressed
-  sidecar; otherwise the public artifact is explicitly non-replayable.
+  sidecar; per-object keys are derived with HKDF, object names use keyed HMACs,
+  and a deployment-pinned KMS/storage custody receipt binds retention and key
+  version. Otherwise the public artifact is explicitly non-replayable.
 - `boundary-graph.json` parses Python notebook cells and WebAssembly imports,
   validates and inventories Python bytecode, reads PE/ELF/Mach-O imports, models
   template includes, and records reflection, plugin, entry-point, and dynamic
   import dispatch. Malformed, unsupported, or heuristic-only surfaces prevent
   complete or semantic-complete claims instead of disappearing from the denominator.
+- `runtime-trace-correlation.json` accepts only deployment-pinned traces whose
+  request-to-sink source and target match an exact retained static edge. It
+  preserves authorization decisions, operations, sinks, and span counts without
+  inferring execution from static reachability alone.
 - Trusted-lane evidence produces a bounded `<tool>-summary.json` and never
   forwards raw crash logs, process output, artifact bytes, or malware samples.
 - Every scan emits `sonarqube-external-issues.json` in addition to SARIF, so a

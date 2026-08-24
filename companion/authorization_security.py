@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import ipaddress
 import os
@@ -14,16 +15,21 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin, urlsplit
 
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+
 try:
     from companion.assurance_context import load_context
     from companion.provenance import inline_provenance
     from companion.strict_json import dumps as strict_dumps
     from companion.strict_json import loads as strict_loads
+    from companion.strict_json import canonical_bytes
 except ModuleNotFoundError:  # Direct script execution.
     from assurance_context import load_context  # type: ignore[import-not-found,no-redef]
     from provenance import inline_provenance  # type: ignore[import-not-found,no-redef]
     from strict_json import dumps as strict_dumps  # type: ignore[import-not-found,no-redef]
     from strict_json import loads as strict_loads  # type: ignore[import-not-found,no-redef]
+    from strict_json import canonical_bytes  # type: ignore[import-not-found,no-redef]
 
 
 _MAX_CONTRACT_BYTES = 1024 * 1024
@@ -300,7 +306,7 @@ def main(argv: list[str] | None = None) -> int:
         raise ValueError("recovery checks require an independent state oracle")
     for check in recovery_checks:
         trigger = check["trigger"]
-        trigger_status = _request(
+        trigger_status, trigger_response = _request_observation(
             base_url,
             trigger["path"],
             roles[trigger["role"]],
@@ -315,6 +321,20 @@ def main(argv: list[str] | None = None) -> int:
                     check["id"], check["phase"], "recovery-trigger", trigger_status
                 )
             )
+        else:
+            try:
+                _verify_recovery_receipt(
+                    trigger_response, check_id=check["id"], phase=check["phase"]
+                )
+            except ValueError:
+                findings.append(
+                    _workflow_finding(
+                        check["id"],
+                        check["phase"],
+                        "orchestration-receipt",
+                        0,
+                    )
+                )
         postcondition = check["postcondition"]
         if oracle is None:
             raise ValueError("recovery checks require an independent state oracle")
@@ -408,6 +428,7 @@ def main(argv: list[str] | None = None) -> int:
                         "independent-state-oracle",
                         "process-restart-postconditions",
                         "replica-failover-postconditions",
+                        "signed-orchestration-events",
                     )
                     if oracle is not None
                     else ()
@@ -421,6 +442,7 @@ def main(argv: list[str] | None = None) -> int:
                     "durable-postconditions",
                     "process-restart-postconditions",
                     "replica-failover-postconditions",
+                    "signed-orchestration-events",
                 ]
             ),
             "canaries_expected": 1,
@@ -673,6 +695,55 @@ def _recovery_postcondition(value: object) -> dict[str, Any]:
         "expected_status": _status_list(value["expected_status"]),
         "assertions": [_json_assertion(assertion) for assertion in assertions],
     }
+
+
+def _verify_recovery_receipt(payload: bytes, *, check_id: str, phase: str) -> None:
+    raw_key = os.environ.get("PYSEC_AUTHORIZATION_ORCHESTRATOR_KEY_PATH", "").strip()
+    expected_key = (
+        os.environ.get("PYSEC_AUTHORIZATION_ORCHESTRATOR_KEY_SHA256", "")
+        .strip()
+        .casefold()
+    )
+    if not raw_key or len(expected_key) != 64:
+        raise ValueError("authorization orchestrator trust is unavailable")
+    key_bytes = _regular_bytes(Path(raw_key))
+    if hashlib.sha256(key_bytes).hexdigest() != expected_key:
+        raise ValueError("authorization orchestrator key does not match its pin")
+    key = serialization.load_pem_public_key(key_bytes)
+    if not isinstance(key, Ed25519PublicKey):
+        raise ValueError("authorization orchestrator key must use Ed25519")
+    value = strict_loads(payload)
+    fields = {
+        "schema_version",
+        "check_id",
+        "phase",
+        "event_id",
+        "before_instance_id",
+        "after_instance_id",
+        "orchestrator_identity_sha256",
+        "signature_base64",
+    }
+    if not isinstance(value, dict) or set(value) != fields:
+        raise ValueError("authorization orchestration receipt fields do not match")
+    signed = {name: value[name] for name in fields - {"signature_base64"}}
+    if (
+        value["schema_version"] != "1.0"
+        or value["check_id"] != check_id
+        or value["phase"] != phase
+        or value["orchestrator_identity_sha256"] != expected_key
+        or not _label(value["event_id"], "orchestration event")
+        or not _label(value["before_instance_id"], "before instance")
+        or not _label(value["after_instance_id"], "after instance")
+        or value["before_instance_id"] == value["after_instance_id"]
+    ):
+        raise ValueError("authorization orchestration receipt policy failed")
+    try:
+        signature = base64.b64decode(str(value["signature_base64"]), validate=True)
+        key.verify(signature, canonical_bytes(signed))
+    except Exception as exc:
+        raise ValueError(
+            "authorization orchestration receipt signature failed"
+        ) from exc
 
 
 def _state_step(value: object, roles: dict[str, dict[str, str]]) -> dict[str, Any]:

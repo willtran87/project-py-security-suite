@@ -81,7 +81,7 @@ def evaluate_report_corpus(
         else datetime.now(UTC)
     )
     authority = _corpus_authority(document, corpus_path, authority_time)
-    replay_protected = _consume_effectiveness_replay(
+    replay_receipt = _consume_effectiveness_replay(
         document,
         verification,
         observed_digest,
@@ -126,7 +126,8 @@ def evaluate_report_corpus(
             "diversity": _diversity(labels),
         },
         "time_authority": time_authority,
-        "replay_protected": replay_protected,
+        "replay_protected": bool(replay_receipt),
+        "replay_receipt": replay_receipt,
         "confusion_matrix": counts,
         "metrics": {
             "precision": _ratio(true_positive, true_positive + false_positive),
@@ -372,7 +373,7 @@ def _consume_effectiveness_replay(
     replay_service_receipt_key: Path | None,
     replay_service_receipt_key_sha256: str,
     replay_query_budget: int,
-) -> bool:
+) -> dict[str, Any] | None:
     governed = document.get("schema_version") == "2.0"
     replay_key = hashlib.sha256(
         canonical_bytes(
@@ -389,7 +390,7 @@ def _consume_effectiveness_replay(
             raise ValueError(
                 "governed effectiveness evaluation cannot use a rollbackable local ledger"
             )
-        _consume_remote_effectiveness_replay(
+        return _consume_remote_effectiveness_replay(
             replay_key,
             corpus_id=str(document.get("corpus_id") or ""),
             holdout_sha256=str(document.get("holdout_labels_sha256") or ""),
@@ -400,9 +401,8 @@ def _consume_effectiveness_replay(
             receipt_key_sha256=replay_service_receipt_key_sha256,
             query_budget=replay_query_budget,
         )
-        return True
     if replay_ledger is None:
-        return False
+        return None
     ledger = replay_ledger.expanduser().resolve()
     ledger.parent.mkdir(parents=True, exist_ok=True)
     if ledger.is_symlink():
@@ -429,7 +429,17 @@ def _consume_effectiveness_replay(
         connection.execute("COMMIT")
     finally:
         connection.close()
-    return True
+    return {
+        "mode": "local-ledger",
+        "replay_key": replay_key,
+        "request_sha256": replay_key,
+        "service_key_sha256": "",
+        "sequence": 0,
+        "holdout_uses": 1,
+        "checkpoint_size": 0,
+        "checkpoint_root_sha256": "",
+        "signature_base64": "",
+    }
 
 
 def _consume_remote_effectiveness_replay(
@@ -443,7 +453,7 @@ def _consume_remote_effectiveness_replay(
     receipt_key: Path | None,
     receipt_key_sha256: str,
     query_budget: int,
-) -> None:
+) -> dict[str, Any]:
     target = urlsplit(service_url)
     if (
         target.scheme != "https"
@@ -520,6 +530,9 @@ def _consume_remote_effectiveness_replay(
         "replay_key",
         "sequence",
         "holdout_uses",
+        "request_sha256",
+        "checkpoint_size",
+        "checkpoint_root_sha256",
         "signature_base64",
     }
     if not isinstance(receipt, dict) or set(receipt) != fields:
@@ -529,12 +542,18 @@ def _consume_remote_effectiveness_replay(
         receipt["schema_version"] != "1.0"
         or receipt["status"] != "consumed"
         or receipt["replay_key"] != replay_key
+        or receipt["request_sha256"]
+        != hashlib.sha256(canonical_bytes(request_subject)).hexdigest()
         or isinstance(receipt["sequence"], bool)
         or not isinstance(receipt["sequence"], int)
         or receipt["sequence"] < 1
         or isinstance(receipt["holdout_uses"], bool)
         or not isinstance(receipt["holdout_uses"], int)
         or not 1 <= receipt["holdout_uses"] <= query_budget
+        or isinstance(receipt["checkpoint_size"], bool)
+        or not isinstance(receipt["checkpoint_size"], int)
+        or receipt["checkpoint_size"] < receipt["sequence"]
+        or not _digest(str(receipt["checkpoint_root_sha256"]))
     ):
         raise ValueError("governed effectiveness replay receipt policy failed")
     try:
@@ -544,6 +563,17 @@ def _consume_remote_effectiveness_replay(
         raise ValueError(
             "governed effectiveness replay receipt signature failed"
         ) from exc
+    return {
+        "mode": "remote-signed-checkpoint",
+        "replay_key": replay_key,
+        "request_sha256": str(receipt["request_sha256"]),
+        "service_key_sha256": receipt_key_sha256,
+        "sequence": int(receipt["sequence"]),
+        "holdout_uses": int(receipt["holdout_uses"]),
+        "checkpoint_size": int(receipt["checkpoint_size"]),
+        "checkpoint_root_sha256": str(receipt["checkpoint_root_sha256"]),
+        "signature_base64": str(receipt["signature_base64"]),
+    }
 
 
 def _digest(value: str) -> bool:

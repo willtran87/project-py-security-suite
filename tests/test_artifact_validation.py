@@ -94,6 +94,23 @@ def test_native_report_secrets_use_encrypted_content_addressed_storage(
     raw_store.mkdir()
     key = tmp_path / "raw.key"
     key.write_bytes(b"k" * 32)
+    custody = tmp_path / "custody.json"
+    custody.write_text(
+        json.dumps(
+            {
+                "schema_version": "1.0",
+                "provider": "test-kms",
+                "key_id": "evidence-key",
+                "key_version": "1",
+                "store_identity": hashlib.sha256(
+                    str(raw_store.resolve()).encode()
+                ).hexdigest(),
+                "retention_days": 30,
+                "master_key_sha256": hashlib.sha256(key.read_bytes()).hexdigest(),
+            }
+        ),
+        encoding="utf-8",
+    )
     payload = json.dumps(
         {
             "total_packages": 0,
@@ -114,6 +131,10 @@ def test_native_report_secrets_use_encrypted_content_addressed_storage(
             "PYSEC_RAW_EVIDENCE_KEY_SHA256": hashlib.sha256(
                 key.read_bytes()
             ).hexdigest(),
+            "PYSEC_RAW_EVIDENCE_CUSTODY_RECEIPT_PATH": str(custody),
+            "PYSEC_RAW_EVIDENCE_CUSTODY_RECEIPT_SHA256": hashlib.sha256(
+                custody.read_bytes()
+            ).hexdigest(),
         },
     ):
         artifact = PipdeptreeAdapter(ToolConfig(), 4096).derived_artifacts(
@@ -133,6 +154,10 @@ def test_native_report_secrets_use_encrypted_content_addressed_storage(
                 "PYSEC_RAW_EVIDENCE_KEY_PATH": str(key),
                 "PYSEC_RAW_EVIDENCE_KEY_SHA256": hashlib.sha256(
                     key.read_bytes()
+                ).hexdigest(),
+                "PYSEC_RAW_EVIDENCE_CUSTODY_RECEIPT_PATH": str(custody),
+                "PYSEC_RAW_EVIDENCE_CUSTODY_RECEIPT_SHA256": hashlib.sha256(
+                    custody.read_bytes()
                 ).hexdigest(),
             },
         ),
