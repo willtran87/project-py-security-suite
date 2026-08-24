@@ -2,9 +2,18 @@
   "schema_version": "3.0",
   "base_url": "http://127.0.0.1:8765/",
   "oracle": {
-    "base_url": "http://127.0.0.1:8766/",
-    "authorization_env": "PYSEC_AUTHORIZATION_ORACLE_TOKEN",
-    "identity_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    "observers": [
+      {
+        "base_url": "http://127.0.0.1:8766/",
+        "authorization_env": "PYSEC_AUTHORIZATION_ORACLE_TOKEN",
+        "identity_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      {
+        "base_url": "http://127.0.0.1:8767/",
+        "authorization_env": "PYSEC_AUTHORIZATION_ORACLE_WITNESS_TOKEN",
+        "identity_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      }
+    ]
   },
   "roles": {
     "anonymous": {},

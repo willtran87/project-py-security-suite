@@ -10,10 +10,12 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
-from .deployment_receipt import verify_deployment_receipt
+from .deployment_receipt import verify_portable_receipt
 from .path_safety import read_regular_file
+from .pinned_command import command_configured, run_pinned_json_command
 from .strict_json import dumps as strict_dumps
 from .strict_json import loads as strict_loads
+from .strict_json import canonical_bytes
 
 
 def protect_native_report(payload: str, *, adapter: str) -> dict[str, Any]:
@@ -53,9 +55,8 @@ def _redact(value: object) -> object:
 
 def _encrypted_sidecar(payload: bytes, raw_sha256: str) -> dict[str, Any]:
     raw_directory = os.environ.get("PYSEC_RAW_EVIDENCE_DIRECTORY", "").strip()
-    key_path_raw = os.environ.get("PYSEC_RAW_EVIDENCE_KEY_PATH", "").strip()
-    key_sha256 = os.environ.get("PYSEC_RAW_EVIDENCE_KEY_SHA256", "").strip().casefold()
-    if not any((raw_directory, key_path_raw, key_sha256)):
+    kms_configured = command_configured("PYSEC_RAW_EVIDENCE_KMS")
+    if not raw_directory and not kms_configured:
         return {
             "mode": "redacted-inline",
             "object_id": "",
@@ -63,27 +64,50 @@ def _encrypted_sidecar(payload: bytes, raw_sha256: str) -> dict[str, Any]:
             "key_sha256": "",
             "custody_receipt_sha256": "",
             "custody_level": "none",
+            "wrapped_data_key_base64": "",
             "custody_receipt": None,
             "custody_authority_receipt": None,
         }
-    if not raw_directory or not key_path_raw or not _digest(key_sha256):
+    if not raw_directory or not kms_configured:
         raise ValueError("encrypted raw evidence storage configuration is incomplete")
     root = Path(raw_directory).expanduser().resolve()
     if root.is_symlink() or not root.is_dir():
         raise ValueError(
             "encrypted raw evidence directory must be an existing regular directory"
         )
-    key_path = Path(key_path_raw).expanduser().resolve()
-    _, key = read_regular_file(
-        key_path, "raw evidence encryption key", maximum_bytes=32
+    key, wrapped_key, custody_receipt, custody_authority = _kms_data_key(
+        root, raw_sha256
     )
-    if len(key) != 32 or hashlib.sha256(key).hexdigest() != key_sha256:
-        raise ValueError(
-            "raw evidence encryption key does not match its deployment pin"
+    key_sha256 = hashlib.sha256(key).hexdigest()
+    custody_sha256 = hashlib.sha256(canonical_bytes(custody_receipt)).hexdigest()
+    try:
+        return _store_encrypted_sidecar(
+            payload,
+            raw_sha256,
+            root,
+            key,
+            key_sha256,
+            custody_sha256,
+            custody_receipt,
+            custody_authority,
+            wrapped_key,
         )
-    custody_sha256, custody_receipt, custody_authority = _custody_receipt(
-        root, key_sha256
-    )
+    finally:
+        for index in range(len(key)):
+            key[index] = 0
+
+
+def _store_encrypted_sidecar(
+    payload: bytes,
+    raw_sha256: str,
+    root: Path,
+    key: bytes | bytearray,
+    key_sha256: str,
+    custody_sha256: str,
+    custody_receipt: dict[str, Any],
+    custody_authority: dict[str, Any],
+    wrapped_data_key_base64: str,
+) -> dict[str, Any]:
     object_key = HKDF(
         algorithm=hashes.SHA256(),
         length=32,
@@ -143,31 +167,58 @@ def _encrypted_sidecar(payload: bytes, raw_sha256: str) -> dict[str, Any]:
         "key_sha256": key_sha256,
         "custody_receipt_sha256": custody_sha256,
         "custody_level": "hardware-kms-envelope",
+        "wrapped_data_key_base64": wrapped_data_key_base64,
         "custody_receipt": custody_receipt,
         "custody_authority_receipt": custody_authority,
     }
 
 
-def _custody_receipt(
-    root: Path, key_sha256: str
-) -> tuple[str, dict[str, Any], dict[str, Any]]:
-    raw_path = os.environ.get("PYSEC_RAW_EVIDENCE_CUSTODY_RECEIPT_PATH", "").strip()
-    expected = (
-        os.environ.get("PYSEC_RAW_EVIDENCE_CUSTODY_RECEIPT_SHA256", "")
-        .strip()
-        .casefold()
+def _kms_data_key(
+    root: Path, raw_sha256: str
+) -> tuple[bytearray, str, dict[str, Any], dict[str, Any]]:
+    response = run_pinned_json_command(
+        "PYSEC_RAW_EVIDENCE_KMS",
+        {
+            "schema_version": "1.0",
+            "operation": "generate-data-key",
+            "store_identity": hashlib.sha256(str(root).encode()).hexdigest(),
+            "object_plaintext_sha256": raw_sha256,
+        },
     )
-    if not raw_path or not _digest(expected):
-        raise ValueError("raw evidence custody receipt configuration is incomplete")
-    path = Path(raw_path).expanduser().resolve()
-    _, payload = read_regular_file(
-        path, "raw evidence custody receipt", maximum_bytes=64 * 1024
-    )
-    if hashlib.sha256(payload).hexdigest() != expected:
-        raise ValueError(
-            "raw evidence custody receipt does not match its deployment pin"
+    if (
+        set(response)
+        != {
+            "schema_version",
+            "plaintext_data_key_base64",
+            "wrapped_data_key_base64",
+            "encryption_operation_id",
+            "custody_receipt",
+            "custody_authority_receipt",
+        }
+        or response.get("schema_version") != "1.0"
+    ):
+        raise ValueError("KMS data-key response fields do not match")
+    plaintext = bytearray()
+    try:
+        import base64
+
+        plaintext = bytearray(
+            base64.b64decode(str(response["plaintext_data_key_base64"]), validate=True)
         )
-    value = strict_loads(payload)
+        wrapped = base64.b64decode(
+            str(response["wrapped_data_key_base64"]), validate=True
+        )
+    except (TypeError, ValueError) as exc:
+        for index in range(len(plaintext)):
+            plaintext[index] = 0
+        raise ValueError("KMS data-key response encoding is invalid") from exc
+    operation_id = str(response["encryption_operation_id"]).strip()
+    if len(plaintext) != 32 or len(wrapped) < 32 or not operation_id:
+        for index in range(len(plaintext)):
+            plaintext[index] = 0
+        raise ValueError("KMS data-key response policy failed")
+    value = response["custody_receipt"]
+    authority = response["custody_authority_receipt"]
     fields = {
         "schema_version",
         "provider",
@@ -186,13 +237,14 @@ def _custody_receipt(
         not isinstance(value, dict)
         or set(value) != fields
         or value.get("schema_version") != "1.0"
-        or value.get("plaintext_data_key_sha256") != key_sha256
+        or value.get("plaintext_data_key_sha256")
+        != hashlib.sha256(plaintext).hexdigest()
         or value.get("store_identity") != hashlib.sha256(str(root).encode()).hexdigest()
         or value.get("key_origin") != "kms-generated-data-key"
         or value.get("wrapping_key_non_exportable") is not True
         or value.get("hardware_backed") is not True
-        or not _digest(str(value.get("wrapped_key_sha256") or ""))
-        or not str(value.get("encryption_operation_id") or "").strip()
+        or value.get("wrapped_key_sha256") != hashlib.sha256(wrapped).hexdigest()
+        or value.get("encryption_operation_id") != operation_id
         or not isinstance(value.get("retention_days"), int)
         or isinstance(value.get("retention_days"), bool)
         or not 1 <= value["retention_days"] <= 3650
@@ -201,13 +253,47 @@ def _custody_receipt(
             for name in ("provider", "key_id", "key_version")
         )
     ):
+        for index in range(len(plaintext)):
+            plaintext[index] = 0
         raise ValueError("raw evidence custody receipt policy is invalid")
-    authority = verify_deployment_receipt(
-        value,
-        purpose="raw-evidence-custody",
-        environment_prefix="PYSEC_RAW_EVIDENCE_CUSTODY_AUTHORITY",
+    statement = authority.get("statement") if isinstance(authority, dict) else None
+    challenge = (
+        os.environ.get("PYSEC_SCAN_TIME_CHALLENGE_SHA256", "").strip().casefold()
     )
-    return expected, value, authority
+    expected_key = (
+        os.environ.get("PYSEC_RAW_EVIDENCE_CUSTODY_AUTHORITY_KEY_SHA256", "")
+        .strip()
+        .casefold()
+    )
+    if (
+        not isinstance(statement, dict)
+        or not _digest(challenge)
+        or not _digest(expected_key)
+    ):
+        for index in range(len(plaintext)):
+            plaintext[index] = 0
+        raise ValueError("raw evidence custody authority configuration is incomplete")
+    from .trusted_observation import scan_observed_at
+
+    try:
+        verified_authority = verify_portable_receipt(
+            value,
+            authority,
+            purpose="raw-evidence-custody",
+            observed_at=scan_observed_at(),
+            challenge_sha256=challenge,
+            expected_key_sha256=expected_key,
+        )
+    except ValueError:
+        for index in range(len(plaintext)):
+            plaintext[index] = 0
+        raise
+    return (
+        plaintext,
+        str(response["wrapped_data_key_base64"]),
+        dict(value),
+        verified_authority,
+    )
 
 
 def _digest(value: str) -> bool:

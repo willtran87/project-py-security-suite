@@ -252,13 +252,27 @@ class CompanionAuthorizationSecurityTests(unittest.TestCase):
     def test_independent_oracle_requires_distinct_origin_and_credentials(self) -> None:
         roles = {"user": {"authorization_env": "PYSEC_USER_TOKEN"}}
         with patch.dict(
-            "os.environ", {"PYSEC_AUTHORIZATION_ORACLE_IDENTITY_SHA256": "a" * 64}
+            "os.environ",
+            {
+                "PYSEC_AUTHORIZATION_ORACLE_QUORUM_SHA256": hashlib.sha256(
+                    canonical_bytes(["a" * 64, "b" * 64])
+                ).hexdigest()
+            },
         ):
             oracle = _oracle(
                 {
-                    "base_url": "http://127.0.0.1:8766/",
-                    "authorization_env": "PYSEC_ORACLE_TOKEN",
-                    "identity_sha256": "a" * 64,
+                    "observers": [
+                        {
+                            "base_url": "http://127.0.0.1:8766/",
+                            "authorization_env": "PYSEC_ORACLE_TOKEN",
+                            "identity_sha256": "a" * 64,
+                        },
+                        {
+                            "base_url": "http://127.0.0.1:8767/",
+                            "authorization_env": "PYSEC_ORACLE_WITNESS_TOKEN",
+                            "identity_sha256": "b" * 64,
+                        },
+                    ],
                 },
                 "http://127.0.0.1:8765/",
                 roles,
@@ -267,15 +281,28 @@ class CompanionAuthorizationSecurityTests(unittest.TestCase):
         with (
             patch.dict(
                 "os.environ",
-                {"PYSEC_AUTHORIZATION_ORACLE_IDENTITY_SHA256": "a" * 64},
+                {
+                    "PYSEC_AUTHORIZATION_ORACLE_QUORUM_SHA256": hashlib.sha256(
+                        canonical_bytes(["a" * 64, "b" * 64])
+                    ).hexdigest()
+                },
             ),
             self.assertRaisesRegex(ValueError, "independent network origin"),
         ):
             _oracle(
                 {
-                    "base_url": "http://127.0.0.1:8765/observer",
-                    "authorization_env": "PYSEC_ORACLE_TOKEN",
-                    "identity_sha256": "a" * 64,
+                    "observers": [
+                        {
+                            "base_url": "http://127.0.0.1:8765/observer",
+                            "authorization_env": "PYSEC_ORACLE_TOKEN",
+                            "identity_sha256": "a" * 64,
+                        },
+                        {
+                            "base_url": "http://127.0.0.1:8767/",
+                            "authorization_env": "PYSEC_ORACLE_WITNESS_TOKEN",
+                            "identity_sha256": "b" * 64,
+                        },
+                    ],
                 },
                 "http://127.0.0.1:8765/",
                 roles,
@@ -283,15 +310,28 @@ class CompanionAuthorizationSecurityTests(unittest.TestCase):
         with (
             patch.dict(
                 "os.environ",
-                {"PYSEC_AUTHORIZATION_ORACLE_IDENTITY_SHA256": "a" * 64},
+                {
+                    "PYSEC_AUTHORIZATION_ORACLE_QUORUM_SHA256": hashlib.sha256(
+                        canonical_bytes(["a" * 64, "b" * 64])
+                    ).hexdigest()
+                },
             ),
             self.assertRaisesRegex(ValueError, "credentials distinct"),
         ):
             _oracle(
                 {
-                    "base_url": "http://127.0.0.1:8766/",
-                    "authorization_env": "PYSEC_USER_TOKEN",
-                    "identity_sha256": "a" * 64,
+                    "observers": [
+                        {
+                            "base_url": "http://127.0.0.1:8766/",
+                            "authorization_env": "PYSEC_USER_TOKEN",
+                            "identity_sha256": "a" * 64,
+                        },
+                        {
+                            "base_url": "http://127.0.0.1:8767/",
+                            "authorization_env": "PYSEC_ORACLE_WITNESS_TOKEN",
+                            "identity_sha256": "b" * 64,
+                        },
+                    ],
                 },
                 "http://127.0.0.1:8765/",
                 roles,
@@ -363,6 +403,8 @@ class CompanionAuthorizationSecurityTests(unittest.TestCase):
                 "contract_sha256": "c" * 64,
                 "request_sha256": "d" * 64,
                 "oracle_identity_sha256": "e" * 64,
+                "recovery_epoch": 42,
+                "fencing_token_sha256": "f" * 64,
                 "issued_at": (observed - timedelta(minutes=1)).isoformat(),
                 "expires_at": (observed + timedelta(minutes=1)).isoformat(),
                 "before_state_sha256": hashlib.sha256(

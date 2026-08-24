@@ -291,6 +291,14 @@ local SQLite ledger. Signed receipt time is rechecked against the governance
 validity window, and `PYSEC_GOVERNANCE_REPLAY_SERVICE_STATE_FILE` retains the
 monotonic hash-chain checkpoint.
 
+Portable deployment receipts can delegate compare-and-advance to an external
+monotonic store. For an authority prefix `PREFIX`, configure
+`PREFIX_STATE_COMMAND_JSON`, `PREFIX_STATE_EXECUTABLE_SHA256`, and
+`PREFIX_STATE_ASSETS_JSON` (plus optional `PREFIX_STATE_RUNTIME_SHA256`). The
+digest-pinned command receives a canonical compare-and-advance request and must
+return the accepted generation, receipt digest, backend identity, and operation
+ID. Production and release reject the local SQLite fallback.
+
 A public keyring can set a threshold across distinct Ed25519 signers and assign
 each key an active, retired, or revoked lifecycle state with validity dates.
 Revoked or out-of-window keys never contribute to the threshold.
@@ -478,17 +486,21 @@ coverage. `resource-limits.json` records CPU, memory, process, open-file, output
 and scratch controls; production/release additionally require an external
 `file-write-quota` capability, because post-run directory polling is not a hard
 write limit.
-Optional exact native reports use `PYSEC_RAW_EVIDENCE_DIRECTORY`, the
-digest-pinned 256-bit key named by `PYSEC_RAW_EVIDENCE_KEY_PATH`, and a custody
-record named by `PYSEC_RAW_EVIDENCE_CUSTODY_RECEIPT_PATH` plus its SHA-256. The
-receipt binds provider, key ID/version, store identity, retention, and the
-master-key commitment. Deployment traces are admitted through
+Optional exact native reports use `PYSEC_RAW_EVIDENCE_DIRECTORY` and an actual
+digest-pinned KMS data-key command configured by
+`PYSEC_RAW_EVIDENCE_KMS_{COMMAND_JSON,EXECUTABLE_SHA256,ASSETS_JSON}`. The KMS
+returns a one-use plaintext data key plus wrapped key; only the wrapped key and
+key digest are retained. Its response carries a signed custody subject binding
+provider, key ID/version, store identity, retention, operation, and wrapped-key
+commitment. Pin the embedded authority key with
+`PYSEC_RAW_EVIDENCE_CUSTODY_AUTHORITY_KEY_SHA256`. Deployment traces are admitted through
 `PYSEC_RUNTIME_TRACE_EVIDENCE_PATH` plus its SHA-256 and retained only when
-every source/target pair exists in `boundary-graph.json`. Custody requires the
-same authority-envelope variables under
-`PYSEC_RAW_EVIDENCE_CUSTODY_AUTHORITY`; traces use
+every source/target pair exists in `boundary-graph.json`. Traces use
 `PYSEC_RUNTIME_TRACE_AUTHORITY`, require `PYSEC_RUNTIME_DEPLOYMENT_SHA256`, and
-bind the exact boundary-graph digest. Production and release scans and
+bind the exact boundary-graph digest. Required routes come from the separately
+signed `PYSEC_RUNTIME_COVERAGE_POLICY_{PATH,SHA256}` subject authorized under
+`PYSEC_RUNTIME_COVERAGE_POLICY_AUTHORITY`. Collector counters must prove zero
+refused/failed exports and complete canary delivery. Production and release scans and
 `release-check` both fail closed without complete signed runtime correlation.
 `trust-policy.json` seals deployment trust variables by value digest, and its
 digest is included in the effective configuration identity. Production and

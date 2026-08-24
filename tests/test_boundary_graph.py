@@ -17,6 +17,19 @@ class BoundaryGraphTests(unittest.TestCase):
         self.assertFalse(artifact["semantic_complete"])
         self.assertEqual(artifact["errors"][0]["reason"], "python-syntax-error")
 
+    def test_polyglot_parser_failure_marks_language_incomplete(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory)
+            (target / "broken.ts").write_text("function broken( {\n", encoding="utf-8")
+            artifact = build_boundary_graph(target)
+        self.assertFalse(artifact["complete"])
+        self.assertFalse(artifact["semantic_complete"])
+        self.assertEqual(artifact["heuristic_languages"], ["typescript"])
+        self.assertEqual(
+            artifact["errors"][0]["reason"],
+            "tree-sitter-typescript-syntax-error",
+        )
+
     def test_unifies_python_javascript_and_native_boundaries(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -81,7 +94,9 @@ class BoundaryGraphTests(unittest.TestCase):
             )
             # One function import: module "env", field "clock", type index 0.
             (root / "module.wasm").write_bytes(
-                b"\0asm\x01\0\0\0\x02\x0d\x01\x03env\x05clock\x00\x00"
+                b"\0asm\x01\0\0\0"
+                b"\x01\x04\x01\x60\x00\x00"
+                b"\x02\x0d\x01\x03env\x05clock\x00\x00"
             )
             graph = build_boundary_graph(root)
 

@@ -168,7 +168,7 @@
             "properties": {
               "statement": {
                 "type": "object", "additionalProperties": false,
-                "required": ["schema_version", "check_id", "phase", "event_id", "before_instance_id", "after_instance_id", "orchestrator_identity_sha256", "run_id", "deployment_sha256", "challenge_sha256", "contract_sha256", "request_sha256", "oracle_identity_sha256", "issued_at", "expires_at", "before_state_sha256", "after_state_sha256", "postcondition_response_sha256"],
+                "required": ["schema_version", "check_id", "phase", "event_id", "before_instance_id", "after_instance_id", "orchestrator_identity_sha256", "run_id", "deployment_sha256", "challenge_sha256", "contract_sha256", "request_sha256", "oracle_identity_sha256", "recovery_epoch", "fencing_token_sha256", "issued_at", "expires_at", "before_state_sha256", "after_state_sha256", "postcondition_response_sha256"],
                 "properties": {
                   "schema_version": {"const": "1.0"},
                   "check_id": {"$ref": "#/$defs/label"},
@@ -183,6 +183,8 @@
                   "contract_sha256": {"$ref": "#/$defs/digest"},
                   "request_sha256": {"$ref": "#/$defs/digest"},
                   "oracle_identity_sha256": {"$ref": "#/$defs/digest"},
+                  "recovery_epoch": {"type": "integer", "minimum": 1},
+                  "fencing_token_sha256": {"$ref": "#/$defs/digest"},
                   "issued_at": {"type": "string", "format": "date-time"},
                   "expires_at": {"type": "string", "format": "date-time"}
                   ,"before_state_sha256": {"$ref": "#/$defs/digest"}

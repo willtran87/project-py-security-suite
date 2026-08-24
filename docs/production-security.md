@@ -210,15 +210,15 @@ still execute in dynamic or connected companion stages:
 5. **Multi-role authorization contracts** for explicit BOLA/IDOR and tenant
    boundaries plus state transitions, replay resistance, concurrency limits,
    and approval ceilings. Contract schema 3.0 reads every durable postcondition
-   through a separately credentialed, deployment-identified observer on a
-   distinct network origin. It requires explicit process-restart and replica-
-   failover triggers and verifies their durable invariants through that observer;
-   the observer identity is deployment-pinned through
-   `PYSEC_AUTHORIZATION_ORACLE_IDENTITY_SHA256`, and its credential cannot be
-   shared with an application role. Restart and failover trigger responses must
+   through a quorum of separately credentialed, deployment-identified observers
+   on distinct network origins. It requires explicit process-restart and replica-
+   failover triggers and verifies their durable invariants through every observer;
+   the quorum identity is deployment-pinned through
+   `PYSEC_AUTHORIZATION_ORACLE_QUORUM_SHA256`, and credentials cannot be shared.
+   Restart and failover trigger responses must
    also carry an Ed25519 receipt under the deployment-pinned
    `PYSEC_AUTHORIZATION_ORCHESTRATOR_KEY_PATH` key, with distinct before/after
-   instance identities and an event ID;
+   instance identities, recovery epoch, fencing-token digest, and event ID;
    schema 2.0 records these resilience, independent-oracle, and durable-
    postcondition checks as skipped. These complement, but cannot infer, human-
    reviewed business rules and approval intent.
@@ -296,7 +296,10 @@ every requirement. It must be independently authorized through an Ed25519
 envelope under `PYSEC_REQUIREMENTS_EVIDENCE_POLICY_AUTHORITY`, and passing
 assessments must use `artifact-value-replay-v1`, satisfy bounded evidence-age
 rules, and include the policy's minimum positive and negative-control
-assertions; an existence-only check cannot pass. Artifact
+assertions; an existence-only check cannot pass. Every assertion also binds a
+retained procedure-execution record containing the pinned command, fixture,
+mutation, exit code, stdout/stderr digests, timestamps, and result digest.
+Positive and negative controls must come from distinct executions. Artifact
 names or catalog counts alone cannot establish conformance.
 
 Deployment-pinned runtime traces retain their complete signed subject and
@@ -311,12 +314,15 @@ Native binary parsing runs in a resource-contained isolated worker, with an
 optional deployment-pinned OS sandbox prefix. PE, ELF, and Mach-O analysis
 retains import/symbol and hardening state; WebAssembly analysis validates
 bounded sections and records import, memory-limit/shared-memory, and start
-function controls. Templates record computed includes and explicit escaping
+function controls. Tree-sitter grammars provide AST-bound import and call
+extraction for supported non-Python source. Templates record computed includes and explicit escaping
 bypasses, while notebooks and bytecode are parsed without executing target
 code. Git history qualification rejects shallow, partial, promisor, sparse,
 alternate, replace-ref, unreachable, or corrupt stores; it supports and binds
 both SHA-1 and SHA-256 object formats and rechecks the complete ref/object
-ledger after bundle creation and materialization.
+ledger after bundle creation and materialization. Production and release
+require SHA-256 Git objects and a good signature from an allowlisted fingerprint
+on every reachable commit.
 
 Encrypted native evidence requires an authority-signed hardware-KMS envelope
 receipt binding the ephemeral plaintext data-key digest, non-exportable

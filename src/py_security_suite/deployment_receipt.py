@@ -13,6 +13,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from cryptography.exceptions import InvalidSignature
 
 from .path_safety import read_regular_file
+from .pinned_command import command_configured, run_pinned_json_command
 from .strict_json import canonical_bytes, loads as strict_loads
 
 
@@ -106,6 +107,12 @@ def verify_deployment_receipt(
         or now > expires
     ):
         raise ValueError("deployment authority receipt is outside its validity window")
+    monotonic_state = _advance_monotonic_state(
+        environment_prefix,
+        purpose=purpose,
+        generation=generation,
+        receipt_sha256=receipt_digest,
+    )
     portable = {
         "schema_version": "1.0",
         "statement": statement,
@@ -113,6 +120,7 @@ def verify_deployment_receipt(
         "public_key_pem_base64": base64.b64encode(key_payload).decode("ascii"),
         "receipt_payload_base64": base64.b64encode(receipt_payload).decode("ascii"),
         "receipt_sha256": receipt_digest,
+        "monotonic_state": monotonic_state,
     }
     verify_portable_receipt(
         subject,
@@ -121,12 +129,6 @@ def verify_deployment_receipt(
         observed_at=now,
         challenge_sha256=challenge,
         expected_key_sha256=key_digest,
-    )
-    _advance_monotonic_state(
-        environment_prefix,
-        purpose=purpose,
-        generation=generation,
-        receipt_sha256=receipt_digest,
     )
     return portable
 
@@ -149,9 +151,11 @@ def verify_portable_receipt(
         "public_key_pem_base64",
         "receipt_payload_base64",
         "receipt_sha256",
+        "monotonic_state",
     }:
         raise ValueError("portable deployment receipt fields do not match")
     statement = receipt.get("statement")
+    monotonic_state = receipt.get("monotonic_state")
     fields = {
         "schema_version",
         "purpose",
@@ -181,6 +185,13 @@ def verify_portable_receipt(
     now = observed_at.astimezone(UTC)
     if (
         receipt.get("schema_version") != "1.0"
+        or not isinstance(monotonic_state, dict)
+        or set(monotonic_state)
+        != {"mode", "backend_identity_sha256", "operation_id", "generation"}
+        or monotonic_state.get("mode") not in {"external-command", "local-sqlite"}
+        or not _digest(str(monotonic_state.get("backend_identity_sha256") or ""))
+        or not str(monotonic_state.get("operation_id") or "")
+        or monotonic_state.get("generation") != statement.get("generation")
         or hashlib.sha256(receipt_payload).hexdigest() != receipt.get("receipt_sha256")
         or original
         != {
@@ -214,7 +225,43 @@ def verify_portable_receipt(
 
 def _advance_monotonic_state(
     prefix: str, *, purpose: str, generation: int, receipt_sha256: str
-) -> None:
+) -> dict[str, Any]:
+    command_prefix = f"{prefix}_STATE"
+    if command_configured(command_prefix):
+        response = run_pinned_json_command(
+            command_prefix,
+            {
+                "schema_version": "1.0",
+                "operation": "compare-and-advance",
+                "purpose": purpose,
+                "generation": generation,
+                "receipt_sha256": receipt_sha256,
+            },
+        )
+        if (
+            set(response)
+            != {
+                "schema_version",
+                "accepted",
+                "generation",
+                "receipt_sha256",
+                "backend_identity_sha256",
+                "operation_id",
+            }
+            or response.get("schema_version") != "1.0"
+            or response.get("accepted") is not True
+            or response.get("generation") != generation
+            or response.get("receipt_sha256") != receipt_sha256
+            or not _digest(str(response.get("backend_identity_sha256") or ""))
+            or not str(response.get("operation_id") or "")
+        ):
+            raise ValueError("external monotonic state rejected receipt advancement")
+        return {
+            "mode": "external-command",
+            "backend_identity_sha256": response["backend_identity_sha256"],
+            "operation_id": response["operation_id"],
+            "generation": generation,
+        }
     raw_path = os.environ.get(f"{prefix}_STATE_PATH", "").strip()
     if not raw_path:
         raise ValueError("deployment authority monotonic state is unavailable")
@@ -254,6 +301,12 @@ def _advance_monotonic_state(
         os.chmod(path, 0o600)
     except OSError:
         pass
+    return {
+        "mode": "local-sqlite",
+        "backend_identity_sha256": hashlib.sha256(str(path).encode()).hexdigest(),
+        "operation_id": "sqlite-immediate-transaction",
+        "generation": generation,
+    }
 
 
 def _pair(prefix: str, kind: str) -> tuple[Path, str]:

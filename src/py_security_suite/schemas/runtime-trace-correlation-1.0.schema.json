@@ -3,7 +3,7 @@
   "$id": "urn:project-py-security-suite:schema:runtime-trace-correlation:1.0",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "analysis", "complete", "evidence_sha256", "deployment_sha256", "boundary_graph_sha256", "authority_receipt", "evidence", "coverage_requirements", "coverage_required", "coverage_observed", "coverage_percent", "trace_count", "allow_count", "deny_count", "traces", "limitations"],
+  "required": ["schema_version", "analysis", "complete", "evidence_sha256", "deployment_sha256", "boundary_graph_sha256", "authority_receipt", "coverage_policy", "coverage_policy_authority_receipt", "evidence", "coverage_requirements", "coverage_required", "coverage_observed", "coverage_percent", "trace_count", "allow_count", "deny_count", "traces", "limitations"],
   "properties": {
     "schema_version": {"const": "1.0"},
     "analysis": {"const": "deployment-pinned-request-to-sink-runtime-correlation"},
@@ -12,6 +12,8 @@
     "deployment_sha256": {"type": "string", "pattern": "^$|^[0-9a-f]{64}$"},
     "boundary_graph_sha256": {"type": "string", "pattern": "^$|^[0-9a-f]{64}$"},
     "authority_receipt": {"type": ["object", "null"]},
+    "coverage_policy": {"type": ["object", "null"]},
+    "coverage_policy_authority_receipt": {"type": ["object", "null"]},
     "evidence": {"type": ["object", "null"]},
     "coverage_requirements": {"type": "array", "maxItems": 100000, "items": {"$ref": "#/$defs/requirement"}},
     "coverage_required": {"type": "integer", "minimum": 0},

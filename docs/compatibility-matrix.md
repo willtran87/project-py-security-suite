@@ -392,8 +392,8 @@ contracts that complement scanner coverage:
 - Checkov, git-sizer, and pipdeptree normalized artifacts retain a deterministic
   projection with every string value redacted, raw and redacted commitments,
   classification, and replay
-  policy. When `PYSEC_RAW_EVIDENCE_DIRECTORY` and a digest-pinned 256-bit key are
-  configured, exact raw bytes are encrypted with AES-GCM in a content-addressed
+  policy. When `PYSEC_RAW_EVIDENCE_DIRECTORY` and a digest-pinned KMS data-key
+  command are configured, exact raw bytes are encrypted with AES-GCM in a content-addressed
   sidecar; per-object keys are derived with HKDF, object names use keyed HMACs,
   and a deployment-pinned KMS/storage custody receipt binds retention and key
   version. Otherwise the public artifact is explicitly non-replayable.

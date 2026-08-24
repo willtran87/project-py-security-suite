@@ -90,6 +90,7 @@ def scan_project(
         vcs_revision=(
             inventory.vcs_revision if inventory.vcs_revision_verified else ""
         ),
+        require_signed_git_provenance=config.profile in {"production", "release"},
     ) as scan_target:
         return _scan_sealed_project(
             target=target,
@@ -152,7 +153,10 @@ def _scan_sealed_project(
     derived_artifacts["dependency-surface.json"] = dependency_surface_artifact(
         scan_target
     )
-    boundary_graph = build_boundary_graph(scan_target)
+    boundary_graph = build_boundary_graph(
+        scan_target,
+        require_governed_parsers=config.profile in {"production", "release"},
+    )
     derived_artifacts["boundary-graph.json"] = boundary_graph
     from .runtime_trace import runtime_trace_artifact
 
@@ -386,6 +390,12 @@ def _scan_sealed_project(
     ):
         context_errors.append(
             "applicable mapped ASVS, MASVS, or TCASVS controls lack retained evidence"
+        )
+    if config.profile in {"production", "release"} and _has_local_monotonic_receipt(
+        derived_artifacts
+    ):
+        context_errors.append(
+            "deployment authority generations require an external monotonic CAS backend"
         )
 
     (
@@ -933,3 +943,14 @@ def _run_adapters(
         name: value for result in ordered for name, value in result.artifacts.items()
     }
     return findings, tool_runs, diagnostics, artifacts
+
+
+def _has_local_monotonic_receipt(value: object) -> bool:
+    if isinstance(value, dict):
+        state = value.get("monotonic_state")
+        if isinstance(state, dict) and state.get("mode") == "local-sqlite":
+            return True
+        return any(_has_local_monotonic_receipt(item) for item in value.values())
+    if isinstance(value, list):
+        return any(_has_local_monotonic_receipt(item) for item in value)
+    return False

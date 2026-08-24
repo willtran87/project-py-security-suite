@@ -36,6 +36,14 @@ def test_runtime_trace_must_correlate_to_static_edge(tmp_path: Path) -> None:
             "instrumentation_sha256": "e" * 64,
             "sampling_rate": 1.0,
             "coverage_requirements": [requirement],
+            "collector_metrics": {
+                "accepted_spans": 4,
+                "refused_spans": 0,
+                "sent_spans": 4,
+                "failed_spans": 0,
+                "canary_expected": 1,
+                "canary_observed": 1,
+            },
             "traces": [
                 {
                     "trace_id": "1" * 32,
@@ -66,6 +74,21 @@ def test_runtime_trace_must_correlate_to_static_edge(tmp_path: Path) -> None:
         purpose="runtime-trace-evidence",
         prefix="PYSEC_RUNTIME_TRACE_AUTHORITY",
     )
+    coverage_policy_value = {
+        "schema_version": "1.0",
+        "deployment_sha256": "a" * 64,
+        "boundary_graph_sha256": graph_sha256,
+        "producer_identity_sha256": "f" * 64,
+        "requirements": [requirement],
+    }
+    coverage_policy = tmp_path / "runtime-coverage-policy.json"
+    coverage_policy.write_text(json.dumps(coverage_policy_value), encoding="utf-8")
+    coverage_authority = authority_environment(
+        tmp_path,
+        coverage_policy_value,
+        purpose="runtime-coverage-policy",
+        prefix="PYSEC_RUNTIME_COVERAGE_AUTHORITY",
+    )
     with (
         patch.dict(
             "os.environ",
@@ -78,7 +101,13 @@ def test_runtime_trace_must_correlate_to_static_edge(tmp_path: Path) -> None:
                 "PYSEC_RUNTIME_TRACE_COLLECTOR_SHA256": "b" * 64,
                 "PYSEC_RUNTIME_TRACE_BUILD_SHA256": "d" * 64,
                 "PYSEC_RUNTIME_TRACE_INSTRUMENTATION_SHA256": "e" * 64,
+                "PYSEC_RUNTIME_COVERAGE_POLICY_PATH": str(coverage_policy),
+                "PYSEC_RUNTIME_COVERAGE_POLICY_SHA256": hashlib.sha256(
+                    coverage_policy.read_bytes()
+                ).hexdigest(),
+                "PYSEC_RUNTIME_COVERAGE_POLICY_PRODUCER_SHA256": "f" * 64,
                 **authority,
+                **coverage_authority,
             },
         ),
         patch(

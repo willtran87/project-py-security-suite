@@ -19,7 +19,7 @@ def runtime_trace_artifact(boundary_graph: dict[str, Any]) -> dict[str, Any]:
         os.environ.get("PYSEC_RUNTIME_TRACE_EVIDENCE_SHA256", "").strip().casefold()
     )
     if not raw_path and not expected:
-        return _artifact([], "", "", "", None, None, [], False)
+        return _artifact([], "", "", "", None, None, None, None, [], False)
     if not raw_path or not _digest(expected):
         raise ValueError("runtime trace evidence configuration is incomplete")
     path = Path(raw_path).expanduser().resolve()
@@ -41,6 +41,7 @@ def runtime_trace_artifact(boundary_graph: dict[str, Any]) -> dict[str, Any]:
             "instrumentation_sha256",
             "sampling_rate",
             "coverage_requirements",
+            "collector_metrics",
             "traces",
         }
         or value.get("schema_version") != "1.0"
@@ -50,6 +51,7 @@ def runtime_trace_artifact(boundary_graph: dict[str, Any]) -> dict[str, Any]:
         or value.get("sampling_rate") != 1.0
         or not isinstance(value.get("coverage_requirements"), list)
         or not 1 <= len(value["coverage_requirements"]) <= 100_000
+        or not isinstance(value.get("collector_metrics"), dict)
     ):
         raise ValueError("runtime trace evidence fields do not match")
     deployment = (
@@ -79,6 +81,11 @@ def runtime_trace_artifact(boundary_graph: dict[str, Any]) -> dict[str, Any]:
         purpose="runtime-trace-evidence",
         environment_prefix="PYSEC_RUNTIME_TRACE_AUTHORITY",
     )
+    coverage_policy, coverage_authority = _coverage_policy(deployment, graph_digest)
+    if value["coverage_requirements"] != coverage_policy["requirements"]:
+        raise ValueError(
+            "runtime trace route denominator differs from independent policy"
+        )
     authority_issued = _timestamp(
         str(authority["statement"]["issued_at"]), "runtime authority issued_at"
     )
@@ -173,12 +180,40 @@ def runtime_trace_artifact(boundary_graph: dict[str, Any]) -> dict[str, Any]:
     missing = [item for item in requirements if canonical_bytes(item) not in observed]
     if missing:
         raise ValueError("runtime trace evidence does not cover every required route")
+    span_total = sum(int(item["span_count"]) for item in traces)
+    metrics = value["collector_metrics"]
+    if (
+        set(metrics)
+        != {
+            "accepted_spans",
+            "refused_spans",
+            "sent_spans",
+            "failed_spans",
+            "canary_expected",
+            "canary_observed",
+        }
+        or any(
+            isinstance(metrics[name], bool)
+            or not isinstance(metrics[name], int)
+            or metrics[name] < 0
+            for name in metrics
+        )
+        or metrics["accepted_spans"] != span_total
+        or metrics["sent_spans"] != span_total
+        or metrics["refused_spans"] != 0
+        or metrics["failed_spans"] != 0
+        or metrics["canary_expected"] < 1
+        or metrics["canary_observed"] != metrics["canary_expected"]
+    ):
+        raise ValueError("runtime collector loss and canary accounting is incomplete")
     return _artifact(
         sorted(traces, key=lambda item: str(item["trace_id"])),
         expected,
         deployment,
         graph_digest,
         authority,
+        coverage_policy,
+        coverage_authority,
         value,
         requirements,
         True,
@@ -191,6 +226,8 @@ def _artifact(
     deployment_sha256: str,
     boundary_graph_sha256: str,
     authority_receipt: dict[str, Any] | None,
+    coverage_policy: dict[str, Any] | None,
+    coverage_policy_authority_receipt: dict[str, Any] | None,
     evidence: dict[str, Any] | None,
     coverage_requirements: list[dict[str, str]],
     complete: bool,
@@ -203,6 +240,8 @@ def _artifact(
         "deployment_sha256": deployment_sha256,
         "boundary_graph_sha256": boundary_graph_sha256,
         "authority_receipt": authority_receipt,
+        "coverage_policy": coverage_policy,
+        "coverage_policy_authority_receipt": coverage_policy_authority_receipt,
         "evidence": evidence,
         "coverage_requirements": coverage_requirements,
         "coverage_required": len(coverage_requirements),
@@ -218,6 +257,52 @@ def _artifact(
         if complete
         else ["Deployment-pinned runtime trace evidence was not supplied."],
     }
+
+
+def _coverage_policy(
+    deployment_sha256: str, boundary_graph_sha256: str
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    raw_path = os.environ.get("PYSEC_RUNTIME_COVERAGE_POLICY_PATH", "").strip()
+    expected = (
+        os.environ.get("PYSEC_RUNTIME_COVERAGE_POLICY_SHA256", "").strip().casefold()
+    )
+    producer = (
+        os.environ.get("PYSEC_RUNTIME_COVERAGE_POLICY_PRODUCER_SHA256", "")
+        .strip()
+        .casefold()
+    )
+    if not raw_path or not _digest(expected) or not _digest(producer):
+        raise ValueError("runtime coverage policy configuration is incomplete")
+    path = Path(raw_path).expanduser().resolve()
+    _, payload = read_regular_file(
+        path, "runtime coverage policy", maximum_bytes=16 * 1024 * 1024
+    )
+    if hashlib.sha256(payload).hexdigest() != expected:
+        raise ValueError("runtime coverage policy does not match its deployment pin")
+    value = strict_loads(payload)
+    if (
+        not isinstance(value, dict)
+        or set(value)
+        != {
+            "schema_version",
+            "deployment_sha256",
+            "boundary_graph_sha256",
+            "producer_identity_sha256",
+            "requirements",
+        }
+        or value.get("schema_version") != "1.0"
+        or value.get("deployment_sha256") != deployment_sha256
+        or value.get("boundary_graph_sha256") != boundary_graph_sha256
+        or value.get("producer_identity_sha256") != producer
+        or not isinstance(value.get("requirements"), list)
+    ):
+        raise ValueError("runtime coverage policy fields do not match")
+    authority = verify_deployment_receipt(
+        value,
+        purpose="runtime-coverage-policy",
+        environment_prefix="PYSEC_RUNTIME_COVERAGE_AUTHORITY",
+    )
+    return value, authority
 
 
 def _digest(value: str) -> bool:

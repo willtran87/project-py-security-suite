@@ -201,6 +201,43 @@ class SecurityRequirementsCoverageTests(unittest.TestCase):
                 canonical_bytes(artifact_value)
             ).hexdigest()
             assessed_at = datetime.now(UTC)
+            command_sha256 = "c" * 64
+            fixture_sha256 = "f" * 64
+            procedure_artifacts: dict[str, object] = {}
+            execution_assertion_fields: list[dict[str, object]] = []
+            for polarity, mutation_sha256 in (
+                ("positive", "1" * 64),
+                ("negative-control", "2" * 64),
+            ):
+                name = f"procedure-{polarity}.json"
+                execution = {
+                    "schema_version": "1.0",
+                    "procedure_id": "artifact-value-replay-v1",
+                    "producer_sha256": "a" * 64,
+                    "command_sha256": command_sha256,
+                    "fixture_sha256": fixture_sha256,
+                    "mutation_sha256": mutation_sha256,
+                    "exit_code": 0,
+                    "stdout_sha256": artifact_sha256,
+                    "stderr_sha256": hashlib.sha256(b"").hexdigest(),
+                    "result_artifact": "result.json",
+                    "result_sha256": artifact_sha256,
+                    "started_at": assessed_at.isoformat(),
+                    "finished_at": assessed_at.isoformat(),
+                }
+                procedure_artifacts[name] = execution
+                execution_assertion_fields.append(
+                    {
+                        "execution_artifact": name,
+                        "execution_sha256": hashlib.sha256(
+                            canonical_bytes(execution)
+                        ).hexdigest(),
+                        "fixture_sha256": fixture_sha256,
+                        "mutation_sha256": mutation_sha256,
+                        "command_sha256": command_sha256,
+                        "exit_code": 0,
+                    }
+                )
             assessments = [
                 {
                     "standard": standard,
@@ -222,6 +259,7 @@ class SecurityRequirementsCoverageTests(unittest.TestCase):
                                 "polarity": "positive",
                                 "observed_at": assessed_at.isoformat(),
                                 "producer_sha256": "a" * 64,
+                                **execution_assertion_fields[0],
                             },
                             {
                                 "artifact": "result.json",
@@ -232,6 +270,7 @@ class SecurityRequirementsCoverageTests(unittest.TestCase):
                                 "polarity": "negative-control",
                                 "observed_at": assessed_at.isoformat(),
                                 "producer_sha256": "a" * 64,
+                                **execution_assertion_fields[1],
                             },
                         ]
                         if index == 0
@@ -267,6 +306,10 @@ class SecurityRequirementsCoverageTests(unittest.TestCase):
                                 "version": "1.0.0",
                                 "requirement": f"REQ-{index}",
                                 "allowed_artifacts": ["result.json"],
+                                "allowed_execution_artifacts": [
+                                    "procedure-negative-control.json",
+                                    "procedure-positive.json",
+                                ],
                                 "allowed_methods": ["automated replay"],
                                 "allowed_operators": ["equals", "not-equals"],
                                 "allowed_producer_sha256": ["a" * 64],
@@ -314,7 +357,9 @@ class SecurityRequirementsCoverageTests(unittest.TestCase):
                 ) as verifier,
             ):
                 artifact = security_requirements_coverage_artifact(
-                    {"languages": {}, "edges": []}, [], {"result.json": artifact_value}
+                    {"languages": {}, "edges": []},
+                    [],
+                    {"result.json": artifact_value, **procedure_artifacts},
                 )
         self.assertEqual(verifier.call_count, 2)
         self.assertTrue(artifact["complete"])

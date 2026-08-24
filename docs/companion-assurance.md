@@ -166,9 +166,11 @@ resistance, concurrent-attempt atomicity limits, and an approval-limit case.
 Each declared business state machine therefore exercises normal order,
 sequence bypass, duplicate action, and race behavior and then proves the
 durable state invariant, rather than inferring safety from response codes. The
-v3 contract additionally uses a distinct observer origin and credential, pins
-its deployment identity through `PYSEC_AUTHORIZATION_ORACLE_IDENTITY_SHA256`,
-and requires process-restart and replica-failover invariants. The schema 2.0
+v3 contract additionally requires at least two distinct observer origins,
+credentials, and deployment identities. It pins the canonical observer quorum
+through `PYSEC_AUTHORIZATION_ORACLE_QUORUM_SHA256`, requires both observers to
+return identical canonical state before and after each transition, and requires
+process-restart and replica-failover invariants. The schema 2.0
 compatibility contract reports those independent resilience checks as skipped.
 These assertions complement authenticated ZAP active scanning. A
 copy-ready scheduled workflow is provided at

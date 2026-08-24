@@ -118,7 +118,9 @@ _TEXT_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
 )
 
 
-def build_boundary_graph(target: Path) -> dict[str, Any]:
+def build_boundary_graph(
+    target: Path, *, require_governed_parsers: bool = False
+) -> dict[str, Any]:
     """Build a bounded, language-neutral graph of external trust boundaries."""
     root = target.resolve()
     edges: list[dict[str, Any]] = []
@@ -126,6 +128,7 @@ def build_boundary_graph(target: Path) -> dict[str, Any]:
     languages: Counter[str] = Counter()
     language_files: dict[str, list[dict[str, Any]]] = {}
     special_surfaces: list[dict[str, Any]] = []
+    semantic_failed_languages: set[str] = set()
     scanned_bytes = 0
     repository_files = sorted(
         path
@@ -139,6 +142,12 @@ def build_boundary_graph(target: Path) -> dict[str, Any]:
             continue
         relative = path.relative_to(root).as_posix()
         try:
+            if (
+                require_governed_parsers
+                and kind in {"bytecode", "native-extension"}
+                and not os.environ.get("PYSEC_PARSER_SANDBOX_PREFIX_JSON", "").strip()
+            ):
+                raise ValueError("governed parser sandbox is required")
             _, payload = read_regular_file(
                 path,
                 f"{kind} surface",
@@ -236,14 +245,21 @@ def build_boundary_graph(target: Path) -> dict[str, Any]:
             edges.extend(python_edges)
             if parse_error:
                 errors.append({"path": relative, "reason": parse_error})
+                semantic_failed_languages.add(language)
         else:
-            edges.extend(_text_edges(text, relative, language))
+            semantic_edges, parse_error = _polyglot_semantic_edges(
+                payload, relative, language
+            )
+            edges.extend(semantic_edges)
+            if parse_error:
+                errors.append({"path": relative, "reason": parse_error})
+                semantic_failed_languages.add(language)
     unique = {
         (edge["source"], edge["line"], edge["kind"], edge["target"]): edge
         for edge in edges
     }
     ordered = [unique[key] for key in sorted(unique)]
-    heuristic_languages = sorted(set(languages) - {"python"})
+    heuristic_languages = sorted(semantic_failed_languages)
     special_surfaces = sorted(
         {(item["path"], item["kind"]): item for item in special_surfaces}.values(),
         key=lambda item: (str(item["path"]), str(item["kind"])),
@@ -276,7 +292,13 @@ def build_boundary_graph(target: Path) -> dict[str, Any]:
         and not truncated
         and not errors
         and special_surface_complete,
-        "semantic_parsers": ["python-ast"] if languages.get("python") else [],
+        "semantic_parsers": (
+            (["python-ast"] if languages.get("python") else [])
+            + [
+                f"tree-sitter-{language}"
+                for language in sorted(set(languages) - {"python"})
+            ]
+        ),
         "heuristic_languages": heuristic_languages,
         "special_surfaces": special_surfaces,
         "special_surface_complete": special_surface_complete,
@@ -385,6 +407,79 @@ def _text_edges(text: str, source: str, language: str) -> list[dict[str, Any]]:
                 )
             )
     return edges
+
+
+def _polyglot_semantic_edges(
+    payload: bytes, source: str, language: str
+) -> tuple[list[dict[str, Any]], str | None]:
+    """Parse supported non-Python languages before extracting boundary nodes."""
+
+    from tree_sitter import Language, Parser
+
+    module_name = {"csharp": "c_sharp"}.get(language, language)
+    function_name = (
+        "language_tsx"
+        if source.casefold().endswith(".tsx")
+        else "language_typescript"
+        if language == "typescript"
+        else "language_php"
+        if language == "php"
+        else "language"
+    )
+    try:
+        grammar = importlib.import_module(f"tree_sitter_{module_name}")
+        factory = getattr(grammar, function_name)
+        tree = Parser(Language(factory())).parse(payload)
+    except (AttributeError, ImportError, LookupError, TypeError, ValueError):
+        return [], f"tree-sitter-{language}-parser-error"
+    if tree.root_node.has_error:
+        return [], f"tree-sitter-{language}-syntax-error"
+    import_nodes = {
+        "import_declaration",
+        "import_statement",
+        "include_directive",
+        "namespace_use_declaration",
+        "preproc_include",
+        "require_expression",
+        "use_declaration",
+        "using_directive",
+    }
+    call_nodes = {
+        "call_expression",
+        "function_call_expression",
+        "invocation_expression",
+        "method_invocation",
+    }
+    edges: list[dict[str, Any]] = []
+    stack = [tree.root_node]
+    visited = 0
+    while stack:
+        node = stack.pop()
+        visited += 1
+        if visited > 2_000_000:
+            return [], f"tree-sitter-{language}-node-limit"
+        if node.type in import_nodes | call_nodes:
+            snippet = payload[node.start_byte : node.end_byte].decode(
+                "utf-8", errors="replace"
+            )
+            extracted = _text_edges(snippet, source, language)
+            for edge in extracted:
+                edge["line"] = node.start_point.row + int(edge["line"])
+            edges.extend(extracted)
+            if node.type in import_nodes and not extracted:
+                target = " ".join(snippet.split())[:500]
+                if target:
+                    edges.append(
+                        _edge(
+                            source,
+                            node.start_point.row + 1,
+                            "module-import",
+                            target,
+                            language,
+                        )
+                    )
+        stack.extend(reversed(node.children))
+    return edges, None
 
 
 def _analyze_special_surface(
@@ -551,6 +646,12 @@ def _template_edges(text: str, source: str, suffix: str) -> list[dict[str, Any]]
 def _wasm_imports(payload: bytes) -> list[str]:
     if not payload.startswith(b"\x00asm\x01\x00\x00\x00"):
         raise ValueError("WebAssembly header is invalid")
+    from wasmtime import Engine, Module, WasmtimeError
+
+    try:
+        Module.validate(Engine(), payload)
+    except WasmtimeError as exc:
+        raise ValueError("WebAssembly module failed full validation") from exc
     offset = 8
     imports: list[str] = []
     while offset < len(payload):

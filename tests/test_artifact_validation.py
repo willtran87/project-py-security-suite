@@ -3,6 +3,9 @@ from __future__ import annotations
 import pytest
 import json
 import hashlib
+import base64
+import os
+import sys
 from datetime import UTC, datetime
 from unittest.mock import patch
 from pathlib import Path
@@ -10,6 +13,7 @@ from pathlib import Path
 from py_security_suite.artifact_validation import validate_governed_artifacts
 from py_security_suite.adapters.portfolio import PipdeptreeAdapter
 from py_security_suite.config import ToolConfig
+from py_security_suite.deployment_receipt import verify_deployment_receipt
 from tests.deployment_authority import authority_environment
 
 
@@ -94,8 +98,9 @@ def test_native_report_secrets_use_encrypted_content_addressed_storage(
 ) -> None:
     raw_store = tmp_path / "raw"
     raw_store.mkdir()
-    key = tmp_path / "raw.key"
-    key.write_bytes(b"k" * 32)
+    key_bytes = b"k" * 32
+    wrapped_key = b"w" * 48
+    kms_script = tmp_path / "kms.py"
     custody = tmp_path / "custody.json"
     custody.write_text(
         json.dumps(
@@ -108,13 +113,11 @@ def test_native_report_secrets_use_encrypted_content_addressed_storage(
                     str(raw_store.resolve()).encode()
                 ).hexdigest(),
                 "retention_days": 30,
-                "plaintext_data_key_sha256": hashlib.sha256(
-                    key.read_bytes()
-                ).hexdigest(),
+                "plaintext_data_key_sha256": hashlib.sha256(key_bytes).hexdigest(),
                 "key_origin": "kms-generated-data-key",
                 "wrapping_key_non_exportable": True,
                 "hardware_backed": True,
-                "wrapped_key_sha256": "b" * 64,
+                "wrapped_key_sha256": hashlib.sha256(wrapped_key).hexdigest(),
                 "encryption_operation_id": "kms-operation-1",
             }
         ),
@@ -125,6 +128,33 @@ def test_native_report_secrets_use_encrypted_content_addressed_storage(
         json.loads(custody.read_text(encoding="utf-8")),
         purpose="raw-evidence-custody",
         prefix="PYSEC_RAW_EVIDENCE_CUSTODY_AUTHORITY",
+    )
+    with (
+        patch.dict(os.environ, custody_authority),
+        patch(
+            "py_security_suite.deployment_receipt._scan_observed_at",
+            return_value=datetime.now(UTC),
+        ),
+        patch(
+            "py_security_suite.trusted_observation.scan_observed_at",
+            return_value=datetime.now(UTC),
+        ),
+    ):
+        portable_custody = verify_deployment_receipt(
+            json.loads(custody.read_text(encoding="utf-8")),
+            purpose="raw-evidence-custody",
+            environment_prefix="PYSEC_RAW_EVIDENCE_CUSTODY_AUTHORITY",
+        )
+    kms_response = {
+        "schema_version": "1.0",
+        "plaintext_data_key_base64": base64.b64encode(key_bytes).decode(),
+        "wrapped_data_key_base64": base64.b64encode(wrapped_key).decode(),
+        "encryption_operation_id": "kms-operation-1",
+        "custody_receipt": json.loads(custody.read_text(encoding="utf-8")),
+        "custody_authority_receipt": portable_custody,
+    }
+    kms_script.write_text(
+        f"print({json.dumps(json.dumps(kms_response))})\n", encoding="utf-8"
     )
     payload = json.dumps(
         {
@@ -138,24 +168,43 @@ def test_native_report_secrets_use_encrypted_content_addressed_storage(
             "password": "do-not-publish",
         }
     )
+    executable = Path(sys.executable).resolve()
+    kms_environment = {
+        "PYSEC_RAW_EVIDENCE_KMS_COMMAND_JSON": json.dumps(
+            [str(executable), "-I", str(kms_script)]
+        ),
+        "PYSEC_RAW_EVIDENCE_KMS_EXECUTABLE_SHA256": hashlib.sha256(
+            executable.read_bytes()
+        ).hexdigest(),
+        "PYSEC_RAW_EVIDENCE_KMS_ASSETS_JSON": json.dumps(
+            [
+                {
+                    "path": str(kms_script),
+                    "sha256": hashlib.sha256(kms_script.read_bytes()).hexdigest(),
+                }
+            ]
+        ),
+    }
     with (
         patch.dict(
             "os.environ",
             {
                 "PYSEC_RAW_EVIDENCE_DIRECTORY": str(raw_store),
-                "PYSEC_RAW_EVIDENCE_KEY_PATH": str(key),
-                "PYSEC_RAW_EVIDENCE_KEY_SHA256": hashlib.sha256(
-                    key.read_bytes()
-                ).hexdigest(),
-                "PYSEC_RAW_EVIDENCE_CUSTODY_RECEIPT_PATH": str(custody),
-                "PYSEC_RAW_EVIDENCE_CUSTODY_RECEIPT_SHA256": hashlib.sha256(
-                    custody.read_bytes()
-                ).hexdigest(),
-                **custody_authority,
+                **kms_environment,
+                "PYSEC_SCAN_TIME_CHALLENGE_SHA256": portable_custody["statement"][
+                    "challenge_sha256"
+                ],
+                "PYSEC_RAW_EVIDENCE_CUSTODY_AUTHORITY_KEY_SHA256": portable_custody[
+                    "statement"
+                ]["signer_key_sha256"],
             },
         ),
         patch(
             "py_security_suite.deployment_receipt._scan_observed_at",
+            return_value=datetime.now(UTC),
+        ),
+        patch(
+            "py_security_suite.trusted_observation.scan_observed_at",
             return_value=datetime.now(UTC),
         ),
     ):
@@ -173,19 +222,21 @@ def test_native_report_secrets_use_encrypted_content_addressed_storage(
             "os.environ",
             {
                 "PYSEC_RAW_EVIDENCE_DIRECTORY": str(raw_store),
-                "PYSEC_RAW_EVIDENCE_KEY_PATH": str(key),
-                "PYSEC_RAW_EVIDENCE_KEY_SHA256": hashlib.sha256(
-                    key.read_bytes()
-                ).hexdigest(),
-                "PYSEC_RAW_EVIDENCE_CUSTODY_RECEIPT_PATH": str(custody),
-                "PYSEC_RAW_EVIDENCE_CUSTODY_RECEIPT_SHA256": hashlib.sha256(
-                    custody.read_bytes()
-                ).hexdigest(),
-                **custody_authority,
+                **kms_environment,
+                "PYSEC_SCAN_TIME_CHALLENGE_SHA256": portable_custody["statement"][
+                    "challenge_sha256"
+                ],
+                "PYSEC_RAW_EVIDENCE_CUSTODY_AUTHORITY_KEY_SHA256": portable_custody[
+                    "statement"
+                ]["signer_key_sha256"],
             },
         ),
         patch(
             "py_security_suite.deployment_receipt._scan_observed_at",
+            return_value=datetime.now(UTC),
+        ),
+        patch(
+            "py_security_suite.trusted_observation.scan_observed_at",
             return_value=datetime.now(UTC),
         ),
         pytest.raises(ValueError, match="truncated"),

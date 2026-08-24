@@ -144,6 +144,28 @@ class InventorySealingTests(unittest.TestCase):
                     pass
 
     @unittest.skipUnless(shutil.which("git"), "Git is required")
+    def test_production_git_provenance_rejects_sha1_history(self) -> None:
+        git = resolve_executable("git")
+        assert git is not None
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _git(git, ["init", "-q", "--object-format=sha1", str(root)], root)
+            _configure_identity(git, root)
+            (root / "app.py").write_text("VALUE = 1\n", encoding="utf-8")
+            _git(git, ["-C", str(root), "add", "app.py"], root)
+            _git(git, ["-C", str(root), "commit", "-q", "-m", "initial"], root)
+            inventory, source = inventory_target_with_evidence(root)
+
+            with self.assertRaisesRegex(ValueError, "SHA-256 objects"):
+                with sealed_source_snapshot(
+                    root,
+                    source,
+                    vcs_revision=inventory.vcs_revision,
+                    require_signed_git_provenance=True,
+                ):
+                    pass
+
+    @unittest.skipUnless(shutil.which("git"), "Git is required")
     def test_replace_refs_are_rejected(self) -> None:
         git = resolve_executable("git")
         assert git is not None

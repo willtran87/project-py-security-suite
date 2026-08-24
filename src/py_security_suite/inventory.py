@@ -13,6 +13,7 @@ from typing import Any
 from .execution import CommandEnvironment, resolve_executable, run_command
 from .models import Inventory
 from .path_safety import read_regular_file
+from .strict_json import loads as strict_loads
 
 
 _SKIP_DIRECTORIES = frozenset(
@@ -157,6 +158,7 @@ def sealed_source_snapshot(
     source_inventory: dict[str, Any],
     *,
     vcs_revision: str = "",
+    require_signed_git_provenance: bool = False,
 ) -> Iterator[Path]:
     """Copy the exact inventoried source set into a private read-only scan root."""
     expected_digest = str(source_inventory.get("source_sha256") or "")
@@ -199,7 +201,13 @@ def sealed_source_snapshot(
                 os.fsync(handle.fileno())
             os.chmod(destination, 0o400)
         if vcs_revision:
-            _seal_git_history(target, snapshot, vcs_revision, temporary_parent)
+            _seal_git_history(
+                target,
+                snapshot,
+                vcs_revision,
+                temporary_parent,
+                require_signed_git_provenance=require_signed_git_provenance,
+            )
         observed, count, total = source_snapshot(snapshot)
         if (
             observed != expected_digest
@@ -227,7 +235,12 @@ def sealed_source_snapshot(
 
 
 def _seal_git_history(
-    target: Path, snapshot: Path, revision: str, temporary_parent: Path
+    target: Path,
+    snapshot: Path,
+    revision: str,
+    temporary_parent: Path,
+    *,
+    require_signed_git_provenance: bool,
 ) -> None:
     """Materialize a hook-free, read-only Git history beside the source snapshot."""
     if not (target / ".git").exists():
@@ -240,18 +253,31 @@ def _seal_git_history(
         snapshot,
         revision,
         temporary_parent / "superproject",
+        require_signed_git_provenance=require_signed_git_provenance,
     )
-    _seal_submodule_histories(target, snapshot, temporary_parent)
+    _seal_submodule_histories(
+        target,
+        snapshot,
+        temporary_parent,
+        require_signed_git_provenance=require_signed_git_provenance,
+    )
 
 
 def _materialize_git_history(
-    target: Path, snapshot: Path, revision: str, work_root: Path
+    target: Path,
+    snapshot: Path,
+    revision: str,
+    work_root: Path,
+    *,
+    require_signed_git_provenance: bool = False,
 ) -> None:
     """Bundle and materialize one exact repository without hooks or worktree files."""
     git = resolve_executable("git")
     if git is None:
         raise ValueError("Git is unavailable while sealing repository history")
-    _validate_git_repository_mode(git, target)
+    _validate_git_repository_mode(
+        git, target, require_signed_provenance=require_signed_git_provenance
+    )
     repository_state = _git_repository_state(git, target)
     work_root.mkdir(mode=0o700, parents=True)
     bundle = work_root / "repository.bundle"
@@ -472,7 +498,9 @@ def _parse_ref_lines(value: str) -> dict[str, str]:
     return dict(sorted(refs.items()))
 
 
-def _validate_git_repository_mode(git: str, target: Path) -> None:
+def _validate_git_repository_mode(
+    git: str, target: Path, *, require_signed_provenance: bool = False
+) -> None:
     """Reject repository modes that can hide or rewrite reachable history."""
 
     def query(arguments: list[str], *, exits: frozenset[int] = frozenset({0})) -> str:
@@ -487,9 +515,13 @@ def _validate_git_repository_mode(git: str, target: Path) -> None:
             ],
             cwd=target,
             timeout_seconds=120,
-            max_output_bytes=64 * 1024,
+            max_output_bytes=64 * 1024 * 1024,
         )
-        if result.timed_out or result.exit_code not in exits:
+        if (
+            result.timed_out
+            or result.output_limit_exceeded
+            or result.exit_code not in exits
+        ):
             raise ValueError("Git repository qualification command failed")
         return result.stdout.strip()
 
@@ -548,10 +580,47 @@ def _validate_git_repository_mode(git: str, target: Path) -> None:
     )
     if integrity.exit_code != 0 or integrity.timed_out:
         raise ValueError("Git object database failed full integrity validation")
+    if require_signed_provenance:
+        if query(["rev-parse", "--show-object-format"]).casefold() != "sha256":
+            raise ValueError("production Git provenance requires SHA-256 objects")
+        raw_signers = os.environ.get(
+            "PYSEC_GIT_ALLOWED_SIGNER_FINGERPRINTS_JSON", ""
+        ).strip()
+        try:
+            signer_value = strict_loads(raw_signers.encode())
+        except (TypeError, ValueError) as exc:
+            raise ValueError("production Git signer policy is invalid") from exc
+        if not isinstance(signer_value, list) or not signer_value:
+            raise ValueError("production Git signer policy is unavailable")
+        signers = {
+            str(item).strip().casefold()
+            for item in signer_value
+            if isinstance(item, str) and 16 <= len(item.strip()) <= 128
+        }
+        if len(signers) != len(signer_value):
+            raise ValueError("production Git signer policy has invalid identities")
+        ledger = query(["log", "--all", "--format=%H%x00%G?%x00%GF"])
+        commits = 0
+        for line in ledger.splitlines():
+            fields = line.split("\x00")
+            if len(fields) != 3:
+                raise ValueError("Git commit provenance ledger is malformed")
+            _, grade, fingerprint = fields
+            if grade != "G" or fingerprint.strip().casefold() not in signers:
+                raise ValueError(
+                    "every reachable Git commit must have a trusted allowed signature"
+                )
+            commits += 1
+        if not commits:
+            raise ValueError("Git commit provenance ledger is empty")
 
 
 def _seal_submodule_histories(
-    target: Path, snapshot: Path, temporary_parent: Path
+    target: Path,
+    snapshot: Path,
+    temporary_parent: Path,
+    *,
+    require_signed_git_provenance: bool,
 ) -> None:
     """Recursively seal every initialized gitlink at its indexed revision."""
     gitmodules = target / ".gitmodules"
@@ -615,11 +684,13 @@ def _seal_submodule_histories(
             destination,
             observed_revision,
             temporary_parent / f"submodule-{index}",
+            require_signed_git_provenance=require_signed_git_provenance,
         )
         _seal_submodule_histories(
             source,
             destination,
             temporary_parent / f"submodule-{index}-nested",
+            require_signed_git_provenance=require_signed_git_provenance,
         )
 
 

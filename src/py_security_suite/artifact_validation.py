@@ -138,6 +138,8 @@ def _validate_runtime_trace_accounting(value: object) -> None:
         value.get("deployment_sha256"),
         value.get("boundary_graph_sha256"),
         value.get("authority_receipt"),
+        value.get("coverage_policy"),
+        value.get("coverage_policy_authority_receipt"),
         value.get("evidence"),
     )
     if complete is not bool(traces and all(evidence_fields)):
@@ -152,6 +154,9 @@ def _validate_runtime_trace_accounting(value: object) -> None:
             or evidence.get("boundary_graph_sha256")
             != value.get("boundary_graph_sha256")
             or evidence.get("coverage_requirements")
+            != value.get("coverage_requirements")
+            or not isinstance(value.get("coverage_policy"), dict)
+            or value["coverage_policy"].get("requirements")
             != value.get("coverage_requirements")
             or not isinstance(evidence.get("traces"), list)
             or any(not isinstance(item, dict) for item in evidence.get("traces", []))
@@ -172,6 +177,11 @@ def _validate_runtime_trace_accounting(value: object) -> None:
             evidence,
             value["authority_receipt"],
             "runtime-trace-evidence",
+        )
+        _reverify_portable(
+            value["coverage_policy"],
+            value["coverage_policy_authority_receipt"],
+            "runtime-coverage-policy",
         )
 
 
@@ -392,6 +402,7 @@ def _validate_native_normalization(value: dict[str, Any], records: int) -> None:
         "key_sha256",
         "custody_receipt_sha256",
         "custody_level",
+        "wrapped_data_key_base64",
         "custody_receipt",
         "custody_authority_receipt",
     }:
@@ -406,6 +417,7 @@ def _validate_native_normalization(value: dict[str, Any], records: int) -> None:
             "ciphertext_sha256",
             "key_sha256",
             "custody_receipt_sha256",
+            "wrapped_data_key_base64",
         )
     ):
         raise ValueError("encrypted native report storage receipt is incomplete")
@@ -413,17 +425,37 @@ def _validate_native_normalization(value: dict[str, Any], records: int) -> None:
         storage["custody_level"] != "hardware-kms-envelope"
         or not isinstance(storage["custody_receipt"], dict)
         or not isinstance(storage["custody_authority_receipt"], dict)
+        or storage["custody_receipt_sha256"]
+        != hashlib.sha256(canonical_bytes(storage["custody_receipt"])).hexdigest()
     ):
         raise ValueError("encrypted native evidence lacks hardware KMS custody")
     if replayable:
+        try:
+            wrapped_key = base64.b64decode(
+                storage["wrapped_data_key_base64"], validate=True
+            )
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                "encrypted native evidence wrapped key is invalid"
+            ) from exc
+        if (
+            len(wrapped_key) < 32
+            or storage["custody_receipt"].get("wrapped_key_sha256")
+            != hashlib.sha256(wrapped_key).hexdigest()
+        ):
+            raise ValueError("encrypted native evidence wrapped key is unbound")
         _reverify_portable(
             storage["custody_receipt"],
             storage["custody_authority_receipt"],
             "raw-evidence-custody",
         )
     if not replayable and any(
-        storage[name] is not None
-        for name in ("custody_receipt", "custody_authority_receipt")
+        storage[name] is not None and storage[name] != ""
+        for name in (
+            "wrapped_data_key_base64",
+            "custody_receipt",
+            "custody_authority_receipt",
+        )
     ):
         raise ValueError("inline native evidence cannot claim key custody")
     expected = value.get("normalization_sha256")

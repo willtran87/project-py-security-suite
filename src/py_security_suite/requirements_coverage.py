@@ -220,8 +220,12 @@ def security_requirements_coverage_artifact(
                 record["status"] = str(assessment["status"])
                 record["evidence"] = sorted(
                     {
-                        str(assertion["artifact"])
+                        str(name)
                         for assertion in assessment["assertions"]
+                        for name in (
+                            assertion["artifact"],
+                            assertion["execution_artifact"],
+                        )
                     }
                 )
         mapped = {(item["standard"], item["version"]): 0 for item in policy["catalogs"]}
@@ -672,6 +676,8 @@ def _requirement_assessment(
         < controls["minimum_negative_assertions"]
         or any(
             assertion["artifact"] not in controls["allowed_artifacts"]
+            or assertion["execution_artifact"]
+            not in controls["allowed_execution_artifacts"]
             or assertion["operator"] not in controls["allowed_operators"]
             or assertion["producer_sha256"] not in controls["allowed_producer_sha256"]
             for assertion in normalized
@@ -697,6 +703,23 @@ def _requirement_assessment(
             for item in normalized
         ):
             raise ValueError("requirement assertion evidence is stale or future-dated")
+        for item in normalized:
+            _verify_procedure_execution(item, artifacts, str(value["procedure_id"]))
+        if declared == "pass":
+            positive_runs = {
+                (item["fixture_sha256"], item["mutation_sha256"])
+                for item in normalized
+                if item["polarity"] == "positive"
+            }
+            negative_runs = {
+                (item["fixture_sha256"], item["mutation_sha256"])
+                for item in normalized
+                if item["polarity"] == "negative-control"
+            }
+            if positive_runs & negative_runs:
+                raise ValueError(
+                    "negative controls require independently retained mutated executions"
+                )
         outcomes = [_replay_assertion(item, artifacts) for item in normalized]
         observed_result = "pass" if all(outcomes) else "fail"
         if declared != observed_result:
@@ -758,6 +781,7 @@ def _assessment_evidence_policy(
         "version",
         "requirement",
         "allowed_artifacts",
+        "allowed_execution_artifacts",
         "allowed_methods",
         "allowed_operators",
         "allowed_producer_sha256",
@@ -778,6 +802,7 @@ def _assessment_evidence_policy(
             name: item[name]
             for name in (
                 "allowed_artifacts",
+                "allowed_execution_artifacts",
                 "allowed_methods",
                 "allowed_operators",
                 "allowed_producer_sha256",
@@ -843,6 +868,12 @@ def _assessment_assertion(value: object) -> dict[str, Any]:
         "polarity",
         "observed_at",
         "producer_sha256",
+        "execution_artifact",
+        "execution_sha256",
+        "fixture_sha256",
+        "mutation_sha256",
+        "command_sha256",
+        "exit_code",
     }
     if not isinstance(value, dict) or set(value) != fields:
         raise ValueError("requirement assertion fields do not match")
@@ -851,11 +882,21 @@ def _assessment_assertion(value: object) -> dict[str, Any]:
     pointer = str(value["pointer"])
     operator = str(value["operator"])
     producer = str(value["producer_sha256"])
+    execution_artifact = _text(
+        value["execution_artifact"], "procedure execution artifact", 500
+    )
     polarity = str(value["polarity"])
     observed_at = _timestamp(value["observed_at"], "assertion observed_at")
     if (
         not _digest(digest)
         or not _digest(producer)
+        or not _digest(str(value["execution_sha256"]))
+        or not _digest(str(value["fixture_sha256"]))
+        or not _digest(str(value["mutation_sha256"]))
+        or not _digest(str(value["command_sha256"]))
+        or isinstance(value["exit_code"], bool)
+        or not isinstance(value["exit_code"], int)
+        or not -255 <= value["exit_code"] <= 255
         or polarity not in {"positive", "negative-control"}
         or not pointer.startswith("/")
         or len(pointer) > 1000
@@ -875,7 +916,58 @@ def _assessment_assertion(value: object) -> dict[str, Any]:
         "polarity": polarity,
         "observed_at": observed_at,
         "producer_sha256": producer,
+        "execution_artifact": execution_artifact,
+        "execution_sha256": str(value["execution_sha256"]),
+        "fixture_sha256": str(value["fixture_sha256"]),
+        "mutation_sha256": str(value["mutation_sha256"]),
+        "command_sha256": str(value["command_sha256"]),
+        "exit_code": value["exit_code"],
     }
+
+
+def _verify_procedure_execution(
+    assertion: dict[str, Any], artifacts: dict[str, Any], procedure_id: str
+) -> None:
+    execution = artifacts.get(assertion["execution_artifact"])
+    fields = {
+        "schema_version",
+        "procedure_id",
+        "producer_sha256",
+        "command_sha256",
+        "fixture_sha256",
+        "mutation_sha256",
+        "exit_code",
+        "stdout_sha256",
+        "stderr_sha256",
+        "result_artifact",
+        "result_sha256",
+        "started_at",
+        "finished_at",
+    }
+    if (
+        not isinstance(execution, dict)
+        or set(execution) != fields
+        or hashlib.sha256(canonical_bytes(execution)).hexdigest()
+        != assertion["execution_sha256"]
+        or execution["schema_version"] != "1.0"
+        or execution["procedure_id"] != procedure_id
+        or execution["producer_sha256"] != assertion["producer_sha256"]
+        or execution["command_sha256"] != assertion["command_sha256"]
+        or execution["fixture_sha256"] != assertion["fixture_sha256"]
+        or execution["mutation_sha256"] != assertion["mutation_sha256"]
+        or execution["exit_code"] != assertion["exit_code"]
+        or execution["result_artifact"] != assertion["artifact"]
+        or execution["result_sha256"] != assertion["sha256"]
+        or any(
+            not _digest(str(execution[name]))
+            for name in ("stdout_sha256", "stderr_sha256")
+        )
+    ):
+        raise ValueError("requirement procedure execution is invalid or unbound")
+    started = _timestamp(execution["started_at"], "procedure started_at")
+    finished = _timestamp(execution["finished_at"], "procedure finished_at")
+    if finished < started or finished - started > timedelta(hours=24):
+        raise ValueError("requirement procedure execution duration is invalid")
 
 
 def _replay_assertion(assertion: dict[str, Any], artifacts: dict[str, Any]) -> bool:

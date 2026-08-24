@@ -310,10 +310,10 @@ def main(argv: list[str] | None = None) -> int:
         postcondition = check["postcondition"]
         if oracle is None:
             raise ValueError("recovery checks require an independent state oracle")
-        before_status, before_response = _request_observation(
-            oracle["base_url"], postcondition["path"], oracle["role"]
+        before_status, before_response = _oracle_quorum_observation(
+            oracle, postcondition["path"]
         )
-        requests += 1
+        requests += len(oracle["observers"])
         exercised_ids.append(f"recovery:{check['phase']}:{check['id']}:precondition")
         before_valid = before_status in set(postcondition["expected_status"])
         try:
@@ -352,12 +352,10 @@ def main(argv: list[str] | None = None) -> int:
             pending_recovery_receipts.append(pending_receipt)
         if oracle is None:
             raise ValueError("recovery checks require an independent state oracle")
-        observed_status, response = _request_observation(
-            oracle["base_url"],
-            postcondition["path"],
-            oracle["role"],
+        observed_status, response = _oracle_quorum_observation(
+            oracle, postcondition["path"]
         )
-        requests += 1
+        requests += len(oracle["observers"])
         if pending_receipt is not None:
             pending_receipt["postcondition_response"] = response
         exercised_ids.append(f"recovery:{check['phase']}:{check['id']}:postcondition")
@@ -534,51 +532,97 @@ def _oracle(
     application_url: str,
     roles: dict[str, dict[str, str]],
 ) -> dict[str, Any]:
-    required = {"base_url", "authorization_env", "identity_sha256"}
+    required = {"observers"}
     if not isinstance(value, dict) or set(value) != required:
         raise ValueError("independent state oracle fields do not match")
-    base_url = _loopback_url(str(value["base_url"] or ""))
     application = urlsplit(application_url)
-    observer = urlsplit(base_url)
-    if (application.scheme, application.hostname, application.port) == (
-        observer.scheme,
-        observer.hostname,
-        observer.port,
-    ):
-        raise ValueError("state oracle must use an independent network origin")
-    authorization_env = str(value["authorization_env"] or "")
-    if (
-        not authorization_env
-        or authorization_env.upper() != authorization_env
-        or not authorization_env.replace("_", "").isalnum()
-        or len(authorization_env) > 100
-    ):
-        raise ValueError("state oracle authorization environment is invalid")
-    if authorization_env in {
+    raw_observers = value["observers"]
+    if not isinstance(raw_observers, list) or not 2 <= len(raw_observers) <= 5:
+        raise ValueError("state oracle requires two to five independent observers")
+    observers: list[dict[str, Any]] = []
+    origins: set[tuple[str | None, str | None, int | None]] = set()
+    credentials: set[str] = set()
+    identities: set[str] = set()
+    application_origin = (application.scheme, application.hostname, application.port)
+    application_credentials = {
         settings["authorization_env"]
         for settings in roles.values()
         if settings["authorization_env"]
-    }:
-        raise ValueError(
-            "state oracle must use credentials distinct from application roles"
+    }
+    for raw in raw_observers:
+        fields = {"base_url", "authorization_env", "identity_sha256"}
+        if not isinstance(raw, dict) or set(raw) != fields:
+            raise ValueError("state oracle observer fields do not match")
+        base_url = _loopback_url(str(raw["base_url"] or ""))
+        parsed = urlsplit(base_url)
+        origin = (parsed.scheme, parsed.hostname, parsed.port)
+        if origin == application_origin or origin in origins:
+            raise ValueError("state oracle must use independent network origins")
+        authorization_env = str(raw["authorization_env"] or "")
+        if (
+            not authorization_env
+            or authorization_env.upper() != authorization_env
+            or not authorization_env.replace("_", "").isalnum()
+            or len(authorization_env) > 100
+        ):
+            raise ValueError("state oracle authorization environment is invalid")
+        if (
+            authorization_env in application_credentials
+            or authorization_env in credentials
+        ):
+            raise ValueError(
+                "state oracle must use credentials distinct from application roles and observers"
+            )
+        identity = str(raw["identity_sha256"] or "").casefold()
+        if (
+            len(identity) != 64
+            or any(character not in "0123456789abcdef" for character in identity)
+            or identity in identities
+        ):
+            raise ValueError(
+                "state oracle deployment identity is invalid or duplicated"
+            )
+        origins.add(origin)
+        credentials.add(authorization_env)
+        identities.add(identity)
+        observers.append(
+            {
+                "base_url": base_url,
+                "role": {"authorization_env": authorization_env},
+                "identity_sha256": identity,
+            }
         )
-    identity = str(value["identity_sha256"] or "")
-    if len(identity) != 64 or any(
-        character not in "0123456789abcdef" for character in identity
-    ):
-        raise ValueError("state oracle deployment identity is invalid")
+    identity = hashlib.sha256(canonical_bytes(sorted(identities))).hexdigest()
     if (
-        os.environ.get("PYSEC_AUTHORIZATION_ORACLE_IDENTITY_SHA256", "")
+        os.environ.get("PYSEC_AUTHORIZATION_ORACLE_QUORUM_SHA256", "")
         .strip()
         .casefold()
         != identity
     ):
-        raise ValueError("state oracle identity does not match its deployment pin")
+        raise ValueError("state oracle quorum does not match its deployment pin")
     return {
-        "base_url": base_url,
-        "role": {"authorization_env": authorization_env},
+        "base_url": observers[0]["base_url"],
+        "role": observers[0]["role"],
         "identity_sha256": identity,
+        "observers": observers,
     }
+
+
+def _oracle_quorum_observation(oracle: dict[str, Any], path: str) -> tuple[int, bytes]:
+    observations = [
+        _request_observation(observer["base_url"], path, observer["role"])
+        for observer in oracle["observers"]
+    ]
+    statuses = {status for status, _ in observations}
+    canonical_responses: set[bytes] = set()
+    try:
+        for _, response in observations:
+            canonical_responses.add(canonical_bytes(strict_loads(response)))
+    except (TypeError, ValueError):
+        return (next(iter(statuses)) if len(statuses) == 1 else 0), b""
+    if len(statuses) != 1 or len(canonical_responses) != 1:
+        return 0, b""
+    return statuses.pop(), canonical_responses.pop()
 
 
 def _roles(value: object) -> dict[str, dict[str, str]]:
@@ -791,6 +835,8 @@ def _verify_recovery_receipt(
         "contract_sha256",
         "request_sha256",
         "oracle_identity_sha256",
+        "recovery_epoch",
+        "fencing_token_sha256",
         "issued_at",
         "expires_at",
         "before_state_sha256",
@@ -812,6 +858,10 @@ def _verify_recovery_receipt(
         or value["contract_sha256"] != contract_sha256
         or value["request_sha256"] != request_sha256
         or value["oracle_identity_sha256"] != oracle_identity_sha256
+        or isinstance(value["recovery_epoch"], bool)
+        or not isinstance(value["recovery_epoch"], int)
+        or value["recovery_epoch"] < 1
+        or not _digest_label(value["fencing_token_sha256"])
         or value["postcondition_response_sha256"]
         != hashlib.sha256(postcondition_response).hexdigest()
         or not _label(value["event_id"], "orchestration event")

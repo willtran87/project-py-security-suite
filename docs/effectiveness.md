@@ -139,10 +139,12 @@ prior tree state in the durable SQLite ledger named by
 `PYSEC_EFFECTIVENESS_CHECKPOINT_STATE_PATH`; an immediate transaction rejects
 rollback, forks, and concurrent advancement. Every checkpoint must also carry
 valid signatures from at least two independent Ed25519 witnesses pinned by
-`PYSEC_EFFECTIVENESS_WITNESS_KEYS_JSON` (a JSON object mapping each public-key
-SHA-256 to its PEM path). This witness quorum makes a service split view
-detectable outside the service's own signing key. The first checkpoint uses
-size zero and an empty root.
+`PYSEC_EFFECTIVENESS_WITNESS_KEYS_JSON`. Each digest maps to a key path,
+organization, and lifecycle window; duplicate organizations do not count.
+`PYSEC_EFFECTIVENESS_GOSSIP_CHECKPOINTS_JSON` independently pins the expected
+size/root for each signed log identity, making a service split view detectable
+outside the service and witness signing keys. The first checkpoint uses size
+zero and an empty root.
 
 Run the benchmark only after sealing and verifying the scan report:
 

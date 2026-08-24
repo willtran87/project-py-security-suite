@@ -121,6 +121,7 @@ class EffectivenessCorpusTests(unittest.TestCase):
             ).hexdigest(),
             "checkpoint_size": 1,
             "checkpoint_root_sha256": leaf,
+            "log_identity_sha256": "9" * 64,
             "leaf_index": 0,
             "leaf_sha256": leaf,
             "inclusion_proof_sha256": [],
@@ -128,7 +129,7 @@ class EffectivenessCorpusTests(unittest.TestCase):
             "previous_checkpoint_root_sha256": "",
             "consistency_proof_sha256": [],
         }
-        witness_policy: dict[str, str] = {}
+        witness_policy: dict[str, dict[str, str]] = {}
         witnesses = []
         for index in range(2):
             witness_private = Ed25519PrivateKey.generate()
@@ -139,7 +140,12 @@ class EffectivenessCorpusTests(unittest.TestCase):
             witness_path = self.root / f"witness-{index}.pub.pem"
             witness_path.write_bytes(witness_public)
             witness_digest = hashlib.sha256(witness_public).hexdigest()
-            witness_policy[witness_digest] = str(witness_path)
+            witness_policy[witness_digest] = {
+                "path": str(witness_path),
+                "organization": f"witness-organization-{index}",
+                "not_before": "2026-08-23T00:00:00+00:00",
+                "not_after": "2026-08-25T00:00:00+00:00",
+            }
             witnesses.append(
                 {
                     "key_sha256": witness_digest,
@@ -175,6 +181,14 @@ class EffectivenessCorpusTests(unittest.TestCase):
                         self.root / "effectiveness-checkpoint.sqlite3"
                     ),
                     "PYSEC_EFFECTIVENESS_WITNESS_KEYS_JSON": json.dumps(witness_policy),
+                    "PYSEC_EFFECTIVENESS_GOSSIP_CHECKPOINTS_JSON": json.dumps(
+                        {
+                            "9" * 64: {
+                                "checkpoint_size": 1,
+                                "checkpoint_root_sha256": leaf,
+                            }
+                        }
+                    ),
                 },
             ),
             patch(

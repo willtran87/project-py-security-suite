@@ -447,6 +447,7 @@ def _consume_effectiveness_replay(
         "previous_checkpoint_size": 0,
         "previous_checkpoint_root_sha256": "",
         "consistency_proof_sha256": [],
+        "witnesses": [],
     }
 
 
@@ -541,6 +542,7 @@ def _consume_remote_effectiveness_replay(
         "request_sha256",
         "checkpoint_size",
         "checkpoint_root_sha256",
+        "log_identity_sha256",
         "leaf_index",
         "leaf_sha256",
         "inclusion_proof_sha256",
@@ -571,6 +573,7 @@ def _consume_remote_effectiveness_replay(
         or not isinstance(receipt["checkpoint_size"], int)
         or receipt["checkpoint_size"] < receipt["sequence"]
         or not _digest(str(receipt["checkpoint_root_sha256"]))
+        or not _digest(str(receipt["log_identity_sha256"]))
         or receipt["leaf_sha256"]
         != hashlib.sha256(b"\x00" + canonical_bytes(request_subject)).hexdigest()
         or receipt["leaf_index"] != receipt["sequence"] - 1
@@ -611,7 +614,10 @@ def _consume_remote_effectiveness_replay(
         raise ValueError(
             "governed effectiveness replay receipt signature failed"
         ) from exc
-    _verify_checkpoint_witnesses(receipt["witnesses"], signed)
+    _verify_checkpoint_witnesses(
+        receipt["witnesses"], signed, _receipt_time(request_subject["observed_at"])
+    )
+    _verify_gossip_checkpoint(signed)
     _advance_checkpoint_state(
         state_path,
         expected_size=configured_previous_size,
@@ -643,7 +649,9 @@ def _consume_remote_effectiveness_replay(
     }
 
 
-def _verify_checkpoint_witnesses(value: object, statement: dict[str, Any]) -> None:
+def _verify_checkpoint_witnesses(
+    value: object, statement: dict[str, Any], observed_at: datetime
+) -> None:
     raw_policy = os.environ.get("PYSEC_EFFECTIVENESS_WITNESS_KEYS_JSON", "").strip()
     try:
         policy = strict_loads(raw_policy)
@@ -656,15 +664,16 @@ def _verify_checkpoint_witnesses(value: object, statement: dict[str, Any]) -> No
         or len(value) < 2
     ):
         raise ValueError("effectiveness checkpoint witness quorum is unavailable")
-    approved: dict[str, Ed25519PublicKey] = {}
-    for digest, raw_path in policy.items():
+    approved: dict[str, tuple[Ed25519PublicKey, str]] = {}
+    for digest, configuration in policy.items():
         if (
             not isinstance(digest, str)
             or not _digest(digest)
-            or not isinstance(raw_path, str)
+            or not isinstance(configuration, dict)
+            or set(configuration) != {"path", "organization", "not_before", "not_after"}
         ):
             raise ValueError("effectiveness witness policy is invalid")
-        path = Path(raw_path).expanduser().resolve()
+        path = Path(str(configuration["path"])).expanduser().resolve()
         _, payload = read_regular_file(
             path, "effectiveness witness key", maximum_bytes=16 * 1024
         )
@@ -673,8 +682,14 @@ def _verify_checkpoint_witnesses(value: object, statement: dict[str, Any]) -> No
         loaded_key = serialization.load_pem_public_key(payload)
         if not isinstance(loaded_key, Ed25519PublicKey):
             raise ValueError("effectiveness witness key is not Ed25519")
-        approved[digest] = loaded_key
+        not_before = _receipt_time(configuration["not_before"])
+        not_after = _receipt_time(configuration["not_after"])
+        organization = str(configuration["organization"]).strip()
+        if not organization or not_before > observed_at or observed_at > not_after:
+            raise ValueError("effectiveness witness lifecycle is invalid")
+        approved[digest] = loaded_key, organization
     observed: set[str] = set()
+    organizations: set[str] = set()
     for witness in value:
         if not isinstance(witness, dict) or set(witness) != {
             "key_sha256",
@@ -682,9 +697,10 @@ def _verify_checkpoint_witnesses(value: object, statement: dict[str, Any]) -> No
         }:
             raise ValueError("effectiveness checkpoint witness is invalid")
         digest = str(witness["key_sha256"])
-        witness_key = approved.get(digest)
-        if witness_key is None or digest in observed:
+        approved_witness = approved.get(digest)
+        if approved_witness is None or digest in observed:
             raise ValueError("effectiveness checkpoint witness is not approved")
+        witness_key, organization = approved_witness
         try:
             signature = base64.b64decode(
                 str(witness["signature_base64"]), validate=True
@@ -695,8 +711,38 @@ def _verify_checkpoint_witnesses(value: object, statement: dict[str, Any]) -> No
                 "effectiveness checkpoint witness signature failed"
             ) from exc
         observed.add(digest)
-    if len(observed) < 2:
+        organizations.add(organization)
+    if len(observed) < 2 or len(organizations) < 2:
         raise ValueError("effectiveness checkpoint witness quorum was not met")
+
+
+def _verify_gossip_checkpoint(statement: dict[str, Any]) -> None:
+    raw = os.environ.get("PYSEC_EFFECTIVENESS_GOSSIP_CHECKPOINTS_JSON", "").strip()
+    try:
+        checkpoints = strict_loads(raw)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("effectiveness gossip checkpoint policy is invalid") from exc
+    identity = str(statement["log_identity_sha256"])
+    expected = checkpoints.get(identity) if isinstance(checkpoints, dict) else None
+    if (
+        not isinstance(expected, dict)
+        or set(expected) != {"checkpoint_size", "checkpoint_root_sha256"}
+        or expected["checkpoint_size"] != statement["checkpoint_size"]
+        or expected["checkpoint_root_sha256"] != statement["checkpoint_root_sha256"]
+    ):
+        raise ValueError(
+            "effectiveness checkpoint is absent from external gossip state"
+        )
+
+
+def _receipt_time(value: object) -> datetime:
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError("effectiveness receipt time is invalid") from exc
+    if parsed.tzinfo is None:
+        raise ValueError("effectiveness receipt time must include a timezone")
+    return parsed.astimezone(UTC)
 
 
 def _proof(value: object) -> bool:
