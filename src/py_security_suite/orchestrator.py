@@ -397,6 +397,21 @@ def _scan_sealed_project(
         context_errors.append(
             "deployment authority generations require an external monotonic CAS backend"
         )
+    if config.profile in {"production", "release"}:
+        anchored_state = (
+            "PYSEC_OPERATION_RECEIPT_STATE_PATH",
+            "PYSEC_OPERATION_RECEIPT_MIN_SEQUENCE",
+            "PYSEC_OPERATION_RECEIPT_CHECKPOINT_SHA256",
+            "PYSEC_TRUSTED_TIME_STATE_PATH",
+            "PYSEC_TRUSTED_TIME_MIN_SEQUENCE",
+            "PYSEC_TRUSTED_TIME_CHECKPOINT_SHA256",
+        )
+        missing_state = [name for name in anchored_state if not os.environ.get(name)]
+        if missing_state:
+            context_errors.append(
+                "production replay and trusted-time state lacks deployment anchors: "
+                + ", ".join(missing_state)
+            )
 
     (
         inventory.source_sha256_after,

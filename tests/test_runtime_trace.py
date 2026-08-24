@@ -95,6 +95,12 @@ def test_runtime_trace_must_correlate_to_static_edge(tmp_path: Path) -> None:
             "kernel_identity_sha256": "8" * 64,
         }
     ]
+    independent_raw_spans = [dict(item) for item in raw_spans]
+    independent_observer_config = {
+        "schema_version": "1.0",
+        "channel": "kernel-audit",
+        "collector_identity_sha256": "6" * 64,
+    }
     independent_subject = {
         "schema_version": "1.0",
         "deployment_sha256": "a" * 64,
@@ -103,6 +109,12 @@ def test_runtime_trace_must_correlate_to_static_edge(tmp_path: Path) -> None:
         "instrumented_build_sha256": "d" * 64,
         "observations_sha256": hashlib.sha256(
             canonical_bytes(independent_observations)
+        ).hexdigest(),
+        "raw_spans_sha256": hashlib.sha256(
+            canonical_bytes(independent_raw_spans)
+        ).hexdigest(),
+        "observer_config_sha256": hashlib.sha256(
+            canonical_bytes(independent_observer_config)
         ).hexdigest(),
     }
     independent_receipt, independent_key = operation_receipt(
@@ -134,6 +146,12 @@ def test_runtime_trace_must_correlate_to_static_edge(tmp_path: Path) -> None:
         "raw_spans_sha256": hashlib.sha256(canonical_bytes(raw_spans)).hexdigest(),
         "independent_observer_identity_sha256": "c" * 64,
         "independent_observations": independent_observations,
+        "independent_raw_spans": independent_raw_spans,
+        "independent_raw_spans_sha256": independent_subject["raw_spans_sha256"],
+        "independent_observer_config": independent_observer_config,
+        "independent_observer_config_sha256": independent_subject[
+            "observer_config_sha256"
+        ],
         "independent_operation_receipt": independent_receipt,
         "independent_authority_key_sha256": independent_key,
         "traces": traces,

@@ -54,6 +54,10 @@ def runtime_trace_artifact(boundary_graph: dict[str, Any]) -> dict[str, Any]:
             "raw_spans_sha256",
             "independent_observer_identity_sha256",
             "independent_observations",
+            "independent_raw_spans",
+            "independent_raw_spans_sha256",
+            "independent_observer_config",
+            "independent_observer_config_sha256",
             "independent_operation_receipt",
             "independent_authority_key_sha256",
             "traces",
@@ -76,6 +80,14 @@ def runtime_trace_artifact(boundary_graph: dict[str, Any]) -> dict[str, Any]:
         != hashlib.sha256(canonical_bytes(value.get("raw_spans"))).hexdigest()
         or not isinstance(value.get("raw_spans"), list)
         or not isinstance(value.get("independent_observations"), list)
+        or value.get("independent_raw_spans_sha256")
+        != hashlib.sha256(
+            canonical_bytes(value.get("independent_raw_spans"))
+        ).hexdigest()
+        or value.get("independent_observer_config_sha256")
+        != hashlib.sha256(
+            canonical_bytes(value.get("independent_observer_config"))
+        ).hexdigest()
     ):
         raise ValueError("runtime trace evidence fields do not match")
     deployment = (
@@ -332,6 +344,25 @@ def _verify_independent_runtime_observations(
     challenge: str,
 ) -> None:
     observations = value["independent_observations"]
+    independent_spans = value["independent_raw_spans"]
+    _verify_raw_spans(independent_spans, traces)
+    if {canonical_bytes(item) for item in independent_spans} != {
+        canonical_bytes(item) for item in value["raw_spans"]
+    }:
+        raise ValueError("independent raw telemetry disagrees with collector spans")
+    observer_config = value["independent_observer_config"]
+    if (
+        not isinstance(observer_config, dict)
+        or set(observer_config)
+        != {"schema_version", "channel", "collector_identity_sha256"}
+        or observer_config.get("schema_version") != "1.0"
+        or observer_config.get("channel")
+        not in {"kernel-audit", "service-mesh-tap", "independent-otlp"}
+        or not _digest(str(observer_config.get("collector_identity_sha256") or ""))
+        or observer_config["collector_identity_sha256"]
+        == value["collector_identity_sha256"]
+    ):
+        raise ValueError("independent runtime observer channel is invalid")
     fields = {
         "trace_id",
         "span_count",
@@ -379,6 +410,8 @@ def _verify_independent_runtime_observations(
         "observations_sha256": hashlib.sha256(
             canonical_bytes(observations)
         ).hexdigest(),
+        "raw_spans_sha256": value["independent_raw_spans_sha256"],
+        "observer_config_sha256": value["independent_observer_config_sha256"],
     }
     verify_operation_receipt(
         subject,

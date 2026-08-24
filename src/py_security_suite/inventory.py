@@ -309,11 +309,7 @@ def _materialize_git_history(
                 "runtime_closure_sha256": native_runtime_closure_sha256(Path(git)),
             },
         }
-        git_manifest_receipt = verify_deployment_receipt(
-            git_manifest,
-            purpose="git-ref-manifest",
-            environment_prefix="PYSEC_GIT_REF_MANIFEST_AUTHORITY",
-        )
+        git_manifest_receipt = None
     else:
         git_manifest = None
         git_manifest_receipt = None
@@ -418,6 +414,22 @@ def _materialize_git_history(
     )
     if observed.exit_code != 0 or observed.stdout.strip().casefold() != revision:
         raise ValueError("sealed Git history does not match the inventoried revision")
+    if git_manifest is not None:
+        git_manifest["clean_replay"] = _clean_git_signature_replay(
+            git,
+            clone,
+            bundle,
+            base64.b64decode(
+                str(git_manifest["allowed_signers_file_base64"]), validate=True
+            ),
+            git_manifest["signature_ledger"],
+            work_root,
+        )
+        git_manifest_receipt = verify_deployment_receipt(
+            git_manifest,
+            purpose="git-ref-manifest",
+            environment_prefix="PYSEC_GIT_REF_MANIFEST_AUTHORITY",
+        )
     _copy_regular_tree(clone / ".git", snapshot / ".git")
     if git_manifest is not None and git_manifest_receipt is not None:
         (snapshot / ".git" / "pysec-provenance.json").write_bytes(
@@ -429,6 +441,106 @@ def _materialize_git_history(
                 }
             )
         )
+
+
+def _clean_git_signature_replay(
+    git: str,
+    clone: Path,
+    bundle: Path,
+    allowed_signers: bytes,
+    expected_ledger: object,
+    work_root: Path,
+) -> dict[str, Any]:
+    """Reverify every signature and object from the sealed bundle on a clean clone."""
+    if not isinstance(expected_ledger, dict):
+        raise ValueError("clean Git replay ledger is unavailable")
+    signers = work_root / "clean-replay-allowed-signers"
+    signers.write_bytes(allowed_signers)
+
+    def query(arguments: list[str]) -> str:
+        result = run_command(
+            [
+                git,
+                "-c",
+                "gpg.format=ssh",
+                "-c",
+                f"gpg.ssh.allowedSignersFile={signers}",
+                "-C",
+                str(clone),
+                *arguments,
+            ],
+            cwd=clone,
+            timeout_seconds=300,
+            max_output_bytes=64 * 1024 * 1024,
+        )
+        if result.exit_code != 0 or result.timed_out or result.output_limit_exceeded:
+            raise ValueError("clean Git signature replay failed")
+        return result.stdout.strip()
+
+    integrity = query(["fsck", "--full", "--strict", "--no-dangling"])
+    if integrity:
+        raise ValueError("clean Git replay reported object-integrity diagnostics")
+    commit_rows = query(["log", "--all", "--format=%H%x00%G?%x00%GF%x00%cI"])
+    observed_commits: dict[str, tuple[str, str, str]] = {}
+    for row in commit_rows.splitlines():
+        fields = row.split("\x00")
+        if len(fields) != 4 or fields[1] != "G":
+            raise ValueError("clean Git commit signature replay failed")
+        observed_commits[fields[0].casefold()] = (
+            fields[1],
+            fields[2].strip().casefold(),
+            datetime.fromisoformat(fields[3].replace("Z", "+00:00")).isoformat(),
+        )
+    expected_commits = {
+        str(item["commit"]): (
+            "G",
+            str(item["fingerprint"]),
+            str(item["committed_at"]),
+        )
+        for item in expected_ledger.get("commits", [])
+    }
+    if observed_commits != expected_commits:
+        raise ValueError("clean Git commit ledger differs from qualified history")
+    observed_tags: dict[str, tuple[str, str]] = {}
+    for item in expected_ledger.get("tags", []):
+        tag = str(item["tag"])
+        signature = (
+            query(
+                [
+                    "tag",
+                    "-v",
+                    "--format=%(signature:grade)%00%(signature:fingerprint)",
+                    tag,
+                ]
+            )
+            .splitlines()[-1]
+            .split("\x00")
+        )
+        if len(signature) != 2 or signature[0] != "G":
+            raise ValueError("clean Git tag signature replay failed")
+        observed_tags[tag] = (signature[0], signature[1].strip().casefold())
+    expected_tags = {
+        str(item["tag"]): ("G", str(item["fingerprint"]))
+        for item in expected_ledger.get("tags", [])
+    }
+    if observed_tags != expected_tags:
+        raise ValueError("clean Git tag ledger differs from qualified history")
+    return {
+        "schema_version": "1.0",
+        "bundle_sha256": sha256_file(bundle),
+        "reachable_objects_sha256": hashlib.sha256(
+            "\n".join(
+                sorted(set(query(["rev-list", "--objects", "--all"]).splitlines()))
+            ).encode()
+        ).hexdigest(),
+        "signature_ledger_sha256": hashlib.sha256(
+            canonical_bytes(expected_ledger)
+        ).hexdigest(),
+        "git_executable_sha256": sha256_file(Path(git)),
+        "git_runtime_closure_sha256": native_runtime_closure_sha256(Path(git)),
+        "verified_commits": len(observed_commits),
+        "verified_tags": len(observed_tags),
+    }
 
 
 def _git_repository_state(git: str, target: Path) -> dict[str, Any]:

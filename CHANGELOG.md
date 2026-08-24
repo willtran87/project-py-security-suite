@@ -1,5 +1,14 @@
 # Changelog
 
+- Reproduce compiler semantic artifacts under two independently signed engine
+  operations and verify every taint-path edge; replay Git signatures from the
+  sealed bundle on a clean clone; require clean-host KMS recovery after local
+  key zeroization; bind sandbox claims to OS measurement artifacts; compare
+  independent raw runtime telemetry; retain and rehash complete requirements
+  runtime materials with keyed secret commitments; add deployment-anchored,
+  hash-chained replay and trusted-time state; and discover missing semantic
+  receipt validators from artifact content.
+
 - Close the remaining offline-verification gaps: execute every pinned helper
   through a digest-bound launcher; retain launcher argv, endpoint/mTLS
   transcripts, and original trusted verification time; require two independent

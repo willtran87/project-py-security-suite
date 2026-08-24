@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import hashlib
+import base64
 import hmac
 import os
+from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
 
@@ -13,6 +15,7 @@ from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from .deployment_receipt import verify_portable_receipt
 from .path_safety import read_regular_file
 from .pinned_command import command_configured, run_pinned_json_command
+from .operation_receipt import verify_operation_receipt
 from .strict_json import dumps as strict_dumps
 from .strict_json import loads as strict_loads
 from .strict_json import canonical_bytes
@@ -83,7 +86,7 @@ def _encrypted_sidecar(payload: bytes, raw_sha256: str) -> dict[str, Any]:
     key_sha256 = hashlib.sha256(key).hexdigest()
     custody_sha256 = hashlib.sha256(canonical_bytes(custody_receipt)).hexdigest()
     try:
-        return _store_encrypted_sidecar(
+        storage = _store_encrypted_sidecar(
             payload,
             raw_sha256,
             root,
@@ -98,6 +101,8 @@ def _encrypted_sidecar(payload: bytes, raw_sha256: str) -> dict[str, Any]:
     finally:
         for index in range(len(key)):
             key[index] = 0
+    storage["recovery_drill"] = _external_recovery_drill(root, raw_sha256, storage)
+    return storage
 
 
 def _store_encrypted_sidecar(
@@ -195,14 +200,99 @@ def _store_encrypted_sidecar(
         "custody_receipt": custody_receipt,
         "custody_authority_receipt": custody_authority,
         "effective_policy_attestation": effective_policy_attestation,
-        "recovery_drill": {
-            "schema_version": "1.0",
-            "mode": "authenticated-local-restore",
-            "object_id": object_id,
-            "ciphertext_sha256": ciphertext_sha256,
-            "recovered_plaintext_sha256": hashlib.sha256(payload).hexdigest(),
-            "verified": True,
-        },
+        "recovery_drill": None,
+    }
+
+
+def _external_recovery_drill(
+    root: Path, raw_sha256: str, storage: dict[str, Any]
+) -> dict[str, Any]:
+    if not command_configured("PYSEC_RAW_EVIDENCE_RECOVERY"):
+        raise ValueError("clean-host raw evidence recovery command is unavailable")
+    challenge = (
+        os.environ.get("PYSEC_SCAN_TIME_CHALLENGE_SHA256", "").strip().casefold()
+    )
+    wrapped = base64.b64decode(storage["wrapped_data_key_base64"], validate=True)
+    request = {
+        "schema_version": "1.0",
+        "operation": "recover-encrypted-evidence",
+        "store_identity": hashlib.sha256(str(root).encode()).hexdigest(),
+        "object_id": storage["object_id"],
+        "ciphertext_sha256": storage["ciphertext_sha256"],
+        "wrapped_key_sha256": hashlib.sha256(wrapped).hexdigest(),
+        "wrapped_data_key_base64": storage["wrapped_data_key_base64"],
+        "expected_plaintext_sha256": raw_sha256,
+        "challenge_sha256": challenge,
+    }
+    response = run_pinned_json_command("PYSEC_RAW_EVIDENCE_RECOVERY", request)
+    policy_attestation = response.pop("_effective_policy_attestation", None)
+    fields = {
+        "schema_version",
+        "object_id",
+        "ciphertext_sha256",
+        "recovered_plaintext_sha256",
+        "replica_identity_sha256",
+        "kms_unwrap_operation_id",
+        "recovery_operation_id",
+        "recovery_authority_key_sha256",
+        "recovery_operation_receipt",
+    }
+    expected_key = (
+        os.environ.get("PYSEC_RAW_EVIDENCE_RECOVERY_AUTHORITY_KEY_SHA256", "")
+        .strip()
+        .casefold()
+    )
+    if (
+        set(response) != fields
+        or response.get("schema_version") != "1.0"
+        or response.get("object_id") != storage["object_id"]
+        or response.get("ciphertext_sha256") != storage["ciphertext_sha256"]
+        or response.get("recovered_plaintext_sha256") != raw_sha256
+        or not _digest(str(response.get("replica_identity_sha256") or ""))
+        or response.get("replica_identity_sha256") == request["store_identity"]
+        or not str(response.get("kms_unwrap_operation_id") or "")
+        or not str(response.get("recovery_operation_id") or "")
+        or not _digest(expected_key)
+        or response.get("recovery_authority_key_sha256") != expected_key
+        or not isinstance(policy_attestation, dict)
+    ):
+        raise ValueError("clean-host raw evidence recovery response is invalid")
+    subject = {
+        "schema_version": "1.0",
+        "request_sha256": hashlib.sha256(canonical_bytes(request)).hexdigest(),
+        "object_id": response["object_id"],
+        "ciphertext_sha256": response["ciphertext_sha256"],
+        "recovered_plaintext_sha256": response["recovered_plaintext_sha256"],
+        "replica_identity_sha256": response["replica_identity_sha256"],
+        "kms_unwrap_operation_id": response["kms_unwrap_operation_id"],
+    }
+    receipt = response["recovery_operation_receipt"]
+    statement = receipt.get("statement") if isinstance(receipt, dict) else None
+    try:
+        observed_at = datetime.fromisoformat(
+            str((statement or {})["issued_at"]).replace("Z", "+00:00")
+        )
+    except (KeyError, ValueError) as exc:
+        raise ValueError("clean-host recovery receipt time is invalid") from exc
+    verified = verify_operation_receipt(
+        subject,
+        receipt,
+        purpose="raw-evidence-clean-host-recovery",
+        observed_at=observed_at,
+        challenge_sha256=challenge,
+        expected_key_sha256=expected_key,
+    )
+    if verified["statement"]["operation_id"] != response["recovery_operation_id"]:
+        raise ValueError("clean-host recovery operation identity is detached")
+    return {
+        "schema_version": "1.0",
+        "mode": "external-clean-host-kms-restore",
+        **subject,
+        "recovery_operation_id": response["recovery_operation_id"],
+        "recovery_authority_key_sha256": expected_key,
+        "recovery_operation_receipt": verified,
+        "effective_policy_attestation": policy_attestation,
+        "verified": True,
     }
 
 

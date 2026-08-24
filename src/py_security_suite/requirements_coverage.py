@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import base64
 import json
 import os
 from datetime import UTC, datetime, timedelta
@@ -1110,9 +1111,13 @@ def _procedure_manifests_valid(execution: dict[str, Any]) -> bool:
         != {
             "kind",
             "executable_sha256",
+            "executable_base64",
             "closure_sha256",
+            "closure_manifest",
             "image_digest",
+            "image_manifest_base64",
             "sbom_sha256",
+            "sbom_base64",
         }
         or runtime.get("kind") not in {"native", "container"}
         or execution.get("command_sha256") != runtime.get("executable_sha256")
@@ -1142,29 +1147,109 @@ def _procedure_manifests_valid(execution: dict[str, Any]) -> bool:
         }
     ):
         return False
+    try:
+        executable = base64.b64decode(runtime["executable_base64"], validate=True)
+        sbom = base64.b64decode(runtime["sbom_base64"], validate=True)
+        image_manifest = base64.b64decode(
+            runtime["image_manifest_base64"], validate=True
+        )
+    except (TypeError, ValueError):
+        return False
+    if (
+        not executable
+        or len(executable) > 16 * 1024 * 1024
+        or hashlib.sha256(executable).hexdigest() != runtime["executable_sha256"]
+        or not sbom
+        or len(sbom) > 16 * 1024 * 1024
+        or hashlib.sha256(sbom).hexdigest() != runtime["sbom_sha256"]
+        or not isinstance(runtime["closure_manifest"], list)
+        or runtime["closure_sha256"]
+        != hashlib.sha256(canonical_bytes(runtime["closure_manifest"])).hexdigest()
+        or (runtime["kind"] == "native" and image_manifest)
+        or (
+            runtime["kind"] == "container"
+            and (
+                not image_manifest
+                or hashlib.sha256(image_manifest).hexdigest()
+                != runtime["image_digest"].removeprefix("sha256:")
+            )
+        )
+    ):
+        return False
+    closure_paths: set[str] = set()
+    for item in runtime["closure_manifest"]:
+        if not _material_record_valid(item, closure_paths, "path"):
+            return False
     environment_names: set[str] = set()
     for item in environment:
         if (
             not isinstance(item, dict)
-            or set(item) != {"name", "value_sha256", "classification"}
+            or set(item)
+            != {
+                "name",
+                "value_commitment",
+                "classification",
+                "commitment_algorithm",
+                "commitment_key_sha256",
+                "nonce_sha256",
+            }
             or not str(item["name"])
             or str(item["name"]) in environment_names
-            or not _digest(str(item["value_sha256"]))
+            or not _digest(str(item["value_commitment"]))
             or item["classification"] not in {"public-commitment", "secret-commitment"}
         ):
             return False
+        if item["classification"] == "public-commitment" and (
+            item["commitment_algorithm"] != "sha256"
+            or item["commitment_key_sha256"] != ""
+            or item["nonce_sha256"] != ""
+        ):
+            return False
+        if item["classification"] == "secret-commitment":
+            expected_key = (
+                os.environ.get("PYSEC_REQUIREMENTS_SECRET_COMMITMENT_KEY_SHA256", "")
+                .strip()
+                .casefold()
+            )
+            if (
+                item["commitment_algorithm"] != "hmac-sha256"
+                or not _digest(expected_key)
+                or item["commitment_key_sha256"] != expected_key
+                or not _digest(str(item["nonce_sha256"]))
+            ):
+                return False
         environment_names.add(str(item["name"]))
     asset_names: set[str] = set()
     for item in assets:
-        if (
-            not isinstance(item, dict)
-            or set(item) != {"name", "sha256"}
-            or not str(item["name"])
-            or str(item["name"]) in asset_names
-            or not _digest(str(item["sha256"]))
+        if not isinstance(item, dict) or not _material_record_valid(
+            item, asset_names, "name"
         ):
             return False
-        asset_names.add(str(item["name"]))
+    return True
+
+
+def _material_record_valid(
+    item: object, identities: set[str], identity_field: str
+) -> bool:
+    if not isinstance(item, dict) or set(item) != {
+        identity_field,
+        "sha256",
+        "content_base64",
+    }:
+        return False
+    identity = str(item[identity_field])
+    try:
+        content = base64.b64decode(str(item["content_base64"]), validate=True)
+    except (TypeError, ValueError):
+        return False
+    if (
+        not identity
+        or identity in identities
+        or len(content) > 16 * 1024 * 1024
+        or hashlib.sha256(content).hexdigest() != item["sha256"]
+    ):
+        return False
+    identities.add(identity)
     return True
 
 

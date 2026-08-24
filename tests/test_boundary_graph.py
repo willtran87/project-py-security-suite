@@ -12,7 +12,7 @@ from unittest.mock import patch
 
 from py_security_suite.boundary_graph import build_boundary_graph
 from py_security_suite.strict_json import canonical_bytes
-from tests.deployment_authority import authority_environment
+from tests.deployment_authority import authority_environment, operation_receipt
 
 
 class BoundaryGraphTests(unittest.TestCase):
@@ -166,6 +166,10 @@ class BoundaryGraphTests(unittest.TestCase):
                         "primary_analysis_artifact_sha256": "",
                         "secondary_analysis_artifact_base64": "",
                         "secondary_analysis_artifact_sha256": "",
+                        "primary_authority_key_sha256": "",
+                        "primary_operation_receipt": {},
+                        "secondary_authority_key_sha256": "",
+                        "secondary_operation_receipt": {},
                         "taint_paths": [],
                         "taint_paths_sha256": "",
                     }
@@ -180,16 +184,46 @@ class BoundaryGraphTests(unittest.TestCase):
             evidence["frontends"][0]["secondary_semantic_ledger_sha256"] = evidence[
                 "frontends"
             ][0]["semantic_ledger_sha256"]
-            for prefix, payload in (
-                ("primary", b"clang-bqrs"),
-                ("secondary", b"codeql-bqrs"),
-            ):
+            for prefix in ("primary", "secondary"):
+                engine_prefix = "" if prefix == "primary" else "secondary_"
+                replay = {
+                    "schema_version": "1.0",
+                    "engine": evidence["frontends"][0][f"{engine_prefix}engine"],
+                    "engine_sha256": evidence["frontends"][0][
+                        f"{engine_prefix}engine_sha256"
+                    ],
+                    "configuration_sha256": evidence["frontends"][0][
+                        f"{engine_prefix}configuration_sha256"
+                    ],
+                    "files_sha256": evidence["frontends"][0]["files_sha256"],
+                    "semantic_ledger": evidence["frontends"][0][
+                        f"{engine_prefix}semantic_ledger"
+                    ],
+                    "taint_paths": [],
+                }
+                payload = canonical_bytes(replay)
                 evidence["frontends"][0][f"{prefix}_analysis_artifact_base64"] = (
                     base64.b64encode(payload).decode()
                 )
                 evidence["frontends"][0][f"{prefix}_analysis_artifact_sha256"] = (
                     hashlib.sha256(payload).hexdigest()
                 )
+                engine_subject = {
+                    "schema_version": "1.0",
+                    "language": "c",
+                    "engine": replay["engine"],
+                    "engine_sha256": replay["engine_sha256"],
+                    "configuration_sha256": replay["configuration_sha256"],
+                    "files_sha256": replay["files_sha256"],
+                    "analysis_artifact_sha256": hashlib.sha256(payload).hexdigest(),
+                }
+                receipt, key = operation_receipt(
+                    engine_subject,
+                    purpose="compiler-semantic-engine-analysis",
+                    operation_id=f"{prefix}-compiler-analysis",
+                )
+                evidence["frontends"][0][f"{prefix}_operation_receipt"] = receipt
+                evidence["frontends"][0][f"{prefix}_authority_key_sha256"] = key
             evidence["frontends"][0]["taint_paths_sha256"] = hashlib.sha256(
                 canonical_bytes([])
             ).hexdigest()

@@ -2,17 +2,24 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+import sqlite3
+from contextlib import closing
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from py_security_suite.artifact_validation import (
+    _OPERATION_STATE_GENESIS_SHA256,
+    _contains_operation_receipt,
     _consume_operation_receipts,
     _validate_operation_receipt_graph,
 )
 from py_security_suite.requirements_coverage import _procedure_manifests_valid
 from py_security_suite.runtime_trace import _verify_raw_spans
-from py_security_suite.trusted_time import _advance_time_state
+from py_security_suite.trusted_time import (
+    _TRUSTED_TIME_STATE_GENESIS_SHA256,
+    _advance_time_state,
+)
 from tests.deployment_authority import operation_receipt
 
 
@@ -31,6 +38,14 @@ def test_operation_receipt_graph_rejects_forked_roots() -> None:
         _validate_operation_receipt_graph({"receipts": receipts})
 
 
+def test_operation_receipt_validator_discovery_is_structural() -> None:
+    receipt, _ = operation_receipt(
+        {"run": 1}, purpose="test-operation", operation_id="discover-1"
+    )
+    assert _contains_operation_receipt({"nested": [{"receipt": receipt}]}) is True
+    assert _contains_operation_receipt({"nested": [{"receipt": {}}]}) is False
+
+
 def test_operation_receipt_state_rejects_cross_report_replay(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -40,10 +55,43 @@ def test_operation_receipt_state_rejects_cross_report_replay(
     monkeypatch.setenv(
         "PYSEC_OPERATION_RECEIPT_STATE_PATH", str(tmp_path / "operations.sqlite")
     )
+    monkeypatch.setenv("PYSEC_OPERATION_RECEIPT_MIN_SEQUENCE", "0")
+    monkeypatch.setenv(
+        "PYSEC_OPERATION_RECEIPT_CHECKPOINT_SHA256",
+        _OPERATION_STATE_GENESIS_SHA256,
+    )
     _consume_operation_receipts([receipt], {"report": 1})
     _consume_operation_receipts([receipt], {"report": 1})
     with pytest.raises(ValueError, match="replay across reports"):
         _consume_operation_receipts([receipt], {"report": 2})
+
+
+def test_operation_receipt_anchor_detects_deleted_state(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "operations.sqlite"
+    monkeypatch.setenv("PYSEC_OPERATION_RECEIPT_STATE_PATH", str(path))
+    monkeypatch.setenv("PYSEC_OPERATION_RECEIPT_MIN_SEQUENCE", "0")
+    monkeypatch.setenv(
+        "PYSEC_OPERATION_RECEIPT_CHECKPOINT_SHA256",
+        _OPERATION_STATE_GENESIS_SHA256,
+    )
+    first, _ = operation_receipt(
+        {"run": 1}, purpose="test-operation", operation_id="anchor-1"
+    )
+    _consume_operation_receipts([first], {"report": 1})
+    with closing(sqlite3.connect(path)) as connection:
+        sequence, checkpoint = connection.execute(
+            "SELECT sequence, checkpoint_sha256 FROM operation_receipt_checkpoint"
+        ).fetchone()
+    path.unlink()
+    monkeypatch.setenv("PYSEC_OPERATION_RECEIPT_MIN_SEQUENCE", str(sequence))
+    monkeypatch.setenv("PYSEC_OPERATION_RECEIPT_CHECKPOINT_SHA256", checkpoint)
+    second, _ = operation_receipt(
+        {"run": 2}, purpose="test-operation", operation_id="anchor-2"
+    )
+    with pytest.raises(ValueError, match="deletion or rollback"):
+        _consume_operation_receipts([second], {"report": 2})
 
 
 def test_requirements_executor_rejects_raw_environment_values() -> None:
@@ -75,6 +123,10 @@ def test_trusted_time_state_rejects_rollback(
     monkeypatch.setenv(
         "PYSEC_TRUSTED_TIME_STATE_PATH", str(tmp_path / "trusted-time.sqlite")
     )
+    monkeypatch.setenv("PYSEC_TRUSTED_TIME_MIN_SEQUENCE", "0")
+    monkeypatch.setenv(
+        "PYSEC_TRUSTED_TIME_CHECKPOINT_SHA256", _TRUSTED_TIME_STATE_GENESIS_SHA256
+    )
     now = datetime.now(UTC)
     current = {
         "trusted_time_observed_at": now.isoformat(),
@@ -87,3 +139,34 @@ def test_trusted_time_state_rejects_rollback(
     _advance_time_state("c" * 64, current)
     with pytest.raises(ValueError, match="rollback or fork"):
         _advance_time_state("d" * 64, older)
+
+
+def test_trusted_time_anchor_detects_deleted_state(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "trusted-time.sqlite"
+    monkeypatch.setenv("PYSEC_TRUSTED_TIME_STATE_PATH", str(path))
+    monkeypatch.setenv("PYSEC_TRUSTED_TIME_MIN_SEQUENCE", "0")
+    monkeypatch.setenv(
+        "PYSEC_TRUSTED_TIME_CHECKPOINT_SHA256", _TRUSTED_TIME_STATE_GENESIS_SHA256
+    )
+    now = datetime.now(UTC)
+    _advance_time_state(
+        "c" * 64,
+        {"trusted_time_observed_at": now.isoformat(), "trusted_time_sha256": "a" * 64},
+    )
+    with closing(sqlite3.connect(path)) as connection:
+        sequence, checkpoint = connection.execute(
+            "SELECT sequence, checkpoint_sha256 FROM trusted_time_state"
+        ).fetchone()
+    path.unlink()
+    monkeypatch.setenv("PYSEC_TRUSTED_TIME_MIN_SEQUENCE", str(sequence))
+    monkeypatch.setenv("PYSEC_TRUSTED_TIME_CHECKPOINT_SHA256", checkpoint)
+    with pytest.raises(ValueError, match="deletion or rollback"):
+        _advance_time_state(
+            "d" * 64,
+            {
+                "trusted_time_observed_at": (now + timedelta(seconds=1)).isoformat(),
+                "trusted_time_sha256": "b" * 64,
+            },
+        )

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import base64
 import hashlib
 import os
 import tempfile
@@ -207,18 +208,44 @@ class SecurityRequirementsCoverageTests(unittest.TestCase):
             environment_record = [
                 {
                     "name": "PYTHONHASHSEED",
-                    "value_sha256": hashlib.sha256(b"0").hexdigest(),
+                    "value_commitment": hashlib.sha256(b"0").hexdigest(),
                     "classification": "public-commitment",
+                    "commitment_algorithm": "sha256",
+                    "commitment_key_sha256": "",
+                    "nonce_sha256": "",
                 }
             ]
+            executable_bytes = b"deterministic-replay-executable"
+            closure_manifest = [
+                {
+                    "path": "runtime/library.bin",
+                    "sha256": hashlib.sha256(b"runtime-library").hexdigest(),
+                    "content_base64": base64.b64encode(b"runtime-library").decode(),
+                }
+            ]
+            sbom_bytes = canonical_bytes(
+                {"bomFormat": "CycloneDX", "specVersion": "1.6", "components": []}
+            )
             runtime_manifest = {
                 "kind": "native",
-                "executable_sha256": "7" * 64,
-                "closure_sha256": "6" * 64,
+                "executable_sha256": hashlib.sha256(executable_bytes).hexdigest(),
+                "executable_base64": base64.b64encode(executable_bytes).decode(),
+                "closure_sha256": hashlib.sha256(
+                    canonical_bytes(closure_manifest)
+                ).hexdigest(),
+                "closure_manifest": closure_manifest,
                 "image_digest": "",
-                "sbom_sha256": "5" * 64,
+                "image_manifest_base64": "",
+                "sbom_sha256": hashlib.sha256(sbom_bytes).hexdigest(),
+                "sbom_base64": base64.b64encode(sbom_bytes).decode(),
             }
-            assets_manifest = [{"name": "replay-policy", "sha256": "8" * 64}]
+            assets_manifest = [
+                {
+                    "name": "replay-policy",
+                    "sha256": hashlib.sha256(b"strict-policy").hexdigest(),
+                    "content_base64": base64.b64encode(b"strict-policy").decode(),
+                }
+            ]
             sandbox_policy = {
                 "network": "deny",
                 "filesystem": "read-only",

@@ -308,10 +308,13 @@ stdout/stderr digests, timestamps, and result digest. A policy-approved
 execution authority signs the whole record, and mutation operators link
 negative controls to their parent fixture.
 Environment entries retain only classified value commitments, never raw secret
-values. Runtime evidence closes over the executable, native dependency closure
-or immutable container digest, and SBOM; assets are individually named and
-hashed, while sandbox policy requires denied networking, read-only files,
-confined processes, and isolated credentials.
+values. Secret entries use keyed HMAC-SHA-256 commitments with deployment-pinned
+key identity and per-value nonce commitments. Runtime evidence carries the
+actual executable, dependency-closure manifest, SBOM, immutable container
+manifest where applicable, and verifies every material digest during replay;
+assets likewise retain replayable content. Sandbox policy requires denied
+networking, read-only files, confined processes, and isolated credentials and
+binds those controls to an OS-specific kernel measurement artifact.
 Positive and negative controls must come from distinct executions. Artifact
 names or catalog counts alone cannot establish conformance.
 
@@ -324,8 +327,8 @@ signed evidence. Sandbox, raw-evidence custody, and requirements-policy
 artifacts retain the same portable proof material for later verification.
 The runtime contract additionally retains digest-bound collector configuration,
 instrumentation manifests, individual parent-linked spans, deterministic route
-source documents, and a separately signed observer ledger that must agree with
-collector span and sink accounting.
+source documents, and a separately signed independent raw span stream and
+observer configuration that must reproduce collector event and sink accounting.
 
 Native binary parsing runs in a resource-contained isolated worker, with an
 optional deployment-pinned OS sandbox prefix. PE, ELF, and Mach-O analysis
@@ -342,7 +345,10 @@ the retained authority receipt.
 Governed compiler evidence requires two distinct non-tree-sitter engines,
 byte-for-byte replay artifacts, matching independently produced semantic
 ledgers, and explicit source-to-sink taint paths with retained sanitizer and
-barrier nodes.
+barrier nodes. Each replay artifact is strict canonical JSON bound to the exact
+engine, configuration, and file-set digests and has its own operation-authority
+receipt; every consecutive taint-path hop must exist in the retained CFG,
+dataflow, or interprocedural edge union.
 Templates record computed includes and explicit escaping
 bypasses, while notebooks and bytecode are parsed without executing target
 code. Git history qualification rejects shallow, partial, promisor, sparse,
@@ -358,6 +364,11 @@ policy, Git executable/runtime closure, exact security-configuration bytes, and
 the observed commit/tag signer ledger. Raw commit and annotated-tag objects are
 retained and their Git SHA-256 object IDs are recomputed during clean-host
 replay.
+Before signing that manifest, the suite clones the sealed bundle into a clean
+repository, runs strict full-object integrity checks, and re-verifies every
+reachable commit and annotated-tag signature using only the retained
+allowed-signers material. The clean replay's bundle, object, signature-ledger,
+Git executable, and runtime-closure digests are bound into the authority receipt.
 
 Encrypted native evidence requires an authority-signed hardware-KMS envelope
 receipt binding the exact scan challenge and command request, plaintext object
@@ -365,10 +376,15 @@ and ephemeral data-key digests, non-exportable
 wrapping-key and hardware assertions, wrapped-key digest, operation ID, store,
 and retention policy. The signed receipt and its portable authority envelope
 are accompanied by the pinned helper's signed effective-policy attestation and
-an authenticated restore drill bound to the encrypted object and recovered
-plaintext digest. Signed operation receipts are checked as a single non-forking
+an external clean-host recovery drill that uses a distinct replica identity,
+performs a fresh KMS unwrap after local key zeroization, and returns signed
+recovery and sandbox-measurement receipts bound to the encrypted object and
+recovered plaintext digest. Signed operation receipts are checked as a single non-forking
 graph across all artifacts; deployments can set
 `PYSEC_OPERATION_RECEIPT_STATE_PATH` to reject receipt reuse across reports.
+Operation and trusted-time SQLite stores are hash chained and must be paired
+with deployment-owned minimum-sequence and checkpoint-digest anchors; production
+and release reject missing anchors, and rollback below an advanced anchor fails.
 RFC 3161 contexts may provide two to five independent authorities; quorum mode
 requires `PYSEC_TRUSTED_TIME_STATE_PATH`, limits inter-authority skew to five
 seconds, and rejects clock rollback or same-challenge forks.

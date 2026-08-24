@@ -197,7 +197,16 @@ def test_external_monotonic_state_is_pinned_and_retained(tmp_path: Path) -> None
     effective_policy_attestation = receipt["monotonic_state"].pop(
         "effective_policy_attestation"
     )
-    assert effective_policy_attestation["subject"]["policy_observations"] == {
+    policy_observations = effective_policy_attestation["subject"]["policy_observations"]
+    assert {
+        name: policy_observations[name]
+        for name in (
+            "network_allowlist_enforced",
+            "filesystem_read_only",
+            "credentials_isolated",
+            "child_process_confined",
+        )
+    } == {
         "network_allowlist_enforced": True,
         "filesystem_read_only": True,
         "credentials_isolated": True,

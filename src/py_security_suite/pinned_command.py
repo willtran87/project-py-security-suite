@@ -131,6 +131,7 @@ def run_pinned_json_command(
         "launcher_sha256": sandbox_executable_sha256,
         "executable_sha256": expected_executable,
         "attestor_key_sha256": attestor_key_sha256,
+        "sandbox_identity_sha256": sandbox_identity,
     }
     with tempfile.TemporaryDirectory(prefix="pysec-pinned-attestation-") as temporary:
         attestation_path = Path(temporary) / "effective-policy.json"
@@ -198,7 +199,6 @@ def _verify_execution_attestation(
     if not isinstance(value, dict) or set(value) != {"subject", "operation_receipt"}:
         raise ValueError("pinned command effective-policy attestation is invalid")
     subject = value["subject"]
-    policy = subject.get("policy_observations") if isinstance(subject, dict) else None
     if (
         not isinstance(subject, dict)
         or set(subject)
@@ -213,17 +213,9 @@ def _verify_execution_attestation(
         or isinstance(subject["attestor_process_id"], bool)
         or not isinstance(subject["attestor_process_id"], int)
         or subject["attestor_process_id"] < 1
-        or not isinstance(policy, dict)
-        or set(policy)
-        != {
-            "network_allowlist_enforced",
-            "filesystem_read_only",
-            "credentials_isolated",
-            "child_process_confined",
-        }
-        or any(policy[name] is not True for name in policy)
     ):
         raise ValueError("pinned command effective policy was not enforced")
+    verify_effective_policy_subject(subject)
     receipt = value["operation_receipt"]
     statement = receipt.get("statement") if isinstance(receipt, dict) else None
     try:
@@ -243,6 +235,63 @@ def _verify_execution_attestation(
         expected_key_sha256=expected_key_sha256,
     )
     return dict(value)
+
+
+def verify_effective_policy_subject(subject: object) -> None:
+    if not isinstance(subject, dict):
+        raise ValueError("effective-policy attestation subject is invalid")
+    policy = subject.get("policy_observations")
+    if not isinstance(policy, dict) or set(policy) != {
+        "network_allowlist_enforced",
+        "filesystem_read_only",
+        "credentials_isolated",
+        "child_process_confined",
+        "measurement_source",
+        "measurement_artifact",
+        "measurement_artifact_sha256",
+    }:
+        raise ValueError("effective-policy measurements are incomplete")
+    controls = {
+        "network_allowlist_enforced": policy["network_allowlist_enforced"],
+        "filesystem_read_only": policy["filesystem_read_only"],
+        "credentials_isolated": policy["credentials_isolated"],
+        "child_process_confined": policy["child_process_confined"],
+    }
+    measurement = policy["measurement_artifact"]
+    expected_source = {
+        "linux": "linux-procfs-seccomp",
+        "win32": "windows-job-object-query",
+        "darwin": "macos-sandbox-audit",
+    }
+    if (
+        any(item is not True for item in controls.values())
+        or policy["measurement_source"] not in set(expected_source.values())
+        or not isinstance(measurement, dict)
+        or set(measurement)
+        != {
+            "schema_version",
+            "platform",
+            "child_process_id",
+            "child_exit_code",
+            "kernel_identity_sha256",
+            "sandbox_identity_sha256",
+            "controls",
+        }
+        or measurement.get("schema_version") != "1.0"
+        or expected_source.get(str(measurement.get("platform")))
+        != policy["measurement_source"]
+        or isinstance(measurement.get("child_process_id"), bool)
+        or not isinstance(measurement.get("child_process_id"), int)
+        or measurement["child_process_id"] < 1
+        or measurement.get("child_exit_code") != subject.get("exit_code")
+        or not _digest(str(measurement.get("kernel_identity_sha256") or ""))
+        or measurement.get("sandbox_identity_sha256")
+        != subject.get("sandbox_identity_sha256")
+        or measurement.get("controls") != controls
+        or policy["measurement_artifact_sha256"]
+        != hashlib.sha256(canonical_bytes(measurement)).hexdigest()
+    ):
+        raise ValueError("effective-policy kernel measurement is invalid")
 
 
 def command_configured(prefix: str) -> bool:

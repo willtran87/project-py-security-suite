@@ -32,20 +32,25 @@ def pinned_command_sandbox_environment(
     attestor_key_sha256 = hashlib.sha256(attestor_public_bytes).hexdigest()
     embedded_private = base64.b64encode(attestor_private_bytes).decode("ascii")
     launcher.write_text(
-        "import base64,hashlib,json,os,subprocess,sys\n"
+        "import base64,hashlib,json,os,platform,subprocess,sys\n"
         "from datetime import UTC,datetime,timedelta\n"
         "from cryptography.hazmat.primitives import serialization\n"
         f"PRIVATE={embedded_private!r}\n"
         "canonical=lambda value: json.dumps(value,sort_keys=True,separators=(',',':'),ensure_ascii=False,allow_nan=False).encode()\n"
-        "result=subprocess.run(sys.argv[1:])\n"
+        "child=subprocess.Popen(sys.argv[1:]);returncode=child.wait()\n"
         "subject=json.loads(base64.b64decode(os.environ['PYSEC_PINNED_ATTESTATION_SUBJECT_BASE64']))\n"
-        "subject.update({'exit_code':result.returncode,'attestor_process_id':os.getpid(),'policy_observations':{'network_allowlist_enforced':True,'filesystem_read_only':True,'credentials_isolated':True,'child_process_confined':True}})\n"
+        "controls={'network_allowlist_enforced':True,'filesystem_read_only':True,'credentials_isolated':True,'child_process_confined':True}\n"
+        "platform_id={'linux':'linux','win32':'win32','darwin':'darwin'}[sys.platform]\n"
+        "source={'linux':'linux-procfs-seccomp','win32':'windows-job-object-query','darwin':'macos-sandbox-audit'}[platform_id]\n"
+        "measurement={'schema_version':'1.0','platform':platform_id,'child_process_id':child.pid,'child_exit_code':returncode,'kernel_identity_sha256':hashlib.sha256(platform.platform().encode()).hexdigest(),'sandbox_identity_sha256':subject['sandbox_identity_sha256'],'controls':controls}\n"
+        "policy={**controls,'measurement_source':source,'measurement_artifact':measurement,'measurement_artifact_sha256':hashlib.sha256(canonical(measurement)).hexdigest()}\n"
+        "subject.update({'exit_code':returncode,'attestor_process_id':os.getpid(),'policy_observations':policy})\n"
         "private=serialization.load_pem_private_key(base64.b64decode(PRIVATE),password=None)\n"
         "public=private.public_key().public_bytes(serialization.Encoding.PEM,serialization.PublicFormat.SubjectPublicKeyInfo)\n"
         "now=datetime.now(UTC);statement={'schema_version':'1.0','purpose':'pinned-command-effective-policy','subject_sha256':hashlib.sha256(canonical(subject)).hexdigest(),'operation_id':'pinned-'+subject['execution_nonce'],'previous_operation_sha256':'','challenge_sha256':os.environ['PYSEC_PINNED_ATTESTATION_CHALLENGE_SHA256'],'issued_at':now.isoformat(),'expires_at':(now+timedelta(minutes=5)).isoformat(),'signer_key_sha256':hashlib.sha256(public).hexdigest()}\n"
         "receipt={'schema_version':'1.0','statement':statement,'signature_base64':base64.b64encode(private.sign(canonical(statement))).decode(),'public_key_pem_base64':base64.b64encode(public).decode()}\n"
         "open(os.environ['PYSEC_PINNED_ATTESTATION_PATH'],'wb').write(canonical({'subject':subject,'operation_receipt':receipt}))\n"
-        "raise SystemExit(result.returncode)\n",
+        "raise SystemExit(returncode)\n",
         encoding="utf-8",
     )
     executable_sha256 = hashlib.sha256(Path(sys.executable).read_bytes()).hexdigest()

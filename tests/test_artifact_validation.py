@@ -126,6 +126,18 @@ def test_retained_git_provenance_reverifies_signers_and_manifest(
             "reachable_objects_sha256": "e" * 64,
         },
     }
+    manifest["clean_replay"] = {
+        "schema_version": "1.0",
+        "bundle_sha256": "d" * 64,
+        "reachable_objects_sha256": "e" * 64,
+        "signature_ledger_sha256": hashlib.sha256(
+            canonical_bytes(manifest["signature_ledger"])
+        ).hexdigest(),
+        "git_executable_sha256": "c" * 64,
+        "git_runtime_closure_sha256": "f" * 64,
+        "verified_commits": 2,
+        "verified_tags": 0,
+    }
     environment = authority_environment(
         tmp_path,
         manifest,
@@ -340,6 +352,38 @@ def test_native_report_secrets_use_encrypted_content_addressed_storage(
     kms_script.write_text(
         f"print({json.dumps(json.dumps(kms_response))})\n", encoding="utf-8"
     )
+    recovery_private = Ed25519PrivateKey.generate()
+    recovery_private_pem = recovery_private.private_bytes(
+        serialization.Encoding.PEM,
+        serialization.PrivateFormat.PKCS8,
+        serialization.NoEncryption(),
+    )
+    recovery_public = recovery_private.public_key().public_bytes(
+        serialization.Encoding.PEM,
+        serialization.PublicFormat.SubjectPublicKeyInfo,
+    )
+    recovery_key_sha256 = hashlib.sha256(recovery_public).hexdigest()
+    recovery_script = tmp_path / "recover.py"
+    recovery_script.write_text(
+        "import base64,hashlib,json,pathlib,sys\n"
+        "from datetime import UTC,datetime,timedelta\n"
+        "from cryptography.hazmat.primitives import hashes,serialization\n"
+        "from cryptography.hazmat.primitives.ciphers.aead import AESGCM\n"
+        "from cryptography.hazmat.primitives.kdf.hkdf import HKDF\n"
+        f"ROOT=pathlib.Path({str(raw_store.resolve())!r})\n"
+        f"KEY=base64.b64decode({base64.b64encode(key_bytes).decode()!r})\n"
+        f"PRIVATE=base64.b64decode({base64.b64encode(recovery_private_pem).decode()!r})\n"
+        "canonical=lambda value:json.dumps(value,sort_keys=True,separators=(',',':'),ensure_ascii=False,allow_nan=False).encode()\n"
+        "request=json.loads(base64.b64decode(sys.argv[-1]));stored=(ROOT/request['object_id']).read_bytes()\n"
+        "object_key=HKDF(algorithm=hashes.SHA256(),length=32,salt=bytes.fromhex(request['expected_plaintext_sha256']),info=b'pysec-native-evidence-object-v1').derive(KEY)\n"
+        "plaintext=AESGCM(object_key).decrypt(stored[:12],stored[12:],request['expected_plaintext_sha256'].encode())\n"
+        "private=serialization.load_pem_private_key(PRIVATE,password=None);public=private.public_key().public_bytes(serialization.Encoding.PEM,serialization.PublicFormat.SubjectPublicKeyInfo)\n"
+        "subject={'schema_version':'1.0','request_sha256':hashlib.sha256(canonical(request)).hexdigest(),'object_id':request['object_id'],'ciphertext_sha256':hashlib.sha256(stored).hexdigest(),'recovered_plaintext_sha256':hashlib.sha256(plaintext).hexdigest(),'replica_identity_sha256':hashlib.sha256(b'independent-test-replica').hexdigest(),'kms_unwrap_operation_id':'unwrap-test-1'}\n"
+        "now=datetime.now(UTC);statement={'schema_version':'1.0','purpose':'raw-evidence-clean-host-recovery','subject_sha256':hashlib.sha256(canonical(subject)).hexdigest(),'operation_id':'recovery-test-1','previous_operation_sha256':'','challenge_sha256':request['challenge_sha256'],'issued_at':now.isoformat(),'expires_at':(now+timedelta(minutes=5)).isoformat(),'signer_key_sha256':hashlib.sha256(public).hexdigest()}\n"
+        "receipt={'schema_version':'1.0','statement':statement,'signature_base64':base64.b64encode(private.sign(canonical(statement))).decode(),'public_key_pem_base64':base64.b64encode(public).decode()}\n"
+        "print(json.dumps({'schema_version':'1.0','object_id':subject['object_id'],'ciphertext_sha256':subject['ciphertext_sha256'],'recovered_plaintext_sha256':subject['recovered_plaintext_sha256'],'replica_identity_sha256':subject['replica_identity_sha256'],'kms_unwrap_operation_id':subject['kms_unwrap_operation_id'],'recovery_operation_id':'recovery-test-1','recovery_authority_key_sha256':hashlib.sha256(public).hexdigest(),'recovery_operation_receipt':receipt}))\n",
+        encoding="utf-8",
+    )
     payload = json.dumps(
         {
             "total_packages": 0,
@@ -371,12 +415,37 @@ def test_native_report_secrets_use_encrypted_content_addressed_storage(
         ),
         **sandbox_environment,
     }
+    recovery_sandbox, _, recovery_sandbox_asset = pinned_command_sandbox_environment(
+        tmp_path,
+        prefix="PYSEC_RAW_EVIDENCE_RECOVERY",
+        allowed_endpoints=["https://kms-recovery.example.invalid:443"],
+    )
+    recovery_environment = {
+        "PYSEC_RAW_EVIDENCE_RECOVERY_COMMAND_JSON": json.dumps(
+            [str(executable), "-I", str(recovery_script)]
+        ),
+        "PYSEC_RAW_EVIDENCE_RECOVERY_EXECUTABLE_SHA256": hashlib.sha256(
+            executable.read_bytes()
+        ).hexdigest(),
+        "PYSEC_RAW_EVIDENCE_RECOVERY_ASSETS_JSON": json.dumps(
+            [
+                {
+                    "path": str(recovery_script),
+                    "sha256": hashlib.sha256(recovery_script.read_bytes()).hexdigest(),
+                },
+                recovery_sandbox_asset,
+            ]
+        ),
+        "PYSEC_RAW_EVIDENCE_RECOVERY_AUTHORITY_KEY_SHA256": recovery_key_sha256,
+        **recovery_sandbox,
+    }
     with (
         patch.dict(
             "os.environ",
             {
                 "PYSEC_RAW_EVIDENCE_DIRECTORY": str(raw_store),
                 **kms_environment,
+                **recovery_environment,
                 "PYSEC_SCAN_TIME_CHALLENGE_SHA256": portable_custody["statement"][
                     "challenge_sha256"
                 ],
@@ -409,6 +478,7 @@ def test_native_report_secrets_use_encrypted_content_addressed_storage(
             {
                 "PYSEC_RAW_EVIDENCE_DIRECTORY": str(raw_store),
                 **kms_environment,
+                **recovery_environment,
                 "PYSEC_SCAN_TIME_CHALLENGE_SHA256": portable_custody["statement"][
                     "challenge_sha256"
                 ],

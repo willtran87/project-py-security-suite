@@ -245,27 +245,16 @@ def verify_portable_receipt(
         attestation_subject = (
             attestation.get("subject") if isinstance(attestation, dict) else None
         )
-        policy = (
-            attestation_subject.get("policy_observations")
-            if isinstance(attestation_subject, dict)
-            else None
-        )
         if (
             not isinstance(attestation, dict)
             or set(attestation) != {"subject", "operation_receipt"}
             or not isinstance(attestation_subject, dict)
-            or not isinstance(policy, dict)
-            or set(policy)
-            != {
-                "network_allowlist_enforced",
-                "filesystem_read_only",
-                "credentials_isolated",
-                "child_process_confined",
-            }
-            or any(item is not True for item in policy.values())
             or not _digest(str(attestation_subject.get("attestor_key_sha256") or ""))
         ):
             raise ValueError("retained command effective-policy attestation is invalid")
+        from .pinned_command import verify_effective_policy_subject
+
+        verify_effective_policy_subject(attestation_subject)
         attestation_statement = attestation["operation_receipt"].get("statement", {})
         attestation_issued = _timestamp(
             attestation_statement.get("issued_at"), "effective-policy issued_at"

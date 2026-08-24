@@ -274,7 +274,16 @@ seconds and use distinct authority and signer identities. Quorum mode requires
 also adds rollback/fork detection to single-authority contexts. Set
 `PYSEC_OPERATION_RECEIPT_STATE_PATH` to a separate durable SQLite file to make
 operation IDs consume-once across different reports while keeping verification
-of the identical report idempotent.
+of the identical report idempotent. Each state file must be paired with a
+deployment-owned lower-bound sequence and checkpoint:
+`PYSEC_TRUSTED_TIME_{MIN_SEQUENCE,CHECKPOINT_SHA256}` and
+`PYSEC_OPERATION_RECEIPT_{MIN_SEQUENCE,CHECKPOINT_SHA256}`. New stores begin at
+sequence `0`. The operation-receipt genesis checkpoint is
+`bdf2cd63534de291a2e754d3c74a46e68049867c1ab471eb921e73a82c3e8988`; the
+trusted-time genesis checkpoint is
+`4cbacab216fed4d37f4e23cb97a948b17784b5c8ef6919c48f3ef7adfcc14143`;
+after promotion, advance the deployment anchor from the store's checkpoint row.
+A missing, restored, or truncated database below that anchor fails closed.
 `replay_ledger_path` atomically consumes
 each authenticated evidence identity in SQLite, so a previously accepted
 receipt cannot authorize a later decision.
@@ -518,7 +527,13 @@ request/challenge/plaintext-object digest, and wrapped-key
 commitment. The retained custody subject also preserves the exact launcher
 argv, endpoint allowlist, peer identity, TLS 1.3 cipher/session transcript, and
 their canonical digests for offline verification. Pin the embedded authority key with
-`PYSEC_RAW_EVIDENCE_CUSTODY_AUTHORITY_KEY_SHA256`. Deployment traces are admitted through
+`PYSEC_RAW_EVIDENCE_CUSTODY_AUTHORITY_KEY_SHA256`. Every encrypted write also
+requires the independently pinned `PYSEC_RAW_EVIDENCE_RECOVERY` command family
+(command, executable/assets, sandbox, and effective-policy attestor settings)
+and `PYSEC_RAW_EVIDENCE_RECOVERY_AUTHORITY_KEY_SHA256`. It must restore through
+a distinct replica identity, perform a real KMS unwrap, and return a signed
+operation receipt for the recovered plaintext digest after the writer has
+zeroized its local data key. Deployment traces are admitted through
 `PYSEC_RUNTIME_TRACE_EVIDENCE_PATH` plus its SHA-256 and retained only when
 every source/target pair exists in `boundary-graph.json`. Traces use
 `PYSEC_RUNTIME_TRACE_AUTHORITY`, require `PYSEC_RUNTIME_DEPLOYMENT_SHA256`, and
@@ -528,7 +543,10 @@ signed `PYSEC_RUNTIME_COVERAGE_POLICY_{PATH,SHA256}` subject authorized under
 refused/failed exports and complete canary delivery and carry a receipt from
 `PYSEC_RUNTIME_COLLECTOR_AUTHORITY_KEY_SHA256`. The denominator must be the exact
 union of independently signed API-contract, deployment-route, and authorization-
-policy inventories pinned by `PYSEC_RUNTIME_INVENTORY_KEYS_JSON`. Production and release scans and
+policy inventories pinned by `PYSEC_RUNTIME_INVENTORY_KEYS_JSON`. The
+independent observer must additionally retain its raw parent-linked span stream
+and observer configuration; admission requires exact event-set agreement with
+the collector rather than accepting an observer summary alone. Production and release scans and
 `release-check` both fail closed without complete signed runtime correlation.
 `trust-policy.json` seals deployment trust variables by value digest, and its
 digest is included in the effective configuration identity. Production and

@@ -18,6 +18,11 @@ from pyasn1_modules import rfc5035  # type: ignore[import-untyped]
 from .strict_json import canonical_bytes
 
 
+_TRUSTED_TIME_STATE_GENESIS_SHA256 = hashlib.sha256(
+    b"pysec-trusted-time-state-genesis-v1"
+).hexdigest()
+
+
 def verify_rfc3161(
     context_path: Path,
     value: object,
@@ -270,6 +275,12 @@ def _advance_time_state(challenge_sha256: str, result: dict[str, str]) -> None:
     raw_path = os.environ.get("PYSEC_TRUSTED_TIME_STATE_PATH", "").strip()
     if not raw_path:
         return
+    minimum_sequence = _state_sequence("PYSEC_TRUSTED_TIME_MIN_SEQUENCE")
+    expected_checkpoint = os.environ.get(
+        "PYSEC_TRUSTED_TIME_CHECKPOINT_SHA256", ""
+    ).strip()
+    if not _digest(expected_checkpoint):
+        raise ValueError("trusted-time deployment checkpoint is invalid")
     path = Path(raw_path).expanduser().resolve()
     if path.is_symlink():
         raise ValueError("trusted-time monotonic state must not be a symbolic link")
@@ -283,13 +294,47 @@ def _advance_time_state(challenge_sha256: str, result: dict[str, str]) -> None:
         connection.execute(
             "CREATE TABLE IF NOT EXISTS trusted_time_state "
             "(scope TEXT PRIMARY KEY, observed_at TEXT NOT NULL, "
-            "challenge_sha256 TEXT NOT NULL, receipt_sha256 TEXT NOT NULL)"
+            "challenge_sha256 TEXT NOT NULL, receipt_sha256 TEXT NOT NULL, "
+            "sequence INTEGER NOT NULL DEFAULT 0, "
+            "checkpoint_sha256 TEXT NOT NULL DEFAULT '')"
         )
+        columns = {
+            str(row[1])
+            for row in connection.execute("PRAGMA table_info(trusted_time_state)")
+        }
+        if "sequence" not in columns:
+            connection.execute(
+                "ALTER TABLE trusted_time_state ADD COLUMN sequence INTEGER NOT NULL "
+                "DEFAULT 0"
+            )
+        if "checkpoint_sha256" not in columns:
+            connection.execute(
+                "ALTER TABLE trusted_time_state ADD COLUMN checkpoint_sha256 TEXT "
+                "NOT NULL DEFAULT ''"
+            )
         connection.execute("BEGIN IMMEDIATE")
         row = connection.execute(
-            "SELECT observed_at, challenge_sha256, receipt_sha256 "
+            "SELECT observed_at, challenge_sha256, receipt_sha256, sequence, "
+            "checkpoint_sha256 "
             "FROM trusted_time_state WHERE scope = 'global'"
         ).fetchone()
+        if row is None:
+            if (
+                minimum_sequence != 0
+                or expected_checkpoint != _TRUSTED_TIME_STATE_GENESIS_SHA256
+            ):
+                connection.execute("ROLLBACK")
+                raise ValueError("trusted-time state deletion or rollback detected")
+            sequence = 0
+            checkpoint = _TRUSTED_TIME_STATE_GENESIS_SHA256
+        else:
+            sequence = int(row[3])
+            checkpoint = str(row[4])
+            if sequence < minimum_sequence or (
+                sequence == minimum_sequence and checkpoint != expected_checkpoint
+            ):
+                connection.execute("ROLLBACK")
+                raise ValueError("trusted-time state deletion or rollback detected")
         if row is not None and (
             datetime.fromisoformat(observed.replace("Z", "+00:00"))
             < datetime.fromisoformat(str(row[0]).replace("Z", "+00:00"))
@@ -297,16 +342,46 @@ def _advance_time_state(challenge_sha256: str, result: dict[str, str]) -> None:
         ):
             connection.execute("ROLLBACK")
             raise ValueError("trusted-time rollback or fork detected")
+        if row is not None and challenge_sha256 == row[1] and digest == row[2]:
+            connection.execute("COMMIT")
+            return
+        sequence += 1
+        checkpoint = hashlib.sha256(
+            canonical_bytes(
+                {
+                    "schema_version": "1.0",
+                    "previous_checkpoint_sha256": checkpoint,
+                    "sequence": sequence,
+                    "challenge_sha256": challenge_sha256,
+                    "receipt_sha256": digest,
+                    "observed_at": observed,
+                }
+            )
+        ).hexdigest()
         connection.execute(
-            "INSERT INTO trusted_time_state VALUES ('global', ?, ?, ?) "
+            "INSERT INTO trusted_time_state "
+            "(scope, observed_at, challenge_sha256, receipt_sha256, sequence, "
+            "checkpoint_sha256) VALUES ('global', ?, ?, ?, ?, ?) "
             "ON CONFLICT(scope) DO UPDATE SET observed_at=excluded.observed_at, "
             "challenge_sha256=excluded.challenge_sha256, "
-            "receipt_sha256=excluded.receipt_sha256",
-            (observed, challenge_sha256, digest),
+            "receipt_sha256=excluded.receipt_sha256, sequence=excluded.sequence, "
+            "checkpoint_sha256=excluded.checkpoint_sha256",
+            (observed, challenge_sha256, digest, sequence, checkpoint),
         )
         connection.execute("COMMIT")
     finally:
         connection.close()
+
+
+def _state_sequence(name: str) -> int:
+    raw = os.environ.get(name, "").strip()
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise ValueError(f"{name} deployment sequence is invalid") from exc
+    if value < 0 or str(value) != raw:
+        raise ValueError(f"{name} deployment sequence is invalid")
+    return value
 
 
 def _verify_legacy_policy(authority: str, signer_sha256: str) -> None:

@@ -9,7 +9,9 @@ import json
 import os
 import re
 import sys
+from datetime import datetime
 from collections import Counter
+from itertools import pairwise
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -18,6 +20,8 @@ from .path_safety import read_regular_file
 from .execution import CommandEnvironment, run_command
 from .strict_json import canonical_bytes
 from .deployment_receipt import verify_deployment_receipt
+from .operation_receipt import verify_operation_receipt
+from .strict_json import loads as strict_loads
 
 
 _MAX_FILE_BYTES = 1024 * 1024
@@ -435,6 +439,10 @@ def verify_compiler_semantic_evidence(
             "primary_analysis_artifact_sha256",
             "secondary_analysis_artifact_base64",
             "secondary_analysis_artifact_sha256",
+            "primary_authority_key_sha256",
+            "primary_operation_receipt",
+            "secondary_authority_key_sha256",
+            "secondary_operation_receipt",
             "taint_paths",
             "taint_paths_sha256",
         }
@@ -491,15 +499,33 @@ def verify_compiler_semantic_evidence(
             language_file_sets[language],
             expected_counts={name: item[name] for name in counts},
         )
-        _verify_analysis_artifact(item, "primary")
-        _verify_analysis_artifact(item, "secondary")
+        primary_replay = _verify_analysis_artifact(item, "primary")
+        secondary_replay = _verify_analysis_artifact(item, "secondary")
+        if (
+            primary_replay["semantic_ledger"] != item["semantic_ledger"]
+            or secondary_replay["semantic_ledger"] != item["secondary_semantic_ledger"]
+            or primary_replay["taint_paths"] != item["taint_paths"]
+            or secondary_replay["taint_paths"] != item["taint_paths"]
+        ):
+            raise ValueError(
+                "compiler analysis replay disagrees with retained semantics"
+            )
+        _verify_engine_operation(item, "primary", primary_replay)
+        _verify_engine_operation(item, "secondary", secondary_replay)
+        if (
+            item["primary_authority_key_sha256"]
+            == item["secondary_authority_key_sha256"]
+        ):
+            raise ValueError(
+                "compiler analysis engines require independent authorities"
+            )
         _verify_taint_paths(item["taint_paths"], item["semantic_ledger"])
         observed.add(language)
     if observed != expected_languages:
         raise ValueError("compiler semantic evidence omits a source language")
 
 
-def _verify_analysis_artifact(item: dict[str, Any], prefix: str) -> None:
+def _verify_analysis_artifact(item: dict[str, Any], prefix: str) -> dict[str, Any]:
     try:
         payload = base64.b64decode(
             str(item[f"{prefix}_analysis_artifact_base64"]), validate=True
@@ -513,6 +539,74 @@ def _verify_analysis_artifact(item: dict[str, Any], prefix: str) -> None:
         != item[f"{prefix}_analysis_artifact_sha256"]
     ):
         raise ValueError("compiler analysis replay artifact is detached")
+    try:
+        replay = strict_loads(payload)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            "compiler analysis replay artifact is not strict JSON"
+        ) from exc
+    engine_field = "engine" if prefix == "primary" else "secondary_engine"
+    engine_digest_field = (
+        "engine_sha256" if prefix == "primary" else "secondary_engine_sha256"
+    )
+    config_field = (
+        "configuration_sha256"
+        if prefix == "primary"
+        else "secondary_configuration_sha256"
+    )
+    if (
+        not isinstance(replay, dict)
+        or set(replay)
+        != {
+            "schema_version",
+            "engine",
+            "engine_sha256",
+            "configuration_sha256",
+            "files_sha256",
+            "semantic_ledger",
+            "taint_paths",
+        }
+        or replay.get("schema_version") != "1.0"
+        or replay.get("engine") != item[engine_field]
+        or replay.get("engine_sha256") != item[engine_digest_field]
+        or replay.get("configuration_sha256") != item[config_field]
+        or replay.get("files_sha256") != item["files_sha256"]
+    ):
+        raise ValueError("compiler analysis replay artifact contract is invalid")
+    return replay
+
+
+def _verify_engine_operation(
+    item: dict[str, Any], prefix: str, replay: dict[str, Any]
+) -> None:
+    artifact_sha256 = str(item[f"{prefix}_analysis_artifact_sha256"])
+    subject = {
+        "schema_version": "1.0",
+        "language": item["language"],
+        "engine": replay["engine"],
+        "engine_sha256": replay["engine_sha256"],
+        "configuration_sha256": replay["configuration_sha256"],
+        "files_sha256": replay["files_sha256"],
+        "analysis_artifact_sha256": artifact_sha256,
+    }
+    receipt = item[f"{prefix}_operation_receipt"]
+    statement = receipt.get("statement") if isinstance(receipt, dict) else None
+    if not isinstance(statement, dict):
+        raise ValueError("compiler engine operation receipt is missing")
+    try:
+        observed_at = datetime.fromisoformat(
+            str(statement["issued_at"]).replace("Z", "+00:00")
+        )
+    except (KeyError, ValueError) as exc:
+        raise ValueError("compiler engine operation time is invalid") from exc
+    verify_operation_receipt(
+        subject,
+        receipt,
+        purpose="compiler-semantic-engine-analysis",
+        observed_at=observed_at,
+        challenge_sha256=str(statement.get("challenge_sha256") or ""),
+        expected_key_sha256=str(item[f"{prefix}_authority_key_sha256"]),
+    )
 
 
 def _verify_taint_paths(value: object, semantic_ledger: object) -> None:
@@ -522,6 +616,12 @@ def _verify_taint_paths(value: object, semantic_ledger: object) -> None:
     if not isinstance(symbols, list):
         raise ValueError("compiler taint path symbols are unavailable")
     identities = {str(item["id"]) for item in symbols if isinstance(item, dict)}
+    edges = {
+        (str(edge["source"]), str(edge["target"]))
+        for name in ("cfg_edges", "dataflow_edges", "interprocedural_edges")
+        for edge in semantic_ledger.get(name, [])
+        if isinstance(edge, dict)
+    }
     seen: set[str] = set()
     for path in value:
         if not isinstance(path, dict) or set(path) != {
@@ -549,6 +649,10 @@ def _verify_taint_paths(value: object, semantic_ledger: object) -> None:
             or not isinstance(barriers, list)
             or any(node not in nodes for node in [*sanitizers, *barriers])
             or len(set(nodes)) != len(nodes)
+            or any(
+                (str(source), str(target)) not in edges
+                for source, target in pairwise(nodes)
+            )
         ):
             raise ValueError("compiler taint path is invalid")
         seen.add(path_id)
