@@ -1,5 +1,14 @@
 # Changelog
 
+- Close eight residual assurance gaps: independently replay raw TPM2, Nitro,
+  and SEV-SNP evidence; require fresh threshold-signed failure-domain registries
+  with transparency inclusion; correlate runtime traces with independently
+  authorized kernel events; distinguish syntax AST coverage from compiler
+  semantics; load deployment trust from one signed, expiring policy; continuously
+  fuzz strict JSON and SARIF parsers; require a server-authenticated external
+  surface denominator; and produce reproducible, offline-tested, GitHub-attested
+  release artifacts behind a closed evidence gate.
+
 - Parse format-specific TPM2, Nitro, and SEV-SNP evidence instead of accepting
   opaque quotes; require deployment-rooted offline receipt context and optional
   registered failure-domain identities. Make secondary Git verification read

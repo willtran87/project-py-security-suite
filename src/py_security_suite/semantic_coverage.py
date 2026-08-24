@@ -87,46 +87,75 @@ def semantic_language_coverage_artifact(
             and row.get("source_files_sha256") == expected_digest
             and "semantic-dataflow" in (row.get("analysis_modes") or [])
         )
+        compiler_frontend = _compiler_frontend(boundary_graph, language)
+        compiler_semantic = bool(compiler_frontend)
+        semantic = row_complete or compiler_semantic
         coverage.append(
             {
                 "language": language,
                 "engine": (
-                    "python-ast" if native else str((row or {}).get("engine") or "")
+                    str((compiler_frontend or {}).get("engine") or "")
+                    if compiler_semantic
+                    else str((row or {}).get("engine") or "")
+                    if row_complete
+                    else "python-ast-syntax"
+                    if native
+                    else ""
                 ),
                 "engine_version": (
-                    __version__
-                    if native
+                    str((compiler_frontend or {}).get("engine_version") or "")
+                    if compiler_semantic
                     else str((row or {}).get("engine_version") or "")
+                    if row_complete
+                    else __version__
+                    if native
+                    else ""
                 ),
                 "query_pack_sha256": (
-                    _PYTHON_QUERY_PACK_SHA256
-                    if native
+                    str((compiler_frontend or {}).get("query_pack_sha256") or "")
+                    if compiler_semantic
                     else str((row or {}).get("query_pack_sha256") or "")
+                    if row_complete
+                    else _PYTHON_QUERY_PACK_SHA256
+                    if native
+                    else ""
                 ),
                 "source_files_sha256": (
                     expected_digest
-                    if native
+                    if compiler_semantic or native and not row_complete
                     else str((row or {}).get("source_files_sha256") or "")
                 ),
                 "files_discovered": discovered[language],
                 "files_analyzed": (
                     discovered[language]
-                    if native
+                    if compiler_semantic or native and not row_complete
                     else int((row or {}).get("files_analyzed") or 0)
                 ),
-                "exclusions": [] if native else list(exclusions or []),
+                "exclusions": []
+                if compiler_semantic or native and not row_complete
+                else list(exclusions or []),
                 "files": list(expected_files or [])
-                if native
+                if compiler_semantic or native and not row_complete
                 else list(reported_files or []),
                 "analysis_modes": (
-                    ["semantic-dataflow", "control-flow", "call-graph"]
+                    list((compiler_frontend or {}).get("analysis_modes") or [])
+                    if compiler_semantic
+                    else list((row or {}).get("analysis_modes") or [])
+                    if row_complete
+                    else ["syntax-ast", "control-flow", "call-graph"]
                     if native
                     else list((row or {}).get("analysis_modes") or [])
                 ),
-                "semantic": native or row_complete,
-                "source_bound": native or row_complete,
+                "semantic": semantic,
+                "source_bound": semantic,
                 "cross_language_correlation": (
-                    "native-graph" if native else "normalized-finding-fusion"
+                    "compiler-ledger"
+                    if compiler_semantic
+                    else "normalized-finding-fusion"
+                    if row_complete
+                    else "syntax-graph-only"
+                    if native
+                    else "not-established"
                 ),
             }
         )
@@ -290,6 +319,27 @@ def semantic_language_coverage_artifact(
         ],
         "complete": not uncovered and cross_language_complete,
     }
+
+
+def _compiler_frontend(
+    boundary_graph: dict[str, Any], language: str
+) -> dict[str, Any] | None:
+    evidence = boundary_graph.get("compiler_semantic_evidence")
+    if boundary_graph.get("compiler_semantic_complete") is not True or not isinstance(
+        evidence, dict
+    ):
+        return None
+    frontends = evidence.get("frontends")
+    if not isinstance(frontends, list):
+        return None
+    matches = [
+        item
+        for item in frontends
+        if isinstance(item, dict)
+        and str(item.get("language") or "").casefold() == language
+        and "semantic-dataflow" in (item.get("analysis_modes") or [])
+    ]
+    return matches[0] if len(matches) == 1 else None
 
 
 def _valid_boundary(

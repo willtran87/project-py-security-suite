@@ -329,6 +329,11 @@ The runtime contract additionally retains digest-bound collector configuration,
 instrumentation manifests, individual parent-linked spans, deterministic route
 source documents, and a separately signed independent raw span stream and
 observer configuration that must reproduce collector event and sink accounting.
+When `PYSEC_REQUIRE_KERNEL_RUNTIME_EVENTS=1`, admission also requires a canonical
+kernel-event ledger (for example, deployment-owned eBPF/Falco/Tetragon or Windows
+ETW evidence) containing process-exec and sink-access observations for every
+trace. Its third failure domain signs a `runtime-kernel-observation` operation
+receipt, and `PYSEC_RUNTIME_KERNEL_AUTHORITY_KEY_SHA256` pins that authority.
 
 Native binary parsing runs in a resource-contained isolated worker, with an
 optional deployment-pinned OS sandbox prefix. PE, ELF, and Mach-O analysis
@@ -342,6 +347,10 @@ language file set (including Python), with complete symbol, CFG, dataflow, and
 interprocedural edge ledgers rather than aggregate counts alone. Publication
 recomputes each file-set, semantic-ledger, and graph digest before re-verifying
 the retained authority receipt.
+Python's built-in AST contributes syntax, control-flow, and call-graph coverage
+only. It is deliberately not reported as source-bound semantic/data-flow
+coverage unless authenticated CodeQL/polyglot or governed compiler-frontend
+evidence supplies those stronger claims.
 Governed compiler evidence requires two distinct non-tree-sitter engines,
 byte-for-byte replay artifacts, matching independently produced semantic
 ledgers, and explicit source-to-sink taint paths with retained sanitizer and
@@ -395,10 +404,25 @@ Remote sandbox evidence is never treated as an opaque quote. The retained,
 authority-signed normalized evidence is parsed according to TPM2 Quote, Nitro,
 or SEV-SNP rules and must bind the challenge, host, boot state, measurements,
 certificate-chain identity, signature-verification result, and applicable TCB
-floor. Deployments can require `PYSEC_FAILURE_DOMAIN_REGISTRY_{PATH,SHA256}` and
+floor. `PYSEC_REQUIRE_RAW_ATTESTATION_REPLAY=1` additionally requires the exact
+raw evidence bytes, their digest, normalized-claims digest, and a separately
+signed format-specific replay statement. The replay authority is deployment
+pinned with `PYSEC_RAW_ATTESTATION_REPLAY_KEY_SHA256` and must be distinct from
+the normalized-evidence authority. Deployments can require
+`PYSEC_FAILURE_DOMAIN_REGISTRY_{PATH,SHA256}` and
 `PYSEC_REQUIRE_REGISTERED_FAILURE_DOMAINS=1`; the pinned registry maps active
 authority keys to organization, host, control-plane, and measured
 implementation identities and rejects revoked identities.
+Fresh registry mode (`PYSEC_REQUIRE_FRESH_FAILURE_DOMAIN_REGISTRY=1`) accepts
+only v2 registries with an issued/expiry window, generation floor, threshold
+Ed25519 signatures from deployment-pinned roots, and a Merkle inclusion proof
+against `PYSEC_FAILURE_DOMAIN_LOG_ROOT_SHA256`.
+
+Deployments can set `PYSEC_REQUIRE_EXPLICIT_TRUST_POLICY=1` and provide one
+digest- and key-pinned signed policy through `PYSEC_EXPLICIT_TRUST_POLICY_*`.
+The policy is generation-bounded and expiring, rejects unsupported variables,
+rejects unsigned ambient trust settings and conflicts, and supplies the exact
+trust environment used by later verifiers.
 
 Encrypted native evidence requires an authority-signed hardware-KMS envelope
 receipt binding the exact scan challenge and command request, plaintext object

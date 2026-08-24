@@ -1130,6 +1130,14 @@ pysec release-manifest REPORT \
 
 Every JSON input must bind the same report checksum seal. The manifest is still
 non-authoritative; the admission controller verifies and approves it.
+Set `PYSEC_REQUIRE_HARDENED_RELEASE_EVIDENCE=1` in that controller to require
+authenticated, complete ClusterFuzzLite, GitHub-attestation, in-toto,
+reproducible-build, and surface-inventory records. Reproducibility must be a
+byte-for-byte match, and surface evidence must carry the independent v4
+denominator features. The pinned `Release artifact assurance` workflow builds
+twice from one source epoch, compares exact bytes, exercises the wheel against a
+hash-locked offline wheelhouse, and issues GitHub build-provenance attestations
+for the exact retained release subjects.
 
 Before release promotion, sign every distribution into a separate provenance
 directory:

@@ -312,8 +312,11 @@ The hardened contracts close the remaining authority and behavior gaps:
   WebSocket handshakes and frames, and reports DOM sinks, wildcard
   `postMessage`, storage, cookie, mixed-content, and isolation state without
   retaining frame bodies;
-- surface inventory v3 requires signed, hash-linked request/response pagination
-  receipts whose record count agrees with the server total;
+- surface inventory v4 requires independent collector and signer organizations,
+  signed hash-linked pagination receipts, server-signed page chains and totals,
+  liveness probes, RFC 3161 collection history, and tombstones. Governed
+  ingestion refuses earlier evidence because it lacks an authoritative external
+  denominator;
 - AI v2 requires a signed calibrated judge, paired seeded scenarios across
   independent runs, multi-turn memory/tool isolation, drift baselines, and
   family-wise confidence control;
@@ -344,6 +347,9 @@ The hardened contracts close the remaining authority and behavior gaps:
 These packages are test-only and do not expand the scanner process's trusted
 computing base. Their exact versions and transitive dependencies are recorded
 in `uv.lock`; acquire the locked wheels in the connected preparation lane.
+The pinned `Continuous parser fuzzing` workflow runs Atheris against the strict
+JSON and SARIF entry points on pull requests, pushes, and a daily schedule while
+retaining a seed corpus under `fuzz/corpus/security-parsers`.
 
 Package wheels, native archives, rules, databases, trusted roots, and Java
 runtime must be prepared in a connected update lane, checksum-verified, and

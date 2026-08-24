@@ -44,7 +44,7 @@ flowchart LR
 | Scanner or helper is replaced | Exact executable digests, auxiliary identities, organization trust catalog, before/after checks | Publisher compromise requires bundle provenance review; security tooling |
 | Scanner exfiltrates source | Offline arguments plus external egress-denied runner attestation | The suite cannot enforce its parent network namespace; platform security |
 | Stale or poisoned intelligence | Digest-bound snapshots, freshness checks, organization approval | Snapshot acquisition and provenance remain external; vulnerability management |
-| Malformed output exploits parser | Size/depth/count bounds, strict shapes, defensive parsers, regression/fuzz tests | Native parser/library defects remain possible; suite maintainers |
+| Malformed output exploits parser | Size/depth/count bounds, strict shapes, defensive parsers, regression tests, and scheduled Atheris coverage-guided fuzzing of strict JSON/SARIF entry points | Native parser/library defects remain possible; suite maintainers |
 | Finding is hidden by aggregation | Source attribution, native rule, classifications, locations, context, citations, fingerprints, and multi-source retention | Scanner blind spots require corpus and disagreement review; AppSec |
 | Baseline hides a regression | Same profile/tool set, source identity, and verified VCS ancestry for production/release | Baseline approval and retention remain external; release engineering |
 | Artifact/report substitution | Closed inventory, SHA-256 seal, report verification, payload verification, release-manifest verification | SHA-256 and storage controls must remain approved; release engineering |

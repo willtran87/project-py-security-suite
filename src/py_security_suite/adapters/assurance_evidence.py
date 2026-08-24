@@ -555,6 +555,33 @@ class SurfaceInventoryAdapter(AssuranceEvidenceAdapter):
     default_area = "api-and-service-surface-inventory"
     reference = "https://owasp.org/API-Security/editions/2023/en/0xa9-improper-inventory-management/"
 
+    def parse(self, payload: str, target: Path) -> list[Finding]:
+        document = strict_json_loads(payload)
+        if self.config.require_assurance_profile:
+            execution = (
+                document.get("execution") if isinstance(document, dict) else None
+            )
+            features = (
+                set(execution.get("features", []))
+                if isinstance(execution, dict)
+                and isinstance(execution.get("features"), list)
+                else set()
+            )
+            required = {
+                "independent-collectors",
+                "independent-signers",
+                "pagination-completeness",
+                "server-signed-page-chain",
+                "signed-total-count",
+                "liveness-probes",
+            }
+            if not required.issubset(features):
+                raise TypeError(
+                    "governed surface inventory lacks an independent, "
+                    "server-authenticated denominator"
+                )
+        return super().parse(payload, target)
+
 
 class EventSecurityAdapter(AssuranceEvidenceAdapter):
     name = "event-security"

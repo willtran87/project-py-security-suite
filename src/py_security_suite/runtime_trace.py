@@ -36,39 +36,49 @@ def runtime_trace_artifact(boundary_graph: dict[str, Any]) -> dict[str, Any]:
     if hashlib.sha256(payload).hexdigest() != expected:
         raise ValueError("runtime trace evidence does not match its deployment pin")
     value = strict_loads(payload)
+    base_fields = {
+        "schema_version",
+        "deployment_sha256",
+        "boundary_graph_sha256",
+        "collector_identity_sha256",
+        "collector_failure_domain",
+        "instrumented_build_sha256",
+        "instrumentation_sha256",
+        "sampling_rate",
+        "coverage_requirements",
+        "collector_metrics",
+        "collector_operation_receipt",
+        "collector_authority_key_sha256",
+        "collector_config",
+        "collector_config_sha256",
+        "instrumentation_manifest",
+        "instrumentation_manifest_sha256",
+        "raw_spans",
+        "raw_spans_sha256",
+        "independent_observer_identity_sha256",
+        "independent_failure_domain",
+        "independent_observations",
+        "independent_raw_spans",
+        "independent_raw_spans_sha256",
+        "independent_observer_config",
+        "independent_observer_config_sha256",
+        "independent_operation_receipt",
+        "independent_authority_key_sha256",
+        "traces",
+    }
+    kernel_fields = {
+        "kernel_events",
+        "kernel_events_sha256",
+        "kernel_observer_identity_sha256",
+        "kernel_failure_domain",
+        "kernel_operation_receipt",
+        "kernel_authority_key_sha256",
+    }
+    observed_fields = set(value) if isinstance(value, dict) else set()
     if (
         not isinstance(value, dict)
-        or set(value)
-        != {
-            "schema_version",
-            "deployment_sha256",
-            "boundary_graph_sha256",
-            "collector_identity_sha256",
-            "collector_failure_domain",
-            "instrumented_build_sha256",
-            "instrumentation_sha256",
-            "sampling_rate",
-            "coverage_requirements",
-            "collector_metrics",
-            "collector_operation_receipt",
-            "collector_authority_key_sha256",
-            "collector_config",
-            "collector_config_sha256",
-            "instrumentation_manifest",
-            "instrumentation_manifest_sha256",
-            "raw_spans",
-            "raw_spans_sha256",
-            "independent_observer_identity_sha256",
-            "independent_failure_domain",
-            "independent_observations",
-            "independent_raw_spans",
-            "independent_raw_spans_sha256",
-            "independent_observer_config",
-            "independent_observer_config_sha256",
-            "independent_operation_receipt",
-            "independent_authority_key_sha256",
-            "traces",
-        }
+        or frozenset(observed_fields)
+        not in {frozenset(base_fields), frozenset(base_fields | kernel_fields)}
         or value.get("schema_version") != "1.0"
         or not _digest(str(value.get("deployment_sha256") or ""))
         or not isinstance(value.get("traces"), list)
@@ -287,6 +297,14 @@ def runtime_trace_artifact(boundary_graph: dict[str, Any]) -> dict[str, Any]:
         observed_at=authority_issued,
         challenge=challenge,
     )
+    _verify_kernel_runtime_events(
+        value,
+        traces,
+        deployment=deployment,
+        graph_digest=graph_digest,
+        observed_at=authority_issued,
+        challenge=challenge,
+    )
     return _artifact(
         sorted(traces, key=lambda item: str(item["trace_id"])),
         expected,
@@ -433,6 +451,146 @@ def _verify_independent_runtime_observations(
     )
 
 
+def _verify_kernel_runtime_events(
+    value: dict[str, Any],
+    traces: list[dict[str, Any]],
+    *,
+    deployment: str,
+    graph_digest: str,
+    observed_at: Any,
+    challenge: str,
+) -> None:
+    fields = {
+        "kernel_events",
+        "kernel_events_sha256",
+        "kernel_observer_identity_sha256",
+        "kernel_failure_domain",
+        "kernel_operation_receipt",
+        "kernel_authority_key_sha256",
+    }
+    present = set(value) & fields
+    required = os.environ.get("PYSEC_REQUIRE_KERNEL_RUNTIME_EVENTS", "").strip() == "1"
+    if not present:
+        if required:
+            raise ValueError("kernel-origin runtime evidence is required")
+        return
+    if present != fields:
+        raise ValueError("kernel-origin runtime evidence fields are incomplete")
+    events = value["kernel_events"]
+    if (
+        not isinstance(events, list)
+        or not events
+        or len(events) > 1_000_000
+        or value["kernel_events_sha256"]
+        != hashlib.sha256(canonical_bytes(events)).hexdigest()
+    ):
+        raise ValueError("kernel-origin runtime event ledger is invalid")
+    event_fields = {
+        "sequence",
+        "monotonic_ns",
+        "event_type",
+        "trace_id",
+        "process_identity_sha256",
+        "resource",
+        "outcome",
+        "source_event_sha256",
+    }
+    by_trace: dict[str, set[str]] = {}
+    trace_records = {str(trace["trace_id"]): trace for trace in traces}
+    process_identities = {
+        str(observation["trace_id"]): str(observation["process_identity_sha256"])
+        for observation in value["independent_observations"]
+        if isinstance(observation, dict)
+    }
+    previous_sequence = 0
+    previous_monotonic = -1
+    for event in events:
+        if (
+            not isinstance(event, dict)
+            or set(event) != event_fields
+            or isinstance(event.get("sequence"), bool)
+            or not isinstance(event.get("sequence"), int)
+            or event["sequence"] != previous_sequence + 1
+            or isinstance(event.get("monotonic_ns"), bool)
+            or not isinstance(event.get("monotonic_ns"), int)
+            or event["monotonic_ns"] <= previous_monotonic
+            or event.get("event_type") not in {"process-exec", "sink-access"}
+            or event.get("outcome") not in {"allowed", "denied"}
+            or not str(event.get("resource") or "").strip()
+            or not _digest(str(event.get("process_identity_sha256") or ""))
+            or not _digest(str(event.get("source_event_sha256") or ""))
+            or str(event.get("trace_id") or "") not in trace_records
+            or event.get("process_identity_sha256")
+            != process_identities.get(str(event.get("trace_id") or ""))
+            or (
+                event.get("event_type") == "sink-access"
+                and (
+                    event.get("resource")
+                    != trace_records[str(event["trace_id"])]["sink"]
+                    or event.get("outcome")
+                    != (
+                        "allowed"
+                        if trace_records[str(event["trace_id"])][
+                            "authorization_decision"
+                        ]
+                        == "allow"
+                        else "denied"
+                    )
+                )
+            )
+        ):
+            raise ValueError("kernel-origin runtime event is invalid")
+        previous_sequence = event["sequence"]
+        previous_monotonic = event["monotonic_ns"]
+        by_trace.setdefault(str(event["trace_id"]), set()).add(str(event["event_type"]))
+    expected_traces = {str(trace["trace_id"]) for trace in traces}
+    if set(by_trace) != expected_traces or any(
+        kinds != {"process-exec", "sink-access"} for kinds in by_trace.values()
+    ):
+        raise ValueError("kernel-origin runtime evidence does not cover every trace")
+    expected_key = str(value["kernel_authority_key_sha256"])
+    configured_key = (
+        os.environ.get("PYSEC_RUNTIME_KERNEL_AUTHORITY_KEY_SHA256", "")
+        .strip()
+        .casefold()
+    )
+    if (
+        expected_key != configured_key
+        or not _digest(configured_key)
+        or not _digest(str(value["kernel_observer_identity_sha256"]))
+    ):
+        raise ValueError("kernel runtime observer is not deployment-pinned")
+    require_independent_failure_domains(
+        value["collector_failure_domain"],
+        value["kernel_failure_domain"],
+        labels=("runtime collector", "kernel observer"),
+    )
+    require_independent_failure_domains(
+        value["independent_failure_domain"],
+        value["kernel_failure_domain"],
+        labels=("runtime observer", "kernel observer"),
+    )
+    verify_registered_failure_domain(
+        value["kernel_failure_domain"], configured_key, "kernel runtime observer"
+    )
+    subject = {
+        "schema_version": "1.0",
+        "deployment_sha256": deployment,
+        "boundary_graph_sha256": graph_digest,
+        "kernel_observer_identity_sha256": value["kernel_observer_identity_sha256"],
+        "kernel_events_sha256": value["kernel_events_sha256"],
+        "failure_domain": value["kernel_failure_domain"],
+    }
+    verify_operation_receipt(
+        subject,
+        value["kernel_operation_receipt"],
+        purpose="runtime-kernel-observation",
+        observed_at=observed_at,
+        challenge_sha256=challenge,
+        expected_key_sha256=configured_key,
+    )
+
+
 def _verify_independent_observer_config(
     observer_config: object,
     independent_spans: list[dict[str, Any]],
@@ -542,7 +700,9 @@ def _verify_observer_event_ledger(
     if observer_config["batch_merkle_root_sha256"] != _merkle_root(event_hashes):
         raise ValueError("independent runtime event batch root is invalid")
     canary = observer_config["canary_event"]
-    challenge = os.environ.get("PYSEC_SCAN_TIME_CHALLENGE_SHA256", "").strip().casefold()
+    challenge = (
+        os.environ.get("PYSEC_SCAN_TIME_CHALLENGE_SHA256", "").strip().casefold()
+    )
     if (
         not isinstance(canary, dict)
         or set(canary) != {"challenge_sha256", "source_event_sha256", "observed"}

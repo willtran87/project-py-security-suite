@@ -349,9 +349,12 @@ def _advance_time_state(challenge_sha256: str, result: dict[str, str]) -> None:
             connection.execute("ROLLBACK")
             raise ValueError("trusted-time rollback or fork detected")
         if row is not None and challenge_sha256 == row[1] and digest == row[2]:
-            external_required = os.environ.get(
-                "PYSEC_TRUSTED_TIME_REQUIRE_EXTERNAL_CHECKPOINT", ""
-            ).strip() == "1"
+            external_required = (
+                os.environ.get(
+                    "PYSEC_TRUSTED_TIME_REQUIRE_EXTERNAL_CHECKPOINT", ""
+                ).strip()
+                == "1"
+            )
             external_bytes = bytes(row[5])
             if external_required and not external_bytes:
                 connection.execute("ROLLBACK")

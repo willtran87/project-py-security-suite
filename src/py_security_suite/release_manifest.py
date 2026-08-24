@@ -1,16 +1,24 @@
 from __future__ import annotations
 
 import hashlib
-import json
+import os
 from pathlib import Path
 from typing import Any
 
 from .execution import sha256_file
 from .passport import verify_report
 from .path_safety import resolve_regular_file
+from .strict_json import canonical_bytes, loads as strict_loads
 
 _MAX_JSON_BYTES = 128 * 1024 * 1024
 _DIGEST_LENGTH = 64
+_HARDENED_RELEASE_EVIDENCE = {
+    "clusterfuzzlite",
+    "github-attestation",
+    "in-toto",
+    "reproducible-build",
+    "surface-inventory",
+}
 
 
 def build_release_evidence_manifest(
@@ -35,12 +43,13 @@ def build_release_evidence_manifest(
             raise ValueError(
                 f"release evidence {name} does not match its approved SHA-256"
             )
-        document = json.loads(source.read_bytes())
+        document = strict_loads(source.read_bytes())
         if not isinstance(document, dict):
             raise TypeError(f"release evidence {name} root must be an object")
         bound_digest = bound_report_digest(document)
         if bound_digest != verification["checksums_sha256"]:
             raise ValueError(f"release evidence {name} is not bound to this report")
+        _validate_hardened_evidence(name, document)
         records.append(
             {
                 "name": name,
@@ -90,7 +99,7 @@ def verify_release_evidence_manifest(
     actual = sha256_file(source)
     if actual != expected:
         raise ValueError("release evidence manifest does not match its SHA-256")
-    document = json.loads(source.read_bytes())
+    document = strict_loads(source.read_bytes())
     if not isinstance(document, dict):
         raise TypeError("release evidence manifest root must be an object")
     _validate_manifest_shape(document)
@@ -136,11 +145,12 @@ def verify_release_evidence_manifest(
         )
         if sha256_file(evidence_path) != digest:
             raise ValueError(f"release evidence {name} does not match its SHA-256")
-        evidence_document = json.loads(evidence_path.read_bytes())
+        evidence_document = strict_loads(evidence_path.read_bytes())
         if not isinstance(evidence_document, dict):
             raise TypeError(f"release evidence {name} root must be an object")
         if bound_report_digest(evidence_document) != verification["checksums_sha256"]:
             raise ValueError(f"release evidence {name} is not bound to this report")
+        _validate_hardened_evidence(name, evidence_document)
         verified_names.append(name)
         identity.append({"name": name, "sha256": digest})
 
@@ -148,7 +158,9 @@ def verify_release_evidence_manifest(
     if calculated_id != document["manifest_id"]:
         raise ValueError("release evidence manifest ID is invalid")
     requested = set(required_evidence)
-    if "" in requested or len(requested) != len(required_evidence):
+    if os.environ.get("PYSEC_REQUIRE_HARDENED_RELEASE_EVIDENCE", "").strip() == "1":
+        requested.update(_HARDENED_RELEASE_EVIDENCE)
+    if "" in required_evidence or len(set(required_evidence)) != len(required_evidence):
         raise ValueError("required evidence names must be non-empty and unique")
     missing = sorted(requested - names)
     if missing:
@@ -186,6 +198,46 @@ def verify_release_evidence_manifest(
         },
         "required_authorities": list(document["required_authorities"]),
     }
+
+
+def _validate_hardened_evidence(name: str, document: dict[str, Any]) -> None:
+    if name == "reproducible-build" and (
+        document.get("reproducible") is not True or document.get("status") != "match"
+    ):
+        raise ValueError(
+            "release reproducibility evidence does not demonstrate a match"
+        )
+    if name not in _HARDENED_RELEASE_EVIDENCE - {"reproducible-build"}:
+        return
+    binding = document.get("evidence_binding")
+    execution = document.get("execution")
+    if (
+        document.get("kind") != name
+        or not isinstance(binding, dict)
+        or binding.get("verified") is not True
+        or binding.get("authenticated") is not True
+        or not isinstance(execution, dict)
+        or execution.get("status") != "completed"
+        or execution.get("coverage_percent") != 100.0
+        or execution.get("skipped_checks")
+    ):
+        raise ValueError(
+            f"release evidence {name} lacks authenticated complete execution"
+        )
+    if name == "surface-inventory":
+        features = set(execution.get("features") or [])
+        required = {
+            "independent-collectors",
+            "independent-signers",
+            "pagination-completeness",
+            "server-signed-page-chain",
+            "signed-total-count",
+            "liveness-probes",
+        }
+        if not required.issubset(features):
+            raise ValueError(
+                "release surface inventory lacks an independent denominator"
+            )
 
 
 def _validate_manifest_shape(document: dict[str, Any]) -> None:
@@ -270,9 +322,7 @@ def _manifest_id(report_digest: str, evidence: list[dict[str, str]]) -> str:
         "report_checksums_sha256": report_digest,
         "evidence": sorted(evidence, key=lambda item: item["name"]),
     }
-    return hashlib.sha256(
-        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
-    ).hexdigest()
+    return hashlib.sha256(canonical_bytes(payload)).hexdigest()
 
 
 def _portable_path(source: Path, base: Path | None) -> str:

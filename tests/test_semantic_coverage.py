@@ -80,6 +80,22 @@ class SemanticCoverageTests(unittest.TestCase):
                         "features": ["semantic-dataflow", "language-matrix"],
                         "language_matrix": [
                             {
+                                "language": "python",
+                                "engine": "codeql",
+                                "engine_version": "2.20.0",
+                                "query_pack_sha256": "a" * 64,
+                                "source_files_sha256": boundary["language_file_sets"][
+                                    "python"
+                                ]["files_sha256"],
+                                "files_discovered": 1,
+                                "files_analyzed": 1,
+                                "exclusions": [],
+                                "analysis_modes": ["semantic-dataflow"],
+                                "files": boundary["language_file_sets"]["python"][
+                                    "files"
+                                ],
+                            },
+                            {
                                 "language": "typescript",
                                 "engine": "codeql",
                                 "engine_version": "2.20.0",
@@ -94,7 +110,7 @@ class SemanticCoverageTests(unittest.TestCase):
                                 "files": boundary["language_file_sets"]["typescript"][
                                     "files"
                                 ],
-                            }
+                            },
                         ],
                         "cross_language_matrix": [
                             {
@@ -144,8 +160,34 @@ class SemanticCoverageTests(unittest.TestCase):
             },
         )
         self.assertFalse(incomplete["complete"])
-        self.assertEqual(incomplete["uncovered_languages"], ["typescript"])
+        self.assertEqual(incomplete["uncovered_languages"], ["python", "typescript"])
         self.assertTrue(complete["complete"])
+
+    def test_python_syntax_ast_is_not_mislabeled_as_semantic_dataflow(self) -> None:
+        boundary = {
+            "languages": {"python": 1},
+            "language_file_sets": {
+                "python": {
+                    "files": [
+                        {
+                            "path": "app.py",
+                            "size_bytes": 1,
+                            "sha256": "1" * 64,
+                            "line_count": 1,
+                        }
+                    ],
+                    "files_sha256": "2" * 64,
+                }
+            },
+        }
+        artifact = semantic_language_coverage_artifact(boundary, {})
+        self.assertFalse(artifact["complete"])
+        self.assertEqual(artifact["uncovered_languages"], ["python"])
+        self.assertFalse(artifact["languages"][0]["semantic"])
+        self.assertEqual(
+            artifact["languages"][0]["analysis_modes"],
+            ["syntax-ast", "control-flow", "call-graph"],
+        )
 
     def test_cross_language_summary_without_exact_ledgers_is_incomplete(self) -> None:
         boundary = {

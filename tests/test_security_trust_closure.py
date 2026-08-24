@@ -6,6 +6,7 @@ import base64
 import gzip
 import io
 import json
+import os
 import tarfile
 from unittest.mock import patch
 from pathlib import Path
@@ -14,6 +15,7 @@ from contextlib import closing
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.hazmat.primitives import serialization
 
 from py_security_suite.artifact_validation import (
     _OPERATION_STATE_GENESIS_SHA256,
@@ -33,6 +35,7 @@ from py_security_suite.boundary_graph import _canary_results_valid
 from py_security_suite.native_evidence import _provider_audit_readback
 from py_security_suite.strict_json import canonical_bytes
 from py_security_suite.runtime_trace import _verify_raw_spans
+from py_security_suite.trust_policy import capture_trust_environment
 from py_security_suite.trusted_time import (
     _TRUSTED_TIME_STATE_GENESIS_SHA256,
     _advance_time_state,
@@ -60,19 +63,25 @@ def test_operation_receipt_validator_discovery_is_structural() -> None:
         {"run": 1}, purpose="test-operation", operation_id="discover-1"
     )
     assert _contains_operation_receipt({"nested": [{"receipt": receipt}]}) is True
-    assert _contains_operation_receipt(
-        {
-            "payloadType": "application/vnd.in-toto+json",
-            "payload": "e30=",
-            "signatures": [{"keyid": "builder", "sig": "c2ln"}],
-        }
-    ) is True
-    assert _contains_operation_receipt(
-        {
-            "payload": "e30=",
-            "signatures": [{"protected": "e30=", "signature": "c2ln"}],
-        }
-    ) is True
+    assert (
+        _contains_operation_receipt(
+            {
+                "payloadType": "application/vnd.in-toto+json",
+                "payload": "e30=",
+                "signatures": [{"keyid": "builder", "sig": "c2ln"}],
+            }
+        )
+        is True
+    )
+    assert (
+        _contains_operation_receipt(
+            {
+                "payload": "e30=",
+                "signatures": [{"protected": "e30=", "signature": "c2ln"}],
+            }
+        )
+        is True
+    )
     assert _contains_operation_receipt({"cose_sign1_base64": "0oRDoQEmoA=="}) is True
     assert _contains_operation_receipt({"nested": [{"receipt": {}}]}) is False
     receipt["revision_metadata"] = {"format": "v2"}
@@ -238,6 +247,82 @@ def test_tpm_attestation_rejects_opaque_or_unverified_quote() -> None:
         )
 
 
+def test_tpm_attestation_requires_and_verifies_independent_raw_replay(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    private = Ed25519PrivateKey.generate()
+    public_bytes = private.public_key().public_bytes(
+        serialization.Encoding.PEM,
+        serialization.PublicFormat.SubjectPublicKeyInfo,
+    )
+    key_sha256 = hashlib.sha256(public_bytes).hexdigest()
+    raw = b"raw-tpm2-quote-and-signature"
+    claims = {
+        "quote_type": "TPM_ST_ATTEST_QUOTE",
+        "hash_algorithm": "sha256",
+        "pcr_selection": [0, 7],
+        "event_log_sha256": "d" * 64,
+        "ak_certificate_chain_sha256": "e" * 64,
+        "signature_verified": True,
+        "certificate_chain_verified": True,
+        "revocation_checked": True,
+        "event_log_replayed": True,
+        "trust_root_sha256": "f" * 64,
+        "verifier_implementation_sha256": "9" * 64,
+    }
+    statement = {
+        "schema_version": "1.0",
+        "format": "tpm2-quote",
+        "challenge_sha256": "c" * 64,
+        "host_identity_sha256": "a" * 64,
+        "pcrs_sha256": "b" * 64,
+        "raw_evidence_sha256": hashlib.sha256(raw).hexdigest(),
+        "normalized_claims_sha256": hashlib.sha256(canonical_bytes(claims)).hexdigest(),
+        "signature_verified": True,
+        "certificate_chain_verified": True,
+        "revocation_checked": True,
+    }
+    evidence = {
+        "schema_version": "1.0",
+        "format": "tpm2-quote",
+        "challenge_sha256": "c" * 64,
+        "host_identity_sha256": "a" * 64,
+        "pcrs_sha256": "b" * 64,
+        "secure_boot": True,
+        "measured_boot": True,
+        "claims": {
+            **claims,
+            "raw_evidence_base64": base64.b64encode(raw).decode(),
+            "raw_evidence_sha256": hashlib.sha256(raw).hexdigest(),
+            "replay_statement": statement,
+            "replay_signature_base64": base64.b64encode(
+                private.sign(canonical_bytes(statement))
+            ).decode(),
+            "replay_public_key_pem_base64": base64.b64encode(public_bytes).decode(),
+        },
+    }
+    monkeypatch.setenv("PYSEC_REQUIRE_RAW_ATTESTATION_REPLAY", "1")
+    monkeypatch.setenv("PYSEC_RAW_ATTESTATION_REPLAY_KEY_SHA256", key_sha256)
+    verify_format_evidence(
+        canonical_bytes(evidence),
+        format_name="tpm2-quote",
+        challenge_sha256="c" * 64,
+        host_identity_sha256="a" * 64,
+        pcrs_sha256="b" * 64,
+        implementation_sha256="9" * 64,
+    )
+    evidence["claims"]["raw_evidence_sha256"] = "0" * 64
+    with pytest.raises(ValueError, match="replay binding"):
+        verify_format_evidence(
+            canonical_bytes(evidence),
+            format_name="tpm2-quote",
+            challenge_sha256="c" * 64,
+            host_identity_sha256="a" * 64,
+            pcrs_sha256="b" * 64,
+            implementation_sha256="9" * 64,
+        )
+
+
 def test_failure_domain_registry_rejects_revoked_authority(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -255,9 +340,7 @@ def test_failure_domain_registry_rejects_revoked_authority(
             {
                 "authority_key_sha256": key,
                 "failure_domain": domain,
-                "implementation_artifact_sha256": domain[
-                    "implementation_sha256"
-                ],
+                "implementation_artifact_sha256": domain["implementation_sha256"],
                 "status": "revoked",
             }
         ],
@@ -271,6 +354,139 @@ def test_failure_domain_registry_rejects_revoked_authority(
     )
     with pytest.raises(ValueError, match="not actively registered"):
         verify_registered_failure_domain(domain, key, "test authority")
+
+
+def test_failure_domain_registry_requires_fresh_threshold_transparency(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    authority_key = "a" * 64
+    domain = {
+        "organization": "independent-provider",
+        "host_identity_sha256": "b" * 64,
+        "control_plane_sha256": "c" * 64,
+        "implementation_sha256": "d" * 64,
+    }
+    signed = {
+        "generation": 7,
+        "issued_at": (datetime.now(UTC) - timedelta(minutes=1)).isoformat(),
+        "expires_at": (datetime.now(UTC) + timedelta(hours=1)).isoformat(),
+        "authorities": [
+            {
+                "authority_key_sha256": authority_key,
+                "failure_domain": domain,
+                "implementation_artifact_sha256": domain["implementation_sha256"],
+                "status": "active",
+            }
+        ],
+    }
+    roots = [Ed25519PrivateKey.generate(), Ed25519PrivateKey.generate()]
+    root_records = []
+    signatures = []
+    for private in roots:
+        public = private.public_key().public_bytes(
+            serialization.Encoding.PEM,
+            serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        digest = hashlib.sha256(public).hexdigest()
+        root_records.append(
+            {
+                "key_sha256": digest,
+                "public_key_pem_base64": base64.b64encode(public).decode(),
+            }
+        )
+        signatures.append(
+            {
+                "key_sha256": digest,
+                "signature_base64": base64.b64encode(
+                    private.sign(canonical_bytes(signed))
+                ).decode(),
+            }
+        )
+    log_root = hashlib.sha256(b"\x00" + canonical_bytes(signed)).hexdigest()
+    registry = {
+        "schema_version": "2.0",
+        "signed": signed,
+        "signatures": signatures,
+        "transparency": {
+            "log_id": "deployment-security-log",
+            "log_index": 0,
+            "tree_size": 1,
+            "audit_path": [],
+            "root_sha256": log_root,
+        },
+    }
+    path = tmp_path / "failure-domains-v2.json"
+    path.write_bytes(canonical_bytes(registry))
+    monkeypatch.setenv("PYSEC_FAILURE_DOMAIN_REGISTRY_PATH", str(path))
+    monkeypatch.setenv(
+        "PYSEC_FAILURE_DOMAIN_REGISTRY_SHA256",
+        hashlib.sha256(path.read_bytes()).hexdigest(),
+    )
+    monkeypatch.setenv("PYSEC_REQUIRE_FRESH_FAILURE_DOMAIN_REGISTRY", "1")
+    monkeypatch.setenv("PYSEC_FAILURE_DOMAIN_REGISTRY_MIN_GENERATION", "7")
+    monkeypatch.setenv(
+        "PYSEC_FAILURE_DOMAIN_REGISTRY_ROOT_KEYS_JSON", json.dumps(root_records)
+    )
+    monkeypatch.setenv("PYSEC_FAILURE_DOMAIN_REGISTRY_SIGNATURE_THRESHOLD", "2")
+    monkeypatch.setenv("PYSEC_FAILURE_DOMAIN_LOG_ROOT_SHA256", log_root)
+    assert verify_registered_failure_domain(domain, authority_key, "test") == domain
+
+    registry["transparency"]["tree_size"] = 2
+    path.write_bytes(canonical_bytes(registry))
+    monkeypatch.setenv(
+        "PYSEC_FAILURE_DOMAIN_REGISTRY_SHA256",
+        hashlib.sha256(path.read_bytes()).hexdigest(),
+    )
+    with pytest.raises(ValueError, match="inclusion proof"):
+        verify_registered_failure_domain(domain, authority_key, "test")
+
+
+def test_explicit_trust_policy_rejects_ambient_conflicts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    private = Ed25519PrivateKey.generate()
+    public = private.public_key().public_bytes(
+        serialization.Encoding.PEM,
+        serialization.PublicFormat.SubjectPublicKeyInfo,
+    )
+    key_sha256 = hashlib.sha256(public).hexdigest()
+    signed = {
+        "schema_version": "1.0",
+        "generation": 3,
+        "issued_at": (datetime.now(UTC) - timedelta(minutes=1)).isoformat(),
+        "expires_at": (datetime.now(UTC) + timedelta(hours=1)).isoformat(),
+        "variables": {"PYSEC_REQUIRE_RAW_ATTESTATION_REPLAY": "1"},
+    }
+    document = {
+        "signed": signed,
+        "signature": {
+            "key_sha256": key_sha256,
+            "public_key_pem_base64": base64.b64encode(public).decode(),
+            "signature_base64": base64.b64encode(
+                private.sign(canonical_bytes(signed))
+            ).decode(),
+        },
+    }
+    path = tmp_path / "trust-policy.json"
+    path.write_bytes(canonical_bytes(document))
+    monkeypatch.setenv("PYSEC_EXPLICIT_TRUST_POLICY_PATH", str(path))
+    monkeypatch.setenv(
+        "PYSEC_EXPLICIT_TRUST_POLICY_SHA256",
+        hashlib.sha256(path.read_bytes()).hexdigest(),
+    )
+    monkeypatch.setenv("PYSEC_EXPLICIT_TRUST_POLICY_KEY_SHA256", key_sha256)
+    monkeypatch.setenv("PYSEC_REQUIRE_EXPLICIT_TRUST_POLICY", "1")
+    with monkeypatch.context() as unsigned_environment:
+        unsigned_environment.setenv("PYSEC_REQUIRE_KERNEL_RUNTIME_EVENTS", "1")
+        with pytest.raises(ValueError, match="absent from signed policy"):
+            capture_trust_environment()
+    captured = capture_trust_environment()
+    assert captured["PYSEC_REQUIRE_RAW_ATTESTATION_REPLAY"] == "1"
+    with monkeypatch.context() as conflict_environment:
+        conflict_environment.setenv("PYSEC_REQUIRE_RAW_ATTESTATION_REPLAY", "0")
+        with pytest.raises(ValueError, match="conflicts"):
+            capture_trust_environment()
+    os.environ.pop("PYSEC_REQUIRE_RAW_ATTESTATION_REPLAY", None)
 
 
 def test_required_kms_audit_readback_fails_closed(

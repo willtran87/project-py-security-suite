@@ -59,10 +59,14 @@ def verify_operation_receipt(
     issued = _timestamp(statement.get("issued_at"), "operation issued_at")
     expires = _timestamp(statement.get("expires_at"), "operation expires_at")
     expected_time = (
-        expected_trusted_time_sha256
-        if expected_trusted_time_sha256 is not None
-        else os.environ.get("PYSEC_SCAN_TIME_CONTEXT_SHA256", "")
-    ).strip().casefold()
+        (
+            expected_trusted_time_sha256
+            if expected_trusted_time_sha256 is not None
+            else os.environ.get("PYSEC_SCAN_TIME_CONTEXT_SHA256", "")
+        )
+        .strip()
+        .casefold()
+    )
     now = _trusted_observed_at(observed_at)
     if (
         receipt.get("schema_version") != "1.0"

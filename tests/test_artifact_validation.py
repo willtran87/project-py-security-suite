@@ -295,14 +295,14 @@ def test_retained_git_provenance_reverifies_signers_and_manifest(
         },
     ):
         validate_governed_artifacts({"source-inventory.json": inventory})
-        manifest["clean_replay"]["secondary_verification"][
-            "cas_bundle_read_sha256"
-        ] = "0" * 64
+        manifest["clean_replay"]["secondary_verification"]["cas_bundle_read_sha256"] = (
+            "0" * 64
+        )
         with pytest.raises(ValueError, match="external Git replay evidence"):
             validate_governed_artifacts({"source-inventory.json": inventory})
-        manifest["clean_replay"]["secondary_verification"][
-            "cas_bundle_read_sha256"
-        ] = manifest["clean_replay"]["bundle_sha256"]
+        manifest["clean_replay"]["secondary_verification"]["cas_bundle_read_sha256"] = (
+            manifest["clean_replay"]["bundle_sha256"]
+        )
     original_object = manifest["signature_ledger"]["commits"][0]["object_base64"]
     manifest["signature_ledger"]["commits"][0]["object_base64"] = base64.b64encode(
         b"tampered commit object"

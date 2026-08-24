@@ -605,7 +605,9 @@ def _compiler_canary_results(evidence: dict[str, Any]) -> list[dict[str, Any]]:
                 replay = strict_loads(payload)
             except (KeyError, TypeError, ValueError) as exc:
                 raise ValueError("compiler canary replay material is invalid") from exc
-            canaries = replay.get("canary_results") if isinstance(replay, dict) else None
+            canaries = (
+                replay.get("canary_results") if isinstance(replay, dict) else None
+            )
             if not isinstance(canaries, dict) or not _canary_results_valid(canaries):
                 raise ValueError("compiler canary replay result is invalid")
             results.append(dict(canaries))

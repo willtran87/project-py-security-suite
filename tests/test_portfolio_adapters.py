@@ -24,6 +24,7 @@ from py_security_suite.adapters.assurance_evidence import (
     OciImageAdapter,
     PyTmAdapter,
     ReproducibleBuildAdapter,
+    SurfaceInventoryAdapter,
     YaraAdapter,
     ZapAdapter,
 )
@@ -368,6 +369,30 @@ class PortfolioAdapterTests(unittest.TestCase):
         self.assertEqual(finding.locations[0].start_line, 12)
         self.assertEqual(finding.evidence["counterexample"], "value=-1")
         self.assertTrue(finding.evidence["assurance_context"]["binding_verified"])
+
+    def test_governed_surface_inventory_requires_external_denominator(self) -> None:
+        document = {
+            "kind": "surface-inventory",
+            "findings": [],
+            "source_sha256": "a" * 64,
+            "evidence_binding": {"verified": True, "authenticated": True},
+            "execution": {"features": ["independent-collectors"]},
+        }
+        adapter = SurfaceInventoryAdapter(
+            ToolConfig(require_assurance_profile=True), 4096
+        )
+        with self.assertRaisesRegex(TypeError, "independent"):
+            adapter.parse(json.dumps(document), Path.cwd())
+
+        document["execution"]["features"] = [
+            "independent-collectors",
+            "independent-signers",
+            "pagination-completeness",
+            "server-signed-page-chain",
+            "signed-total-count",
+            "liveness-probes",
+        ]
+        self.assertEqual(adapter.parse(json.dumps(document), Path.cwd()), [])
 
     def test_runtime_evidence_applicability_fails_closed_for_matching_projects(
         self,

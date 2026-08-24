@@ -1,0 +1,77 @@
+name: Release artifact assurance
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-assurance-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  reproduce-attest:
+    name: Reproduce, exercise, and attest distributions
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write # Exchange GitHub OIDC identity for the provenance signer.
+      attestations: write # Publish provenance for the exact built subjects.
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.11.19"
+          enable-cache: false
+      - name: Install locked build environment
+        run: uv sync --locked --all-groups --python "3.13"
+      - name: Build twice from the same immutable source epoch
+        env:
+          SOURCE_DATE_EPOCH: "1754784000"
+        run: |
+          uv build --no-sources --out-dir .artifacts/release-a
+          uv build --no-sources --out-dir .artifacts/release-b
+      - name: Require byte-for-byte reproducibility
+        shell: bash
+        run: |
+          set -euo pipefail
+          find .artifacts/release-a -maxdepth 1 -type f -printf '%f\n' | sort > "$RUNNER_TEMP/a.names"
+          find .artifacts/release-b -maxdepth 1 -type f -printf '%f\n' | sort > "$RUNNER_TEMP/b.names"
+          diff -u "$RUNNER_TEMP/a.names" "$RUNNER_TEMP/b.names"
+          while IFS= read -r name; do
+            test "$(sha256sum ".artifacts/release-a/$name" | cut -d' ' -f1)" = "$(sha256sum ".artifacts/release-b/$name" | cut -d' ' -f1)"
+          done < "$RUNNER_TEMP/a.names"
+      - name: Create a closed dependency wheelhouse
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .artifacts/wheelhouse
+          uv export --frozen --no-dev --no-emit-project --output-file "$RUNNER_TEMP/runtime-requirements.txt"
+          python -m pip download --require-hashes --requirement "$RUNNER_TEMP/runtime-requirements.txt" --dest .artifacts/wheelhouse
+          cp .artifacts/release-a/*.whl .artifacts/wheelhouse/
+      - name: Install and exercise the exact wheel offline
+        shell: pwsh
+        run: >-
+          ./scripts/test-wheel-offline.ps1
+          -Wheel (Get-ChildItem .artifacts/release-a/*.whl).FullName
+          -Wheelhouse .artifacts/wheelhouse
+          -Python python
+      - name: Attest exact release subjects
+        uses: actions/attest-build-provenance@43d14bc2b83dec42d39ecae14e916627a18bb661 # v3
+        with:
+          subject-path: .artifacts/release-a/*
+      - name: Retain exact release artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-artifacts
+          path: .artifacts/release-a
+          if-no-files-found: error

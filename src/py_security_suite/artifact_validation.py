@@ -683,9 +683,12 @@ def _consume_operation_receipts(
                 raise ValueError(
                     "operation receipt state deletion or rollback detected"
                 )
-            external_required = os.environ.get(
-                "PYSEC_OPERATION_RECEIPT_REQUIRE_EXTERNAL_CHECKPOINT", ""
-            ).strip() == "1"
+            external_required = (
+                os.environ.get(
+                    "PYSEC_OPERATION_RECEIPT_REQUIRE_EXTERNAL_CHECKPOINT", ""
+                ).strip()
+                == "1"
+            )
             external_bytes = bytes(checkpoint_row[2])
             if external_required and not external_bytes:
                 connection.execute("ROLLBACK")
@@ -1799,9 +1802,7 @@ def _validate_native_normalization(value: dict[str, Any], records: int) -> None:
             != hashlib.sha256(canonical_bytes(drill["recovery_request"])).hexdigest()
             or drill["recovery_request"].get("object_id") != drill["object_id"]
             or drill["recovery_request"].get("challenge_sha256")
-            != os.environ.get("PYSEC_SCAN_TIME_CHALLENGE_SHA256", "")
-            .strip()
-            .casefold()
+            != os.environ.get("PYSEC_SCAN_TIME_CHALLENGE_SHA256", "").strip().casefold()
             or not _digest(str(drill.get("replica_identity_sha256") or ""))
             or not str(drill.get("kms_unwrap_operation_id") or "")
             or not str(drill.get("execution_nonce") or "")
@@ -1897,9 +1898,12 @@ def _validate_native_normalization(value: dict[str, Any], records: int) -> None:
             str(drill["provider_audit_authority_key_sha256"]),
         )
         readback = drill["provider_audit_readback"]
-        readback_required = os.environ.get(
-            "PYSEC_RAW_EVIDENCE_PROVIDER_AUDIT_READBACK_REQUIRED", ""
-        ).strip() == "1"
+        readback_required = (
+            os.environ.get(
+                "PYSEC_RAW_EVIDENCE_PROVIDER_AUDIT_READBACK_REQUIRED", ""
+            ).strip()
+            == "1"
+        )
         if readback_required and readback is None:
             raise ValueError("retained KMS provider audit readback is absent")
         if readback is not None:

@@ -1465,7 +1465,9 @@ def _oci_manifest_valid(
     ):
         return False
     try:
-        config = strict_loads(blobs[manifest["config"]["digest"].removeprefix("sha256:")])
+        config = strict_loads(
+            blobs[manifest["config"]["digest"].removeprefix("sha256:")]
+        )
     except (TypeError, ValueError):
         return False
     diff_ids = (
@@ -1486,8 +1488,7 @@ def _oci_manifest_valid(
         if (
             not isinstance(diff_id, str)
             or not diff_id.startswith("sha256:")
-            or hashlib.sha256(unpacked).hexdigest()
-            != diff_id.removeprefix("sha256:")
+            or hashlib.sha256(unpacked).hexdigest() != diff_id.removeprefix("sha256:")
             or not _safe_oci_layer(unpacked)
         ):
             return False
@@ -1509,9 +1510,7 @@ def _oci_manifest_valid(
     return _oci_attestations_valid(manifest, blobs)
 
 
-def _oci_attestations_valid(
-    manifest: dict[str, Any], blobs: dict[str, bytes]
-) -> bool:
+def _oci_attestations_valid(manifest: dict[str, Any], blobs: dict[str, bytes]) -> bool:
     annotations = manifest["annotations"]
     signature_digest = annotations["pysec.signature-envelope-sha256"]
     provenance_digest = annotations["pysec.provenance-sha256"]
@@ -1565,9 +1564,11 @@ def _oci_attestations_valid(
         or signature.get("subject") != signed_subject
     ):
         return False
-    expected_key = os.environ.get(
-        "PYSEC_REQUIREMENTS_OCI_SIGNATURE_KEY_SHA256", ""
-    ).strip().casefold()
+    expected_key = (
+        os.environ.get("PYSEC_REQUIREMENTS_OCI_SIGNATURE_KEY_SHA256", "")
+        .strip()
+        .casefold()
+    )
     receipt = signature["operation_receipt"]
     statement = receipt.get("statement") if isinstance(receipt, dict) else None
     try:
@@ -1577,9 +1578,7 @@ def _oci_attestations_valid(
             receipt,
             purpose="requirements-oci-image-signature",
             observed_at=issued,
-            challenge_sha256=os.environ.get(
-                "PYSEC_SCAN_TIME_CHALLENGE_SHA256", ""
-            )
+            challenge_sha256=os.environ.get("PYSEC_SCAN_TIME_CHALLENGE_SHA256", "")
             .strip()
             .casefold(),
             expected_key_sha256=expected_key,
@@ -1600,8 +1599,20 @@ def _safe_oci_layer(payload: bytes) -> bool:
                     or ".." in path.parts
                     or member.name in seen
                     or member.isdev()
-                    or (member.issym() and (Path(member.linkname).is_absolute() or ".." in Path(member.linkname).parts))
-                    or (member.islnk() and (Path(member.linkname).is_absolute() or ".." in Path(member.linkname).parts))
+                    or (
+                        member.issym()
+                        and (
+                            Path(member.linkname).is_absolute()
+                            or ".." in Path(member.linkname).parts
+                        )
+                    )
+                    or (
+                        member.islnk()
+                        and (
+                            Path(member.linkname).is_absolute()
+                            or ".." in Path(member.linkname).parts
+                        )
+                    )
                 ):
                     return False
                 seen.add(member.name)

@@ -578,17 +578,34 @@ accepting an observer summary alone. Production and release scans and
 digest is included in the effective configuration identity. Production and
 release additionally require an externally quorum-signed trust-policy
 attestation with expiry, generation anti-rollback, and replay consumption.
+To eliminate ambient configuration ambiguity, set
+`PYSEC_REQUIRE_EXPLICIT_TRUST_POLICY=1` and pin a canonical signed policy with
+`PYSEC_EXPLICIT_TRUST_POLICY_PATH`, `_SHA256`, `_KEY_SHA256`, and
+`_MIN_GENERATION`. Its `variables` object becomes the process trust environment;
+any other configured trust variable or conflicting ambient value fails closed.
 Organization policy metadata can be authenticated the same way through
 `PYSEC_ORGANIZATION_POLICY_ATTESTATION` and its deployment-owned SHA-256.
 Set `PYSEC_FAILURE_DOMAIN_REGISTRY_PATH` and its SHA-256 together with
 `PYSEC_REQUIRE_REGISTERED_FAILURE_DOMAINS=1` to require active, key-bound
 organization/host/control-plane/implementation identities. Set
+`PYSEC_REQUIRE_FRESH_FAILURE_DOMAIN_REGISTRY=1`,
+`PYSEC_FAILURE_DOMAIN_REGISTRY_MIN_GENERATION`,
+`PYSEC_FAILURE_DOMAIN_REGISTRY_ROOT_KEYS_JSON`,
+`PYSEC_FAILURE_DOMAIN_REGISTRY_SIGNATURE_THRESHOLD`, and
+`PYSEC_FAILURE_DOMAIN_LOG_ROOT_SHA256` to require an unexpired v2 registry,
+threshold root signatures, and transparency-log inclusion. Set
 `PYSEC_SEV_SNP_MIN_REPORTED_TCB` to the deployment-approved minimum SNP TCB.
 Production sets `PYSEC_REQUIRE_HARDWARE_ATTESTATION_ROOTS=1` and pins each used
 format with `PYSEC_{TPM2,NITRO,SEV_SNP}_ATTESTATION_ROOT_SHA256`. Normalized
 evidence must confirm native signature and certificate-chain verification,
 revocation checks, event-log replay or TCB checks, and the exact verifier
 implementation identity.
+Set `PYSEC_REQUIRE_RAW_ATTESTATION_REPLAY=1` and pin
+`PYSEC_RAW_ATTESTATION_REPLAY_KEY_SHA256` to require retained raw quote/document
+bytes and an independently signed replay statement bound to the normalized
+claims. Set `PYSEC_REQUIRE_KERNEL_RUNTIME_EVENTS=1` and pin
+`PYSEC_RUNTIME_KERNEL_AUTHORITY_KEY_SHA256` to require process-exec and
+sink-access kernel observations for every deployment trace.
 Secret requirement commitments require
 `PYSEC_REQUIREMENTS_SECRET_NONCE_STATE_PATH`; reused nonces with a different
 commitment fail closed, and the signed blinded request must come from an

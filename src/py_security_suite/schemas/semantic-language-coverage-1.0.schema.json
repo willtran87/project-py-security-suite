@@ -24,7 +24,7 @@
       "properties": {
         "language": {"type": "string", "minLength": 1, "maxLength": 50}, "engine": {"type": "string", "maxLength": 100}, "engine_version": {"type": "string", "maxLength": 100}, "query_pack_sha256": {"$ref": "#/$defs/digest"}, "source_files_sha256": {"$ref": "#/$defs/digest"}, "files_discovered": {"type": "integer", "minimum": 1}, "files_analyzed": {"type": "integer", "minimum": 0},
         "exclusions": {"type": "array", "maxItems": 10000, "items": {"type": "object", "additionalProperties": false, "required": ["path", "reason"], "properties": {"path": {"type": "string", "minLength": 1, "maxLength": 1000}, "reason": {"type": "string", "minLength": 1, "maxLength": 200}}}},
-        "files": {"type": "array", "maxItems": 50000, "items": {"$ref": "#/$defs/file"}}, "analysis_modes": {"type": "array", "maxItems": 32, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 160}}, "semantic": {"type": "boolean"}, "source_bound": {"type": "boolean"}, "cross_language_correlation": {"enum": ["native-graph", "normalized-finding-fusion", "authenticated-contract-dataflow"]}
+        "files": {"type": "array", "maxItems": 50000, "items": {"$ref": "#/$defs/file"}}, "analysis_modes": {"type": "array", "maxItems": 32, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 160}}, "semantic": {"type": "boolean"}, "source_bound": {"type": "boolean"}, "cross_language_correlation": {"enum": ["native-graph", "normalized-finding-fusion", "authenticated-contract-dataflow", "compiler-ledger", "syntax-graph-only", "not-established"]}
       }
     },
     "cross": {

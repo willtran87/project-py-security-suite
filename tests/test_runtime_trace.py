@@ -191,6 +191,42 @@ def test_runtime_trace_must_correlate_to_static_edge(tmp_path: Path) -> None:
         purpose="runtime-independent-observation",
         operation_id="independent-run-1",
     )
+    kernel_events = [
+        {
+            "sequence": index,
+            "monotonic_ns": index * 10_000,
+            "event_type": event_type,
+            "trace_id": traces[0]["trace_id"],
+            "process_identity_sha256": "7" * 64,
+            "resource": "python" if event_type == "process-exec" else "database",
+            "outcome": "allowed",
+            "source_event_sha256": hashlib.sha256(
+                f"kernel-event-{index}".encode()
+            ).hexdigest(),
+        }
+        for index, event_type in enumerate(("process-exec", "sink-access"), start=1)
+    ]
+    kernel_failure_domain = {
+        "organization": "kernel-observer-org",
+        "host_identity_sha256": "a" * 64,
+        "control_plane_sha256": "b" * 64,
+        "implementation_sha256": "c" * 64,
+    }
+    kernel_subject = {
+        "schema_version": "1.0",
+        "deployment_sha256": "a" * 64,
+        "boundary_graph_sha256": graph_sha256,
+        "kernel_observer_identity_sha256": "f" * 64,
+        "kernel_events_sha256": hashlib.sha256(
+            canonical_bytes(kernel_events)
+        ).hexdigest(),
+        "failure_domain": kernel_failure_domain,
+    }
+    kernel_receipt, kernel_key = operation_receipt(
+        kernel_subject,
+        purpose="runtime-kernel-observation",
+        operation_id="kernel-run-1",
+    )
     evidence_document = {
         "schema_version": "1.0",
         "deployment_sha256": "a" * 64,
@@ -225,6 +261,12 @@ def test_runtime_trace_must_correlate_to_static_edge(tmp_path: Path) -> None:
         ],
         "independent_operation_receipt": independent_receipt,
         "independent_authority_key_sha256": independent_key,
+        "kernel_events": kernel_events,
+        "kernel_events_sha256": kernel_subject["kernel_events_sha256"],
+        "kernel_observer_identity_sha256": "f" * 64,
+        "kernel_failure_domain": kernel_failure_domain,
+        "kernel_operation_receipt": kernel_receipt,
+        "kernel_authority_key_sha256": kernel_key,
         "traces": traces,
     }
     evidence_value = json.dumps(evidence_document)
@@ -311,6 +353,8 @@ def test_runtime_trace_must_correlate_to_static_edge(tmp_path: Path) -> None:
                 "PYSEC_RUNTIME_INVENTORY_KEYS_JSON": json.dumps(inventory_keys),
                 "PYSEC_RUNTIME_COLLECTOR_AUTHORITY_KEY_SHA256": collector_key,
                 "PYSEC_RUNTIME_INDEPENDENT_AUTHORITY_KEY_SHA256": independent_key,
+                "PYSEC_REQUIRE_KERNEL_RUNTIME_EVENTS": "1",
+                "PYSEC_RUNTIME_KERNEL_AUTHORITY_KEY_SHA256": kernel_key,
                 **authority,
                 **coverage_authority,
             },

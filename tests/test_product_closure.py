@@ -268,6 +268,18 @@ class ProductClosureTests(unittest.TestCase):
                     required_evidence=("passport-verification",),
                 )
 
+            with (
+                patch.dict(
+                    "os.environ", {"PYSEC_REQUIRE_HARDENED_RELEASE_EVIDENCE": "1"}
+                ),
+                self.assertRaisesRegex(ValueError, "clusterfuzzlite"),
+            ):
+                verify_release_evidence_manifest(
+                    manifest_path,
+                    manifest_sha256=manifest_digest,
+                    report=report,
+                )
+
             verify_mock.return_value = _verification("scan-1", "e")
             with self.assertRaisesRegex(ValueError, "not bound"):
                 build_release_evidence_manifest(

@@ -424,7 +424,9 @@ def _provider_audit_readback(
         "failure_domain",
         "operation_receipt",
     }
-    expected_key = os.environ.get(f"{prefix}_AUTHORITY_KEY_SHA256", "").strip().casefold()
+    expected_key = (
+        os.environ.get(f"{prefix}_AUTHORITY_KEY_SHA256", "").strip().casefold()
+    )
     if (
         set(response) != fields
         or response.get("schema_version") != "1.0"
@@ -438,12 +440,12 @@ def _provider_audit_readback(
     domain = verify_registered_failure_domain(
         response["failure_domain"], expected_key, "KMS audit readback"
     )
-    attestation_subject = attestation.get("subject") if isinstance(attestation, dict) else None
-    if (
-        not isinstance(attestation_subject, dict)
-        or response.get("execution_nonce")
-        != attestation_subject.get("execution_nonce")
-    ):
+    attestation_subject = (
+        attestation.get("subject") if isinstance(attestation, dict) else None
+    )
+    if not isinstance(attestation_subject, dict) or response.get(
+        "execution_nonce"
+    ) != attestation_subject.get("execution_nonce"):
         raise ValueError("KMS audit readback execution binding is invalid")
     require_independent_failure_domains(
         audit_domain,
@@ -503,7 +505,9 @@ def verify_retained_provider_audit_readback(
     }:
         raise ValueError("retained KMS audit readback fields do not match")
     prefix = "PYSEC_RAW_EVIDENCE_PROVIDER_AUDIT_READBACK"
-    expected_key = os.environ.get(f"{prefix}_AUTHORITY_KEY_SHA256", "").strip().casefold()
+    expected_key = (
+        os.environ.get(f"{prefix}_AUTHORITY_KEY_SHA256", "").strip().casefold()
+    )
     if (
         value.get("provider") != audit["provider"]
         or value.get("audit_event_id") != audit["audit_event_id"]
@@ -528,7 +532,9 @@ def verify_retained_provider_audit_readback(
     }
     if (
         not isinstance(request, dict)
-        or any(request.get(name) != expected for name, expected in expected_request.items())
+        or any(
+            request.get(name) != expected for name, expected in expected_request.items()
+        )
         or not isinstance(request.get("command_context"), dict)
     ):
         raise ValueError("retained KMS audit readback request is detached")
@@ -557,15 +563,14 @@ def verify_retained_provider_audit_readback(
     from .pinned_command import verify_retained_effective_policy_attestation
 
     attestation = value["effective_policy_attestation"]
-    attestation_subject = attestation.get("subject") if isinstance(attestation, dict) else None
-    if (
-        not isinstance(attestation_subject, dict)
-        or value["execution_nonce"] != attestation_subject.get("execution_nonce")
-    ):
+    attestation_subject = (
+        attestation.get("subject") if isinstance(attestation, dict) else None
+    )
+    if not isinstance(attestation_subject, dict) or value[
+        "execution_nonce"
+    ] != attestation_subject.get("execution_nonce"):
         raise ValueError("retained KMS audit readback execution binding is invalid")
-    if domain != verify_retained_effective_policy_attestation(
-        attestation
-    ):
+    if domain != verify_retained_effective_policy_attestation(attestation):
         raise ValueError("retained KMS audit readback domain is not attested")
 
 

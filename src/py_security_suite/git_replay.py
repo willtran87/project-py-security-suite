@@ -177,7 +177,9 @@ def _invoke(
         raise ValueError("external Git replay authority response is invalid")
     failure_domain = verify_failure_domain(response["failure_domain"], prefix)
     verify_registered_failure_domain(response["failure_domain"], expected_key, prefix)
-    attestation_subject = attestation.get("subject") if isinstance(attestation, dict) else None
+    attestation_subject = (
+        attestation.get("subject") if isinstance(attestation, dict) else None
+    )
     if (
         failure_domain != remote_attested_failure_domain(attestation)
         or not isinstance(attestation_subject, dict)

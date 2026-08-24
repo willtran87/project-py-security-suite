@@ -32,7 +32,9 @@ def publish_checkpoint(
             prefixes = strict_loads(quorum_raw)
             threshold = int(os.environ.get(f"{prefix}_QUORUM_THRESHOLD", ""))
         except (TypeError, ValueError) as exc:
-            raise ValueError("checkpoint authority quorum configuration is invalid") from exc
+            raise ValueError(
+                "checkpoint authority quorum configuration is invalid"
+            ) from exc
         if (
             not isinstance(prefixes, list)
             or len(prefixes) < 2
@@ -111,11 +113,9 @@ def _publish_single(
         failure_domain, expected_key, "checkpoint authority"
     )
     attestation_subject = policy_attestation.get("subject")
-    if (
-        not isinstance(attestation_subject, dict)
-        or response.get("execution_nonce")
-        != attestation_subject.get("execution_nonce")
-    ):
+    if not isinstance(attestation_subject, dict) or response.get(
+        "execution_nonce"
+    ) != attestation_subject.get("execution_nonce"):
         raise ValueError("checkpoint result is detached from its attested execution")
     receipt = response["checkpoint_operation_receipt"]
     statement = receipt.get("statement") if isinstance(receipt, dict) else None
@@ -217,7 +217,9 @@ def verify_retained_checkpoint(
     expected_key = (
         os.environ.get(f"{prefix}_AUTHORITY_KEY_SHA256", "").strip().casefold()
     )
-    failure_domain = verify_failure_domain(value["failure_domain"], "checkpoint authority")
+    failure_domain = verify_failure_domain(
+        value["failure_domain"], "checkpoint authority"
+    )
     configured_domain = verify_failure_domain(
         strict_loads(os.environ.get(f"{prefix}_FAILURE_DOMAIN_JSON", "")),
         "configured checkpoint authority",
@@ -229,14 +231,16 @@ def verify_retained_checkpoint(
         or failure_domain != configured_domain
     ):
         raise ValueError("retained external checkpoint is invalid")
-    verify_registered_failure_domain(failure_domain, expected_key, "checkpoint authority")
+    verify_registered_failure_domain(
+        failure_domain, expected_key, "checkpoint authority"
+    )
     attestation = value["effective_policy_attestation"]
-    attestation_subject = attestation.get("subject") if isinstance(attestation, dict) else None
-    if (
-        not isinstance(attestation_subject, dict)
-        or value.get("execution_nonce")
-        != attestation_subject.get("execution_nonce")
-    ):
+    attestation_subject = (
+        attestation.get("subject") if isinstance(attestation, dict) else None
+    )
+    if not isinstance(attestation_subject, dict) or value.get(
+        "execution_nonce"
+    ) != attestation_subject.get("execution_nonce"):
         raise ValueError("retained checkpoint execution binding is invalid")
     receipt = value["checkpoint_operation_receipt"]
     statement = receipt.get("statement") if isinstance(receipt, dict) else None
