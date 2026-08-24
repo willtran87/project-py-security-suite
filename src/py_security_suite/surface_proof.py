@@ -10,7 +10,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
-from .strict_json import canonical_bytes
+from .strict_json import canonical_bytes, loads as strict_loads
 
 
 _DIGEST = re.compile(r"[0-9a-f]{64}")
@@ -26,6 +26,7 @@ _SOURCE_FIELDS = {
     "pages_expected",
     "pages_observed",
     "page_receipts_sha256",
+    "page_receipts_base64",
     "server_total_records",
     "records_observed",
     "liveness_probes",
@@ -138,6 +139,31 @@ def verify_surface_proof(execution: object) -> dict[str, Any]:
             or source["server_total_records"] != source["records_observed"]
         ):
             raise TypeError("surface reconciliation source proof is invalid")
+        _verify_page_receipts(source)
+        collector_subject = {
+            "kind": kind,
+            "sha256": source["snapshot_sha256"],
+            "collector_organization": collector_org,
+            "adapter_sha256": source["adapter_sha256"],
+            "endpoint_identity_sha256": source["endpoint_identity_sha256"],
+            "query_sha256": source["query_sha256"],
+            "pages_expected": source["pages_expected"],
+            "pages_observed": source["pages_observed"],
+            "collection_complete": True,
+            "collected_at": source["collected_at"],
+            "page_receipts_sha256": source["page_receipts_sha256"],
+            "server_total_records": source["server_total_records"],
+        }
+        server_subject = {
+            **collector_subject,
+            "liveness_probes": source["liveness_probes"],
+            "server_organization": server_org,
+        }
+        if (
+            source["collector_subject"] != collector_subject
+            or source["server_subject"] != server_subject
+        ):
+            raise TypeError("surface reconciliation authority subject is detached")
         observed_at = collected_at.astimezone(UTC)
         collector_receipt = _verify_portable_authority(
             source["collector_receipt"],
@@ -163,6 +189,56 @@ def verify_surface_proof(execution: object) -> dict[str, Any]:
         signers.update((collector_signer, server_signer))
         organizations.update((collector_org, server_org))
     return proof
+
+
+def _verify_page_receipts(source: dict[str, Any]) -> None:
+    try:
+        raw = base64.b64decode(str(source["page_receipts_base64"]), validate=True)
+    except (TypeError, ValueError) as exc:
+        raise TypeError("surface page receipts encoding is invalid") from exc
+    if (
+        not raw
+        or len(raw) > 64 * 1024 * 1024
+        or hashlib.sha256(raw).hexdigest() != source["page_receipts_sha256"]
+    ):
+        raise TypeError("surface page receipts commitment does not match")
+    try:
+        receipts = strict_loads(raw)
+    except (TypeError, ValueError) as exc:
+        raise TypeError("surface page receipts are not strict JSON") from exc
+    if not isinstance(receipts, list) or len(receipts) != source["pages_expected"]:
+        raise TypeError("surface page receipt count does not match")
+    previous = ""
+    total = 0
+    required = {
+        "page_number",
+        "request_sha256",
+        "response_sha256",
+        "continuation_in_sha256",
+        "continuation_out_sha256",
+        "record_count",
+    }
+    for index, item in enumerate(receipts, start=1):
+        if not isinstance(item, dict) or set(item) != required:
+            raise TypeError("surface page receipt is invalid")
+        incoming = str(item.get("continuation_in_sha256") or "")
+        outgoing = str(item.get("continuation_out_sha256") or "")
+        count = item.get("record_count")
+        if (
+            item.get("page_number") != index
+            or incoming != previous
+            or _DIGEST.fullmatch(str(item.get("request_sha256") or "")) is None
+            or _DIGEST.fullmatch(str(item.get("response_sha256") or "")) is None
+            or (outgoing and _DIGEST.fullmatch(outgoing) is None)
+            or isinstance(count, bool)
+            or not isinstance(count, int)
+            or count < 0
+        ):
+            raise TypeError("surface page receipt chain is invalid")
+        total += count
+        previous = outgoing
+    if previous or total != source["server_total_records"]:
+        raise TypeError("surface page receipt chain is incomplete")
 
 
 def _verify_portable_authority(

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import os
 import tempfile
@@ -20,6 +21,11 @@ except ModuleNotFoundError:  # Direct script execution.
     from strict_json import dumps as strict_dumps  # type: ignore[import-not-found,no-redef]
     from strict_json import loads as strict_loads  # type: ignore[import-not-found,no-redef]
     from trusted_time import verify_rfc3161  # type: ignore[import-not-found,no-redef]
+
+try:
+    from py_security_suite.trusted_observation import governed_now
+except ModuleNotFoundError:  # Direct script execution with the suite on PYTHONPATH.
+    from trusted_observation import governed_now  # type: ignore[import-not-found,no-redef]
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -114,7 +120,11 @@ def reconcile(path: Path) -> dict[str, Any]:
                 "server_total_records",
             }
         if version == "4.0":
-            expected_source |= {"server_authority", "liveness_probes"}
+            expected_source |= {
+                "server_authority",
+                "server_organization",
+                "liveness_probes",
+            }
         if set(value) != expected_source:
             raise ValueError("observed source fields do not match the contract")
         kind = _label(value.get("kind"), "source kind")
@@ -176,7 +186,7 @@ def reconcile(path: Path) -> dict[str, Any]:
                         ),
                     }
                 )
-                _verify_page_receipts(path, value, expected_pages)
+                page_receipts_raw = _verify_page_receipts(path, value, expected_pages)
             authority = verify_authority(
                 path,
                 value.get("authority"),
@@ -202,7 +212,11 @@ def reconcile(path: Path) -> dict[str, Any]:
                 liveness = _positive_integer(
                     value.get("liveness_probes"), "surface liveness probes"
                 )
+                server_organization = _label(
+                    value.get("server_organization"), "server organization"
+                )
                 authority_subject["liveness_probes"] = liveness
+                authority_subject["server_organization"] = server_organization
                 if liveness < 1:
                     raise ValueError("surface inventory requires liveness probes")
                 server = verify_authority(
@@ -224,6 +238,10 @@ def reconcile(path: Path) -> dict[str, Any]:
                 if server["organization"] == organization:
                     raise ValueError(
                         "surface server and collector require distinct organizations"
+                    )
+                if server["organization"] != server_organization:
+                    raise ValueError(
+                        "surface server organization does not match its signed subject"
                     )
                 signer_ids.add(server["signer_id"])
         source_records = _records(
@@ -249,6 +267,9 @@ def reconcile(path: Path) -> dict[str, Any]:
                     "pages_expected": value["pages_expected"],
                     "pages_observed": value["pages_observed"],
                     "page_receipts_sha256": value["page_receipts_sha256"],
+                    "page_receipts_base64": base64.b64encode(page_receipts_raw).decode(
+                        "ascii"
+                    ),
                     "server_total_records": value["server_total_records"],
                     "records_observed": len(source_records),
                     "liveness_probes": value["liveness_probes"],
@@ -499,7 +520,7 @@ def _timestamp(
     normalized = result.astimezone(UTC)
     if (
         enforce_fresh
-        and abs(((reference or datetime.now(UTC)) - normalized).total_seconds())
+        and abs(((reference or governed_now()) - normalized).total_seconds())
         > 24 * 60 * 60
     ):
         raise ValueError(f"{label} is stale or in the future")
@@ -512,13 +533,14 @@ def _positive_integer(value: object, label: str) -> int:
     return value
 
 
-def _verify_page_receipts(context: Path, source: dict[str, Any], pages: int) -> None:
+def _verify_page_receipts(context: Path, source: dict[str, Any], pages: int) -> bytes:
     receipt_path = _pinned_sibling(
         context,
         source.get("page_receipts_file"),
         source.get("page_receipts_sha256"),
     )
-    value = _read(receipt_path)
+    raw = _raw(receipt_path)
+    value = strict_loads(raw)
     if not isinstance(value, list) or len(value) != pages:
         raise ValueError("surface inventory page receipt count does not match")
     previous = ""
@@ -551,6 +573,7 @@ def _verify_page_receipts(context: Path, source: dict[str, Any], pages: int) -> 
         previous = outgoing
     if previous or total != source.get("server_total_records"):
         raise ValueError("surface inventory page chain is incomplete")
+    return raw
 
 
 def _verify_collector_organization(signer_id: str, organization: str) -> None:

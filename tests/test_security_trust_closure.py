@@ -54,6 +54,7 @@ def test_explicit_policy_state_is_anchored_before_local_advance(
     state = tmp_path / "policy-state.sqlite3"
     monkeypatch.setenv("PYSEC_EXPLICIT_TRUST_POLICY_STATE_PATH", str(state))
     monkeypatch.setenv("PYSEC_REQUIRE_EXTERNAL_POLICY_STATE_CHECKPOINT", "1")
+    monkeypatch.setenv("PYSEC_SCAN_TIME_CHALLENGE_SHA256", "c" * 64)
     captured: list[tuple[str, dict[str, object], bool]] = []
 
     def checkpoint(
@@ -68,7 +69,12 @@ def test_explicit_policy_state_is_anchored_before_local_advance(
             "a" * 64,
             required=True,
         )
-    assert captured == [
+        _advance_policy_state(
+            {"generation": 1, "previous_policy_sha256": ""},
+            "a" * 64,
+            required=True,
+        )
+    assert captured == 2 * [
         (
             "PYSEC_TRUST_POLICY_STATE_CHECKPOINT",
             {
@@ -76,6 +82,7 @@ def test_explicit_policy_state_is_anchored_before_local_advance(
                 "namespace": "explicit-trust-policy",
                 "previous": {"generation": 0, "policy_sha256": ""},
                 "proposed": {"generation": 1, "policy_sha256": "a" * 64},
+                "observation_challenge_sha256": "c" * 64,
             },
             True,
         )
@@ -454,6 +461,7 @@ def test_failure_domain_registry_rejects_revoked_authority(
 def test_failure_domain_registry_requires_fresh_threshold_transparency(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    observed = datetime.now(UTC)
     authority_key = "a" * 64
     domain = {
         "organization": "independent-provider",
@@ -463,8 +471,8 @@ def test_failure_domain_registry_requires_fresh_threshold_transparency(
     }
     signed = {
         "generation": 7,
-        "issued_at": (datetime.now(UTC) - timedelta(minutes=1)).isoformat(),
-        "expires_at": (datetime.now(UTC) + timedelta(hours=1)).isoformat(),
+        "issued_at": (observed - timedelta(minutes=1)).isoformat(),
+        "expires_at": (observed + timedelta(hours=1)).isoformat(),
         "authorities": [
             {
                 "authority_key_sha256": authority_key,
@@ -568,7 +576,27 @@ def test_failure_domain_registry_requires_fresh_threshold_transparency(
     monkeypatch.setenv(
         "PYSEC_FAILURE_DOMAIN_REGISTRY_STATE_PATH", str(tmp_path / "registry.sqlite3")
     )
-    assert verify_registered_failure_domain(domain, authority_key, "test") == domain
+    monkeypatch.setenv("PYSEC_REQUIRE_EXTERNAL_FAILURE_DOMAIN_STATE_CHECKPOINT", "1")
+    monkeypatch.setenv("PYSEC_SCAN_TIME_CHALLENGE_SHA256", "c" * 64)
+    checkpoint_calls: list[dict[str, object]] = []
+
+    def publish(
+        _prefix: str, subject: dict[str, object], *, required: bool
+    ) -> dict[str, object]:
+        assert required
+        checkpoint_calls.append(subject)
+        return {"accepted": True}
+
+    with (
+        patch("py_security_suite.failure_domain.governed_now", return_value=observed),
+        patch("py_security_suite.checkpoint_authority.publish_checkpoint", publish),
+    ):
+        assert verify_registered_failure_domain(domain, authority_key, "test") == domain
+        assert verify_registered_failure_domain(domain, authority_key, "test") == domain
+    assert len(checkpoint_calls) == 2
+    assert all(
+        call["observation_challenge_sha256"] == "c" * 64 for call in checkpoint_calls
+    )
 
     registry["transparency"]["tree_size"] = 2
     path.write_bytes(canonical_bytes(registry))
@@ -576,7 +604,10 @@ def test_failure_domain_registry_requires_fresh_threshold_transparency(
         "PYSEC_FAILURE_DOMAIN_REGISTRY_SHA256",
         hashlib.sha256(path.read_bytes()).hexdigest(),
     )
-    with pytest.raises(ValueError, match="inclusion proof|detached"):
+    with (
+        patch("py_security_suite.failure_domain.governed_now", return_value=observed),
+        pytest.raises(ValueError, match="inclusion proof|detached"),
+    ):
         verify_registered_failure_domain(domain, authority_key, "test")
 
 

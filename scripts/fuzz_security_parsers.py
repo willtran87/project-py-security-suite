@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-import sys
+import json
 import os
+import re
+import sys
 from pathlib import Path
 from typing import Any, cast
 
@@ -58,7 +60,7 @@ def test_one_input(data: bytes) -> None:
     selector = data[0] % len(selected)
     try:
         selected[selector][1].parse(text, _TARGET)
-    except (OSError, TypeError, ValueError):
+    except (TypeError, ValueError):
         pass
 
 
@@ -87,6 +89,32 @@ def _selected_adapters(target: str) -> tuple[tuple[str, Any], ...]:
 
 def main() -> None:
     global _TARGET_NAME
+    if "--list-targets" in sys.argv:
+        targets = [
+            {
+                "target": "strict-json",
+                "artifact": "strict-json",
+                "seconds": 300,
+                "coverage_floor": 5,
+            },
+            {
+                "target": "sarif",
+                "artifact": "sarif",
+                "seconds": 300,
+                "coverage_floor": 5,
+            },
+        ]
+        targets.extend(
+            {
+                "target": f"adapter:{name}",
+                "artifact": f"adapter-{index:03d}-{re.sub(r'[^a-z0-9-]', '-', name.casefold())}",
+                "seconds": 120,
+                "coverage_floor": 2,
+            }
+            for index, (name, _adapter) in enumerate(_NAMED_ADAPTERS)
+        )
+        print(json.dumps(targets, separators=(",", ":"), sort_keys=True))
+        return
     target_arguments = [item for item in sys.argv[1:] if item.startswith("--target=")]
     if len(target_arguments) > 1:
         raise ValueError("fuzzer accepts one --target argument")

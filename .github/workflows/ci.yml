@@ -245,7 +245,10 @@ jobs:
       - name: Audit GitHub workflows
         run: uv run --frozen zizmor --pedantic --no-progress --color never .github
       - name: Check types
-        run: uv run --frozen mypy src companion scripts/audit_pages.py scripts/mkdocs_hooks.py
+        run: >-
+          uv run --frozen mypy src companion scripts/audit_pages.py
+          scripts/mkdocs_hooks.py scripts/validate-checkpoint-authority.py
+          scripts/validate-native-attestation-fixtures.py
       - name: Build distributions
         run: uv build --no-sources
 

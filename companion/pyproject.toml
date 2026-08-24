@@ -4,7 +4,6 @@ version = "0.1.0"
 description = "Locked Linux companion controls for Python Security Suite"
 requires-python = ">=3.11,<3.14"
 dependencies = [
-  "atheris>=3,<4",
   "aiokafka>=0.12,<1",
   "boofuzz>=0.4,<1",
   "check-manifest>=0.51,<1",

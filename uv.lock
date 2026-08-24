@@ -3,7 +3,8 @@ revision = 3
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.15'",
-    "python_full_version < '3.15'",
+    "python_full_version >= '3.12' and python_full_version < '3.15' and sys_platform != 'win32'",
+    "(python_full_version < '3.12' and sys_platform != 'win32') or (python_full_version < '3.15' and sys_platform == 'win32')",
 ]
 
 [[package]]
@@ -1053,7 +1054,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "atheris", marker = "sys_platform != 'win32'" },
+    { name = "atheris", marker = "python_full_version >= '3.12' and sys_platform != 'win32'" },
     { name = "coverage", extra = ["toml"] },
     { name = "hypothesis" },
     { name = "hypothesis-jsonschema" },
@@ -1103,7 +1104,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "atheris", marker = "sys_platform != 'win32'", specifier = ">=3.1,<4" },
+    { name = "atheris", marker = "python_full_version >= '3.12' and sys_platform != 'win32'", specifier = ">=3.1,<4" },
     { name = "coverage", extras = ["toml"], specifier = ">=7.10,<8" },
     { name = "hypothesis", specifier = ">=6.140,<7" },
     { name = "hypothesis-jsonschema", specifier = ">=0.23,<0.24" },

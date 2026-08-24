@@ -421,6 +421,24 @@ pinned, sandboxed verifier over the retained raw bytes and requires its
 hardware-attested failure domain and executable digest to match the signed
 statement. A valid replay signature without this governed native execution is
 rejected.
+
+Qualify every deployment-native verifier with retained positive and adversarial
+fixtures before allowing it into a production policy. The manifest must contain
+at least one accepted and one rejected case for TPM2 Quote, Nitro, and SEV-SNP;
+negative fixtures name the exact expected verifier error so a broken trust-root
+or registry setup cannot masquerade as a successful rejection test:
+
+```text
+uv run --frozen python scripts/validate-native-attestation-fixtures.py \
+  security-data/native-attestation-fixtures/manifest.json
+```
+
+The harness performs the same strict parsing, raw replay, verifier identity,
+trust-root, and failure-domain checks used by the scanner. Store its output with
+the approved verifier executable/configuration digests. It is a deployment
+conformance test, not a substitute for independent validation of the hardware
+vendor's verification implementation.
+
 Deployments can require
 `PYSEC_FAILURE_DOMAIN_REGISTRY_{PATH,SHA256}` and
 `PYSEC_REQUIRE_REGISTERED_FAILURE_DOMAINS=1`; the pinned registry maps active
@@ -478,6 +496,23 @@ remote-accept/local-commit retry safe. N-of-M checkpoint deployments use
 `*_QUORUM_PREFIXES_JSON` and `*_QUORUM_THRESHOLD`; successful members must span
 independent failure domains. Local SQLite plus environment state is treated only
 as a cache, not an independent rollback root.
+
+Run the live authority conformance harness for every configured checkpoint
+authority (and every quorum member) before admission:
+
+```text
+uv run --frozen python scripts/validate-checkpoint-authority.py \
+  --prefix PYSEC_CHECKPOINT_CONFORMANCE
+```
+
+The disposable namespace test requires acceptance of the first transition and
+its exact idempotent retry, rejection of a same-sequence fork, acceptance of the
+next transition, and rejection of rollback and sequence gaps. Configure the
+prefix with the same pinned-command, authority-key, attestation, and registered
+failure-domain controls as production. Policy and failure-domain cache hits also
+republish their retained base subject with the current trusted observation
+challenge; a valid old local row alone can no longer satisfy hardened rollback
+protection.
 
 Runtime observer evidence contains a boot identity, per-event monotonic
 sequence and timestamp, source-event commitments, a batch Merkle root, and an

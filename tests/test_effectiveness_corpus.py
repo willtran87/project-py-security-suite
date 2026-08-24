@@ -327,7 +327,7 @@ class EffectivenessCorpusTests(unittest.TestCase):
                 {
                     "id": "unexpected-positive",
                     "expected": "clean",
-                    "match": {"classification": "CWE-703"},
+                    "match": {"classification": "CWE-999"},
                 },
                 {
                     "id": "confirmed-clean",
@@ -336,6 +336,16 @@ class EffectivenessCorpusTests(unittest.TestCase):
                 },
             ]
         )
+        findings = json.loads((self.report / "findings.json").read_text())
+        findings["findings"].append(
+            {
+                "finding_id": "PYSEC-UNEXPECTED",
+                "sources": [{"tool": "semgrep", "rule_id": "unexpected"}],
+                "locations": [{"path": "src/example.py"}],
+                "classifications": ["CWE-999"],
+            }
+        )
+        (self.report / "findings.json").write_text(json.dumps(findings))
         with patch(
             "py_security_suite.effectiveness_corpus.verify_report",
             return_value={
@@ -512,7 +522,9 @@ class EffectivenessCorpusTests(unittest.TestCase):
                 "expected": "finding" if index % 2 == 0 else "clean",
                 "match": {
                     "tool": "bandit" if index % 2 == 0 else "no-such-tool",
-                    "rule_id": "B101" if index % 2 == 0 else f"CLEAN-{index}",
+                    "rule_id": ("B101" if index == 0 else f"RULE-{index}")
+                    if index % 2 == 0
+                    else f"CLEAN-{index}",
                 },
                 "cwe": f"cwe-{index % 5}",
                 "language": f"language-{index % 2}",
@@ -520,6 +532,7 @@ class EffectivenessCorpusTests(unittest.TestCase):
                 "boundary_type": f"boundary-{index % 3}",
                 "severity": f"severity-{index % 3}",
                 "mutation_operator": f"mutation-{index % 2}",
+                "fixture_sha256": f"{index + 1:064x}",
             }
             for index in range(25)
         ]

@@ -774,6 +774,8 @@ def _compiler_semantic_differential(
     for frontend in evidence["frontends"]:
         primary_replay = _verify_analysis_artifact(frontend, "primary")
         secondary_replay = _verify_analysis_artifact(frontend, "secondary")
+        primary_facts = _normalized_semantic_facts(primary_replay)
+        secondary_facts = _normalized_semantic_facts(secondary_replay)
         categories: dict[str, dict[str, Any]] = {}
         for name in (
             "symbols",
@@ -783,11 +785,11 @@ def _compiler_semantic_differential(
         ):
             primary = {
                 hashlib.sha256(canonical_bytes(item)).hexdigest()
-                for item in primary_replay["semantic_ledger"][name]
+                for item in primary_facts[name]
             }
             secondary = {
                 hashlib.sha256(canonical_bytes(item)).hexdigest()
-                for item in secondary_replay["semantic_ledger"][name]
+                for item in secondary_facts[name]
             }
             primary_only = sorted(primary - secondary)
             secondary_only = sorted(secondary - primary)
@@ -801,11 +803,11 @@ def _compiler_semantic_differential(
             }
         primary_taint = {
             hashlib.sha256(canonical_bytes(item)).hexdigest()
-            for item in primary_replay["taint_paths"]
+            for item in primary_facts["taint_paths"]
         }
         secondary_taint = {
             hashlib.sha256(canonical_bytes(item)).hexdigest()
-            for item in secondary_replay["taint_paths"]
+            for item in secondary_facts["taint_paths"]
         }
         taint_primary_only = sorted(primary_taint - secondary_taint)
         taint_secondary_only = sorted(secondary_taint - primary_taint)
@@ -829,6 +831,7 @@ def _compiler_semantic_differential(
         )
     subject = {
         "schema_version": "1.0",
+        "normalization": "source-location-symbol-ontology-v1",
         "classification": (
             "consensus"
             if total_primary_only == 0 and total_secondary_only == 0
@@ -842,6 +845,47 @@ def _compiler_semantic_differential(
         **subject,
         "differential_sha256": hashlib.sha256(canonical_bytes(subject)).hexdigest(),
     }
+
+
+def _normalized_semantic_facts(replay: dict[str, Any]) -> dict[str, list[object]]:
+    """Map engine-private IDs onto stable source-location semantic identities."""
+
+    ledger = replay["semantic_ledger"]
+    symbols = {
+        str(item["id"]): {
+            "path": str(item["path"]),
+            "line": int(item["line"]),
+            "kind": str(item["kind"]).casefold(),
+        }
+        for item in ledger["symbols"]
+    }
+
+    def symbol(identifier: object) -> dict[str, object]:
+        return symbols[str(identifier)]
+
+    result: dict[str, list[object]] = {
+        "symbols": list(symbols.values()),
+        "cfg_edges": [],
+        "dataflow_edges": [],
+        "interprocedural_edges": [],
+        "taint_paths": [],
+    }
+    for category in ("cfg_edges", "dataflow_edges", "interprocedural_edges"):
+        result[category] = [
+            {"source": symbol(edge["source"]), "target": symbol(edge["target"])}
+            for edge in ledger[category]
+        ]
+    result["taint_paths"] = [
+        {
+            "source": symbol(path["source"]),
+            "sink": symbol(path["sink"]),
+            "path": [symbol(item) for item in path["path"]],
+            "sanitizers": [symbol(item) for item in path["sanitizers"]],
+            "barriers": [symbol(item) for item in path["barriers"]],
+        }
+        for path in replay["taint_paths"]
+    ]
+    return result
 
 
 def _verify_analysis_artifact(item: dict[str, Any], prefix: str) -> dict[str, Any]:

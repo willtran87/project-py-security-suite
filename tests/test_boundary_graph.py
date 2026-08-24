@@ -33,21 +33,32 @@ class BoundaryGraphTests(unittest.TestCase):
         }
         primary = {
             "semantic_ledger": {
-                "symbols": [{"id": "shared"}, {"id": "primary"}],
+                "symbols": [
+                    {"id": "shared", "path": "app.py", "line": 1, "kind": "function"},
+                    {"id": "primary", "path": "app.py", "line": 2, "kind": "call"},
+                ],
                 "cfg_edges": [],
                 "dataflow_edges": [],
                 "interprocedural_edges": [],
             },
-            "taint_paths": [{"id": "primary-path"}],
+            "taint_paths": [],
         }
         secondary = {
             "semantic_ledger": {
-                "symbols": [{"id": "shared"}, {"id": "secondary"}],
+                "symbols": [
+                    {
+                        "id": "engine-shared",
+                        "path": "app.py",
+                        "line": 1,
+                        "kind": "function",
+                    },
+                    {"id": "secondary", "path": "app.py", "line": 3, "kind": "call"},
+                ],
                 "cfg_edges": [],
                 "dataflow_edges": [],
                 "interprocedural_edges": [],
             },
-            "taint_paths": [{"id": "secondary-path"}],
+            "taint_paths": [],
         }
         with patch(
             "py_security_suite.boundary_graph._verify_analysis_artifact",
@@ -60,8 +71,11 @@ class BoundaryGraphTests(unittest.TestCase):
         self.assertEqual(
             differential["classification"], "engine-disagreement-review-required"
         )
-        self.assertEqual(differential["primary_only"], 2)
-        self.assertEqual(differential["secondary_only"], 2)
+        self.assertEqual(differential["primary_only"], 1)
+        self.assertEqual(differential["secondary_only"], 1)
+        self.assertEqual(
+            differential["normalization"], "source-location-symbol-ontology-v1"
+        )
 
     def test_python_parser_failure_marks_graph_incomplete(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

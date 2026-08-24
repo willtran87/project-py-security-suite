@@ -1139,9 +1139,17 @@ the structured independent v4 reconciliation proof. The pinned `Release
 artifact assurance` workflow builds on two independent runners from the commit
 epoch, separately attests both outputs, compares exact bytes, and exercises the
 retained wheel against a hash-locked offline wheelhouse. The manual `Closed
-release evidence admission` workflow downloads an externally assembled closed
-evidence artifact and verifies its independently approved manifest digest and
-all hardened evidence classes before emitting an admission receipt.
+release evidence assembly` workflow accepts exactly one source-run artifact,
+verifies that run's repository, branch, commit, attempt, conclusion, artifact
+digest, and independently approved manifest digest, then re-verifies every
+hardened evidence class under the protected `release-admission` environment. It
+emits the sole `release-evidence` artifact accepted by promotion. The `Promote
+verified release evidence` workflow is hard-pinned to that workflow path,
+attempt one, the same repository and commit, the protected `main` ref, a
+successful manual event, one unexpired artifact, and the artifact archive digest
+before it extracts anything. Repository administrators should disable
+environment bypass, prohibit self-review, require an independent reviewer, and
+restrict deployment branches to `main`.
 
 Before release promotion, sign every distribution into a separate provenance
 directory:

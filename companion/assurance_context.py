@@ -15,6 +15,11 @@ except ModuleNotFoundError:  # Direct script execution.
     from strict_json import loads as strict_loads  # type: ignore[import-not-found,no-redef]
     from trusted_time import verify_rfc3161  # type: ignore[import-not-found,no-redef]
 
+try:
+    from py_security_suite.trusted_observation import governed_now
+except ModuleNotFoundError:  # Direct script execution with the suite on PYTHONPATH.
+    from trusted_observation import governed_now  # type: ignore[import-not-found,no-redef]
+
 
 _DIGEST_FIELDS = (
     "target_manifest_sha256",
@@ -45,7 +50,7 @@ def load_context(path: Path, exercised_target_ids: list[str]) -> dict[str, str]:
     observed_at = datetime.fromisoformat(
         trusted["trusted_time_observed_at"].replace("Z", "+00:00")
     ).astimezone(UTC)
-    if abs(datetime.now(UTC) - observed_at) > timedelta(hours=24):
+    if abs(governed_now() - observed_at) > timedelta(hours=24):
         raise ValueError("trusted time is outside the accepted window")
     return {
         "run_id": run_id,

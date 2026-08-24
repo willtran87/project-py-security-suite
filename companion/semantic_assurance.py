@@ -127,7 +127,11 @@ def analyze(value: object, kind: str, *, context: Path | None = None) -> dict[st
             ).hexdigest(),
         }
         control_records[control] = subject
-    proof_subject = {"schema_version": "1.0", "controls": control_records}
+    proof_subject = {
+        "schema_version": "1.0",
+        "controls": control_records,
+        "case_ledger": normalized,
+    }
     control_proof = {
         **proof_subject,
         "proof_sha256": hashlib.sha256(

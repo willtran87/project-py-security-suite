@@ -621,6 +621,16 @@ The isolation switch attests an external runner, firewall, or VM boundary; it
 does not alter the host firewall. Omitting it performs a diagnostic scan and
 correctly yields `INCOMPLETE`.
 
+Deployment-owned checkpoint authorities and native hardware-attestation
+verifiers have executable conformance harnesses. Run them against the same
+pinned commands, trust roots, failure-domain registry, and policy used by the
+production lane:
+
+```powershell
+uv run --frozen python scripts/validate-checkpoint-authority.py --prefix PYSEC_CHECKPOINT_CONFORMANCE
+uv run --frozen python scripts/validate-native-attestation-fixtures.py security-data/native-attestation-fixtures/manifest.json
+```
+
 The native installer records SHA-256 bindings for installed scanner entry
 points. `production` and `release` require those approved digests, rehash the
 entry points and transitive loader closure after execution, and verify that the

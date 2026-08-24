@@ -13,6 +13,7 @@ from .path_safety import (
 )
 from .strict_json import loads as strict_loads
 from .strict_json import canonical_bytes
+from .trusted_observation import governed_now
 from .trusted_time import verify_rfc3161
 
 import hashlib
@@ -79,7 +80,7 @@ def retention_status(
             trusted_time["trusted_time_observed_at"].replace("Z", "+00:00")
         ).astimezone(UTC)
     else:
-        now = (observed_at or datetime.now(UTC)).astimezone(UTC)
+        now = (observed_at or governed_now()).astimezone(UTC)
     deadline = deadline.astimezone(UTC)
     return {
         "schema_version": "1.0",

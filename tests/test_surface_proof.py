@@ -56,6 +56,18 @@ def _proof() -> dict[str, object]:
     observed_at = datetime(2026, 8, 24, 12, tzinfo=UTC)
     sources = []
     for index, kind in enumerate(("runtime", "gateway"), start=1):
+        page_receipts = canonical_bytes(
+            [
+                {
+                    "page_number": 1,
+                    "request_sha256": "4" * 64,
+                    "response_sha256": "5" * 64,
+                    "continuation_in_sha256": "",
+                    "continuation_out_sha256": "",
+                    "record_count": 1,
+                }
+            ]
+        )
         collector_subject = {
             "kind": kind,
             "sha256": f"{index}" * 64,
@@ -67,10 +79,14 @@ def _proof() -> dict[str, object]:
             "pages_observed": 1,
             "collection_complete": True,
             "collected_at": observed_at.isoformat(),
-            "page_receipts_sha256": "d" * 64,
+            "page_receipts_sha256": hashlib.sha256(page_receipts).hexdigest(),
             "server_total_records": 1,
         }
-        server_subject = {**collector_subject, "liveness_probes": 1}
+        server_subject = {
+            **collector_subject,
+            "liveness_probes": 1,
+            "server_organization": f"server-org-{index}",
+        }
         collector_receipt, collector_signer = _receipt(
             Ed25519PrivateKey.generate(),
             purpose=f"surface-inventory:{kind}",
@@ -97,7 +113,8 @@ def _proof() -> dict[str, object]:
                 "query_sha256": "c" * 64,
                 "pages_expected": 1,
                 "pages_observed": 1,
-                "page_receipts_sha256": "d" * 64,
+                "page_receipts_sha256": hashlib.sha256(page_receipts).hexdigest(),
+                "page_receipts_base64": base64.b64encode(page_receipts).decode(),
                 "server_total_records": 1,
                 "records_observed": 1,
                 "liveness_probes": 1,

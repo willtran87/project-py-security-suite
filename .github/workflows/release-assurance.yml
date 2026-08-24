@@ -21,17 +21,20 @@ jobs:
       matrix:
         include:
           - builder: a
-            runner: ubuntu-latest
+            runner: ubuntu-24.04
             platform: linux-x64
           - builder: b
-            runner: windows-latest
+            runner: windows-2025
             platform: windows-x64
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 20
     permissions:
       contents: read
-      id-token: write
-      attestations: write
+      id-token: write # Exchange the workflow identity for provenance signing.
+      attestations: write # Publish provenance for the exact builder subjects.
+    env:
+      RELEASE_BUILDER: ${{ matrix.builder }}
+      RELEASE_BUILDER_PLATFORM: ${{ matrix.platform }}
     steps:
       - name: Check out immutable source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -49,10 +52,11 @@ jobs:
         run: |
           "SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD)" |
             Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "PYSEC_RELEASE_BUILDER_PLATFORM=${{ matrix.platform }}" |
+          "PYSEC_RELEASE_BUILDER_PLATFORM=$env:RELEASE_BUILDER_PLATFORM" |
             Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Build distribution
-        run: uv build --no-sources --out-dir ".artifacts/release-${{ matrix.builder }}"
+        shell: pwsh
+        run: uv build --no-sources --out-dir ".artifacts/release-$env:RELEASE_BUILDER"
       - name: Attest exact builder subjects
         uses: actions/attest-build-provenance@43d14bc2b83dec42d39ecae14e916627a18bb661 # v3
         with:
@@ -67,8 +71,11 @@ jobs:
   compare-and-exercise:
     name: Compare independent builds and exercise exact wheel
     needs: independent-build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
+    permissions:
+      contents: read # Verify source and builder provenance against this repository.
+      attestations: read # Download and verify both builder attestations.
     steps:
       - name: Check out immutable source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -91,6 +98,19 @@ jobs:
         with:
           name: release-builder-b
           path: .artifacts/release-b
+      - name: Verify both builder provenance envelopes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for artifact in .artifacts/release-a/* .artifacts/release-b/*; do
+            gh attestation verify "$artifact" \
+              --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow .github/workflows/release-assurance.yml \
+              --source-digest "$GITHUB_SHA" \
+              --source-ref "$GITHUB_REF"
+          done
       - name: Require byte-for-byte reproducibility
         run: >-
           uv run pysec compare-builds .artifacts/release-a .artifacts/release-b

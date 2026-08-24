@@ -21,6 +21,7 @@ from .passport import verify_report
 from .path_safety import read_regular_file, resolve_regular_file
 from .source_inventory import verify_source_inventory_file
 from .strict_json import canonical_bytes, loads as strict_loads
+from .trusted_observation import governed_now
 from .trusted_time import verify_rfc3161
 
 
@@ -78,7 +79,7 @@ def evaluate_report_corpus(
     authority_time = (
         datetime.fromisoformat(time_authority["observed_at"])
         if time_authority["validated"]
-        else datetime.now(UTC)
+        else governed_now()
     )
     authority = _corpus_authority(document, corpus_path, authority_time)
     replay_receipt = _consume_effectiveness_replay(
@@ -94,6 +95,7 @@ def evaluate_report_corpus(
         replay_query_budget,
     )
     _validate_clean_paths(labels, report_root)
+    _validate_unique_finding_assignments(labels, findings)
     outcomes = [_evaluate_label(label, findings) for label in labels]
     counts = {
         name: sum(outcome["outcome"] == name for outcome in outcomes)
@@ -175,6 +177,8 @@ def _labels(document: dict[str, Any]) -> list[dict[str, Any]]:
         raise ValueError(f"effectiveness corpus exceeds {_MAX_LABELS} labels")
     labels: list[dict[str, Any]] = []
     identifiers: set[str] = set()
+    match_identities: set[bytes] = set()
+    fixture_identities: set[str] = set()
     for value in values:
         if not isinstance(value, dict):
             raise TypeError("effectiveness corpus labels must be objects")
@@ -206,6 +210,10 @@ def _labels(document: dict[str, Any]) -> list[dict[str, Any]]:
             or ".." in Path(normalized["path"]).parts
         ):
             raise ValueError("effectiveness corpus paths must be repository-relative")
+        match_identity = canonical_bytes(normalized)
+        if match_identity in match_identities:
+            raise ValueError("effectiveness corpus match predicates must be unique")
+        match_identities.add(match_identity)
         identifiers.add(identifier)
         label = {"id": identifier, "expected": expectation, "match": normalized}
         if version == "2.0":
@@ -219,6 +227,7 @@ def _labels(document: dict[str, Any]) -> list[dict[str, Any]]:
                 "boundary_type",
                 "severity",
                 "mutation_operator",
+                "fixture_sha256",
             }
             if set(value) != required:
                 raise ValueError("governed effectiveness label fields do not match")
@@ -235,7 +244,14 @@ def _labels(document: dict[str, Any]) -> list[dict[str, Any]]:
             }
             if any(not item or len(item) > 160 for item in strata.values()):
                 raise ValueError("governed effectiveness label strata are invalid")
+            fixture_sha256 = str(value.get("fixture_sha256") or "").casefold()
+            if not _digest(fixture_sha256) or fixture_sha256 in fixture_identities:
+                raise ValueError(
+                    "governed effectiveness fixture identities must be unique digests"
+                )
+            fixture_identities.add(fixture_sha256)
             label["strata"] = strata
+            label["fixture_sha256"] = fixture_sha256
         labels.append(label)
     return labels
 
@@ -997,6 +1013,29 @@ def _evaluate_label(
         "matching_findings_omitted": max(0, len(matching) - _MAX_MATCHES_PER_LABEL),
         **({"strata": label["strata"]} if "strata" in label else {}),
     }
+
+
+def _validate_unique_finding_assignments(
+    labels: list[dict[str, Any]], findings: list[dict[str, Any]]
+) -> None:
+    assignments: dict[str, list[str]] = {}
+    for finding in findings:
+        finding_id = str(finding.get("finding_id") or "unknown")
+        matched = [
+            str(label["id"])
+            for label in labels
+            if _finding_matches(finding, label["match"])
+        ]
+        if len(matched) > 1:
+            assignments[finding_id] = matched
+    if assignments:
+        detail = ", ".join(
+            f"{finding_id}: {labels}"
+            for finding_id, labels in sorted(assignments.items())[:10]
+        )
+        raise ValueError(
+            "effectiveness findings must map to exactly one label; overlaps: " + detail
+        )
 
 
 def _finding_matches(finding: dict[str, Any], match: dict[str, str]) -> bool:

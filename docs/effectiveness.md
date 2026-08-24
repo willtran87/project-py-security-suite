@@ -1,6 +1,6 @@
 # Detection effectiveness and operational coverage
 
-Last reviewed: 2026-08-13
+Last reviewed: 2026-08-24
 
 The suite separates five questions that are often incorrectly collapsed into
 one score:
@@ -87,7 +87,9 @@ containers, Kubernetes, DAST, authorization, event handling, browser controls,
 IaC, workflow security, architecture, and unused code. Replace every template match
 with a reviewed fixture that is actually present in the scanned corpus. Require
 per-tool minimums in `release-check`; never count a label for a scanner that was
-unavailable or not applicable.
+unavailable or not applicable. This schema-1.0 file is deliberately a planning
+template, not governed release evidence; it cannot pass the production or release
+corpus gate unchanged.
 
 Every label needs a stable ID, an expected `finding` or `clean` result, and at
 least one exact discriminator: tool, native rule, repository-relative path, or
@@ -113,8 +115,12 @@ deployment supplies the trusted key IDs, allowed roles, organization mapping,
 and lifecycle policy through the same protected authority environment used by
 the assurance profile; corpus files cannot authorize their own signers.
 
-Every governed label also declares CWE, language, parser variant, boundary
-type, severity, and mutation operator. Release readiness recomputes those
+Every governed label also declares the exact `fixture_sha256`, CWE, language,
+parser variant, boundary type, severity, and mutation operator. The evaluator
+rejects duplicate normalized match predicates and rejects a report finding that
+matches more than one label. These checks prevent duplicated cases, overlapping
+selectors, or one broad finding from inflating coverage and recall. Release
+readiness recomputes those
 strata from the exact label outcomes and requires at least five CWEs, two
 languages, two parser variants, three boundary types, three severities, and two
 non-`none` mutation operators. Every named required tool must have both a

@@ -1077,6 +1077,15 @@ def run_command(
                 time.sleep(0.01)
             if process.poll() is None:
                 process.wait(timeout=10)
+            if not scratch_limit_exceeded and _directory_size_exceeds(
+                private_root, scratch_limit
+            ):
+                # A POSIX RLIMIT_FSIZE can stop a writer exactly at the byte
+                # ceiling before the polling loop observes a larger file.  A
+                # final inclusive accounting pass makes that enforcement
+                # visible in the retained execution result on every platform.
+                scratch_limit_exceeded = True
+                terminated = terminate_tree() or process.poll() is not None
         except BaseException:
             terminate_tree()
             raise
@@ -1306,7 +1315,7 @@ def _directory_size_exceeds(root: Path, maximum: int) -> bool:
                     pending.append(Path(child.path))
                 elif child.is_file(follow_symlinks=False):
                     total += child.stat(follow_symlinks=False).st_size
-                    if total > maximum:
+                    if total >= maximum:
                         return True
             except OSError:
                 continue

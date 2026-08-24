@@ -328,10 +328,30 @@
     },
     "control_proof": {
       "type": "object", "additionalProperties": false,
-      "required": ["schema_version", "controls", "proof_sha256"],
+      "required": ["schema_version", "controls", "case_ledger", "proof_sha256"],
       "properties": {
         "schema_version": {"const": "1.0"},
         "proof_sha256": {"$ref": "#/$defs/digest"},
+        "case_ledger": {
+          "type": "array", "minItems": 1, "maxItems": 10000,
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["id", "target_id", "role", "control", "expected", "observed", "severity", "classification"],
+            "properties": {
+              "id": {"type": "string", "minLength": 1, "maxLength": 160},
+              "target_id": {"type": "string", "minLength": 1, "maxLength": 200},
+              "role": {"type": "string", "minLength": 1, "maxLength": 100},
+              "control": {"type": "string", "minLength": 1, "maxLength": 100},
+              "expected": {"type": "string", "minLength": 1, "maxLength": 40},
+              "observed": {"type": "string", "minLength": 1, "maxLength": 40},
+              "severity": {"type": "string", "minLength": 1, "maxLength": 20},
+              "classification": {"type": "string", "minLength": 1, "maxLength": 160},
+              "rule_id": {"type": "string", "minLength": 1, "maxLength": 200},
+              "stratum": {"type": "string", "minLength": 1, "maxLength": 160},
+              "mutation_operator": {"type": "string", "maxLength": 160}
+            }
+          }
+        },
         "controls": {
           "type": "object", "minProperties": 1, "maxProperties": 256,
           "additionalProperties": {
@@ -349,7 +369,7 @@
     },
     "surface_proof_source": {
       "type": "object", "additionalProperties": false,
-      "required": ["kind", "snapshot_sha256", "collector_id", "collector_signer_id", "collector_organization", "adapter_sha256", "endpoint_identity_sha256", "query_sha256", "pages_expected", "pages_observed", "page_receipts_sha256", "server_total_records", "records_observed", "liveness_probes", "server_collector_id", "server_signer_id", "server_organization", "collected_at", "collector_subject", "collector_receipt", "server_subject", "server_receipt"],
+      "required": ["kind", "snapshot_sha256", "collector_id", "collector_signer_id", "collector_organization", "adapter_sha256", "endpoint_identity_sha256", "query_sha256", "pages_expected", "pages_observed", "page_receipts_sha256", "page_receipts_base64", "server_total_records", "records_observed", "liveness_probes", "server_collector_id", "server_signer_id", "server_organization", "collected_at", "collector_subject", "collector_receipt", "server_subject", "server_receipt"],
       "properties": {
         "kind": {"enum": ["runtime", "gateway", "service-mesh", "cloud-control-plane"]},
         "snapshot_sha256": {"$ref": "#/$defs/digest"},
@@ -362,6 +382,7 @@
         "pages_expected": {"type": "integer", "minimum": 1},
         "pages_observed": {"type": "integer", "minimum": 1},
         "page_receipts_sha256": {"$ref": "#/$defs/digest"},
+        "page_receipts_base64": {"type": "string", "minLength": 1, "maxLength": 89478488, "contentEncoding": "base64"},
         "server_total_records": {"type": "integer", "minimum": 1},
         "records_observed": {"type": "integer", "minimum": 1},
         "liveness_probes": {"type": "integer", "minimum": 1},

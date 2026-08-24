@@ -332,7 +332,44 @@ def _verify_transparency(
         expected,
         int(str(signed["generation"])),
     )
+    required_anchor = (
+        os.environ.get(
+            "PYSEC_REQUIRE_EXTERNAL_FAILURE_DOMAIN_STATE_CHECKPOINT", ""
+        ).strip()
+        == "1"
+        or os.environ.get("PYSEC_REQUIRE_HARDENED_RELEASE_EVIDENCE", "").strip() == "1"
+    )
     if state == current:
+        if getattr(_REGISTRY_ANCHOR, "active", False):
+            return
+        stored_subject, _retained = _checkpoint_anchor(
+            Path(state_path), str(value["log_id"])
+        )
+        if not stored_subject:
+            if required_anchor:
+                raise ValueError(
+                    "failure-domain registry external checkpoint revalidation is unavailable"
+                )
+            return
+        parsed_subject = strict_loads(stored_subject)
+        if not isinstance(parsed_subject, dict):
+            raise ValueError("failure-domain registry checkpoint subject is invalid")
+        from .checkpoint_authority import publish_checkpoint
+
+        observed_subject = _checkpoint_observation_subject(
+            parsed_subject, required=required_anchor
+        )
+        _REGISTRY_ANCHOR.active = True
+        try:
+            retained = publish_checkpoint(
+                "PYSEC_FAILURE_DOMAIN_STATE_CHECKPOINT",
+                observed_subject,
+                required=required_anchor,
+            )
+        finally:
+            _REGISTRY_ANCHOR.active = False
+        if retained is not None:
+            _refresh_checkpoint_anchor(Path(state_path), str(value["log_id"]), retained)
         return
     previous_size, previous_root, previous_generation = state
     if (
@@ -353,34 +390,31 @@ def _verify_transparency(
         # registry.  Reentrant verification must validate the same transition but
         # leave publication and mutation to the outer transaction.
         return
-    required_anchor = (
-        os.environ.get(
-            "PYSEC_REQUIRE_EXTERNAL_FAILURE_DOMAIN_STATE_CHECKPOINT", ""
-        ).strip()
-        == "1"
-        or os.environ.get("PYSEC_REQUIRE_HARDENED_RELEASE_EVIDENCE", "").strip() == "1"
-    )
     from .checkpoint_authority import publish_checkpoint
 
+    base_subject: dict[str, object] = {
+        "schema_version": "1.0",
+        "namespace": "failure-domain-registry",
+        "log_id": str(value["log_id"]),
+        "previous": {
+            "tree_size": previous_size,
+            "root_sha256": previous_root,
+            "generation": previous_generation,
+        },
+        "proposed": {
+            "tree_size": current[0],
+            "root_sha256": current[1],
+            "generation": current[2],
+        },
+    }
+    observed_subject = _checkpoint_observation_subject(
+        base_subject, required=required_anchor
+    )
     _REGISTRY_ANCHOR.active = True
     try:
-        publish_checkpoint(
+        retained = publish_checkpoint(
             "PYSEC_FAILURE_DOMAIN_STATE_CHECKPOINT",
-            {
-                "schema_version": "1.0",
-                "namespace": "failure-domain-registry",
-                "log_id": str(value["log_id"]),
-                "previous": {
-                    "tree_size": previous_size,
-                    "root_sha256": previous_root,
-                    "generation": previous_generation,
-                },
-                "proposed": {
-                    "tree_size": current[0],
-                    "root_sha256": current[1],
-                    "generation": current[2],
-                },
-            },
+            observed_subject,
             required=required_anchor,
         )
     finally:
@@ -390,6 +424,8 @@ def _verify_transparency(
         str(value["log_id"]),
         expected=state,
         current=current,
+        checkpoint_subject=base_subject,
+        checkpoint_receipt=retained,
     )
 
 
@@ -457,11 +493,7 @@ def _checkpoint_state(path: Path, log_id: str) -> tuple[int, str, int]:
     try:
         connection.execute("PRAGMA journal_mode=WAL")
         connection.execute("PRAGMA synchronous=FULL")
-        connection.execute(
-            "CREATE TABLE IF NOT EXISTS checkpoint "
-            "(log_id TEXT PRIMARY KEY, size INTEGER NOT NULL, root TEXT NOT NULL, "
-            "generation INTEGER NOT NULL)"
-        )
+        _ensure_checkpoint_table(connection)
         row = connection.execute(
             "SELECT size, root, generation FROM checkpoint WHERE log_id=?", (log_id,)
         ).fetchone()
@@ -476,10 +508,13 @@ def _advance_checkpoint_state(
     *,
     expected: tuple[int, str, int],
     current: tuple[int, str, int],
+    checkpoint_subject: dict[str, object],
+    checkpoint_receipt: dict[str, object] | None,
 ) -> None:
     connection = sqlite3.connect(path, timeout=30, isolation_level=None)
     try:
         connection.execute("PRAGMA synchronous=FULL")
+        _ensure_checkpoint_table(connection)
         connection.execute("BEGIN IMMEDIATE")
         row = connection.execute(
             "SELECT size, root, generation FROM checkpoint WHERE log_id=?", (log_id,)
@@ -491,10 +526,22 @@ def _advance_checkpoint_state(
             connection.execute("ROLLBACK")
             raise ValueError("failure-domain registry state advanced concurrently")
         connection.execute(
-            "INSERT INTO checkpoint(log_id, size, root, generation) VALUES (?, ?, ?, ?) "
+            "INSERT INTO checkpoint(log_id, size, root, generation, checkpoint_subject, "
+            "checkpoint_receipt) VALUES (?, ?, ?, ?, ?, ?) "
             "ON CONFLICT(log_id) DO UPDATE SET size=excluded.size, "
-            "root=excluded.root, generation=excluded.generation",
-            (log_id, *current),
+            "root=excluded.root, generation=excluded.generation, "
+            "checkpoint_subject=excluded.checkpoint_subject, "
+            "checkpoint_receipt=excluded.checkpoint_receipt",
+            (
+                log_id,
+                *current,
+                canonical_bytes(checkpoint_subject).decode("utf-8"),
+                (
+                    canonical_bytes(checkpoint_receipt).decode("utf-8")
+                    if checkpoint_receipt is not None
+                    else ""
+                ),
+            ),
         )
         connection.execute("COMMIT")
     finally:
@@ -503,6 +550,76 @@ def _advance_checkpoint_state(
         os.chmod(path, 0o600)
     except OSError:
         pass
+
+
+def _ensure_checkpoint_table(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        "CREATE TABLE IF NOT EXISTS checkpoint "
+        "(log_id TEXT PRIMARY KEY, size INTEGER NOT NULL, root TEXT NOT NULL, "
+        "generation INTEGER NOT NULL, checkpoint_subject TEXT NOT NULL DEFAULT '', "
+        "checkpoint_receipt TEXT NOT NULL DEFAULT '')"
+    )
+    columns = {
+        str(item[1]) for item in connection.execute("PRAGMA table_info(checkpoint)")
+    }
+    if "checkpoint_subject" not in columns:
+        connection.execute(
+            "ALTER TABLE checkpoint ADD COLUMN checkpoint_subject TEXT NOT NULL DEFAULT ''"
+        )
+    if "checkpoint_receipt" not in columns:
+        connection.execute(
+            "ALTER TABLE checkpoint ADD COLUMN checkpoint_receipt TEXT NOT NULL DEFAULT ''"
+        )
+
+
+def _checkpoint_anchor(path: Path, log_id: str) -> tuple[str, str]:
+    connection = sqlite3.connect(path, timeout=30, isolation_level=None)
+    try:
+        connection.execute("PRAGMA synchronous=FULL")
+        _ensure_checkpoint_table(connection)
+        row = connection.execute(
+            "SELECT checkpoint_subject, checkpoint_receipt FROM checkpoint WHERE log_id=?",
+            (log_id,),
+        ).fetchone()
+        return ("", "") if row is None else (str(row[0]), str(row[1]))
+    finally:
+        connection.close()
+
+
+def _refresh_checkpoint_anchor(
+    path: Path, log_id: str, receipt: dict[str, object]
+) -> None:
+    connection = sqlite3.connect(path, timeout=30, isolation_level=None)
+    try:
+        connection.execute("PRAGMA synchronous=FULL")
+        _ensure_checkpoint_table(connection)
+        connection.execute("BEGIN IMMEDIATE")
+        updated = connection.execute(
+            "UPDATE checkpoint SET checkpoint_receipt=? WHERE log_id=?",
+            (canonical_bytes(receipt).decode("utf-8"), log_id),
+        ).rowcount
+        if updated != 1:
+            connection.execute("ROLLBACK")
+            raise ValueError("failure-domain registry checkpoint disappeared")
+        connection.execute("COMMIT")
+    finally:
+        connection.close()
+
+
+def _checkpoint_observation_subject(
+    subject: dict[str, object], *, required: bool
+) -> dict[str, object]:
+    challenge = (
+        os.environ.get("PYSEC_SCAN_TIME_CHALLENGE_SHA256", "").strip().casefold()
+    )
+    if required and not _digest(challenge):
+        raise ValueError(
+            "external state checkpoint requires a trusted observation challenge"
+        )
+    return {
+        **subject,
+        **({"observation_challenge_sha256": challenge} if challenge else {}),
+    }
 
 
 def _verify_consistency(

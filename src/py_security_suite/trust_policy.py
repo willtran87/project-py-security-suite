@@ -452,16 +452,62 @@ def _advance_policy_state(
         connection.execute(
             "CREATE TABLE IF NOT EXISTS policy "
             "(identity INTEGER PRIMARY KEY CHECK(identity=1), generation INTEGER NOT NULL, "
-            "policy_sha256 TEXT NOT NULL)"
+            "policy_sha256 TEXT NOT NULL, checkpoint_subject TEXT NOT NULL DEFAULT '', "
+            "checkpoint_receipt TEXT NOT NULL DEFAULT '')"
         )
+        columns = {
+            str(item[1]) for item in connection.execute("PRAGMA table_info(policy)")
+        }
+        if "checkpoint_subject" not in columns:
+            connection.execute(
+                "ALTER TABLE policy ADD COLUMN checkpoint_subject TEXT NOT NULL DEFAULT ''"
+            )
+        if "checkpoint_receipt" not in columns:
+            connection.execute(
+                "ALTER TABLE policy ADD COLUMN checkpoint_receipt TEXT NOT NULL DEFAULT ''"
+            )
         connection.execute("BEGIN IMMEDIATE")
         row = connection.execute(
-            "SELECT generation, policy_sha256 FROM policy WHERE identity=1"
+            "SELECT generation, policy_sha256, checkpoint_subject, checkpoint_receipt "
+            "FROM policy WHERE identity=1"
         ).fetchone()
         current = (0, "") if row is None else (int(row[0]), str(row[1]))
         proposed = (int(signed["generation"]), policy_sha256)
         previous = str(signed.get("previous_policy_sha256") or "")
+        anchor_required = (
+            os.environ.get("PYSEC_REQUIRE_EXTERNAL_POLICY_STATE_CHECKPOINT", "").strip()
+            == "1"
+            or os.environ.get("PYSEC_REQUIRE_HARDENED_RELEASE_EVIDENCE", "").strip()
+            == "1"
+        )
         if proposed == current:
+            if row is None or not str(row[2]):
+                if anchor_required:
+                    connection.execute("ROLLBACK")
+                    raise ValueError(
+                        "explicit trust policy external checkpoint revalidation is unavailable"
+                    )
+                connection.execute("COMMIT")
+                return
+            base_subject = strict_loads(str(row[2]))
+            if not isinstance(base_subject, dict):
+                connection.execute("ROLLBACK")
+                raise ValueError("explicit trust policy checkpoint subject is invalid")
+            from .checkpoint_authority import publish_checkpoint
+
+            observed_subject = _checkpoint_observation_subject(
+                base_subject, required=anchor_required
+            )
+            retained = publish_checkpoint(
+                "PYSEC_TRUST_POLICY_STATE_CHECKPOINT",
+                observed_subject,
+                required=anchor_required,
+            )
+            if retained is not None:
+                connection.execute(
+                    "UPDATE policy SET checkpoint_receipt=? WHERE identity=1",
+                    (canonical_bytes(retained).decode("utf-8"),),
+                )
             connection.execute("COMMIT")
             return
         if proposed[0] <= current[0] or previous != current[1]:
@@ -469,32 +515,40 @@ def _advance_policy_state(
             raise ValueError("explicit trust policy rollback or fork detected")
         from .checkpoint_authority import publish_checkpoint
 
-        publish_checkpoint(
-            "PYSEC_TRUST_POLICY_STATE_CHECKPOINT",
-            {
-                "schema_version": "1.0",
-                "namespace": "explicit-trust-policy",
-                "previous": {
-                    "generation": current[0],
-                    "policy_sha256": current[1],
-                },
-                "proposed": {
-                    "generation": proposed[0],
-                    "policy_sha256": proposed[1],
-                },
+        base_subject = {
+            "schema_version": "1.0",
+            "namespace": "explicit-trust-policy",
+            "previous": {
+                "generation": current[0],
+                "policy_sha256": current[1],
             },
-            required=os.environ.get(
-                "PYSEC_REQUIRE_EXTERNAL_POLICY_STATE_CHECKPOINT", ""
-            ).strip()
-            == "1"
-            or os.environ.get("PYSEC_REQUIRE_HARDENED_RELEASE_EVIDENCE", "").strip()
-            == "1",
+            "proposed": {
+                "generation": proposed[0],
+                "policy_sha256": proposed[1],
+            },
+        }
+        observed_subject = _checkpoint_observation_subject(
+            base_subject, required=anchor_required
+        )
+        retained = publish_checkpoint(
+            "PYSEC_TRUST_POLICY_STATE_CHECKPOINT",
+            observed_subject,
+            required=anchor_required,
         )
         connection.execute(
-            "INSERT INTO policy(identity, generation, policy_sha256) VALUES (1, ?, ?) "
+            "INSERT INTO policy(identity, generation, policy_sha256, checkpoint_subject, "
+            "checkpoint_receipt) VALUES (1, ?, ?, ?, ?) "
             "ON CONFLICT(identity) DO UPDATE SET generation=excluded.generation, "
-            "policy_sha256=excluded.policy_sha256",
-            proposed,
+            "policy_sha256=excluded.policy_sha256, "
+            "checkpoint_subject=excluded.checkpoint_subject, "
+            "checkpoint_receipt=excluded.checkpoint_receipt",
+            (
+                *proposed,
+                canonical_bytes(base_subject).decode("utf-8"),
+                canonical_bytes(retained).decode("utf-8")
+                if retained is not None
+                else "",
+            ),
         )
         connection.execute("COMMIT")
     finally:
@@ -503,6 +557,22 @@ def _advance_policy_state(
         os.chmod(path, 0o600)
     except OSError:
         pass
+
+
+def _checkpoint_observation_subject(
+    subject: dict[str, Any], *, required: bool
+) -> dict[str, Any]:
+    challenge = (
+        os.environ.get("PYSEC_SCAN_TIME_CHALLENGE_SHA256", "").strip().casefold()
+    )
+    if required and not _digest(challenge):
+        raise ValueError(
+            "external state checkpoint requires a trusted observation challenge"
+        )
+    return {
+        **subject,
+        **({"observation_challenge_sha256": challenge} if challenge else {}),
+    }
 
 
 def _verify_policy_signature(signed: dict[str, Any], signature: dict[str, Any]) -> None:

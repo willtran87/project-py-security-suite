@@ -3,13 +3,14 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
 from .models import Finding, FindingStatus
 from .path_safety import read_regular_file
 from .strict_json import loads as strict_loads
+from .trusted_observation import governed_now
 
 
 _MAX_FILE_BYTES = 1024 * 1024
@@ -28,7 +29,7 @@ def apply_risk_acceptances(
     """Apply bounded, expiring acceptances and return fail-closed policy errors."""
     if path is None:
         return []
-    current = today or datetime.now(UTC).date()
+    current = today or governed_now().date()
     try:
         document, digest = _load_document(path)
         if expected_sha256 and digest != expected_sha256:
@@ -95,7 +96,7 @@ def validate_risk_acceptances(
     """Validate acceptance governance without requiring current findings."""
     if path is None:
         return []
-    current = today or datetime.now(UTC).date()
+    current = today or governed_now().date()
     try:
         document, digest = _load_document(path)
         if expected_sha256 and digest != expected_sha256:

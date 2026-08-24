@@ -5,6 +5,7 @@ import pytest
 from companion.semantic_assurance import REQUIRED_CONTROLS, analyze
 from companion.strict_json import dumps as strict_dumps
 from py_security_suite.control_proof import verify_control_proof
+from py_security_suite.strict_json import canonical_bytes
 import hashlib
 
 
@@ -60,6 +61,26 @@ def test_semantic_control_proof_rejects_feature_label_tampering() -> None:
     proof = result["execution"]["control_proof"]
     proof["controls"]["message-signing"]["cases"] = 2
     with pytest.raises(ValueError, match="commitment"):
+        verify_control_proof(proof, REQUIRED_CONTROLS[kind])
+
+
+def test_semantic_control_proof_recomputes_records_from_case_ledger() -> None:
+    kind = "event-security"
+    cases = [_case(control) for control in sorted(REQUIRED_CONTROLS[kind])]
+    result = analyze(
+        {
+            "schema_version": "1.0",
+            "kind": kind,
+            "cases": cases,
+            "canary_id": cases[0]["id"],
+        },
+        kind,
+    )
+    proof = result["execution"]["control_proof"]
+    proof["case_ledger"][0]["observed"] = "deny"
+    subject = {name: value for name, value in proof.items() if name != "proof_sha256"}
+    proof["proof_sha256"] = hashlib.sha256(canonical_bytes(subject)).hexdigest()
+    with pytest.raises(ValueError, match="case ledger"):
         verify_control_proof(proof, REQUIRED_CONTROLS[kind])
 
 

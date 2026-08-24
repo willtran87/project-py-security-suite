@@ -13,6 +13,7 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 from .strict_json import canonical_bytes, loads as strict_loads
+from .trusted_observation import governed_now
 from .trusted_time import verify_rfc3161
 
 
@@ -64,7 +65,7 @@ def load_assurance_profile(
             trusted_time["trusted_time_observed_at"], "trusted_time observed_at"
         )
     else:
-        observed_at = (at or datetime.now(UTC)).astimezone(UTC)
+        observed_at = (at or governed_now()).astimezone(UTC)
     if (
         issued_at > observed_at + timedelta(minutes=5)
         or expires_at <= observed_at
