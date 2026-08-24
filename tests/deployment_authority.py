@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import json
+import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -9,6 +11,53 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from py_security_suite.strict_json import canonical_bytes
+
+
+def pinned_command_sandbox_environment(
+    root: Path, *, prefix: str, allowed_endpoints: list[str]
+) -> tuple[dict[str, str], dict[str, object], dict[str, str]]:
+    """Return a pinned pass-through launcher contract for protocol tests."""
+
+    launcher = root / f"{prefix.casefold()}-sandbox.py"
+    launcher.write_text(
+        "import subprocess,sys\n"
+        "raise SystemExit(subprocess.run(sys.argv[1:]).returncode)\n",
+        encoding="utf-8",
+    )
+    executable_sha256 = hashlib.sha256(Path(sys.executable).read_bytes()).hexdigest()
+    mtls_identity = "d" * 64
+    launcher_argv = ["-I", str(launcher)]
+    sandbox_identity = hashlib.sha256(
+        canonical_bytes(
+            {
+                "launcher_sha256": executable_sha256,
+                "launcher_argv": launcher_argv,
+                "allowed_endpoints": allowed_endpoints,
+                "mtls_identity_sha256": mtls_identity,
+            }
+        )
+    ).hexdigest()
+    environment = {
+        f"{prefix}_ALLOWED_ENDPOINTS_JSON": json.dumps(allowed_endpoints),
+        f"{prefix}_MTLS_IDENTITY_SHA256": mtls_identity,
+        f"{prefix}_SANDBOX_IDENTITY_SHA256": sandbox_identity,
+        f"{prefix}_SANDBOX_COMMAND_JSON": json.dumps([sys.executable, *launcher_argv]),
+        f"{prefix}_SANDBOX_EXECUTABLE_SHA256": executable_sha256,
+    }
+    context: dict[str, object] = {
+        "schema_version": "1.0",
+        "executable_sha256": executable_sha256,
+        "allowed_endpoints": allowed_endpoints,
+        "mtls_identity_sha256": mtls_identity,
+        "sandbox_identity_sha256": sandbox_identity,
+        "sandbox_executable_sha256": executable_sha256,
+        "sandbox_launcher_argv": launcher_argv,
+    }
+    asset = {
+        "path": str(launcher),
+        "sha256": hashlib.sha256(launcher.read_bytes()).hexdigest(),
+    }
+    return environment, context, asset
 
 
 def operation_receipt(

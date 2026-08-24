@@ -1,5 +1,15 @@
 # Changelog
 
+- Close the remaining offline-verification gaps: execute every pinned helper
+  through a digest-bound launcher; retain launcher argv, endpoint/mTLS
+  transcripts, and original trusted verification time; require two independent
+  witnesses for external monotonic state; replay-protect every signed recovery
+  observation; retain compiler symbol/CFG/dataflow/interprocedural ledgers for
+  Python and polyglot sources; preserve Git allowed-signers bytes and actual
+  commit/tag signer ledgers; retain signed runtime inventory source documents;
+  and preserve complete requirements fixtures, mutations, and execution
+  materials for independent replay.
+
 - Require exact request-bound receipts from monotonic-state and KMS backends,
   bind pinned helper execution to endpoint, mTLS, sandbox, and executable
   identities, and retain predecessor state for offline fork verification. Add

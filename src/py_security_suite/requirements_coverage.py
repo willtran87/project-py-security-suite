@@ -255,6 +255,20 @@ def security_requirements_coverage_artifact(
         and item["requirements_mapped"] == item["requirements_in_catalog"]
         for item in catalogs
     )
+    execution_names = sorted(
+        {
+            str(assertion["execution_artifact"])
+            for record in records
+            if isinstance(record.get("assessment"), dict)
+            for assertion in record["assessment"].get("assertions", [])
+            if isinstance(assertion, dict) and assertion.get("execution_artifact")
+        }
+    )
+    procedure_executions = {
+        name: artifacts[name] for name in execution_names if name in artifacts
+    }
+    if len(procedure_executions) != len(execution_names):
+        raise ValueError("retained requirement procedure execution is missing")
     subject = {
         "schema_version": "1.0",
         "analysis": "versioned-security-requirements-evidence-crosswalk",
@@ -284,6 +298,7 @@ def security_requirements_coverage_artifact(
         "full_catalog_coverage": full_catalog_coverage,
         "evidence_policy": evidence_policy,
         "evidence_policy_authority_receipt": evidence_policy_authority,
+        "procedure_executions": procedure_executions,
         "complete": assessment_complete
         and full_catalog_coverage
         and organization_approved,
@@ -968,6 +983,13 @@ def _verify_procedure_execution(
         "mutation_operator",
         "mutation_parent_sha256",
         "execution_authority_receipt",
+        "argv",
+        "environment",
+        "runtime_manifest",
+        "assets_manifest",
+        "sandbox_policy",
+        "fixture",
+        "mutation_manifest",
     }
     if (
         not isinstance(execution, dict)
@@ -984,6 +1006,22 @@ def _verify_procedure_execution(
         or execution["result_artifact"] != assertion["artifact"]
         or execution["result_sha256"] != assertion["sha256"]
         or execution["stdout_sha256"] != execution["result_sha256"]
+        or execution["command_sha256"]
+        != hashlib.sha256(canonical_bytes(execution["argv"])).hexdigest()
+        or execution["argv_sha256"]
+        != hashlib.sha256(canonical_bytes(execution["argv"])).hexdigest()
+        or execution["environment_sha256"]
+        != hashlib.sha256(canonical_bytes(execution["environment"])).hexdigest()
+        or execution["runtime_sha256"]
+        != hashlib.sha256(canonical_bytes(execution["runtime_manifest"])).hexdigest()
+        or execution["assets_sha256"]
+        != hashlib.sha256(canonical_bytes(execution["assets_manifest"])).hexdigest()
+        or execution["sandbox_identity_sha256"]
+        != hashlib.sha256(canonical_bytes(execution["sandbox_policy"])).hexdigest()
+        or execution["fixture_sha256"]
+        != hashlib.sha256(canonical_bytes(execution["fixture"])).hexdigest()
+        or execution["mutation_sha256"]
+        != hashlib.sha256(canonical_bytes(execution["mutation_manifest"])).hexdigest()
         or any(
             not _digest(str(execution[name]))
             for name in (
@@ -1013,6 +1051,23 @@ def _verify_procedure_execution(
     finished = _timestamp(execution["finished_at"], "procedure finished_at")
     if finished < started or finished - started > timedelta(hours=24):
         raise ValueError("requirement procedure execution duration is invalid")
+    mutation = execution["mutation_manifest"]
+    if (
+        not isinstance(mutation, dict)
+        or set(mutation) != {"operator", "parent_fixture_sha256", "mutated_fixture"}
+        or mutation["operator"] != execution["mutation_operator"]
+        or mutation["parent_fixture_sha256"] != execution["fixture_sha256"]
+        or execution["mutation_parent_sha256"] != execution["fixture_sha256"]
+        or (
+            execution["mutation_operator"] == "baseline"
+            and mutation["mutated_fixture"] != execution["fixture"]
+        )
+        or (
+            execution["mutation_operator"] == "negative-control-mutation"
+            and mutation["mutated_fixture"] == execution["fixture"]
+        )
+    ):
+        raise ValueError("requirement mutation manifest is invalid or detached")
     subject = {
         name: value
         for name, value in execution.items()
@@ -1020,6 +1075,8 @@ def _verify_procedure_execution(
     }
     receipt = execution["execution_authority_receipt"]
     statement = receipt.get("statement") if isinstance(receipt, dict) else None
+    if not isinstance(statement, dict):
+        raise ValueError("requirement execution authority statement is unavailable")
     signer = str((statement or {}).get("signer_key_sha256") or "")
     challenge = (
         os.environ.get("PYSEC_SCAN_TIME_CHALLENGE_SHA256", "").strip().casefold()
@@ -1034,6 +1091,9 @@ def _verify_procedure_execution(
         challenge_sha256=challenge,
         expected_key_sha256=signer,
     )
+    receipt_issued = _timestamp(statement["issued_at"], "execution receipt issued_at")
+    if receipt_issued < finished or receipt_issued - finished > timedelta(minutes=5):
+        raise ValueError("requirement execution receipt does not bracket execution")
 
 
 def _replay_assertion(assertion: dict[str, Any], artifacts: dict[str, Any]) -> bool:

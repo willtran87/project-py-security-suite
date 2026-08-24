@@ -215,7 +215,9 @@ still execute in dynamic or connected companion stages:
    failover triggers and verifies their durable invariants through every observer.
    Each observer response is independently Ed25519-signed and binds its pinned
    host, organization, request, observation ID, state, recovery epoch, and
-   fencing token;
+   fencing token. Every observation is bound to the raw run-context digest,
+   run/deployment/challenge, recovery event, and trusted scan-time window and is
+   atomically consumed through `PYSEC_AUTHORIZATION_ORACLE_REPLAY_STATE_PATH`;
    the quorum identity is deployment-pinned through
    `PYSEC_AUTHORIZATION_ORACLE_QUORUM_SHA256`, and credentials cannot be shared.
    Restart and failover trigger responses must
@@ -324,7 +326,10 @@ function controls. Tree-sitter grammars provide AST-bound import and call
 extraction for supported non-Python source and retain the exact package version
 and parser-module digest. Governed polyglot admission additionally requires
 separately authorized compiler-frontend evidence, bound to each complete
-language file set, with symbol, CFG, dataflow, and interprocedural accounting.
+language file set (including Python), with complete symbol, CFG, dataflow, and
+interprocedural edge ledgers rather than aggregate counts alone. Publication
+recomputes each file-set, semantic-ledger, and graph digest before re-verifying
+the retained authority receipt.
 Templates record computed includes and explicit escaping
 bypasses, while notebooks and bytecode are parsed without executing target
 code. Git history qualification rejects shallow, partial, promisor, sparse,
@@ -334,14 +339,19 @@ ledger after bundle creation and materialization. Production and release
 require SHA-256 Git objects, a pinned Git verifier and security configuration,
 lifecycle-valid signers from at least two approved organizations, a good
 signature on every reachable commit and tag, and a signed manifest of the full
-ref/object/configuration state.
+ref/object/configuration state. `source-inventory.json` retains that manifest,
+its portable authority receipt, the exact allowed-signers bytes, lifecycle
+policy, and the observed commit/tag signer ledger for clean-host replay.
 
 Encrypted native evidence requires an authority-signed hardware-KMS envelope
 receipt binding the exact scan challenge and command request, plaintext object
 and ephemeral data-key digests, non-exportable
 wrapping-key and hardware assertions, wrapped-key digest, operation ID, store,
 and retention policy. The signed receipt and its portable authority envelope
-are retained with the ciphertext commitment.
+are retained with the ciphertext commitment. The KMS operation must pass
+through its digest-pinned launcher and preserve an mTLS/TLS 1.3 transcript,
+endpoint allowlist, peer identity, and launcher identity that publication
+revalidates offline.
 
 ## Promotion evidence
 

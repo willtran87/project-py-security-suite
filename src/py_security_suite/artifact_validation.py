@@ -3,7 +3,7 @@ from __future__ import annotations
 from importlib.resources import files
 import hashlib
 import base64
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from jsonschema import Draft202012Validator, FormatChecker  # type: ignore[import-untyped]
@@ -13,6 +13,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from .strict_json import loads as strict_loads
 from .strict_json import canonical_bytes
 from .deployment_receipt import verify_portable_receipt
+from .operation_receipt import verify_operation_receipt
 
 
 _ARTIFACT_SCHEMAS = {
@@ -99,6 +100,10 @@ def validate_governed_artifacts(artifacts: dict[str, Any] | None) -> dict[str, s
             _validate_requirements_crosswalk(value)
         elif name == "runtime-trace-correlation.json":
             _validate_runtime_trace_accounting(value)
+        elif name == "boundary-graph.json":
+            _validate_boundary_graph_receipts(value)
+        elif name == "source-inventory.json":
+            _validate_git_provenance(value)
         elif name == "isolation-probe.json":
             _validate_isolation_receipt(value)
         elif name == "checkov-iac.json":
@@ -183,6 +188,44 @@ def _validate_runtime_trace_accounting(value: object) -> None:
             value["coverage_policy_authority_receipt"],
             "runtime-coverage-policy",
         )
+        observed_at = _portable_verified_at(value["authority_receipt"])
+        collector_subject = {
+            "schema_version": "1.0",
+            "deployment_sha256": evidence["deployment_sha256"],
+            "boundary_graph_sha256": evidence["boundary_graph_sha256"],
+            "collector_identity_sha256": evidence["collector_identity_sha256"],
+            "metrics": evidence["collector_metrics"],
+            "traces_sha256": hashlib.sha256(
+                canonical_bytes(evidence["traces"])
+            ).hexdigest(),
+        }
+        _reverify_operation(
+            collector_subject,
+            evidence["collector_operation_receipt"],
+            "runtime-collector-accounting",
+            observed_at,
+            str(evidence["collector_authority_key_sha256"]),
+        )
+        for inventory in value["coverage_policy"]["source_inventories"]:
+            if (
+                inventory["artifact_sha256"]
+                != hashlib.sha256(
+                    canonical_bytes(inventory["source_artifact"])
+                ).hexdigest()
+            ):
+                raise ValueError("runtime source inventory artifact is detached")
+            subject = {
+                name: item
+                for name, item in inventory.items()
+                if name != "operation_receipt"
+            }
+            _reverify_operation(
+                subject,
+                inventory["operation_receipt"],
+                f"runtime-route-inventory:{inventory['kind']}",
+                _portable_verified_at(value["coverage_policy_authority_receipt"]),
+                str(inventory["authority_key_sha256"]),
+            )
 
 
 def _validate_isolation_receipt(value: object) -> None:
@@ -205,7 +248,7 @@ def _reverify_portable(subject: object, receipt: object, purpose: str) -> None:
     statement = receipt["statement"]
     try:
         observed = datetime.fromisoformat(
-            str(statement["issued_at"]).replace("Z", "+00:00")
+            str(receipt["verified_at"]).replace("Z", "+00:00")
         )
     except (KeyError, ValueError) as exc:
         raise ValueError("portable authority receipt time is invalid") from exc
@@ -216,6 +259,275 @@ def _reverify_portable(subject: object, receipt: object, purpose: str) -> None:
         observed_at=observed,
         challenge_sha256=str(statement.get("challenge_sha256") or ""),
     )
+
+
+def _portable_verified_at(receipt: object) -> datetime:
+    if not isinstance(receipt, dict):
+        raise ValueError("portable receipt is absent")
+    try:
+        value = datetime.fromisoformat(
+            str(receipt["verified_at"]).replace("Z", "+00:00")
+        )
+    except (KeyError, ValueError) as exc:
+        raise ValueError("portable receipt verification time is invalid") from exc
+    if value.tzinfo is None:
+        raise ValueError("portable receipt verification time lacks timezone")
+    return value
+
+
+def _reverify_operation(
+    subject: object,
+    receipt: object,
+    purpose: str,
+    observed_at: datetime,
+    expected_key_sha256: str,
+) -> None:
+    statement = receipt.get("statement") if isinstance(receipt, dict) else None
+    challenge = str((statement or {}).get("challenge_sha256") or "")
+    verify_operation_receipt(
+        subject,
+        receipt,
+        purpose=purpose,
+        observed_at=observed_at,
+        challenge_sha256=challenge,
+        expected_key_sha256=expected_key_sha256,
+    )
+
+
+def _validate_boundary_graph_receipts(value: object) -> None:
+    if not isinstance(value, dict):
+        raise TypeError("boundary graph must be an object")
+    evidence = value.get("compiler_semantic_evidence")
+    receipt = value.get("compiler_semantic_authority_receipt")
+    if bool(evidence) != bool(receipt):
+        raise ValueError("compiler semantic authority receipt is incomplete")
+    subject = {name: item for name, item in value.items() if name != "graph_sha256"}
+    if (
+        value.get("graph_sha256")
+        != hashlib.sha256(canonical_bytes(subject)).hexdigest()
+    ):
+        raise ValueError("boundary graph digest does not match")
+    file_sets = value.get("language_file_sets")
+    if not isinstance(file_sets, dict):
+        raise ValueError("boundary graph language file sets are invalid")
+    for file_set in file_sets.values():
+        if (
+            not isinstance(file_set, dict)
+            or file_set.get("files_sha256")
+            != hashlib.sha256(canonical_bytes(file_set.get("files"))).hexdigest()
+        ):
+            raise ValueError("boundary graph language file ledger is detached")
+    if evidence:
+        from .boundary_graph import verify_compiler_semantic_evidence
+
+        verify_compiler_semantic_evidence(evidence, file_sets)
+        _reverify_portable(evidence, receipt, "compiler-semantic-evidence")
+
+
+def _validate_git_provenance(value: object) -> None:
+    if not isinstance(value, dict):
+        raise TypeError("source inventory must be an object")
+    provenance = value.get("git_provenance")
+    if provenance is None:
+        return
+    if not isinstance(provenance, list) or not provenance:
+        raise ValueError("retained Git provenance is empty")
+    paths: set[str] = set()
+    for item in provenance:
+        if not isinstance(item, dict) or set(item) != {
+            "path",
+            "schema_version",
+            "manifest",
+            "authority_receipt",
+        }:
+            raise ValueError("retained Git provenance fields do not match")
+        path = str(item["path"])
+        if path in paths or (
+            path != "." and (path.startswith("/") or ".." in path.split("/"))
+        ):
+            raise ValueError("retained Git provenance path is invalid")
+        paths.add(path)
+        manifest = item["manifest"]
+        if not isinstance(manifest, dict) or set(manifest) != {
+            "schema_version",
+            "git_executable_sha256",
+            "allowed_signers_file_sha256",
+            "allowed_signers_file_base64",
+            "signer_policy",
+            "signature_ledger",
+            "repository_state",
+        }:
+            raise ValueError("retained Git manifest fields do not match")
+        try:
+            allowed_signers = base64.b64decode(
+                str(manifest["allowed_signers_file_base64"]), validate=True
+            )
+        except (TypeError, ValueError) as exc:
+            raise ValueError("retained Git allowed-signers file is invalid") from exc
+        if hashlib.sha256(allowed_signers).hexdigest() != manifest.get(
+            "allowed_signers_file_sha256"
+        ):
+            raise ValueError("retained Git allowed-signers content is detached")
+        from .inventory import allowed_signer_fingerprints
+
+        _validate_git_signature_ledger(
+            manifest, allowed_signer_fingerprints(allowed_signers)
+        )
+        _reverify_portable(manifest, item["authority_receipt"], "git-ref-manifest")
+    if "." not in paths:
+        raise ValueError("retained Git provenance omits the superproject")
+
+
+def _validate_git_signature_ledger(
+    manifest: dict[str, Any], allowed_fingerprints: set[str]
+) -> None:
+    policy = manifest.get("signer_policy")
+    ledger = manifest.get("signature_ledger")
+    if (
+        not isinstance(policy, list)
+        or not isinstance(ledger, dict)
+        or set(ledger)
+        != {
+            "commits",
+            "tags",
+        }
+    ):
+        raise ValueError("retained Git signature policy is invalid")
+    identities: dict[str, tuple[str, datetime, datetime]] = {}
+    for item in policy:
+        if not isinstance(item, dict) or set(item) != {
+            "fingerprint",
+            "organization",
+            "not_before",
+            "not_after",
+        }:
+            raise ValueError("retained Git signer policy is invalid")
+        try:
+            start = datetime.fromisoformat(
+                str(item["not_before"]).replace("Z", "+00:00")
+            )
+            end = datetime.fromisoformat(str(item["not_after"]).replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise ValueError("retained Git signer lifecycle is invalid") from exc
+        fingerprint = str(item["fingerprint"]).casefold()
+        organization = str(item["organization"])
+        if (
+            len(fingerprint) < 16
+            or fingerprint in identities
+            or not organization
+            or start.tzinfo is None
+            or end.tzinfo is None
+            or start >= end
+        ):
+            raise ValueError("retained Git signer policy is invalid")
+        identities[fingerprint] = organization, start, end
+    if set(identities) - allowed_fingerprints:
+        raise ValueError("retained Git signer policy is detached from allowed signers")
+    repository_state = manifest.get("repository_state")
+    if not isinstance(repository_state, dict) or set(repository_state) != {
+        "refs",
+        "object_format",
+        "head",
+        "symbolic_head",
+        "replace_refs",
+        "security_config_sha256",
+        "alternates_sha256",
+        "reachable_objects_sha256",
+    }:
+        raise ValueError("retained Git repository state is invalid")
+    object_format = repository_state["object_format"]
+    digest_length = 64 if object_format == "sha256" else 0
+    refs = repository_state["refs"]
+    if (
+        not digest_length
+        or any(
+            len(str(manifest[name])) != 64
+            or any(
+                character not in "0123456789abcdef" for character in str(manifest[name])
+            )
+            for name in (
+                "git_executable_sha256",
+                "allowed_signers_file_sha256",
+            )
+        )
+        or not isinstance(refs, dict)
+        or not refs
+        or any(
+            not str(name).startswith("refs/")
+            or len(str(digest)) != digest_length
+            or any(character not in "0123456789abcdef" for character in str(digest))
+            for name, digest in refs.items()
+        )
+        or len(str(repository_state["head"])) != digest_length
+        or any(
+            character not in "0123456789abcdef"
+            for character in str(repository_state["head"])
+        )
+        or (
+            repository_state["symbolic_head"]
+            and repository_state["symbolic_head"] not in refs
+        )
+        or repository_state["replace_refs"]
+        or repository_state["alternates_sha256"]
+        or any(
+            len(str(repository_state[name])) != 64
+            or any(
+                character not in "0123456789abcdef"
+                for character in str(repository_state[name])
+            )
+            for name in ("security_config_sha256", "reachable_objects_sha256")
+        )
+    ):
+        raise ValueError("retained Git repository state is invalid")
+    commits = ledger["commits"]
+    tags = ledger["tags"]
+    if not isinstance(commits, list) or not commits or not isinstance(tags, list):
+        raise ValueError("retained Git signature ledger is invalid")
+    organizations: set[str] = set()
+    for kind, records, identity_name, time_name in (
+        ("commit", commits, "commit", "committed_at"),
+        ("tag", tags, "tag", "tagged_at"),
+    ):
+        seen: set[str] = set()
+        for record in records:
+            if not isinstance(record, dict) or set(record) != {
+                identity_name,
+                "fingerprint",
+                time_name,
+                "organization",
+            }:
+                raise ValueError(f"retained Git {kind} signature is invalid")
+            identity = str(record[identity_name])
+            signer = identities.get(str(record["fingerprint"]).casefold())
+            try:
+                observed = datetime.fromisoformat(
+                    str(record[time_name]).replace("Z", "+00:00")
+                )
+            except ValueError as exc:
+                raise ValueError(f"retained Git {kind} time is invalid") from exc
+            if (
+                not identity
+                or identity in seen
+                or (kind == "commit" and len(identity) != digest_length)
+                or signer is None
+                or record["organization"] != signer[0]
+                or observed.tzinfo is None
+                or not signer[1] <= observed <= signer[2]
+            ):
+                raise ValueError(f"retained Git {kind} signature is invalid")
+            seen.add(identity)
+            organizations.add(signer[0])
+    if len(organizations) < 2:
+        raise ValueError("retained Git signatures lack organization diversity")
+    if repository_state["head"] not in {str(item["commit"]) for item in commits}:
+        raise ValueError("retained Git signature ledger omits HEAD")
+    tag_names = {str(item["tag"]) for item in tags}
+    if {
+        name.removeprefix("refs/tags/")
+        for name in refs
+        if str(name).startswith("refs/tags/")
+    } != tag_names:
+        raise ValueError("retained Git tag ledger does not match repository refs")
 
 
 def _is_companion_assurance(value: object) -> bool:
@@ -272,7 +584,128 @@ def _validate_companion_recovery_receipts(value: object) -> None:
             != {**statement, "signature_base64": receipt["signature_base64"]}
         ):
             raise ValueError("portable recovery receipt binding is invalid")
+        observer_receipts = receipt.get("observer_receipts")
+        if (
+            not isinstance(observer_receipts, dict)
+            or set(observer_receipts) != {"precondition", "postcondition"}
+            or not isinstance(observer_receipts["precondition"], list)
+            or not isinstance(observer_receipts["postcondition"], list)
+            or len(observer_receipts["precondition"]) < 2
+            or len(observer_receipts["precondition"])
+            != len(observer_receipts["postcondition"])
+        ):
+            raise ValueError("portable recovery observer quorum is invalid")
+        before = [
+            _verify_observer_receipt_offline(item)
+            for item in observer_receipts["precondition"]
+        ]
+        after = [
+            _verify_observer_receipt_offline(item)
+            for item in observer_receipts["postcondition"]
+        ]
+        before_ids = {item["observer_identity_sha256"] for item in before}
+        after_ids = {item["observer_identity_sha256"] for item in after}
+        try:
+            receipt_time = datetime.fromisoformat(
+                str(statement["issued_at"]).replace("Z", "+00:00")
+            )
+        except (KeyError, ValueError) as exc:
+            raise ValueError("portable recovery receipt time is invalid") from exc
+        if (
+            before_ids != after_ids
+            or len(before_ids) != len(before)
+            or len({item["organization"] for item in before}) != len(before)
+            or len({item["host_identity_sha256"] for item in before}) != len(before)
+            or receipt_time.tzinfo is None
+            or any(
+                not _observer_time_near(item, receipt_time)
+                for item in [*before, *after]
+            )
+            or any(
+                item["run_id"] != statement["run_id"]
+                or item["deployment_sha256"] != statement["deployment_sha256"]
+                or item["challenge_sha256"] != statement["challenge_sha256"]
+                or item["recovery_event_id"]
+                or hashlib.sha256(canonical_bytes(item["state"])).hexdigest()
+                != statement["before_state_sha256"]
+                for item in before
+            )
+            or any(
+                item["run_id"] != statement["run_id"]
+                or item["deployment_sha256"] != statement["deployment_sha256"]
+                or item["challenge_sha256"] != statement["challenge_sha256"]
+                or item["recovery_event_id"] != statement["event_id"]
+                or item["recovery_epoch"] != statement["recovery_epoch"]
+                or item["fencing_token_sha256"] != statement["fencing_token_sha256"]
+                or hashlib.sha256(canonical_bytes(item["state"])).hexdigest()
+                != statement["after_state_sha256"]
+                for item in after
+            )
+        ):
+            raise ValueError("portable recovery observer binding is invalid")
         event_ids.add(event_id)
+
+
+def _observer_time_near(value: dict[str, Any], receipt_time: datetime) -> bool:
+    try:
+        observed = datetime.fromisoformat(
+            str(value["observed_at"]).replace("Z", "+00:00")
+        )
+        expires = datetime.fromisoformat(
+            str(value["expires_at"]).replace("Z", "+00:00")
+        )
+    except ValueError:
+        return False
+    return bool(
+        observed.tzinfo is not None
+        and expires.tzinfo is not None
+        and abs(observed - receipt_time) <= timedelta(minutes=10)
+        and observed < expires
+        and expires - observed <= timedelta(minutes=5)
+    )
+
+
+def _verify_observer_receipt_offline(value: object) -> dict[str, Any]:
+    fields = {
+        "schema_version",
+        "observer_identity_sha256",
+        "organization",
+        "host_identity_sha256",
+        "request_sha256",
+        "observation_id",
+        "status",
+        "state",
+        "recovery_epoch",
+        "fencing_token_sha256",
+        "context_sha256",
+        "run_id",
+        "deployment_sha256",
+        "challenge_sha256",
+        "recovery_event_id",
+        "observed_at",
+        "expires_at",
+        "public_key_pem_base64",
+        "signature_base64",
+    }
+    if not isinstance(value, dict) or set(value) != fields:
+        raise ValueError("portable recovery observer fields do not match")
+    try:
+        key_bytes = base64.b64decode(value["public_key_pem_base64"], validate=True)
+        signature = base64.b64decode(value["signature_base64"], validate=True)
+        key = serialization.load_pem_public_key(key_bytes)
+        if not isinstance(key, Ed25519PublicKey):
+            raise ValueError("observer key is not Ed25519")
+        key.verify(
+            signature,
+            canonical_bytes(
+                {name: value[name] for name in fields - {"signature_base64"}}
+            ),
+        )
+    except Exception as exc:
+        raise ValueError("portable recovery observer signature is invalid") from exc
+    if hashlib.sha256(key_bytes).hexdigest() != value["observer_identity_sha256"]:
+        raise ValueError("portable recovery observer identity is invalid")
+    return value
 
 
 def _validate_requirements_crosswalk(value: object) -> None:
@@ -328,6 +761,58 @@ def _validate_requirements_crosswalk(value: object) -> None:
             evidence_authority,
             "requirements-evidence-policy",
         )
+        executions = value.get("procedure_executions")
+        if not isinstance(executions, dict):
+            raise ValueError("requirements procedure executions are not retained")
+        controls = {
+            (
+                str(item["standard"]),
+                str(item["version"]),
+                str(item["requirement"]),
+            ): item
+            for item in evidence_policy.get("requirements", [])
+            if isinstance(item, dict)
+        }
+        observed_at = _portable_verified_at(evidence_authority)
+        for record in records:
+            assessment = record.get("assessment") if isinstance(record, dict) else None
+            if not isinstance(assessment, dict):
+                continue
+            control = controls.get(
+                (
+                    str(record["standard"]),
+                    str(record["version"]),
+                    str(record["requirement"]),
+                )
+            )
+            if not isinstance(control, dict):
+                raise ValueError("requirements execution policy is detached")
+            for assertion in assessment.get("assertions", []):
+                execution = executions.get(assertion.get("execution_artifact"))
+                if not isinstance(execution, dict) or hashlib.sha256(
+                    canonical_bytes(execution)
+                ).hexdigest() != assertion.get("execution_sha256"):
+                    raise ValueError("requirements execution artifact is detached")
+                receipt = execution.get("execution_authority_receipt")
+                statement = (
+                    receipt.get("statement") if isinstance(receipt, dict) else None
+                )
+                signer = str((statement or {}).get("signer_key_sha256") or "")
+                if signer not in control.get(
+                    "allowed_execution_authority_key_sha256", []
+                ):
+                    raise ValueError("requirements execution signer is not approved")
+                _reverify_operation(
+                    {
+                        name: item
+                        for name, item in execution.items()
+                        if name != "execution_authority_receipt"
+                    },
+                    receipt,
+                    "requirements-procedure-execution",
+                    observed_at,
+                    signer,
+                )
 
 
 def _validate_checkov_accounting(value: object) -> None:
@@ -430,6 +915,7 @@ def _validate_native_normalization(value: dict[str, Any], records: int) -> None:
     ):
         raise ValueError("encrypted native evidence lacks hardware KMS custody")
     if replayable:
+        custody = storage["custody_receipt"]
         try:
             wrapped_key = base64.b64decode(
                 storage["wrapped_data_key_base64"], validate=True
@@ -440,12 +926,13 @@ def _validate_native_normalization(value: dict[str, Any], records: int) -> None:
             ) from exc
         if (
             len(wrapped_key) < 32
-            or storage["custody_receipt"].get("wrapped_key_sha256")
+            or custody.get("wrapped_key_sha256")
             != hashlib.sha256(wrapped_key).hexdigest()
         ):
             raise ValueError("encrypted native evidence wrapped key is unbound")
+        _validate_custody_transport(custody)
         _reverify_portable(
-            storage["custody_receipt"],
+            custody,
             storage["custody_authority_receipt"],
             "raw-evidence-custody",
         )
@@ -464,3 +951,65 @@ def _validate_native_normalization(value: dict[str, Any], records: int) -> None:
     }
     if expected != hashlib.sha256(canonical_bytes(subject)).hexdigest():
         raise ValueError("normalized artifact digest does not match")
+
+
+def _validate_custody_transport(custody: dict[str, Any]) -> None:
+    context = custody.get("command_context")
+    transcript = custody.get("transport_transcript")
+    if not isinstance(context, dict) or set(context) != {
+        "schema_version",
+        "executable_sha256",
+        "allowed_endpoints",
+        "mtls_identity_sha256",
+        "sandbox_identity_sha256",
+        "sandbox_executable_sha256",
+        "sandbox_launcher_argv",
+    }:
+        raise ValueError("retained KMS command context is invalid")
+    endpoints = context["allowed_endpoints"]
+    launcher_argv = context["sandbox_launcher_argv"]
+    expected_sandbox = hashlib.sha256(
+        canonical_bytes(
+            {
+                "launcher_sha256": context["sandbox_executable_sha256"],
+                "launcher_argv": launcher_argv,
+                "allowed_endpoints": endpoints,
+                "mtls_identity_sha256": context["mtls_identity_sha256"],
+            }
+        )
+    ).hexdigest()
+    if (
+        not isinstance(endpoints, list)
+        or endpoints != sorted(set(endpoints))
+        or not endpoints
+        or any(
+            not isinstance(item, str) or not item.startswith("https://")
+            for item in endpoints
+        )
+        or not isinstance(launcher_argv, list)
+        or any(not isinstance(item, str) or not item for item in launcher_argv)
+        or custody.get("sandbox_identity_sha256") != context["sandbox_identity_sha256"]
+        or custody.get("allowed_endpoints_sha256")
+        != hashlib.sha256(canonical_bytes(endpoints)).hexdigest()
+        or custody.get("mtls_peer_identity_sha256") != context["mtls_identity_sha256"]
+        or expected_sandbox != context["sandbox_identity_sha256"]
+        or not isinstance(transcript, dict)
+        or set(transcript)
+        != {
+            "endpoint",
+            "peer_identity_sha256",
+            "protocol",
+            "cipher",
+            "session_id",
+        }
+        or transcript.get("endpoint") not in endpoints
+        or transcript.get("peer_identity_sha256") != context["mtls_identity_sha256"]
+        or transcript.get("protocol") != "TLSv1.3"
+        or not isinstance(transcript.get("cipher"), str)
+        or not transcript["cipher"]
+        or not isinstance(transcript.get("session_id"), str)
+        or not 16 <= len(transcript["session_id"]) <= 200
+        or custody.get("transport_transcript_sha256")
+        != hashlib.sha256(canonical_bytes(transcript)).hexdigest()
+    ):
+        raise ValueError("retained KMS transport transcript is invalid")

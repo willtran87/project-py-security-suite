@@ -11,6 +11,21 @@
     "source_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "total_files": {"type": "integer", "minimum": 0, "maximum": 1000000},
     "total_bytes": {"type": "integer", "minimum": 0},
+    "git_provenance": {
+      "type": "array",
+      "maxItems": 129,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "schema_version", "manifest", "authority_receipt"],
+        "properties": {
+          "path": {"type": "string", "minLength": 1, "maxLength": 4096},
+          "schema_version": {"const": "1.0"},
+          "manifest": {"type": "object"},
+          "authority_receipt": {"type": "object"}
+        }
+      }
+    },
     "files": {
       "type": "array",
       "maxItems": 1000000,

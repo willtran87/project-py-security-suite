@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import os
 from pathlib import Path
 from typing import Any
@@ -50,18 +51,46 @@ def run_pinned_json_command(
     sandbox_identity = (
         os.environ.get(f"{prefix}_SANDBOX_IDENTITY_SHA256", "").strip().casefold()
     )
+    raw_sandbox = os.environ.get(f"{prefix}_SANDBOX_COMMAND_JSON", "").strip()
+    sandbox_executable_sha256 = (
+        os.environ.get(f"{prefix}_SANDBOX_EXECUTABLE_SHA256", "").strip().casefold()
+    )
     try:
         allowed_endpoints = strict_loads(raw_endpoints)
+        sandbox_command = strict_loads(raw_sandbox)
     except (TypeError, ValueError) as exc:
         raise ValueError(f"{prefix} transport policy is invalid") from exc
     if (
         not isinstance(allowed_endpoints, list)
         or allowed_endpoints != sorted(set(allowed_endpoints))
         or any(not isinstance(item, str) or not item for item in allowed_endpoints)
+        or any(not item.startswith("https://") for item in allowed_endpoints)
         or not _digest(mtls_identity)
         or not _digest(sandbox_identity)
+        or not isinstance(sandbox_command, list)
+        or not sandbox_command
+        or any(not isinstance(item, str) or not item for item in sandbox_command)
+        or not _digest(sandbox_executable_sha256)
     ):
         raise ValueError(f"{prefix} transport and sandbox policy is incomplete")
+    resolved_sandbox = resolve_executable(sandbox_command[0])
+    if (
+        resolved_sandbox is None
+        or sha256_file(Path(resolved_sandbox)) != sandbox_executable_sha256
+    ):
+        raise ValueError(f"{prefix} sandbox launcher does not match its pin")
+    enforced_sandbox_identity = hashlib.sha256(
+        canonical_bytes(
+            {
+                "launcher_sha256": sandbox_executable_sha256,
+                "launcher_argv": sandbox_command[1:],
+                "allowed_endpoints": allowed_endpoints,
+                "mtls_identity_sha256": mtls_identity,
+            }
+        )
+    ).hexdigest()
+    if sandbox_identity != enforced_sandbox_identity:
+        raise ValueError(f"{prefix} sandbox identity does not match its policy")
     runtime_pin = os.environ.get(f"{prefix}_RUNTIME_SHA256", "").strip().casefold()
     if runtime_pin and (
         not _digest(runtime_pin)
@@ -76,6 +105,8 @@ def run_pinned_json_command(
         "allowed_endpoints": allowed_endpoints,
         "mtls_identity_sha256": mtls_identity,
         "sandbox_identity_sha256": sandbox_identity,
+        "sandbox_executable_sha256": sandbox_executable_sha256,
+        "sandbox_launcher_argv": [str(item) for item in sandbox_command[1:]],
     }
     encoded_request = base64.b64encode(canonical_bytes(request)).decode("ascii")
     result = run_command(
@@ -83,7 +114,11 @@ def run_pinned_json_command(
         cwd=Path(resolved).parent,
         timeout_seconds=timeout_seconds,
         max_output_bytes=maximum_output_bytes,
-        environment=CommandEnvironment(max_scratch_bytes=16 * 1024 * 1024),
+        environment=CommandEnvironment(
+            sandbox_prefix=tuple(str(item) for item in sandbox_command),
+            sandbox_executable_sha256=sandbox_executable_sha256,
+            max_scratch_bytes=16 * 1024 * 1024,
+        ),
     )
     if sha256_file(Path(resolved)) != expected_executable:
         raise ValueError(f"{prefix} executable changed during governed execution")

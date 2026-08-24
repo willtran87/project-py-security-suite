@@ -77,6 +77,7 @@ def test_runtime_trace_must_correlate_to_static_edge(tmp_path: Path) -> None:
         "coverage_requirements": [requirement],
         "collector_metrics": metrics,
         "collector_operation_receipt": collector_receipt,
+        "collector_authority_key_sha256": collector_key,
         "traces": traces,
     }
     evidence_value = json.dumps(evidence_document)
@@ -102,11 +103,16 @@ def test_runtime_trace_must_correlate_to_static_edge(tmp_path: Path) -> None:
             serialization.PublicFormat.SubjectPublicKeyInfo,
         )
         inventory_keys[kind] = hashlib.sha256(public).hexdigest()
+        source_artifact = {"kind": kind, "routes": [requirement]}
         inventory_subject = {
             "schema_version": "1.0",
             "kind": kind,
-            "artifact_sha256": str(index) * 64,
+            "artifact_sha256": hashlib.sha256(
+                canonical_bytes(source_artifact)
+            ).hexdigest(),
+            "source_artifact": source_artifact,
             "producer_identity_sha256": str(index + 3) * 64,
+            "authority_key_sha256": inventory_keys[kind],
             "requirements": [requirement],
         }
         inventory_receipt, _ = operation_receipt(

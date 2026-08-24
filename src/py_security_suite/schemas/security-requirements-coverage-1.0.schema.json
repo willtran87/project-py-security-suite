@@ -3,7 +3,7 @@
   "$id": "urn:project-py-security-suite:schema:security-requirements-coverage:1.0",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "analysis", "applicability", "applicability_decision", "catalogs", "requirements", "applicable_requirements", "evidenced_requirements", "gaps", "automation_complete", "full_catalog_coverage", "evidence_policy", "evidence_policy_authority_receipt", "complete", "limitations", "crosswalk_sha256"],
+  "required": ["schema_version", "analysis", "applicability", "applicability_decision", "catalogs", "requirements", "applicable_requirements", "evidenced_requirements", "gaps", "automation_complete", "full_catalog_coverage", "evidence_policy", "evidence_policy_authority_receipt", "procedure_executions", "complete", "limitations", "crosswalk_sha256"],
   "properties": {
     "schema_version": {"const": "1.0"},
     "analysis": {"const": "versioned-security-requirements-evidence-crosswalk"},
@@ -18,6 +18,7 @@
     "full_catalog_coverage": {"type": "boolean"},
     "evidence_policy": {"type": ["object", "null"]},
     "evidence_policy_authority_receipt": {"type": ["object", "null"]},
+    "procedure_executions": {"type": "object", "maxProperties": 10000, "additionalProperties": {"type": "object"}},
     "complete": {"type": "boolean"},
     "limitations": {"type": "array", "minItems": 1, "maxItems": 20, "items": {"type": "string", "minLength": 1, "maxLength": 1000}},
     "crosswalk_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}

@@ -296,12 +296,18 @@ monotonic store. For an authority prefix `PREFIX`, configure
 `PREFIX_STATE_COMMAND_JSON`, `PREFIX_STATE_EXECUTABLE_SHA256`, and
 `PREFIX_STATE_ASSETS_JSON` (plus optional `PREFIX_STATE_RUNTIME_SHA256`). Also
 set `PREFIX_STATE_ALLOWED_ENDPOINTS_JSON`, `PREFIX_STATE_MTLS_IDENTITY_SHA256`,
-and `PREFIX_STATE_SANDBOX_IDENTITY_SHA256`; these form the signed command
-execution context. The
+`PREFIX_STATE_SANDBOX_COMMAND_JSON`,
+`PREFIX_STATE_SANDBOX_EXECUTABLE_SHA256`, and the derived
+`PREFIX_STATE_SANDBOX_IDENTITY_SHA256`; these form the enforced, retained
+command execution context. Pin the backend signing identity with
+`PREFIX_STATE_BACKEND_KEY_SHA256` and provide at least two independently owned
+witnesses through `PREFIX_STATE_WITNESS_KEYS_JSON`. The
 digest-pinned command receives a canonical compare-and-advance request and must
 return the accepted generation, receipt digest, backend identity, and operation
-ID, predecessor generation/digest, exact request digest, and an Ed25519 backend
-receipt. The portable envelope retains and re-verifies this response offline.
+ID, predecessor generation/digest, exact request digest, execution transcript,
+an Ed25519 backend receipt, and witness receipts. The portable envelope retains
+and re-verifies the response, consistency chain, transport context, and witness
+quorum offline.
 Production and release reject the local SQLite fallback.
 
 A public keyring can set a threshold across distinct Ed25519 signers and assign
@@ -494,12 +500,16 @@ write limit.
 Optional exact native reports use `PYSEC_RAW_EVIDENCE_DIRECTORY` and an actual
 digest-pinned KMS data-key command configured by
 `PYSEC_RAW_EVIDENCE_KMS_{COMMAND_JSON,EXECUTABLE_SHA256,ASSETS_JSON}` plus its
-endpoint, mTLS-identity, and sandbox-identity pins. The KMS
+endpoint and mTLS-identity pins and the required
+`PYSEC_RAW_EVIDENCE_KMS_{SANDBOX_COMMAND_JSON,SANDBOX_EXECUTABLE_SHA256,SANDBOX_IDENTITY_SHA256}`
+launcher contract. The KMS
 returns a one-use plaintext data key plus wrapped key; only the wrapped key and
 key digest are retained. Its response carries a signed custody subject binding
 provider, key ID/version, store identity, retention, operation, exact command
 request/challenge/plaintext-object digest, and wrapped-key
-commitment. Pin the embedded authority key with
+commitment. The retained custody subject also preserves the exact launcher
+argv, endpoint allowlist, peer identity, TLS 1.3 cipher/session transcript, and
+their canonical digests for offline verification. Pin the embedded authority key with
 `PYSEC_RAW_EVIDENCE_CUSTODY_AUTHORITY_KEY_SHA256`. Deployment traces are admitted through
 `PYSEC_RUNTIME_TRACE_EVIDENCE_PATH` plus its SHA-256 and retained only when
 every source/target pair exists in `boundary-graph.json`. Traces use

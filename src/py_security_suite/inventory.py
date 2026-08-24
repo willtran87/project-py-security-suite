@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import base64
 import os
 import shutil
 import tempfile
@@ -15,7 +16,7 @@ from .deployment_receipt import verify_deployment_receipt
 from .execution import CommandEnvironment, resolve_executable, run_command, sha256_file
 from .models import Inventory
 from .path_safety import read_regular_file
-from .strict_json import loads as strict_loads
+from .strict_json import canonical_bytes, loads as strict_loads
 
 
 _SKIP_DIRECTORIES = frozenset(
@@ -210,6 +211,8 @@ def sealed_source_snapshot(
                 temporary_parent,
                 require_signed_git_provenance=require_signed_git_provenance,
             )
+            if require_signed_git_provenance:
+                source_inventory["git_provenance"] = _retained_git_provenance(snapshot)
         observed, count, total = source_snapshot(snapshot)
         if (
             observed != expected_digest
@@ -277,21 +280,32 @@ def _materialize_git_history(
     git = resolve_executable("git")
     if git is None:
         raise ValueError("Git is unavailable while sealing repository history")
-    _validate_git_repository_mode(
+    signature_ledger = _validate_git_repository_mode(
         git, target, require_signed_provenance=require_signed_git_provenance
     )
     repository_state = _git_repository_state(git, target)
     if require_signed_git_provenance:
         git_sha256 = sha256_file(Path(git).resolve())
-        verify_deployment_receipt(
-            {
-                "schema_version": "1.0",
-                "git_executable_sha256": git_sha256,
-                "repository_state": repository_state,
-            },
+        allowed_signers_sha256, allowed_signers_base64 = _git_allowed_signers(
+            git, target
+        )
+        git_manifest = {
+            "schema_version": "1.0",
+            "git_executable_sha256": git_sha256,
+            "allowed_signers_file_sha256": allowed_signers_sha256,
+            "allowed_signers_file_base64": allowed_signers_base64,
+            "signer_policy": _git_signer_policy(),
+            "signature_ledger": signature_ledger,
+            "repository_state": repository_state,
+        }
+        git_manifest_receipt = verify_deployment_receipt(
+            git_manifest,
             purpose="git-ref-manifest",
             environment_prefix="PYSEC_GIT_REF_MANIFEST_AUTHORITY",
         )
+    else:
+        git_manifest = None
+        git_manifest_receipt = None
     work_root.mkdir(mode=0o700, parents=True)
     bundle = work_root / "repository.bundle"
     clone = work_root / "history"
@@ -394,6 +408,16 @@ def _materialize_git_history(
     if observed.exit_code != 0 or observed.stdout.strip().casefold() != revision:
         raise ValueError("sealed Git history does not match the inventoried revision")
     _copy_regular_tree(clone / ".git", snapshot / ".git")
+    if git_manifest is not None and git_manifest_receipt is not None:
+        (snapshot / ".git" / "pysec-provenance.json").write_bytes(
+            canonical_bytes(
+                {
+                    "schema_version": "1.0",
+                    "manifest": git_manifest,
+                    "authority_receipt": git_manifest_receipt,
+                }
+            )
+        )
 
 
 def _git_repository_state(git: str, target: Path) -> dict[str, Any]:
@@ -513,7 +537,7 @@ def _parse_ref_lines(value: str) -> dict[str, str]:
 
 def _validate_git_repository_mode(
     git: str, target: Path, *, require_signed_provenance: bool = False
-) -> None:
+) -> dict[str, Any] | None:
     """Reject repository modes that can hide or rewrite reachable history."""
 
     def query(arguments: list[str], *, exits: frozenset[int] = frozenset({0})) -> str:
@@ -654,8 +678,22 @@ def _validate_git_repository_mode(
             signers[fingerprint] = organization, not_before, not_after
         if len({item[0] for item in signers.values()}) < 2:
             raise ValueError("production Git signer policy has invalid identities")
+        if query(["config", "--get", "gpg.format"]).casefold() != "ssh":
+            raise ValueError(
+                "production Git signature verification requires SSH format"
+            )
+        _, allowed_signers_base64 = _git_allowed_signers(git, target)
+        allowed_fingerprints = allowed_signer_fingerprints(
+            base64.b64decode(allowed_signers_base64, validate=True)
+        )
+        if set(signers) - allowed_fingerprints:
+            raise ValueError(
+                "production Git signer policy is detached from allowed-signers file"
+            )
         ledger = query(["log", "--all", "--format=%H%x00%G?%x00%GF%x00%cI"])
         commits = 0
+        observed_organizations: set[str] = set()
+        commit_ledger: list[dict[str, str]] = []
         for line in ledger.splitlines():
             fields = line.split("\x00")
             if len(fields) != 4:
@@ -675,14 +713,76 @@ def _validate_git_repository_mode(
                 raise ValueError(
                     "every reachable Git commit must have a trusted allowed signature"
                 )
+            observed_organizations.add(signer[0])
+            commit_ledger.append(
+                {
+                    "commit": fields[0].casefold(),
+                    "fingerprint": fingerprint.strip().casefold(),
+                    "committed_at": committed.isoformat(),
+                    "organization": signer[0],
+                }
+            )
             commits += 1
         if not commits:
             raise ValueError("Git commit provenance ledger is empty")
-        tags = query(["tag", "--list"])
-        for tag in tags.splitlines():
-            if not tag:
-                continue
-            query(["tag", "-v", tag], exits=frozenset({0}))
+        tags = query(
+            [
+                "for-each-ref",
+                "--format=%(refname:short)%00%(objecttype)%00%(taggerdate:iso-strict)",
+                "refs/tags",
+            ]
+        )
+        tag_ledger: list[dict[str, str]] = []
+        for line in tags.splitlines():
+            fields = line.split("\x00")
+            if len(fields) != 3 or fields[1] != "tag":
+                raise ValueError("production Git tags must be signed annotated tags")
+            tag, _, tagged_at = fields
+            signature = query(
+                [
+                    "tag",
+                    "-v",
+                    "--format=%(signature:grade)%00%(signature:fingerprint)",
+                    tag,
+                ],
+                exits=frozenset({0}),
+            ).splitlines()[-1]
+            signature_fields = signature.split("\x00")
+            signer = (
+                signers.get(signature_fields[1].strip().casefold())
+                if len(signature_fields) == 2
+                else None
+            )
+            try:
+                tag_time = datetime.fromisoformat(tagged_at.replace("Z", "+00:00"))
+            except ValueError as exc:
+                raise ValueError("Git tag timestamp is invalid") from exc
+            if (
+                len(signature_fields) != 2
+                or signature_fields[0] != "G"
+                or signer is None
+                or tag_time.tzinfo is None
+                or not signer[1] <= tag_time <= signer[2]
+            ):
+                raise ValueError("Git tag signature is not policy-approved")
+            observed_organizations.add(signer[0])
+            tag_ledger.append(
+                {
+                    "tag": tag,
+                    "fingerprint": signature_fields[1].strip().casefold(),
+                    "tagged_at": tag_time.isoformat(),
+                    "organization": signer[0],
+                }
+            )
+        if len(observed_organizations) < 2:
+            raise ValueError(
+                "production Git history requires signatures from two organizations"
+            )
+        return {
+            "commits": sorted(commit_ledger, key=lambda item: item["commit"]),
+            "tags": sorted(tag_ledger, key=lambda item: item["tag"]),
+        }
+    return None
 
 
 def _seal_submodule_histories(
@@ -875,6 +975,103 @@ def _sha256_digest(value: str) -> bool:
     return len(value) == 64 and all(
         character in "0123456789abcdef" for character in value
     )
+
+
+def _git_signer_policy() -> list[dict[str, Any]]:
+    raw = os.environ.get("PYSEC_GIT_ALLOWED_SIGNER_FINGERPRINTS_JSON", "").strip()
+    value = strict_loads(raw.encode())
+    if not isinstance(value, list) or not value:
+        raise ValueError("production Git signer policy is unavailable")
+    return value
+
+
+def _git_allowed_signers(git: str, target: Path) -> tuple[str, str]:
+    result = run_command(
+        [
+            git,
+            "-c",
+            f"safe.directory={target.resolve()}",
+            "-C",
+            str(target),
+            "config",
+            "--path",
+            "--get",
+            "gpg.ssh.allowedSignersFile",
+        ],
+        cwd=target,
+        timeout_seconds=30,
+        max_output_bytes=64 * 1024,
+    )
+    if result.exit_code != 0 or result.timed_out or not result.stdout.strip():
+        raise ValueError("production Git allowed-signers file is unavailable")
+    path = Path(result.stdout.strip()).expanduser()
+    if not path.is_absolute():
+        path = target / path
+    _, payload = read_regular_file(
+        path.resolve(), "Git allowed-signers file", maximum_bytes=4 * 1024 * 1024
+    )
+    digest = hashlib.sha256(payload).hexdigest()
+    expected = (
+        os.environ.get("PYSEC_GIT_ALLOWED_SIGNERS_FILE_SHA256", "").strip().casefold()
+    )
+    if not _sha256_digest(expected) or digest != expected:
+        raise ValueError("production Git allowed-signers file does not match its pin")
+    return digest, base64.b64encode(payload).decode("ascii")
+
+
+def allowed_signer_fingerprints(payload: bytes) -> set[str]:
+    """Derive OpenSSH SHA-256 fingerprints from an allowed-signers file."""
+    fingerprints: set[str] = set()
+    key_markers = ("ssh-", "ecdsa-", "sk-")
+    for raw_line in payload.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith(b"#"):
+            continue
+        fields = line.split()
+        index = next(
+            (
+                offset
+                for offset, field in enumerate(fields[:-1])
+                if field.decode("ascii", errors="ignore").startswith(key_markers)
+            ),
+            -1,
+        )
+        if index < 0:
+            raise ValueError("Git allowed-signers entry has no public key")
+        try:
+            wire_key = base64.b64decode(fields[index + 1], validate=True)
+        except ValueError as exc:
+            raise ValueError("Git allowed-signers public key is invalid") from exc
+        fingerprint = (
+            base64.b64encode(hashlib.sha256(wire_key).digest())
+            .decode("ascii")
+            .rstrip("=")
+        )
+        fingerprints.add(f"sha256:{fingerprint}".casefold())
+    if not fingerprints:
+        raise ValueError("Git allowed-signers file contains no identities")
+    return fingerprints
+
+
+def _retained_git_provenance(snapshot: Path) -> list[dict[str, Any]]:
+    retained: list[dict[str, Any]] = []
+    for path in sorted(snapshot.rglob("pysec-provenance.json")):
+        if path.parent.name != ".git":
+            continue
+        relative = path.parent.parent.relative_to(snapshot).as_posix() or "."
+        _, payload = read_regular_file(
+            path,
+            "retained Git provenance",
+            maximum_bytes=16 * 1024 * 1024,
+            boundary=snapshot,
+        )
+        value = strict_loads(payload)
+        if not isinstance(value, dict):
+            raise ValueError("retained Git provenance is invalid")
+        retained.append({"path": relative, **value})
+    if not retained or retained[0]["path"] != ".":
+        raise ValueError("superproject Git provenance was not retained")
+    return retained
 
 
 def _source_digest(target: Path, paths: list[Path]) -> tuple[str, int]:

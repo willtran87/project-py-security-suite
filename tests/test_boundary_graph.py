@@ -142,9 +142,26 @@ class BoundaryGraphTests(unittest.TestCase):
                         "cfg_edges": 1,
                         "dataflow_edges": 0,
                         "interprocedural_edges": 0,
+                        "semantic_ledger": {
+                            "symbols": [
+                                {
+                                    "id": "main",
+                                    "path": "native.c",
+                                    "line": 1,
+                                    "kind": "function",
+                                }
+                            ],
+                            "cfg_edges": [{"source": "main", "target": "main"}],
+                            "dataflow_edges": [],
+                            "interprocedural_edges": [],
+                        },
+                        "semantic_ledger_sha256": "",
                     }
                 ],
             }
+            evidence["frontends"][0]["semantic_ledger_sha256"] = hashlib.sha256(
+                canonical_bytes(evidence["frontends"][0]["semantic_ledger"])
+            ).hexdigest()
             evidence_path = root / "compiler-semantics.json"
             evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
             environment = authority_environment(
@@ -174,6 +191,15 @@ class BoundaryGraphTests(unittest.TestCase):
             graph["compiler_semantic_evidence"]["frontends"][0]["engine"],
             "clang-static-analyzer",
         )
+
+    def test_governed_python_analysis_also_requires_compiler_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "app.py").write_text("print('ok')\n", encoding="utf-8")
+            with self.assertRaisesRegex(
+                ValueError, "compiler semantic evidence configuration"
+            ):
+                build_boundary_graph(root, require_governed_parsers=True)
 
 
 if __name__ == "__main__":

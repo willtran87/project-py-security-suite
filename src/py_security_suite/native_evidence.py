@@ -4,7 +4,7 @@ import hashlib
 import hmac
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives import hashes
@@ -224,6 +224,7 @@ def _kms_data_key(
         raise ValueError("KMS data-key response policy failed")
     value = response["custody_receipt"]
     authority = response["custody_authority_receipt"]
+    command_context = cast(dict[str, Any], request["command_context"])
     fields = {
         "schema_version",
         "provider",
@@ -240,6 +241,12 @@ def _kms_data_key(
         "request_sha256",
         "object_plaintext_sha256",
         "challenge_sha256",
+        "sandbox_identity_sha256",
+        "allowed_endpoints_sha256",
+        "mtls_peer_identity_sha256",
+        "transport_transcript",
+        "transport_transcript_sha256",
+        "command_context",
     }
     if (
         not isinstance(value, dict)
@@ -257,6 +264,20 @@ def _kms_data_key(
         != hashlib.sha256(canonical_bytes(request)).hexdigest()
         or value.get("object_plaintext_sha256") != raw_sha256
         or value.get("challenge_sha256") != challenge
+        or value.get("sandbox_identity_sha256")
+        != command_context["sandbox_identity_sha256"]
+        or value.get("command_context") != command_context
+        or value.get("allowed_endpoints_sha256")
+        != hashlib.sha256(
+            canonical_bytes(command_context["allowed_endpoints"])
+        ).hexdigest()
+        or value.get("mtls_peer_identity_sha256")
+        != command_context["mtls_identity_sha256"]
+        or value.get("transport_transcript_sha256")
+        != hashlib.sha256(
+            canonical_bytes(value.get("transport_transcript"))
+        ).hexdigest()
+        or not _transport_transcript(value.get("transport_transcript"), command_context)
         or not isinstance(value.get("retention_days"), int)
         or isinstance(value.get("retention_days"), bool)
         or not 1 <= value["retention_days"] <= 3650
@@ -308,4 +329,19 @@ def _kms_data_key(
 def _digest(value: str) -> bool:
     return len(value) == 64 and all(
         character in "0123456789abcdef" for character in value
+    )
+
+
+def _transport_transcript(value: object, context: dict[str, Any]) -> bool:
+    return bool(
+        isinstance(value, dict)
+        and set(value)
+        == {"endpoint", "peer_identity_sha256", "protocol", "cipher", "session_id"}
+        and value.get("endpoint") in context["allowed_endpoints"]
+        and value.get("peer_identity_sha256") == context["mtls_identity_sha256"]
+        and value.get("protocol") == "TLSv1.3"
+        and isinstance(value.get("cipher"), str)
+        and value["cipher"]
+        and isinstance(value.get("session_id"), str)
+        and 16 <= len(value["session_id"]) <= 200
     )

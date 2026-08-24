@@ -10,12 +10,19 @@ from datetime import UTC, datetime
 from unittest.mock import patch
 from pathlib import Path
 
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
 from py_security_suite.artifact_validation import validate_governed_artifacts
 from py_security_suite.adapters.portfolio import PipdeptreeAdapter
 from py_security_suite.config import ToolConfig
 from py_security_suite.deployment_receipt import verify_deployment_receipt
+from py_security_suite.inventory import allowed_signer_fingerprints
 from py_security_suite.strict_json import canonical_bytes
-from tests.deployment_authority import authority_environment
+from tests.deployment_authority import (
+    authority_environment,
+    pinned_command_sandbox_environment,
+)
 
 
 @pytest.mark.parametrize(
@@ -41,6 +48,103 @@ def test_malformed_governed_artifact_blocks_publication_validation() -> None:
                 }
             }
         )
+
+
+def test_retained_git_provenance_reverifies_signers_and_manifest(
+    tmp_path: Path,
+) -> None:
+    now = datetime.now(UTC)
+    keys = [Ed25519PrivateKey.generate(), Ed25519PrivateKey.generate()]
+    allowed = b"".join(
+        f"org-{index} ".encode()
+        + key.public_key().public_bytes(
+            serialization.Encoding.OpenSSH,
+            serialization.PublicFormat.OpenSSH,
+        )
+        + b"\n"
+        for index, key in enumerate(keys, start=1)
+    )
+    fingerprints = sorted(allowed_signer_fingerprints(allowed))
+    manifest = {
+        "schema_version": "1.0",
+        "git_executable_sha256": "c" * 64,
+        "allowed_signers_file_sha256": hashlib.sha256(allowed).hexdigest(),
+        "allowed_signers_file_base64": base64.b64encode(allowed).decode(),
+        "signer_policy": [
+            {
+                "fingerprint": fingerprint,
+                "organization": f"org-{index}",
+                "not_before": now.replace(year=now.year - 1).isoformat(),
+                "not_after": now.replace(year=now.year + 1).isoformat(),
+            }
+            for index, fingerprint in enumerate(fingerprints, start=1)
+        ],
+        "signature_ledger": {
+            "commits": [
+                {
+                    "commit": marker * 64,
+                    "fingerprint": fingerprint,
+                    "committed_at": now.isoformat(),
+                    "organization": f"org-{index}",
+                }
+                for index, (marker, fingerprint) in enumerate(
+                    zip(("a", "b"), fingerprints, strict=True), start=1
+                )
+            ],
+            "tags": [],
+        },
+        "repository_state": {
+            "refs": {"refs/heads/main": "a" * 64},
+            "object_format": "sha256",
+            "head": "a" * 64,
+            "symbolic_head": "refs/heads/main",
+            "replace_refs": "",
+            "security_config_sha256": "d" * 64,
+            "alternates_sha256": "",
+            "reachable_objects_sha256": "e" * 64,
+        },
+    }
+    environment = authority_environment(
+        tmp_path,
+        manifest,
+        purpose="git-ref-manifest",
+        prefix="PYSEC_GIT_REF_MANIFEST_AUTHORITY",
+    )
+    verification_time = datetime.now(UTC)
+    with (
+        patch.dict(os.environ, environment),
+        patch(
+            "py_security_suite.deployment_receipt._scan_observed_at",
+            return_value=verification_time,
+        ),
+    ):
+        receipt = verify_deployment_receipt(
+            manifest,
+            purpose="git-ref-manifest",
+            environment_prefix="PYSEC_GIT_REF_MANIFEST_AUTHORITY",
+        )
+    inventory = {
+        "schema_version": "1.0",
+        "scope": "empty retained source fixture",
+        "source_sha256": hashlib.sha256(b"").hexdigest(),
+        "total_files": 0,
+        "total_bytes": 0,
+        "files": [],
+        "git_provenance": [
+            {
+                "path": ".",
+                "schema_version": "1.0",
+                "manifest": manifest,
+                "authority_receipt": receipt,
+            }
+        ],
+    }
+    validate_governed_artifacts({"source-inventory.json": inventory})
+    manifest["allowed_signers_file_base64"] = base64.b64encode(
+        allowed + b"#tamper\n"
+    ).decode()
+    with pytest.raises(ValueError, match="allowed-signers content is detached"):
+        validate_governed_artifacts({"source-inventory.json": inventory})
 
 
 def test_unregistered_artifact_blocks_publication_validation() -> None:
@@ -102,6 +206,13 @@ def test_native_report_secrets_use_encrypted_content_addressed_storage(
     key_bytes = b"k" * 32
     wrapped_key = b"w" * 48
     challenge = "c" * 64
+    sandbox_environment, command_context, sandbox_asset = (
+        pinned_command_sandbox_environment(
+            tmp_path,
+            prefix="PYSEC_RAW_EVIDENCE_KMS",
+            allowed_endpoints=["https://kms.example.invalid:443"],
+        )
+    )
     request = {
         "schema_version": "1.0",
         "operation": "generate-data-key",
@@ -121,18 +232,17 @@ def test_native_report_secrets_use_encrypted_content_addressed_storage(
             ).encode()
         ).hexdigest(),
         "challenge_sha256": challenge,
-        "command_context": {
-            "schema_version": "1.0",
-            "executable_sha256": hashlib.sha256(
-                Path(sys.executable).read_bytes()
-            ).hexdigest(),
-            "allowed_endpoints": ["https://kms.example.invalid:443"],
-            "mtls_identity_sha256": "d" * 64,
-            "sandbox_identity_sha256": "e" * 64,
-        },
+        "command_context": command_context,
     }
     kms_script = tmp_path / "kms.py"
     custody = tmp_path / "custody.json"
+    transport_transcript = {
+        "endpoint": "https://kms.example.invalid:443",
+        "peer_identity_sha256": command_context["mtls_identity_sha256"],
+        "protocol": "TLSv1.3",
+        "cipher": "TLS_AES_256_GCM_SHA384",
+        "session_id": "session-12345678",
+    }
     custody.write_text(
         json.dumps(
             {
@@ -153,6 +263,16 @@ def test_native_report_secrets_use_encrypted_content_addressed_storage(
                 "request_sha256": hashlib.sha256(canonical_bytes(request)).hexdigest(),
                 "object_plaintext_sha256": request["object_plaintext_sha256"],
                 "challenge_sha256": challenge,
+                "sandbox_identity_sha256": command_context["sandbox_identity_sha256"],
+                "allowed_endpoints_sha256": hashlib.sha256(
+                    canonical_bytes(command_context["allowed_endpoints"])
+                ).hexdigest(),
+                "mtls_peer_identity_sha256": command_context["mtls_identity_sha256"],
+                "transport_transcript": transport_transcript,
+                "transport_transcript_sha256": hashlib.sha256(
+                    canonical_bytes(transport_transcript)
+                ).hexdigest(),
+                "command_context": command_context,
             }
         ),
         encoding="utf-8",
@@ -216,14 +336,11 @@ def test_native_report_secrets_use_encrypted_content_addressed_storage(
                 {
                     "path": str(kms_script),
                     "sha256": hashlib.sha256(kms_script.read_bytes()).hexdigest(),
-                }
+                },
+                sandbox_asset,
             ]
         ),
-        "PYSEC_RAW_EVIDENCE_KMS_ALLOWED_ENDPOINTS_JSON": json.dumps(
-            ["https://kms.example.invalid:443"]
-        ),
-        "PYSEC_RAW_EVIDENCE_KMS_MTLS_IDENTITY_SHA256": "d" * 64,
-        "PYSEC_RAW_EVIDENCE_KMS_SANDBOX_IDENTITY_SHA256": "e" * 64,
+        **sandbox_environment,
     }
     with (
         patch.dict(

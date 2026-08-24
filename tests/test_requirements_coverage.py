@@ -203,8 +203,14 @@ class SecurityRequirementsCoverageTests(unittest.TestCase):
                 canonical_bytes(artifact_value)
             ).hexdigest()
             assessed_at = datetime.now(UTC)
-            command_sha256 = "c" * 64
-            fixture_sha256 = "f" * 64
+            argv = ["replay", "--fixture", "fixture.json"]
+            environment_record = {"PYTHONHASHSEED": "0"}
+            runtime_manifest = {"runtime": "cpython", "version": "3.11"}
+            assets_manifest = [{"name": "replay-policy", "sha256": "8" * 64}]
+            sandbox_policy = {"network": "none", "filesystem": "read-only"}
+            fixture = {"passed": True}
+            command_sha256 = hashlib.sha256(canonical_bytes(argv)).hexdigest()
+            fixture_sha256 = hashlib.sha256(canonical_bytes(fixture)).hexdigest()
             procedure_artifacts: dict[str, object] = {}
             execution_assertion_fields: list[dict[str, object]] = []
             execution_private = Ed25519PrivateKey.generate()
@@ -213,11 +219,23 @@ class SecurityRequirementsCoverageTests(unittest.TestCase):
                 serialization.PublicFormat.SubjectPublicKeyInfo,
             )
             execution_authority_sha256 = hashlib.sha256(execution_public).hexdigest()
-            for polarity, mutation_sha256 in (
-                ("positive", "1" * 64),
-                ("negative-control", "2" * 64),
-            ):
+            for polarity in ("positive", "negative-control"):
                 name = f"procedure-{polarity}.json"
+                mutation_operator = (
+                    "baseline"
+                    if polarity == "positive"
+                    else "negative-control-mutation"
+                )
+                mutation_manifest = {
+                    "operator": mutation_operator,
+                    "parent_fixture_sha256": fixture_sha256,
+                    "mutated_fixture": (
+                        fixture if polarity == "positive" else {"passed": False}
+                    ),
+                }
+                mutation_sha256 = hashlib.sha256(
+                    canonical_bytes(mutation_manifest)
+                ).hexdigest()
                 execution_subject = {
                     "schema_version": "1.0",
                     "procedure_id": "artifact-value-replay-v1",
@@ -232,17 +250,28 @@ class SecurityRequirementsCoverageTests(unittest.TestCase):
                     "result_sha256": artifact_sha256,
                     "started_at": assessed_at.isoformat(),
                     "finished_at": assessed_at.isoformat(),
-                    "argv_sha256": "3" * 64,
-                    "environment_sha256": "4" * 64,
-                    "runtime_sha256": "5" * 64,
-                    "assets_sha256": "6" * 64,
-                    "sandbox_identity_sha256": "7" * 64,
-                    "mutation_operator": (
-                        "baseline"
-                        if polarity == "positive"
-                        else "negative-control-mutation"
-                    ),
+                    "argv_sha256": command_sha256,
+                    "environment_sha256": hashlib.sha256(
+                        canonical_bytes(environment_record)
+                    ).hexdigest(),
+                    "runtime_sha256": hashlib.sha256(
+                        canonical_bytes(runtime_manifest)
+                    ).hexdigest(),
+                    "assets_sha256": hashlib.sha256(
+                        canonical_bytes(assets_manifest)
+                    ).hexdigest(),
+                    "sandbox_identity_sha256": hashlib.sha256(
+                        canonical_bytes(sandbox_policy)
+                    ).hexdigest(),
+                    "mutation_operator": mutation_operator,
                     "mutation_parent_sha256": fixture_sha256,
+                    "argv": argv,
+                    "environment": environment_record,
+                    "runtime_manifest": runtime_manifest,
+                    "assets_manifest": assets_manifest,
+                    "sandbox_policy": sandbox_policy,
+                    "fixture": fixture,
+                    "mutation_manifest": mutation_manifest,
                 }
                 execution_receipt, _ = operation_receipt(
                     execution_subject,

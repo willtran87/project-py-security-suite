@@ -69,6 +69,14 @@ def main(argv: list[str] | None = None) -> int:
     oracle = (
         _oracle(contract.get("oracle"), base_url, roles) if version == "3.0" else None
     )
+    if oracle is not None:
+        oracle["context_sha256"] = hashlib.sha256(
+            _regular_bytes(args.context)
+        ).hexdigest()
+        oracle["trusted_observed_at"] = _context_observed_at(args.context)
+        for observer in oracle["observers"]:
+            observer["context_sha256"] = oracle["context_sha256"]
+            observer["trusted_observed_at"] = oracle["trusted_observed_at"]
     cases = _cases(contract.get("cases"), roles)
     state_cases = _state_cases(contract.get("state_cases"), roles)
     recovery_checks = (
@@ -418,6 +426,7 @@ def main(argv: list[str] | None = None) -> int:
                 postcondition_response=pending["postcondition_response"],
                 precondition_observers=pending["precondition_observers"],
                 postcondition_observers=pending["postcondition_observers"],
+                context_sha256=hashlib.sha256(_regular_bytes(args.context)).hexdigest(),
             )
             event_id = str(receipt["statement"]["event_id"])
             if event_id in recovery_event_ids:
@@ -659,6 +668,7 @@ def _oracle_quorum_observation(
         or len({item["fencing_token_sha256"] for item in verified}) != 1
     ):
         return 0, b"", []
+    _consume_oracle_observations(verified)
     return statuses.pop(), canonical_responses.pop(), verified
 
 
@@ -677,6 +687,11 @@ def _verify_oracle_envelope(
         "state",
         "recovery_epoch",
         "fencing_token_sha256",
+        "context_sha256",
+        "run_id",
+        "deployment_sha256",
+        "challenge_sha256",
+        "recovery_event_id",
         "observed_at",
         "expires_at",
         "public_key_pem_base64",
@@ -696,7 +711,12 @@ def _verify_oracle_envelope(
     except (TypeError, ValueError) as exc:
         raise ValueError("state oracle observation encoding is invalid") from exc
     signed = {name: value[name] for name in fields - {"signature_base64"}}
-    now = datetime.now(UTC)
+    try:
+        trusted_observed = datetime.fromisoformat(
+            str(observer["trusted_observed_at"]).replace("Z", "+00:00")
+        )
+    except (KeyError, ValueError) as exc:
+        raise ValueError("state oracle trusted time is invalid") from exc
     if (
         not isinstance(key, Ed25519PublicKey)
         or hashlib.sha256(key_bytes).hexdigest() != observer["identity_sha256"]
@@ -705,6 +725,13 @@ def _verify_oracle_envelope(
         or value["host_identity_sha256"] != observer["host_identity_sha256"]
         or value["request_sha256"]
         != hashlib.sha256(canonical_bytes({"method": "GET", "path": path})).hexdigest()
+        or value["context_sha256"] != oracle_context(observer)
+        or not _optional_label(value["recovery_event_id"])
+        or not all(
+            _digest_label(value[name])
+            for name in ("deployment_sha256", "challenge_sha256")
+        )
+        or not _label(value["run_id"], "oracle run")
         or not _label(value["observation_id"], "oracle observation")
         or isinstance(value["status"], bool)
         or not isinstance(value["status"], int)
@@ -715,10 +742,10 @@ def _verify_oracle_envelope(
         or not _digest_label(value["fencing_token_sha256"])
         or observed.tzinfo is None
         or expires.tzinfo is None
-        or observed > now
+        or trusted_observed.tzinfo is None
+        or abs(observed - trusted_observed) > timedelta(minutes=10)
         or expires <= observed
         or expires - observed > timedelta(minutes=5)
-        or now > expires
     ):
         raise ValueError("state oracle observation policy failed")
     try:
@@ -729,6 +756,26 @@ def _verify_oracle_envelope(
     except Exception as exc:
         raise ValueError("state oracle observation signature failed") from exc
     return value
+
+
+def oracle_context(observer: dict[str, Any]) -> str:
+    context = str(observer.get("context_sha256") or "")
+    if not _digest_label(context):
+        raise ValueError("state oracle run context is unavailable")
+    return context
+
+
+def _context_observed_at(path: Path) -> str:
+    value = strict_loads(_regular_bytes(path))
+    trusted = value.get("trusted_time") if isinstance(value, dict) else None
+    observed = str((trusted or {}).get("observed_at") or "")
+    try:
+        parsed = datetime.fromisoformat(observed.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError("authorization context trusted time is invalid") from exc
+    if parsed.tzinfo is None:
+        raise ValueError("authorization context trusted time lacks timezone")
+    return parsed.isoformat()
 
 
 def _roles(value: object) -> dict[str, dict[str, str]]:
@@ -913,6 +960,7 @@ def _verify_recovery_receipt(
     postcondition_response: bytes,
     precondition_observers: list[dict[str, Any]],
     postcondition_observers: list[dict[str, Any]],
+    context_sha256: str,
 ) -> dict[str, Any]:
     raw_key = os.environ.get("PYSEC_AUTHORIZATION_ORCHESTRATOR_KEY_PATH", "").strip()
     expected_key = (
@@ -991,6 +1039,22 @@ def _verify_recovery_receipt(
         != {item.get("observer_identity_sha256") for item in postcondition_observers}
         or {item.get("observation_id") for item in precondition_observers}
         & {item.get("observation_id") for item in postcondition_observers}
+        or any(
+            item.get("context_sha256") != context_sha256
+            or item.get("run_id") != run_id
+            or item.get("deployment_sha256") != deployment_sha256
+            or item.get("challenge_sha256") != challenge_sha256
+            or item.get("recovery_event_id") not in {"", None}
+            for item in precondition_observers
+        )
+        or any(
+            item.get("context_sha256") != context_sha256
+            or item.get("run_id") != run_id
+            or item.get("deployment_sha256") != deployment_sha256
+            or item.get("challenge_sha256") != challenge_sha256
+            or item.get("recovery_event_id") != value["event_id"]
+            for item in postcondition_observers
+        )
     ):
         raise ValueError("authorization orchestration receipt policy failed")
     try:
@@ -1029,6 +1093,24 @@ def _verify_recovery_receipt(
         or observed > expires
     ):
         raise ValueError("authorization orchestration receipt is outside its window")
+    for observer in [*precondition_observers, *postcondition_observers]:
+        try:
+            observer_time = datetime.fromisoformat(
+                str(observer["observed_at"]).replace("Z", "+00:00")
+            )
+            observer_expiry = datetime.fromisoformat(
+                str(observer["expires_at"]).replace("Z", "+00:00")
+            )
+        except (KeyError, ValueError) as exc:
+            raise ValueError("authorization observer time is invalid") from exc
+        if (
+            observer_time.tzinfo is None
+            or observer_expiry.tzinfo is None
+            or abs(observer_time - observed) > timedelta(minutes=10)
+            or observer_expiry <= observer_time
+            or observer_expiry - observer_time > timedelta(minutes=5)
+        ):
+            raise ValueError("authorization observer time is outside trusted scan time")
     try:
         signature = base64.b64decode(str(value["signature_base64"]), validate=True)
         key.verify(signature, canonical_bytes(signed))
@@ -1049,10 +1131,53 @@ def _verify_recovery_receipt(
     }
 
 
+def _consume_oracle_observations(observers: list[dict[str, Any]]) -> None:
+    raw_path = os.environ.get(
+        "PYSEC_AUTHORIZATION_ORACLE_REPLAY_STATE_PATH", ""
+    ).strip()
+    if not raw_path:
+        raise ValueError("authorization oracle replay state is unavailable")
+    import sqlite3
+
+    path = Path(raw_path).expanduser().resolve()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    connection = sqlite3.connect(path, timeout=30, isolation_level=None)
+    try:
+        connection.execute("PRAGMA journal_mode=WAL")
+        connection.execute("PRAGMA synchronous=FULL")
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS observations "
+            "(observer_identity TEXT NOT NULL, observation_id TEXT NOT NULL, "
+            "PRIMARY KEY(observer_identity, observation_id))"
+        )
+        connection.execute("BEGIN IMMEDIATE")
+        for observer in observers:
+            connection.execute(
+                "INSERT INTO observations(observer_identity, observation_id) VALUES (?, ?)",
+                (
+                    str(observer["observer_identity_sha256"]),
+                    str(observer["observation_id"]),
+                ),
+            )
+        connection.execute("COMMIT")
+    except sqlite3.IntegrityError as exc:
+        connection.execute("ROLLBACK")
+        raise ValueError("authorization observer receipt was replayed") from exc
+    finally:
+        connection.close()
+
+
 def _digest_label(value: object) -> bool:
     digest = str(value or "")
     return len(digest) == 64 and all(
         character in "0123456789abcdef" for character in digest
+    )
+
+
+def _optional_label(value: object) -> bool:
+    text = str(value or "")
+    return not text or (
+        len(text) <= 200 and all(ord(character) >= 32 for character in text)
     )
 
 

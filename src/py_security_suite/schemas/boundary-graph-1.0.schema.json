@@ -15,7 +15,7 @@
     "complete": {"type": "boolean"},
     "semantic_complete": {"type": "boolean"},
     "semantic_parsers": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
-    "semantic_parser_provenance": {"type": "array", "uniqueItems": true, "items": {"type": "object", "additionalProperties": false, "required": ["language", "engine", "version", "module_sha256"], "properties": {"language": {"type": "string"}, "engine": {"type": "string"}, "version": {"type": "string"}, "module_sha256": {"$ref": "#/$defs/digest"}}}},
+    "semantic_parser_provenance": {"type": "array", "uniqueItems": true, "items": {"type": "object", "additionalProperties": false, "required": ["language", "engine", "version", "module_sha256", "extractor_sha256"], "properties": {"language": {"type": "string"}, "engine": {"type": "string"}, "version": {"type": "string"}, "module_sha256": {"$ref": "#/$defs/digest"}, "extractor_sha256": {"$ref": "#/$defs/digest"}}}},
     "compiler_semantic_complete": {"type": "boolean"},
     "compiler_semantic_evidence": {"type": ["object", "null"]},
     "compiler_semantic_authority_receipt": {"type": ["object", "null"]},

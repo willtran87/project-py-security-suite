@@ -19,6 +19,7 @@ from py_security_suite.deployment_receipt import (
 )
 from py_security_suite.strict_json import canonical_bytes
 from tests.deployment_authority import authority_environment, operation_receipt
+from tests.deployment_authority import pinned_command_sandbox_environment
 
 
 def test_portable_receipt_revalidates_without_original_authority_files(
@@ -93,15 +94,11 @@ def test_external_monotonic_state_is_pinned_and_retained(tmp_path: Path) -> None
         serialization.PublicFormat.SubjectPublicKeyInfo,
     )
     backend_identity = hashlib.sha256(public_bytes).hexdigest()
-    command_context = {
-        "schema_version": "1.0",
-        "executable_sha256": hashlib.sha256(
-            Path(sys.executable).read_bytes()
-        ).hexdigest(),
-        "allowed_endpoints": [],
-        "mtls_identity_sha256": "d" * 64,
-        "sandbox_identity_sha256": "e" * 64,
-    }
+    sandbox_environment, command_context, sandbox_asset = (
+        pinned_command_sandbox_environment(
+            tmp_path, prefix=f"{prefix}_STATE", allowed_endpoints=[]
+        )
+    )
     backend_request = {
         "schema_version": "1.0",
         "operation": "compare-and-advance",
@@ -112,6 +109,13 @@ def test_external_monotonic_state_is_pinned_and_retained(tmp_path: Path) -> None
         "command_context": command_context,
     }
     request_sha256 = hashlib.sha256(canonical_bytes(backend_request)).hexdigest()
+    execution_transcript = {
+        "mode": "local-sandbox",
+        "endpoint": "",
+        "peer_identity_sha256": "",
+        "sandbox_identity_sha256": command_context["sandbox_identity_sha256"],
+        "session_id": "local-session-123",
+    }
     backend_subject = {
         "schema_version": "1.0",
         "operation": "compare-and-advance",
@@ -123,6 +127,7 @@ def test_external_monotonic_state_is_pinned_and_retained(tmp_path: Path) -> None
         "backend_identity_sha256": backend_identity,
         "operation_id": "cas-42",
         "request_sha256": request_sha256,
+        "execution_transcript": execution_transcript,
     }
     backend_receipt, _ = operation_receipt(
         backend_subject,
@@ -130,6 +135,23 @@ def test_external_monotonic_state_is_pinned_and_retained(tmp_path: Path) -> None
         operation_id="cas-42",
         private_key=private,
     )
+    witness_policy: dict[str, str] = {}
+    witnesses = []
+    for index in range(2):
+        witness_private = Ed25519PrivateKey.generate()
+        witness_public = witness_private.public_key().public_bytes(
+            serialization.Encoding.PEM,
+            serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        witness_key = hashlib.sha256(witness_public).hexdigest()
+        witness_policy[witness_key] = f"witness-org-{index}"
+        witness_receipt, _ = operation_receipt(
+            backend_subject,
+            purpose="monotonic-state-witness",
+            operation_id=f"witness-{index}",
+            private_key=witness_private,
+        )
+        witnesses.append(witness_receipt)
     backend = tmp_path / "monotonic.py"
     backend.write_text(
         "import base64,json,sys\n"
@@ -138,6 +160,8 @@ def test_external_monotonic_state_is_pinned_and_retained(tmp_path: Path) -> None
         "'generation':r['generation'],'receipt_sha256':r['receipt_sha256'],"
         f"'backend_identity_sha256':'{backend_identity}','operation_id':'cas-42',"
         f"'previous_generation':0,'previous_receipt_sha256':'','backend_receipt':{backend_receipt!r},"
+        f"'witness_policy':{witness_policy!r},'witnesses':{witnesses!r},"
+        f"'execution_transcript':{execution_transcript!r},"
         "'request_sha256':__import__('hashlib').sha256(__import__('json').dumps(r,separators=(',',':'),sort_keys=True).encode()).hexdigest()}))\n",
         encoding="utf-8",
     )
@@ -154,12 +178,13 @@ def test_external_monotonic_state_is_pinned_and_retained(tmp_path: Path) -> None
                     {
                         "path": str(backend),
                         "sha256": hashlib.sha256(backend.read_bytes()).hexdigest(),
-                    }
+                    },
+                    sandbox_asset,
                 ]
             ),
-            f"{prefix}_STATE_ALLOWED_ENDPOINTS_JSON": "[]",
-            f"{prefix}_STATE_MTLS_IDENTITY_SHA256": "d" * 64,
-            f"{prefix}_STATE_SANDBOX_IDENTITY_SHA256": "e" * 64,
+            **sandbox_environment,
+            f"{prefix}_STATE_BACKEND_KEY_SHA256": backend_identity,
+            f"{prefix}_STATE_WITNESS_KEYS_JSON": json.dumps(witness_policy),
         }
     )
     with patch.dict(os.environ, environment):
@@ -178,4 +203,7 @@ def test_external_monotonic_state_is_pinned_and_retained(tmp_path: Path) -> None
         "previous_receipt_sha256": "",
         "backend_receipt": backend_receipt,
         "request_sha256": request_sha256,
+        "witness_policy": witness_policy,
+        "witnesses": witnesses,
+        "execution_transcript": execution_transcript,
     }

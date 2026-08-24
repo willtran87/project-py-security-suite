@@ -283,7 +283,7 @@ def build_boundary_graph(
     parser_provenance = _semantic_parser_provenance(languages)
     compiler_evidence, compiler_authority = _compiler_semantic_evidence(
         language_file_sets,
-        required=require_governed_parsers and bool(set(languages) - {"python"}),
+        required=require_governed_parsers and bool(languages),
     )
     subject = {
         "schema_version": "1.0",
@@ -308,7 +308,7 @@ def build_boundary_graph(
         ),
         "semantic_parser_provenance": parser_provenance,
         "compiler_semantic_complete": compiler_evidence is not None
-        or not bool(set(languages) - {"python"}),
+        or not bool(languages),
         "compiler_semantic_evidence": compiler_evidence,
         "compiler_semantic_authority_receipt": compiler_authority,
         "heuristic_languages": heuristic_languages,
@@ -336,6 +336,9 @@ def _semantic_parser_provenance(languages: Counter[str]) -> list[dict[str, str]]
                 "module_sha256": hashlib.sha256(
                     Path(ast.__file__).read_bytes()
                 ).hexdigest(),
+                "extractor_sha256": hashlib.sha256(
+                    Path(__file__).read_bytes()
+                ).hexdigest(),
             }
         )
     for language in sorted(set(languages) - {"python"}):
@@ -351,6 +354,9 @@ def _semantic_parser_provenance(languages: Counter[str]) -> list[dict[str, str]]
                 "engine": "tree-sitter",
                 "version": importlib.metadata.version(package_name),
                 "module_sha256": hashlib.sha256(module_path.read_bytes()).hexdigest(),
+                "extractor_sha256": hashlib.sha256(
+                    Path(__file__).read_bytes()
+                ).hexdigest(),
             }
         )
     return result
@@ -383,7 +389,28 @@ def _compiler_semantic_evidence(
         or not isinstance(value.get("frontends"), list)
     ):
         raise ValueError("compiler semantic evidence fields do not match")
-    expected_languages = set(language_file_sets) - {"python"}
+    verify_compiler_semantic_evidence(value, language_file_sets)
+    authority = verify_deployment_receipt(
+        value,
+        purpose="compiler-semantic-evidence",
+        environment_prefix="PYSEC_COMPILER_SEMANTIC_AUTHORITY",
+    )
+    return value, authority
+
+
+def verify_compiler_semantic_evidence(
+    value: object, language_file_sets: object
+) -> None:
+    """Recheck retained compiler semantics against the exact source-file ledger."""
+    if (
+        not isinstance(value, dict)
+        or set(value) != {"schema_version", "frontends"}
+        or value.get("schema_version") != "1.0"
+        or not isinstance(value.get("frontends"), list)
+        or not isinstance(language_file_sets, dict)
+    ):
+        raise ValueError("compiler semantic evidence fields do not match")
+    expected_languages = set(language_file_sets)
     observed: set[str] = set()
     for item in value.get("frontends", []):
         fields = {
@@ -396,6 +423,8 @@ def _compiler_semantic_evidence(
             "cfg_edges",
             "dataflow_edges",
             "interprocedural_edges",
+            "semantic_ledger",
+            "semantic_ledger_sha256",
         }
         language = str(item.get("language") or "") if isinstance(item, dict) else ""
         counts = ("symbols", "cfg_edges", "dataflow_edges", "interprocedural_edges")
@@ -413,6 +442,8 @@ def _compiler_semantic_evidence(
                 for name in ("engine_sha256", "configuration_sha256")
             )
             or item["files_sha256"] != language_file_sets[language]["files_sha256"]
+            or item["semantic_ledger_sha256"]
+            != hashlib.sha256(canonical_bytes(item["semantic_ledger"])).hexdigest()
             or any(
                 isinstance(item[name], bool)
                 or not isinstance(item[name], int)
@@ -423,15 +454,63 @@ def _compiler_semantic_evidence(
             or sum(item[name] for name in counts[1:]) < 1
         ):
             raise ValueError("compiler semantic frontend evidence is invalid")
+        _verify_semantic_ledger(
+            item["semantic_ledger"],
+            language_file_sets[language],
+            expected_counts={name: item[name] for name in counts},
+        )
         observed.add(language)
     if observed != expected_languages:
         raise ValueError("compiler semantic evidence omits a source language")
-    authority = verify_deployment_receipt(
-        value,
-        purpose="compiler-semantic-evidence",
-        environment_prefix="PYSEC_COMPILER_SEMANTIC_AUTHORITY",
-    )
-    return value, authority
+
+
+def _verify_semantic_ledger(
+    value: object,
+    file_set: dict[str, Any],
+    *,
+    expected_counts: dict[str, int],
+) -> None:
+    if not isinstance(value, dict) or set(value) != {
+        "symbols",
+        "cfg_edges",
+        "dataflow_edges",
+        "interprocedural_edges",
+    }:
+        raise ValueError("compiler semantic ledger fields do not match")
+    files = {str(item["path"]) for item in file_set["files"]}
+    symbols = value["symbols"]
+    if not isinstance(symbols, list) or len(symbols) != expected_counts["symbols"]:
+        raise ValueError("compiler semantic symbol ledger does not match")
+    identities: set[str] = set()
+    for symbol in symbols:
+        if (
+            not isinstance(symbol, dict)
+            or set(symbol) != {"id", "path", "line", "kind"}
+            or not str(symbol["id"])
+            or symbol["id"] in identities
+            or symbol["path"] not in files
+            or isinstance(symbol["line"], bool)
+            or not isinstance(symbol["line"], int)
+            or symbol["line"] < 1
+            or not str(symbol["kind"])
+        ):
+            raise ValueError("compiler semantic symbol is invalid")
+        identities.add(str(symbol["id"]))
+    for name in ("cfg_edges", "dataflow_edges", "interprocedural_edges"):
+        edges = value[name]
+        if not isinstance(edges, list) or len(edges) != expected_counts[name]:
+            raise ValueError("compiler semantic edge ledger does not match")
+        canonical: set[bytes] = set()
+        for edge in edges:
+            if (
+                not isinstance(edge, dict)
+                or set(edge) != {"source", "target"}
+                or edge["source"] not in identities
+                or edge["target"] not in identities
+                or canonical_bytes(edge) in canonical
+            ):
+                raise ValueError("compiler semantic edge is invalid")
+            canonical.add(canonical_bytes(edge))
 
 
 def _python_edges(text: str, source: str) -> tuple[list[dict[str, Any]], str | None]:

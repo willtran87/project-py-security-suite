@@ -200,8 +200,8 @@
                 "type": "object", "additionalProperties": false,
                 "required": ["precondition", "postcondition"],
                 "properties": {
-                  "precondition": {"type": "array", "minItems": 2, "maxItems": 5, "items": {"type": "object"}},
-                  "postcondition": {"type": "array", "minItems": 2, "maxItems": 5, "items": {"type": "object"}}
+                  "precondition": {"type": "array", "minItems": 2, "maxItems": 5, "items": {"$ref": "#/$defs/oracle_observation"}},
+                  "postcondition": {"type": "array", "minItems": 2, "maxItems": 5, "items": {"$ref": "#/$defs/oracle_observation"}}
                 }
               }
             }
@@ -267,6 +267,31 @@
   "$defs": {
     "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "label": {"type": "string", "minLength": 1, "maxLength": 160},
+    "oracle_observation": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schema_version", "observer_identity_sha256", "organization", "host_identity_sha256", "request_sha256", "observation_id", "status", "state", "recovery_epoch", "fencing_token_sha256", "context_sha256", "run_id", "deployment_sha256", "challenge_sha256", "recovery_event_id", "observed_at", "expires_at", "public_key_pem_base64", "signature_base64"],
+      "properties": {
+        "schema_version": {"const": "1.0"},
+        "observer_identity_sha256": {"$ref": "#/$defs/digest"},
+        "organization": {"$ref": "#/$defs/label"},
+        "host_identity_sha256": {"$ref": "#/$defs/digest"},
+        "request_sha256": {"$ref": "#/$defs/digest"},
+        "observation_id": {"$ref": "#/$defs/label"},
+        "status": {"type": "integer", "minimum": 100, "maximum": 599},
+        "state": {},
+        "recovery_epoch": {"type": "integer", "minimum": 1},
+        "fencing_token_sha256": {"$ref": "#/$defs/digest"},
+        "context_sha256": {"$ref": "#/$defs/digest"},
+        "run_id": {"$ref": "#/$defs/label"},
+        "deployment_sha256": {"$ref": "#/$defs/digest"},
+        "challenge_sha256": {"$ref": "#/$defs/digest"},
+        "recovery_event_id": {"type": "string", "maxLength": 160},
+        "observed_at": {"type": "string", "format": "date-time"},
+        "expires_at": {"type": "string", "format": "date-time"},
+        "public_key_pem_base64": {"type": "string", "minLength": 1},
+        "signature_base64": {"type": "string", "minLength": 1}
+      }
+    },
     "language_matrix_entry": {
       "type": "object", "additionalProperties": false,
       "required": ["language", "engine", "engine_version", "query_pack_sha256", "source_files_sha256", "files_discovered", "files_analyzed", "exclusions", "analysis_modes", "files"],

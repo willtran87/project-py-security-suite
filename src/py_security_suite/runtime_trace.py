@@ -45,6 +45,7 @@ def runtime_trace_artifact(boundary_graph: dict[str, Any]) -> dict[str, Any]:
             "coverage_requirements",
             "collector_metrics",
             "collector_operation_receipt",
+            "collector_authority_key_sha256",
             "traces",
         }
         or value.get("schema_version") != "1.0"
@@ -217,6 +218,8 @@ def runtime_trace_artifact(boundary_graph: dict[str, Any]) -> dict[str, Any]:
         .strip()
         .casefold()
     )
+    if value["collector_authority_key_sha256"] != collector_key:
+        raise ValueError("runtime collector authority key is detached from evidence")
     collector_subject = {
         "schema_version": "1.0",
         "deployment_sha256": deployment,
@@ -355,7 +358,9 @@ def _coverage_policy(
             "schema_version",
             "kind",
             "artifact_sha256",
+            "source_artifact",
             "producer_identity_sha256",
+            "authority_key_sha256",
             "requirements",
             "operation_receipt",
         }
@@ -366,10 +371,13 @@ def _coverage_policy(
             or inventory.get("kind") not in kinds
             or inventory["kind"] in seen
             or not _digest(str(inventory.get("artifact_sha256") or ""))
+            or inventory["artifact_sha256"]
+            != hashlib.sha256(canonical_bytes(inventory["source_artifact"])).hexdigest()
             or not _digest(str(inventory.get("producer_identity_sha256") or ""))
             or not isinstance(inventory.get("requirements"), list)
             or not isinstance(inventory_keys, dict)
             or not _digest(str(inventory_keys.get(inventory["kind"]) or ""))
+            or inventory["authority_key_sha256"] != inventory_keys[inventory["kind"]]
         ):
             raise ValueError("runtime source inventory is invalid")
         subject = {

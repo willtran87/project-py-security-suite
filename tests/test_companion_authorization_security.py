@@ -15,7 +15,9 @@ from companion.assurance_context import target_set_sha256
 from companion.authorization_security import (
     _loopback_url,
     _oracle,
+    _oracle_quorum_observation,
     _recovery_checks,
+    _verify_oracle_envelope,
     _verify_recovery_receipt,
     main,
 )
@@ -64,6 +66,88 @@ def _verified_context() -> dict[str, str]:
 
 
 class CompanionAuthorizationSecurityTests(unittest.TestCase):
+    def test_oracle_envelopes_use_trusted_time_and_reject_replay(self) -> None:
+        from datetime import UTC, datetime, timedelta
+
+        with tempfile.TemporaryDirectory() as directory:
+            observed = datetime.now(UTC)
+            observers: list[dict[str, object]] = []
+            payloads: list[bytes] = []
+            for index, organization in enumerate(("org-a", "org-b"), start=1):
+                key = Ed25519PrivateKey.generate()
+                key_bytes = key.public_key().public_bytes(
+                    serialization.Encoding.PEM,
+                    serialization.PublicFormat.SubjectPublicKeyInfo,
+                )
+                identity = hashlib.sha256(key_bytes).hexdigest()
+                observer = {
+                    "base_url": f"http://127.0.0.1:{8800 + index}/",
+                    "role": {"authorization_env": f"PYSEC_ORACLE_{index}"},
+                    "identity_sha256": identity,
+                    "organization": organization,
+                    "host_identity_sha256": str(index) * 64,
+                    "context_sha256": "9" * 64,
+                    "trusted_observed_at": observed.isoformat(),
+                }
+                signed = {
+                    "schema_version": "1.0",
+                    "observer_identity_sha256": identity,
+                    "organization": organization,
+                    "host_identity_sha256": str(index) * 64,
+                    "request_sha256": hashlib.sha256(
+                        canonical_bytes({"method": "GET", "path": "/state"})
+                    ).hexdigest(),
+                    "observation_id": f"observation-{index}",
+                    "status": 200,
+                    "state": {"ready": True},
+                    "recovery_epoch": 7,
+                    "fencing_token_sha256": "f" * 64,
+                    "context_sha256": "9" * 64,
+                    "run_id": "run-1",
+                    "deployment_sha256": "a" * 64,
+                    "challenge_sha256": "b" * 64,
+                    "recovery_event_id": "",
+                    "observed_at": observed.isoformat(),
+                    "expires_at": (observed + timedelta(minutes=1)).isoformat(),
+                    "public_key_pem_base64": base64.b64encode(key_bytes).decode(),
+                }
+                envelope = {
+                    **signed,
+                    "signature_base64": base64.b64encode(
+                        key.sign(canonical_bytes(signed))
+                    ).decode(),
+                }
+                observers.append(observer)
+                payloads.append(canonical_bytes(envelope))
+                self.assertEqual(
+                    _verify_oracle_envelope(observer, "/state", payloads[-1])["status"],
+                    200,
+                )
+            oracle = {"observers": observers}
+            replay_path = Path(directory) / "oracle-replay.sqlite3"
+            with (
+                patch.dict(
+                    "os.environ",
+                    {"PYSEC_AUTHORIZATION_ORACLE_REPLAY_STATE_PATH": str(replay_path)},
+                ),
+                patch(
+                    "companion.authorization_security._request_observation",
+                    side_effect=[
+                        (200, payloads[0]),
+                        (200, payloads[1]),
+                        (200, payloads[0]),
+                        (200, payloads[1]),
+                    ],
+                ),
+            ):
+                status, state, receipts = _oracle_quorum_observation(oracle, "/state")
+                self.assertEqual(
+                    (status, state), (200, canonical_bytes({"ready": True}))
+                )
+                self.assertEqual(len(receipts), 2)
+                with self.assertRaisesRegex(ValueError, "replayed"):
+                    _oracle_quorum_observation(oracle, "/state")
+
     def test_contract_exercises_allow_and_deny_roles_without_retaining_tokens(
         self,
     ) -> None:
@@ -442,6 +526,13 @@ class CompanionAuthorizationSecurityTests(unittest.TestCase):
                     "recovery_epoch": 41,
                     "fencing_token_sha256": "0" * 64,
                     "state": {"state": "active"},
+                    "context_sha256": "9" * 64,
+                    "run_id": "run-1",
+                    "deployment_sha256": "a" * 64,
+                    "challenge_sha256": "b" * 64,
+                    "recovery_event_id": "",
+                    "observed_at": observed.isoformat(),
+                    "expires_at": (observed + timedelta(minutes=1)).isoformat(),
                 }
                 for marker in ("1", "2")
             ]
@@ -452,6 +543,13 @@ class CompanionAuthorizationSecurityTests(unittest.TestCase):
                     "recovery_epoch": 42,
                     "fencing_token_sha256": "f" * 64,
                     "state": {"state": "restored"},
+                    "context_sha256": "9" * 64,
+                    "run_id": "run-1",
+                    "deployment_sha256": "a" * 64,
+                    "challenge_sha256": "b" * 64,
+                    "recovery_event_id": "event-1",
+                    "observed_at": observed.isoformat(),
+                    "expires_at": (observed + timedelta(minutes=1)).isoformat(),
                 }
                 for marker in ("1", "2")
             ]
@@ -460,6 +558,9 @@ class CompanionAuthorizationSecurityTests(unittest.TestCase):
                 {
                     "PYSEC_AUTHORIZATION_ORCHESTRATOR_KEY_PATH": str(public_path),
                     "PYSEC_AUTHORIZATION_ORCHESTRATOR_KEY_SHA256": identity,
+                    "PYSEC_AUTHORIZATION_ORACLE_REPLAY_STATE_PATH": str(
+                        Path(directory) / "oracle-replay.sqlite3"
+                    ),
                 },
             ):
                 _verify_recovery_receipt(
@@ -477,6 +578,7 @@ class CompanionAuthorizationSecurityTests(unittest.TestCase):
                     postcondition_response=postcondition_response,
                     precondition_observers=before_observers,
                     postcondition_observers=after_observers,
+                    context_sha256="9" * 64,
                 )
 
 

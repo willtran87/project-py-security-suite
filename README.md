@@ -867,11 +867,16 @@ x86-64 and Python 3.11; other platforms can use organization-managed native
 executables through the same CLI and report contract.
 
 Governed polyglot scans can require signed compiler-semantic evidence in
-addition to the bundled syntax ASTs. Runtime coverage uses three independently
-signed route inventories and separately signed collector accounting; recovery
-drills retain signed, host- and organization-bound observer quorums. External
-KMS and monotonic-state helpers sign exact request/challenge receipts that also
-bind their endpoint, mTLS, sandbox, and executable identities.
+addition to the bundled syntax ASTs. The retained evidence includes exact
+symbol, CFG, dataflow, and interprocedural ledgers for every governed language,
+including Python. Runtime coverage retains three independently signed route
+source documents and separately signed collector accounting; recovery drills
+retain run-bound, replay-consumed, signed observer quorums. External KMS and
+monotonic-state helpers execute through pinned launchers and retain exact
+request/challenge, endpoint, mTLS, sandbox, executable, TLS-session, backend,
+and independent witness identities. Production Git provenance retains the
+allowed-signers bytes plus the lifecycle-checked commit/tag signer ledger in
+the published source inventory.
 
 No scanner portfolio can prove that software is vulnerability-free. Production
 approval must bind this report, an SBOM, the final artifact digest, test

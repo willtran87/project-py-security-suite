@@ -6,7 +6,7 @@ import os
 import sqlite3
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
@@ -124,6 +124,7 @@ def verify_deployment_receipt(
         "receipt_payload_base64": base64.b64encode(receipt_payload).decode("ascii"),
         "receipt_sha256": receipt_digest,
         "monotonic_state": monotonic_state,
+        "verified_at": now.isoformat(),
     }
     verify_portable_receipt(
         subject,
@@ -155,6 +156,7 @@ def verify_portable_receipt(
         "receipt_payload_base64",
         "receipt_sha256",
         "monotonic_state",
+        "verified_at",
     }:
         raise ValueError("portable deployment receipt fields do not match")
     statement = receipt.get("statement")
@@ -186,8 +188,12 @@ def verify_portable_receipt(
     issued = _timestamp(statement.get("issued_at"), "issued_at")
     expires = _timestamp(statement.get("expires_at"), "expires_at")
     now = observed_at.astimezone(UTC)
+    verified_at = _timestamp(receipt.get("verified_at"), "verified_at")
     if (
         receipt.get("schema_version") != "1.0"
+        or verified_at > now
+        or verified_at < issued
+        or verified_at > expires
         or not isinstance(monotonic_state, dict)
         or set(monotonic_state)
         != {
@@ -199,6 +205,9 @@ def verify_portable_receipt(
             "previous_receipt_sha256",
             "backend_receipt",
             "request_sha256",
+            "witness_policy",
+            "witnesses",
+            "execution_transcript",
         }
         or monotonic_state.get("mode") not in {"external-command", "local-sqlite"}
         or not _digest(str(monotonic_state.get("backend_identity_sha256") or ""))
@@ -242,6 +251,7 @@ def verify_portable_receipt(
             backend_identity_sha256=str(monotonic_state["backend_identity_sha256"]),
             operation_id=str(monotonic_state["operation_id"]),
             request_sha256=str(monotonic_state["request_sha256"]),
+            execution_transcript=monotonic_state["execution_transcript"],
         )
         verified_backend = verify_operation_receipt(
             backend_subject,
@@ -258,6 +268,13 @@ def verify_portable_receipt(
             != monotonic_state["previous_receipt_sha256"]
         ):
             raise ValueError("monotonic backend receipt chain is invalid")
+        _verify_monotonic_witnesses(
+            backend_subject,
+            monotonic_state["witness_policy"],
+            monotonic_state["witnesses"],
+            observed_at=now,
+            challenge_sha256=challenge_sha256,
+        )
     elif monotonic_state["backend_receipt"] is not None:
         raise ValueError("local monotonic state must not claim an external receipt")
     try:
@@ -306,6 +323,9 @@ def _advance_monotonic_state(
                 "previous_receipt_sha256",
                 "backend_receipt",
                 "request_sha256",
+                "witness_policy",
+                "witnesses",
+                "execution_transcript",
             }
             or response.get("schema_version") != "1.0"
             or response.get("accepted") is not True
@@ -319,6 +339,10 @@ def _advance_monotonic_state(
             or not _optional_digest(response.get("previous_receipt_sha256"))
             or response.get("request_sha256")
             != hashlib.sha256(canonical_bytes(request)).hexdigest()
+            or not _execution_transcript_valid(
+                response.get("execution_transcript"),
+                cast(dict[str, Any], request["command_context"]),
+            )
         ):
             raise ValueError("external monotonic state rejected receipt advancement")
         backend_subject = _monotonic_backend_subject(
@@ -330,6 +354,7 @@ def _advance_monotonic_state(
             backend_identity_sha256=str(response["backend_identity_sha256"]),
             operation_id=str(response["operation_id"]),
             request_sha256=str(response["request_sha256"]),
+            execution_transcript=response["execution_transcript"],
         )
         verified_backend = verify_operation_receipt(
             backend_subject,
@@ -345,6 +370,30 @@ def _advance_monotonic_state(
             != response["previous_receipt_sha256"]
         ):
             raise ValueError("external monotonic state receipt chain is invalid")
+        expected_backend_key = (
+            os.environ.get(f"{command_prefix}_BACKEND_KEY_SHA256", "")
+            .strip()
+            .casefold()
+        )
+        try:
+            expected_witness_policy = strict_loads(
+                os.environ.get(f"{command_prefix}_WITNESS_KEYS_JSON", "").encode()
+            )
+        except (TypeError, ValueError) as exc:
+            raise ValueError("external monotonic witness policy is invalid") from exc
+        if (
+            not _digest(expected_backend_key)
+            or expected_backend_key != response["backend_identity_sha256"]
+            or response["witness_policy"] != expected_witness_policy
+        ):
+            raise ValueError("external monotonic trust policy does not match its pins")
+        _verify_monotonic_witnesses(
+            backend_subject,
+            response["witness_policy"],
+            response["witnesses"],
+            observed_at=observed_at,
+            challenge_sha256=challenge_sha256,
+        )
         return {
             "mode": "external-command",
             "backend_identity_sha256": response["backend_identity_sha256"],
@@ -354,6 +403,9 @@ def _advance_monotonic_state(
             "previous_receipt_sha256": response["previous_receipt_sha256"],
             "backend_receipt": response["backend_receipt"],
             "request_sha256": response["request_sha256"],
+            "witness_policy": response["witness_policy"],
+            "witnesses": response["witnesses"],
+            "execution_transcript": response["execution_transcript"],
         }
     raw_path = os.environ.get(f"{prefix}_STATE_PATH", "").strip()
     if not raw_path:
@@ -405,6 +457,9 @@ def _advance_monotonic_state(
         "previous_receipt_sha256": previous_receipt_sha256,
         "backend_receipt": None,
         "request_sha256": "",
+        "witness_policy": None,
+        "witnesses": [],
+        "execution_transcript": None,
     }
 
 
@@ -418,6 +473,7 @@ def _monotonic_backend_subject(
     backend_identity_sha256: str,
     operation_id: str,
     request_sha256: str,
+    execution_transcript: object,
 ) -> dict[str, Any]:
     return {
         "schema_version": "1.0",
@@ -430,7 +486,73 @@ def _monotonic_backend_subject(
         "backend_identity_sha256": backend_identity_sha256,
         "operation_id": operation_id,
         "request_sha256": request_sha256,
+        "execution_transcript": execution_transcript,
     }
+
+
+def _verify_monotonic_witnesses(
+    subject: dict[str, Any],
+    policy: object,
+    witnesses: object,
+    *,
+    observed_at: datetime,
+    challenge_sha256: str,
+) -> None:
+    if (
+        not isinstance(policy, dict)
+        or len(policy) < 2
+        or not isinstance(witnesses, list)
+        or len(witnesses) < 2
+    ):
+        raise ValueError("monotonic state witness quorum is unavailable")
+    organizations: set[str] = set()
+    keys: set[str] = set()
+    for receipt in witnesses:
+        statement = receipt.get("statement") if isinstance(receipt, dict) else None
+        key_sha256 = str((statement or {}).get("signer_key_sha256") or "")
+        organization = policy.get(key_sha256)
+        if (
+            not _digest(key_sha256)
+            or not isinstance(organization, str)
+            or not organization
+            or key_sha256 in keys
+        ):
+            raise ValueError("monotonic state witness is not policy-approved")
+        verify_operation_receipt(
+            subject,
+            receipt,
+            purpose="monotonic-state-witness",
+            observed_at=observed_at,
+            challenge_sha256=challenge_sha256,
+            expected_key_sha256=key_sha256,
+        )
+        keys.add(key_sha256)
+        organizations.add(organization)
+    if len(keys) < 2 or len(organizations) < 2:
+        raise ValueError("monotonic state witness organizations are not independent")
+
+
+def _execution_transcript_valid(value: object, context: dict[str, Any]) -> bool:
+    if not isinstance(value, dict) or set(value) != {
+        "mode",
+        "endpoint",
+        "peer_identity_sha256",
+        "sandbox_identity_sha256",
+        "session_id",
+    }:
+        return False
+    endpoints = context["allowed_endpoints"]
+    local = not endpoints
+    return bool(
+        value["mode"] == ("local-sandbox" if local else "mtls")
+        and value["endpoint"] == ("" if local else value["endpoint"])
+        and (local or value["endpoint"] in endpoints)
+        and value["peer_identity_sha256"]
+        == ("" if local else context["mtls_identity_sha256"])
+        and value["sandbox_identity_sha256"] == context["sandbox_identity_sha256"]
+        and isinstance(value["session_id"], str)
+        and 16 <= len(value["session_id"]) <= 200
+    )
 
 
 def _pair(prefix: str, kind: str) -> tuple[Path, str]:
