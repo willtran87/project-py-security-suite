@@ -1006,8 +1006,7 @@ def _verify_procedure_execution(
         or execution["result_artifact"] != assertion["artifact"]
         or execution["result_sha256"] != assertion["sha256"]
         or execution["stdout_sha256"] != execution["result_sha256"]
-        or execution["command_sha256"]
-        != hashlib.sha256(canonical_bytes(execution["argv"])).hexdigest()
+        or not _procedure_manifests_valid(execution)
         or execution["argv_sha256"]
         != hashlib.sha256(canonical_bytes(execution["argv"])).hexdigest()
         or execution["environment_sha256"]
@@ -1094,6 +1093,79 @@ def _verify_procedure_execution(
     receipt_issued = _timestamp(statement["issued_at"], "execution receipt issued_at")
     if receipt_issued < finished or receipt_issued - finished > timedelta(minutes=5):
         raise ValueError("requirement execution receipt does not bracket execution")
+
+
+def _procedure_manifests_valid(execution: dict[str, Any]) -> bool:
+    environment = execution.get("environment")
+    runtime = execution.get("runtime_manifest")
+    assets = execution.get("assets_manifest")
+    sandbox = execution.get("sandbox_policy")
+    if (
+        not isinstance(environment, list)
+        or any(not isinstance(item, dict) for item in environment)
+        or environment
+        != sorted(environment, key=lambda item: str(item.get("name", "")))
+        or not isinstance(runtime, dict)
+        or set(runtime)
+        != {
+            "kind",
+            "executable_sha256",
+            "closure_sha256",
+            "image_digest",
+            "sbom_sha256",
+        }
+        or runtime.get("kind") not in {"native", "container"}
+        or execution.get("command_sha256") != runtime.get("executable_sha256")
+        or any(
+            not _digest(str(runtime.get(name) or ""))
+            for name in ("executable_sha256", "closure_sha256", "sbom_sha256")
+        )
+        or not isinstance(runtime.get("image_digest"), str)
+        or (
+            runtime["kind"] == "container"
+            and not (
+                runtime["image_digest"].startswith("sha256:")
+                and _digest(runtime["image_digest"].removeprefix("sha256:"))
+            )
+        )
+        or (runtime["kind"] == "native" and runtime["image_digest"] != "")
+        or not isinstance(assets, list)
+        or any(not isinstance(item, dict) for item in assets)
+        or assets != sorted(assets, key=lambda item: str(item.get("name", "")))
+        or not isinstance(sandbox, dict)
+        or sandbox
+        != {
+            "network": "deny",
+            "filesystem": "read-only",
+            "process": "confined",
+            "credentials": "isolated",
+        }
+    ):
+        return False
+    environment_names: set[str] = set()
+    for item in environment:
+        if (
+            not isinstance(item, dict)
+            or set(item) != {"name", "value_sha256", "classification"}
+            or not str(item["name"])
+            or str(item["name"]) in environment_names
+            or not _digest(str(item["value_sha256"]))
+            or item["classification"] not in {"public-commitment", "secret-commitment"}
+        ):
+            return False
+        environment_names.add(str(item["name"]))
+    asset_names: set[str] = set()
+    for item in assets:
+        if (
+            not isinstance(item, dict)
+            or set(item) != {"name", "sha256"}
+            or not str(item["name"])
+            or str(item["name"]) in asset_names
+            or not _digest(str(item["sha256"]))
+        ):
+            return False
+        asset_names.add(str(item["name"]))
+    return True
 
 
 def _replay_assertion(assertion: dict[str, Any], artifacts: dict[str, Any]) -> bool:

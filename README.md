@@ -876,7 +876,14 @@ monotonic-state helpers execute through pinned launchers and retain exact
 request/challenge, endpoint, mTLS, sandbox, executable, TLS-session, backend,
 and independent witness identities. Production Git provenance retains the
 allowed-signers bytes plus the lifecycle-checked commit/tag signer ledger in
-the published source inventory.
+the published source inventory, together with raw Git objects, exact security
+configuration bytes, and the verifier runtime closure for clean-host replay.
+Pinned helpers retain signed per-invocation effective-policy attestations;
+runtime analysis cross-checks raw parent-linked spans with an independent
+observer, and compiler evidence requires distinct engines with replay artifacts
+and explicit taint paths. Optional persistent operation-receipt state rejects
+cross-report replay, while RFC 3161 quorum mode rejects authority disagreement
+and monotonic-time rollback.
 
 No scanner portfolio can prove that software is vulnerability-free. Production
 approval must bind this report, an SBOM, the final artifact digest, test

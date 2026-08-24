@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+import base64
 import hashlib
 import json
 import os
@@ -156,11 +157,41 @@ class BoundaryGraphTests(unittest.TestCase):
                             "interprocedural_edges": [],
                         },
                         "semantic_ledger_sha256": "",
+                        "secondary_engine": "codeql",
+                        "secondary_engine_sha256": "c" * 64,
+                        "secondary_configuration_sha256": "d" * 64,
+                        "secondary_semantic_ledger": {},
+                        "secondary_semantic_ledger_sha256": "",
+                        "primary_analysis_artifact_base64": "",
+                        "primary_analysis_artifact_sha256": "",
+                        "secondary_analysis_artifact_base64": "",
+                        "secondary_analysis_artifact_sha256": "",
+                        "taint_paths": [],
+                        "taint_paths_sha256": "",
                     }
                 ],
             }
             evidence["frontends"][0]["semantic_ledger_sha256"] = hashlib.sha256(
                 canonical_bytes(evidence["frontends"][0]["semantic_ledger"])
+            ).hexdigest()
+            evidence["frontends"][0]["secondary_semantic_ledger"] = evidence[
+                "frontends"
+            ][0]["semantic_ledger"]
+            evidence["frontends"][0]["secondary_semantic_ledger_sha256"] = evidence[
+                "frontends"
+            ][0]["semantic_ledger_sha256"]
+            for prefix, payload in (
+                ("primary", b"clang-bqrs"),
+                ("secondary", b"codeql-bqrs"),
+            ):
+                evidence["frontends"][0][f"{prefix}_analysis_artifact_base64"] = (
+                    base64.b64encode(payload).decode()
+                )
+                evidence["frontends"][0][f"{prefix}_analysis_artifact_sha256"] = (
+                    hashlib.sha256(payload).hexdigest()
+                )
+            evidence["frontends"][0]["taint_paths_sha256"] = hashlib.sha256(
+                canonical_bytes([])
             ).hexdigest()
             evidence_path = root / "compiler-semantics.json"
             evidence_path.write_text(json.dumps(evidence), encoding="utf-8")

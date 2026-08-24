@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import base64
 import hashlib
 import importlib.util
 import importlib.metadata
@@ -425,6 +426,17 @@ def verify_compiler_semantic_evidence(
             "interprocedural_edges",
             "semantic_ledger",
             "semantic_ledger_sha256",
+            "secondary_engine",
+            "secondary_engine_sha256",
+            "secondary_configuration_sha256",
+            "secondary_semantic_ledger",
+            "secondary_semantic_ledger_sha256",
+            "primary_analysis_artifact_base64",
+            "primary_analysis_artifact_sha256",
+            "secondary_analysis_artifact_base64",
+            "secondary_analysis_artifact_sha256",
+            "taint_paths",
+            "taint_paths_sha256",
         }
         language = str(item.get("language") or "") if isinstance(item, dict) else ""
         counts = ("symbols", "cfg_edges", "dataflow_edges", "interprocedural_edges")
@@ -434,16 +446,31 @@ def verify_compiler_semantic_evidence(
             or language not in expected_languages
             or language in observed
             or str(item["engine"]).casefold().startswith("tree-sitter")
+            or item["secondary_engine"] == item["engine"]
+            or str(item["secondary_engine"]).casefold().startswith("tree-sitter")
             or any(
                 len(str(item[name])) != 64
                 or any(
                     character not in "0123456789abcdef" for character in str(item[name])
                 )
-                for name in ("engine_sha256", "configuration_sha256")
+                for name in (
+                    "engine_sha256",
+                    "configuration_sha256",
+                    "secondary_engine_sha256",
+                    "secondary_configuration_sha256",
+                )
             )
             or item["files_sha256"] != language_file_sets[language]["files_sha256"]
             or item["semantic_ledger_sha256"]
             != hashlib.sha256(canonical_bytes(item["semantic_ledger"])).hexdigest()
+            or item["secondary_semantic_ledger_sha256"]
+            != hashlib.sha256(
+                canonical_bytes(item["secondary_semantic_ledger"])
+            ).hexdigest()
+            or item["secondary_semantic_ledger_sha256"]
+            != item["semantic_ledger_sha256"]
+            or item["taint_paths_sha256"]
+            != hashlib.sha256(canonical_bytes(item["taint_paths"])).hexdigest()
             or any(
                 isinstance(item[name], bool)
                 or not isinstance(item[name], int)
@@ -459,9 +486,72 @@ def verify_compiler_semantic_evidence(
             language_file_sets[language],
             expected_counts={name: item[name] for name in counts},
         )
+        _verify_semantic_ledger(
+            item["secondary_semantic_ledger"],
+            language_file_sets[language],
+            expected_counts={name: item[name] for name in counts},
+        )
+        _verify_analysis_artifact(item, "primary")
+        _verify_analysis_artifact(item, "secondary")
+        _verify_taint_paths(item["taint_paths"], item["semantic_ledger"])
         observed.add(language)
     if observed != expected_languages:
         raise ValueError("compiler semantic evidence omits a source language")
+
+
+def _verify_analysis_artifact(item: dict[str, Any], prefix: str) -> None:
+    try:
+        payload = base64.b64decode(
+            str(item[f"{prefix}_analysis_artifact_base64"]), validate=True
+        )
+    except (TypeError, ValueError) as exc:
+        raise ValueError("compiler analysis replay artifact is invalid") from exc
+    if (
+        not payload
+        or len(payload) > 16 * 1024 * 1024
+        or hashlib.sha256(payload).hexdigest()
+        != item[f"{prefix}_analysis_artifact_sha256"]
+    ):
+        raise ValueError("compiler analysis replay artifact is detached")
+
+
+def _verify_taint_paths(value: object, semantic_ledger: object) -> None:
+    if not isinstance(value, list) or not isinstance(semantic_ledger, dict):
+        raise ValueError("compiler taint paths are invalid")
+    symbols = semantic_ledger.get("symbols")
+    if not isinstance(symbols, list):
+        raise ValueError("compiler taint path symbols are unavailable")
+    identities = {str(item["id"]) for item in symbols if isinstance(item, dict)}
+    seen: set[str] = set()
+    for path in value:
+        if not isinstance(path, dict) or set(path) != {
+            "id",
+            "source",
+            "sink",
+            "path",
+            "sanitizers",
+            "barriers",
+        }:
+            raise ValueError("compiler taint path fields do not match")
+        path_id = str(path["id"])
+        nodes = path["path"]
+        sanitizers = path["sanitizers"]
+        barriers = path["barriers"]
+        if (
+            not path_id
+            or path_id in seen
+            or not isinstance(nodes, list)
+            or len(nodes) < 2
+            or path["source"] != nodes[0]
+            or path["sink"] != nodes[-1]
+            or any(node not in identities for node in nodes)
+            or not isinstance(sanitizers, list)
+            or not isinstance(barriers, list)
+            or any(node not in nodes for node in [*sanitizers, *barriers])
+            or len(set(nodes)) != len(nodes)
+        ):
+            raise ValueError("compiler taint path is invalid")
+        seen.add(path_id)
 
 
 def _verify_semantic_ledger(

@@ -46,6 +46,16 @@ def runtime_trace_artifact(boundary_graph: dict[str, Any]) -> dict[str, Any]:
             "collector_metrics",
             "collector_operation_receipt",
             "collector_authority_key_sha256",
+            "collector_config",
+            "collector_config_sha256",
+            "instrumentation_manifest",
+            "instrumentation_manifest_sha256",
+            "raw_spans",
+            "raw_spans_sha256",
+            "independent_observer_identity_sha256",
+            "independent_observations",
+            "independent_operation_receipt",
+            "independent_authority_key_sha256",
             "traces",
         }
         or value.get("schema_version") != "1.0"
@@ -56,6 +66,16 @@ def runtime_trace_artifact(boundary_graph: dict[str, Any]) -> dict[str, Any]:
         or not isinstance(value.get("coverage_requirements"), list)
         or not 1 <= len(value["coverage_requirements"]) <= 100_000
         or not isinstance(value.get("collector_metrics"), dict)
+        or value.get("collector_config_sha256")
+        != hashlib.sha256(canonical_bytes(value.get("collector_config"))).hexdigest()
+        or value.get("instrumentation_manifest_sha256")
+        != hashlib.sha256(
+            canonical_bytes(value.get("instrumentation_manifest"))
+        ).hexdigest()
+        or value.get("raw_spans_sha256")
+        != hashlib.sha256(canonical_bytes(value.get("raw_spans"))).hexdigest()
+        or not isinstance(value.get("raw_spans"), list)
+        or not isinstance(value.get("independent_observations"), list)
     ):
         raise ValueError("runtime trace evidence fields do not match")
     deployment = (
@@ -184,6 +204,7 @@ def runtime_trace_artifact(boundary_graph: dict[str, Any]) -> dict[str, Any]:
     missing = [item for item in requirements if canonical_bytes(item) not in observed]
     if missing:
         raise ValueError("runtime trace evidence does not cover every required route")
+    _verify_raw_spans(value["raw_spans"], traces)
     span_total = sum(int(item["span_count"]) for item in traces)
     metrics = value["collector_metrics"]
     if (
@@ -238,6 +259,14 @@ def runtime_trace_artifact(boundary_graph: dict[str, Any]) -> dict[str, Any]:
         challenge_sha256=challenge,
         expected_key_sha256=collector_key,
     )
+    _verify_independent_runtime_observations(
+        value,
+        traces,
+        deployment=deployment,
+        graph_digest=graph_digest,
+        observed_at=authority_issued,
+        challenge=challenge,
+    )
     return _artifact(
         sorted(traces, key=lambda item: str(item["trace_id"])),
         expected,
@@ -249,6 +278,115 @@ def runtime_trace_artifact(boundary_graph: dict[str, Any]) -> dict[str, Any]:
         value,
         requirements,
         True,
+    )
+
+
+def _verify_raw_spans(raw_spans: object, traces: list[dict[str, Any]]) -> None:
+    fields = {
+        "trace_id",
+        "span_id",
+        "parent_span_id",
+        "process_identity_sha256",
+        "operation",
+    }
+    if not isinstance(raw_spans, list) or len(raw_spans) > 1_000_000:
+        raise ValueError("runtime raw span ledger is invalid")
+    known_traces = {str(item["trace_id"]): item for item in traces}
+    spans: dict[str, dict[str, Any]] = {}
+    counts: dict[str, int] = {}
+    for item in raw_spans:
+        if not isinstance(item, dict) or set(item) != fields:
+            raise ValueError("runtime raw span fields do not match")
+        trace_id = str(item["trace_id"])
+        span_id = str(item["span_id"])
+        if (
+            trace_id not in known_traces
+            or not span_id
+            or span_id in spans
+            or not _digest(str(item["process_identity_sha256"]))
+            or item["operation"] != known_traces[trace_id]["operation"]
+        ):
+            raise ValueError("runtime raw span is detached from its trace")
+        spans[span_id] = item
+        counts[trace_id] = counts.get(trace_id, 0) + 1
+    for span in spans.values():
+        parent = str(span["parent_span_id"])
+        if parent and (
+            parent not in spans or spans[parent]["trace_id"] != span["trace_id"]
+        ):
+            raise ValueError("runtime raw span parent is missing or cross-trace")
+    if any(
+        counts.get(trace_id, 0) != trace["span_count"]
+        for trace_id, trace in known_traces.items()
+    ):
+        raise ValueError("runtime raw span accounting does not match trace summaries")
+
+
+def _verify_independent_runtime_observations(
+    value: dict[str, Any],
+    traces: list[dict[str, Any]],
+    *,
+    deployment: str,
+    graph_digest: str,
+    observed_at: Any,
+    challenge: str,
+) -> None:
+    observations = value["independent_observations"]
+    fields = {
+        "trace_id",
+        "span_count",
+        "sink_observed",
+        "process_identity_sha256",
+        "kernel_identity_sha256",
+    }
+    by_trace: dict[str, dict[str, Any]] = {}
+    for item in observations:
+        if (
+            not isinstance(item, dict)
+            or set(item) != fields
+            or str(item["trace_id"]) in by_trace
+            or not _digest(str(item["process_identity_sha256"]))
+            or not _digest(str(item["kernel_identity_sha256"]))
+        ):
+            raise ValueError("independent runtime observation is invalid")
+        by_trace[str(item["trace_id"])] = item
+    if set(by_trace) != {str(item["trace_id"]) for item in traces} or any(
+        by_trace[str(trace["trace_id"])]["span_count"] != trace["span_count"]
+        or by_trace[str(trace["trace_id"])]["sink_observed"]
+        is not trace["sink_observed"]
+        for trace in traces
+    ):
+        raise ValueError("independent runtime observations disagree with traces")
+    expected_key = (
+        os.environ.get("PYSEC_RUNTIME_INDEPENDENT_AUTHORITY_KEY_SHA256", "")
+        .strip()
+        .casefold()
+    )
+    if (
+        not _digest(expected_key)
+        or value["independent_authority_key_sha256"] != expected_key
+        or not _digest(str(value["independent_observer_identity_sha256"]))
+        or value["independent_observer_identity_sha256"]
+        == value["collector_identity_sha256"]
+    ):
+        raise ValueError("independent runtime observer is not deployment-pinned")
+    subject = {
+        "schema_version": "1.0",
+        "deployment_sha256": deployment,
+        "boundary_graph_sha256": graph_digest,
+        "observer_identity_sha256": value["independent_observer_identity_sha256"],
+        "instrumented_build_sha256": value["instrumented_build_sha256"],
+        "observations_sha256": hashlib.sha256(
+            canonical_bytes(observations)
+        ).hexdigest(),
+    }
+    verify_operation_receipt(
+        subject,
+        value["independent_operation_receipt"],
+        purpose="runtime-independent-observation",
+        observed_at=observed_at,
+        challenge_sha256=challenge,
+        expected_key_sha256=expected_key,
     )
 
 
@@ -378,6 +516,11 @@ def _coverage_policy(
             or not isinstance(inventory_keys, dict)
             or not _digest(str(inventory_keys.get(inventory["kind"]) or ""))
             or inventory["authority_key_sha256"] != inventory_keys[inventory["kind"]]
+            or not _runtime_source_artifact_valid(
+                inventory["kind"],
+                inventory["source_artifact"],
+                inventory["requirements"],
+            )
         ):
             raise ValueError("runtime source inventory is invalid")
         subject = {
@@ -402,6 +545,19 @@ def _coverage_policy(
     }:
         raise ValueError("runtime denominator omits or adds inventoried routes")
     return value, authority
+
+
+def _runtime_source_artifact_valid(
+    kind: str, value: object, requirements: object
+) -> bool:
+    return bool(
+        isinstance(value, dict)
+        and set(value) == {"schema_version", "kind", "routes"}
+        and value.get("schema_version") == "1.0"
+        and value.get("kind") == kind
+        and isinstance(requirements, list)
+        and value.get("routes") == requirements
+    )
 
 
 def _digest(value: str) -> bool:

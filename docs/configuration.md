@@ -267,6 +267,14 @@ deployment, external surface inventory, challenge, and trusted-time receipt.
 checks. Its trusted-time object must contain an RFC 3161 response, nonce, and
 digest-pinned timestamping certificate; the verifier checks the message imprint,
 nonce, signature, timestamping EKU, certificate validity, and issued time.
+The trusted-time value may instead be an array of two to five independently
+pinned RFC 3161 authority objects. Quorum timestamps must agree within five
+seconds and use distinct authority and signer identities. Quorum mode requires
+`PYSEC_TRUSTED_TIME_STATE_PATH` to name a durable SQLite file; the same setting
+also adds rollback/fork detection to single-authority contexts. Set
+`PYSEC_OPERATION_RECEIPT_STATE_PATH` to a separate durable SQLite file to make
+operation IDs consume-once across different reports while keeping verification
+of the identical report idempotent.
 `replay_ledger_path` atomically consumes
 each authenticated evidence identity in SQLite, so a previously accepted
 receipt cannot authorize a later decision.

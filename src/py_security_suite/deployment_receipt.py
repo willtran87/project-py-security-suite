@@ -208,6 +208,7 @@ def verify_portable_receipt(
             "witness_policy",
             "witnesses",
             "execution_transcript",
+            "effective_policy_attestation",
         }
         or monotonic_state.get("mode") not in {"external-command", "local-sqlite"}
         or not _digest(str(monotonic_state.get("backend_identity_sha256") or ""))
@@ -240,6 +241,43 @@ def verify_portable_receipt(
     ):
         raise ValueError("portable deployment receipt trust binding is invalid")
     if monotonic_state["mode"] == "external-command":
+        attestation = monotonic_state["effective_policy_attestation"]
+        attestation_subject = (
+            attestation.get("subject") if isinstance(attestation, dict) else None
+        )
+        policy = (
+            attestation_subject.get("policy_observations")
+            if isinstance(attestation_subject, dict)
+            else None
+        )
+        if (
+            not isinstance(attestation, dict)
+            or set(attestation) != {"subject", "operation_receipt"}
+            or not isinstance(attestation_subject, dict)
+            or not isinstance(policy, dict)
+            or set(policy)
+            != {
+                "network_allowlist_enforced",
+                "filesystem_read_only",
+                "credentials_isolated",
+                "child_process_confined",
+            }
+            or any(item is not True for item in policy.values())
+            or not _digest(str(attestation_subject.get("attestor_key_sha256") or ""))
+        ):
+            raise ValueError("retained command effective-policy attestation is invalid")
+        attestation_statement = attestation["operation_receipt"].get("statement", {})
+        attestation_issued = _timestamp(
+            attestation_statement.get("issued_at"), "effective-policy issued_at"
+        )
+        verify_operation_receipt(
+            attestation_subject,
+            attestation["operation_receipt"],
+            purpose="pinned-command-effective-policy",
+            observed_at=attestation_issued,
+            challenge_sha256=challenge_sha256,
+            expected_key_sha256=str(attestation_subject["attestor_key_sha256"]),
+        )
         backend_subject = _monotonic_backend_subject(
             purpose=purpose,
             generation=int(statement["generation"]),
@@ -275,7 +313,10 @@ def verify_portable_receipt(
             observed_at=now,
             challenge_sha256=challenge_sha256,
         )
-    elif monotonic_state["backend_receipt"] is not None:
+    elif (
+        monotonic_state["backend_receipt"] is not None
+        or monotonic_state["effective_policy_attestation"] is not None
+    ):
         raise ValueError("local monotonic state must not claim an external receipt")
     try:
         signature = base64.b64decode(
@@ -309,6 +350,9 @@ def _advance_monotonic_state(
         response = run_pinned_json_command(
             command_prefix,
             request,
+        )
+        effective_policy_attestation = response.pop(
+            "_effective_policy_attestation", None
         )
         if (
             set(response)
@@ -406,6 +450,7 @@ def _advance_monotonic_state(
             "witness_policy": response["witness_policy"],
             "witnesses": response["witnesses"],
             "execution_transcript": response["execution_transcript"],
+            "effective_policy_attestation": effective_policy_attestation,
         }
     raw_path = os.environ.get(f"{prefix}_STATE_PATH", "").strip()
     if not raw_path:
@@ -460,6 +505,7 @@ def _advance_monotonic_state(
         "witness_policy": None,
         "witnesses": [],
         "execution_transcript": None,
+        "effective_policy_attestation": None,
     }
 
 

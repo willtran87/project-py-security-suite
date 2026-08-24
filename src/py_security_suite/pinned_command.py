@@ -3,6 +3,8 @@ from __future__ import annotations
 import base64
 import hashlib
 import os
+import tempfile
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +15,8 @@ from .execution import (
     run_command,
     sha256_file,
 )
+from .operation_receipt import verify_operation_receipt
+from .path_safety import read_regular_file
 from .strict_json import canonical_bytes, loads as strict_loads
 
 
@@ -55,6 +59,11 @@ def run_pinned_json_command(
     sandbox_executable_sha256 = (
         os.environ.get(f"{prefix}_SANDBOX_EXECUTABLE_SHA256", "").strip().casefold()
     )
+    attestor_key_sha256 = (
+        os.environ.get(f"{prefix}_EXECUTION_ATTESTATION_KEY_SHA256", "")
+        .strip()
+        .casefold()
+    )
     try:
         allowed_endpoints = strict_loads(raw_endpoints)
         sandbox_command = strict_loads(raw_sandbox)
@@ -71,6 +80,7 @@ def run_pinned_json_command(
         or not sandbox_command
         or any(not isinstance(item, str) or not item for item in sandbox_command)
         or not _digest(sandbox_executable_sha256)
+        or not _digest(attestor_key_sha256)
     ):
         raise ValueError(f"{prefix} transport and sandbox policy is incomplete")
     resolved_sandbox = resolve_executable(sandbox_command[0])
@@ -107,19 +117,49 @@ def run_pinned_json_command(
         "sandbox_identity_sha256": sandbox_identity,
         "sandbox_executable_sha256": sandbox_executable_sha256,
         "sandbox_launcher_argv": [str(item) for item in sandbox_command[1:]],
+        "effective_policy_attestor_key_sha256": attestor_key_sha256,
     }
     encoded_request = base64.b64encode(canonical_bytes(request)).decode("ascii")
-    result = run_command(
-        [str(resolved), *command[1:], encoded_request],
-        cwd=Path(resolved).parent,
-        timeout_seconds=timeout_seconds,
-        max_output_bytes=maximum_output_bytes,
-        environment=CommandEnvironment(
-            sandbox_prefix=tuple(str(item) for item in sandbox_command),
-            sandbox_executable_sha256=sandbox_executable_sha256,
-            max_scratch_bytes=16 * 1024 * 1024,
-        ),
-    )
+    nonce = os.urandom(32).hex()
+    attestation_base = {
+        "schema_version": "1.0",
+        "request_sha256": hashlib.sha256(canonical_bytes(request)).hexdigest(),
+        "command_context_sha256": hashlib.sha256(
+            canonical_bytes(request["command_context"])
+        ).hexdigest(),
+        "execution_nonce": nonce,
+        "launcher_sha256": sandbox_executable_sha256,
+        "executable_sha256": expected_executable,
+        "attestor_key_sha256": attestor_key_sha256,
+    }
+    with tempfile.TemporaryDirectory(prefix="pysec-pinned-attestation-") as temporary:
+        attestation_path = Path(temporary) / "effective-policy.json"
+        result = run_command(
+            [str(resolved), *command[1:], encoded_request],
+            cwd=Path(resolved).parent,
+            timeout_seconds=timeout_seconds,
+            max_output_bytes=maximum_output_bytes,
+            environment=CommandEnvironment(
+                extra={
+                    "PYSEC_PINNED_ATTESTATION_PATH": str(attestation_path),
+                    "PYSEC_PINNED_ATTESTATION_SUBJECT_BASE64": base64.b64encode(
+                        canonical_bytes(attestation_base)
+                    ).decode("ascii"),
+                    "PYSEC_PINNED_ATTESTATION_CHALLENGE_SHA256": os.environ.get(
+                        "PYSEC_SCAN_TIME_CHALLENGE_SHA256", ""
+                    ),
+                },
+                sandbox_prefix=tuple(str(item) for item in sandbox_command),
+                sandbox_executable_sha256=sandbox_executable_sha256,
+                max_scratch_bytes=16 * 1024 * 1024,
+            ),
+        )
+        execution_attestation = _verify_execution_attestation(
+            attestation_path,
+            attestation_base,
+            result.exit_code,
+            attestor_key_sha256,
+        )
     if sha256_file(Path(resolved)) != expected_executable:
         raise ValueError(f"{prefix} executable changed during governed execution")
     _verify_assets(prefix)
@@ -137,7 +177,72 @@ def run_pinned_json_command(
         raise ValueError(f"{prefix} command returned invalid JSON") from exc
     if not isinstance(value, dict):
         raise ValueError(f"{prefix} command response must be an object")
+    if "_effective_policy_attestation" in value:
+        raise ValueError(f"{prefix} command response used a reserved field")
+    value["_effective_policy_attestation"] = execution_attestation
     return value
+
+
+def _verify_execution_attestation(
+    path: Path,
+    base: dict[str, Any],
+    exit_code: int | None,
+    expected_key_sha256: str,
+) -> dict[str, Any]:
+    _, payload = read_regular_file(
+        path,
+        "pinned command effective-policy attestation",
+        maximum_bytes=1024 * 1024,
+    )
+    value = strict_loads(payload)
+    if not isinstance(value, dict) or set(value) != {"subject", "operation_receipt"}:
+        raise ValueError("pinned command effective-policy attestation is invalid")
+    subject = value["subject"]
+    policy = subject.get("policy_observations") if isinstance(subject, dict) else None
+    if (
+        not isinstance(subject, dict)
+        or set(subject)
+        != {
+            *base,
+            "exit_code",
+            "attestor_process_id",
+            "policy_observations",
+        }
+        or any(subject[name] != item for name, item in base.items())
+        or subject["exit_code"] != exit_code
+        or isinstance(subject["attestor_process_id"], bool)
+        or not isinstance(subject["attestor_process_id"], int)
+        or subject["attestor_process_id"] < 1
+        or not isinstance(policy, dict)
+        or set(policy)
+        != {
+            "network_allowlist_enforced",
+            "filesystem_read_only",
+            "credentials_isolated",
+            "child_process_confined",
+        }
+        or any(policy[name] is not True for name in policy)
+    ):
+        raise ValueError("pinned command effective policy was not enforced")
+    receipt = value["operation_receipt"]
+    statement = receipt.get("statement") if isinstance(receipt, dict) else None
+    try:
+        observed_at = datetime.fromisoformat(
+            str((statement or {})["issued_at"]).replace("Z", "+00:00")
+        )
+    except (KeyError, ValueError) as exc:
+        raise ValueError("pinned command attestation time is invalid") from exc
+    verify_operation_receipt(
+        subject,
+        receipt,
+        purpose="pinned-command-effective-policy",
+        observed_at=observed_at,
+        challenge_sha256=os.environ.get("PYSEC_SCAN_TIME_CHALLENGE_SHA256", "")
+        .strip()
+        .casefold(),
+        expected_key_sha256=expected_key_sha256,
+    )
+    return dict(value)
 
 
 def command_configured(prefix: str) -> bool:

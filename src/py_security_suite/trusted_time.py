@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import os
-from datetime import UTC, datetime
+import sqlite3
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +19,64 @@ from .strict_json import canonical_bytes
 
 
 def verify_rfc3161(
+    context_path: Path,
+    value: object,
+    challenge_sha256: str,
+    *,
+    require_advanced: bool = False,
+) -> dict[str, str]:
+    """Verify one timestamp or an independent two-authority time quorum."""
+    if not isinstance(value, list):
+        result = _verify_single_rfc3161(
+            context_path, value, challenge_sha256, require_advanced=require_advanced
+        )
+        _advance_time_state(challenge_sha256, result)
+        return result
+    if not 2 <= len(value) <= 5:
+        raise ValueError("trusted-time quorum requires two to five authorities")
+    receipts = [
+        _verify_single_rfc3161(
+            context_path, item, challenge_sha256, require_advanced=require_advanced
+        )
+        for item in value
+    ]
+    authorities = {
+        str(item.get("authority")) for item in value if isinstance(item, dict)
+    }
+    signers = {item["trusted_time_signer_sha256"] for item in receipts}
+    observed = [
+        datetime.fromisoformat(item["trusted_time_observed_at"].replace("Z", "+00:00"))
+        for item in receipts
+    ]
+    if len(authorities) != len(value) or len(signers) != len(value):
+        raise ValueError("trusted-time quorum authorities must be independent")
+    if max(observed) - min(observed) > timedelta(seconds=5):
+        raise ValueError("trusted-time quorum timestamps disagree")
+    normalized = {
+        "schema_version": "1.0",
+        "challenge_sha256": challenge_sha256,
+        "authorities": sorted(authorities),
+        "receipts": sorted(item["trusted_time_sha256"] for item in receipts),
+    }
+    result = {
+        "trusted_time_sha256": hashlib.sha256(canonical_bytes(normalized)).hexdigest(),
+        "trusted_time_observed_at": max(observed).isoformat(),
+        "trusted_time_receipt_sha256": hashlib.sha256(
+            canonical_bytes(
+                sorted(item["trusted_time_receipt_sha256"] for item in receipts)
+            )
+        ).hexdigest(),
+        "trusted_time_signer_sha256": hashlib.sha256(
+            canonical_bytes(sorted(signers))
+        ).hexdigest(),
+    }
+    if not os.environ.get("PYSEC_TRUSTED_TIME_STATE_PATH", "").strip():
+        raise ValueError("trusted-time quorum requires persistent monotonic state")
+    _advance_time_state(challenge_sha256, result)
+    return result
+
+
+def _verify_single_rfc3161(
     context_path: Path,
     value: object,
     challenge_sha256: str,
@@ -205,6 +264,49 @@ def _verify_deployment_policy(
         raise ValueError("timestamp policy OID is not deployment-approved")
     if authority not in allowed_authorities:
         raise ValueError("timestamp authority is not deployment-approved")
+
+
+def _advance_time_state(challenge_sha256: str, result: dict[str, str]) -> None:
+    raw_path = os.environ.get("PYSEC_TRUSTED_TIME_STATE_PATH", "").strip()
+    if not raw_path:
+        return
+    path = Path(raw_path).expanduser().resolve()
+    if path.is_symlink():
+        raise ValueError("trusted-time monotonic state must not be a symbolic link")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    observed = result["trusted_time_observed_at"]
+    digest = result["trusted_time_sha256"]
+    connection = sqlite3.connect(path, timeout=30, isolation_level=None)
+    try:
+        connection.execute("PRAGMA journal_mode=WAL")
+        connection.execute("PRAGMA synchronous=FULL")
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS trusted_time_state "
+            "(scope TEXT PRIMARY KEY, observed_at TEXT NOT NULL, "
+            "challenge_sha256 TEXT NOT NULL, receipt_sha256 TEXT NOT NULL)"
+        )
+        connection.execute("BEGIN IMMEDIATE")
+        row = connection.execute(
+            "SELECT observed_at, challenge_sha256, receipt_sha256 "
+            "FROM trusted_time_state WHERE scope = 'global'"
+        ).fetchone()
+        if row is not None and (
+            datetime.fromisoformat(observed.replace("Z", "+00:00"))
+            < datetime.fromisoformat(str(row[0]).replace("Z", "+00:00"))
+            or (challenge_sha256 == row[1] and digest != row[2])
+        ):
+            connection.execute("ROLLBACK")
+            raise ValueError("trusted-time rollback or fork detected")
+        connection.execute(
+            "INSERT INTO trusted_time_state VALUES ('global', ?, ?, ?) "
+            "ON CONFLICT(scope) DO UPDATE SET observed_at=excluded.observed_at, "
+            "challenge_sha256=excluded.challenge_sha256, "
+            "receipt_sha256=excluded.receipt_sha256",
+            (observed, challenge_sha256, digest),
+        )
+        connection.execute("COMMIT")
+    finally:
+        connection.close()
 
 
 def _verify_legacy_policy(authority: str, signer_sha256: str) -> None:

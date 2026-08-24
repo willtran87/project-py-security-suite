@@ -307,6 +307,11 @@ mutation, argv/environment/runtime/assets/sandbox identities, exit code,
 stdout/stderr digests, timestamps, and result digest. A policy-approved
 execution authority signs the whole record, and mutation operators link
 negative controls to their parent fixture.
+Environment entries retain only classified value commitments, never raw secret
+values. Runtime evidence closes over the executable, native dependency closure
+or immutable container digest, and SBOM; assets are individually named and
+hashed, while sandbox policy requires denied networking, read-only files,
+confined processes, and isolated credentials.
 Positive and negative controls must come from distinct executions. Artifact
 names or catalog counts alone cannot establish conformance.
 
@@ -317,6 +322,10 @@ static-edge digests, allow-and-deny behavior, timestamps, and an explicit
 required-route matrix; every top-level trace and coverage field must equal the
 signed evidence. Sandbox, raw-evidence custody, and requirements-policy
 artifacts retain the same portable proof material for later verification.
+The runtime contract additionally retains digest-bound collector configuration,
+instrumentation manifests, individual parent-linked spans, deterministic route
+source documents, and a separately signed observer ledger that must agree with
+collector span and sink accounting.
 
 Native binary parsing runs in a resource-contained isolated worker, with an
 optional deployment-pinned OS sandbox prefix. PE, ELF, and Mach-O analysis
@@ -330,6 +339,10 @@ language file set (including Python), with complete symbol, CFG, dataflow, and
 interprocedural edge ledgers rather than aggregate counts alone. Publication
 recomputes each file-set, semantic-ledger, and graph digest before re-verifying
 the retained authority receipt.
+Governed compiler evidence requires two distinct non-tree-sitter engines,
+byte-for-byte replay artifacts, matching independently produced semantic
+ledgers, and explicit source-to-sink taint paths with retained sanitizer and
+barrier nodes.
 Templates record computed includes and explicit escaping
 bypasses, while notebooks and bytecode are parsed without executing target
 code. Git history qualification rejects shallow, partial, promisor, sparse,
@@ -341,14 +354,25 @@ lifecycle-valid signers from at least two approved organizations, a good
 signature on every reachable commit and tag, and a signed manifest of the full
 ref/object/configuration state. `source-inventory.json` retains that manifest,
 its portable authority receipt, the exact allowed-signers bytes, lifecycle
-policy, and the observed commit/tag signer ledger for clean-host replay.
+policy, Git executable/runtime closure, exact security-configuration bytes, and
+the observed commit/tag signer ledger. Raw commit and annotated-tag objects are
+retained and their Git SHA-256 object IDs are recomputed during clean-host
+replay.
 
 Encrypted native evidence requires an authority-signed hardware-KMS envelope
 receipt binding the exact scan challenge and command request, plaintext object
 and ephemeral data-key digests, non-exportable
 wrapping-key and hardware assertions, wrapped-key digest, operation ID, store,
 and retention policy. The signed receipt and its portable authority envelope
-are retained with the ciphertext commitment. The KMS operation must pass
+are accompanied by the pinned helper's signed effective-policy attestation and
+an authenticated restore drill bound to the encrypted object and recovered
+plaintext digest. Signed operation receipts are checked as a single non-forking
+graph across all artifacts; deployments can set
+`PYSEC_OPERATION_RECEIPT_STATE_PATH` to reject receipt reuse across reports.
+RFC 3161 contexts may provide two to five independent authorities; quorum mode
+requires `PYSEC_TRUSTED_TIME_STATE_PATH`, limits inter-authority skew to five
+seconds, and rejects clock rollback or same-challenge forks.
+The KMS operation must pass
 through its digest-pinned launcher and preserve an mTLS/TLS 1.3 transcript,
 endpoint allowlist, peer identity, and launcher identity that publication
 revalidates offline.

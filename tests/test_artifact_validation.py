@@ -13,7 +13,10 @@ from pathlib import Path
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from py_security_suite.artifact_validation import validate_governed_artifacts
+from py_security_suite.artifact_validation import (
+    _validate_git_signature_ledger,
+    validate_governed_artifacts,
+)
 from py_security_suite.adapters.portfolio import PipdeptreeAdapter
 from py_security_suite.config import ToolConfig
 from py_security_suite.deployment_receipt import verify_deployment_receipt
@@ -65,11 +68,27 @@ def test_retained_git_provenance_reverifies_signers_and_manifest(
         for index, key in enumerate(keys, start=1)
     )
     fingerprints = sorted(allowed_signer_fingerprints(allowed))
+    commit_payloads = [
+        f"tree {'1' * 64}\nauthor test <test@example.invalid> 1 +0000\ncommitter test <test@example.invalid> 1 +0000\n\ncommit {index}\n".encode()
+        for index in (1, 2)
+    ]
+    commit_ids = [
+        hashlib.sha256(
+            b"commit " + str(len(payload)).encode() + b"\0" + payload
+        ).hexdigest()
+        for payload in commit_payloads
+    ]
+    security_config = b"gpg.format\nssh\x00"
     manifest = {
         "schema_version": "1.0",
         "git_executable_sha256": "c" * 64,
         "allowed_signers_file_sha256": hashlib.sha256(allowed).hexdigest(),
         "allowed_signers_file_base64": base64.b64encode(allowed).decode(),
+        "git_runtime_manifest": {
+            "version": "git version 2.51.0",
+            "executable_sha256": "c" * 64,
+            "runtime_closure_sha256": "f" * 64,
+        },
         "signer_policy": [
             {
                 "fingerprint": fingerprint,
@@ -82,24 +101,27 @@ def test_retained_git_provenance_reverifies_signers_and_manifest(
         "signature_ledger": {
             "commits": [
                 {
-                    "commit": marker * 64,
+                    "commit": commit_id,
                     "fingerprint": fingerprint,
                     "committed_at": now.isoformat(),
                     "organization": f"org-{index}",
+                    "object_base64": base64.b64encode(payload).decode(),
+                    "object_sha256": hashlib.sha256(payload).hexdigest(),
                 }
-                for index, (marker, fingerprint) in enumerate(
-                    zip(("a", "b"), fingerprints, strict=True), start=1
+                for index, (commit_id, payload, fingerprint) in enumerate(
+                    zip(commit_ids, commit_payloads, fingerprints, strict=True), start=1
                 )
             ],
             "tags": [],
         },
         "repository_state": {
-            "refs": {"refs/heads/main": "a" * 64},
+            "refs": {"refs/heads/main": commit_ids[0]},
             "object_format": "sha256",
-            "head": "a" * 64,
+            "head": commit_ids[0],
             "symbolic_head": "refs/heads/main",
             "replace_refs": "",
-            "security_config_sha256": "d" * 64,
+            "security_config_sha256": hashlib.sha256(security_config).hexdigest(),
+            "security_config_base64": base64.b64encode(security_config).decode(),
             "alternates_sha256": "",
             "reachable_objects_sha256": "e" * 64,
         },
@@ -140,6 +162,13 @@ def test_retained_git_provenance_reverifies_signers_and_manifest(
         ],
     }
     validate_governed_artifacts({"source-inventory.json": inventory})
+    original_object = manifest["signature_ledger"]["commits"][0]["object_base64"]
+    manifest["signature_ledger"]["commits"][0]["object_base64"] = base64.b64encode(
+        b"tampered commit object"
+    ).decode()
+    with pytest.raises(ValueError, match="object replay failed"):
+        _validate_git_signature_ledger(manifest, set(fingerprints))
+    manifest["signature_ledger"]["commits"][0]["object_base64"] = original_object
     manifest["allowed_signers_file_base64"] = base64.b64encode(
         allowed + b"#tamper\n"
     ).decode()

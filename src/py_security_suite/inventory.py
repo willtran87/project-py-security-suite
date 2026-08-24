@@ -13,7 +13,13 @@ from pathlib import Path
 from typing import Any
 
 from .deployment_receipt import verify_deployment_receipt
-from .execution import CommandEnvironment, resolve_executable, run_command, sha256_file
+from .execution import (
+    CommandEnvironment,
+    native_runtime_closure_sha256,
+    resolve_executable,
+    run_command,
+    sha256_file,
+)
 from .models import Inventory
 from .path_safety import read_regular_file
 from .strict_json import canonical_bytes, loads as strict_loads
@@ -297,6 +303,11 @@ def _materialize_git_history(
             "signer_policy": _git_signer_policy(),
             "signature_ledger": signature_ledger,
             "repository_state": repository_state,
+            "git_runtime_manifest": {
+                "version": _git_version(git, target),
+                "executable_sha256": git_sha256,
+                "runtime_closure_sha256": native_runtime_closure_sha256(Path(git)),
+            },
         }
         git_manifest_receipt = verify_deployment_receipt(
             git_manifest,
@@ -501,6 +512,7 @@ def _git_repository_state(git: str, target: Path) -> dict[str, Any]:
         "symbolic_head": symbolic_head,
         "replace_refs": query(["replace", "-l"]),
         "security_config_sha256": hashlib.sha256(configuration.encode()).hexdigest(),
+        "security_config_base64": base64.b64encode(configuration.encode()).decode(),
         "alternates_sha256": alternates_sha256,
         "reachable_objects_sha256": hashlib.sha256(
             reachable_objects.encode()
@@ -520,6 +532,20 @@ def _git_bundle_refs(git: str, bundle: Path, target: Path) -> dict[str, str]:
     return _parse_ref_lines(listed.stdout.strip())
 
 
+def _git_version(git: str, target: Path) -> str:
+    result = run_command(
+        [git, "--version"], cwd=target, timeout_seconds=10, max_output_bytes=4096
+    )
+    version = result.stdout.strip()
+    if (
+        result.exit_code != 0
+        or result.timed_out
+        or not version.startswith("git version ")
+    ):
+        raise ValueError("Git runtime version could not be retained")
+    return version
+
+
 def _parse_ref_lines(value: str) -> dict[str, str]:
     refs: dict[str, str] = {}
     for line in value.splitlines():
@@ -533,6 +559,35 @@ def _parse_ref_lines(value: str) -> dict[str, str]:
             raise ValueError("Git ref advertisement is duplicated or invalid")
         refs[name] = digest
     return dict(sorted(refs.items()))
+
+
+def _git_raw_object(
+    git: str, target: Path, kind: str, identity: str
+) -> tuple[str, str]:
+    result = run_command(
+        [
+            git,
+            "-c",
+            f"safe.directory={target.resolve()}",
+            "-C",
+            str(target),
+            "cat-file",
+            kind,
+            identity,
+        ],
+        cwd=target,
+        timeout_seconds=120,
+        max_output_bytes=16 * 1024 * 1024,
+    )
+    if result.exit_code != 0 or result.timed_out or result.output_limit_exceeded:
+        raise ValueError(f"Git {kind} replay object could not be retained")
+    payload = result.stdout.encode("utf-8")
+    object_id = hashlib.sha256(
+        kind.encode() + b" " + str(len(payload)).encode() + b"\0" + payload
+    ).hexdigest()
+    if object_id != identity.casefold():
+        raise ValueError(f"Git {kind} replay object does not match its object ID")
+    return base64.b64encode(payload).decode(), hashlib.sha256(payload).hexdigest()
 
 
 def _validate_git_repository_mode(
@@ -714,12 +769,17 @@ def _validate_git_repository_mode(
                     "every reachable Git commit must have a trusted allowed signature"
                 )
             observed_organizations.add(signer[0])
+            object_base64, object_sha256 = _git_raw_object(
+                git, target, "commit", fields[0]
+            )
             commit_ledger.append(
                 {
                     "commit": fields[0].casefold(),
                     "fingerprint": fingerprint.strip().casefold(),
                     "committed_at": committed.isoformat(),
                     "organization": signer[0],
+                    "object_base64": object_base64,
+                    "object_sha256": object_sha256,
                 }
             )
             commits += 1
@@ -766,12 +826,19 @@ def _validate_git_repository_mode(
             ):
                 raise ValueError("Git tag signature is not policy-approved")
             observed_organizations.add(signer[0])
+            tag_object_id = query(["rev-parse", f"refs/tags/{tag}"])
+            object_base64, object_sha256 = _git_raw_object(
+                git, target, "tag", tag_object_id
+            )
             tag_ledger.append(
                 {
                     "tag": tag,
+                    "object_id": tag_object_id,
                     "fingerprint": signature_fields[1].strip().casefold(),
                     "tagged_at": tag_time.isoformat(),
                     "organization": signer[0],
+                    "object_base64": object_base64,
+                    "object_sha256": object_sha256,
                 }
             )
         if len(observed_organizations) < 2:

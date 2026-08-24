@@ -3,8 +3,12 @@ from __future__ import annotations
 from importlib.resources import files
 import hashlib
 import base64
+import os
+import sqlite3
+from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Any
+from collections.abc import Callable
 
 from jsonschema import Draft202012Validator, FormatChecker  # type: ignore[import-untyped]
 from cryptography.hazmat.primitives import serialization
@@ -68,6 +72,38 @@ _ARTIFACT_SCHEMAS = {
     "trust-policy.json": "trust-policy-1.0.schema.json",
 }
 
+_TYPED_VALIDATORS: dict[str, Callable[[object], None]] = {}
+_RECEIPT_BEARING_ARTIFACTS = frozenset(
+    {
+        "runtime-trace-correlation.json",
+        "isolation-probe.json",
+        "boundary-graph.json",
+        "source-inventory.json",
+        "security-requirements-coverage.json",
+        "checkov-iac.json",
+        "git-sizer.json",
+        "pipdeptree-summary.json",
+    }
+)
+
+
+def _digest(value: str) -> bool:
+    return len(value) == 64 and all(
+        character in "0123456789abcdef" for character in value
+    )
+
+
+def _typed_validator(
+    name: str,
+) -> Callable[[Callable[[object], None]], Callable[[object], None]]:
+    def register(function: Callable[[object], None]) -> Callable[[object], None]:
+        if name in _TYPED_VALIDATORS:
+            raise RuntimeError(f"duplicate artifact validator registration: {name}")
+        _TYPED_VALIDATORS[name] = function
+        return function
+
+    return register
+
 
 def validate_governed_artifacts(artifacts: dict[str, Any] | None) -> dict[str, str]:
     """Validate every artifact with a bundled governed contract before sealing."""
@@ -96,28 +132,18 @@ def validate_governed_artifacts(artifacts: dict[str, Any] | None) -> dict[str, s
                 f"derived artifact {name} violates {schema_name} at {location}: "
                 f"{errors[0].message}"
             )
-        if name == "security-requirements-coverage.json":
-            _validate_requirements_crosswalk(value)
-        elif name == "runtime-trace-correlation.json":
-            _validate_runtime_trace_accounting(value)
-        elif name == "boundary-graph.json":
-            _validate_boundary_graph_receipts(value)
-        elif name == "source-inventory.json":
-            _validate_git_provenance(value)
-        elif name == "isolation-probe.json":
-            _validate_isolation_receipt(value)
-        elif name == "checkov-iac.json":
-            _validate_checkov_accounting(value)
-        elif name == "git-sizer.json":
-            _validate_git_sizer_accounting(value)
-        elif name == "pipdeptree-summary.json":
-            _validate_pipdeptree_accounting(value)
+        validator = _TYPED_VALIDATORS.get(name)
+        if validator is not None:
+            validator(value)
         if _is_companion_assurance(value):
             _validate_companion_recovery_receipts(value)
         validated[name] = schema_name
+    receipts = _validate_operation_receipt_graph(artifacts or {})
+    _consume_operation_receipts(receipts, artifacts or {})
     return validated
 
 
+@_typed_validator("runtime-trace-correlation.json")
 def _validate_runtime_trace_accounting(value: object) -> None:
     if not isinstance(value, dict) or not isinstance(value.get("traces"), list):
         raise TypeError("runtime trace artifact is invalid")
@@ -206,6 +232,35 @@ def _validate_runtime_trace_accounting(value: object) -> None:
             observed_at,
             str(evidence["collector_authority_key_sha256"]),
         )
+        for name in ("collector_config", "instrumentation_manifest", "raw_spans"):
+            if (
+                evidence.get(f"{name}_sha256")
+                != hashlib.sha256(canonical_bytes(evidence.get(name))).hexdigest()
+            ):
+                raise ValueError(f"runtime {name} replay artifact is detached")
+        independent_subject = {
+            "schema_version": "1.0",
+            "deployment_sha256": evidence["deployment_sha256"],
+            "boundary_graph_sha256": evidence["boundary_graph_sha256"],
+            "observer_identity_sha256": evidence[
+                "independent_observer_identity_sha256"
+            ],
+            "instrumented_build_sha256": evidence["instrumented_build_sha256"],
+            "observations_sha256": hashlib.sha256(
+                canonical_bytes(evidence["independent_observations"])
+            ).hexdigest(),
+        }
+        _reverify_operation(
+            independent_subject,
+            evidence["independent_operation_receipt"],
+            "runtime-independent-observation",
+            observed_at,
+            str(evidence["independent_authority_key_sha256"]),
+        )
+        from .runtime_trace import _runtime_source_artifact_valid, _verify_raw_spans
+
+        _verify_raw_spans(evidence["raw_spans"], evidence["traces"])
+
         for inventory in value["coverage_policy"]["source_inventories"]:
             if (
                 inventory["artifact_sha256"]
@@ -214,6 +269,12 @@ def _validate_runtime_trace_accounting(value: object) -> None:
                 ).hexdigest()
             ):
                 raise ValueError("runtime source inventory artifact is detached")
+            if not _runtime_source_artifact_valid(
+                str(inventory["kind"]),
+                inventory["source_artifact"],
+                inventory["requirements"],
+            ):
+                raise ValueError("runtime source inventory cannot be reproduced")
             subject = {
                 name: item
                 for name, item in inventory.items()
@@ -228,6 +289,7 @@ def _validate_runtime_trace_accounting(value: object) -> None:
             )
 
 
+@_typed_validator("isolation-probe.json")
 def _validate_isolation_receipt(value: object) -> None:
     if not isinstance(value, dict):
         raise TypeError("isolation probe must be an object")
@@ -294,6 +356,137 @@ def _reverify_operation(
     )
 
 
+def _validate_operation_receipt_graph(
+    artifacts: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Reject conflicting, replayed, or forked operation identities report-wide."""
+    receipt_fields = {
+        "schema_version",
+        "statement",
+        "signature_base64",
+        "public_key_pem_base64",
+    }
+    statement_fields = {
+        "schema_version",
+        "purpose",
+        "subject_sha256",
+        "operation_id",
+        "previous_operation_sha256",
+        "challenge_sha256",
+        "issued_at",
+        "expires_at",
+        "signer_key_sha256",
+    }
+    receipts: list[dict[str, Any]] = []
+
+    def visit(value: object) -> None:
+        if isinstance(value, dict):
+            statement = value.get("statement")
+            if set(value) == receipt_fields and isinstance(statement, dict):
+                if set(statement) == statement_fields:
+                    receipts.append(value)
+                    return
+            for item in value.values():
+                visit(item)
+        elif isinstance(value, list):
+            for item in value:
+                visit(item)
+
+    visit(artifacts)
+    identities: dict[tuple[str, str], bytes] = {}
+    chains: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for receipt in receipts:
+        statement = receipt["statement"]
+        signer = str(statement["signer_key_sha256"])
+        operation_id = str(statement["operation_id"])
+        identity = (signer, operation_id)
+        encoded = canonical_bytes(receipt)
+        previous = identities.get(identity)
+        if previous is not None and previous != encoded:
+            raise ValueError(
+                "operation receipt identity is reused with different evidence"
+            )
+        identities[identity] = encoded
+        chains.setdefault((signer, str(statement["purpose"])), []).append(receipt)
+    for chain in chains.values():
+        unique = {
+            hashlib.sha256(canonical_bytes(item)).hexdigest(): item for item in chain
+        }
+        if len(unique) < 2:
+            continue
+        roots: list[str] = []
+        children: dict[str, str] = {}
+        for digest, receipt in unique.items():
+            predecessor = str(receipt["statement"]["previous_operation_sha256"])
+            if not predecessor:
+                roots.append(digest)
+                continue
+            if predecessor not in unique:
+                raise ValueError("operation receipt predecessor is not retained")
+            if predecessor in children:
+                raise ValueError("operation receipt predecessor chain forks")
+            children[predecessor] = digest
+        if len(roots) != 1:
+            raise ValueError("operation receipt chain must have exactly one root")
+        visited: set[str] = set()
+        cursor = roots[0]
+        while cursor:
+            if cursor in visited:
+                raise ValueError("operation receipt predecessor chain contains a cycle")
+            visited.add(cursor)
+            cursor = children.get(cursor, "")
+        if visited != set(unique):
+            raise ValueError("operation receipt predecessor chain is discontinuous")
+    return receipts
+
+
+def _consume_operation_receipts(
+    receipts: list[dict[str, Any]], artifacts: dict[str, Any]
+) -> None:
+    raw_path = os.environ.get("PYSEC_OPERATION_RECEIPT_STATE_PATH", "").strip()
+    if not raw_path or not receipts:
+        return
+    path = Path(raw_path).expanduser().resolve()
+    if path.is_symlink():
+        raise ValueError("operation receipt state must not be a symbolic link")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    report_sha256 = hashlib.sha256(canonical_bytes(artifacts)).hexdigest()
+    connection = sqlite3.connect(path, timeout=30, isolation_level=None)
+    try:
+        connection.execute("PRAGMA journal_mode=WAL")
+        connection.execute("PRAGMA synchronous=FULL")
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS operation_receipts "
+            "(signer TEXT NOT NULL, operation_id TEXT NOT NULL, "
+            "receipt_sha256 TEXT NOT NULL, report_sha256 TEXT NOT NULL, "
+            "PRIMARY KEY(signer, operation_id))"
+        )
+        connection.execute("BEGIN IMMEDIATE")
+        for receipt in receipts:
+            statement = receipt["statement"]
+            identity = (
+                str(statement["signer_key_sha256"]),
+                str(statement["operation_id"]),
+            )
+            receipt_sha256 = hashlib.sha256(canonical_bytes(receipt)).hexdigest()
+            row = connection.execute(
+                "SELECT receipt_sha256, report_sha256 FROM operation_receipts "
+                "WHERE signer = ? AND operation_id = ?",
+                identity,
+            ).fetchone()
+            if row is not None and row != (receipt_sha256, report_sha256):
+                connection.execute("ROLLBACK")
+                raise ValueError("operation receipt replay across reports detected")
+            connection.execute(
+                "INSERT OR IGNORE INTO operation_receipts VALUES (?, ?, ?, ?)",
+                (*identity, receipt_sha256, report_sha256),
+            )
+        connection.execute("COMMIT")
+    finally:
+        connection.close()
+
+
+@_typed_validator("boundary-graph.json")
 def _validate_boundary_graph_receipts(value: object) -> None:
     if not isinstance(value, dict):
         raise TypeError("boundary graph must be an object")
@@ -324,6 +517,7 @@ def _validate_boundary_graph_receipts(value: object) -> None:
         _reverify_portable(evidence, receipt, "compiler-semantic-evidence")
 
 
+@_typed_validator("source-inventory.json")
 def _validate_git_provenance(value: object) -> None:
     if not isinstance(value, dict):
         raise TypeError("source inventory must be an object")
@@ -356,6 +550,7 @@ def _validate_git_provenance(value: object) -> None:
             "signer_policy",
             "signature_ledger",
             "repository_state",
+            "git_runtime_manifest",
         }:
             raise ValueError("retained Git manifest fields do not match")
         try:
@@ -431,6 +626,7 @@ def _validate_git_signature_ledger(
         "symbolic_head",
         "replace_refs",
         "security_config_sha256",
+        "security_config_base64",
         "alternates_sha256",
         "reachable_objects_sha256",
     }:
@@ -438,6 +634,13 @@ def _validate_git_signature_ledger(
     object_format = repository_state["object_format"]
     digest_length = 64 if object_format == "sha256" else 0
     refs = repository_state["refs"]
+    runtime_manifest = manifest.get("git_runtime_manifest")
+    try:
+        security_config = base64.b64decode(
+            str(repository_state["security_config_base64"]), validate=True
+        )
+    except (TypeError, ValueError) as exc:
+        raise ValueError("retained Git security configuration is invalid") from exc
     if (
         not digest_length
         or any(
@@ -449,6 +652,17 @@ def _validate_git_signature_ledger(
                 "git_executable_sha256",
                 "allowed_signers_file_sha256",
             )
+        )
+        or hashlib.sha256(security_config).hexdigest()
+        != repository_state["security_config_sha256"]
+        or not isinstance(runtime_manifest, dict)
+        or set(runtime_manifest)
+        != {"version", "executable_sha256", "runtime_closure_sha256"}
+        or not str(runtime_manifest["version"]).startswith("git version ")
+        or runtime_manifest["executable_sha256"] != manifest["git_executable_sha256"]
+        or any(
+            not _digest(str(runtime_manifest[name]))
+            for name in ("executable_sha256", "runtime_closure_sha256")
         )
         or not isinstance(refs, dict)
         or not refs
@@ -490,12 +704,17 @@ def _validate_git_signature_ledger(
     ):
         seen: set[str] = set()
         for record in records:
-            if not isinstance(record, dict) or set(record) != {
+            expected_record_fields = {
                 identity_name,
                 "fingerprint",
                 time_name,
                 "organization",
-            }:
+                "object_base64",
+                "object_sha256",
+            }
+            if kind == "tag":
+                expected_record_fields.add("object_id")
+            if not isinstance(record, dict) or set(record) != expected_record_fields:
                 raise ValueError(f"retained Git {kind} signature is invalid")
             identity = str(record[identity_name])
             signer = identities.get(str(record["fingerprint"]).casefold())
@@ -515,6 +734,21 @@ def _validate_git_signature_ledger(
                 or not signer[1] <= observed <= signer[2]
             ):
                 raise ValueError(f"retained Git {kind} signature is invalid")
+            try:
+                payload = base64.b64decode(record["object_base64"], validate=True)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(f"retained Git {kind} object is invalid") from exc
+            object_id = hashlib.sha256(
+                kind.encode() + b" " + str(len(payload)).encode() + b"\0" + payload
+            ).hexdigest()
+            expected_object_id = (
+                identity if kind == "commit" else str(record["object_id"])
+            )
+            if (
+                hashlib.sha256(payload).hexdigest() != record["object_sha256"]
+                or object_id != expected_object_id
+            ):
+                raise ValueError(f"retained Git {kind} object replay failed")
             seen.add(identity)
             organizations.add(signer[0])
     if len(organizations) < 2:
@@ -528,6 +762,8 @@ def _validate_git_signature_ledger(
         if str(name).startswith("refs/tags/")
     } != tag_names:
         raise ValueError("retained Git tag ledger does not match repository refs")
+    if any(refs.get(f"refs/tags/{item['tag']}") != item["object_id"] for item in tags):
+        raise ValueError("retained Git tag object is detached from its ref")
 
 
 def _is_companion_assurance(value: object) -> bool:
@@ -708,6 +944,7 @@ def _verify_observer_receipt_offline(value: object) -> dict[str, Any]:
     return value
 
 
+@_typed_validator("security-requirements-coverage.json")
 def _validate_requirements_crosswalk(value: object) -> None:
     if not isinstance(value, dict):
         raise TypeError("security requirements crosswalk must be an object")
@@ -793,6 +1030,10 @@ def _validate_requirements_crosswalk(value: object) -> None:
                     canonical_bytes(execution)
                 ).hexdigest() != assertion.get("execution_sha256"):
                     raise ValueError("requirements execution artifact is detached")
+                from .requirements_coverage import _procedure_manifests_valid
+
+                if not _procedure_manifests_valid(execution):
+                    raise ValueError("requirements execution manifests are invalid")
                 receipt = execution.get("execution_authority_receipt")
                 statement = (
                     receipt.get("statement") if isinstance(receipt, dict) else None
@@ -815,6 +1056,7 @@ def _validate_requirements_crosswalk(value: object) -> None:
                 )
 
 
+@_typed_validator("checkov-iac.json")
 def _validate_checkov_accounting(value: object) -> None:
     if not isinstance(value, dict):
         raise TypeError("Checkov artifact must be an object")
@@ -827,6 +1069,7 @@ def _validate_checkov_accounting(value: object) -> None:
     _validate_native_normalization(value, total)
 
 
+@_typed_validator("git-sizer.json")
 def _validate_git_sizer_accounting(value: object) -> None:
     if not isinstance(value, dict) or not isinstance(value.get("metrics"), list):
         raise TypeError("git-sizer artifact metrics must be an array")
@@ -844,6 +1087,7 @@ def _validate_git_sizer_accounting(value: object) -> None:
     _validate_native_normalization(value, len(metrics))
 
 
+@_typed_validator("pipdeptree-summary.json")
 def _validate_pipdeptree_accounting(value: object) -> None:
     if not isinstance(value, dict):
         raise TypeError("pipdeptree artifact must be an object")
@@ -890,6 +1134,8 @@ def _validate_native_normalization(value: dict[str, Any], records: int) -> None:
         "wrapped_data_key_base64",
         "custody_receipt",
         "custody_authority_receipt",
+        "effective_policy_attestation",
+        "recovery_drill",
     }:
         raise ValueError("native report storage receipt is invalid")
     replayable = storage["mode"] == "encrypted-cas"
@@ -936,12 +1182,71 @@ def _validate_native_normalization(value: dict[str, Any], records: int) -> None:
             storage["custody_authority_receipt"],
             "raw-evidence-custody",
         )
+        attestation = storage["effective_policy_attestation"]
+        subject = attestation.get("subject") if isinstance(attestation, dict) else None
+        policy = (
+            subject.get("policy_observations") if isinstance(subject, dict) else None
+        )
+        if (
+            not isinstance(attestation, dict)
+            or set(attestation) != {"subject", "operation_receipt"}
+            or not isinstance(subject, dict)
+            or not isinstance(policy, dict)
+            or set(policy)
+            != {
+                "network_allowlist_enforced",
+                "filesystem_read_only",
+                "credentials_isolated",
+                "child_process_confined",
+            }
+            or any(item is not True for item in policy.values())
+            or subject.get("attestor_key_sha256")
+            != custody["command_context"]["effective_policy_attestor_key_sha256"]
+        ):
+            raise ValueError("retained KMS effective-policy attestation is invalid")
+        statement = attestation["operation_receipt"].get("statement", {})
+        try:
+            issued = datetime.fromisoformat(
+                str(statement["issued_at"]).replace("Z", "+00:00")
+            )
+        except (KeyError, ValueError) as exc:
+            raise ValueError("retained KMS attestation time is invalid") from exc
+        _reverify_operation(
+            subject,
+            attestation["operation_receipt"],
+            "pinned-command-effective-policy",
+            issued,
+            str(subject["attestor_key_sha256"]),
+        )
+        drill = storage["recovery_drill"]
+        if (
+            not isinstance(drill, dict)
+            or set(drill)
+            != {
+                "schema_version",
+                "mode",
+                "object_id",
+                "ciphertext_sha256",
+                "recovered_plaintext_sha256",
+                "verified",
+            }
+            or drill.get("schema_version") != "1.0"
+            or drill.get("mode") != "authenticated-local-restore"
+            or drill.get("object_id") != storage["object_id"]
+            or drill.get("ciphertext_sha256") != storage["ciphertext_sha256"]
+            or drill.get("recovered_plaintext_sha256")
+            != value.get("native_report_sha256")
+            or drill.get("verified") is not True
+        ):
+            raise ValueError("encrypted native evidence recovery drill is invalid")
     if not replayable and any(
         storage[name] is not None and storage[name] != ""
         for name in (
             "wrapped_data_key_base64",
             "custody_receipt",
             "custody_authority_receipt",
+            "effective_policy_attestation",
+            "recovery_drill",
         )
     ):
         raise ValueError("inline native evidence cannot claim key custody")
@@ -964,6 +1269,7 @@ def _validate_custody_transport(custody: dict[str, Any]) -> None:
         "sandbox_identity_sha256",
         "sandbox_executable_sha256",
         "sandbox_launcher_argv",
+        "effective_policy_attestor_key_sha256",
     }:
         raise ValueError("retained KMS command context is invalid")
     endpoints = context["allowed_endpoints"]
@@ -1013,3 +1319,7 @@ def _validate_custody_transport(custody: dict[str, Any]) -> None:
         != hashlib.sha256(canonical_bytes(transcript)).hexdigest()
     ):
         raise ValueError("retained KMS transport transcript is invalid")
+
+
+if _RECEIPT_BEARING_ARTIFACTS != frozenset(_TYPED_VALIDATORS):
+    raise RuntimeError("receipt-bearing artifact validator registry is incomplete")

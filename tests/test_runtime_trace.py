@@ -66,6 +66,50 @@ def test_runtime_trace_must_correlate_to_static_edge(tmp_path: Path) -> None:
         purpose="runtime-collector-accounting",
         operation_id="collector-run-1",
     )
+    collector_config = {
+        "schema_version": "1.0",
+        "receivers": ["otlp"],
+        "processors": ["memory_limiter", "batch"],
+        "exporters": ["signed-file"],
+    }
+    instrumentation_manifest = {
+        "schema_version": "1.0",
+        "modules": [{"path": "api.py", "sha256": "9" * 64}],
+    }
+    raw_spans = [
+        {
+            "trace_id": traces[0]["trace_id"],
+            "span_id": f"span-{index}",
+            "parent_span_id": "" if index == 0 else f"span-{index - 1}",
+            "process_identity_sha256": "7" * 64,
+            "operation": traces[0]["operation"],
+        }
+        for index in range(4)
+    ]
+    independent_observations = [
+        {
+            "trace_id": traces[0]["trace_id"],
+            "span_count": traces[0]["span_count"],
+            "sink_observed": traces[0]["sink_observed"],
+            "process_identity_sha256": "7" * 64,
+            "kernel_identity_sha256": "8" * 64,
+        }
+    ]
+    independent_subject = {
+        "schema_version": "1.0",
+        "deployment_sha256": "a" * 64,
+        "boundary_graph_sha256": graph_sha256,
+        "observer_identity_sha256": "c" * 64,
+        "instrumented_build_sha256": "d" * 64,
+        "observations_sha256": hashlib.sha256(
+            canonical_bytes(independent_observations)
+        ).hexdigest(),
+    }
+    independent_receipt, independent_key = operation_receipt(
+        independent_subject,
+        purpose="runtime-independent-observation",
+        operation_id="independent-run-1",
+    )
     evidence_document = {
         "schema_version": "1.0",
         "deployment_sha256": "a" * 64,
@@ -78,6 +122,20 @@ def test_runtime_trace_must_correlate_to_static_edge(tmp_path: Path) -> None:
         "collector_metrics": metrics,
         "collector_operation_receipt": collector_receipt,
         "collector_authority_key_sha256": collector_key,
+        "collector_config": collector_config,
+        "collector_config_sha256": hashlib.sha256(
+            canonical_bytes(collector_config)
+        ).hexdigest(),
+        "instrumentation_manifest": instrumentation_manifest,
+        "instrumentation_manifest_sha256": hashlib.sha256(
+            canonical_bytes(instrumentation_manifest)
+        ).hexdigest(),
+        "raw_spans": raw_spans,
+        "raw_spans_sha256": hashlib.sha256(canonical_bytes(raw_spans)).hexdigest(),
+        "independent_observer_identity_sha256": "c" * 64,
+        "independent_observations": independent_observations,
+        "independent_operation_receipt": independent_receipt,
+        "independent_authority_key_sha256": independent_key,
         "traces": traces,
     }
     evidence_value = json.dumps(evidence_document)
@@ -103,7 +161,11 @@ def test_runtime_trace_must_correlate_to_static_edge(tmp_path: Path) -> None:
             serialization.PublicFormat.SubjectPublicKeyInfo,
         )
         inventory_keys[kind] = hashlib.sha256(public).hexdigest()
-        source_artifact = {"kind": kind, "routes": [requirement]}
+        source_artifact = {
+            "schema_version": "1.0",
+            "kind": kind,
+            "routes": [requirement],
+        }
         inventory_subject = {
             "schema_version": "1.0",
             "kind": kind,
@@ -159,6 +221,7 @@ def test_runtime_trace_must_correlate_to_static_edge(tmp_path: Path) -> None:
                 "PYSEC_RUNTIME_COVERAGE_POLICY_PRODUCER_SHA256": "f" * 64,
                 "PYSEC_RUNTIME_INVENTORY_KEYS_JSON": json.dumps(inventory_keys),
                 "PYSEC_RUNTIME_COLLECTOR_AUTHORITY_KEY_SHA256": collector_key,
+                "PYSEC_RUNTIME_INDEPENDENT_AUTHORITY_KEY_SHA256": independent_key,
                 **authority,
                 **coverage_authority,
             },

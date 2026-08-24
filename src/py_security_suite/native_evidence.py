@@ -67,6 +67,8 @@ def _encrypted_sidecar(payload: bytes, raw_sha256: str) -> dict[str, Any]:
             "wrapped_data_key_base64": "",
             "custody_receipt": None,
             "custody_authority_receipt": None,
+            "effective_policy_attestation": None,
+            "recovery_drill": None,
         }
     if not raw_directory or not kms_configured:
         raise ValueError("encrypted raw evidence storage configuration is incomplete")
@@ -75,8 +77,8 @@ def _encrypted_sidecar(payload: bytes, raw_sha256: str) -> dict[str, Any]:
         raise ValueError(
             "encrypted raw evidence directory must be an existing regular directory"
         )
-    key, wrapped_key, custody_receipt, custody_authority = _kms_data_key(
-        root, raw_sha256
+    key, wrapped_key, custody_receipt, custody_authority, policy_attestation = (
+        _kms_data_key(root, raw_sha256)
     )
     key_sha256 = hashlib.sha256(key).hexdigest()
     custody_sha256 = hashlib.sha256(canonical_bytes(custody_receipt)).hexdigest()
@@ -91,6 +93,7 @@ def _encrypted_sidecar(payload: bytes, raw_sha256: str) -> dict[str, Any]:
             custody_receipt,
             custody_authority,
             wrapped_key,
+            policy_attestation,
         )
     finally:
         for index in range(len(key)):
@@ -107,6 +110,7 @@ def _store_encrypted_sidecar(
     custody_receipt: dict[str, Any],
     custody_authority: dict[str, Any],
     wrapped_data_key_base64: str,
+    effective_policy_attestation: dict[str, Any],
 ) -> dict[str, Any]:
     object_key = HKDF(
         algorithm=hashes.SHA256(),
@@ -149,7 +153,7 @@ def _store_encrypted_sidecar(
     else:
         descriptor = os.open(
             destination,
-            os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0),
             0o600,
         )
         try:
@@ -160,6 +164,26 @@ def _store_encrypted_sidecar(
             os.fsync(descriptor)
         finally:
             os.close(descriptor)
+    _, stored = read_regular_file(
+        destination,
+        "encrypted raw evidence recovery drill",
+        maximum_bytes=128 * 1024 * 1024,
+        boundary=root,
+    )
+    try:
+        recovered = AESGCM(object_key).decrypt(
+            stored[:12], stored[12:], raw_sha256.encode("ascii")
+        )
+    except Exception as exc:
+        raise ValueError("encrypted raw evidence recovery drill failed") from exc
+    if (
+        recovered != payload
+        or hashlib.sha256(recovered).hexdigest() != raw_sha256
+        or hashlib.sha256(stored).hexdigest() != ciphertext_sha256
+    ):
+        raise ValueError(
+            "encrypted raw evidence recovery drill did not reproduce payload"
+        )
     return {
         "mode": "encrypted-cas",
         "object_id": object_id,
@@ -170,12 +194,21 @@ def _store_encrypted_sidecar(
         "wrapped_data_key_base64": wrapped_data_key_base64,
         "custody_receipt": custody_receipt,
         "custody_authority_receipt": custody_authority,
+        "effective_policy_attestation": effective_policy_attestation,
+        "recovery_drill": {
+            "schema_version": "1.0",
+            "mode": "authenticated-local-restore",
+            "object_id": object_id,
+            "ciphertext_sha256": ciphertext_sha256,
+            "recovered_plaintext_sha256": hashlib.sha256(payload).hexdigest(),
+            "verified": True,
+        },
     }
 
 
 def _kms_data_key(
     root: Path, raw_sha256: str
-) -> tuple[bytearray, str, dict[str, Any], dict[str, Any]]:
+) -> tuple[bytearray, str, dict[str, Any], dict[str, Any], dict[str, Any]]:
     challenge = (
         os.environ.get("PYSEC_SCAN_TIME_CHALLENGE_SHA256", "").strip().casefold()
     )
@@ -190,6 +223,7 @@ def _kms_data_key(
         "PYSEC_RAW_EVIDENCE_KMS",
         request,
     )
+    policy_attestation = response.pop("_effective_policy_attestation", None)
     if (
         set(response)
         != {
@@ -323,6 +357,7 @@ def _kms_data_key(
         str(response["wrapped_data_key_base64"]),
         dict(value),
         verified_authority,
+        cast(dict[str, Any], policy_attestation),
     )
 
 

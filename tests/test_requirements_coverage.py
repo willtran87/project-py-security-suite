@@ -204,12 +204,30 @@ class SecurityRequirementsCoverageTests(unittest.TestCase):
             ).hexdigest()
             assessed_at = datetime.now(UTC)
             argv = ["replay", "--fixture", "fixture.json"]
-            environment_record = {"PYTHONHASHSEED": "0"}
-            runtime_manifest = {"runtime": "cpython", "version": "3.11"}
+            environment_record = [
+                {
+                    "name": "PYTHONHASHSEED",
+                    "value_sha256": hashlib.sha256(b"0").hexdigest(),
+                    "classification": "public-commitment",
+                }
+            ]
+            runtime_manifest = {
+                "kind": "native",
+                "executable_sha256": "7" * 64,
+                "closure_sha256": "6" * 64,
+                "image_digest": "",
+                "sbom_sha256": "5" * 64,
+            }
             assets_manifest = [{"name": "replay-policy", "sha256": "8" * 64}]
-            sandbox_policy = {"network": "none", "filesystem": "read-only"}
+            sandbox_policy = {
+                "network": "deny",
+                "filesystem": "read-only",
+                "process": "confined",
+                "credentials": "isolated",
+            }
             fixture = {"passed": True}
-            command_sha256 = hashlib.sha256(canonical_bytes(argv)).hexdigest()
+            command_sha256 = runtime_manifest["executable_sha256"]
+            argv_sha256 = hashlib.sha256(canonical_bytes(argv)).hexdigest()
             fixture_sha256 = hashlib.sha256(canonical_bytes(fixture)).hexdigest()
             procedure_artifacts: dict[str, object] = {}
             execution_assertion_fields: list[dict[str, object]] = []
@@ -219,6 +237,7 @@ class SecurityRequirementsCoverageTests(unittest.TestCase):
                 serialization.PublicFormat.SubjectPublicKeyInfo,
             )
             execution_authority_sha256 = hashlib.sha256(execution_public).hexdigest()
+            previous_execution_receipt_sha256 = ""
             for polarity in ("positive", "negative-control"):
                 name = f"procedure-{polarity}.json"
                 mutation_operator = (
@@ -250,7 +269,7 @@ class SecurityRequirementsCoverageTests(unittest.TestCase):
                     "result_sha256": artifact_sha256,
                     "started_at": assessed_at.isoformat(),
                     "finished_at": assessed_at.isoformat(),
-                    "argv_sha256": command_sha256,
+                    "argv_sha256": argv_sha256,
                     "environment_sha256": hashlib.sha256(
                         canonical_bytes(environment_record)
                     ).hexdigest(),
@@ -278,7 +297,11 @@ class SecurityRequirementsCoverageTests(unittest.TestCase):
                     purpose="requirements-procedure-execution",
                     operation_id=f"procedure-{polarity}",
                     private_key=execution_private,
+                    previous_operation_sha256=previous_execution_receipt_sha256,
                 )
+                previous_execution_receipt_sha256 = hashlib.sha256(
+                    canonical_bytes(execution_receipt)
+                ).hexdigest()
                 execution = {
                     **execution_subject,
                     "execution_authority_receipt": execution_receipt,
