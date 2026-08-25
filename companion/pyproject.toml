@@ -31,7 +31,7 @@ dependencies = [
 dev = [
   "coverage[toml]>=7.10,<8",
   "pytest>=8.4,<10",
-  "pytest-socket>=0.7,<0.8",
+  "pytest-socket>=0.7,<0.9",
   "pytest-timeout>=2.4,<3",
   "tox>=4.30,<5",
 ]
