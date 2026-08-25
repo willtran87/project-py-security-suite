@@ -239,6 +239,32 @@ class IsolatedEnvironmentTests(unittest.TestCase):
         self.assertEqual(result.stdout.strip(), "sandboxed")
         self.assertEqual(result.command[0], str(Path(sys.executable).resolve()))
 
+    def test_sandbox_private_root_placeholder_is_scoped_and_masked(self) -> None:
+        launcher = (
+            sys.executable,
+            "-c",
+            (
+                "import pathlib,subprocess,sys; "
+                "assert pathlib.Path(sys.argv[1]).is_dir(); "
+                "raise SystemExit(subprocess.run(sys.argv[2:]).returncode)"
+            ),
+            "{PYSEC_PRIVATE_ROOT}",
+        )
+        result = run_command(
+            [sys.executable, "-c", "print('scoped')"],
+            cwd=Path.cwd(),
+            timeout_seconds=10,
+            max_output_bytes=1024,
+            environment=CommandEnvironment(
+                sandbox_prefix=launcher,
+                sandbox_executable_sha256=sha256_file(Path(sys.executable)),
+            ),
+        )
+        self.assertEqual(result.exit_code, 0)
+        self.assertEqual(result.stdout.strip(), "scoped")
+        self.assertIn("{PYSEC_PRIVATE_ROOT}", result.command)
+        self.assertFalse(any("pysec-process-home-" in item for item in result.command))
+
     def test_sandbox_launcher_digest_mismatch_fails_before_execution(self) -> None:
         with self.assertRaisesRegex(ValueError, "sandbox launcher"):
             run_command(

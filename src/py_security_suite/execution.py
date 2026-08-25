@@ -1101,6 +1101,9 @@ def run_command(
         for name, path in private_locations.items():
             path.mkdir(parents=True, exist_ok=True)
             process_environment[name] = str(path)
+        private_command = [
+            item.replace("{PYSEC_PRIVATE_ROOT}", str(private_root)) for item in command
+        ]
         gate: Path | None = None
         limit_report = private_root / "limits-applied.json"
         process_command = command
@@ -1115,7 +1118,7 @@ def run_command(
             str(max_output_bytes),
             str(timeout_seconds),
             str(environment.max_scratch_bytes if environment else 512 * 1024**2),
-            *command,
+            *private_command,
         ]
         # Executables are resolved by adapters, arguments are passed as a
         # vector, shell execution is disabled, and the environment is reduced.

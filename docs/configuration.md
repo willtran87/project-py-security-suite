@@ -519,7 +519,10 @@ That subject also requires an Ed25519 authority envelope configured through
 the exact subject digest, purpose, scan challenge, issuance/expiry window,
 signer key, and monotonic generation.
 Sandbox arguments may use
-`{PYSEC_PROBE_SECRET_PARENT}` to mask the per-run secret directory. Governance
+`{PYSEC_PROBE_SECRET_PARENT}` to mask the per-run secret directory and
+`{PYSEC_PRIVATE_ROOT}` to grant a sandbox access only to its disposable
+home/cache/scratch tree. Both placeholders remain masked in retained command
+evidence. Governance
 v2 also requires host-filesystem, credential, process, device, and IPC
 isolation; Windows evidence must additionally assert `windows-appcontainer`
 because a Job Object alone is not a security boundary. Unsupported host
