@@ -2,13 +2,6 @@ name: Continuous parser fuzzing
 
 on:
   pull_request:
-    paths:
-      - src/py_security_suite/**
-      - scripts/fuzz_security_parsers.py
-      - fuzz/**
-      - pyproject.toml
-      - uv.lock
-      - .github/workflows/fuzz.yml
   push:
     branches: [main]
   schedule:
