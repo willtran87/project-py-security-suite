@@ -29,14 +29,43 @@ _SECRET_ASSIGNMENT = re.compile(
 )
 _RUNTIME_CLOSURE_LOCK = threading.Lock()
 _ENVIRONMENT_RUNTIME_CLOSURE: str | None = None
-_LIMIT_GATE_BOOTSTRAP = (
-    "import os,subprocess,sys,time;"
-    "gate=sys.argv[1];deadline=time.monotonic()+10;"
-    "\nwhile not os.path.exists(gate):"
-    "\n  if time.monotonic()>=deadline: raise SystemExit(125)"
-    "\n  time.sleep(0.005)"
-    "\nraise SystemExit(subprocess.run(sys.argv[2:]).returncode)"
-)
+_LIMIT_GATE_BOOTSTRAP = """
+import json, os, subprocess, sys, time
+gate, report = sys.argv[1:3]
+enforced, errors = [], []
+if os.name != "nt":
+    import resource
+    requested_limits = (
+        ("address-space", "RLIMIT_AS", 8 * 1024**3),
+        ("process-count", "RLIMIT_NPROC", 256),
+        ("open-files", "RLIMIT_NOFILE", 2048),
+        ("file-size", "RLIMIT_FSIZE", int(sys.argv[5])),
+        ("cpu-time", "RLIMIT_CPU", max(1, int(sys.argv[4]))),
+    )
+    for name, constant, requested in requested_limits:
+        try:
+            kind = getattr(resource, constant)
+            current_soft, current_hard = resource.getrlimit(kind)
+            value = requested
+            if current_hard != resource.RLIM_INFINITY:
+                value = min(value, current_hard)
+            if current_soft != resource.RLIM_INFINITY:
+                value = min(value, current_soft)
+            resource.setrlimit(kind, (value, current_hard))
+            enforced.append(name)
+        except (AttributeError, OSError, ValueError) as exc:
+            errors.append(f"{name}:{exc}")
+temporary_report = report + ".tmp"
+with open(temporary_report, "x", encoding="utf-8") as handle:
+    json.dump({"enforced": enforced, "errors": errors}, handle)
+os.replace(temporary_report, report)
+deadline = time.monotonic() + 10
+while not os.path.exists(gate):
+    if time.monotonic() >= deadline:
+        raise SystemExit(125)
+    time.sleep(0.005)
+raise SystemExit(subprocess.run(sys.argv[6:]).returncode)
+"""
 
 
 @dataclass(slots=True)
@@ -990,6 +1019,7 @@ def run_command(
             path.mkdir(parents=True, exist_ok=True)
             process_environment[name] = str(path)
         gate: Path | None = None
+        limit_report = private_root / "limits-applied.json"
         process_command = command
         gate = private_root / "limits-applied.gate"
         process_command = [
@@ -998,6 +1028,10 @@ def run_command(
             "-c",
             _LIMIT_GATE_BOOTSTRAP,
             str(gate),
+            str(limit_report),
+            str(max_output_bytes),
+            str(timeout_seconds),
+            str(environment.max_scratch_bytes if environment else 512 * 1024**2),
             *command,
         ]
         # Executables are resolved by adapters, arguments are passed as a
@@ -1023,6 +1057,7 @@ def run_command(
             max_scratch_bytes=(
                 environment.max_scratch_bytes if environment else 512 * 1024**2
             ),
+            limit_report=limit_report,
         )
         containment_failed = bool(limit_errors)
         if not containment_failed and "pre-execution-assignment" not in limits:
@@ -1136,6 +1171,7 @@ def _apply_process_resource_limits(
     max_output_bytes: int,
     timeout_seconds: int,
     max_scratch_bytes: int,
+    limit_report: Path,
 ) -> tuple[tuple[str, ...], tuple[str, ...], int | None]:
     """Apply OS-enforced scanner quotas immediately after process creation."""
     pid = getattr(process, "pid", None)
@@ -1146,37 +1182,31 @@ def _apply_process_resource_limits(
             return _apply_windows_job_limits(process, timeout_seconds=timeout_seconds)
         except (OSError, ValueError) as exc:
             return (), (f"windows-job:{exc}",), None
+    deadline = time.monotonic() + 10
+    while not limit_report.is_file() and process.poll() is None:
+        if time.monotonic() >= deadline:
+            break
+        time.sleep(0.005)
     try:
-        resource = __import__("resource")
-    except ImportError:
-        return (), ("posix-prlimit:unavailable",), None
-    prlimit = getattr(resource, "prlimit", None)
-    if not callable(prlimit):
-        return (), ("posix-prlimit:unavailable",), None
-    limits = (
-        ("address-space", resource.RLIMIT_AS, 8 * 1024**3),
-        ("process-count", resource.RLIMIT_NPROC, 256),
-        ("open-files", resource.RLIMIT_NOFILE, 2048),
-        ("file-size", resource.RLIMIT_FSIZE, max_scratch_bytes),
-        ("cpu-time", resource.RLIMIT_CPU, max(1, timeout_seconds)),
-    )
-    enforced: list[str] = []
-    errors: list[str] = []
-    for name, kind, requested in limits:
-        try:
-            current_soft, current_hard = prlimit(pid, kind)
-            hard = current_hard
-            if hard == resource.RLIM_INFINITY:
-                value = requested
-            else:
-                value = min(requested, hard)
-            if current_soft != resource.RLIM_INFINITY:
-                value = min(value, current_soft)
-            prlimit(pid, kind, (value, hard))
-            enforced.append(name)
-        except (OSError, ValueError) as exc:
-            errors.append(f"{name}:{exc}")
-    return tuple(enforced), tuple(errors), None
+        _, payload = read_regular_file(
+            limit_report,
+            "POSIX child resource-limit report",
+            maximum_bytes=4096,
+            boundary=limit_report.parent,
+        )
+        report = strict_loads(payload)
+    except (OSError, TypeError, ValueError):
+        return (), ("posix-child-limits:unavailable",), None
+    if (
+        not isinstance(report, dict)
+        or set(report) != {"enforced", "errors"}
+        or not isinstance(report["enforced"], list)
+        or not isinstance(report["errors"], list)
+        or any(not isinstance(item, str) or not item for item in report["enforced"])
+        or any(not isinstance(item, str) or not item for item in report["errors"])
+    ):
+        return (), ("posix-child-limits:invalid-report",), None
+    return tuple(report["enforced"]), tuple(report["errors"]), None
 
 
 def _apply_windows_job_limits(
