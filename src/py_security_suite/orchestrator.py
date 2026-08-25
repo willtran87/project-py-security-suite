@@ -3,7 +3,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import sys
 import time
 import uuid
 from collections.abc import Mapping
@@ -624,7 +623,7 @@ def _resource_limit_assurance(
         }
         if os.name == "nt"
         else {
-            "data-segment" if sys.platform == "darwin" else "address-space",
+            "address-space",
             "process-count",
             "open-files",
             "file-size",

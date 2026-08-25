@@ -85,7 +85,12 @@ def test_windows_appcontainer_denies_host_reads_and_network() -> None:
         server.join(timeout=5)
 
 
-def _exercise_sandbox(executable: str, arguments: tuple[str, ...]) -> None:
+def _exercise_sandbox(
+    executable: str,
+    arguments: tuple[str, ...],
+    *,
+    probe_executable: str | None = None,
+) -> None:
     listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     listener.bind(("127.0.0.1", 0))
     listener.listen(1)
@@ -113,7 +118,7 @@ def _exercise_sandbox(executable: str, arguments: tuple[str, ...]) -> None:
     try:
         result = run_command(
             [
-                sys.executable,
+                probe_executable or sys.executable,
                 "-I",
                 "-c",
                 source,
@@ -213,6 +218,7 @@ def test_linux_bubblewrap_enforces_network_and_read_only_target() -> None:
             "/proc",
             "--",
         ),
+        probe_executable="/usr/bin/python3",
     )
 
 

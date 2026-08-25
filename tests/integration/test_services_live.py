@@ -35,10 +35,9 @@ def test_postgresql_row_security_blocks_cross_tenant_reads(
         try:
             for role, password in zip(roles, passwords, strict=True):
                 admin.execute(
-                    sql.SQL("CREATE ROLE {} LOGIN PASSWORD %s").format(
-                        sql.Identifier(role)
-                    ),
-                    (password,),
+                    sql.SQL("CREATE ROLE {} LOGIN PASSWORD {}").format(
+                        sql.Identifier(role), sql.Literal(password)
+                    )
                 )
             admin.execute(
                 sql.SQL("CREATE TABLE {} (tenant name, secret text)").format(
