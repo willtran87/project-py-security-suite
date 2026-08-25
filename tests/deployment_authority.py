@@ -19,6 +19,9 @@ def pinned_command_sandbox_environment(
     """Return a pinned pass-through launcher contract for protocol tests."""
 
     launcher = root / f"{prefix.casefold()}-sandbox.py"
+    cryptography_site_packages = Path(serialization.__file__).resolve().parents[4]
+    if cryptography_site_packages.name not in {"site-packages", "dist-packages"}:
+        raise RuntimeError("cryptography package root could not be determined")
     attestor_private = Ed25519PrivateKey.generate()
     attestor_private_bytes = attestor_private.private_bytes(
         serialization.Encoding.PEM,
@@ -46,6 +49,7 @@ def pinned_command_sandbox_environment(
     launcher.write_text(
         "import base64,hashlib,json,os,platform,subprocess,sys\n"
         "from datetime import UTC,datetime,timedelta\n"
+        f"sys.path.insert(0,{str(cryptography_site_packages)!r})\n"
         "from cryptography.hazmat.primitives import serialization\n"
         f"PRIVATE={embedded_private!r}\n"
         f"REMOTE_PRIVATE={embedded_remote_private!r}\n"

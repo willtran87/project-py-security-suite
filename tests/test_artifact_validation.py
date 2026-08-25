@@ -511,9 +511,11 @@ def test_native_report_secrets_use_encrypted_content_addressed_storage(
     )
     audit_key_sha256 = hashlib.sha256(audit_public).hexdigest()
     recovery_script = tmp_path / "recover.py"
+    cryptography_site_packages = Path(serialization.__file__).resolve().parents[4]
     recovery_script.write_text(
         "import base64,hashlib,json,os,pathlib,sys\n"
         "from datetime import UTC,datetime,timedelta\n"
+        f"sys.path.insert(0,{str(cryptography_site_packages)!r})\n"
         "from cryptography.hazmat.primitives import hashes,serialization\n"
         "from cryptography.hazmat.primitives.ciphers.aead import AESGCM\n"
         "from cryptography.hazmat.primitives.kdf.hkdf import HKDF\n"

@@ -10,9 +10,11 @@ from typing import Any
 
 from .execution import (
     CommandEnvironment,
+    RawExecution,
     native_runtime_closure_sha256,
     resolve_executable,
     run_command,
+    sanitize_diagnostic,
     sha256_file,
 )
 from .operation_receipt import verify_operation_receipt
@@ -167,6 +169,12 @@ def run_pinned_json_command(
                 max_scratch_bytes=16 * 1024 * 1024,
             ),
         )
+        failure_detail = _execution_failure_detail(result)
+        if failure_detail:
+            raise ValueError(
+                f"{prefix} command failed its governed execution contract: "
+                f"{failure_detail}"
+            )
         execution_attestation = _verify_execution_attestation(
             attestation_path,
             attestation_base,
@@ -176,14 +184,6 @@ def run_pinned_json_command(
     if sha256_file(Path(resolved)) != expected_executable:
         raise ValueError(f"{prefix} executable changed during governed execution")
     _verify_assets(prefix)
-    if (
-        result.exit_code != 0
-        or result.timed_out
-        or result.output_limit_exceeded
-        or result.resource_limit_errors
-        or result.stderr.strip()
-    ):
-        raise ValueError(f"{prefix} command failed its governed execution contract")
     try:
         value = strict_loads(result.stdout)
     except (TypeError, ValueError) as exc:
@@ -194,6 +194,26 @@ def run_pinned_json_command(
         raise ValueError(f"{prefix} command response used a reserved field")
     value["_effective_policy_attestation"] = execution_attestation
     return value
+
+
+def _execution_failure_detail(result: RawExecution) -> str:
+    failures: list[str] = []
+    if result.exit_code != 0:
+        failures.append(f"exit code {result.exit_code}")
+    if result.timed_out:
+        failures.append("timed out")
+    if result.output_limit_exceeded:
+        failures.append("output limit exceeded")
+    if result.scratch_limit_exceeded:
+        failures.append("scratch limit exceeded")
+    if result.resident_memory_limit_exceeded:
+        failures.append("resident-memory limit exceeded")
+    if result.resource_limit_errors:
+        failures.append("resource limits were not enforced")
+    diagnostic = sanitize_diagnostic(result.stderr, maximum=1024)
+    if diagnostic:
+        failures.append(diagnostic)
+    return "; ".join(failures)
 
 
 def _verify_execution_attestation(
