@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 from multiprocessing import shared_memory
 import os
 import socket
@@ -240,6 +241,24 @@ print(json.dumps(result, sort_keys=True))
 """.strip()
 
 
+def _host_ipv4_address() -> str | None:
+    for item in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+        candidate = item[4][0]
+        try:
+            address = ipaddress.ip_address(candidate)
+        except ValueError:
+            continue
+        if (
+            isinstance(address, ipaddress.IPv4Address)
+            and not address.is_loopback
+            and not address.is_unspecified
+            and not address.is_multicast
+            and not address.is_link_local
+        ):
+            return address.compressed
+    return None
+
+
 def probe_isolation_boundary(
     target: Path,
     config: IsolationConfig,
@@ -288,13 +307,8 @@ def probe_isolation_boundary(
         if udp6 is not None:
             udp6.close()
         udp6 = None
-    host4 = ""
-    for item in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
-        candidate = item[4][0]
-        if isinstance(candidate, str) and not candidate.startswith("127."):
-            host4 = candidate
-            break
-    if host4:
+    host4 = _host_ipv4_address()
+    if host4 is not None:
         try:
             host_tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             host_tcp.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -361,7 +375,7 @@ def probe_isolation_boundary(
                 str(int(udp4.getsockname()[1])),
                 str(int(tcp6.getsockname()[1]) if tcp6 is not None else 0),
                 canary_name,
-                host4,
+                host4 or "",
                 str(int(host_tcp.getsockname()[1]) if host_tcp is not None else 0),
                 str(int(host_udp.getsockname()[1]) if host_udp is not None else 0),
                 str(int(udp6.getsockname()[1]) if udp6 is not None else 0),

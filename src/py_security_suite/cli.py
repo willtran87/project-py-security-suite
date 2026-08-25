@@ -1197,7 +1197,9 @@ def _decrypt_report_command(args: argparse.Namespace) -> int:
 
 
 def _retention_status_command(args: argparse.Namespace) -> int:
-    print(json.dumps(retention_status(args.report), indent=2, sort_keys=True))
+    print(  # lgtm[py/clear-text-logging-sensitive-data] verified digests and timestamps only
+        json.dumps(retention_status(args.report), indent=2, sort_keys=True)
+    )
     return 0
 
 
@@ -1338,7 +1340,9 @@ def _reachability_diff_command(args: argparse.Namespace) -> int:
             label="reachability delta output",
         )
     if args.format == "json":
-        print(rendered_json)
+        print(  # lgtm[py/clear-text-logging-sensitive-data] aggregate governed metrics only
+            rendered_json
+        )
     else:
         counts = result["counts"]
         print(

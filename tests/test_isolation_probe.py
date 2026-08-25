@@ -9,10 +9,33 @@ import pytest
 
 from py_security_suite.config import IsolationConfig
 from py_security_suite.execution import RawExecution
-from py_security_suite.isolation_probe import probe_isolation_boundary
+from py_security_suite.isolation_probe import (
+    _host_ipv4_address,
+    probe_isolation_boundary,
+)
 
 
 class IsolationProbeTests(unittest.TestCase):
+    def test_host_interface_selection_rejects_unsafe_ipv4_addresses(self) -> None:
+        addresses = [
+            (2, 1, 6, "", ("0.0.0.0", 0)),  # noqa: S104 - rejection fixture
+            (2, 1, 6, "", ("127.0.0.1", 0)),
+            (2, 1, 6, "", ("169.254.4.5", 0)),
+            (2, 1, 6, "", ("224.0.0.1", 0)),
+            (2, 1, 6, "", ("192.0.2.8", 0)),
+        ]
+        with patch(
+            "py_security_suite.isolation_probe.socket.getaddrinfo",
+            return_value=addresses,
+        ):
+            self.assertEqual(_host_ipv4_address(), "192.0.2.8")
+
+        with patch(
+            "py_security_suite.isolation_probe.socket.getaddrinfo",
+            return_value=addresses[:-1],
+        ):
+            self.assertIsNone(_host_ipv4_address())
+
     @pytest.mark.enable_socket
     def test_required_probe_records_both_enforced_capabilities(self) -> None:
         execution = RawExecution(
