@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import re
 from dataclasses import asdict, dataclass, field, is_dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -188,7 +190,10 @@ def isoformat(value: datetime) -> str:
 
 
 def normalize_repo_path(target: Path, path: str | Path) -> str:
-    candidate = Path(path)
+    raw_path = str(path).replace("\\", "/")
+    if re.match(r"^[a-zA-Z]:/", raw_path) and os.name != "nt":
+        return "<outside-target>"
+    candidate = Path(raw_path)
     if not candidate.is_absolute() and ".." in candidate.parts:
         return "<outside-target>"
     try:

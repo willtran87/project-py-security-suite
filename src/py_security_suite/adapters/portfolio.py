@@ -302,6 +302,8 @@ class ValidatePyprojectAdapter(ScannerAdapter):
         return [executable, "--dump-json", str((target / "pyproject.toml").resolve())]
 
     def parse(self, payload: str, target: Path) -> list[Finding]:
+        if "\x00" in payload:
+            raise ValueError("validate-pyproject output contains a NUL byte")
         if payload.lstrip().startswith("{"):
             document = strict_json_loads(payload)
             if not isinstance(document, dict):

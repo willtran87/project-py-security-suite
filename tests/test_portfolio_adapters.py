@@ -241,6 +241,8 @@ class PortfolioAdapterTests(unittest.TestCase):
         self.assertEqual(adapter.parse('{"project":{"name":"demo"}}', Path(".")), [])
         finding = adapter.parse("Invalid file: pyproject.toml", Path("."))[0]
         self.assertEqual(finding.locations[0].path, "pyproject.toml")
+        with self.assertRaisesRegex(ValueError, "NUL byte"):
+            adapter.parse("Invalid file:\x00 pyproject.toml", Path("."))
 
     def test_validate_pyproject_preflight_environment_and_type_guard(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -62,6 +62,8 @@ class TachAdapter(ScannerAdapter):
             line = _ANSI.sub("", raw_line).strip()
             if not line:
                 continue
+            if "\x00" in line:
+                raise ValueError("Tach output contains a NUL byte")
             match = _VIOLATION.match(line)
             if match is None:
                 if "[L" in line or line.startswith("[FAIL]"):

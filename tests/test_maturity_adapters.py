@@ -65,6 +65,8 @@ class MaturityAdapterTests(unittest.TestCase):
             Path("."),
         )[0]
         self.assertEqual(native.locations[0].start_line, 19)
+        with self.assertRaisesRegex(ValueError, "NUL byte"):
+            adapter.parse("src/example/api.py:19: invalid\x00message\n", Path("."))
         payload = adapter.result_payload(
             RawExecution(
                 command=["tach", "check"],
