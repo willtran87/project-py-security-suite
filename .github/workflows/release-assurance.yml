@@ -59,7 +59,24 @@ jobs:
             Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Build distribution
         shell: pwsh
-        run: uv build --no-sources --out-dir ".artifacts/release-$env:RELEASE_BUILDER"
+        run: |
+          $releaseDirectory = ".artifacts/release-$env:RELEASE_BUILDER"
+          uv build --no-sources --out-dir $releaseDirectory
+          if ($LASTEXITCODE -ne 0) {
+            throw "Distribution build failed"
+          }
+          $sdists = @(Get-ChildItem -LiteralPath $releaseDirectory -Filter "*.tar.gz")
+          if ($sdists.Count -ne 1) {
+            throw "Expected exactly one source distribution, found $($sdists.Count)"
+          }
+          uv run pysec normalize-sdist $sdists[0].FullName `
+            --output $sdists[0].FullName `
+            --source-date-epoch ([int64]$env:SOURCE_DATE_EPOCH) `
+            --overwrite `
+            --format json
+          if ($LASTEXITCODE -ne 0) {
+            throw "Source distribution normalization failed"
+          }
       - name: Attest exact builder subjects
         uses: actions/attest-build-provenance@43d14bc2b83dec42d39ecae14e916627a18bb661 # v3
         with:
