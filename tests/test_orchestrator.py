@@ -29,6 +29,7 @@ from py_security_suite.orchestrator import (
     resolve_asset_paths,
     scan_project,
 )
+from py_security_suite.path_safety import HeldParentDirectory
 from py_security_suite.passport import verify_report
 from py_security_suite.reports import (
     _finding_priority,
@@ -125,6 +126,7 @@ class FakeSecrets(FakeBandit):
 
 class MutatingSecrets(FakeSecrets):
     def run(self, target: Path) -> AdapterResult:
+        target.chmod(0o700)
         (target / "scanner-created.py").write_text(
             "unexpected = True\n",
             encoding="utf-8",
@@ -1024,15 +1026,19 @@ class OrchestratorTests(unittest.TestCase):
                 verify_report(replaced_output)["scan_id"], first.manifest.scan_id
             )
 
-            original_rename = Path.rename
+            original_rename = HeldParentDirectory.rename
 
-            def fail_staging_rename(source: Path, target_path: Path) -> Path:
+            def fail_staging_rename(
+                held_parent: HeldParentDirectory,
+                source: Path,
+                target_path: Path,
+            ) -> None:
                 if source.name.startswith(".replaced-report.staging-"):
                     raise OSError("replacement publication failure")
-                return original_rename(source, target_path)
+                original_rename(held_parent, source, target_path)
 
             with (
-                patch.object(Path, "rename", fail_staging_rename),
+                patch.object(HeldParentDirectory, "rename", fail_staging_rename),
                 self.assertRaisesRegex(OSError, "publication failure"),
             ):
                 scan_project(

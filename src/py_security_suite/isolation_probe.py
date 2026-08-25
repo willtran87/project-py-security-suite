@@ -536,44 +536,65 @@ def probe_isolation_boundary(
             else "",
         }
         if sys.platform == "darwin"
-        else {"platform": sys.platform, "policy_introspection_available": False}
+        else {
+            "platform": "windows" if sys.platform == "win32" else sys.platform,
+            "policy_introspection_available": False,
+        }
     )
     if policy_observations.get("platform") == "linux":
-        seccomp_filters = policy_observations.get("seccomp_filters")
-        capabilities["linux-no-new-privileges"] = (
-            policy_observations["no_new_privileges"] is True
-        )
-        capabilities["linux-capabilities-dropped"] = (
-            policy_observations["capabilities_dropped"] is True
-        )
-        capabilities["linux-seccomp-filter-enforced"] = (
-            policy_observations["seccomp_mode"] == 2
-            and isinstance(seccomp_filters, int)
-            and not isinstance(seccomp_filters, bool)
-            and seccomp_filters >= 1
-        )
-        capabilities["linux-seccomp-policy-bound"] = len(
-            str(policy_observations["seccomp_policy_sha256"])
-        ) == 64 and all(
-            character in "0123456789abcdef"
-            for character in str(policy_observations["seccomp_policy_sha256"])
-        )
+        if policy_observations.get("policy_introspection_available") is False:
+            capabilities.update(
+                {
+                    "linux-no-new-privileges": False,
+                    "linux-capabilities-dropped": False,
+                    "linux-seccomp-filter-enforced": False,
+                    "linux-seccomp-policy-bound": False,
+                }
+            )
+        else:
+            seccomp_filters = policy_observations.get("seccomp_filters")
+            capabilities["linux-no-new-privileges"] = (
+                policy_observations.get("no_new_privileges") is True
+            )
+            capabilities["linux-capabilities-dropped"] = (
+                policy_observations.get("capabilities_dropped") is True
+            )
+            capabilities["linux-seccomp-filter-enforced"] = (
+                policy_observations.get("seccomp_mode") == 2
+                and isinstance(seccomp_filters, int)
+                and not isinstance(seccomp_filters, bool)
+                and seccomp_filters >= 1
+            )
+            seccomp_policy = str(policy_observations.get("seccomp_policy_sha256") or "")
+            capabilities["linux-seccomp-policy-bound"] = len(
+                seccomp_policy
+            ) == 64 and all(
+                character in "0123456789abcdef" for character in seccomp_policy
+            )
     elif policy_observations.get("platform") == "windows":
-        capabilities["windows-dep-enabled"] = policy_observations["dep_enabled"] is True
+        introspected = (
+            policy_observations.get("policy_introspection_available") is not False
+        )
+        capabilities["windows-dep-enabled"] = (
+            introspected and policy_observations.get("dep_enabled") is True
+        )
         capabilities["windows-aslr-enabled"] = (
-            policy_observations["aslr_enabled"] is True
+            introspected and policy_observations.get("aslr_enabled") is True
         )
         capabilities["windows-dynamic-code-prohibited"] = (
-            policy_observations["dynamic_code_prohibited"] is True
+            introspected and policy_observations.get("dynamic_code_prohibited") is True
         )
         capabilities["windows-child-processes-prohibited"] = (
-            policy_observations["child_processes_prohibited"] is True
+            introspected
+            and policy_observations.get("child_processes_prohibited") is True
         )
     elif policy_observations.get("platform") == "macos":
         capabilities["macos-sandbox-profile-bound"] = (
             len(str(policy_observations["sandbox_profile_sha256"])) == 64
         )
-    if policy_observations.get("platform") in {"linux", "macos"}:
+    if policy_observations.get("platform") in {"linux", "macos"} and (
+        policy_observations.get("policy_introspection_available") is not False
+    ):
         attestation_sha, attestation, authority = _effective_policy_attestation(
             policy_observations
         )

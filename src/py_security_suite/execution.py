@@ -1482,14 +1482,29 @@ def _directory_size_exceeds(root: Path, maximum: int) -> bool:
 
 
 def _kill_process_group_after_leader_exit(process: subprocess.Popen[bytes]) -> None:
+    if process.poll() is None:
+        return
     kill_process_group = os.__dict__.get("killpg")
+    get_process_group = os.__dict__.get("getpgrp")
     hard_kill = signal.__dict__.get("SIGKILL")
-    if not callable(kill_process_group) or hard_kill is None:
+    process_group = process.pid
+    if (
+        not callable(kill_process_group)
+        or hard_kill is None
+        or type(process_group) is not int
+        or process_group <= 1
+        or process_group == os.getpid()
+        or (callable(get_process_group) and process_group == get_process_group())
+    ):
         return
     try:
-        kill_process_group(process.pid, hard_kill)
+        kill_process_group(process_group, hard_kill)
     except (OSError, ProcessLookupError):
         pass
+
+
+def _running_on_windows() -> bool:
+    return os.name == "nt"
 
 
 def _terminate_process_tree(process: subprocess.Popen[bytes]) -> bool:
@@ -1497,7 +1512,7 @@ def _terminate_process_tree(process: subprocess.Popen[bytes]) -> bool:
     if process.poll() is not None:
         return True
     try:
-        if os.name == "nt":
+        if _running_on_windows():
             windows = Path(
                 os.environ.get("SYSTEMROOT") or os.environ.get("WINDIR") or "C:/Windows"
             ).resolve()

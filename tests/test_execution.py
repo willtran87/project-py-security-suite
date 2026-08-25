@@ -15,6 +15,7 @@ from unittest.mock import MagicMock, call, patch
 from py_security_suite.execution import (
     CommandEnvironment,
     _darwin_shared_cache_dependency,
+    _kill_process_group_after_leader_exit,
     _process_tree_resident_bytes,
     _terminate_process_tree,
     isolated_environment,
@@ -284,7 +285,7 @@ class IsolatedEnvironmentTests(unittest.TestCase):
         process.poll.side_effect = [None, None, 0]
         completed = MagicMock(returncode=1)
         with (
-            patch("py_security_suite.execution.os.name", "nt"),
+            patch("py_security_suite.execution._running_on_windows", return_value=True),
             patch("py_security_suite.execution.Path.is_file", return_value=True),
             patch(
                 "py_security_suite.execution.subprocess.run",
@@ -300,7 +301,7 @@ class IsolatedEnvironmentTests(unittest.TestCase):
         process = MagicMock()
         process.poll.side_effect = [None, 0]
         with (
-            patch("py_security_suite.execution.os.name", "nt"),
+            patch("py_security_suite.execution._running_on_windows", return_value=True),
             patch("py_security_suite.execution.Path.is_file", return_value=False),
         ):
             self.assertTrue(_terminate_process_tree(process))
@@ -338,6 +339,45 @@ class IsolatedEnvironmentTests(unittest.TestCase):
         process.poll.return_value = 0
         self.assertTrue(_terminate_process_tree(process))
         process.kill.assert_not_called()
+
+    def test_post_exit_cleanup_rejects_unsafe_process_groups(self) -> None:
+        kill_process_group = MagicMock()
+        process = MagicMock()
+        with (
+            patch.dict(
+                "py_security_suite.execution.os.__dict__",
+                {"killpg": kill_process_group, "getpgrp": MagicMock(return_value=42)},
+            ),
+            patch.dict(
+                "py_security_suite.execution.signal.__dict__",
+                {"SIGKILL": 9},
+            ),
+        ):
+            for pid, poll_result in ((1, 0), (42, 0), (MagicMock(), 0), (84, None)):
+                process.pid = pid
+                process.poll.return_value = poll_result
+                _kill_process_group_after_leader_exit(process)
+
+        kill_process_group.assert_not_called()
+
+    def test_post_exit_cleanup_kills_only_the_isolated_process_group(self) -> None:
+        kill_process_group = MagicMock()
+        process = MagicMock(pid=84)
+        process.pid = 84
+        process.poll.return_value = 0
+        with (
+            patch.dict(
+                "py_security_suite.execution.os.__dict__",
+                {"killpg": kill_process_group, "getpgrp": MagicMock(return_value=42)},
+            ),
+            patch.dict(
+                "py_security_suite.execution.signal.__dict__",
+                {"SIGKILL": 9},
+            ),
+        ):
+            _kill_process_group_after_leader_exit(process)
+
+        kill_process_group.assert_called_once_with(84, 9)
 
     def test_executable_resolution_and_terminal_sanitization_are_bounded(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
