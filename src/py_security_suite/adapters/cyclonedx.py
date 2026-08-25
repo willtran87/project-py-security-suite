@@ -8,6 +8,7 @@ from typing import Any
 from ..config import ToolConfig
 from ..execution import RawExecution, resolve_executable, run_command, sha256_file
 from ..models import Finding, ToolRun, ToolStatus
+from ..strict_json import loads as strict_json_loads
 from .base import AdapterResult, ScannerAdapter
 
 
@@ -311,7 +312,7 @@ class CycloneDxAdapter(ScannerAdapter):
 
 
 def _document(payload: str) -> dict[str, Any]:
-    value = json.loads(payload)
+    value = strict_json_loads(payload)
     if not isinstance(value, dict):
         raise TypeError("CycloneDX output must be an object")
     return value

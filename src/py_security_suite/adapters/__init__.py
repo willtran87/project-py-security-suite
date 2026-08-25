@@ -2,57 +2,83 @@ from __future__ import annotations
 
 from .actionlint import ActionlintAdapter
 from .assurance_evidence import (
+    AiSecurityAdapter,
     AtherisAdapter,
+    AuthorizationSecurityAdapter,
+    BrowserSecurityAdapter,
     CheckManifestAdapter,
     ClamAvAdapter,
+    CloudAttackPathAdapter,
+    ClusterFuzzLiteAdapter,
     CrossHairAdapter,
+    DatabaseSecurityAdapter,
+    EventSecurityAdapter,
+    FalcoAdapter,
+    FuzzIntrospectorAdapter,
     GitHubAttestationAdapter,
+    IastAdapter,
     InTotoAdapter,
+    KubescapeAdapter,
+    MobSfAdapter,
     MutmutAdapter,
+    NativeSanitizersAdapter,
+    NucleiAdapter,
+    OastAdapter,
     OciImageAdapter,
+    PolyglotAdapter,
+    ProtocolSecurityAdapter,
+    ProwlerAdapter,
     PyTmAdapter,
+    RaspAdapter,
     ReproducibleBuildAdapter,
+    RestlerAdapter,
+    RulesetRegressionAdapter,
+    SecretVerificationAdapter,
+    SurfaceInventoryAdapter,
+    TlsScanAdapter,
     YaraAdapter,
     ZapAdapter,
 )
 from .bandit import BanditAdapter
-from .codeql import CodeQlAdapter
 from .checkov import CheckovAdapter
+from .codeql import CodeQlAdapter
 from .cosign import CosignAdapter
 from .cyclonedx import CycloneDxAdapter
-from .detect_secrets import DetectSecretsAdapter
 from .deptry import DeptryAdapter
-from .diff_cover import DiffCoverAdapter
+from .detect_secrets import DetectSecretsAdapter
 from .devskim import DevSkimAdapter
+from .diff_cover import DiffCoverAdapter
 from .flawfinder import FlawfinderAdapter
 from .gitleaks import GitleaksAdapter
+from .graphify import GraphifyAdapter
 from .grype import GrypeAdapter
 from .guarddog import GuardDogAdapter
 from .hadolint import HadolintAdapter
 from .mypy import MypyAdapter
 from .osv import OsvScannerAdapter
-from .pylint import PylintAdapter
-from .pysa import PysaAdapter
-from .psscriptanalyzer import PSScriptAnalyzerAdapter
-from .pyright import PyrightAdapter
-from .pypi_attestations import PyPiAttestationsAdapter
 from .portfolio import (
     ConftestAdapter,
     GitSizerAdapter,
     KicsAdapter,
     KubeLinterAdapter,
     PipdeptreeAdapter,
-    ValidatePyprojectAdapter,
     ValeAdapter,
+    ValidatePyprojectAdapter,
 )
-from .ruff import RuffAdapter
-from .ruff_quality import RuffQualityAdapter
-from .ruff_format import RuffFormatAdapter
+from .psscriptanalyzer import PSScriptAnalyzerAdapter
+from .pylint import PylintAdapter
+from .pypi_attestations import PyPiAttestationsAdapter
+from .pyright import PyrightAdapter
+from .pysa import PysaAdapter
 from .radon import RadonAdapter
+from .reachability import ReachabilityAdapter
 from .reuse import ReuseAdapter
+from .ruff import RuffAdapter
+from .ruff_format import RuffFormatAdapter
+from .ruff_quality import RuffQualityAdapter
 from .scancode import ScanCodeAdapter
-from .semgrep import SemgrepAdapter
 from .scorecard import ScorecardAdapter
+from .semgrep import SemgrepAdapter
 from .shellcheck import ShellCheckAdapter
 from .syft import SyftAdapter
 from .tach import TachAdapter
@@ -82,6 +108,8 @@ ADAPTER_TYPES = {
     "mypy": MypyAdapter,
     "vulture": VultureAdapter,
     "radon": RadonAdapter,
+    "reachability": ReachabilityAdapter,
+    "graphify": GraphifyAdapter,
     "zizmor": ZizmorAdapter,
     "actionlint": ActionlintAdapter,
     "hadolint": HadolintAdapter,
@@ -122,12 +150,36 @@ ADAPTER_TYPES = {
     "kube-linter": KubeLinterAdapter,
     "crosshair": CrossHairAdapter,
     "atheris": AtherisAdapter,
+    "clusterfuzzlite": ClusterFuzzLiteAdapter,
     "mutmut": MutmutAdapter,
     "oci-image": OciImageAdapter,
     "check-manifest": CheckManifestAdapter,
     "clamav": ClamAvAdapter,
     "github-attestation": GitHubAttestationAdapter,
     "zap": ZapAdapter,
+    "nuclei": NucleiAdapter,
+    "oast": OastAdapter,
+    "restler": RestlerAdapter,
+    "protocol-security": ProtocolSecurityAdapter,
+    "fuzz-introspector": FuzzIntrospectorAdapter,
+    "browser-security": BrowserSecurityAdapter,
+    "authorization-security": AuthorizationSecurityAdapter,
+    "surface-inventory": SurfaceInventoryAdapter,
+    "event-security": EventSecurityAdapter,
+    "database-security": DatabaseSecurityAdapter,
+    "ruleset-regression": RulesetRegressionAdapter,
+    "ai-security": AiSecurityAdapter,
+    "iast": IastAdapter,
+    "falco": FalcoAdapter,
+    "kubescape": KubescapeAdapter,
+    "prowler": ProwlerAdapter,
+    "cloud-attack-path": CloudAttackPathAdapter,
+    "rasp": RaspAdapter,
+    "native-sanitizers": NativeSanitizersAdapter,
+    "mobsf": MobSfAdapter,
+    "tls-scan": TlsScanAdapter,
+    "polyglot": PolyglotAdapter,
+    "secret-verification": SecretVerificationAdapter,
     "pytm": PyTmAdapter,
     "in-toto": InTotoAdapter,
     "reproducible-build": ReproducibleBuildAdapter,
@@ -137,47 +189,70 @@ ADAPTER_TYPES = {
 __all__ = [
     "ADAPTER_TYPES",
     "ActionlintAdapter",
+    "AiSecurityAdapter",
     "AtherisAdapter",
+    "AuthorizationSecurityAdapter",
     "BanditAdapter",
+    "BrowserSecurityAdapter",
     "CheckManifestAdapter",
     "CheckWheelContentsAdapter",
     "CheckovAdapter",
     "ClamAvAdapter",
+    "CloudAttackPathAdapter",
+    "ClusterFuzzLiteAdapter",
     "CodeQlAdapter",
     "ConftestAdapter",
     "CosignAdapter",
     "CoverageAdapter",
     "CrossHairAdapter",
+    "DatabaseSecurityAdapter",
     "CycloneDxAdapter",
     "DeptryAdapter",
     "DetectSecretsAdapter",
     "DevSkimAdapter",
     "DiffCoverAdapter",
     "FlawfinderAdapter",
+    "FalcoAdapter",
+    "EventSecurityAdapter",
+    "FuzzIntrospectorAdapter",
     "GitHubAttestationAdapter",
     "GitSizerAdapter",
     "GitleaksAdapter",
+    "GraphifyAdapter",
     "GrypeAdapter",
     "GuardDogAdapter",
     "HadolintAdapter",
     "HypothesisAdapter",
+    "IastAdapter",
     "InTotoAdapter",
     "JUnitAdapter",
     "KicsAdapter",
     "KubeLinterAdapter",
+    "KubescapeAdapter",
+    "MobSfAdapter",
     "MutmutAdapter",
     "MypyAdapter",
     "OciImageAdapter",
+    "NativeSanitizersAdapter",
+    "NucleiAdapter",
+    "OastAdapter",
     "OsvScannerAdapter",
     "PSScriptAnalyzerAdapter",
     "PipdeptreeAdapter",
+    "PolyglotAdapter",
+    "ProwlerAdapter",
+    "ProtocolSecurityAdapter",
     "PyPiAttestationsAdapter",
     "PyTmAdapter",
     "PylintAdapter",
     "PyrightAdapter",
     "PysaAdapter",
     "RadonAdapter",
+    "RaspAdapter",
+    "ReachabilityAdapter",
     "ReproducibleBuildAdapter",
+    "RulesetRegressionAdapter",
+    "RestlerAdapter",
     "ReuseAdapter",
     "RuffAdapter",
     "RuffFormatAdapter",
@@ -186,9 +261,12 @@ __all__ = [
     "SchemathesisAdapter",
     "ScorecardAdapter",
     "SemgrepAdapter",
+    "SecretVerificationAdapter",
+    "SurfaceInventoryAdapter",
     "ShellCheckAdapter",
     "SyftAdapter",
     "TachAdapter",
+    "TlsScanAdapter",
     "TrivyAdapter",
     "TruffleHogAdapter",
     "TwineAdapter",

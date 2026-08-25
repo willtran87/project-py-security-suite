@@ -6,12 +6,15 @@ __pycache__/
 .ruff_cache/
 .coverage
 coverage.json
+coverage.xml
 junit.xml
 hypothesis-junit.xml
 schemathesis-junit.xml
+*.pysec-binding.json
 .venv/
 build/
 dist/
+site/
 .pysec-report/
 python-security-report/
 .artifacts/

@@ -13,6 +13,7 @@ from py_security_suite.adapters.mypy import MypyAdapter
 from py_security_suite.adapters.tach import TachAdapter
 from py_security_suite.adapters.vulture import VultureAdapter
 from py_security_suite.config import ToolConfig
+from py_security_suite.execution import RawExecution
 
 
 class MaturityAdapterTests(unittest.TestCase):
@@ -58,6 +59,25 @@ class MaturityAdapterTests(unittest.TestCase):
         self.assertEqual(finding.locations[0].start_line, 17)
         self.assertEqual(finding.sources[0].tool, "tach")
         self.assertEqual(finding.sources[0].rule_id, "forbidden-dependency")
+
+        native = adapter.parse(
+            "[FAIL] src/example/api.py:19: Cannot import 'example.persistence'.\n",
+            Path("."),
+        )[0]
+        self.assertEqual(native.locations[0].start_line, 19)
+        with self.assertRaisesRegex(ValueError, "NUL byte"):
+            adapter.parse("src/example/api.py:19: invalid\x00message\n", Path("."))
+        payload = adapter.result_payload(
+            RawExecution(
+                command=["tach", "check"],
+                exit_code=1,
+                stdout="Internal Dependencies\n",
+                stderr="[FAIL] src/example/api.py:19: violation\n",
+                duration_seconds=0.1,
+            )
+        )
+        self.assertIn("Internal Dependencies", payload)
+        self.assertIn("[FAIL]", payload)
 
     def test_tach_requires_a_repository_architecture_contract(self) -> None:
         adapter = TachAdapter(ToolConfig(), 1024)

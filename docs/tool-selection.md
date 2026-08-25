@@ -1,6 +1,6 @@
 # Tool selection and portfolio governance
 
-Last reviewed: 2026-08-06
+Last reviewed: 2026-08-09
 
 The suite favors tools that are mature, produce structured output, have a
 documented non-interactive CLI, can consume only local inputs, and add a
@@ -19,6 +19,9 @@ redaction, and failure semantics are governed.
 | [Vulture](https://github.com/jendrikseipp/vulture) | Identifies certainly unused or unreachable code that expands review and attack surface | quality | Only 100% confidence is reported |
 | [Radon](https://radon.readthedocs.io/) | Independent cyclomatic-complexity measurement with full rank C+ evidence and focused rank E/F findings | quality | Local source only; generated roots excluded |
 | [Tach](https://docs.gauge.sh/) | Enforces repository-owned module dependencies, dependency direction, cycles, layers, and public interfaces | quality | Requires local `tach.toml`; static analysis does not import or execute target code |
+| [Reachability analysis](reachability.md) | Traces representative paths from application roots and ranks disconnected module or symbol islands by size | quality | Bundled AST-only analyzer; no target imports, execution, network, database, or Docker |
+| [Graphify](graphify.md) | Builds a code-property graph and adds blast radius, structural hubs, and cross-tool finding neighborhoods | quality | Pinned `graphifyy` sidecar; code-only AST mode, no clustering/model calls, no target execution |
+| [Sensitive-data exposure synthesis](data-exposure.md) | Joins Semgrep/Pysa/CodeQL evidence and inventory-only sinks to logs, telemetry, request collections, URL queries, client errors, SDK configuration, reachability, coverage, runtime observations, graph impact, CODEOWNERS, graph-selected tests, change risk, structural hotspots, normalized package findings, source/artifact SDK lineage, nearby findings, and evidence-fusion triage | security | Bundled AST inventory and immutable rules; no target imports, execution, SDK calls, or network access; inventory and SDK-package context prioritize review but do not assert disclosure or exploitability |
 | [coverage.py](https://coverage.readthedocs.io/) evidence | Makes aggregate and per-file branch-coverage gaps visible without running tests in the scanner boundary | testing | Validates bounded pre-generated JSON; top ten hotspots become findings |
 | JUnit XML evidence | Makes failed tests visible in the same action plan and assurance case | testing | Bounded, entity-free metadata ingestion; failure bodies and process output are discarded |
 | [actionlint](https://github.com/rhysd/actionlint) | Validates GitHub Actions syntax, expressions, matrices, dependencies, and runner semantics | quality | Explicit workflow inputs; optional ShellCheck and pyflakes subprocesses disabled |
@@ -65,16 +68,16 @@ confidence. Correlation prevents two tools observing the same logical issue at
 the same location from becoming two risk votes; all source tools and native
 rules remain attached to the consolidated finding.
 
-## Recommended next repository-health layers
+## Evaluated repository-health layers
 
-These controls expand assurance, but they should not all execute inside the
-static scanner process:
+These controls can expand assurance, but are deliberately outside required
+profiles until their evidence contracts satisfy the same admission criteria:
 
-| Domain | Recommended control | Placement and rationale |
+| Domain | Candidate | Decision and rationale |
 |---|---|---|
-| API documentation | [interrogate](https://interrogate.readthedocs.io/) | Optional maintainability gate for libraries and platform APIs; use a repository-owned threshold so private implementation code is not forced into low-value docstrings |
-| Secondary typing | [ty](https://docs.astral.sh/ty/type-checking/) | Promising fast, independent type perspective, but keep experimental until its current beta CLI and diagnostic contract are stable enough for a required enterprise gate |
-| Behavioral resilience | Hypothesis, Atheris, mutation testing, and contract/API testing | Separate dynamic companion jobs with disposable credentials, resource limits, and a test-appropriate network policy; CrossHair, Atheris, and mutmut now feed bounded results back into the aggregate |
+| API documentation | [interrogate](https://interrogate.readthedocs.io/) | Deferred: useful optional coverage percentage, but its CLI does not provide a stable structured per-symbol diagnostic contract suitable for normalized finding citations. A repository may run it as a separate maintainability gate. |
+| Secondary typing | [ty](https://docs.astral.sh/ty/type-checking/) | Experimental only: its fast independent analysis and JUnit/GitLab output are promising, but upstream still labels the tool beta and explicitly permits breaking diagnostics between `0.0.x` releases. Re-evaluate after a stable contract. |
+| Behavioral resilience | Hypothesis, Atheris, mutation testing, and contract/API testing | Admitted through separate dynamic companion jobs with disposable credentials, resource limits, and a test-appropriate network policy; CrossHair, Atheris, mutmut, Schemathesis, and ZAP feed bounded results back into the aggregate. |
 
 The preferred reporting evolution is to ingest evidence from those companion
 lanes into the same assurance case, while retaining distinct outcomes for

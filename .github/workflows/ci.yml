@@ -1,0 +1,357 @@
+name: Continuous integration
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  containment-integration:
+    name: Real containment / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.11.19"
+      - name: Install locked dependencies
+        run: uv sync --locked --all-groups --python "3.13"
+      - name: Install Linux sandbox
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes apparmor-utils bubblewrap
+          sudo install -m 0644 /dev/stdin /etc/apparmor.d/bwrap <<'EOF'
+          abi <abi/4.0>,
+          include <tunables/global>
+
+          profile bwrap /usr/bin/bwrap flags=(unconfined) {
+            userns,
+          }
+          EOF
+          sudo apparmor_parser --replace /etc/apparmor.d/bwrap
+      - name: Exercise real process, disk, and rollback controls
+        run: uv run --frozen pytest -q tests/integration/test_containment_live.py
+      - name: Exercise real platform sandbox
+        env:
+          PYSEC_RUN_PLATFORM_SANDBOX: "1"
+        run: uv run --frozen pytest -q tests/integration/test_platform_sandbox_live.py
+
+  companion-service-integration:
+    name: Companion PostgreSQL and Kafka integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.11.19"
+          enable-cache: true
+          cache-dependency-glob: companion/uv.lock
+      - name: Install locked companion dependencies
+        run: uv sync --project companion --locked --all-groups --python "3.13"
+      - name: Start TLS and SCRAM protected PostgreSQL
+        shell: bash
+        run: |
+          set -euo pipefail
+          certs="$RUNNER_TEMP/pysec-postgres-certs"
+          mkdir -p "$certs"
+          openssl req -x509 -newkey rsa:3072 -nodes -days 2 -sha256 \
+            -subj "/CN=pysec-test-ca" \
+            -addext "basicConstraints=critical,CA:TRUE" \
+            -addext "keyUsage=critical,keyCertSign,cRLSign" \
+            -keyout "$certs/ca.key" -out "$certs/ca.crt"
+          openssl req -newkey rsa:3072 -nodes -sha256 \
+            -subj "/CN=localhost" \
+            -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" \
+            -keyout "$certs/server.key" -out "$certs/server.csr"
+          printf 'basicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\nsubjectAltName=DNS:localhost,IP:127.0.0.1\nextendedKeyUsage=serverAuth\n' > "$certs/server.ext"
+          openssl x509 -req -days 2 -sha256 \
+            -in "$certs/server.csr" -CA "$certs/ca.crt" -CAkey "$certs/ca.key" \
+            -CAcreateserial -extfile "$certs/server.ext" -out "$certs/server.crt"
+          docker run --rm --user root -v "$certs:/certs" \
+            postgres:17.6-alpine@sha256:747d5ed1fdeeb124b880fbe3d7c6557d2c4064ae41d6b6297d417882effce4be \
+            sh -c 'chown postgres:postgres /certs/server.key /certs/server.crt /certs/ca.crt && chmod 600 /certs/server.key'
+          docker run --detach --rm --name pysec-postgres --publish 5432:5432 \
+            --env POSTGRES_PASSWORD=pysec-integration-only \
+            --env POSTGRES_INITDB_ARGS=--auth-host=scram-sha-256 \
+            --volume "$certs:/certs:ro" \
+            postgres:17.6-alpine@sha256:747d5ed1fdeeb124b880fbe3d7c6557d2c4064ae41d6b6297d417882effce4be \
+            -c ssl=on -c ssl_cert_file=/certs/server.crt \
+            -c ssl_key_file=/certs/server.key -c ssl_ca_file=/certs/ca.crt \
+            -c password_encryption=scram-sha-256
+          timeout 60 bash -c 'until docker exec pysec-postgres pg_isready -U postgres; do sleep 2; done'
+      - name: Start TLS 1.3 and SCRAM protected digest-pinned Redpanda
+        shell: bash
+        run: |
+          set -euo pipefail
+          certs="$RUNNER_TEMP/pysec-kafka-certs"
+          mkdir -p "$certs"
+          openssl req -x509 -newkey rsa:3072 -nodes -days 2 -sha256 \
+            -subj "/CN=pysec-kafka-test-ca" \
+            -addext "basicConstraints=critical,CA:TRUE" \
+            -addext "keyUsage=critical,keyCertSign,cRLSign" \
+            -keyout "$certs/ca.key" -out "$certs/ca.crt"
+          openssl req -newkey rsa:3072 -nodes -sha256 \
+            -subj "/CN=localhost" \
+            -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" \
+            -keyout "$certs/server.key" -out "$certs/server.csr"
+          printf 'basicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\nsubjectAltName=DNS:localhost,IP:127.0.0.1\nextendedKeyUsage=serverAuth\n' > "$certs/server.ext"
+          openssl x509 -req -days 2 -sha256 \
+            -in "$certs/server.csr" -CA "$certs/ca.crt" -CAkey "$certs/ca.key" \
+            -CAcreateserial -extfile "$certs/server.ext" -out "$certs/server.crt"
+          chmod 644 "$certs/server.key" "$certs/server.crt" "$certs/ca.crt"
+          docker run --detach --name pysec-redpanda --publish 9092:9092 \
+            --volume "$certs:/certs:ro" \
+            docker.redpanda.com/redpandadata/redpanda:v25.2.1@sha256:930ca743dd41d91311fc1b28f505269814ccab142483daad773516c0544fa502 \
+            redpanda start --overprovisioned --smp 1 --memory 512M \
+            --reserve-memory 0M --node-id 0 --check=false \
+            --set 'redpanda.kafka_api=[{"address":"0.0.0.0","port":9092,"name":"sasl_tls","authentication_method":"sasl"}]' \
+            --set 'redpanda.advertised_kafka_api=[{"address":"localhost","port":9092,"name":"sasl_tls"}]' \
+            --set 'redpanda.kafka_api_tls=[{"name":"sasl_tls","enabled":true,"cert_file":"/certs/server.crt","key_file":"/certs/server.key","truststore_file":"/certs/ca.crt","require_client_auth":false}]' \
+            --set redpanda.enable_sasl=true \
+            --set 'redpanda.superusers=[pysec-admin]'
+      - name: Wait for Kafka
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in {1..30}; do
+            if ! docker inspect pysec-redpanda --format '{{.State.Running}}' | grep -qx true; then
+              docker logs pysec-redpanda
+              exit 1
+            fi
+            if docker exec pysec-redpanda rpk cluster health --exit-when-healthy; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs pysec-redpanda
+          exit 1
+      - name: Create least-privilege SCRAM users and ACLs
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker exec pysec-redpanda rpk security user create pysec-admin \
+            --password pysec-admin-integration --mechanism SCRAM-SHA-512 \
+            -X admin.hosts=localhost:9644
+          docker exec pysec-redpanda rpk security user create pysec-test \
+            --password pysec-test-integration --mechanism SCRAM-SHA-512 \
+            -X admin.hosts=localhost:9644
+          docker exec pysec-redpanda rpk security user create pysec-restricted \
+            --password pysec-restricted-integration --mechanism SCRAM-SHA-512 \
+            -X admin.hosts=localhost:9644
+          common=(-X brokers=localhost:9092 -X tls.enabled=true \
+            -X tls.ca=/certs/ca.crt -X user=pysec-admin \
+            -X pass=pysec-admin-integration -X sasl.mechanism=SCRAM-SHA-512)
+          docker exec pysec-redpanda rpk security acl create "${common[@]}" \
+            --allow-principal pysec-test --operation read,write,describe,create \
+            --topic pysec-transactions- --resource-pattern-type prefixed
+          docker exec pysec-redpanda rpk security acl create "${common[@]}" \
+            --allow-principal pysec-test --operation read,describe \
+            --group pysec- --resource-pattern-type prefixed
+          docker exec pysec-redpanda rpk security acl create "${common[@]}" \
+            --allow-principal pysec-test --operation write,describe \
+            --transactional-id pysec- --resource-pattern-type prefixed
+          docker exec pysec-redpanda rpk security acl create "${common[@]}" \
+            --allow-principal pysec-test --operation idempotent_write,create --cluster
+      - name: Exercise live service semantics
+        env:
+          PYSEC_RUN_SERVICE_INTEGRATION: "1"
+          PYSEC_TEST_POSTGRES_DSN: "postgresql://postgres:pysec-integration-only@localhost:5432/postgres?sslmode=verify-full&channel_binding=require&sslrootcert=${{ runner.temp }}/pysec-postgres-certs/ca.crt"
+          PYSEC_TEST_KAFKA_SERVERS: 127.0.0.1:9092
+          PYSEC_TEST_KAFKA_CA: ${{ runner.temp }}/pysec-kafka-certs/ca.crt
+          PYSEC_TEST_KAFKA_USER: pysec-test
+          PYSEC_TEST_KAFKA_PASSWORD: pysec-test-integration
+          PYSEC_TEST_KAFKA_RESTRICTED_USER: pysec-restricted
+          PYSEC_TEST_KAFKA_RESTRICTED_PASSWORD: pysec-restricted-integration
+        run: >-
+          uv run --project companion --frozen pytest -q
+          tests/integration/test_services_live.py
+      - name: Stop Redpanda
+        if: always()
+        run: docker rm --force pysec-redpanda pysec-postgres || true
+
+  companion-browser-integration:
+    name: Companion authenticated multi-engine browser integration
+    runs-on: ubuntu-latest
+    env:
+      HOME: /root
+    container:
+      image: mcr.microsoft.com/playwright/python:v1.62.0-noble@sha256:51d31fdfacb0cff99a1a724152e34ae408d2bd4e7da310ff157450f49261cc59
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.11.19"
+          enable-cache: true
+          cache-dependency-glob: companion/uv.lock
+      - name: Install locked companion dependencies
+        run: uv sync --project companion --locked --all-groups --python "3.13"
+      - name: Exercise the live browser security lane
+        env:
+          PYSEC_RUN_LIVE_INTEGRATION: "1"
+        run: >-
+          uv run --project companion --frozen pytest -q
+          tests/integration/test_browser_live.py
+
+  test:
+    name: Test Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.11.19"
+          enable-cache: true
+          cache-dependency-glob: |
+            uv.lock
+            companion/uv.lock
+      - name: Install locked dependencies
+        env:
+          PYTHON_VERSION: ${{ matrix.python-version }}
+        run: uv sync --locked --all-groups --python "$PYTHON_VERSION"
+      - name: Run tests
+        run: uv run --frozen pytest -q
+
+  quality:
+    name: Quality and dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.11.19"
+          enable-cache: true
+          cache-dependency-glob: |
+            uv.lock
+            companion/uv.lock
+      - name: Install locked dependencies
+        run: uv sync --locked --all-groups --python "3.13"
+      - name: Check formatting
+        run: uv run --frozen ruff format --check .
+      - name: Lint
+        run: uv run --frozen ruff check .
+      - name: Audit GitHub workflows
+        run: uv run --frozen zizmor --pedantic --no-progress --color never .github
+      - name: Check types
+        run: >-
+          uv run --frozen mypy src companion scripts/audit_pages.py
+          scripts/mkdocs_hooks.py scripts/validate-checkpoint-authority.py
+          scripts/validate-native-attestation-fixtures.py
+      - name: Build distributions
+        run: uv build --no-sources
+
+  dependency-audit:
+    name: Dependency audit ${{ matrix.os }} / Python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ["3.11", "3.13"]
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.11.19"
+          enable-cache: true
+          cache-dependency-glob: |
+            uv.lock
+            companion/uv.lock
+      - name: Install locked audit dependencies
+        shell: bash
+        env:
+          PYTHON_VERSION: ${{ matrix.python-version }}
+        run: uv sync --locked --all-groups --python "$PYTHON_VERSION"
+      - name: Export and audit platform-resolved dependency graphs
+        shell: bash
+        run: |
+          set -euo pipefail
+          audit_requirements() {
+            local requirements="$1"
+            for attempt in 1 2 3; do
+              if uv run --frozen pip-audit \
+                --requirement "$requirements" \
+                --disable-pip --strict --progress-spinner off; then
+                return 0
+              fi
+              if [ "$attempt" -eq 3 ]; then
+                return 1
+              fi
+              sleep $((attempt * 5))
+            done
+          }
+          uv export --quiet --frozen --all-groups --no-emit-project \
+            --output-file "$RUNNER_TEMP/requirements-audit.txt"
+          audit_requirements "$RUNNER_TEMP/requirements-audit.txt"
+          uv export --project companion --quiet --frozen --all-groups \
+            --no-emit-project --no-emit-local \
+            --output-file "$RUNNER_TEMP/companion-requirements-audit.txt"
+          audit_requirements "$RUNNER_TEMP/companion-requirements-audit.txt"
+
+  required-gate:
+    name: CI required gate
+    if: always()
+    needs:
+      - containment-integration
+      - companion-service-integration
+      - companion-browser-integration
+      - test
+      - quality
+      - dependency-audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    env:
+      NEEDS_JSON: ${{ toJSON(needs) }}
+    steps:
+      - name: Require every CI lane to pass
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -e 'all(.[]; .result == "success")' <<< "$NEEDS_JSON"

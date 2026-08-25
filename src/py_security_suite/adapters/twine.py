@@ -16,7 +16,6 @@ from ..models import (
 from .artifacts import artifact_identity_evidence, distribution_files
 from .base import ScannerAdapter
 
-
 _TWINE_ISSUE = re.compile(
     r"^(?P<level>ERROR|WARNING)\s+(?P<message>.+)$",
     re.IGNORECASE,

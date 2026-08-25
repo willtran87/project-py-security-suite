@@ -1,5 +1,7 @@
 # Copy to .github/workflows/python-security.yml after replacing every
-# <approved-commit-sha> and the isolation verification command.
+# <approved-commit-sha>, the isolation verification command, and the
+# organization-owned policy path. That policy must digest-bind the isolation,
+# intelligence, and scanner-trust evidence used for release readiness.
 name: Python security
 
 on:
@@ -17,6 +19,7 @@ jobs:
     runs-on: [self-hosted, pysec-isolated]
     env:
       PYTHONPATH: ${{ github.workspace }}/src
+      PYSEC_ORGANIZATION_POLICY: ${{ vars.PYSEC_ORGANIZATION_POLICY }}
 
     steps:
       - name: Check out the exact revision
@@ -36,6 +39,7 @@ jobs:
           set +e
           python -m py_security_suite scan . \
             --config pysec.toml \
+            --policy "${PYSEC_ORGANIZATION_POLICY:?set organization policy path}" \
             --output python-security-report \
             --network-isolated \
             --github-summary
@@ -43,36 +47,47 @@ jobs:
           echo "exit_code=$scan_exit" >> "$GITHUB_OUTPUT"
           exit 0
 
-      - name: Export the verified machine-readable inspection
+      - name: Build and verify the complete evidence pack
         if: always()
+        id: release_readiness
         shell: bash
         run: |
-          python -m py_security_suite verify-report python-security-report \
-            --format json \
-            --output python-security-report-verification.json \
-            > /dev/null
-          python -m py_security_suite inspect python-security-report \
-            --format json \
-            --output python-security-report-inspection.json \
-            > /dev/null
-          python -m py_security_suite verify-inspection \
-            python-security-report-inspection.json \
-            --report python-security-report \
-            --format json \
-            --output python-security-report-inspection-verification.json \
-            > /dev/null
+          set +e
+          python -m py_security_suite evidence-pack python-security-report \
+            --config pysec.toml \
+            --policy "${PYSEC_ORGANIZATION_POLICY:?set organization policy path}" \
+            --block-severity critical --block-severity high \
+            --minimum-confidence medium \
+            --require-tool bandit --require-tool semgrep \
+            --output python-security-evidence > evidence-pack-receipt.json
+          pack_exit=$?
+          if test "$pack_exit" -eq 0; then
+            pack_sha="$(python -c 'import json; print(json.load(open("evidence-pack-receipt.json"))["pack"]["sha256"])')"
+            python -m py_security_suite verify-evidence-pack \
+              python-security-evidence --report python-security-report \
+              --pack-sha256 "$pack_sha" \
+              --output evidence-pack-verification.json > /dev/null
+            cat python-security-evidence/github-annotations.txt
+            python -c 'import json,sys; sys.exit(0 if json.load(open("python-security-evidence/release-readiness.json"))["decision"] == "approved" else 1)'
+            release_exit=$?
+          else
+            release_exit="$pack_exit"
+          fi
+          echo "exit_code=$release_exit" >> "$GITHUB_OUTPUT"
+          exit 0
 
-      - name: Upload the complete sanitized report and inspection
+      - name: Upload the complete sanitized report and evidence pack
         if: always()
         uses: actions/upload-artifact@<approved-commit-sha>
         with:
           name: python-security-report
           path: |
             python-security-report/
-            python-security-report-verification.json
-            python-security-report-inspection.json
-            python-security-report-inspection-verification.json
+            python-security-evidence/
+            evidence-pack-receipt.json
+            evidence-pack-verification.json
           if-no-files-found: error
+          retention-days: 30
 
       - name: Publish SARIF when code scanning is enabled
         if: always()
@@ -84,4 +99,6 @@ jobs:
       - name: Apply the suite policy result after publishing reports
         if: always()
         shell: bash
-        run: exit "${{ steps.security_scan.outputs.exit_code }}"
+        run: |
+          test "${{ steps.security_scan.outputs.exit_code }}" -eq 0
+          test "${{ steps.release_readiness.outputs.exit_code }}" -eq 0

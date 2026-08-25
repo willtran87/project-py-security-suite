@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:effectiveness:1.1",
+  "title": "Observed scan effectiveness and contributing-tool assurance",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "scope", "tool_health", "normalization",
+    "independence", "tool_contribution", "tool_posture"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.1"},
+    "scope": {"type": "string", "minLength": 1},
+    "tool_health": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["selected", "applicable", "completed", "completion_percent"],
+      "properties": {
+        "selected": {"$ref": "#/$defs/count"},
+        "applicable": {"$ref": "#/$defs/count"},
+        "completed": {"$ref": "#/$defs/count"},
+        "completion_percent": {"$ref": "#/$defs/percent"}
+      }
+    },
+    "normalization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["findings", "attributed", "actionable_and_cited", "attribution_percent", "actionability_percent"],
+      "properties": {
+        "findings": {"$ref": "#/$defs/count"},
+        "attributed": {"$ref": "#/$defs/count"},
+        "actionable_and_cited": {"$ref": "#/$defs/count"},
+        "attribution_percent": {"$ref": "#/$defs/percent"},
+        "actionability_percent": {"$ref": "#/$defs/percent"}
+      }
+    },
+    "independence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["corroborated_findings", "single_tool_findings", "exact_location_merges", "semantic_or_cross_stage_corroboration"],
+      "properties": {
+        "corroborated_findings": {"$ref": "#/$defs/count"},
+        "single_tool_findings": {"$ref": "#/$defs/count"},
+        "exact_location_merges": {"$ref": "#/$defs/count"},
+        "semantic_or_cross_stage_corroboration": {"$ref": "#/$defs/count"}
+      }
+    },
+    "tool_contribution": {
+      "type": "array",
+      "maxItems": 500,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["tool", "findings", "unique_findings"],
+        "properties": {
+          "tool": {"type": "string", "minLength": 1},
+          "findings": {"$ref": "#/$defs/count"},
+          "unique_findings": {"$ref": "#/$defs/count"}
+        }
+      }
+    },
+    "tool_posture": {
+      "type": "array",
+      "maxItems": 500,
+      "items": {"$ref": "#/$defs/toolPosture"}
+    }
+  },
+  "$defs": {
+    "count": {"type": "integer", "minimum": 0},
+    "percent": {"type": "number", "minimum": 0, "maximum": 100},
+    "nullableBoolean": {"type": ["boolean", "null"]},
+    "toolPosture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tool", "status", "applicable", "evidence_lane",
+        "normalized_findings", "unique_normalized_findings",
+        "executable_integrity_verified", "executable_organization_approved",
+        "executable_unchanged", "auxiliary_executable_present",
+        "auxiliary_executable_integrity_verified",
+        "auxiliary_executable_organization_approved",
+        "auxiliary_executable_unchanged", "assurance_status"
+      ],
+      "properties": {
+        "tool": {"type": "string", "minLength": 1, "maxLength": 500},
+        "status": {"enum": ["completed", "unavailable", "failed", "timed_out", "parse_error", "skipped"]},
+        "applicable": {"type": "boolean"},
+        "evidence_lane": {"type": "string", "minLength": 1, "maxLength": 100},
+        "normalized_findings": {"$ref": "#/$defs/count"},
+        "unique_normalized_findings": {"$ref": "#/$defs/count"},
+        "executable_integrity_verified": {"$ref": "#/$defs/nullableBoolean"},
+        "executable_organization_approved": {"type": "boolean"},
+        "executable_unchanged": {"$ref": "#/$defs/nullableBoolean"},
+        "auxiliary_executable_present": {"type": "boolean"},
+        "auxiliary_executable_integrity_verified": {"$ref": "#/$defs/nullableBoolean"},
+        "auxiliary_executable_organization_approved": {"$ref": "#/$defs/nullableBoolean"},
+        "auxiliary_executable_unchanged": {"$ref": "#/$defs/nullableBoolean"},
+        "assurance_status": {"enum": ["approved", "approval-gap", "integrity-gap", "not-established", "execution-gap", "not-applicable"]}
+      }
+    }
+  }
+}

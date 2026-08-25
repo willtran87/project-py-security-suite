@@ -1,7 +1,7 @@
 # Python Security Suite design
 
 Status: alpha foundation  
-Last reviewed: 2026-08-06
+Last reviewed: 2026-08-13
 
 ## Purpose
 
@@ -42,7 +42,7 @@ flowchart LR
         Install["install-native-tools.ps1<br/>hash verification + pip --no-index"]
         Project["Python project<br/>read-only by policy"]
         Suite["Python Security Suite"]
-        Scanners["62 governed adapters<br/>security | quality | testing | policy | architecture | supply chain | artifact | governance"]
+        Scanners["64 governed adapters<br/>security | quality | testing | policy | architecture | supply chain | artifact | governance"]
         Reports["Markdown | HTML | SARIF | SonarQube | JSON<br/>SBOM + delta + intelligence + Security Passport"]
         Contracts["Version-explicit JSON Schemas<br/>installed package resources"]
         Install --> Suite
@@ -60,6 +60,67 @@ flowchart LR
     Reports --> GitHub
     Contracts --> GitHub
 ```
+
+### Evidence-plane-aware route synthesis
+
+Risk-route synthesis does not assume every normalized finding belongs on a
+production Python call path. It cross-references the exact target with the
+Graphify file model, sealed source inventory, built-artifact manifest, target
+kind, scanner, finding area, and path type before selecting an action.
+
+```mermaid
+flowchart LR
+    Target["Normalized review target"] --> Join{"Route applicability"}
+    Graph["Graphify file membership"] --> Join
+    Source["Sealed source inventory"] --> Join
+    Artifact["Built-artifact manifest"] --> Join
+    Identity["Target kind + scanner + area + path"] --> Join
+    Join -->|"Python runtime source"| Route["Declared-entry route or explicit model gap"]
+    Join -->|"Artifact control"| Release["Release integrity / provenance lane"]
+    Join -->|"Generated evidence"| Producer["Evidence producer / scan-scope lane"]
+    Join -->|"Validation code"| Test["Shared-test quality lane"]
+    Join -->|"Non-Python control"| Native["Native repository / IaC / configuration lane"]
+    Route --> Report["Finding + report + closure"]
+    Release --> Report
+    Producer --> Report
+    Test --> Report
+    Native --> Report
+```
+
+This classification never suppresses a finding or changes native severity. It
+prevents an artifact-provenance failure, generated JUnit file, or test-quality
+finding from being mislabeled as a missing production entry point while keeping
+real Python graph and entry-model gaps fail-visible.
+
+### Typed cross-evidence leverage
+
+After risk-route synthesis, the suite creates `advanced-analysis.json`. This
+bounded relationship layer uses stable subject identities and keeps structural
+inference distinct from native scanner confirmation.
+
+```mermaid
+flowchart TB
+    Routes["Risk routes + Graphify"] --> Dominators["File dominators + alternate paths"]
+    SARIF["Native SARIF codeFlows"] --> Taint["Confirmed taint sequences"]
+    Artifact["Wheel metadata + RECORD"] --> Parity["Published activation parity"]
+    Assurance["pytm + mutmut + tests"] --> Trace["Threat/control/test traceability"]
+    Exposure["Sensitive-data routes"] --> Privacy["Telemetry protection topology"]
+    Advisory["SBOM + KEV/EPSS + final artifact"] --> Trust["Dependency trust routes"]
+    Dominators --> Evidence["Typed evidence graph"]
+    Taint --> Evidence
+    Parity --> Evidence
+    Trace --> Evidence
+    Privacy --> Evidence
+    Trust --> Evidence
+    Evidence --> Reports["Markdown + HTML + JSON"]
+    Evidence --> Delta["Digest-bound advanced-diff"]
+```
+
+Control dominance is a file-graph property only. The report calls the subject a
+candidate control until implementation, scanner, and test evidence establish
+its behavior. `advanced-diff` compares approved SHA-256-bound artifacts and
+fails on retained attack-surface regressions without treating a clean delta as
+proof of safety. See [Advanced cross-evidence analysis](advanced-analysis.md).
 
 The scan lane emits an unsigned in-toto Statement using the SLSA Verification
 Summary Attestation predicate. A separate approval lane verifies the report and
@@ -117,8 +178,104 @@ does not need Docker, a package index, the Semgrep registry, OSV services, or
 credential verification services. The native bundle currently targets Windows
 x86-64 and Python 3.11.
 
+```mermaid
+flowchart LR
+    Source["Exact source revision"] --> BuildA["Clean build A"]
+    Source --> BuildB["Clean build B"]
+    BuildA --> Normalize["normalize-sdist<br/>reviewed fixed epoch"]
+    BuildB --> Normalize
+    Normalize --> Compare["compare-builds<br/>exact set + byte identity"]
+    Source --> Scan["Isolated comprehensive scan"]
+    Compare --> Payload["Wheel + sdist identities<br/>reproducibility evidence"]
+    Scan --> Seal["Checksum-sealed report"]
+    Seal --> Decision["release-check"]
+    Seal --> Closure["closure-plan<br/>owned evidence backlog"]
+    Seal --> Diff["diff-coverage<br/>retained change scope"]
+    Closure -->|"validation alignment"| Decision
+    Diff -->|"assessment completeness"| Decision
+    Decision --> Plan["promotion-plan"]
+    Seal --> Baseline["baseline-candidate<br/>revision + exact digest"]
+    Seal --> Trend["trend<br/>verified report history"]
+    Closure -->|"validation debt + owner continuity"| Trend
+    Diff -->|"comparability scope"| Trend
+    Closure -->|"owned validation queues"| Plan
+    Diff -->|"assessment availability"| Plan
+    Trend -->|"digest-bound trajectory + regressions"| Plan
+    Payload --> Request["prepare-signing<br/>closed artifact set"]
+    Seal --> Request
+    Request --> Signer["Independent controlled signer"]
+    Signer --> Verify["Offline bundle + subject verification"]
+    Verify --> Passport["Signed Security Passport"]
+    Passport --> Admission["Organization admission controller"]
+    Plan --> Pack["evidence-pack<br/>atomic closed directory"]
+    Pack --> Manifest["release-manifest<br/>closed evidence set"]
+    Passport --> Manifest
+    Manifest --> Admission
+```
+
+`closure-plan.json` is generated inside the same atomic report publication. It
+joins active findings, governance integrity gaps, conditional activation,
+coverage hotspots, reachability uncertainty, and changed-file validation
+mismatches without becoming an admission decision. For each changed file it
+consolidates Graphify-selected tests, exact case results, changed-line and
+whole-file coverage, findings, and retained CODEOWNERS rules. Stable work IDs
+survive reruns when the underlying issue is unchanged;
+authority labels prevent repository automation from self-approving external
+signing, isolation, scanner trust, or release controls.
+
+Operational trend 1.3 reads that closure evidence and its retained diff-coverage
+assessment scope from each independently verified report. Stable work IDs
+distinguish new, resolved, unchanged, and state-transitioned validation subjects
+only when both endpoints contain current ledger and assessment evidence;
+CODEOWNERS routing produces owner-queue history and ownership deltas only under
+that same condition. Debt growth, ownership erosion, failing-test regression,
+and missing ledger or scope evidence become explicit anomalies.
+
+The evidence-pack application layer composes existing verified services; it
+does not create a second evidence model. Payload files are generated in private
+staging, the release manifest binds selected decision records to the report,
+the audit archive embeds the sealed report and those records, and the outer
+pack manifest closes every readable artifact. Only a fully re-verified staging
+tree is atomically renamed into place.
+
+The scan lane produces evidence and candidate requests, never organizational
+authority. Platform security attests isolation, security tooling approves exact
+scanner entry points, vulnerability management approves intelligence,
+controlled signing holds keys, and the release approver owns admission.
+
 `--network-isolated` does not enforce network denial. It attests that the
 enterprise runner, VM, firewall, or equivalent external control already does.
+
+Production and release add a second statement: bounded evidence whose SHA-256
+is pinned by organization policy, whose target and source digest match this
+scan, and whose validity window covers scan start. Repository configuration
+cannot promote its own evidence to `organization_approved`. Intelligence
+approval uses the same authority split and binds the exact KEV, EPSS, and VEX
+snapshot set.
+
+```mermaid
+flowchart LR
+    Org["Organization policy<br/>approved evidence digests"] --> Validate["Bounded evidence validation"]
+    Runner["External controller<br/>egress denial + signature verification"] --> Evidence["Isolation attestation"]
+    Repo["Immutable repository digest"] --> Evidence
+    Evidence --> Validate
+    Report --> Draft["Non-authoritative evidence draft"]
+    Draft --> Review["Independent provenance and policy review"]
+    Review --> Org
+    Snapshots["Exact KEV | EPSS | VEX digests"] --> Approval["Intelligence approval"]
+    Approval --> Validate
+    Report["Verified report"] --> Gate["release-check"]
+    Validate --> Gate
+    Effectiveness["Labeled benchmark"] --> Gate
+    Passport["Passport verification"] --> Gate
+    Gate --> Decision{"APPROVED?"}
+```
+
+Scanner identity carries two independent facts through the manifest: whether
+the observed executable matched a configured digest, and whether that digest
+originated in organization policy. The release gate requires both plus an
+unchanged post-execution digest. This prevents a repository from approving its
+own toolchain while preserving useful local tamper detection.
 
 ## Runtime architecture
 
@@ -129,13 +286,14 @@ flowchart TD
     Guard["Policy weakening guard"]
     Inventory["Target inventory + initial content digest<br/>tool/cache directories excluded"]
     Orchestrator["Orchestrator<br/>bounded parallel execution"]
+    TrustCatalog["Organization trust catalog<br/>digest-bound + approved + expiring"]
     ToolTrust["Entry-point trust gate<br/>resolve + SHA-256 + approved digest"]
     FinalSnapshot["Final target content digest"]
 
     subgraph Adapters["Scanner adapter boundary"]
         Fast["Fast Python security<br/>Bandit | Semgrep | Ruff S"]
-        Quality["Code quality and architecture<br/>Ruff | Pylint | mypy | Pyright | deptry | Vulture | Radon | Tach"]
-        Tests["Passive test evidence<br/>coverage.py | diff-cover | JUnit XML"]
+        Quality["Code quality and architecture<br/>Ruff | Pylint | mypy | Pyright | deptry | Vulture | Radon | Tach | Reachability | Graphify"]
+        Tests["Passive test evidence<br/>coverage.py | diff-cover | bounded JUnit cases"]
         Secrets["Secrets<br/>detect-secrets | Gitleaks | TruffleHog"]
         Supply["Supply chain<br/>OSV | CycloneDX | GuardDog"]
         Pipeline["Repository controls<br/>zizmor | actionlint | Hadolint | Checkov | Trivy | PSScriptAnalyzer | ShellCheck"]
@@ -146,10 +304,12 @@ flowchart TD
 
     Normalize["Normalized findings<br/>stable ID + source + citations"]
     Correlate["Correlation<br/>path + line + logical rule"]
+    Exposure["Sensitive-data synthesis<br/>taint + configuration + SDK/sink + graph context"]
     Policy["Policy evaluation"]
     Report["Report writers"]
 
     CLI --> Config --> Guard --> Inventory --> Orchestrator --> ToolTrust
+    TrustCatalog --> ToolTrust
     ToolTrust --> Fast
     ToolTrust --> Quality
     ToolTrust --> Tests
@@ -168,24 +328,35 @@ flowchart TD
     Governance --> Normalize
     Deep --> Normalize
     Artifact --> Normalize
-    Normalize --> Correlate --> FinalSnapshot --> Policy --> Report
+    Normalize --> Correlate --> Exposure --> FinalSnapshot --> Policy --> Report
 ```
 
 The orchestrator runs only scanners selected by the active profile. Each
 adapter owns command construction, prerequisite checks, entry-point digest
 verification, version detection, timeout handling, output parsing,
-classification mapping, and scanner-specific remediation guidance. The
-entry point is rehashed after execution; a mismatch or mid-scan change fails
-closed.
+classification mapping, and scanner-specific remediation guidance. The entry
+point is rehashed after execution; a mismatch or mid-scan change fails closed.
+Python console scanners can additionally pin and recheck the complete
+recursively installed distribution closure.
 
-Subprocesses receive a reduced environment and a disposable private home,
-app-data, and cache root. Ambient proxy variables and user site packages are
-not forwarded. Raw scanner output is not retained in the report; evidence
-contains sanitized tool health and output digests.
+Subprocesses receive a reduced environment, deterministic executable search
+path, and a disposable private home, app-data, and cache root. Ambient proxy,
+loader, Python import, and user-site configuration are not forwarded. Output is
+spooled to private temporary files and the complete process tree is terminated
+as soon as either stream exceeds its byte limit, so truncation cannot follow an
+unbounded in-memory capture. A configured digest-pinned sandbox launcher wraps
+both version and scan commands.
 
 ### Enforced suite architecture
 
 The repository dogfoods Tach with a checked-in [`tach.toml`](../tach.toml).
+
+Cross-tool joins are governed by the
+[evidence-fusion contract](evidence-fusion.md). The fusion layer links semantic
+classifications, source and artifact package inventories, exact artifact
+digests, changed-line coverage, runtime observations, complexity, ownership,
+and graph neighborhoods. It emits explanatory triage context without changing
+scanner severity or treating missing observations as negative evidence.
 Every internal dependency is explicit, unconfigured source modules are
 forbidden, circular dependencies fail the check, and unused declarations fail
 because exact mode is enabled.
@@ -206,6 +377,223 @@ Tach findings use the common quality-domain contract: tool and native rule,
 classification, file and line, bounded source excerpt, impact, remediation,
 and an official rule citation. A boundary change therefore appears as an
 actionable report item rather than an opaque scanner failure.
+
+The bundled [reachability analyzer](reachability.md) adds a second structural
+view. It follows bounded, typed AST edges from declared or discovered application
+roots and separates executable, load-only, and disconnected code. Direct calls,
+constructor lifecycle, concrete imported/local receivers, bounded polymorphic
+dispatch, callback references, literal internal dynamic imports, and recognized
+framework configuration or registration are distinct from imports and
+definitions. Statically false and `TYPE_CHECKING` branches are pruned. Every node
+and edge explains its confidence and predecessor. Optional coverage.py JSON adds
+observed, not-observed, or not-measured corroboration. The sealed
+`reachability.json` records representative execution sequences, applied precision
+features, and ranked islands with removal readiness, blockers, and ordered actions
+without importing or executing target code.
+
+[Static risk-route synthesis](risk-paths.md) combines the complementary graph
+views after finding, structural, exposure, and evidence-fusion enrichment. A
+bounded multi-source search starts at declared reachability entry points and
+walks deterministic Graphify file relations to normalized findings,
+review-worthy sensitive-data sinks, and evidence-fusion advisory importer
+paths. Each route carries runtime state, changed-
+line and coverage evidence, focused tests, validation gaps, owners, related
+findings, and exact supporting artifacts. It also joins each target's exact
+contributing scanners to effectiveness 1.1 and scanner-trust evidence, keeping
+completion, primary/helper integrity, before/after continuity, organization
+approval, normalized/unique contribution, and perspective breadth separate.
+Suite-derived correlations remain labeled as derived and never manufacture an
+independent scanner perspective. Unrouted targets retain the same assurance
+context. Finding targets additionally join digest-approved baseline
+comparability to exact lifecycle, changed-line scope, validation, entry-runtime,
+and scanner-assurance evidence. This identifies baseline-new or regressed work
+on changed lines and modified pre-existing debt while failing closed when a
+baseline is absent or incompatible; default `new` never becomes an unsupported
+change-origin claim. Unrouted Python targets are also joined to exact retained
+structural-island path or line membership. Reachability state, Graphify boundary
+edges, candidate entry paths, Vulture corroboration, runtime/coverage
+counter-evidence, focused tests, scanner assurance, and owners then produce a
+bounded model-path, scope-separation, remediate-or-retire, or further-review
+decision. Unrouted targets remain explicit model gaps; neither a route, its
+absence, nor island membership is treated as an exploitability, safety, or
+dead-code verdict. Routes converging on the same non-entry file become bounded
+shared control points with one cross-target validation action. Exact primary
+and alternate-entry file order is joined to retained CODEOWNERS last-match
+rules. This creates stable owner-to-owner boundary records, identifies unowned
+segments and target-owner mismatches, and fans the route into every responsible
+coordination queue. The target finding owner remains independently attributed;
+missing CODEOWNERS evidence never becomes an unsupported unowned-file claim.
+Exact route and hotspot IDs are also grouped into owner queues so teams can
+coordinate one
+remediation/test campaign without collapsing the underlying findings. Each
+hotspot also becomes a stable validation campaign: reverse Graphify edges select
+direct/transitive tests, bounded case inventories establish observed execution,
+file coverage exposes unexercised shared-control code, and structural synthesis
+adds changed-line risk while reachability contributes runtime observation state.
+Each campaign also resolves its exact route IDs back to contributing-tool
+posture. Scanner execution, integrity, approval, and perspective state therefore
+travel with the tests they selected; passing tests cannot erase a trust or
+execution gap in the route evidence.
+The factorized review model cites each contributing artifact and keeps the native
+findings unchanged.
+
+Package findings frequently point at a lockfile rather than executable source.
+Risk-route synthesis now uses alias-aware advisory clusters as the identity
+boundary and promotes each exact Graphify importer path as a bounded target.
+The resulting route retains KEV/EPSS/VEX context, dependency lineage,
+scanner-attributed fixes, citations, owners, tests, coverage, and validation;
+it links back to every native cluster finding without duplicating the finding.
+This answers “which entry point reaches an affected package importer?” while
+explicitly leaving vulnerable-function invocation and exploitability unproven.
+Instead of collapsing a target to one shortest origin, risk synthesis retains
+up to 25 exact file routes from every declared entry point that reaches it.
+Duplicate declarations on one file remain distinct interfaces, bounded
+omissions are counted, and one primary route remains stable so finding identity
+does not multiply. Reports and closure can therefore coordinate CLI, module,
+worker, or framework-interface validation separately. Each declaration's exact
+reachability target node supplies an interface-local observed, unobserved, or
+unavailable runtime state; path-level runtime evidence is not borrowed.
+Each importer also joins exact source and built-artifact package inventories,
+distinguishing matched versions, drift, source-only, artifact-only, and missing
+composition evidence without interpreting a version string as proof of safety.
+When data-exposure synthesis also retains an SDK sink on the same exact path,
+risk synthesis requires matching package and advisory-cluster identity before
+emitting a sensitive-boundary dependency intersection. The compound record
+coordinates boundary-control and dependency-remediation review while explicitly
+leaving disclosure, attacker control, and vulnerable-function use unproven.
+Confirmed exposure findings and review-worthy sink inventory also become a
+separate end-to-end sensitive-data route ledger. It preserves the evidence
+basis and joins entry-interface breadth, exact runtime state, data class, sink,
+trust boundary, observed protection, scanner assurance, validation, lifecycle,
+CODEOWNERS handoffs, and bounded applicable citations without converting static
+coincidence into a leakage claim. Confirmed routes inherit normalized finding
+references; inventory routes select sink-family standards from the data-exposure
+artifact. Missing citation provenance is counted and becomes closure work, while
+the references remain guidance rather than route validation.
+
+```mermaid
+flowchart LR
+    Entry["Declared entry points"] --> Search["Bounded static route search"]
+    Runtime["Exact entry target-node runtime evidence"] --> Matrix
+    Graph["Graphify file relations"] --> Search
+    Findings["Normalized findings"] --> Targets["Review targets"]
+    Exposure["Sensitive sink surfaces"] --> Targets
+    Advisories["Alias-aware advisories<br/>fix + KEV/EPSS/VEX"] --> Importers["Exact dependency importers"]
+    Lineage["Source/artifact package lineage"] --> Importers
+    Graph --> Importers
+    Importers --> Targets
+    Exposure --> ExactJoin["Exact path/package/advisory join"]
+    Importers --> ExactJoin
+    ExactJoin --> Targets
+    Targets --> Search
+    Effectiveness["Tool completion + contribution"] --> Assurance["Exact contributing-tool assurance"]
+    Trust["Primary/helper integrity<br/>continuity + approval"] --> Assurance
+    Assurance --> Routed
+    Delta["Approved finding baseline + delta"] --> Lifecycle["Lifecycle/change attribution"]
+    Targets --> Lifecycle
+    Binding --> Lifecycle
+    Lifecycle --> Routed
+    Search --> Matrix["Per-target multi-entry exposure matrix"]
+    Ownership["Retained CODEOWNERS rules"] --> OwnerPath["Ordered file ownership + handoffs"]
+    Matrix --> OwnerPath
+    OwnerPath --> Routed["Bounded risk routes"]
+    Search --> Routed
+    Routed --> SensitiveRoutes["End-to-end sensitive-data routes<br/>boundary + protection + assurance"]
+    Citations["Finding citations + sink-family standards"] --> SensitiveRoutes
+    Routed --> Hotspots["Shared control points"]
+    Graph --> Campaigns["Graph-selected validation campaigns"]
+    Hotspots --> Campaigns
+    Routed --> CampaignAssurance["Per-campaign route assurance"]
+    Assurance --> CampaignAssurance
+    CampaignAssurance --> Campaigns
+    Tests["Case-level execution"] --> Binding["Exact source digest + producer-verified payload receipts"]
+    Coverage["Hotspot file coverage"] --> Binding
+    Inventory["Sealed source inventory"] --> Binding
+    Binding --> Campaigns
+    Context["Complexity + graph centrality<br/>change risk + runtime state"] --> Campaigns
+    Campaigns --> SharedTests["Cross-campaign shared-test hotspots"]
+    Routed --> Queues["Owner route queues"]
+    Campaigns --> Queues
+    SharedTests --> Queues
+    Routed --> Routes["risk-paths.json"]
+    SensitiveRoutes --> Routes
+    Hotspots --> Routes
+    Campaigns --> Routes
+    SharedTests --> Routes
+    Queues --> Routes
+    Routes --> Report["Finding cards + summary + SARIF"]
+```
+
+[Structural synthesis](structural-synthesis.md) then cross-validates these islands
+and Vulture candidates against Graphify references, runtime coverage, Radon
+complexity, Tach boundaries, ownership, and security findings. This produces
+advisory removal/dynamic-use dispositions, latent attack-surface classifications,
+and import-cycle hotspots without changing native scanner severity. Schema 1.2
+also joins diff coverage to reverse Graphify paths for direct/transitive test
+selection and compound change-risk scoring, discovers conservative structural
+orphans, retains concrete island boundary evidence for missing-root versus
+test-only triage, and cross-checks selected tests against exact case execution
+and changed-line coverage.
+
+[Sensitive-data exposure synthesis](data-exposure.md) adds a distinct disclosure
+view. Bundled Semgrep rules establish credential, private-field, and request
+collection paths into logs, telemetry, and URL queries; detect raw exception
+responses and risky automatic-PII configuration; and allow Pysa/CodeQL to supply
+organization models. A bounded AST inventory identifies logging, process-output,
+observability, analytics, metrics, URL-query, client-response, header-capture,
+and egress SDK surfaces without treating presence as a finding. The synthesis
+joins exact sink and SDK evidence to Graphify, reachability, coverage, runtime,
+changed-code, and related-finding context. Finalized evidence-fusion results
+feed back into the exposure artifact as triage tiers and contextual verification
+plans. Inventory-only sink surfaces receive the same bounded structural/test
+context and evidence-specific verification steps for review ordering, but remain
+explicitly separate from vulnerabilities. Structural synthesis and CODEOWNERS
+also contribute accountable owners, exact graph-selected tests, change-risk
+scores, and island/import-cycle identifiers, turning triage into a bounded
+owner-and-test handoff. Finalized source/artifact lineage and normalized package
+findings add a separate SDK dependency lane with advisory citations and explicit
+matched-versus-risk semantics. Package-scoped CVE/GHSA/PYSEC/OSV alias clusters
+prevent reciprocal advisory records from overstating distinct risk while
+retaining every scanner source and enabling OSV/Grype corroboration.
+Risk-route synthesis then carries those exposure semantics across each declared
+entry route. Reports and closure work distinguish scanner-confirmed
+source-to-sink evidence from inventory-only surfaces while presenting
+protection, runtime, assurance, validation, lifecycle, and owner gaps together.
+Those clusters also join CycloneDX dependency roots, exact Graphify import
+edges, importing-file reachability/runtime state, and deptry findings. The
+result is actionable dependency-use context with explicit incomplete and
+conflicting states, never an exploitability verdict or severity override.
+OSV and Grype fixed-version records plus approved offline KEV, EPSS, and VEX
+then form a per-advisory remediation context. It retains scanner attribution,
+uses the established P0-P4 priority model, adapts the action to dependency-use
+evidence, and carries uncertainties and verification steps. It deliberately
+does not guess a minimum safe version, accept VEX without scoped validation, or
+change native severity.
+Reverse Graphify edges then map each exact importing file to direct/transitive
+tests, while retained coverage and CODEOWNERS-derived finding ownership provide
+validation gaps and responsible teams. The closure plan keys work by advisory
+cluster, consolidating alias-equivalent observations without dropping native
+finding IDs or scanner attribution.
+It separately keys changed-file validation work by repository path, merging an
+overlapping whole-file coverage hotspot into the same owned item. Release
+readiness consumes these items as a causal validation-alignment control and
+retains their owner, priority, action, and evidence references.
+Native Coverage/diff-cover findings for that path are folded into the same work
+item with their IDs and scanner attribution but remain unchanged in the finding
+ledger.
+The human closure view rolls exact subjects up by owner and validation state.
+Release readiness 1.3 then groups remediation only across identical owner,
+priority, authority, action, and causal blocker tuples. Each group retains stable
+closure-item references before bounded source and artifact citations.
+Evidence-fusion 1.3 also joins those graph-selected test files to exact,
+repository-normalized case records from JUnit, Hypothesis, and Schemathesis.
+It reports current passing, failing, incomplete, unobserved, unavailable, or
+unselected evidence while preserving the requirement to rerun after remediation.
+Aggregate totals cannot establish that any particular selected file executed.
+Passing selected tests whose affected dependency import paths remain uncovered
+are reported as an explicit validation mismatch.
+CWE/OWASP/OpenTelemetry-backed actions remain
+independent of native scanner severity and no sensitive values are retained.
 
 ## Scan sequence
 
@@ -262,11 +650,11 @@ additional perspectives:
 | Deep | Pysa, CodeQL through `run-codeql` | Interprocedural and semantic data-flow analysis |
 | Supply chain | Trivy, GuardDog, ScanCode, Gitleaks, TruffleHog | IaC, licenses, malicious packages, origin inventory, diverse secret detectors |
 | Artifact | Syft, Grype, check-wheel-contents, Twine, PyPI attestations, Cosign | Final-distribution SBOM, vulnerabilities, source parity, contents, metadata, signatures, identity, and provenance |
-| Quality, structure, and test evidence | Ruff quality/format, Pylint, mypy, Pyright, deptry, Vulture, Radon, Tach, coverage, diff-cover, JUnit, PSScriptAnalyzer, ShellCheck, actionlint, Hadolint, REUSE | Correctness, formatting, type contracts, dependency declarations, dead code, complexity, dependency boundaries, test adequacy/outcomes, scripts, workflows, containers, and SPDX metadata |
+| Quality, structure, and test evidence | Ruff quality/format, Pylint, mypy, Pyright, deptry, Vulture, Radon, Tach, reachability, Graphify, coverage, diff-cover, JUnit, PSScriptAnalyzer, ShellCheck, actionlint, Hadolint, REUSE | Correctness, formatting, type contracts, dependency declarations, dead code, entry-point sequences, disconnected islands, graph impact, complexity, dependency boundaries, test adequacy/outcomes, scripts, workflows, containers, and SPDX metadata |
 | Deep IaC | Checkov plus Trivy, Hadolint, actionlint, and zizmor | Graph-aware cloud/IaC policies plus independent deployment and pipeline perspectives |
 | Governance evidence | OpenSSF Scorecard evidence ingestion | Repository-host controls generated in a separately authorized connected lane |
 | Repository insight | Conftest, KICS, pipdeptree, git-sizer, validate-pyproject, Vale, KubeLinter | Organization policy, IaC diversity, environment health, Git scale, packaging metadata, prose, and Kubernetes readiness |
-| Trusted-lane evidence | Hypothesis, Schemathesis, CrossHair, Atheris, mutmut, ZAP, pytm, check-manifest, ClamAV, GitHub attestations, in-toto, reproducible builds, final OCI image, YARA | Bounded results from execution- or release-sensitive companion controls |
+| Trusted-lane evidence | Hypothesis, Schemathesis, CrossHair, Atheris, ClusterFuzzLite, mutmut, ZAP, Nuclei, browser and authorization contracts, IAST, Falco, Kubescape, Prowler, RASP, native sanitizers, MobSF, TLS, polyglot analysis, pytm, check-manifest, ClamAV, GitHub attestations, in-toto, reproducible builds, final OCI image, YARA | Fresh, coverage-bearing, canary-verified, signed bounded results from execution- or release-sensitive companion controls |
 | Production | Source/repository portfolio plus strict readiness checks | Fail-closed pre-release source gate |
 | Release | Comprehensive portfolio plus a required built distribution | Fail-closed artifact promotion gate |
 
@@ -388,8 +776,15 @@ report/
 |-- scancode-inventory.json        # when ScanCode is applicable
 |-- pylint-summary.json            # Pylint counts/statistics
 |-- radon-complexity.json           # complete rank C+ complexity evidence
+|-- reachability.json               # three-state topology, explanations, coverage, and islands
+|-- graphify.json                    # validated code-only topology
+|-- graph-analysis.json              # graph-aware finding neighborhoods
+|-- risk-paths.json                  # entry routes, shared campaigns, owners, and validation gaps
+|-- structural-synthesis.json        # dead code, island boundaries, change risk, and test targets
+|-- data-exposure.json               # sensitive-data paths and SDK/sink review surfaces
+|-- evidence-fusion.json             # semantic and cross-stage evidence joins
 |-- coverage-summary.json           # validated pre-generated coverage
-|-- junit-summary.json              # validated test result metadata
+|-- junit-summary.json              # bounded output-free test case/file/result ledger
 |-- reuse-compliance.json           # when REUSE opt-in is present
 `-- evidence/
     |-- bandit.json
@@ -439,6 +834,11 @@ flowchart LR
   never imply that a source line exists for a wheel or archive.
 - `results.sarif` supports GitHub code-scanning ingestion.
 - `findings.json` is the stable machine-readable finding collection.
+- `source-inventory.json` binds each maintained source path, byte size, and
+  SHA-256 to the aggregate source digest and supports non-invented clean-corpus
+  labels without retaining source contents. It is a canonical required report
+  artifact, not optional derived evidence; independent verification recomputes
+  its bounded, strictly sorted, duplicate-free aggregate and manifest binding.
 - `scan-manifest.json` records tool health, versions, inventory, policy
   reasons, timestamps, profile, and isolation attestation.
 - `checksums.sha256` protects report integrity after generation. Verification
@@ -469,6 +869,66 @@ are resolved beneath the target, symlink and traversal escapes are rejected,
 common credential assignments in non-secret context are redacted, and line
 length and context are bounded. Complete results remain in HTML, JSON, and
 SARIF.
+
+The risk-path synthesis further cross-references each redacted secret candidate
+with its content lane, source/graph/artifact membership, current-tree or
+Git-history origin, scanner verification and assurance, lifecycle, and owners.
+This produces `secret_provenance_assessments` and lane-specific closure criteria
+without copying the candidate value or changing the finding's severity or
+status. Generated evidence and test fixtures remain review contexts, not
+automatic false-positive classifications.
+
+```mermaid
+flowchart LR
+    Scanners["detect-secrets | Gitleaks | TruffleHog"] --> Normalize["Redacted normalized findings"]
+    Inventory["Source + graph + artifact inventory"] --> Join{"Provenance join"}
+    History["Current tree + Git history"] --> Join
+    Trust["Verification + scanner assurance"] --> Join
+    Normalize --> Join
+    Join --> Ledger["Bounded secret provenance ledger"]
+    Ledger --> Reports["Finding cards + SARIF"]
+    Ledger --> Actions["Lane-specific closure work"]
+    Sensitive["Sensitive-data sink routes"] --> Intersect{"Exact path or bounded route member?"}
+    Ledger --> Intersect
+    Intersect --> Compound["Secret-to-sink review intersections"]
+    Campaign["Validation campaigns<br/>tests + execution + coverage"] --> Handoff["Source-bound validation handoff"]
+    Quality["Scanner assurance + shared-test quality"] --> Handoff
+    Compound --> Handoff
+    Compound --> Reports
+    Handoff --> Reports
+    Handoff --> Actions
+```
+
+The compound intersection is emitted only for production-source candidates in
+the exact sink file or on the ordered Graphify file route to that sink. It
+preserves file-hop distance, history/current-tree alignment, protection,
+validation, scanner assurance, and owners. It remains static co-location
+evidence: symbol-level value flow, credential validity, runtime execution, and
+disclosure require separate proof.
+
+The handoff cross-references Graphify-selected or route-mapped candidate tests
+with retained JUnit execution, aggregate coverage, producer-verified source
+binding, route-scanner assurance, shared-test findings, and ownership. It fails
+closed on gaps and deliberately reports canary validation as not established;
+candidate test proximity is not evidence that a secret assignment was exercised.
+
+When an exact sink/advisory intersection and a secret/sink intersection cite the
+same retained sensitive route, risk-path synthesis creates a third bounded
+ledger rather than asking reviewers to discover the relationship manually.
+
+```mermaid
+flowchart TD
+    SecretSink["Secret / sink ledger"] --> Identity{"Same sensitive route ID"}
+    SinkAdvisory["Sink / SDK advisory ledger"] --> Identity
+    Identity --> Compound["Secret / boundary / advisory ledger"]
+    Compound --> Reports["Markdown + HTML + SARIF + JSON"]
+    Compound --> Closure["Coordinated credential, protection, dependency closure"]
+```
+
+Stable route identity prevents accidental joins across unrelated sinks in the
+same file or package. The compound record preserves both source IDs, runtime,
+validation, lifecycle, assurance, ownership, and citations, but remains derived
+review context rather than taint, disclosure, or exploitability evidence.
 
 ## Configuration and policy ownership
 
@@ -556,16 +1016,18 @@ See [configuration.md](configuration.md) for the complete supported schema.
 
 - Network egress denial and proof of that boundary.
 - CPU, memory, process, and wall-clock quotas beyond per-tool timeouts.
-- File-system permissions and read-only source mounts. The suite detects
-  content changes but does not itself make a native target read-only.
+- Read-only source mounts. The suite detects content changes and creates report
+  directories/files with private 0700/0600 modes, but the enterprise boundary
+  still controls the source mount and platform ACL inheritance.
 - Bundle transport, provenance, malware inspection, and approval.
 - Artifact retention, access control, signing, and audit logging.
 
 ### Residual risks
 
 - SHA-256 manifests and entry-point bindings detect substitution relative to
-  an approved digest but are not publisher signatures. A Python console-script
-  digest does not cover every imported package file.
+  an approved digest but are not publisher signatures. Python console scripts
+  can close the imported-package gap with `runtime_closure_sha256`; native
+  dynamic-library closure still depends on the approved sandbox image/bundle.
 - Database refresh still depends on the connected update lane, while maximum
   accepted age is enforced during isolated execution.
 - Local rules and advisory snapshots define the achievable coverage.
@@ -578,15 +1040,17 @@ See [configuration.md](configuration.md) for the complete supported schema.
 
 The native Windows self-scan process verifies:
 
-- the `comprehensive` profile selects all 62 adapters;
-- all 35 applicable scanners completed without failures, timeouts, or parse
-  errors; 27 conditional scanners were correctly not applicable;
+- the `comprehensive` profile selects all 88 adapters;
+- the latest readiness assessment identifies 37 applicable controls and 26
+  conditional or content-not-applicable controls, with no unavailable scanner;
 - Pylint, Radon, Ruff formatting, coverage, and JUnit adapters executed through
-  approved entry-point bindings and emitted normalized derived evidence;
-- the separately generated branch-coverage evidence records 93.17% combined
-  line-and-branch coverage and 86.97% branch coverage, satisfying both 80%
-  repository gates with no per-file hotspots; JUnit records 299 passing tests,
-  one platform-limited symlink skip, and no failures or errors;
+  unchanged observed entry-point bindings and emitted normalized derived
+  evidence; organization approval remains an external decision;
+- the separately generated branch-coverage evidence records 90.07% combined
+  line-and-branch coverage across 13,486 statements and 4,558 branches,
+  including 92.98% statement and 81.48% branch coverage; JUnit records 495
+  collected tests, 494 passes, one platform-limited skip, and no failures or
+  errors;
 - CycloneDX completed from `uv.lock` through a frozen offline export with a
   hash-verified helper; zizmor, actionlint, Pysa, GuardDog, Flawfinder, and
   REUSE were correctly not applicable to this repository and native host;
@@ -594,26 +1058,35 @@ The native Windows self-scan process verifies:
   correctly not applicable because these dogfood artifacts have no Trusted
   Publisher repository identity;
 - Syft and Grype inspected safely expanded wheel and source distributions;
-- the artifact manifest bound both distributions by SHA-256;
+- two fixed-epoch builds produced identical wheels and, after deterministic
+  metadata normalization, identical source distributions; the artifact
+  manifest bound both distributions by SHA-256;
 - all generated report checksums verified and target content remained
   unchanged;
-- all 37 observed scanner and helper entry points were confirmed unchanged
-  after execution; 12 were also bound to approved digests, while the remaining
-  25 are explicitly reported as provenance-approval work;
-- the 2026-08-06 isolated comprehensive outcome was `INCOMPLETE` because the
-  digest-pinned KEV and EPSS snapshots were 4.37 days old against a 3-day
-  maximum; the suite failed closed despite complete scanner execution;
+- every observed scanner and helper entry point was confirmed unchanged after
+  execution; each remains explicitly routed as independent
+  provenance-approval work rather than being locally self-approved;
+- the 2026-08-10 comprehensive outcome was `INCOMPLETE` solely because the
+  required external network-isolation attestation was absent; fresh local
+  intelligence and complete scanner execution did not weaken that boundary;
 - exactly two high-severity Cosign observations remain for intentionally absent
   wheel and source-distribution bundles, with no testing-coverage findings; and
+- the bundled reachability analyzer completed its schema-1.2 three-state model
+  at medium confidence because bounded polymorphic dispatch was used: four
+  entry points, no disconnected code, and no reportable islands; coverage
+  corroborated every executable node and nearly every load-only node; and
 - code security, secrets, dependency-vulnerability, architecture, and quality
-  perspectives had no findings. Release remains blocked until approved
-  intelligence is refreshed and an approved signing lane supplies bundles for
+  perspectives had no unresolved repository finding. `closure-plan.json`
+  preserves the remaining governed and conditional work as stable owned
+  actions. Release remains blocked until the external
+  isolation authority attests the exact run, the scanner identities are
+  independently approved, and a controlled signing lane supplies bundles for
   both exact artifact digests.
 
 ## Expanded implementation state
 
 Adapters, parser fixtures, applicability handling, profiles, attribution, and
-offline command construction are implemented for all 62 portfolio tools,
+offline command construction are implemented for all 64 portfolio tools,
 including CodeQL through `run-codeql`, final-distribution controls, seven
 repository-health scanners, and trusted-lane evidence adapters including final
 OCI-image assurance.

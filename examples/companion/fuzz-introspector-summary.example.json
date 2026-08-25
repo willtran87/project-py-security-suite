@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0",
+  "fuzzers": [
+    {
+      "name": "request-parser",
+      "statically_reachable_functions": 120,
+      "dynamically_covered_functions": 96,
+      "corpus_files": 48,
+      "blockers": []
+    }
+  ],
+  "health_canary_observed": true
+}

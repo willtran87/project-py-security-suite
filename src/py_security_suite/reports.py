@@ -3,14 +3,19 @@ from __future__ import annotations
 import hashlib
 import html
 import json
+import os
 import re
+import csv
 import shutil
+import subprocess  # nosec B404 - fixed Windows ACL utilities only
 import tempfile
 from collections import Counter
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote, urlsplit
 
+from .admission import admission_decisions
+from .artifact_validation import validate_governed_artifacts
 from .models import (
     Citation,
     Finding,
@@ -28,8 +33,10 @@ from .passport import (
     build_security_passport_statement,
     verify_report,
 )
+from .path_safety import HeldParentDirectory, hold_parent_directory
 from .prioritization import finding_order_key, finding_priority
-from .source_context import source_language
+from .portfolio_health import activation_recipe, portfolio_health_artifact
+from .source_context import redact_sensitive_snippets, source_language
 
 
 REPORT_FILES = tuple(REQUIRED_REPORT_ARTIFACTS.values())
@@ -50,6 +57,11 @@ _TOOL_REFERENCES = {
     "vulture": "https://github.com/jendrikseipp/vulture",
     "radon": "https://radon.readthedocs.io/",
     "tach": "https://docs.gauge.sh/",
+    "reachability": (
+        "https://github.com/willtran87/project-py-security-suite/"
+        "blob/main/docs/reachability.md"
+    ),
+    "graphify": "https://graphify.com/docs/cli",
     "coverage": "https://coverage.readthedocs.io/",
     "junit": "https://github.com/testmoapp/junitxml",
     "hypothesis": "https://hypothesis.readthedocs.io/",
@@ -89,11 +101,30 @@ _TOOL_REFERENCES = {
     "kube-linter": "https://docs.kubelinter.io/",
     "crosshair": "https://crosshair.readthedocs.io/",
     "atheris": "https://github.com/google/atheris",
+    "clusterfuzzlite": "https://google.github.io/clusterfuzzlite/",
     "mutmut": "https://mutmut.readthedocs.io/",
     "check-manifest": "https://github.com/mgedmin/check-manifest",
     "clamav": "https://docs.clamav.net/",
     "github-attestation": "https://docs.github.com/en/actions/security-guides/using-artifact-attestations-to-establish-provenance-for-builds",
     "zap": "https://www.zaproxy.org/docs/automate/automation-framework/",
+    "browser-security": "https://www.zaproxy.org/docs/desktop/addons/client-side-integration/",
+    "authorization-security": "https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/",
+    "iast": "https://docs.datadoghq.com/security/code_security/iast/",
+    "falco": "https://falco.org/docs/",
+    "kubescape": "https://kubescape.io/docs/scanning/",
+    "mobsf": "https://mobsf.github.io/docs/",
+    "native-sanitizers": "https://clang.llvm.org/docs/AddressSanitizer.html",
+    "nuclei": "https://docs.projectdiscovery.io/templates/reference/template-signing",
+    "oast": "https://docs.projectdiscovery.io/templates/reference/oob-testing",
+    "restler": "https://github.com/microsoft/restler-fuzzer",
+    "protocol-security": "https://grpc.io/docs/guides/auth/",
+    "fuzz-introspector": "https://google.github.io/oss-fuzz/advanced-topics/fuzz-introspector/",
+    "polyglot": "https://codeql.github.com/docs/codeql-overview/supported-languages-and-frameworks/",
+    "prowler": "https://docs.prowler.com/introduction",
+    "cloud-attack-path": "https://github.com/lyft/cartography",
+    "rasp": "https://coraza.io/docs/",
+    "tls-scan": "https://nabla-c0d3.github.io/sslyze/documentation/",
+    "secret-verification": "https://github.com/trufflesecurity/trufflehog",
     "pytm": "https://owasp.org/www-project-pytm/",
     "in-toto": "https://in-toto.io/docs/getting-started/",
     "oci-image": "https://opencontainers.org/",
@@ -113,12 +144,14 @@ def write_reports(
     replace_existing: bool = False,
 ) -> None:
     output = output.expanduser().absolute()
+    validate_governed_artifacts(derived_artifacts)
     if (output.exists() or output.is_symlink()) and not replace_existing:
         raise FileExistsError(f"report output already exists: {output}")
     output.parent.mkdir(parents=True, exist_ok=True)
     staging = Path(
         tempfile.mkdtemp(prefix=f".{output.name}.staging-", dir=output.parent)
     )
+    os.chmod(staging, 0o700)  # noqa: S103 - security artifact directory
     try:
         _write_report_contents(
             output=staging,
@@ -128,6 +161,7 @@ def write_reports(
             include_evidence=include_evidence,
             derived_artifacts=derived_artifacts,
         )
+        _harden_report_tree(staging)
         verify_report(staging)
         _publish_report(staging, output, replace_existing=replace_existing)
     finally:
@@ -153,11 +187,13 @@ def _publish_report(staging: Path, output: Path, *, replace_existing: bool) -> N
             f"report publication is already active or requires recovery: {lock}"
         ) from exc
     try:
-        _publish_report_locked(
-            staging,
-            output,
-            replace_existing=replace_existing,
-        )
+        with hold_parent_directory(output, "report publication") as parent:
+            _publish_report_locked(
+                staging,
+                output,
+                replace_existing=replace_existing,
+                held_parent=parent,
+            )
     finally:
         lock.rmdir()
 
@@ -167,9 +203,15 @@ def _publish_report_locked(
     output: Path,
     *,
     replace_existing: bool,
+    held_parent: HeldParentDirectory,
 ) -> None:
     if not output.exists() and not output.is_symlink():
-        staging.rename(output)
+        held_parent.rename(staging, output)
+        try:
+            _verify_report_permissions(output)
+        except BaseException:
+            held_parent.rename(output, staging)
+            raise
         return
     if not replace_existing:
         raise FileExistsError(f"report output appeared during generation: {output}")
@@ -182,13 +224,16 @@ def _publish_report_locked(
     backup = Path(tempfile.mkdtemp(prefix=f".{output.name}.backup-", dir=output.parent))
     backup.rmdir()
     published = False
-    output.rename(backup)
+    held_parent.rename(output, backup)
     try:
-        staging.rename(output)
+        held_parent.rename(staging, output)
+        _verify_report_permissions(output)
         published = True
     except BaseException:
+        if output.exists() and not staging.exists():
+            held_parent.rename(output, staging)
         if not output.exists() and not output.is_symlink():
-            backup.rename(output)
+            held_parent.rename(backup, output)
         raise
     finally:
         if published and backup.exists():
@@ -204,13 +249,16 @@ def _write_report_contents(
     include_evidence: bool,
     derived_artifacts: dict[str, Any] | None,
 ) -> None:
+    redact_sensitive_snippets(findings)
     _register_report_artifacts(manifest, derived_artifacts)
     active_findings = [
         finding
         for finding in findings
         if finding.status is not FindingStatus.SUPPRESSED
     ]
-    _write_primary_report_files(output, manifest, findings, active_findings)
+    _write_primary_report_files(
+        output, manifest, findings, active_findings, derived_artifacts
+    )
     _write_evidence(output, manifest, diagnostics, include_evidence)
     _write_derived_artifacts(output, derived_artifacts)
     _write_json(output / "scan-manifest.json", manifest)
@@ -226,6 +274,8 @@ def _register_report_artifacts(
 ) -> None:
     manifest.artifacts = dict(REQUIRED_REPORT_ARTIFACTS)
     for name in sorted(derived_artifacts or {}):
+        if name == "source-inventory.json":
+            continue
         if (
             "/" in name
             or "\\" in name
@@ -234,6 +284,8 @@ def _register_report_artifacts(
         ):
             raise ValueError(f"unsafe or reserved derived artifact name: {name}")
         manifest.artifacts[name] = name
+    if "source-inventory.json" not in (derived_artifacts or {}):
+        raise ValueError("required source-inventory.json derived artifact is missing")
 
 
 def _write_primary_report_files(
@@ -241,8 +293,25 @@ def _write_primary_report_files(
     manifest: ScanManifest,
     findings: list[Finding],
     active_findings: list[Finding],
+    derived_artifacts: dict[str, Any] | None,
 ) -> None:
-    _write_text(output / "summary.md", render_summary(manifest, findings))
+    fusion = (derived_artifacts or {}).get("evidence-fusion.json")
+    structural = (derived_artifacts or {}).get("structural-synthesis.json")
+    data_exposure = (derived_artifacts or {}).get("data-exposure.json")
+    risk_paths = (derived_artifacts or {}).get("risk-paths.json")
+    advanced = (derived_artifacts or {}).get("advanced-analysis.json")
+    _write_text(
+        output / "summary.md",
+        render_summary(
+            manifest,
+            findings,
+            evidence_fusion=fusion if isinstance(fusion, dict) else None,
+            structural_synthesis=structural if isinstance(structural, dict) else None,
+            data_exposure=data_exposure if isinstance(data_exposure, dict) else None,
+            risk_paths=risk_paths if isinstance(risk_paths, dict) else None,
+            advanced_analysis=advanced if isinstance(advanced, dict) else None,
+        ),
+    )
     _write_text(
         output / "action-plan.md", render_action_plan(manifest, active_findings)
     )
@@ -250,7 +319,15 @@ def _write_primary_report_files(
         output / "assurance-case.md",
         render_assurance_case(manifest, active_findings),
     )
-    _write_text(output / "index.html", render_html(manifest, findings))
+    _write_text(
+        output / "index.html",
+        render_html(
+            manifest,
+            findings,
+            risk_paths=risk_paths if isinstance(risk_paths, dict) else None,
+            advanced_analysis=advanced if isinstance(advanced, dict) else None,
+        ),
+    )
     _write_json(output / "results.sarif", render_sarif(active_findings))
     _write_json(
         output / "sonarqube-external-issues.json",
@@ -265,6 +342,9 @@ def _write_primary_report_files(
             "target": manifest.target,
             "profile": manifest.profile,
             "source_sha256": manifest.inventory.source_sha256,
+            "vcs_revision": manifest.inventory.vcs_revision,
+            "vcs_revision_verified": manifest.inventory.vcs_revision_verified,
+            "selected_tools": sorted(run.tool for run in manifest.tools),
             "findings": findings,
         },
     )
@@ -291,7 +371,15 @@ def _write_derived_artifacts(
         _write_json(output / name, value)
 
 
-def render_summary(manifest: ScanManifest, findings: list[Finding]) -> str:
+def render_summary(
+    manifest: ScanManifest,
+    findings: list[Finding],
+    evidence_fusion: dict[str, Any] | None = None,
+    structural_synthesis: dict[str, Any] | None = None,
+    data_exposure: dict[str, Any] | None = None,
+    risk_paths: dict[str, Any] | None = None,
+    advanced_analysis: dict[str, Any] | None = None,
+) -> str:
     active_findings = [
         finding
         for finding in findings
@@ -306,16 +394,2777 @@ def render_summary(manifest: ScanManifest, findings: list[Finding]) -> str:
         governed_count=len(findings) - len(active_findings),
         coverage_gap_count=len(coverage_gaps),
     )
+    closure_backlog = (
+        "**Owned closure backlog:** `closure-plan.json` is the stable, "
+        + "machine-readable work plan. Render it with "
+        + "`pysec closure-plan REPORT --format markdown`."
+    )
+    lines.extend(["", closure_backlog])
+    lines.extend(_render_fusion_summary(evidence_fusion))
+    lines.extend(_render_structural_summary(structural_synthesis))
+    lines.extend(_render_data_exposure_summary(data_exposure))
+    lines.extend(_render_advanced_analysis_summary(advanced_analysis))
+    lines.extend(_render_risk_path_summary(risk_paths))
     lines.extend(["", "## Decision", ""])
     lines.extend(f"- {reason}" for reason in manifest.policy_reasons)
+    lines.extend(_render_admission_decisions(manifest, active_findings))
     lines.extend(_render_finding_lifecycle(manifest, active_findings))
     lines.extend(_render_finding_rollups(active_findings))
+    lines.extend(_render_portfolio_health(manifest, active_findings))
     lines.extend(_render_markdown_findings(active_findings, tool_versions))
     lines.extend(_render_tool_coverage(manifest.tools, coverage_gaps, not_applicable))
     lines.extend(_render_coverage_actions(manifest, coverage_gaps, not_applicable))
     lines.extend(_render_derived_evidence(manifest))
     lines.extend(_render_triage_workflow(manifest.outcome))
     return "\n".join(lines)
+
+
+def _render_fusion_summary(value: dict[str, Any] | None) -> list[str]:
+    if not isinstance(value, dict) or not isinstance(value.get("summary"), dict):
+        return []
+    summary = value["summary"]
+    lanes = value.get("evidence_lanes", [])
+    gaps = (
+        sum(
+            len(item.get("execution_gaps", []))
+            for item in lanes
+            if isinstance(item, dict) and isinstance(item.get("execution_gaps"), list)
+        )
+        if isinstance(lanes, list)
+        else 0
+    )
+    return [
+        "",
+        "## Cross-referenced evidence",
+        "",
+        "| Signal | Count |",
+        "|---|---:|",
+        f"| Findings enriched | {int(summary.get('findings_enriched', 0))} |",
+        f"| Independent or cross-stage corroboration | {int(summary.get('independently_corroborated', 0))} |",
+        f"| Changed-line findings | {int(summary.get('changed_line_findings', 0))} |",
+        f"| Uncovered finding lines | {int(summary.get('uncovered_findings', 0))} |",
+        f"| Source/artifact package version drift | {int(summary.get('version_drift_packages', 0))} |",
+        f"| Distinct dependency advisories | {int(summary.get('distinct_advisories', 0))} |",
+        f"| Retained advisory observations | {int(summary.get('advisory_observations', 0))} |",
+        f"| Alias-equivalent observations consolidated for triage | {int(summary.get('alias_collapsed_observations', 0))} |",
+        f"| Advisories with exact static import evidence | {int(summary.get('advisories_with_import_evidence', 0))} |",
+        f"| Advisories imported by executable code | {int(summary.get('advisories_in_executable_imports', 0))} |",
+        f"| Advisories with runtime-observed imports | {int(summary.get('runtime_observed_dependency_advisories', 0))} |",
+        f"| Advisories whose package declaration is flagged unused | {int(summary.get('advisories_with_unused_declarations', 0))} |",
+        f"| Import-versus-unused evidence conflicts | {int(summary.get('dependency_use_conflicts', 0))} |",
+        f"| Known-exploited dependency advisories | {int(summary.get('known_exploited_advisories', 0))} |",
+        f"| High-EPSS dependency advisories | {int(summary.get('high_epss_advisories', 0))} |",
+        f"| Dependency advisories with scanner-reported fixes | {int(summary.get('advisories_with_fixed_versions', 0))} |",
+        f"| P0 dependency advisories | {int(summary.get('p0_advisories', 0))} |",
+        f"| Dependency advisories requiring VEX validation | {int(summary.get('advisories_requiring_vex_validation', 0))} |",
+        f"| Dependency advisories with graph-selected focused tests | {int(summary.get('advisories_with_focused_tests', 0))} |",
+        f"| Dependency advisories with passing focused-test evidence | {int(summary.get('advisories_with_passing_focused_test_evidence', 0))} |",
+        f"| Dependency advisories with failing focused-test evidence | {int(summary.get('advisories_with_failing_focused_test_evidence', 0))} |",
+        f"| Dependency advisories with selected tests not observed | {int(summary.get('advisories_with_unobserved_focused_tests', 0))} |",
+        f"| Dependency advisories with introducing-root paths | {int(summary.get('advisories_with_introducing_dependency_paths', 0))} |",
+        f"| Dependency advisories qualified by environment-health gaps | {int(summary.get('advisories_with_dependency_environment_gaps', 0))} |",
+        f"| Transitive advisories without an introducing path | {int(summary.get('transitive_advisories_without_dependency_paths', 0))} |",
+        f"| Dependency advisories with import-path owners | {int(summary.get('advisories_with_import_path_owners', 0))} |",
+        f"| Dependency advisories on import paths below 80% coverage | {int(summary.get('advisories_with_uncovered_import_paths', 0))} |",
+        f"| Passing focused tests with dependency import-path coverage gaps | {int(summary.get('advisories_with_test_coverage_mismatch', 0))} |",
+        f"| Compound structural hotspots | {int(summary.get('compound_hotspots', 0))} |",
+        f"| Evidence-lane execution gaps | {gaps} |",
+        f"| Evidence contradictions | {int(summary.get('contradictions', 0))} |",
+        "",
+        "Detailed lineage, review reasons, limitations, and evidence-lane health are in `evidence-fusion.json`. Fusion guides triage; scanner severity and policy remain authoritative.",
+    ]
+
+
+def _render_structural_summary(value: dict[str, Any] | None) -> list[str]:
+    if not isinstance(value, dict) or not isinstance(value.get("summary"), dict):
+        return []
+    summary = value["summary"]
+    islands = value.get("island_assessments", [])
+    changes = value.get("change_impact_assessments", [])
+    orphans = value.get("orphan_symbol_candidates", [])
+    boundaries = value.get("island_boundary_assessments", [])
+    priority_islands = (
+        [
+            item
+            for item in islands
+            if isinstance(item, dict) and item.get("priority") in {"high", "medium"}
+        ]
+        if isinstance(islands, list)
+        else []
+    )
+    priority_changes = (
+        [
+            item
+            for item in changes
+            if isinstance(item, dict) and item.get("priority") in {"high", "medium"}
+        ]
+        if isinstance(changes, list)
+        else []
+    )
+    actionable_boundaries = (
+        [
+            item
+            for item in boundaries
+            if isinstance(item, dict)
+            and item.get("boundary_classification")
+            in {
+                "candidate-missing-entry-point",
+                "test-only-or-fixture",
+                "closed-boundary",
+            }
+        ]
+        if isinstance(boundaries, list)
+        else []
+    )
+    interpretation = " ".join(
+        (
+            "Conclusions combine Graphify topology, entry-point reachability, runtime coverage, bounded case-level test execution, Vulture, Radon, Tach, and normalized findings.",
+            "They are advisory; absence of runtime observation does not prove code is removable.",
+        )
+    )
+    lines = [
+        "",
+        "## Structural synthesis",
+        "",
+        "| Signal | Count |",
+        "|---|---:|",
+        f"| Dead-code candidates cross-checked | {int(summary.get('dead_code_candidates', 0))} |",
+        f"| Likely removable dead-code candidates | {int(summary.get('likely_removable_dead_code_candidates', 0))} |",
+        f"| Likely dynamic dead-code candidates | {int(summary.get('likely_dynamic_dead_code_candidates', 0))} |",
+        f"| Code islands analyzed | {int(summary.get('islands_analyzed', 0))} |",
+        f"| Likely removable islands | {int(summary.get('likely_removable_islands', 0))} |",
+        f"| Likely dynamic islands | {int(summary.get('likely_dynamic_islands', 0))} |",
+        f"| Latent attack-surface islands | {int(summary.get('latent_attack_surface_islands', 0))} |",
+        f"| Import cycles | {int(summary.get('import_cycles', 0))} |",
+        f"| Architecture hotspots | {int(summary.get('architecture_hotspots', 0))} |",
+        f"| Changed Python files analyzed | {int(summary.get('changed_python_files_analyzed', 0))} |",
+        f"| Changed files without mapped tests | {int(summary.get('changed_files_without_mapped_tests', 0))} |",
+        f"| Changed files with uncovered lines | {int(summary.get('changed_files_with_uncovered_lines', 0))} |",
+        f"| High-priority change hotspots | {int(summary.get('high_priority_change_hotspots', 0))} |",
+        f"| Graph-recommended test files | {int(summary.get('recommended_test_files', 0))} |",
+        f"| Changed files with passing focused-test evidence | {int(summary.get('changed_files_with_passing_focused_tests', 0))} |",
+        f"| Changed files with failing focused-test evidence | {int(summary.get('changed_files_with_failing_focused_tests', 0))} |",
+        f"| Changed files with selected tests not observed | {int(summary.get('changed_files_with_unobserved_focused_tests', 0))} |",
+        f"| Passing focused tests with uncovered changed lines | {int(summary.get('passing_focused_tests_with_coverage_gaps', 0))} |",
+        f"| Changed files aligned across focused tests and changed-line coverage | {int(summary.get('validation_aligned_changed_files', 0))} |",
+        f"| Structural orphan symbols | {int(summary.get('orphan_symbol_candidates', 0))} |",
+        f"| Candidate missing entry points | {int(summary.get('candidate_missing_entry_points', 0))} |",
+        f"| Test-only island candidates | {int(summary.get('test_only_island_candidates', 0))} |",
+        "",
+        interpretation,
+    ]
+    if priority_islands:
+        lines.extend(
+            [
+                "",
+                "| Priority island | Classification | LOC | Action |",
+                "|---|---|---:|---|",
+            ]
+        )
+        lines.extend(
+            (
+                "| `"
+                + _markdown_code(str(item.get("island_id", "unknown")))
+                + "` | `"
+                + _markdown_code(str(item.get("classification", "review")))
+                + "` | "
+                + str(int(item.get("lines_of_code", 0)))
+                + " | "
+                + _markdown_text(str(item.get("recommended_action", "Review.")))
+                + " |"
+            )
+            for item in priority_islands[:5]
+        )
+    if priority_changes:
+        lines.extend(
+            [
+                "",
+                "| Change hotspot | Classification | Risk | Mapped tests | Validation | Validation action | Change action |",
+                "|---|---|---:|---:|---|---|---|",
+            ]
+        )
+        lines.extend(
+            "| `"
+            + _markdown_code(str(item.get("path", "unknown")))
+            + "` | `"
+            + _markdown_code(str(item.get("classification", "review")))
+            + "` | "
+            + str(int(item.get("risk_score", 0)))
+            + " | "
+            + str(
+                len(item.get("direct_test_files", []))
+                + len(item.get("transitive_test_files", []))
+                + len(item.get("associated_test_files", []))
+            )
+            + " | `"
+            + _markdown_code(str(item.get("test_coverage_alignment", "not-available")))
+            + "` | "
+            + _markdown_text(
+                str(
+                    item.get("validation_action")
+                    or item.get("recommended_action", "Review.")
+                )
+            )
+            + " | "
+            + _markdown_text(str(item.get("recommended_action", "Review.")))
+            + " |"
+            for item in priority_changes[:5]
+        )
+    if isinstance(orphans, list) and orphans:
+        lines.extend(
+            [
+                "",
+                "| Structural orphan | Location | Classification | Confidence | Action |",
+                "|---|---|---|---|---|",
+            ]
+        )
+        lines.extend(
+            "| `"
+            + _markdown_code(str(item.get("label", "unknown")))
+            + "` | `"
+            + _markdown_code(str(item.get("path", "unknown")))
+            + ":"
+            + str(int(item.get("line", 1)))
+            + "` | `"
+            + _markdown_code(str(item.get("classification", "review")))
+            + "` | `"
+            + _markdown_code(str(item.get("confidence", "low")))
+            + "` | "
+            + _markdown_text(str(item.get("recommended_action", "Review.")))
+            + " |"
+            for item in orphans[:5]
+            if isinstance(item, dict)
+        )
+    if actionable_boundaries:
+        lines.extend(
+            [
+                "",
+                "| Island boundary review | Classification | Boundary relations | Entry paths | Action |",
+                "|---|---|---:|---:|---|",
+            ]
+        )
+        lines.extend(
+            "| `"
+            + _markdown_code(str(item.get("island_id", "unknown")))
+            + "` | `"
+            + _markdown_code(str(item.get("boundary_classification", "review")))
+            + "` | "
+            + str(int(item.get("boundary_relation_count", 0)))
+            + " | "
+            + str(len(item.get("candidate_entry_paths", [])))
+            + " | "
+            + _markdown_text(str(item.get("recommended_action", "Review.")))
+            + " |"
+            for item in actionable_boundaries[:5]
+        )
+    return lines
+
+
+def _render_data_exposure_summary(value: dict[str, Any] | None) -> list[str]:
+    if not isinstance(value, dict) or not isinstance(value.get("summary"), dict):
+        return []
+    summary = value["summary"]
+    assessments = value.get("finding_assessments", [])
+    surfaces = value.get("sink_surfaces", [])
+    production_surfaces = (
+        [
+            item
+            for item in surfaces
+            if isinstance(item, dict) and item.get("scope") == "production"
+        ]
+        if isinstance(surfaces, list)
+        else []
+    )
+    query_findings = sum(
+        isinstance(item, dict) and item.get("sink_family") in {"url", "url-query"}
+        for item in assessments
+    )
+    response_findings = sum(
+        isinstance(item, dict)
+        and item.get("sink_family") in {"client-response", "exception"}
+        for item in assessments
+    )
+    lines = [
+        "",
+        "## Sensitive-data exposure",
+        "",
+        "| Signal | Count |",
+        "|---|---:|",
+        f"| Confirmed scanner findings correlated | {int(summary.get('exposure_findings', 0))} |",
+        f"| Findings joined with finalized evidence fusion | {int(summary.get('fusion_enriched_findings', 0))} |",
+        f"| Urgent cross-referenced exposure findings | {int(summary.get('urgent_cross_referenced_findings', 0))} |",
+        f"| Findings on changed lines | {int(summary.get('changed_exposure_findings', 0))} |",
+        f"| Findings on uncovered lines | {int(summary.get('uncovered_exposure_findings', 0))} |",
+        f"| Runtime-observed exposure findings | {int(summary.get('runtime_observed_exposure_findings', 0))} |",
+        f"| Broad upstream blast-radius findings | {int(summary.get('broad_blast_radius_findings', 0))} |",
+        f"| Exposure findings with an assigned owner | {int(summary.get('owned_exposure_findings', 0))} |",
+        f"| Exposure findings with graph-selected tests | {int(summary.get('exposure_findings_with_mapped_tests', 0))} |",
+        f"| Exposure findings with passing-test/coverage mismatch | {int(summary.get('exposure_findings_with_validation_mismatch', 0))} |",
+        f"| Exposure findings in high-risk changes | {int(summary.get('high_change_risk_exposure_findings', 0))} |",
+        f"| Exposure findings with SDK package risk | {int(summary.get('exposure_findings_with_sdk_package_risk', 0))} |",
+        f"| Sensitive logging findings | {int(summary.get('logging_findings', 0))} |",
+        f"| Telemetry and analytics findings | {int(summary.get('telemetry_findings', 0))} |",
+        f"| Sensitive URL-query findings | {query_findings} |",
+        f"| Raw exception response findings | {response_findings} |",
+        f"| Production sink review surfaces | {int(summary.get('production_sink_surfaces', 0))} |",
+        f"| Test sink review surfaces | {int(summary.get('test_sink_surfaces', 0))} |",
+        f"| Explicit risky or invalid capture configurations | {int(summary.get('configuration_review_surfaces', 0))} |",
+        f"| High-priority production review surfaces | {int(summary.get('high_priority_review_surfaces', 0))} |",
+        f"| Surfaces with sensitive-data context | {int(summary.get('sensitive_context_surfaces', 0))} |",
+        f"| Surfaces with an explicit protection signal | {int(summary.get('protected_surfaces', 0))} |",
+        f"| Sink surfaces joined with structural/test context | {int(summary.get('structurally_enriched_surfaces', 0))} |",
+        f"| Changed sink surfaces | {int(summary.get('changed_sink_surfaces', 0))} |",
+        f"| Uncovered sink surfaces | {int(summary.get('uncovered_sink_surfaces', 0))} |",
+        f"| Runtime-observed sink surfaces | {int(summary.get('runtime_observed_sink_surfaces', 0))} |",
+        f"| Disconnected sink surfaces | {int(summary.get('disconnected_sink_surfaces', 0))} |",
+        f"| Sink surfaces near normalized findings | {int(summary.get('compound_sink_surfaces', 0))} |",
+        f"| Sink surfaces with an assigned owner | {int(summary.get('owned_sink_surfaces', 0))} |",
+        f"| Sink surfaces with graph-selected tests | {int(summary.get('sink_surfaces_with_mapped_tests', 0))} |",
+        f"| Sink surfaces with passing-test/coverage mismatch | {int(summary.get('sink_surfaces_with_validation_mismatch', 0))} |",
+        f"| Sink surfaces in high-risk changes | {int(summary.get('high_change_risk_sink_surfaces', 0))} |",
+        f"| Sink surfaces in structural hotspots | {int(summary.get('sink_surfaces_in_structural_hotspots', 0))} |",
+        f"| Sink surfaces with SDK package risk | {int(summary.get('sink_surfaces_with_sdk_package_risk', 0))} |",
+        f"| SDK packages correlated | {int(summary.get('sdk_packages_correlated', 0))} |",
+        f"| SDK packages with normalized findings | {int(summary.get('sdk_packages_with_findings', 0))} |",
+        f"| SDK packages with source/artifact version drift | {int(summary.get('sdk_packages_with_version_drift', 0))} |",
+        f"| Distinct advisories affecting SDK packages | {int(summary.get('sdk_distinct_advisories', 0))} |",
+        f"| Retained SDK advisory observations | {int(summary.get('sdk_advisory_observations', 0))} |",
+        f"| SDK advisories with exact import evidence | {int(summary.get('sdk_advisories_with_import_evidence', 0))} |",
+        f"| SDK advisories imported by executable code | {int(summary.get('sdk_advisories_in_executable_imports', 0))} |",
+        f"| SDK advisories whose packages are flagged unused | {int(summary.get('sdk_advisories_flagged_unused', 0))} |",
+        f"| Known-exploited SDK advisories | {int(summary.get('sdk_known_exploited_advisories', 0))} |",
+        f"| High-EPSS SDK advisories | {int(summary.get('sdk_high_epss_advisories', 0))} |",
+        f"| SDK advisories with scanner-reported fixes | {int(summary.get('sdk_advisories_with_fixed_versions', 0))} |",
+        f"| P0 SDK advisories | {int(summary.get('sdk_p0_advisories', 0))} |",
+        f"| SDK advisories requiring VEX validation | {int(summary.get('sdk_advisories_requiring_vex_validation', 0))} |",
+        f"| SDK advisories with graph-selected focused tests | {int(summary.get('sdk_advisories_with_focused_tests', 0))} |",
+        f"| SDK advisories with passing focused-test evidence | {int(summary.get('sdk_advisories_with_passing_focused_test_evidence', 0))} |",
+        f"| SDK advisories with failing focused-test evidence | {int(summary.get('sdk_advisories_with_failing_focused_test_evidence', 0))} |",
+        f"| SDK advisories with selected tests not observed | {int(summary.get('sdk_advisories_with_unobserved_focused_tests', 0))} |",
+        f"| SDK advisories with introducing-root paths | {int(summary.get('sdk_advisories_with_introducing_dependency_paths', 0))} |",
+        f"| SDK advisories qualified by environment-health gaps | {int(summary.get('sdk_advisories_with_dependency_environment_gaps', 0))} |",
+        f"| Transitive SDK advisories without an introducing path | {int(summary.get('sdk_transitive_advisories_without_dependency_paths', 0))} |",
+        f"| SDK advisories with import-path owners | {int(summary.get('sdk_advisories_with_import_path_owners', 0))} |",
+        f"| SDK advisories on import paths below 80% coverage | {int(summary.get('sdk_advisories_with_uncovered_import_paths', 0))} |",
+        f"| Passing SDK focused tests with import-path coverage gaps | {int(summary.get('sdk_advisories_with_test_coverage_mismatch', 0))} |",
+        f"| Logging, telemetry, analytics, and egress SDK families | {int(summary.get('sdk_families_observed', 0))} |",
+        "",
+        "A sink surface is an inventory item, not proof of leakage. A finding requires source-to-sink scanner evidence and retains CWE/OWASP guidance.",
+    ]
+    if isinstance(assessments, list) and assessments:
+        lines.extend(
+            [
+                "",
+                "| Exposure finding | Location | Triage / data class | Sink / SDK | Relevance | Cross-reference context | Action |",
+                "|---|---|---|---|---|---|---|",
+            ]
+        )
+        lines.extend(
+            "| `"
+            + _markdown_code(str(item.get("finding_id", "unknown")))
+            + "` | `"
+            + _markdown_code(str(item.get("path", "unknown")))
+            + (":" + str(item["line"]) if item.get("line") else "")
+            + "` | `"
+            + _markdown_code(str(item.get("triage_tier", "standard")))
+            + "` / "
+            + _markdown_text(
+                ", ".join(str(value) for value in item.get("data_classes", []))
+                or "unclassified"
+            )
+            + " | `"
+            + _markdown_code(str(item.get("sink_family", "unknown")))
+            + (" / " + _markdown_code(str(item["sdk"])) if item.get("sdk") else "")
+            + "` | `"
+            + _markdown_code(str(item.get("structural_relevance", "unknown")))
+            + "` | "
+            + _markdown_text(_exposure_summary_context(item))
+            + " | "
+            + _markdown_text(str(item.get("recommended_action", "Review.")))
+            + " |"
+            for item in assessments[:5]
+            if isinstance(item, dict)
+        )
+    if production_surfaces:
+        lines.extend(
+            [
+                "",
+                "| Top production sink surface | Family | Priority | Data class | Protection | Cross-reference context | Next verification |",
+                "|---|---|---|---|---|---|---|",
+            ]
+        )
+        lines.extend(
+            "| `"
+            + _markdown_code(str(item.get("path", "unknown")))
+            + ":"
+            + str(int(item.get("line", 1)))
+            + "`<br>"
+            + _markdown_text(str(item.get("label", item.get("sink", "sink"))))
+            + " | `"
+            + _markdown_code(str(item.get("sink_family", "unknown")))
+            + "` | `"
+            + _markdown_code(str(item.get("review_priority", "medium")))
+            + "` | "
+            + _markdown_text(
+                ", ".join(str(value) for value in item.get("data_classes", []))
+                or "unclassified"
+            )
+            + " | `"
+            + _markdown_code(str(item.get("protection_status", "not-observed")))
+            + "` | "
+            + _markdown_text(_surface_summary_context(item))
+            + " | "
+            + _markdown_text(
+                "; ".join(
+                    str(step).rstrip(".")
+                    for step in (
+                        item.get("verification_steps") or ["Review the sink context."]
+                    )[:2]
+                )
+                + "."
+            )
+            + " |"
+            for item in sorted(
+                production_surfaces,
+                key=lambda surface: (
+                    {"high": 0, "medium": 1, "low": 2}.get(
+                        str(surface.get("review_priority")), 3
+                    ),
+                    {"high": 0, "medium": 1, "none": 2}.get(
+                        str(surface.get("sdk_dependency_context", {}).get("risk_tier")),
+                        3,
+                    ),
+                    str(surface.get("path")),
+                    int(surface.get("line") or 0),
+                ),
+            )[:5]
+        )
+    return lines
+
+
+def _render_advanced_analysis_summary(value: dict[str, Any] | None) -> list[str]:
+    if not isinstance(value, dict) or not isinstance(value.get("summary"), dict):
+        return []
+    summary = value["summary"]
+    controls = value.get("control_topology")
+    controls = controls if isinstance(controls, list) else []
+    privacy = value.get("telemetry_privacy_topology")
+    privacy = privacy if isinstance(privacy, list) else []
+    dependencies = value.get("dependency_trust_routes")
+    dependencies = dependencies if isinstance(dependencies, list) else []
+    aligned_taint_paths, retained_taint_paths = _advanced_taint_alignment_counts(value)
+    lines = [
+        "",
+        "## Cross-evidence security leverage",
+        "",
+        (
+            "This section connects route topology, scanner-confirmed flows, release "
+            "metadata, threats, tests, mutations, telemetry, and dependency evidence. "
+            "Structural relationships are review evidence, not proof of exploitability "
+            "or control effectiveness."
+        ),
+        "",
+        "| Decision signal | Count |",
+        "|---|---:|",
+        f"| Typed evidence nodes / relationships | {int(summary.get('relationship_nodes', 0))} / {int(summary.get('relationship_edges', 0))} |",
+        f"| Mandatory / bypass-capable candidate controls | {int(summary.get('mandatory_control_points', 0))} / {int(summary.get('bypass_capable_control_points', 0))} |",
+        f"| Shared mandatory security-route points | {int(summary.get('shared_mandatory_security_route_points', 0))} |",
+        f"| Scanner-confirmed taint paths / retained steps | {int(summary.get('scanner_confirmed_taint_paths', 0))} / {int(summary.get('retained_taint_steps', 0))} |",
+        f"| Ordered route-aligned / not-established taint paths | {aligned_taint_paths} / {retained_taint_paths - aligned_taint_paths} |",
+        f"| Published / unmodeled artifact entry points | {int(summary.get('published_entry_points', 0))} / {int(summary.get('unmodeled_published_entry_points', 0))} |",
+        f"| Wheel RECORD integrity gaps | {int(summary.get('wheel_record_integrity_gaps', 0))} |",
+        f"| Threats without control / source-bound passing test evidence | {int(summary.get('threats_without_control_evidence', 0))} / {int(summary.get('threats_without_test_evidence', 0))} |",
+        f"| Security-control mutations without source-bound passing tests | {int(summary.get('security_control_mutations_without_test_evidence', 0))} |",
+        f"| Telemetry routes without observed protection / with ordering risk | {int(summary.get('telemetry_routes_without_observed_protection', 0))} / {int(summary.get('telemetry_routes_with_redaction_order_risk', 0))} |",
+        f"| Elevated dependency trust routes | {int(summary.get('elevated_dependency_trust_routes', 0))} |",
+    ]
+    lines.extend(_render_advanced_controls(controls))
+    lines.extend(_render_advanced_privacy(privacy))
+    lines.extend(_render_advanced_dependencies(dependencies))
+    lines.extend(
+        [
+            "",
+            "The complete, machine-readable evidence graph and every retained record are in `advanced-analysis.json`.",
+        ]
+    )
+    return lines
+
+
+def _render_advanced_controls(values: list[Any]) -> list[str]:
+    review = [
+        item
+        for item in values
+        if isinstance(item, dict)
+        and (
+            item.get("topology_status") in {"bypass-capable", "not-established"}
+            or item.get("shared_mandatory_security_route_point") is True
+        )
+    ]
+    if not review:
+        return []
+    lines = [
+        "",
+        "### Control topology decisions",
+        "",
+        "| Status | Candidate control | Scope | Owner / action |",
+        "|---|---|---:|---|",
+    ]
+    for item in review[:10]:
+        owners = item.get("owners")
+        owner_text = (
+            ", ".join(str(owner) for owner in owners[:5])
+            if isinstance(owners, list)
+            else ""
+        )
+        lines.append(
+            "| `"
+            + _markdown_code(str(item.get("topology_status") or "unknown"))
+            + "`"
+            + (
+                "<br>shared mandatory security-route point"
+                if item.get("shared_mandatory_security_route_point")
+                else ""
+            )
+            + " | `"
+            + _markdown_code(str(item.get("path") or "unknown"))
+            + "` | "
+            + str(len(item.get("entry_point_ids") or []))
+            + " entries / "
+            + str(len(item.get("target_ids") or []))
+            + " targets | "
+            + _markdown_text(owner_text or "Unassigned")
+            + "<br>"
+            + _markdown_text(str(item.get("recommended_action") or "Review."))
+            + " |"
+        )
+    return lines
+
+
+def _render_advanced_privacy(values: list[Any]) -> list[str]:
+    review = [
+        item
+        for item in values
+        if isinstance(item, dict)
+        and item.get("review_status") != "protected-static-route"
+    ]
+    if not review:
+        return []
+    lines = [
+        "",
+        "### Telemetry privacy decisions",
+        "",
+        "| Status | Route / boundary | Protection | Action |",
+        "|---|---|---|---|",
+    ]
+    for item in review[:10]:
+        path = str(item.get("path") or "unknown")
+        if isinstance(item.get("line"), int):
+            path += f":{item['line']}"
+        lines.append(
+            "| `"
+            + _markdown_code(str(item.get("review_status") or "review"))
+            + "` | `"
+            + _markdown_code(path)
+            + "`<br>boundary `"
+            + _markdown_code(str(item.get("trust_boundary") or "unknown"))
+            + "` | `"
+            + _markdown_code(str(item.get("protection_status") or "unknown"))
+            + "`<br>redaction `"
+            + _markdown_code(str(item.get("redaction_order") or "not-established"))
+            + "`<br>native control correlation `"
+            + str(
+                len(item.get("control_point_ids_observed_on_every_aligned_path") or [])
+            )
+            + "/"
+            + str(len(item.get("mandatory_control_point_ids") or []))
+            + " mandatory`"
+            + " | "
+            + _markdown_text(str(item.get("recommended_action") or "Review."))
+            + " |"
+        )
+    return lines
+
+
+def _render_advanced_dependencies(values: list[Any]) -> list[str]:
+    elevated = [
+        item
+        for item in values
+        if isinstance(item, dict) and item.get("review_tier") in {"critical", "high"}
+    ]
+    if not elevated:
+        return []
+    lines = [
+        "",
+        "### Elevated dependency trust routes",
+        "",
+        "| Tier | Package / importer | Evidence factors | Action |",
+        "|---|---|---|---|",
+    ]
+    for item in elevated[:10]:
+        factors = item.get("risk_factors")
+        factor_text = (
+            ", ".join(str(value) for value in factors)
+            if isinstance(factors, list)
+            else ""
+        )
+        lines.append(
+            "| `"
+            + _markdown_code(str(item.get("review_tier") or "unknown"))
+            + "` score `"
+            + _markdown_code(str(item.get("review_score") or 0))
+            + "` | `"
+            + _markdown_code(str(item.get("package") or "unknown"))
+            + "`<br>`"
+            + _markdown_code(str(item.get("path") or "unknown"))
+            + "` | "
+            + _markdown_text(factor_text or "No elevated factors retained")
+            + " | "
+            + _markdown_text(str(item.get("recommended_action") or "Review."))
+            + " |"
+        )
+    return lines
+
+
+def _render_risk_path_summary(value: dict[str, Any] | None) -> list[str]:
+    if not isinstance(value, dict) or not isinstance(value.get("summary"), dict):
+        return []
+    summary = value["summary"]
+    routes = value.get("routes")
+    routes = routes if isinstance(routes, list) else []
+    dependency_routes = [
+        route
+        for route in routes
+        if isinstance(route, dict)
+        and isinstance(route.get("target"), dict)
+        and route["target"].get("kind") == "dependency-advisory-import"
+    ]
+    unrouted = value.get("unrouted_targets")
+    unrouted = unrouted if isinstance(unrouted, list) else []
+    unrouted_structural = value.get("unrouted_structural_intersections")
+    unrouted_structural = (
+        unrouted_structural if isinstance(unrouted_structural, list) else []
+    )
+    hotspots = value.get("convergence_hotspots")
+    hotspots = hotspots if isinstance(hotspots, list) else []
+    campaigns = value.get("validation_campaigns")
+    campaigns = campaigns if isinstance(campaigns, list) else []
+    test_hotspots = value.get("validation_test_hotspots")
+    test_hotspots = test_hotspots if isinstance(test_hotspots, list) else []
+    intersections = value.get("exposure_advisory_intersections")
+    intersections = intersections if isinstance(intersections, list) else []
+    sensitive_routes = value.get("sensitive_data_routes")
+    sensitive_routes = sensitive_routes if isinstance(sensitive_routes, list) else []
+    secret_assessments = value.get("secret_provenance_assessments")
+    secret_assessments = (
+        secret_assessments if isinstance(secret_assessments, list) else []
+    )
+    secret_exposure_intersections = value.get("secret_exposure_intersections")
+    secret_exposure_intersections = (
+        secret_exposure_intersections
+        if isinstance(secret_exposure_intersections, list)
+        else []
+    )
+    secret_exposure_advisory_intersections = value.get(
+        "secret_exposure_advisory_intersections"
+    )
+    secret_exposure_advisory_intersections = (
+        secret_exposure_advisory_intersections
+        if isinstance(secret_exposure_advisory_intersections, list)
+        else []
+    )
+    owner_queues = value.get("owner_work_queues")
+    owner_queues = owner_queues if isinstance(owner_queues, list) else []
+    lines = [
+        "",
+        "## Static risk routes",
+        "",
+        (
+            "These bounded Graphify routes retain every matched declared Python entry point to "
+            "review targets and their owner/test evidence. A route is triage context, "
+            "not proof of attacker control, exploitability, or sensitive-data flow."
+        ),
+        "",
+        "| Signal | Count |",
+        "|---|---:|",
+        f"| Declared entry points | {int(summary.get('entry_points', 0))} |",
+        f"| Finding targets | {int(summary.get('finding_targets', 0))} |",
+        f"| Sensitive sink-surface targets | {int(summary.get('sink_surface_targets', 0))} |",
+        f"| Dependency-advisory importer targets | {int(summary.get('dependency_advisory_import_targets', 0))} |",
+        f"| Routed dependency-advisory importers | {int(summary.get('routed_dependency_advisory_imports', 0))} |",
+        f"| Retained declared-entry exposures | {int(summary.get('retained_entry_point_exposures', 0))} |",
+        f"| Entry exposures runtime observed / unobserved / unavailable | {int(summary.get('observed_entry_point_exposures', 0))} / {int(summary.get('unobserved_entry_point_exposures', 0))} / {int(summary.get('entry_point_exposures_without_runtime_evidence', 0))} |",
+        f"| Routes reached by multiple entry points | {int(summary.get('routes_with_multiple_entry_points', 0))} |",
+        f"| Multi-entry routes with unobserved interfaces | {int(summary.get('multi_entry_routes_with_unobserved_interfaces', 0))} |",
+        f"| Multi-entry routes with interface runtime-evidence gaps | {int(summary.get('multi_entry_routes_with_runtime_evidence_gaps', 0))} |",
+        f"| Security routes reached by multiple entry points | {int(summary.get('security_routes_with_multiple_entry_points', 0))} |",
+        f"| Maximum entry points for one route | {int(summary.get('maximum_entry_points_per_route', 0))} |",
+        f"| Routes with entry-point exposure truncation | {int(summary.get('routes_with_entry_point_exposure_truncation', 0))} |",
+        f"| Routes with assured scanner evidence | {int(summary.get('assured_evidence_routes', 0))} |",
+        f"| Single-perspective routes | {int(summary.get('single_perspective_routes', 0))} |",
+        f"| Independently corroborated routes | {int(summary.get('independently_corroborated_routes', 0))} |",
+        f"| Routes with scanner trust / execution gaps | {int(summary.get('routes_with_tool_trust_gaps', 0))} / {int(summary.get('routes_with_tool_execution_gaps', 0))} |",
+        f"| Routes without direct tool assurance | {int(summary.get('routes_without_tool_assurance', 0))} |",
+        f"| Finding routes with comparable lifecycle | {int(summary.get('routes_with_comparable_finding_lifecycle', 0))} |",
+        f"| Finding routes without comparable lifecycle | {int(summary.get('routes_without_comparable_finding_lifecycle', 0))} |",
+        f"| Baseline-new or regressed routes | {int(summary.get('baseline_new_or_regressed_routes', 0))} |",
+        f"| Baseline-new or regressed routes on changed lines | {int(summary.get('baseline_new_or_regressed_changed_routes', 0))} |",
+        f"| Baseline-new or regressed changed routes with validation gaps | {int(summary.get('baseline_new_or_regressed_changed_routes_with_validation_gaps', 0))} |",
+        f"| Pre-existing finding routes on changed lines | {int(summary.get('existing_finding_routes_at_changed_lines', 0))} |",
+        f"| Routes with ownership evidence | {int(summary.get('routes_with_ownership_evidence', 0))} |",
+        f"| Routes crossing ownership boundaries | {int(summary.get('routes_crossing_ownership_boundaries', 0))} |",
+        f"| Exact ownership handoffs | {int(summary.get('ownership_boundaries', 0))} |",
+        f"| Routes with unowned segments | {int(summary.get('routes_with_unowned_segments', 0))} |",
+        f"| Routes without ownership evidence | {int(summary.get('routes_without_ownership_evidence', 0))} |",
+        f"| Distinct route owners | {int(summary.get('distinct_route_owners', 0))} |",
+        f"| Unrouted dependency-advisory importers | {int(summary.get('unrouted_dependency_advisory_imports', 0))} |",
+        f"| Distinct routed dependency advisories | {int(summary.get('distinct_routed_dependency_advisories', 0))} |",
+        f"| Known-exploited / high-EPSS dependency routes | {int(summary.get('known_exploited_dependency_routes', 0))} / {int(summary.get('high_epss_dependency_routes', 0))} |",
+        f"| Dependency routes with fixed versions | {int(summary.get('dependency_routes_with_fixed_versions', 0))} |",
+        f"| Dependency routes with validation gaps | {int(summary.get('dependency_routes_with_validation_gaps', 0))} |",
+        f"| Dependency routes at changed importers | {int(summary.get('dependency_routes_at_changed_importers', 0))} |",
+        f"| Dependency routes with uncovered changed lines | {int(summary.get('dependency_routes_with_uncovered_changed_lines', 0))} |",
+        f"| Dependency routes with comparable source/artifact inventory | {int(summary.get('dependency_routes_with_comparable_package_lifecycle', 0))} |",
+        f"| Dependency routes with source/artifact version drift | {int(summary.get('dependency_routes_with_version_drift', 0))} |",
+        f"| Dependency routes source-only / artifact-only | {int(summary.get('dependency_routes_source_only_in_comparable_inventory', 0))} / {int(summary.get('dependency_routes_artifact_only_in_comparable_inventory', 0))} |",
+        f"| Dependency routes with composition evidence gaps | {int(summary.get('dependency_routes_with_composition_evidence_gaps', 0))} |",
+        f"| Dependency routes with exact fixed version in artifact | {int(summary.get('dependency_routes_with_exact_fixed_version_in_artifact', 0))} |",
+        f"| Exact-path exposure / advisory intersections | {int(summary.get('exposure_advisory_intersections', 0))} |",
+        f"| Known-exploited exposure / advisory intersections | {int(summary.get('known_exploited_exposure_advisory_intersections', 0))} |",
+        f"| Unprotected exposure / advisory intersections | {int(summary.get('unprotected_exposure_advisory_intersections', 0))} |",
+        f"| Exposure / advisory intersections with validation gaps | {int(summary.get('exposure_advisory_intersections_with_validation_gaps', 0))} |",
+        f"| End-to-end sensitive-data routes | {int(summary.get('sensitive_data_routes', 0))} |",
+        f"| Scanner-confirmed / inventory-only sensitive-data routes | {int(summary.get('scanner_confirmed_sensitive_data_routes', 0))} / {int(summary.get('inventory_sensitive_data_routes', 0))} |",
+        f"| Sensitive-data routes without observed protection | {int(summary.get('sensitive_data_routes_without_observed_protection', 0))} |",
+        f"| Sensitive-data routes with runtime-observed entry points | {int(summary.get('sensitive_data_routes_with_runtime_observed_entry_points', 0))} |",
+        f"| Sensitive-data routes with validation / scanner-assurance gaps | {int(summary.get('sensitive_data_routes_with_validation_gaps', 0))} / {int(summary.get('sensitive_data_routes_with_assurance_gaps', 0))} |",
+        f"| Sensitive-data routes crossing ownership boundaries / reached by multiple entry points | {int(summary.get('sensitive_data_routes_crossing_ownership_boundaries', 0))} / {int(summary.get('sensitive_data_routes_with_multiple_entry_points', 0))} |",
+        f"| Sensitive-data routes with / without applicable citations | {int(summary.get('sensitive_data_routes_with_citations', 0))} / {int(summary.get('sensitive_data_routes_without_citations', 0))} |",
+        f"| Secret candidates assessed / total | {int(summary.get('secret_candidates_assessed', 0))} / {int(summary.get('secret_candidates', 0))} |",
+        f"| Secret candidates in production / test / generated evidence | {int(summary.get('production_source_secret_candidates', 0))} / {int(summary.get('test_source_secret_candidates', 0))} / {int(summary.get('generated_evidence_secret_candidates', 0))} |",
+        f"| Secret candidates in artifacts / repository controls | {int(summary.get('artifact_secret_candidates', 0))} / {int(summary.get('repository_control_secret_candidates', 0))} |",
+        f"| Secret candidates with history / scanner verification | {int(summary.get('history_secret_candidates', 0))} / {int(summary.get('verified_secret_candidates', 0))} |",
+        f"| Secret candidates without verification / with multiple scanners | {int(summary.get('secret_candidates_without_verification', 0))} / {int(summary.get('multi_scanner_secret_candidates', 0))} |",
+        f"| Secret candidates with assurance gaps / without redaction marker | {int(summary.get('secret_candidates_with_assurance_gaps', 0))} / {int(summary.get('secret_candidates_without_redaction_marker', 0))} |",
+        f"| Secret / sensitive-sink route intersections | {int(summary.get('secret_exposure_intersections', 0))} |",
+        f"| Exact-path / upstream-route secret intersections | {int(summary.get('exact_path_secret_exposure_intersections', 0))} / {int(summary.get('upstream_route_secret_exposure_intersections', 0))} |",
+        f"| Verified / historical secret intersections | {int(summary.get('verified_secret_exposure_intersections', 0))} / {int(summary.get('history_secret_exposure_intersections', 0))} |",
+        f"| Unprotected / scanner-confirmed secret intersections | {int(summary.get('unprotected_secret_exposure_intersections', 0))} / {int(summary.get('scanner_confirmed_secret_exposure_intersections', 0))} |",
+        f"| Secret intersections with contributing assurance gaps | {int(summary.get('secret_exposure_intersections_with_assurance_gaps', 0))} |",
+        f"| Secret intersections with / without candidate tests | {int(summary.get('secret_exposure_intersections_with_candidate_tests', 0))} / {int(summary.get('secret_exposure_intersections_without_candidate_tests', 0))} |",
+        f"| Secret intersections with validation / revision gaps | {int(summary.get('secret_exposure_intersections_with_validation_evidence_gaps', 0))} / {int(summary.get('secret_exposure_intersections_with_revision_gaps', 0))} |",
+        f"| Secret intersections with failing tests / assurance-prerequisite gaps | {int(summary.get('secret_exposure_intersections_with_failing_tests', 0))} / {int(summary.get('secret_exposure_intersections_with_assurance_prerequisite_gaps', 0))} |",
+        f"| Secret intersections without explicit canary validation | {int(summary.get('secret_exposure_intersections_without_canary_validation', 0))} |",
+        f"| Secret / sensitive-sink / advisory intersections | {int(summary.get('secret_exposure_advisory_intersections', 0))} |",
+        f"| Known-exploited / fix-available compound intersections | {int(summary.get('known_exploited_secret_exposure_advisory_intersections', 0))} / {int(summary.get('fix_available_secret_exposure_advisory_intersections', 0))} |",
+        f"| Verified-secret / unprotected compound intersections | {int(summary.get('verified_secret_exposure_advisory_intersections', 0))} / {int(summary.get('unprotected_secret_exposure_advisory_intersections', 0))} |",
+        f"| Runtime-observed compound intersections | {int(summary.get('runtime_observed_secret_exposure_advisory_intersections', 0))} |",
+        f"| Compound intersections with validation / assurance / temporal gaps | {int(summary.get('secret_exposure_advisory_intersections_with_validation_gaps', 0))} / {int(summary.get('secret_exposure_advisory_intersections_with_assurance_gaps', 0))} / {int(summary.get('secret_exposure_advisory_intersections_with_temporal_gaps', 0))} |",
+        f"| Compound intersections without explicit canary validation | {int(summary.get('secret_exposure_advisory_intersections_without_canary_validation', 0))} |",
+        f"| Targets analyzed within bound | {int(summary.get('targets_analyzed', 0))} |",
+        f"| Python route-applicable / intentionally non-runtime targets | {int(summary.get('route_applicable_targets', 0))} / {int(summary.get('route_not_applicable_targets', 0))} |",
+        f"| Targets with a bounded route | {int(summary.get('routed_targets', 0))} |",
+        f"| Targets without a bounded route (all dispositions) | {int(summary.get('unrouted_targets', 0))} |",
+        f"| Actionable Python route gaps / expected non-runtime dispositions | {int(summary.get('unrouted_route_applicable_targets', 0))} / {int(summary.get('unrouted_expected_non_runtime_targets', 0))} |",
+        f"| Python targets absent from graph / without an entry route | {int(summary.get('unrouted_targets_missing_graph_membership', 0))} / {int(summary.get('unrouted_targets_without_entry_route', 0))} |",
+        f"| Unrouted target / structural-island intersections | {int(summary.get('unrouted_structural_intersections', 0))} |",
+        f"| Unrouted targets in disconnected islands | {int(summary.get('unrouted_targets_in_disconnected_islands', 0))} |",
+        f"| Unrouted targets with runtime counter-evidence / dead-code corroboration | {int(summary.get('unrouted_targets_with_runtime_counter_evidence', 0))} / {int(summary.get('unrouted_targets_with_dead_code_corroboration', 0))} |",
+        f"| Unrouted targets with candidate entry paths | {int(summary.get('unrouted_targets_with_candidate_entry_paths', 0))} |",
+        f"| Unrouted structural intersections with validation gaps | {int(summary.get('unrouted_structural_intersections_with_validation_gaps', 0))} |",
+        f"| Runtime-observed routes | {int(summary.get('runtime_observed_routes', 0))} |",
+        f"| Routes with line-coverage gaps | {int(summary.get('coverage_gap_routes', 0))} |",
+        f"| Routes with validation gaps | {int(summary.get('validation_gap_routes', 0))} |",
+        f"| Routes with validation evidence | {int(summary.get('validation_assessed_routes', 0))} |",
+        f"| Routes not validation-assessed | {int(summary.get('validation_unassessed_routes', 0))} |",
+        f"| Routes with an assigned owner | {int(summary.get('owned_routes', 0))} |",
+        f"| Shared route convergence hotspots | {int(summary.get('convergence_hotspots', 0))} |",
+        f"| Shared transit/control points | {int(summary.get('shared_control_points', 0))} |",
+        f"| Routes benefiting from shared remediation | {int(summary.get('routes_in_convergence_hotspots', 0))} |",
+        f"| Owner work queues | {int(summary.get('owner_work_queues', 0))} |",
+        f"| Owner queues with exposure / advisory intersections | {int(summary.get('owner_queues_with_exposure_advisory_intersections', 0))} |",
+        f"| Shared validation campaigns | {int(summary.get('validation_campaigns', 0))} |",
+        f"| Shared validation-test hotspots | {int(summary.get('shared_validation_test_hotspots', 0))} |",
+        f"| Campaigns using shared tests | {int(summary.get('campaigns_using_shared_tests', 0))} |",
+        f"| Routes using shared tests | {int(summary.get('routes_using_shared_tests', 0))} |",
+        f"| Campaigns dependent on one shared test | {int(summary.get('single_test_dependency_campaigns', 0))} |",
+        f"| Shared-test evidence strong / qualified / weak / not established | {int(summary.get('shared_test_hotspots_strong', 0))} / {int(summary.get('shared_test_hotspots_qualified', 0))} / {int(summary.get('shared_test_hotspots_weak', 0))} / {int(summary.get('shared_test_hotspots_not_established', 0))} |",
+        f"| Shared test files with findings / high-severity findings | {int(summary.get('shared_test_files_with_findings', 0))} / {int(summary.get('shared_test_files_with_high_severity_findings', 0))} |",
+        f"| Cross-owner / unowned shared test files | {int(summary.get('cross_owner_shared_test_files', 0))} / {int(summary.get('unowned_shared_test_files', 0))} |",
+        f"| Campaigns with selected tests | {int(summary.get('campaigns_with_selected_tests', 0))} |",
+        f"| Campaigns with failing tests | {int(summary.get('campaigns_with_failing_tests', 0))} |",
+        f"| Campaigns with coverage gaps | {int(summary.get('campaigns_with_coverage_gaps', 0))} |",
+        f"| Campaigns at changed control points | {int(summary.get('campaigns_with_changed_controls', 0))} |",
+        f"| Campaigns with uncovered changed lines | {int(summary.get('campaigns_with_uncovered_changed_lines', 0))} |",
+        f"| Campaigns with runtime-observation gaps | {int(summary.get('campaigns_with_runtime_observation_gaps', 0))} |",
+        f"| Campaigns with route tool-assurance prerequisite met | {int(summary.get('campaigns_with_assured_route_evidence', 0))} |",
+        f"| Campaigns blocked by route tool assurance | {int(summary.get('campaigns_blocked_by_route_assurance', 0))} |",
+        f"| Campaigns with route trust / execution / unassessed gaps | {int(summary.get('campaigns_with_route_trust_gaps', 0))} / {int(summary.get('campaigns_with_route_execution_gaps', 0))} / {int(summary.get('campaigns_with_unassessed_route_evidence', 0))} |",
+        f"| Campaigns with single-perspective routes | {int(summary.get('campaigns_with_route_perspective_gaps', 0))} |",
+        f"| Campaigns with qualified / weak shared-test evidence | {int(summary.get('campaigns_with_qualified_shared_test_evidence', 0))} / {int(summary.get('campaigns_with_weak_shared_test_evidence', 0))} |",
+        f"| Campaigns aligned in current evidence | {int(summary.get('campaigns_aligned_current_evidence', 0))} |",
+        f"| Campaigns requiring more evidence | {int(summary.get('campaigns_requiring_evidence', 0))} |",
+        f"| Unique campaign test files | {int(summary.get('unique_campaign_test_files', 0))} |",
+        f"| Critical / high review campaigns | {int((summary.get('campaigns_by_review_tier') or {}).get('critical', 0))} / {int((summary.get('campaigns_by_review_tier') or {}).get('high', 0))} |",
+        f"| Campaign evidence revision-aligned | {int(summary.get('campaigns_revision_aligned', 0))} |",
+        f"| Campaign evidence revision-mismatched | {int(summary.get('campaigns_revision_mismatched', 0))} |",
+        f"| Campaign evidence digest-matched but binding-unverified | {int(summary.get('campaigns_revision_unverified', 0))} |",
+        f"| Campaign evidence revision not established | {int(summary.get('campaigns_revision_unbound', 0))} |",
+        f"| Source-bound shared control points | {int(summary.get('campaigns_with_source_bound_control_points', 0))} |",
+        f"| Selected-test source bindings | {int(summary.get('selected_test_source_bindings', 0))} |",
+        "",
+    ]
+    if routes:
+        lines.extend(
+            [
+                "| Priority / target | Entry point and bounded route | Runtime / validation | Owner and action |",
+                "|---|---|---|---|",
+            ]
+        )
+        for route in routes[:10]:
+            if not isinstance(route, dict):
+                continue
+            target = route.get("target")
+            entry = route.get("entry_point")
+            validation = route.get("validation")
+            runtime = route.get("runtime_context")
+            assurance = route.get("evidence_assurance")
+            lifecycle = route.get("change_lifecycle_attribution")
+            ownership = route.get("ownership_context")
+            target = target if isinstance(target, dict) else {}
+            entry = entry if isinstance(entry, dict) else {}
+            validation = validation if isinstance(validation, dict) else {}
+            runtime = runtime if isinstance(runtime, dict) else {}
+            files = route.get("files")
+            file_values = files if isinstance(files, list) else []
+            route_text = " → ".join(str(item) for item in file_values[:5])
+            if len(file_values) > 5:
+                route_text += f" → … (+{len(file_values) - 5})"
+            signals = _risk_path_validation_signals(validation, runtime)
+            owners = route.get("owners")
+            owner_text = (
+                ", ".join(str(item) for item in owners[:3])
+                if isinstance(owners, list) and owners
+                else "Unassigned"
+            )
+            lines.append(
+                "| `"
+                + _markdown_code(str(route.get("priority") or "P4"))
+                + "` "
+                + _markdown_text(
+                    str(target.get("label") or target.get("id") or "target")
+                )
+                + "<br>`"
+                + _markdown_code(
+                    str(target.get("path") or "unknown")
+                    + (f":{target['line']}" if target.get("line") else "")
+                )
+                + "` | `"
+                + _markdown_code(
+                    str(entry.get("declared_as") or entry.get("id") or "unknown")
+                )
+                + "`<br>"
+                + _markdown_text(route_text or "same-file entry point")
+                + "<br>"
+                + _markdown_text(_entry_point_exposure_text(route))
+                + " | "
+                + _markdown_text(signals)
+                + "<br>evidence "
+                + _markdown_text(_evidence_assurance_text(assurance))
+                + "<br>lifecycle "
+                + _markdown_text(_change_lifecycle_text(lifecycle))
+                + "<br>ownership "
+                + _markdown_text(_route_ownership_text(ownership))
+                + " | **"
+                + _markdown_text(owner_text)
+                + "**<br>"
+                + _markdown_text(
+                    str(route.get("recommended_action") or "Review the route.")
+                )
+                + " |"
+            )
+    lines.extend(_render_dependency_route_table(dependency_routes))
+    lines.extend(_render_sensitive_data_routes(sensitive_routes))
+    lines.extend(_render_secret_provenance_assessments(secret_assessments))
+    lines.extend(_render_secret_exposure_intersections(secret_exposure_intersections))
+    lines.extend(
+        _render_secret_exposure_advisory_intersections(
+            secret_exposure_advisory_intersections
+        )
+    )
+    lines.extend(_render_exposure_advisory_intersections(intersections))
+    if test_hotspots:
+        lines.extend(
+            [
+                "",
+                "### Shared validation-test hotspots",
+                "",
+                "These test files are selected by multiple shared-control campaigns. Concentration coordinates regression work but does not prove independent assertions or sufficient coverage.",
+                "",
+                "| Review / test | Campaigns / controls / routes | Selection / dependency | Execution / source | Owners / action |",
+                "|---|---:|---|---|---|",
+            ]
+        )
+        for hotspot in test_hotspots[:10]:
+            if not isinstance(hotspot, dict):
+                continue
+            owners = hotspot.get("owners")
+            owner_text = (
+                ", ".join(str(owner) for owner in owners[:3])
+                if isinstance(owners, list) and owners
+                else "Unassigned"
+            )
+            test_owners = hotspot.get("test_file_owners")
+            test_owner_text = (
+                ", ".join(str(owner) for owner in test_owners[:3])
+                if isinstance(test_owners, list) and test_owners
+                else "Unassigned"
+            )
+            statuses = hotspot.get("execution_statuses")
+            status_text = (
+                ", ".join(str(status) for status in statuses[:5])
+                if isinstance(statuses, list) and statuses
+                else "not observed"
+            )
+            binding = hotspot.get("source_binding")
+            source_text = (
+                "bound"
+                if isinstance(binding, dict)
+                and hotspot.get("source_binding_consistent") is True
+                else "not established"
+                if hotspot.get("source_binding_consistent") is False
+                else "not bound"
+            )
+            lines.append(
+                "| `"
+                + _markdown_code(str(hotspot.get("highest_review_tier") or "low"))
+                + "` score `"
+                + _markdown_code(str(int(hotspot.get("highest_review_score") or 0)))
+                + "`<br>`"
+                + _markdown_code(str(hotspot.get("test_path") or "unknown"))
+                + "`<br>`"
+                + _markdown_code(str(hotspot.get("test_hotspot_id") or "unknown"))
+                + "` | "
+                + str(len(hotspot.get("campaign_ids") or []))
+                + " / "
+                + str(len(hotspot.get("control_point_paths") or []))
+                + " / "
+                + str(len(hotspot.get("route_ids") or []))
+                + " | direct/transitive/context `"
+                + _markdown_code(
+                    str(int(hotspot.get("direct_campaigns") or 0))
+                    + "/"
+                    + str(int(hotspot.get("transitive_campaigns") or 0))
+                    + "/"
+                    + str(int(hotspot.get("route_mapped_campaigns") or 0))
+                )
+                + "`<br>sole dependency `"
+                + _markdown_code(
+                    str(len(hotspot.get("single_test_dependency_campaign_ids") or []))
+                )
+                + "` | status `"
+                + _markdown_code(status_text)
+                + "`; cases `"
+                + _markdown_code(str(int(hotspot.get("observed_case_count") or 0)))
+                + "`<br>source `"
+                + _markdown_code(source_text)
+                + "`<br>quality `"
+                + _markdown_code(
+                    str(
+                        hotspot.get("validation_quality_assessment")
+                        or "not-established"
+                    )
+                )
+                + "`; test findings `"
+                + _markdown_code(str(len(hotspot.get("test_file_finding_ids") or [])))
+                + "` | **"
+                + _markdown_text(owner_text)
+                + "** campaign<br>**"
+                + _markdown_text(test_owner_text)
+                + "** test (`"
+                + _markdown_code(
+                    str(hotspot.get("test_owner_alignment") or "not-established")
+                )
+                + "`)<br>"
+                + _markdown_text(
+                    str(
+                        hotspot.get("recommended_action") or "Review shared test scope."
+                    )
+                )
+                + " |"
+            )
+    if campaigns:
+        lines.extend(
+            [
+                "",
+                "### Shared validation campaigns",
+                "",
+                "Each campaign converts one shared control point into a bounded regression plan. Test selection is static context; even passing tests with complete retained coverage do not prove security or exploitability.",
+                "",
+                "| Review / campaign | Selected tests | Execution / coverage | Evidence coherence | Owners / action |",
+                "|---|---|---|---|---|",
+            ]
+        )
+        for campaign in campaigns[:10]:
+            if not isinstance(campaign, dict):
+                continue
+            selected = campaign.get("selected_test_files")
+            selected = selected if isinstance(selected, list) else []
+            tests = ", ".join(f"`{_markdown_code(str(path))}`" for path in selected[:5])
+            if len(selected) > 5:
+                tests += f" (+{len(selected) - 5})"
+            owners = campaign.get("owners")
+            owner_text = (
+                ", ".join(str(owner) for owner in owners[:3])
+                if isinstance(owners, list) and owners
+                else "Unassigned"
+            )
+            coverage = campaign.get("coverage_percent")
+            coverage_text = (
+                f"{float(coverage):.1f}%"
+                if isinstance(coverage, (int, float))
+                else "not available"
+            )
+            snapshot = campaign.get("source_snapshot")
+            snapshot = snapshot if isinstance(snapshot, dict) else {}
+            revision = str(
+                snapshot.get("evidence_revision_binding") or "not-established"
+            )
+            route_assurance_text = _campaign_route_assurance_text(campaign)
+            context_text = _risk_campaign_control_text(campaign)
+            factor_text = _risk_campaign_factor_text(campaign)
+            lines.append(
+                "| `"
+                + _markdown_code(str(campaign.get("review_tier") or "low"))
+                + "` score `"
+                + _markdown_code(str(int(campaign.get("review_score") or 0)))
+                + "`"
+                + ("<br>factors " + _markdown_text(factor_text) if factor_text else "")
+                + "<br>route priority `"
+                + _markdown_code(str(campaign.get("priority") or "P4"))
+                + "`<br>`"
+                + _markdown_code(str(campaign.get("campaign_id") or "unknown"))
+                + "`<br>`"
+                + _markdown_code(str(campaign.get("path") or "unknown"))
+                + "` | "
+                + (tests or "No bounded test candidate")
+                + "<br>selection `"
+                + _markdown_code(
+                    str(campaign.get("test_selection_confidence") or "not-available")
+                )
+                + "` | execution `"
+                + _markdown_code(
+                    str(
+                        campaign.get("focused_test_validation_status")
+                        or "not-available"
+                    )
+                )
+                + "`<br>aggregate coverage `"
+                + _markdown_code(
+                    str(campaign.get("coverage_status") or "not-available")
+                )
+                + "` ("
+                + coverage_text
+                + ")<br>alignment `"
+                + _markdown_code(
+                    str(campaign.get("test_coverage_alignment") or "not-selected")
+                )
+                + "`"
+                + ("<br>" + _markdown_text(context_text) if context_text else "")
+                + " | revision `"
+                + _markdown_code(revision)
+                + "`<br>control bound `"
+                + _markdown_code(
+                    "yes" if snapshot.get("control_point_binding") else "no"
+                )
+                + "`; tests bound `"
+                + _markdown_code(
+                    str(int(snapshot.get("selected_test_files_bound") or 0))
+                )
+                + "`<br>route evidence "
+                + _markdown_text(route_assurance_text)
+                + "<br>shared tests "
+                + _markdown_text(_campaign_shared_test_quality_text(campaign))
+                + " | **"
+                + _markdown_text(owner_text)
+                + "**<br>"
+                + _markdown_text(
+                    str(campaign.get("recommended_action") or "Run the campaign.")
+                )
+                + " |"
+            )
+    if hotspots:
+        lines.extend(
+            [
+                "",
+                "### Shared route control points",
+                "",
+                "These files occur on multiple distinct target routes. Review shared remediation and integration-test scope before creating duplicate work.",
+                "",
+                "| Priority / control point | Role | Routes / targets | Owners | Validation | Consolidated action |",
+                "|---|---|---:|---|---|---|",
+            ]
+        )
+        for hotspot in hotspots[:10]:
+            if not isinstance(hotspot, dict):
+                continue
+            validation = hotspot.get("validation_statuses")
+            validation = validation if isinstance(validation, dict) else {}
+            owners = hotspot.get("owners")
+            owner_text = (
+                ", ".join(str(item) for item in owners[:3])
+                if isinstance(owners, list) and owners
+                else "Unassigned"
+            )
+            lines.append(
+                "| `"
+                + _markdown_code(str(hotspot.get("priority") or "P4"))
+                + "` `"
+                + _markdown_code(str(hotspot.get("path") or "unknown"))
+                + "`<br>`"
+                + _markdown_code(str(hotspot.get("hotspot_id") or "unknown"))
+                + "` | `"
+                + _markdown_code(str(hotspot.get("kind") or "unknown"))
+                + "` | "
+                + str(len(hotspot.get("route_ids") or []))
+                + " / "
+                + str(len(hotspot.get("target_ids") or []))
+                + " | "
+                + _markdown_text(owner_text)
+                + " | "
+                + _markdown_text(_validation_count_summary(validation))
+                + " | "
+                + _markdown_text(
+                    str(hotspot.get("recommended_action") or "Review shared scope.")
+                )
+                + " |"
+            )
+    lines.extend(_render_risk_owner_queues(owner_queues))
+    lines.extend(_render_unrouted_structural_intersections(unrouted_structural))
+    if unrouted:
+        lines.extend(
+            [
+                "",
+                "### Unrouted target dispositions",
+                "",
+                "Only Python runtime-source targets are reachability gaps. Artifact controls, generated evidence, tests, and non-Python repository controls retain their findings but receive their native evidence-lane action instead of misleading entry-point advice.",
+                "",
+                "| Applicability | Target | Evidence | Action |",
+                "|---|---|---|---|",
+            ]
+        )
+        for item in unrouted[:10]:
+            if not isinstance(item, dict):
+                continue
+            target = item.get("target")
+            target = target if isinstance(target, dict) else {}
+            applicability = item.get("route_applicability")
+            applicability = applicability if isinstance(applicability, dict) else {}
+            lines.append(
+                "| `"
+                + _markdown_code(
+                    str(applicability.get("assessment") or "not-established")
+                )
+                + "`<br>`"
+                + _markdown_code(
+                    str(applicability.get("classification") or "not-established")
+                )
+                + "` | `"
+                + _markdown_code(str(item.get("priority") or "P4"))
+                + "` `"
+                + _markdown_code(str(target.get("path") or "unknown"))
+                + "`<br>"
+                + _markdown_text(str(item.get("reason") or "route unavailable"))
+                + " | graph/source/artifact `"
+                + _markdown_code(_route_applicability_membership_text(applicability))
+                + "`<br>scanner "
+                + _markdown_text(
+                    _evidence_assurance_text(item.get("evidence_assurance"))
+                )
+                + " | "
+                + _markdown_text(
+                    str(
+                        item.get("recommended_action")
+                        or applicability.get("recommended_action")
+                        or "Review the target in its native evidence lane."
+                    )
+                )
+                + " |"
+            )
+    return lines
+
+
+def _render_unrouted_structural_intersections(values: list[Any]) -> list[str]:
+    if not values:
+        return []
+    lines = [
+        "",
+        "### Unrouted target / structural-island decisions",
+        "",
+        (
+            "These exact retained island-membership joins combine route gaps with "
+            "reachability, Graphify boundaries, dead-code corroboration, runtime "
+            "counter-evidence, coverage, tests, and ownership. They guide a missing-"
+            "entry-point versus dormant-capability decision; they do not prove dead "
+            "code, safety, exploitability, or production inaccessibility."
+        ),
+        "",
+        "| Priority / target | Island / evidence | Decision | Validation / owner / action |",
+        "|---|---|---|---|",
+    ]
+    for item in values[:10]:
+        if not isinstance(item, dict):
+            continue
+        validation = item.get("target_validation")
+        validation = validation if isinstance(validation, dict) else {}
+        owners = item.get("coordination_owners")
+        owner_values = owners if isinstance(owners, list) else []
+        candidate_entries = item.get("candidate_entry_paths")
+        entry_values = candidate_entries if isinstance(candidate_entries, list) else []
+        tests = item.get("direct_test_files")
+        test_values = tests if isinstance(tests, list) else []
+        lines.append(
+            "| `"
+            + _markdown_code(str(item.get("priority") or "P4"))
+            + "` `"
+            + _markdown_code(str(item.get("path") or "unknown"))
+            + "`"
+            + (
+                ":" + str(int(item["line"]))
+                if isinstance(item.get("line"), int)
+                else ""
+            )
+            + "<br>`"
+            + _markdown_code(str(item.get("target_kind") or "unknown"))
+            + "` | `"
+            + _markdown_code(str(item.get("island_id") or "unknown"))
+            + "`<br>state `"
+            + _markdown_code(str(item.get("island_state") or "unknown"))
+            + "`; boundary `"
+            + _markdown_code(
+                str(item.get("boundary_classification") or "not-established")
+            )
+            + "`; membership `"
+            + _markdown_code(str(item.get("evidence_basis") or "unknown"))
+            + "` | `"
+            + _markdown_code(str(item.get("risk_signal") or "unknown"))
+            + "`<br>`"
+            + _markdown_code(str(item.get("decision") or "review"))
+            + "`"
+            + (
+                "<br>candidate entry "
+                + ", ".join(
+                    "`" + _markdown_code(str(path)) + "`" for path in entry_values[:3]
+                )
+                if entry_values
+                else ""
+            )
+            + " | validation `"
+            + _markdown_code(str(validation.get("assessment_status") or "not-assessed"))
+            + "`; tests "
+            + (
+                ", ".join(
+                    "`" + _markdown_code(str(path)) + "`" for path in test_values[:3]
+                )
+                if test_values
+                else "not mapped"
+            )
+            + "<br>owner "
+            + _markdown_text(
+                ", ".join(str(owner) for owner in owner_values) or "unassigned"
+            )
+            + "<br>"
+            + _markdown_text(str(item.get("recommended_action") or "Review."))
+            + " |"
+        )
+    if len(values) > 10:
+        lines.extend(
+            [
+                "",
+                f"{len(values) - 10} additional retained structural intersection(s) are available in `risk-paths.json`.",
+            ]
+        )
+    return lines
+
+
+def _render_sensitive_data_routes(values: list[Any]) -> list[str]:
+    if not values:
+        return []
+    lines = [
+        "",
+        "### End-to-end sensitive-data routes",
+        "",
+        (
+            "These records join scanner-confirmed exposure findings or review-worthy "
+            "sink inventory to declared entry points, trust boundaries, observed "
+            "protections, scanner assurance, validation, and ownership. They are "
+            "bounded static review paths, not proof of attacker control, runtime "
+            "data flow, disclosure, or regulatory impact. Retained citations support "
+            "classification and remediation guidance; they do not validate the route."
+        ),
+        "",
+        "| Priority / evidence | Entry route / boundary | Data / protection | Assurance / validation | Owner / action |",
+        "|---|---|---|---|---|",
+    ]
+    for value in values[:10]:
+        if not isinstance(value, dict):
+            continue
+        entry_ids = value.get("entry_point_ids")
+        entries = entry_ids if isinstance(entry_ids, list) else []
+        data_classes = value.get("data_classes")
+        classes = data_classes if isinstance(data_classes, list) else []
+        owners = value.get("owners")
+        owner_values = owners if isinstance(owners, list) else []
+        runtime = value.get("entry_point_runtime_statuses")
+        runtime_text = _entry_runtime_status_text(runtime)
+        citations = _risk_advisory_citations_text(value.get("citations"))
+        path = str(value.get("path") or "unknown")
+        if value.get("line"):
+            path += f":{value['line']}"
+        lines.append(
+            "| `"
+            + _markdown_code(str(value.get("priority") or "P4"))
+            + "` `"
+            + _markdown_code(str(value.get("evidence_basis") or "unknown"))
+            + "`<br>`"
+            + _markdown_code(str(value.get("sensitive_route_id") or "unknown"))
+            + "`<br>`"
+            + _markdown_code(path)
+            + "` | "
+            + _markdown_text(
+                ", ".join(str(item) for item in entries[:3]) or "No retained entry"
+            )
+            + "<br>"
+            + _markdown_text(runtime_text)
+            + "<br>sink `"
+            + _markdown_code(str(value.get("sink_family") or "unknown"))
+            + "`; boundary `"
+            + _markdown_code(str(value.get("trust_boundary") or "unknown"))
+            + "` | "
+            + _markdown_text(
+                ", ".join(str(item) for item in classes[:5]) or "Unclassified"
+            )
+            + "<br>protection `"
+            + _markdown_code(str(value.get("protection_status") or "unknown"))
+            + "`"
+            + (
+                "<br>SDK `" + _markdown_code(str(value["sdk"])) + "`"
+                if value.get("sdk")
+                else ""
+            )
+            + ("<br>guidance " + citations if citations else "<br>guidance unavailable")
+            + " | scanner `"
+            + _markdown_code(
+                str(value.get("evidence_assurance_status") or "not-assessed")
+            )
+            + "`<br>validation `"
+            + _markdown_code(str(value.get("validation_status") or "not-assessed"))
+            + "` | **"
+            + _markdown_text(
+                ", ".join(str(item) for item in owner_values[:3]) or "Unassigned"
+            )
+            + "**<br>handoffs `"
+            + _markdown_code(str(int(value.get("ownership_boundaries") or 0)))
+            + "`<br>"
+            + _markdown_text(
+                str(
+                    value.get("recommended_action")
+                    or "Review the sensitive-data route."
+                )
+            )
+            + " |"
+        )
+    return lines
+
+
+def _render_secret_provenance_assessments(values: list[Any]) -> list[str]:
+    if not values:
+        return []
+    lines = [
+        "",
+        "### Secret candidate provenance",
+        "",
+        (
+            "These records join redacted secret-scanner candidates with content lane, "
+            "source/graph/artifact membership, history mode, scanner verification and "
+            "assurance, lifecycle, and ownership. Generated evidence or test context "
+            "is not an automatic false-positive disposition, and scanner verification "
+            "does not establish current usability or scope."
+        ),
+        "",
+        "| Priority / candidate | Content / inventory | Verification / history | Scanner / owner | Action |",
+        "|---|---|---|---|---|",
+    ]
+    for value in values[:10]:
+        if not isinstance(value, dict):
+            continue
+        path = str(value.get("path") or "unknown")
+        if value.get("line"):
+            path += f":{value['line']}"
+        tools = value.get("scanner_tools")
+        tool_values = tools if isinstance(tools, list) else []
+        owners = value.get("owners")
+        owner_values = owners if isinstance(owners, list) else []
+        citations = _risk_advisory_citations_text(value.get("citations"))
+        inventory = "; ".join(
+            (
+                _secret_membership_text(
+                    "source",
+                    value.get("source_inventory_available"),
+                    value.get("source_inventory_member"),
+                ),
+                _secret_membership_text(
+                    "graph",
+                    value.get("graph_available"),
+                    value.get("graph_path_member"),
+                ),
+                _secret_membership_text(
+                    "artifact",
+                    value.get("artifact_manifest_available"),
+                    value.get("artifact_manifest_member"),
+                ),
+            )
+        )
+        lines.append(
+            "| `"
+            + _markdown_code(str(value.get("priority") or "P4"))
+            + "` `"
+            + _markdown_code(str(value.get("secret_context_id") or "unknown"))
+            + "`<br>`"
+            + _markdown_code(path)
+            + "`<br>finding `"
+            + _markdown_code(str(value.get("finding_id") or "unknown"))
+            + "` | `"
+            + _markdown_code(str(value.get("content_lane") or "unknown"))
+            + "`<br>disposition `"
+            + _markdown_code(str(value.get("review_disposition") or "unknown"))
+            + "`<br>"
+            + _markdown_text(inventory)
+            + "<br>redacted `"
+            + _markdown_code("yes" if value.get("redacted") is True else "no")
+            + "` | verification `"
+            + _markdown_code(str(value.get("verification_status") or "not-established"))
+            + "`<br>history `"
+            + _markdown_code(str(value.get("history_status") or "not-established"))
+            + "`<br>lifecycle `"
+            + _markdown_code(str(value.get("lifecycle_status") or "unclassified"))
+            + "` | "
+            + _markdown_text(
+                ", ".join(str(item) for item in tool_values[:5]) or "Unattributed"
+            )
+            + "<br>perspective `"
+            + _markdown_code(str(value.get("scanner_perspective") or "single-scanner"))
+            + "`; assurance `"
+            + _markdown_code(
+                str(value.get("evidence_assurance_status") or "not-assessed")
+            )
+            + "`<br>owner **"
+            + _markdown_text(
+                ", ".join(str(item) for item in owner_values[:3]) or "Unassigned"
+            )
+            + "**"
+            + ("<br>" + citations if citations else "")
+            + " | "
+            + _markdown_text(
+                str(value.get("recommended_action") or "Review the redacted candidate.")
+            )
+            + " |"
+        )
+    return lines
+
+
+def _secret_membership_text(label: str, available: Any, member: Any) -> str:
+    if available is not True:
+        return f"{label} not available"
+    if member is True:
+        return f"{label} member"
+    if member is False:
+        return f"{label} absent"
+    return f"{label} unknown"
+
+
+def _render_secret_exposure_intersections(values: list[Any]) -> list[str]:
+    if not values:
+        return []
+    lines = [
+        "",
+        "### Secret-to-sensitive-sink route intersections",
+        "",
+        (
+            "These records identify a redacted production-source secret candidate in "
+            "the exact sink file or on the bounded Graphify file route to a sensitive "
+            "sink. This is a focused review signal, not symbol-level taint proof, "
+            "credential validation, runtime execution evidence, or proof of disclosure."
+        ),
+        "",
+        "| Priority / relationship | Secret candidate | Sensitive sink | Evidence / assurance | Owners / action |",
+        "|---|---|---|---|---|",
+    ]
+    for value in values[:10]:
+        if not isinstance(value, dict):
+            continue
+        secret_path = str(value.get("secret_path") or "unknown")
+        if value.get("secret_line"):
+            secret_path += f":{value['secret_line']}"
+        sink_path = str(value.get("sink_path") or "unknown")
+        if value.get("sink_line"):
+            sink_path += f":{value['sink_line']}"
+        owners = value.get("owners")
+        owner_values = owners if isinstance(owners, list) else []
+        citations = _risk_advisory_citations_text(value.get("citations"))
+        handoff = value.get("validation_handoff")
+        handoff = handoff if isinstance(handoff, dict) else {}
+        candidate_tests = handoff.get("candidate_test_files")
+        candidate_tests = candidate_tests if isinstance(candidate_tests, list) else []
+        focused_statuses = handoff.get("focused_test_statuses")
+        focused_statuses = (
+            focused_statuses if isinstance(focused_statuses, list) else []
+        )
+        alignments = handoff.get("test_coverage_alignments")
+        alignments = alignments if isinstance(alignments, list) else []
+        revisions = handoff.get("source_revision_bindings")
+        revisions = revisions if isinstance(revisions, list) else []
+        lines.append(
+            "| `"
+            + _markdown_code(str(value.get("priority") or "P4"))
+            + "` `"
+            + _markdown_code(str(value.get("association_kind") or "unknown"))
+            + "`<br>distance `"
+            + _markdown_code(str(value.get("distance_to_sink") or 0))
+            + "` file hop(s)<br>temporal `"
+            + _markdown_code(str(value.get("temporal_alignment") or "not-established"))
+            + "` | `"
+            + _markdown_code(secret_path)
+            + "`<br>verification `"
+            + _markdown_code(
+                str(value.get("secret_verification_status") or "not-established")
+            )
+            + "` | `"
+            + _markdown_code(sink_path)
+            + "`<br>family `"
+            + _markdown_code(str(value.get("sink_family") or "unknown"))
+            + "`; boundary `"
+            + _markdown_code(str(value.get("trust_boundary") or "unknown"))
+            + "`<br>protection `"
+            + _markdown_code(str(value.get("protection_status") or "unknown"))
+            + "` | basis `"
+            + _markdown_code(str(value.get("sensitive_evidence_basis") or "unknown"))
+            + "`<br>secret `"
+            + _markdown_code(
+                str(value.get("secret_assurance_status") or "not-assessed")
+            )
+            + "`; sink `"
+            + _markdown_code(
+                str(value.get("sensitive_assurance_status") or "not-assessed")
+            )
+            + "`; validation `"
+            + _markdown_code(str(value.get("validation_status") or "not-assessed"))
+            + "`<br>handoff `"
+            + _markdown_code(
+                str(handoff.get("supporting_evidence_readiness") or "not-established")
+            )
+            + "`; combined prerequisite `"
+            + _markdown_code(
+                "met"
+                if value.get("combined_assurance_prerequisite_met") is True
+                else "not met"
+            )
+            + "`<br>candidate tests `"
+            + _markdown_code(
+                ", ".join(str(item) for item in candidate_tests[:3]) or "none"
+            )
+            + "`; focused `"
+            + _markdown_code(
+                ", ".join(str(item) for item in focused_statuses) or "not available"
+            )
+            + "`<br>coverage alignment `"
+            + _markdown_code(
+                ", ".join(str(item) for item in alignments) or "not available"
+            )
+            + "`; revision `"
+            + _markdown_code(
+                ", ".join(str(item) for item in revisions) or "not established"
+            )
+            + "`; canary `"
+            + _markdown_code(
+                str(value.get("canary_validation_status") or "not-established")
+            )
+            + "`"
+            + ("<br>" + citations if citations else "")
+            + " | **"
+            + _markdown_text(
+                ", ".join(str(item) for item in owner_values[:3]) or "Unassigned"
+            )
+            + "**<br>"
+            + _markdown_text(
+                str(value.get("recommended_action") or "Trace and protect the route.")
+            )
+            + " |"
+        )
+    if len(values) > 10:
+        lines.extend(
+            [
+                "",
+                f"{len(values) - 10} additional retained intersection(s) are available in `risk-paths.json`.",
+            ]
+        )
+    return lines
+
+
+def _render_secret_exposure_advisory_intersections(
+    values: list[Any],
+) -> list[str]:
+    if not values:
+        return []
+    lines = [
+        "",
+        "### Secret, sensitive-boundary, and advisory intersections",
+        "",
+        (
+            "Each record joins a secret-to-sink intersection and an SDK-advisory "
+            "intersection only when both cite the identical retained sensitive "
+            "route. It is compound review scope—not proof of credential flow, "
+            "disclosure, vulnerable-function execution, or exploitability."
+        ),
+        "",
+        "| Priority / secret | Sensitive boundary | Advisory / lifecycle | Runtime / validation / assurance | Owners / action |",
+        "|---|---|---|---|---|",
+    ]
+    for value in values[:10]:
+        if not isinstance(value, dict):
+            continue
+        secret_path = str(value.get("secret_path") or "unknown")
+        if value.get("secret_line"):
+            secret_path += f":{value['secret_line']}"
+        sink_path = str(value.get("sink_path") or "unknown")
+        if value.get("sink_line"):
+            sink_path += f":{value['sink_line']}"
+        handoff = value.get("validation_handoff")
+        handoff = handoff if isinstance(handoff, dict) else {}
+        tests = value.get("recommended_test_files")
+        tests = tests if isinstance(tests, list) else []
+        statuses = value.get("validation_statuses")
+        statuses = statuses if isinstance(statuses, dict) else {}
+        owners = value.get("owners")
+        owners = owners if isinstance(owners, list) else []
+        citations = _risk_advisory_citations_text(value.get("citations"))
+        threat = (
+            ", ".join(
+                label
+                for applies, label in (
+                    (value.get("known_exploited") is True, "CISA KEV"),
+                    (value.get("epss_high") is True, "high EPSS"),
+                    (value.get("fix_available") is True, "fix available"),
+                )
+                if applies
+            )
+            or "no retained KEV/high-EPSS/fix signal"
+        )
+        lines.append(
+            "| `"
+            + _markdown_code(str(value.get("priority") or "P4"))
+            + "` `"
+            + _markdown_code(secret_path)
+            + "`<br>verification `"
+            + _markdown_code(
+                str(value.get("secret_verification_status") or "not-established")
+            )
+            + "`; temporal `"
+            + _markdown_code(str(value.get("temporal_alignment") or "not-established"))
+            + "`; distance `"
+            + _markdown_code(str(value.get("secret_distance_to_sink") or 0))
+            + "` hop(s) | `"
+            + _markdown_code(sink_path)
+            + "`<br>family `"
+            + _markdown_code(str(value.get("sink_family") or "unknown"))
+            + "`; boundary `"
+            + _markdown_code(str(value.get("trust_boundary") or "unknown"))
+            + "`; protection `"
+            + _markdown_code(str(value.get("protection_status") or "unknown"))
+            + "` | `"
+            + _markdown_code(str(value.get("package") or "unknown"))
+            + "` / `"
+            + _markdown_code(str(value.get("primary_identifier") or "unknown"))
+            + "`<br>"
+            + _markdown_text(threat)
+            + "<br>lifecycle "
+            + _markdown_text(_package_lifecycle_text(value.get("package_lifecycle")))
+            + ("<br>" + citations if citations else "")
+            + " | runtime "
+            + _markdown_text(
+                _entry_runtime_status_text(value.get("entry_point_runtime_statuses"))
+            )
+            + "<br>validation secret/sink/dependency `"
+            + _markdown_code(
+                "/".join(
+                    str(statuses.get(key) or "not-assessed")
+                    for key in ("secret_sink", "sink", "dependency")
+                )
+            )
+            + "`<br>handoff `"
+            + _markdown_code(
+                str(handoff.get("supporting_evidence_readiness") or "not-established")
+            )
+            + "`; combined prerequisite `"
+            + _markdown_code(
+                "met"
+                if value.get("combined_assurance_prerequisite_met") is True
+                else "not met"
+            )
+            + "`; canary `"
+            + _markdown_code(
+                str(value.get("canary_validation_status") or "not-established")
+            )
+            + "`<br>tests `"
+            + _markdown_code(", ".join(str(item) for item in tests[:3]) or "none")
+            + "` | **"
+            + _markdown_text(
+                ", ".join(str(item) for item in owners[:3]) or "Unassigned"
+            )
+            + "**<br>"
+            + _markdown_text(
+                str(value.get("recommended_action") or "Review the compound scope.")
+            )
+            + " |"
+        )
+    if len(values) > 10:
+        lines.extend(
+            [
+                "",
+                f"{len(values) - 10} additional retained compound intersection(s) are available in `risk-paths.json`.",
+            ]
+        )
+    return lines
+
+
+def _render_dependency_route_table(routes: list[Any]) -> list[str]:
+    if not routes:
+        return []
+    lines = [
+        "",
+        "### Routed dependency-advisory imports",
+        "",
+        "These routes join deduplicated advisory clusters to exact source importers and declared entry points. They prioritize vulnerable-function review but do not prove vulnerable-function invocation, attacker control, or exploitability.",
+        "",
+        "| Priority / advisory | Import exposure | Threat / fix | Validation | Citation / action |",
+        "|---|---|---|---|---|",
+    ]
+    lines.extend(
+        _render_dependency_route_row(route)
+        for route in routes[:10]
+        if isinstance(route, dict)
+    )
+    return lines
+
+
+def _render_exposure_advisory_intersections(values: list[Any]) -> list[str]:
+    if not values:
+        return []
+    lines = [
+        "",
+        "### Sensitive-boundary dependency intersections",
+        "",
+        "These records require the same exact source path, SDK package, and advisory cluster on a sensitive sink route and a dependency-importer route. They identify compound review scope; they do not prove sensitive data reached the SDK, leaked, or exercised a vulnerable function.",
+        "",
+        "| Priority / boundary | SDK advisory | Protection / threat | Validation | Owner / action |",
+        "|---|---|---|---|---|",
+    ]
+    for value in values[:10]:
+        if not isinstance(value, dict):
+            continue
+        statuses = value.get("validation_statuses")
+        statuses = statuses if isinstance(statuses, dict) else {}
+        assurance_statuses = value.get("evidence_assurance_statuses")
+        assurance_statuses = (
+            assurance_statuses if isinstance(assurance_statuses, dict) else {}
+        )
+        owners = value.get("owners")
+        owner_text = (
+            ", ".join(str(item) for item in owners[:3])
+            if isinstance(owners, list) and owners
+            else "Unassigned"
+        )
+        citations = _risk_advisory_citations_text(value.get("advisory_citations"))
+        threat = []
+        if value.get("known_exploited") is True:
+            threat.append("CISA KEV")
+        if value.get("epss_high") is True:
+            threat.append("high EPSS")
+        if value.get("fix_available") is True:
+            threat.append("fix available")
+        lifecycle_text = _package_lifecycle_text(value.get("package_lifecycle"))
+        entry_runtime = _entry_runtime_status_text(
+            value.get("entry_point_runtime_statuses")
+        )
+        lines.append(
+            "| `"
+            + _markdown_code(str(value.get("priority") or "P4"))
+            + "` `"
+            + _markdown_code(str(value.get("path") or "unknown"))
+            + (":" + str(value["line"]) if value.get("line") else "")
+            + "`<br>boundary `"
+            + _markdown_code(str(value.get("trust_boundary") or "unknown"))
+            + "`; sink `"
+            + _markdown_code(str(value.get("sink_family") or "unknown"))
+            + "` | `"
+            + _markdown_code(str(value.get("package") or "unknown"))
+            + "` / `"
+            + _markdown_code(str(value.get("primary_identifier") or "unknown-advisory"))
+            + "`<br>SDK `"
+            + _markdown_code(str(value.get("sdk") or "unknown"))
+            + "`"
+            + ("<br>" + citations if citations else "")
+            + " | protection `"
+            + _markdown_code(str(value.get("protection_status") or "unknown"))
+            + "`<br>"
+            + _markdown_text(", ".join(threat) or "no elevated threat signal retained")
+            + "<br>"
+            + _markdown_text(lifecycle_text)
+            + "<br>entry exposure `"
+            + _markdown_code(str(int(value.get("entry_point_exposure_count") or 0)))
+            + "` declared route(s); "
+            + _markdown_text(entry_runtime)
+            + " | sink / dependency `"
+            + _markdown_code(str(statuses.get("sink") or "not-assessed"))
+            + "/"
+            + _markdown_code(str(statuses.get("dependency") or "not-assessed"))
+            + "`<br>evidence `"
+            + _markdown_code(str(assurance_statuses.get("sink") or "not-assessed"))
+            + "/"
+            + _markdown_code(
+                str(assurance_statuses.get("dependency") or "not-assessed")
+            )
+            + "` | **"
+            + _markdown_text(owner_text)
+            + "**<br>"
+            + _markdown_text(
+                str(value.get("recommended_action") or "Review the intersection.")
+            )
+            + " |"
+        )
+    return lines
+
+
+def _render_risk_owner_queues(queues: list[Any]) -> list[str]:
+    if not queues:
+        return []
+    lines = [
+        "",
+        "### Route owner queues",
+        "",
+        "| Owner | Priority | Routes / targets | Controls / campaigns / shared tests / boundary intersections / multi-entry | Validation / campaign review | Next action |",
+        "|---|---|---:|---:|---|---|",
+    ]
+    for queue in queues[:10]:
+        if not isinstance(queue, dict):
+            continue
+        validation = queue.get("validation_statuses")
+        validation = validation if isinstance(validation, dict) else {}
+        assurance = queue.get("evidence_assurance_statuses")
+        assurance = assurance if isinstance(assurance, dict) else {}
+        lines.append(
+            "| **"
+            + _markdown_text(str(queue.get("owner") or "Unassigned"))
+            + "**<br>`"
+            + _markdown_code(str(queue.get("queue_id") or "unknown"))
+            + "` | `"
+            + _markdown_code(str(queue.get("priority") or "P4"))
+            + "` | "
+            + str(int(queue.get("routes") or 0))
+            + " / "
+            + str(int(queue.get("targets") or 0))
+            + " | "
+            + str(len(queue.get("convergence_hotspot_ids") or []))
+            + " / "
+            + str(len(queue.get("validation_campaign_ids") or []))
+            + " / "
+            + str(int(queue.get("shared_validation_test_files") or 0))
+            + " / "
+            + str(int(queue.get("exposure_advisory_intersections") or 0))
+            + "; multi-entry routes `"
+            + _markdown_code(str(int(queue.get("multi_entry_routes") or 0)))
+            + "`<br>interface runtime "
+            + _markdown_text(
+                _entry_runtime_status_text(queue.get("entry_point_runtime_statuses"))
+            )
+            + " | "
+            + _markdown_text(_validation_count_summary(validation))
+            + "<br>evidence assured/perspective/trust/execution/unassessed/derived `"
+            + _markdown_code(
+                "/".join(
+                    str(int(assurance.get(status) or 0))
+                    for status in (
+                        "assured",
+                        "perspective-gap",
+                        "trust-gap",
+                        "execution-gap",
+                        "not-assessed",
+                        "derived-analysis",
+                    )
+                )
+            )
+            + "`"
+            + "<br>lifecycle changed new/regressed/gapped `"
+            + _markdown_code(
+                str(int(queue.get("baseline_new_or_regressed_changed_routes") or 0))
+                + "/"
+                + str(
+                    int(
+                        queue.get(
+                            "baseline_new_or_regressed_changed_routes_with_validation_gaps"
+                        )
+                        or 0
+                    )
+                )
+            )
+            + "`; changed existing/unassessed `"
+            + _markdown_code(
+                str(int(queue.get("existing_finding_routes_at_changed_lines") or 0))
+                + "/"
+                + str(
+                    int(queue.get("routes_without_comparable_finding_lifecycle") or 0)
+                )
+            )
+            + "`"
+            + "<br>ownership handoffs/unowned/gaps `"
+            + _markdown_code(
+                str(int(queue.get("ownership_boundaries") or 0))
+                + "/"
+                + str(len(queue.get("unowned_route_files") or []))
+                + "/"
+                + str(int(queue.get("routes_without_ownership_evidence") or 0))
+            )
+            + "`; collaborators `"
+            + _markdown_code(
+                ", ".join(
+                    str(item) for item in queue.get("collaborating_owners", [])[:5]
+                )
+                or "none"
+            )
+            + "`"
+            + "<br>highest campaign score `"
+            + _markdown_code(str(int(queue.get("highest_campaign_review_score") or 0)))
+            + "`; mismatch/unverified/unbound `"
+            + _markdown_code(
+                str(int(queue.get("campaigns_revision_mismatched") or 0))
+                + "/"
+                + str(int(queue.get("campaigns_revision_unverified") or 0))
+                + "/"
+                + str(int(queue.get("campaigns_revision_unbound") or 0))
+            )
+            + "`; route-assurance blocked/trust/execution `"
+            + _markdown_code(
+                str(int(queue.get("campaigns_blocked_by_route_assurance") or 0))
+                + "/"
+                + str(int(queue.get("campaigns_with_route_trust_gaps") or 0))
+                + "/"
+                + str(int(queue.get("campaigns_with_route_execution_gaps") or 0))
+            )
+            + "`; shared-test qualified/weak/findings `"
+            + _markdown_code(
+                str(
+                    int(queue.get("campaigns_with_qualified_shared_test_evidence") or 0)
+                )
+                + "/"
+                + str(int(queue.get("campaigns_with_weak_shared_test_evidence") or 0))
+                + "/"
+                + str(len(queue.get("shared_test_file_finding_ids") or []))
+            )
+            + "`; changed/runtime gaps `"
+            + _markdown_code(
+                str(int(queue.get("campaigns_with_uncovered_changed_lines") or 0))
+                + "/"
+                + str(int(queue.get("campaigns_with_runtime_observation_gaps") or 0))
+            )
+            + "` | "
+            + _markdown_text(
+                str(queue.get("recommended_action") or "Review the queue.")
+            )
+            + " |"
+        )
+    return lines
+
+
+def _render_dependency_route_row(route: dict[str, Any]) -> str:
+    target = route.get("target")
+    correlations = route.get("correlations")
+    validation = route.get("validation")
+    runtime = route.get("runtime_context")
+    target = target if isinstance(target, dict) else {}
+    correlations = correlations if isinstance(correlations, dict) else {}
+    validation = validation if isinstance(validation, dict) else {}
+    runtime = runtime if isinstance(runtime, dict) else {}
+    versions = correlations.get("versions")
+    version_text = (
+        ", ".join(str(item) for item in versions[:5])
+        if isinstance(versions, list) and versions
+        else "unknown"
+    )
+    fixed = correlations.get("fixed_version_candidates")
+    fixed_text = (
+        ", ".join(str(item) for item in fixed[:5])
+        if isinstance(fixed, list) and fixed
+        else "not retained"
+    )
+    citations = _risk_advisory_citations_text(correlations.get("advisory_citations"))
+    lifecycle_text = _package_lifecycle_text(correlations.get("package_lifecycle"))
+    threat_signals = []
+    if correlations.get("known_exploited") is True:
+        threat_signals.append("CISA KEV")
+    if correlations.get("epss_high") is True:
+        probability = correlations.get("epss_probability")
+        threat_signals.append(
+            "high EPSS"
+            + (
+                f" {float(probability):.1%}"
+                if isinstance(probability, (int, float))
+                else ""
+            )
+        )
+    threat_text = ", ".join(threat_signals) or "no elevated signal retained"
+    change_signals = []
+    if isinstance(correlations.get("change_risk_score"), int):
+        change_signals.append(
+            "change risk "
+            + str(int(correlations["change_risk_score"]))
+            + (
+                f" ({correlations['change_priority']})"
+                if correlations.get("change_priority")
+                else ""
+            )
+        )
+    uncovered_changed = correlations.get("uncovered_changed_lines")
+    if isinstance(uncovered_changed, list) and uncovered_changed:
+        change_signals.append(
+            "uncovered changed lines "
+            + ", ".join(str(line) for line in uncovered_changed[:10])
+        )
+    import_lines = correlations.get("import_lines")
+    import_line_text = (
+        ", ".join(str(line) for line in import_lines[:10])
+        if isinstance(import_lines, list) and import_lines
+        else "not retained"
+    )
+    return (
+        "| `"
+        + _markdown_code(str(route.get("priority") or "P4"))
+        + "` `"
+        + _markdown_code(str(correlations.get("primary_identifier") or "advisory"))
+        + "`<br>"
+        + _markdown_text(str(correlations.get("package") or "unknown"))
+        + " `"
+        + _markdown_code(version_text)
+        + "` | `"
+        + _markdown_code(str(target.get("path") or "unknown"))
+        + "`<br>relationship `"
+        + _markdown_code(str(correlations.get("source_relationship") or "unknown"))
+        + "`; usage `"
+        + _markdown_code(
+            str(correlations.get("dependency_usage_assessment") or "unknown")
+        )
+        + "`; import lines `"
+        + _markdown_code(import_line_text)
+        + "`; hops `"
+        + _markdown_code(str(int(route.get("hop_count") or 0)))
+        + "`<br>"
+        + _markdown_text(_entry_point_exposure_text(route))
+        + " | "
+        + _markdown_text(threat_text)
+        + "<br>fix `"
+        + _markdown_code(
+            "available" if correlations.get("fix_available") else "unknown"
+        )
+        + "`: "
+        + _markdown_text(fixed_text)
+        + "<br>"
+        + _markdown_text(lifecycle_text)
+        + " | "
+        + _markdown_text(_risk_path_validation_signals(validation, runtime))
+        + "<br>evidence "
+        + _markdown_text(_evidence_assurance_text(route.get("evidence_assurance")))
+        + ("<br>" + _markdown_text("; ".join(change_signals)) if change_signals else "")
+        + " | "
+        + (citations + "<br>" if citations else "")
+        + _markdown_text(
+            str(route.get("recommended_action") or "Review dependency use.")
+        )
+        + " |"
+    )
+
+
+def _package_lifecycle_text(value: Any) -> str:
+    lifecycle = value if isinstance(value, dict) else {}
+    assessment = str(lifecycle.get("assessment") or "not-available")
+    source = lifecycle.get("source_versions")
+    artifact = lifecycle.get("artifact_versions")
+    source_text = (
+        ", ".join(str(item) for item in source[:5])
+        if isinstance(source, list) and source
+        else "not observed"
+    )
+    artifact_text = (
+        ", ".join(str(item) for item in artifact[:5])
+        if isinstance(artifact, list) and artifact
+        else "not observed"
+    )
+    exact_match = lifecycle.get("artifact_fixed_version_exact_match")
+    exact_text = (
+        "yes"
+        if exact_match is True
+        else "no"
+        if exact_match is False
+        else "not established"
+    )
+    return (
+        f"lifecycle {assessment}; source {source_text}; artifact {artifact_text}; "
+        f"exact fixed version in artifact {exact_text}"
+    )
+
+
+def _entry_point_exposure_text(value: Any) -> str:
+    route = value if isinstance(value, dict) else {}
+    exposures = route.get("entry_point_exposures")
+    retained = exposures if isinstance(exposures, list) else []
+    count = int(route.get("entry_point_exposure_count") or len(retained))
+    omitted = int(route.get("entry_point_exposures_omitted") or 0)
+    kinds = route.get("entry_point_kinds")
+    kind_values = kinds if isinstance(kinds, list) else []
+    alternates = [
+        str(entry.get("declared_as") or entry.get("id") or "unknown")
+        + (
+            f" ({entry['path']})"
+            if entry.get("path") and entry.get("path") != entry.get("declared_as")
+            else ""
+        )
+        for item in retained
+        if isinstance(item, dict)
+        and item.get("primary") is not True
+        and isinstance((entry := item.get("entry_point")), dict)
+    ][:3]
+    text = f"{count} declared entry-point route(s)"
+    if kind_values:
+        text += " across " + ", ".join(str(item) for item in kind_values[:5])
+    if alternates:
+        text += "; alternate(s): " + ", ".join(alternates)
+    if omitted:
+        text += f"; {omitted} omitted by bound"
+    runtime_counts = _entry_runtime_counts_from_exposures(retained)
+    text += "; " + _entry_runtime_status_text(runtime_counts)
+    return text
+
+
+def _entry_runtime_counts_from_exposures(values: list[Any]) -> dict[str, int]:
+    return {
+        status: sum(
+            isinstance(item, dict)
+            and isinstance(item.get("runtime_context"), dict)
+            and item["runtime_context"].get("assessment") == status
+            for item in values
+        )
+        for status in ("observed", "not-observed", "not-available")
+    }
+
+
+def _entry_runtime_status_text(value: Any) -> str:
+    counts = value if isinstance(value, dict) else {}
+    return (
+        "runtime observed/unobserved/unavailable "
+        f"{int(counts.get('observed') or 0)}/"
+        f"{int(counts.get('not-observed') or 0)}/"
+        f"{int(counts.get('not-available') or 0)}"
+    )
+
+
+def _evidence_assurance_text(value: Any) -> str:
+    assurance = value if isinstance(value, dict) else {}
+    status = str(assurance.get("review_status") or "not-assessed")
+    perspective = str(assurance.get("perspective_assessment") or "not-established")
+    contributing = assurance.get("contributing_tools")
+    tools = contributing if isinstance(contributing, list) else []
+    completed = assurance.get("completed_tools")
+    completed_tools = completed if isinstance(completed, list) else []
+    approved = assurance.get("approved_tools")
+    approved_tools = approved if isinstance(approved, list) else []
+    gaps = []
+    for label, key in (
+        ("trust", "trust_gap_tools"),
+        ("execution", "execution_gap_tools"),
+        ("unassessed", "unassessed_tools"),
+    ):
+        raw = assurance.get(key)
+        values = raw if isinstance(raw, list) else []
+        if values:
+            gaps.append(label + " " + ", ".join(str(item) for item in values[:5]))
+    return (
+        f"{status}; perspective {perspective}; tools {', '.join(str(item) for item in tools[:5]) or 'suite-derived'}; "
+        f"completed/approved {len(completed_tools)}/{len(approved_tools)}"
+        + ("; gaps " + "; ".join(gaps) if gaps else "")
+    )
+
+
+def _change_lifecycle_text(value: Any) -> str:
+    context = value if isinstance(value, dict) else {}
+    if not context:
+        return "not applicable to derived target"
+    classification = str(context.get("classification") or "baseline-not-established")
+    signal = str(context.get("review_signal") or "baseline-not-established")
+    runtime = _entry_runtime_status_text(context.get("entry_point_runtime_statuses"))
+    reasons = context.get("baseline_reasons")
+    reason_values = reasons if isinstance(reasons, list) else []
+    return f"{classification}; review {signal}; {runtime}" + (
+        "; baseline reason " + "; ".join(str(item) for item in reason_values[:2])
+        if reason_values
+        else ""
+    )
+
+
+def _route_ownership_text(value: Any) -> str:
+    context = value if isinstance(value, dict) else {}
+    if not context or context.get("evidence_available") is not True:
+        return "not established"
+    status = str(context.get("coordination_status") or "not-established")
+    owners = context.get("coordination_owners")
+    owner_values = owners if isinstance(owners, list) else []
+    unowned = context.get("unowned_files")
+    unowned_values = unowned if isinstance(unowned, list) else []
+    return (
+        f"{status}; owners {', '.join(str(item) for item in owner_values[:5]) or 'none'}; "
+        f"handoffs {int(context.get('boundary_count') or 0)}; "
+        f"unowned files {len(unowned_values)}; target owner "
+        f"{context.get('target_owner_alignment') or 'not-established'!s}"
+    )
+
+
+def _validation_count_summary(value: dict[str, Any]) -> str:
+    labels = (
+        ("gap", "gap"),
+        ("not-assessed", "not assessed"),
+        ("partial", "partial"),
+        ("aligned", "aligned"),
+    )
+    parts = [
+        f"{int(value.get(key) or 0)} {label}"
+        for key, label in labels
+        if int(value.get(key) or 0)
+    ]
+    return ", ".join(parts) or "no retained assessment"
+
+
+def _risk_path_validation_signals(
+    validation: dict[str, Any], runtime: dict[str, Any]
+) -> str:
+    signals: list[str] = []
+    status = validation.get("assessment_status")
+    if isinstance(status, str):
+        signals.append("assessment " + status)
+    assessment_reasons = validation.get("assessment_reasons")
+    if isinstance(assessment_reasons, list) and assessment_reasons:
+        signals.append(
+            "missing "
+            + ", ".join(
+                str(item).removeprefix("retained ").removesuffix(" is unavailable")
+                for item in assessment_reasons[:3]
+            )
+        )
+    states = runtime.get("reachability_states")
+    if isinstance(states, list) and states:
+        signals.append("reachability " + "/".join(str(item) for item in states[:3]))
+    observations = runtime.get("observations")
+    if isinstance(observations, list) and observations:
+        signals.append("runtime " + "/".join(str(item) for item in observations[:3]))
+    if validation.get("changed_line") is True:
+        signals.append("changed line")
+    if validation.get("line_covered") is False:
+        signals.append("uncovered line")
+    elif validation.get("line_covered") is True:
+        signals.append("covered line")
+    alignment = validation.get("coverage_alignment")
+    if isinstance(alignment, str):
+        signals.append("validation " + alignment)
+    mapped = validation.get("mapped_test_files")
+    if isinstance(mapped, list) and mapped:
+        signals.append("tests " + ", ".join(str(item) for item in mapped[:2]))
+    return "; ".join(signals) or "runtime and validation evidence unavailable"
+
+
+def _surface_context_summary(value: Any) -> str:
+    if not isinstance(value, dict) or not value.get("context_available"):
+        return "not available"
+    signals: list[str] = []
+    if value.get("changed_line") is True:
+        signals.append("changed")
+    if value.get("line_covered") is False:
+        signals.append("uncovered")
+    elif value.get("line_covered") is True:
+        signals.append("covered")
+    states = value.get("reachability_states")
+    if isinstance(states, list) and states:
+        signals.append("reachability " + "/".join(str(item) for item in states[:2]))
+    observations = value.get("runtime_observations")
+    if isinstance(observations, list) and "observed" in observations:
+        signals.append("runtime observed")
+    upstream = value.get("graph_upstream_files")
+    if isinstance(upstream, int):
+        signals.append(f"{upstream} upstream")
+    related = value.get("related_finding_ids")
+    if isinstance(related, list) and related:
+        identifiers = ", ".join(str(item) for item in related[:2])
+        tools = value.get("related_tools")
+        attribution = (
+            " via " + ", ".join(str(item) for item in tools[:3])
+            if isinstance(tools, list) and tools
+            else ""
+        )
+        signals.append(f"nearby {identifiers}{attribution}")
+    owners = value.get("owners")
+    if isinstance(owners, list) and owners:
+        signals.append("owner " + ", ".join(str(item) for item in owners[:2]))
+    mapped = value.get("mapped_test_files")
+    if isinstance(mapped, list) and mapped:
+        signals.append("mapped " + ", ".join(str(item) for item in mapped[:2]))
+    alignment = value.get("test_coverage_alignment")
+    if isinstance(alignment, str):
+        signals.append("validation " + alignment)
+    change_priority = value.get("change_risk_priority")
+    change_score = value.get("change_risk_score")
+    if isinstance(change_priority, str):
+        signals.append(
+            f"change risk {change_priority}"
+            + (f"/{change_score}" if isinstance(change_score, int) else "")
+        )
+    risks = value.get("structural_risk_kinds")
+    if isinstance(risks, list) and risks:
+        signals.append("structural " + ", ".join(str(item) for item in risks[:2]))
+    return "; ".join(signals) or "context available"
+
+
+def _exposure_accountability_summary(value: Any) -> str:
+    if not isinstance(value, dict):
+        return "unassigned; no mapped tests"
+    owners = value.get("owners")
+    mapped = value.get("mapped_test_files")
+    parts = [
+        "owners " + ", ".join(str(item) for item in owners[:2])
+        if isinstance(owners, list) and owners
+        else "unassigned"
+    ]
+    if isinstance(mapped, list) and mapped:
+        parts.append("mapped " + ", ".join(str(item) for item in mapped[:2]))
+    else:
+        parts.append("no mapped tests")
+    alignment = value.get("test_coverage_alignment")
+    if isinstance(alignment, str):
+        parts.append("validation " + alignment)
+    priority = value.get("change_risk_priority")
+    score = value.get("change_risk_score")
+    if isinstance(priority, str):
+        parts.append(
+            f"change risk {priority}" + (f"/{score}" if isinstance(score, int) else "")
+        )
+    risks = value.get("structural_risk_kinds")
+    if isinstance(risks, list) and risks:
+        parts.append("structural " + ", ".join(str(item) for item in risks[:2]))
+    return "; ".join(parts)
+
+
+def _campaign_route_assurance_text(campaign: dict[str, Any]) -> str:
+    assurance = campaign.get("route_evidence_assurance")
+    assurance = assurance if isinstance(assurance, dict) else {}
+    statuses = assurance.get("route_statuses")
+    statuses = statuses if isinstance(statuses, dict) else {}
+    assessment = str(assurance.get("assessment") or "not-assessed")
+    expected = int(assurance.get("routes_expected") or 0)
+    assessed = int(assurance.get("routes_assessed") or 0)
+    gaps = "/".join(
+        str(int(statuses.get(status) or 0))
+        for status in ("trust-gap", "execution-gap", "not-assessed")
+    )
+    return (
+        f"{assessment}; routes {assessed}/{expected}; trust/execution/unassessed {gaps}"
+    )
+
+
+def _route_applicability_membership_text(value: dict[str, Any]) -> str:
+    def state(key: str) -> str:
+        member = value.get(key)
+        return "yes" if member is True else "no" if member is False else "n/a"
+
+    return "/".join(
+        state(key)
+        for key in (
+            "graph_path_member",
+            "source_inventory_member",
+            "artifact_manifest_member",
+        )
+    )
+
+
+def _route_applicability_text(value: dict[str, Any]) -> str:
+    assessment = str(value.get("assessment") or "not-established")
+    classification = str(value.get("classification") or "not-established")
+    return f"{assessment} ({classification})"
+
+
+def _unrouted_structural_context_text(value: Any) -> str:
+    intersections = value if isinstance(value, list) else []
+    retained = [item for item in intersections if isinstance(item, dict)]
+    if not retained:
+        return ""
+    first = retained[0]
+    entries = first.get("candidate_entry_paths")
+    entry_values = entries if isinstance(entries, list) else []
+    tests = first.get("direct_test_files")
+    test_values = tests if isinstance(tests, list) else []
+    owners = first.get("coordination_owners")
+    owner_values = owners if isinstance(owners, list) else []
+    return (
+        " Structural cross-reference: "
+        + str(len(retained))
+        + " exact retained island membership(s); first island "
+        + str(first.get("island_id") or "unknown")
+        + ", state "
+        + str(first.get("island_state") or "unknown")
+        + ", boundary "
+        + str(first.get("boundary_classification") or "not-established")
+        + ", signal "
+        + str(first.get("risk_signal") or "unknown")
+        + ", decision "
+        + str(first.get("decision") or "review")
+        + (
+            ", candidate entries " + ", ".join(map(str, entry_values[:3]))
+            if entry_values
+            else ""
+        )
+        + (
+            ", focused tests " + ", ".join(map(str, test_values[:3]))
+            if test_values
+            else ""
+        )
+        + (
+            ", coordinating owners " + ", ".join(map(str, owner_values[:5]))
+            if owner_values
+            else ""
+        )
+        + ". This membership does not prove dead code or production inaccessibility."
+    )
+
+
+def _campaign_shared_test_quality_text(campaign: dict[str, Any]) -> str:
+    quality = campaign.get("shared_test_evidence_quality")
+    quality = quality if isinstance(quality, dict) else {}
+    return (
+        str(quality.get("assessment") or "not-applicable")
+        + "; findings "
+        + str(len(quality.get("test_file_finding_ids") or []))
+        + "; cross-owner/unowned "
+        + str(len(quality.get("cross_owner_test_files") or []))
+        + "/"
+        + str(len(quality.get("unowned_test_files") or []))
+    )
+
+
+def _risk_advisory_citations_text(value: Any) -> str:
+    if not isinstance(value, list):
+        return ""
+    citations: list[str] = []
+    for item in value[:5]:
+        if not isinstance(item, dict):
+            continue
+        identifier = str(item.get("identifier") or "reference")
+        uri_value = item.get("uri")
+        uri = _safe_http_reference(uri_value) if isinstance(uri_value, str) else None
+        citations.append(
+            f"[{_markdown_text(identifier)}]({uri})"
+            if uri
+            else f"`{_markdown_code(identifier)}`"
+        )
+    return ", ".join(citations)
+
+
+def _risk_advisory_citations_html(value: Any) -> str:
+    if not isinstance(value, list):
+        return ""
+    citations: list[str] = []
+    for item in value[:5]:
+        if not isinstance(item, dict):
+            continue
+        identifier = html.escape(str(item.get("identifier") or "reference"))
+        uri_value = item.get("uri")
+        uri = _safe_http_reference(uri_value) if isinstance(uri_value, str) else None
+        citations.append(
+            f"<a href='{html.escape(uri, quote=True)}' rel='noreferrer'>{identifier}</a>"
+            if uri
+            else f"<code>{identifier}</code>"
+        )
+    return ", ".join(citations)
+
+
+def _exposure_summary_context(item: dict[str, Any]) -> str:
+    values = [
+        _exposure_accountability_summary(item.get("cross_references")),
+        _sdk_dependency_context_summary(item.get("sdk_dependency_context")),
+    ]
+    return "; ".join(value for value in values if value)
+
+
+def _surface_summary_context(item: dict[str, Any]) -> str:
+    values = [
+        _surface_context_summary(item.get("structural_context")),
+        _sdk_dependency_context_summary(item.get("sdk_dependency_context")),
+    ]
+    return "; ".join(value for value in values if value)
+
+
+def _sdk_dependency_context_summary(value: Any) -> str:
+    if not isinstance(value, dict) or not value.get("context_available"):
+        return ""
+    packages = value.get("packages")
+    package_text = (
+        ", ".join(str(item) for item in packages[:3])
+        if isinstance(packages, list) and packages
+        else "unknown"
+    )
+    signals = [f"SDK packages {package_text}"]
+    if value.get("risk_present"):
+        signals.append(f"package risk {value.get('risk_tier', 'medium')}")
+        clusters = value.get("advisory_clusters")
+        tools = value.get("package_finding_tools")
+        if isinstance(clusters, list) and clusters:
+            distinct = int(value.get("distinct_advisory_count") or len(clusters))
+            observations = int(value.get("advisory_observation_count") or 0)
+            attribution = (
+                " via " + ", ".join(str(item) for item in tools[:3])
+                if isinstance(tools, list) and tools
+                else ""
+            )
+            primary = [
+                str(item.get("primary_identifier"))
+                for item in clusters[:3]
+                if isinstance(item, dict) and item.get("primary_identifier")
+            ]
+            signals.append(
+                f"{distinct} distinct advisories / {observations} observations"
+                + attribution
+            )
+            if primary:
+                signals.append("advisories " + ", ".join(primary))
+            usage_summaries = sorted(
+                {
+                    summary
+                    for item in clusters
+                    if isinstance(item, dict)
+                    and (
+                        summary := _dependency_usage_summary(
+                            item.get("dependency_usage")
+                        )
+                    )
+                }
+            )
+            if usage_summaries:
+                signals.append("use " + " / ".join(usage_summaries[:3]))
+            remediation_summaries = sorted(
+                {
+                    summary
+                    for item in clusters
+                    if isinstance(item, dict)
+                    and (
+                        summary := _remediation_context_summary(
+                            item.get("remediation_context")
+                        )
+                    )
+                }
+            )
+            if remediation_summaries:
+                signals.append("action " + " / ".join(remediation_summaries[:3]))
+        else:
+            finding_ids = value.get("package_finding_ids")
+            if isinstance(finding_ids, list) and finding_ids:
+                attribution = (
+                    " via " + ", ".join(str(item) for item in tools[:3])
+                    if isinstance(tools, list) and tools
+                    else ""
+                )
+                signals.append(
+                    "findings "
+                    + ", ".join(str(item) for item in finding_ids[:3])
+                    + attribution
+                )
+    else:
+        signals.append("no joined package-risk finding")
+    lineage = value.get("lineage")
+    exceptional = (
+        [
+            f"{item.get('package')}:{item.get('status')}"
+            for item in lineage
+            if isinstance(item, dict)
+            and item.get("status") in {"version-drift", "artifact-only"}
+        ]
+        if isinstance(lineage, list)
+        else []
+    )
+    if exceptional:
+        signals.append("lineage " + ", ".join(exceptional[:3]))
+    return "; ".join(signals)
+
+
+def _dependency_usage_summary(value: Any) -> str:
+    if not isinstance(value, dict):
+        return ""
+    assessment = str(value.get("assessment") or "unknown")
+    relationship = str(value.get("source_relationship") or "unknown")
+    paths = value.get("import_paths")
+    statuses = value.get("deptry_statuses")
+    if (
+        assessment == "unknown"
+        and relationship == "unknown"
+        and not paths
+        and not statuses
+        and value.get("signals_conflict") is not True
+    ):
+        return ""
+    signals = [assessment]
+    if relationship != "unknown":
+        signals.append(relationship + " dependency")
+    dependency_paths = value.get("dependency_paths")
+    if isinstance(dependency_paths, list) and dependency_paths:
+        first = dependency_paths[0] if isinstance(dependency_paths[0], dict) else {}
+        path = first.get("path") if isinstance(first, dict) else []
+        if isinstance(path, list) and path:
+            signals.append(
+                "introduced by "
+                + " -> ".join(str(item) for item in path[:5])
+                + f" ({value.get('dependency_path_confidence', 'unknown')})"
+            )
+    elif relationship == "transitive":
+        signals.append(
+            "no introducing path"
+            if value.get("dependency_path_evidence_available") is True
+            else "dependency-path evidence unavailable"
+        )
+    if value.get("dependency_environment_warning") is True:
+        signals.append("installed dependency environment has health gaps")
+    elif value.get("environment_health_evidence_available") is not True:
+        signals.append("installed-environment health unavailable")
+    if isinstance(paths, list) and paths:
+        signals.append("imports " + ", ".join(str(item) for item in paths[:2]))
+    if (
+        value.get("import_observed") is True
+        and value.get("reachability_complete") is False
+    ):
+        signals.append("reachability incomplete")
+    if isinstance(statuses, list) and statuses:
+        signals.append("deptry " + ", ".join(str(item) for item in statuses[:2]))
+    if value.get("signals_conflict") is True:
+        signals.append("evidence conflict")
+    tests = value.get("recommended_test_files")
+    if isinstance(tests, list) and tests:
+        signals.append(
+            "focused tests "
+            + ", ".join(str(item) for item in tests[:2])
+            + f" ({value.get('test_selection_confidence', 'unknown')})"
+        )
+        execution_status = str(
+            value.get("focused_test_validation_status") or "not-available"
+        )
+        signals.append("scanned-state focused-test evidence " + execution_status)
+        signals.append(
+            "test/coverage alignment "
+            + str(value.get("test_coverage_alignment") or "not-available")
+        )
+        unobserved = value.get("unobserved_recommended_test_files")
+        if isinstance(unobserved, list) and unobserved:
+            signals.append(
+                "not observed " + ", ".join(str(item) for item in unobserved[:2])
+            )
+    elif value.get("import_observed") is True:
+        signals.append(
+            "no focused test mapping"
+            if value.get("test_mapping_evidence_available") is True
+            else "test mapping unavailable"
+        )
+    owners = value.get("import_path_owners")
+    if isinstance(owners, list) and owners:
+        signals.append("owners " + ", ".join(str(item) for item in owners[:2]))
+    elif value.get("import_observed") is True:
+        signals.append(
+            "no matched import-path owner"
+            if value.get("ownership_evidence_available") is True
+            else "ownership evidence unavailable"
+        )
+    uncovered = value.get("uncovered_import_paths")
+    if isinstance(uncovered, list) and uncovered:
+        signals.append(
+            "below 80% coverage " + ", ".join(str(item) for item in uncovered[:2])
+        )
+    elif (
+        value.get("import_observed") is True
+        and value.get("coverage_evidence_available") is not True
+    ):
+        signals.append("coverage evidence unavailable")
+    return ", ".join(signals)
+
+
+def _remediation_context_summary(value: Any) -> str:
+    if not isinstance(value, dict):
+        return ""
+    priority = str(value.get("priority") or "P4")
+    kind = str(value.get("action_kind") or "review")
+    candidates = value.get("fixed_version_candidates")
+    parts = [priority, kind]
+    if isinstance(candidates, list) and candidates:
+        parts.append(
+            "fix candidates " + ", ".join(str(item) for item in candidates[:4])
+        )
+    elif value.get("fix_available") is False:
+        parts.append("no scanner-reported fix")
+    owners = value.get("owners")
+    if isinstance(owners, list) and owners:
+        parts.append("owner " + ", ".join(str(item) for item in owners[:2]))
+    tests = value.get("recommended_test_files")
+    if isinstance(tests, list) and tests:
+        parts.append("tests " + ", ".join(str(item) for item in tests[:2]))
+        parts.append(
+            "scanned-state focused-test evidence "
+            + str(value.get("focused_test_validation_status") or "not-available")
+        )
+        parts.append(
+            "test/coverage alignment "
+            + str(value.get("test_coverage_alignment") or "not-available")
+        )
+    roots = value.get("introducing_packages")
+    if isinstance(roots, list) and roots:
+        parts.append("introduced by " + ", ".join(str(item) for item in roots[:3]))
+    return ", ".join(parts)
+
+
+def _render_admission_decisions(
+    manifest: ScanManifest, findings: list[Finding]
+) -> list[str]:
+    decisions = admission_decisions(
+        findings,
+        manifest.tools,
+        network_isolation_attested=manifest.network_isolation_attested,
+        source_integrity_verified=manifest.inventory.source_integrity_verified,
+    )
+    lines = [
+        "",
+        "## Admission decisions by evidence axis",
+        "",
+        "These cards separate evidence domains for triage. The scan-policy decision above remains authoritative.",
+        "",
+        "| Evidence axis | Decision | Completed / applicable | Findings | Blocking | Gaps | Required action |",
+        "|---|:---:|---:|---:|---:|---|---|",
+    ]
+    for row in decisions["axes"]:
+        gaps = [*row["execution_gaps"], *row["integrity_gaps"]]
+        lines.append(
+            f"| {_markdown_table(row['label'])} | "
+            f"**{_markdown_table(row['decision'].upper())}** | "
+            f"{row['completed_tools']}/{row['applicable_tools']} | "
+            f"{row['active_findings']} | {row['blocking_findings']} | "
+            f"{_markdown_table('; '.join(gaps) or '-')} | "
+            f"{_markdown_table(row['required_action'])} |"
+        )
+    return lines
 
 
 def _render_summary_header(
@@ -332,6 +3181,13 @@ def _render_summary_header(
         severity.value: sum(finding.severity is severity for finding in active_findings)
         for severity in Severity
     }
+    health = portfolio_health_artifact(
+        active_findings,
+        manifest.tools,
+        outcome=manifest.outcome,
+        policy_reasons=manifest.policy_reasons,
+    )["overall"]
+    release_status = _report_release_status(manifest.outcome)
     return [
         f"# Security result: {manifest.outcome.value.upper()}",
         "",
@@ -347,6 +3203,16 @@ def _render_summary_header(
         f"- **Not applicable:** "
         f"{len(manifest.tools) - _applicable_tools(manifest.tools)} selected tool(s)",
         f"- **Applicable scanner execution gaps:** {coverage_gap_count}",
+        f"- **Execution coverage grade:** {health['execution_grade']}; "
+        f"{health['completed_control_slots']}/{health['applicable_control_slots']} "
+        "applicable control slots completed",
+        f"- **Observed-risk grade:** {health['risk_grade']} "
+        f"({health['risk_status'].replace('_', ' ')})",
+        f"- **Evidence grade:** {health['evidence_grade']} "
+        f"({health['evidence_status'].replace('_', ' ')}); "
+        f"release decision `{health['release_decision']}`",
+        f"- **Release readiness from this report:** `{release_status}`; "
+        "run `pysec release-check` for the governed aggregate decision",
         f"- **Network isolation attested:** "
         f"{'yes' if manifest.network_isolation_attested else 'no'}",
         f"- **Unisolated diagnostic execution:** "
@@ -359,7 +3225,7 @@ def _render_summary_header(
         f"- **Scanner entry-point trust:** {approved_entrypoints}/{entrypoints} "
         f"approved and unchanged; {unchanged_entrypoints}/{entrypoints} observed "
         "unchanged after execution",
-        f"- **Immediate next step:** {_next_action(manifest.outcome)}",
+        f"- **Immediate next step:** {_next_action_for_manifest(manifest)}",
     ]
 
 
@@ -417,6 +3283,45 @@ def _render_finding_rollups(active_findings: list[Finding]) -> list[str]:
         )
     if not active_findings:
         lines.append("| No findings | 0 | 0 | 0 | 0 | 0 | 0 |")
+    return lines
+
+
+def _render_portfolio_health(
+    manifest: ScanManifest, findings: list[Finding]
+) -> list[str]:
+    health = portfolio_health_artifact(
+        findings,
+        manifest.tools,
+        outcome=manifest.outcome,
+        policy_reasons=manifest.policy_reasons,
+    )
+    overall = health["overall"]
+    lines = [
+        "",
+        "## Operational coverage by domain",
+        "",
+        (
+            f"**Execution {overall['execution_grade']} · Risk "
+            f"{overall['risk_grade']} · Evidence {overall['evidence_grade']}** — "
+            f"{overall['completed_control_slots']}/"
+            f"{overall['applicable_control_slots']} applicable control slots completed. "
+            "These independent grades prevent completed execution from being mistaken "
+            "for low risk, complete evidence, or release approval."
+        ),
+        "",
+        "| Domain | Execution | Risk | Status | Completed / applicable | Findings | Blocking | Gaps |",
+        "|---|:---:|:---:|---|---:|---:|---:|---|",
+    ]
+    for row in health["domains"]:
+        gaps = ", ".join(row["execution_gaps"]) or "-"
+        lines.append(
+            f"| {_markdown_table(row['domain'])} | {row['execution_grade']} | "
+            f"{row['risk_grade']} | "
+            f"{_markdown_table(row['status'].replace('_', ' '))} | "
+            f"{row['completed_tools']}/{row['applicable_tools']} | "
+            f"{row['active_findings']} | {row['blocking_findings']} | "
+            f"{_markdown_table(gaps)} |"
+        )
     return lines
 
 
@@ -484,15 +3389,18 @@ def _render_coverage_actions(
                 f"<details><summary>{len(not_applicable)} not-applicable controls "
                 "(informational)</summary>",
                 "",
-                "| Tool | Reason | Re-enable condition | Reference |",
-                "|---|---|---|---|",
+                "| Tool | Category | Owner | Activation trigger | Required evidence | Action | Reference |",
+                "|---|---|---|---|---|---|---|",
             ]
         )
         lines.extend(
             (
                 f"| {_markdown_table(run.tool)} | "
-                f"{_markdown_table(run.error or 'No diagnostic supplied')} | "
-                f"{_markdown_table(_coverage_action(run, manifest))} | "
+                f"{_markdown_table(activation_recipe(run)['category'])} | "
+                f"{_markdown_table(activation_recipe(run)['owner'])} | "
+                f"{_markdown_table(activation_recipe(run)['activation_trigger'])} | "
+                f"{_markdown_table(activation_recipe(run)['evidence_required'])} | "
+                f"{_markdown_table(activation_recipe(run)['required_action'])} | "
                 f"{_markdown_tool_reference(run.tool)} |"
             )
             for run in not_applicable
@@ -594,6 +3502,12 @@ def _render_markdown_findings(
                 f"`{_markdown_code(finding.confidence.value)}`",
                 f"- **Classification:** {classifications}",
                 f"- **References:** {references}",
+                *_markdown_graph_context(finding),
+                *_markdown_secret_provenance_context(finding),
+                *_markdown_risk_path_context(finding),
+                *_markdown_structural_context(finding),
+                *_markdown_data_exposure_context(finding),
+                *_markdown_fusion_context(finding),
                 "",
                 f"**What was detected:** {_markdown_text(finding.description)}",
                 "",
@@ -658,7 +3572,7 @@ def render_action_plan(manifest: ScanManifest, findings: list[Finding]) -> str:
         f"- **Finding ownership:** {assigned_findings}/{len(findings)} findings "
         f"assigned across {len(owner_queues)} named owner queues; "
         f"{unassigned_findings} unassigned",
-        f"- **Immediate next step:** {_next_action(manifest.outcome)}",
+        f"- **Immediate next step:** {_next_action_for_manifest(manifest)}",
         "",
         "## Finding actions",
         "",
@@ -1033,9 +3947,10 @@ def render_assurance_case(
                 "vulture",
                 "radon",
                 "tach",
+                "reachability",
             ),
             "Restore incomplete correctness, formatting, typing, dead-code, "
-            "complexity, and architecture controls, then rerun.",
+            "complexity, architecture, and reachability controls, then rerun.",
             "Applicable quality and architecture controls completed without "
             "active findings; retain their evidence with the review.",
             "https://docs.gauge.sh/",
@@ -1115,6 +4030,7 @@ def render_assurance_case(
                 "conftest",
                 "kics",
                 "kube-linter",
+                "kubescape",
                 "psscriptanalyzer",
                 "shellcheck",
             ),
@@ -1249,9 +4165,22 @@ def render_assurance_case(
             _external_assurance_row(
                 manifest,
                 "Dynamic, API, and runtime behavior",
-                ("hypothesis", "schemathesis", "crosshair", "atheris", "mutmut", "zap"),
-                "Run property, fuzz, mutation, and applicable DAST/API security "
-                "tests in a separate disposable sandbox, then attach bounded evidence.",
+                (
+                    "hypothesis",
+                    "schemathesis",
+                    "crosshair",
+                    "atheris",
+                    "clusterfuzzlite",
+                    "mutmut",
+                    "zap",
+                    "browser-security",
+                    "iast",
+                    "falco",
+                    "kubescape",
+                ),
+                "Run property, fuzz, mutation, applicable DAST/API/IAST checks, and "
+                "runtime workload detection in separate disposable or deployed "
+                "lanes, then attach source-bound evidence.",
                 "Retain the attached companion evidence and rerun every applicable "
                 "dynamic lane for material behavior or API changes.",
                 "https://owasp.org/www-project-application-security-verification-standard/",
@@ -1354,26 +4283,32 @@ def _html_coverage_gap_rows(
     )
 
 
-def _html_not_applicable_details(
-    manifest: ScanManifest, not_applicable: list[ToolRun]
-) -> str:
+def _html_not_applicable_details(not_applicable: list[ToolRun]) -> str:
     if not not_applicable:
         return ""
-    rows = "".join(
-        "<tr>"
-        f"<td><strong>{html.escape(run.tool)}</strong></td>"
-        f"<td>{html.escape(run.error or 'No diagnostic supplied')}</td>"
-        f"<td>{html.escape(_coverage_action(run, manifest))}</td>"
-        f"<td>{_html_tool_reference(run.tool)}</td>"
-        "</tr>"
-        for run in not_applicable
-    )
+    rows = "".join(_html_activation_recipe(run) for run in not_applicable)
     return (
         "<details class='coverage-details'><summary>"
         f"{len(not_applicable)} not-applicable controls (informational)"
-        "</summary><table><thead><tr><th>Tool</th><th>Reason</th>"
-        "<th>Re-enable condition</th><th>Reference</th></tr></thead>"
+        "</summary><table><thead><tr><th>Tool</th><th>Category</th>"
+        "<th>Owner</th><th>Activation trigger</th><th>Required evidence</th>"
+        "<th>Action</th><th>Reference</th></tr></thead>"
         f"<tbody>{rows}</tbody></table></details>"
+    )
+
+
+def _html_activation_recipe(run: ToolRun) -> str:
+    recipe = activation_recipe(run)
+    return (
+        "<tr>"
+        f"<td><strong>{html.escape(run.tool)}</strong></td>"
+        f"<td>{html.escape(recipe['category'])}</td>"
+        f"<td>{html.escape(recipe['owner'])}</td>"
+        f"<td>{html.escape(recipe['activation_trigger'])}</td>"
+        f"<td>{html.escape(recipe['evidence_required'])}</td>"
+        f"<td>{html.escape(recipe['required_action'])}</td>"
+        f"<td>{_html_tool_reference(run.tool)}</td>"
+        "</tr>"
     )
 
 
@@ -1419,7 +4354,232 @@ def _severity_counts(findings: list[Finding]) -> dict[str, int]:
     }
 
 
-def render_html(manifest: ScanManifest, findings: list[Finding]) -> str:
+def _html_admission_cards(manifest: ScanManifest, findings: list[Finding]) -> str:
+    decisions = admission_decisions(
+        findings,
+        manifest.tools,
+        network_isolation_attested=manifest.network_isolation_attested,
+        source_integrity_verified=manifest.inventory.source_integrity_verified,
+    )
+    cards: list[str] = []
+    for row in decisions["axes"]:
+        gaps = [*row["execution_gaps"], *row["integrity_gaps"]]
+        gap_text = "; ".join(gaps) or "No axis-specific evidence gaps."
+        cards.append(
+            f'<article class="axis-card {html.escape(row["decision"])}">'
+            f'<div class="axis-heading"><h3>{html.escape(row["label"])}</h3>'
+            f'<span class="decision-badge {html.escape(row["decision"])}">'
+            f"{html.escape(row['decision'].upper())}</span></div>"
+            f"<p>{html.escape(row['purpose'])}</p>"
+            f"<p><strong>Coverage:</strong> {row['completed_tools']}/"
+            f"{row['applicable_tools']} applicable completed &middot; "
+            f"{row['active_findings']} finding(s) &middot; "
+            f"{row['blocking_findings']} blocking</p>"
+            f"<p><strong>Evidence:</strong> {html.escape(gap_text)}</p>"
+            f"<p><strong>Action:</strong> {html.escape(row['required_action'])}</p>"
+            "</article>"
+        )
+    return "".join(cards)
+
+
+def _html_unrouted_structural_summary(value: dict[str, Any] | None) -> str:
+    if not isinstance(value, dict) or not isinstance(value.get("summary"), dict):
+        return ""
+    summary = value["summary"]
+    raw = value.get("unrouted_structural_intersections")
+    intersections = raw if isinstance(raw, list) else []
+    availability = value.get("evidence_availability")
+    availability = availability if isinstance(availability, dict) else {}
+    rows: list[str] = []
+    for item in intersections[:10]:
+        if not isinstance(item, dict):
+            continue
+        owners = item.get("coordination_owners")
+        owner_values = owners if isinstance(owners, list) else []
+        candidate_entries = item.get("candidate_entry_paths")
+        entry_values = candidate_entries if isinstance(candidate_entries, list) else []
+        tests = item.get("direct_test_files")
+        test_values = tests if isinstance(tests, list) else []
+        validation = item.get("target_validation")
+        validation = validation if isinstance(validation, dict) else {}
+        location = str(item.get("path") or "unknown") + (
+            f":{int(item['line'])}" if isinstance(item.get("line"), int) else ""
+        )
+        rows.append(
+            "<tr><td><code>"
+            + html.escape(str(item.get("priority") or "P4"))
+            + "</code><br><code>"
+            + html.escape(location)
+            + "</code><br>"
+            + html.escape(str(item.get("target_kind") or "unknown"))
+            + "</td><td><code>"
+            + html.escape(str(item.get("island_id") or "unknown"))
+            + "</code><br>state <code>"
+            + html.escape(str(item.get("island_state") or "unknown"))
+            + "</code><br>boundary <code>"
+            + html.escape(str(item.get("boundary_classification") or "not-established"))
+            + "</code><br>membership <code>"
+            + html.escape(str(item.get("evidence_basis") or "unknown"))
+            + "</code></td><td><code>"
+            + html.escape(str(item.get("risk_signal") or "unknown"))
+            + "</code><br><strong>"
+            + html.escape(str(item.get("decision") or "review"))
+            + "</strong>"
+            + (
+                "<br>Candidate entry: "
+                + ", ".join(
+                    "<code>" + html.escape(str(path)) + "</code>"
+                    for path in entry_values[:3]
+                )
+                if entry_values
+                else ""
+            )
+            + "</td><td>Validation <code>"
+            + html.escape(str(validation.get("assessment_status") or "not-assessed"))
+            + "</code>"
+            + (
+                "<br>Tests: "
+                + ", ".join(
+                    "<code>" + html.escape(str(path)) + "</code>"
+                    for path in test_values[:3]
+                )
+                if test_values
+                else "<br>Tests: not mapped"
+            )
+            + "<br>Owner: "
+            + html.escape(", ".join(map(str, owner_values)) or "unassigned")
+            + "<br>"
+            + html.escape(str(item.get("recommended_action") or "Review."))
+            + "</td></tr>"
+        )
+    retained_note = (
+        f" Showing the first {len(rows)} of {len(intersections)} retained intersections."
+        if intersections
+        else " No exact retained intersections were found."
+    )
+    evidence_state = (
+        "available"
+        if availability.get("structural_synthesis") is True
+        else "not available"
+    )
+    table = (
+        "<table><thead><tr><th>Priority / target</th><th>Island / evidence</th>"
+        "<th>Decision</th><th>Validation / owner / action</th></tr></thead><tbody>"
+        + "".join(rows)
+        + "</tbody></table>"
+        if rows
+        else ""
+    )
+    return (
+        "<section aria-labelledby='unrouted-structural-heading'>"
+        "<h2 id='unrouted-structural-heading'>Unrouted target / structural-island decisions</h2>"
+        "<p><strong>Intersections:</strong> "
+        + str(int(summary.get("unrouted_structural_intersections") or 0))
+        + "; <strong>disconnected targets:</strong> "
+        + str(int(summary.get("unrouted_targets_in_disconnected_islands") or 0))
+        + "; <strong>runtime counter-evidence:</strong> "
+        + str(int(summary.get("unrouted_targets_with_runtime_counter_evidence") or 0))
+        + "; <strong>dead-code corroboration:</strong> "
+        + str(int(summary.get("unrouted_targets_with_dead_code_corroboration") or 0))
+        + ". Structural synthesis is <strong>"
+        + evidence_state
+        + "</strong>."
+        + html.escape(retained_note)
+        + "</p><p>Exact retained island membership guides a missing-entry-path, "
+        "test-scope, or dormant-capability decision. It does not prove dead code, "
+        "safety, exploitability, or production inaccessibility.</p>"
+        + table
+        + "</section>"
+    )
+
+
+def _html_advanced_analysis_summary(value: dict[str, Any] | None) -> str:
+    if not isinstance(value, dict) or not isinstance(value.get("summary"), dict):
+        return ""
+    summary = value["summary"]
+    aligned_taint_paths, retained_taint_paths = _advanced_taint_alignment_counts(value)
+    controls = value.get("control_topology")
+    controls = controls if isinstance(controls, list) else []
+    review = [
+        item
+        for item in controls
+        if isinstance(item, dict)
+        and (
+            item.get("topology_status") in {"bypass-capable", "not-established"}
+            or item.get("shared_mandatory_security_route_point") is True
+        )
+    ][:10]
+    rows = "".join(
+        "<tr><td><code>"
+        + html.escape(str(item.get("topology_status") or "unknown"))
+        + "</code>"
+        + (
+            "<br>shared mandatory security-route point"
+            if item.get("shared_mandatory_security_route_point")
+            else ""
+        )
+        + "</td><td><code>"
+        + html.escape(str(item.get("path") or "unknown"))
+        + "</code></td><td>"
+        + str(len(item.get("entry_point_ids") or []))
+        + " entries / "
+        + str(len(item.get("target_ids") or []))
+        + " targets</td><td>"
+        + html.escape(str(item.get("recommended_action") or "Review."))
+        + "</td></tr>"
+        for item in review
+    )
+    table = (
+        "<table><thead><tr><th>Status</th><th>Candidate control</th>"
+        "<th>Scope</th><th>Action</th></tr></thead><tbody>" + rows + "</tbody></table>"
+        if rows
+        else "<p>No bypass-capable or shared mandatory control point was retained.</p>"
+    )
+    return (
+        '<section aria-labelledby="advanced-analysis-heading">'
+        '<h2 id="advanced-analysis-heading">Cross-evidence security leverage</h2>'
+        "<p>Typed evidence relationships connect route topology, native taint paths, "
+        "release entry points, threats, tests, mutations, telemetry, and dependencies. "
+        "They guide review and do not prove exploitability or control effectiveness.</p>"
+        '<div class="stats">'
+        '<div class="stat"><strong>'
+        + str(int(summary.get("bypass_capable_control_points") or 0))
+        + "</strong><span>bypass-capable controls</span></div>"
+        '<div class="stat"><strong>'
+        + str(int(summary.get("shared_mandatory_security_route_points") or 0))
+        + "</strong><span>shared mandatory security-route points</span></div>"
+        '<div class="stat"><strong>'
+        + f"{aligned_taint_paths} / {retained_taint_paths}"
+        + "</strong><span>route-aligned / retained taint paths</span></div>"
+        '<div class="stat"><strong>'
+        + str(int(summary.get("unmodeled_published_entry_points") or 0))
+        + "</strong><span>unmodeled artifact entries</span></div>"
+        '<div class="stat"><strong>'
+        + str(int(summary.get("telemetry_routes_without_observed_protection") or 0))
+        + "</strong><span>telemetry protection gaps</span></div></div>"
+        + table
+        + '<p><a href="advanced-analysis.json">Download the complete typed evidence graph (JSON)</a></p>'
+        "</section>"
+    )
+
+
+def _advanced_taint_alignment_counts(value: dict[str, Any]) -> tuple[int, int]:
+    taint_paths = value.get("taint_paths")
+    retained = taint_paths if isinstance(taint_paths, list) else []
+    aligned = sum(
+        isinstance(item, dict) and item.get("route_alignment") == "aligned"
+        for item in retained
+    )
+    return aligned, len(retained)
+
+
+def render_html(
+    manifest: ScanManifest,
+    findings: list[Finding],
+    *,
+    risk_paths: dict[str, Any] | None = None,
+    advanced_analysis: dict[str, Any] | None = None,
+) -> str:
     tool_versions = {run.tool: run.version for run in manifest.tools}
     active_findings = [
         finding
@@ -1434,7 +4594,7 @@ def render_html(manifest: ScanManifest, findings: list[Finding]) -> str:
     finding_rows = _html_finding_rows(ordered)
     reasons = _html_policy_reasons(manifest)
     gap_rows = _html_coverage_gap_rows(manifest, coverage_gaps)
-    not_applicable_details = _html_not_applicable_details(manifest, not_applicable)
+    not_applicable_details = _html_not_applicable_details(not_applicable)
     tools = _html_tool_rows(manifest.tools)
     area_rows = _html_area_rows(active_findings)
     counts = _severity_counts(active_findings)
@@ -1445,6 +4605,16 @@ def render_html(manifest: ScanManifest, findings: list[Finding]) -> str:
     decision = _policy_decision_value(manifest.outcome)
     completed = _completed_tools(manifest.tools)
     applicable = _applicable_tools(manifest.tools)
+    health = portfolio_health_artifact(
+        active_findings,
+        manifest.tools,
+        outcome=manifest.outcome,
+        policy_reasons=manifest.policy_reasons,
+    )["overall"]
+    release_status = _report_release_status(manifest.outcome)
+    admission_cards = _html_admission_cards(manifest, active_findings)
+    unrouted_structural_html = _html_unrouted_structural_summary(risk_paths)
+    advanced_analysis_html = _html_advanced_analysis_summary(advanced_analysis)
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -1484,6 +4654,17 @@ code {{ overflow-wrap: anywhere; }}
 .decision-badge.block {{ background: #f8dddd; color: #8c1616; }}
 .decision-badge.review {{ background: #fff0c7; color: #6e4e00; }}
 .decision-badge.allow {{ background: #dcefe4; color: #185c36; }}
+.decision-badge.incomplete, .decision-badge.not_applicable {{
+  background: #fff0c7; color: #6e4e00; }}
+.axis-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: .8rem; margin: 1rem 0 2rem; }}
+.axis-card {{ background: #fff; border: 1px solid #d5dde7; border-left: .4rem solid #247044;
+  border-radius: .4rem; padding: 1rem; }}
+.axis-card.block {{ border-left-color: #a61b1b; }}
+.axis-card.incomplete {{ border-left-color: #9a6e00; }}
+.axis-card.not_applicable {{ border-left-color: #718096; }}
+.axis-heading {{ display: flex; align-items: center; justify-content: space-between; gap: .75rem; }}
+.axis-heading h3 {{ margin: 0; }}
 .coverage-details {{ margin: 1rem 0 2rem; }}
 .coverage-details summary {{ color: #17395f; cursor: pointer; font-weight: 700;
   padding: .65rem 0; }}
@@ -1579,6 +4760,14 @@ target <code>{html.escape(manifest.target)}</code></p>
 <span>Entrypoints approved</span></div>
 <div class="stat"><strong>{unchanged_entrypoints}/{entrypoints}</strong>
 <span>Entrypoints unchanged</span></div>
+<div class="stat"><strong>{health["execution_grade"]}</strong>
+<span>Execution grade</span></div>
+<div class="stat"><strong>{health["risk_grade"]}</strong>
+<span>Observed-risk grade</span></div>
+<div class="stat"><strong>{health["evidence_grade"]}</strong>
+<span>Evidence grade</span></div>
+<div class="stat"><strong>{html.escape(release_status)}</strong>
+<span>Release readiness</span></div>
 <div class="stat"><strong>{
         "yes" if manifest.inventory.source_integrity_verified else "no"
     }</strong><span>Target unchanged</span></div>
@@ -1586,10 +4775,20 @@ target <code>{html.escape(manifest.target)}</code></p>
 <section class="decision">
 <h2>Decision: <span class="decision-badge {decision.lower()}">{decision}</span></h2>
 <ul>{reasons}</ul>
-<p><strong>Next action:</strong> {html.escape(_next_action(manifest.outcome))}</p>
+<p><strong>Next action:</strong> {html.escape(_next_action_for_manifest(manifest))}</p>
+<p><strong>Promotion:</strong> Run <code>pysec release-check</code> with the
+required governed sidecars; this report alone does not authorize release.</p>
 <p><a href="action-plan.md">Open the prioritized action plan</a></p>
+<p><a href="closure-plan.json">Download the owned closure backlog (JSON)</a></p>
 <p><a href="assurance-case.md">Open the production assurance case</a></p>
 </section>
+<section aria-labelledby="admission-heading">
+<h2 id="admission-heading">Admission decisions by evidence axis</h2>
+<p>Use these cards to route work quickly. The scan-policy decision remains authoritative.</p>
+<div class="axis-grid">{admission_cards}</div>
+</section>
+{unrouted_structural_html}
+{advanced_analysis_html}
 <main>
 <h2>Prioritized findings</h2>
 <p>Start here. Each item links the security meaning to a precise source
@@ -1689,7 +4888,7 @@ def render_sarif(findings: list[Finding]) -> dict[str, Any]:
         result: dict[str, Any] = {
             "ruleId": rule_id,
             "level": _sarif_level(finding.severity),
-            "message": {"text": finding.title},
+            "message": {"text": finding.description},
             "partialFingerprints": {"primaryLocationLineHash": finding.fingerprint},
             "properties": {
                 "finding_id": finding.finding_id,
@@ -1724,28 +4923,56 @@ def render_sarif(findings: list[Finding]) -> dict[str, Any]:
                 ],
             },
         }
+        graph_context = finding.evidence.get("graph_context")
+        if isinstance(graph_context, dict):
+            result["properties"]["graph_context"] = json_ready(graph_context)
+        risk_path = finding.evidence.get("risk_path")
+        if isinstance(risk_path, dict):
+            result["properties"]["risk_path"] = json_ready(risk_path)
+        secret_provenance = finding.evidence.get("secret_provenance")
+        if isinstance(secret_provenance, dict):
+            result["properties"]["secret_provenance"] = json_ready(secret_provenance)
+        structural = finding.evidence.get("structural_synthesis")
+        if isinstance(structural, dict):
+            result["properties"]["structural_synthesis"] = json_ready(structural)
+        data_exposure = finding.evidence.get("data_exposure")
+        if isinstance(data_exposure, dict):
+            result["properties"]["data_exposure"] = json_ready(data_exposure)
+        fusion = finding.evidence.get("fusion")
+        if isinstance(fusion, dict):
+            result["properties"]["evidence_fusion"] = json_ready(fusion)
+        location_summary = finding.evidence.get("sarif_location_summary")
+        if isinstance(location_summary, dict):
+            result["properties"]["sarif_location_summary"] = json_ready(
+                location_summary
+            )
+        result_semantics = finding.evidence.get("sarif_result_semantics")
+        if isinstance(result_semantics, dict):
+            result["properties"]["sarif_result_semantics"] = json_ready(
+                result_semantics
+            )
+        rule_reference = finding.evidence.get("sarif_rule_reference")
+        if isinstance(rule_reference, dict):
+            result["properties"]["sarif_rule_reference"] = json_ready(rule_reference)
+        message_reference = finding.evidence.get("sarif_message_reference")
+        if isinstance(message_reference, dict):
+            result["properties"]["sarif_message_reference"] = json_ready(
+                message_reference
+            )
+        severity_decision = finding.evidence.get("sarif_severity_decision")
+        if isinstance(severity_decision, dict):
+            result["properties"]["sarif_severity_decision"] = json_ready(
+                severity_decision
+            )
+        code_flows = finding.evidence.get("sarif_code_flows")
+        if isinstance(code_flows, list):
+            flow_summary = _sarif_code_flow_summary(code_flows)
+            if flow_summary:
+                result["properties"]["sarif_code_flow_summary"] = flow_summary
         if finding.locations:
-            location = finding.locations[0]
-            physical: dict[str, Any] = {"artifactLocation": {"uri": location.path}}
-            if location.start_line:
-                region: dict[str, Any] = {
-                    "startLine": location.start_line,
-                    "endLine": location.end_line or location.start_line,
-                }
-                if location.snippet and not location.snippet_redacted:
-                    highlighted = _highlighted_snippet(location)
-                    if highlighted:
-                        region["snippet"] = {"text": highlighted}
-                    snippet_start = location.snippet_start_line or location.start_line
-                    physical["contextRegion"] = {
-                        "startLine": snippet_start,
-                        "endLine": (
-                            snippet_start + len(location.snippet.splitlines()) - 1
-                        ),
-                        "snippet": {"text": location.snippet},
-                    }
-                physical["region"] = region
-            result["locations"] = [{"physicalLocation": physical}]
+            result["locations"] = [
+                _sarif_result_location(location) for location in finding.locations
+            ]
         results.append(result)
     return {
         "$schema": ("https://json.schemastore.org/sarif-2.1.0.json"),
@@ -1762,6 +4989,96 @@ def render_sarif(findings: list[Finding]) -> dict[str, Any]:
             }
         ],
     }
+
+
+def _sarif_code_flow_summary(value: list[Any]) -> list[dict[str, Any]]:
+    allowed_semantics = {
+        "native-source-sink-kinds",
+        "security-path-problem",
+        "unclassified-code-flow",
+    }
+    summaries: list[dict[str, Any]] = []
+    for flow_index, flow in enumerate(value[:10]):
+        if not isinstance(flow, dict):
+            continue
+        raw_semantic_basis = flow.get("semantic_basis")
+        semantic_basis = (
+            raw_semantic_basis
+            if isinstance(raw_semantic_basis, str)
+            and raw_semantic_basis in allowed_semantics
+            else "unclassified-code-flow"
+        )
+        raw_counts = flow.get("thread_flow_location_resolution_counts")
+        counts = raw_counts if isinstance(raw_counts, dict) else {}
+        bounded_counts = sorted(
+            ((key, count) for key, count in counts.items() if isinstance(key, str)),
+            key=lambda item: item[0],
+        )[:20]
+        summaries.append(
+            {
+                "flow_index": flow_index,
+                "code_flow_index": _sarif_summary_count(flow.get("code_flow_index")),
+                "code_flow_thread_count": _sarif_summary_count(
+                    flow.get("code_flow_thread_count")
+                ),
+                "represented_thread_count": _sarif_summary_count(
+                    flow.get("represented_thread_count")
+                ),
+                "thread_flows_omitted": _sarif_summary_count(
+                    flow.get("thread_flows_omitted")
+                ),
+                "cross_thread_combined": flow.get("cross_thread_combined") is True,
+                "execution_order_complete": (
+                    flow.get("execution_order_complete") is True
+                ),
+                "invalid_execution_order_count": _sarif_summary_count(
+                    flow.get("invalid_execution_order_count")
+                ),
+                "duplicate_execution_order_count": _sarif_summary_count(
+                    flow.get("duplicate_execution_order_count")
+                ),
+                "simultaneous_execution_order_count": _sarif_summary_count(
+                    flow.get("simultaneous_execution_order_count")
+                ),
+                "semantic_basis": semantic_basis,
+                "reported_step_count": _sarif_summary_count(flow.get("step_count")),
+                "steps_omitted": _sarif_summary_count(flow.get("steps_omitted")),
+                "thread_flow_location_resolution_counts": {
+                    key[:100]: _sarif_summary_count(count)
+                    for key, count in bounded_counts
+                },
+            }
+        )
+    return summaries
+
+
+def _sarif_summary_count(value: Any) -> int:
+    return (
+        value
+        if isinstance(value, int) and not isinstance(value, bool) and value >= 0
+        else 0
+    )
+
+
+def _sarif_result_location(location: Location) -> dict[str, Any]:
+    physical: dict[str, Any] = {"artifactLocation": {"uri": location.path}}
+    if location.start_line:
+        region: dict[str, Any] = {
+            "startLine": location.start_line,
+            "endLine": location.end_line or location.start_line,
+        }
+        if location.snippet and not location.snippet_redacted:
+            highlighted = _highlighted_snippet(location)
+            if highlighted:
+                region["snippet"] = {"text": highlighted}
+            snippet_start = location.snippet_start_line or location.start_line
+            physical["contextRegion"] = {
+                "startLine": snippet_start,
+                "endLine": snippet_start + len(location.snippet.splitlines()) - 1,
+                "snippet": {"text": location.snippet},
+            }
+        physical["region"] = region
+    return {"physicalLocation": physical}
 
 
 def render_sonarqube_external_issues(findings: list[Finding]) -> dict[str, Any]:
@@ -1794,6 +5111,67 @@ def render_sonarqube_external_issues(findings: list[Finding]) -> dict[str, Any]:
                 "filePath": location.path,
             },
         }
+        graph_context = finding.evidence.get("graph_context")
+        if isinstance(graph_context, dict):
+            issue["primaryLocation"]["message"] += (
+                f" Graph impact: {int(graph_context.get('two_hop_upstream_count', 0))} "
+                "upstream and "
+                f"{int(graph_context.get('two_hop_downstream_count', 0))} "
+                "downstream files within two hops."
+            )
+        structural = finding.evidence.get("structural_synthesis")
+        if isinstance(structural, dict):
+            disposition = structural.get("disposition")
+            island = structural.get("island")
+            cycle = structural.get("import_cycle")
+            change = structural.get("change_impact")
+            boundary = structural.get("island_boundary")
+            labels = []
+            if disposition:
+                labels.append(f"dead-code disposition {disposition}")
+            if isinstance(island, dict):
+                labels.append(
+                    f"island classification {island.get('classification', 'review')}"
+                )
+            if isinstance(cycle, dict):
+                labels.append(
+                    f"import cycle across {int(cycle.get('file_count', 0))} files"
+                )
+            if isinstance(change, dict):
+                labels.append(
+                    "change impact "
+                    f"{change.get('classification', 'review')} with risk "
+                    f"{int(change.get('risk_score', 0))}"
+                )
+            if isinstance(boundary, dict):
+                labels.append(
+                    "island boundary "
+                    f"{boundary.get('boundary_classification', 'review')}"
+                )
+            if labels:
+                issue["primaryLocation"]["message"] += (
+                    " Structural synthesis: " + "; ".join(labels) + "."
+                )
+        data_exposure = finding.evidence.get("data_exposure")
+        if isinstance(data_exposure, dict):
+            issue["primaryLocation"]["message"] += (
+                " Sensitive-data path: "
+                f"{data_exposure.get('concern', 'review')} to "
+                f"{data_exposure.get('sink_family', 'unknown')}"
+                + (
+                    f" through {data_exposure['sdk']}"
+                    if data_exposure.get("sdk")
+                    else ""
+                )
+                + "."
+            )
+        fusion = finding.evidence.get("fusion")
+        if isinstance(fusion, dict):
+            issue["primaryLocation"]["message"] += (
+                " Evidence fusion: "
+                f"{fusion.get('review_tier', 'standard')} review tier, "
+                f"{fusion.get('corroboration', 'single-tool')} corroboration."
+            )
         if location.start_line:
             issue["primaryLocation"]["textRange"] = {
                 "startLine": location.start_line,
@@ -1918,6 +5296,12 @@ def _render_html_finding(finding: Finding, tool_versions: dict[str, str]) -> str
         or "<li>No external reference.</li>"
     )
     source_context = _html_source_excerpt(finding)
+    graph_context = _html_graph_context(finding)
+    secret_provenance_context = _html_secret_provenance_context(finding)
+    risk_path_context = _html_risk_path_context(finding)
+    structural_context = _html_structural_context(finding)
+    data_exposure_context = _html_data_exposure_context(finding)
+    fusion_context = _html_fusion_context(finding)
     return (
         f"<article class='finding {severity}' "
         f"id='{html.escape(finding.finding_id, quote=True)}'>"
@@ -1942,6 +5326,12 @@ def _render_html_finding(finding: Finding, tool_versions: dict[str, str]) -> str
         "<div class='finding-location'><strong>Review this location:</strong> "
         f"<code>{html.escape(_location_text(finding))}</code></div>"
         f"{source_context}"
+        f"{graph_context}"
+        f"{secret_provenance_context}"
+        f"{risk_path_context}"
+        f"{structural_context}"
+        f"{data_exposure_context}"
+        f"{fusion_context}"
         "<div class='detail-grid'>"
         "<section class='detail'><h4>What was detected</h4>"
         f"<p>{html.escape(finding.description)}</p></section>"
@@ -1963,6 +5353,1455 @@ def _finding_tools(finding: Finding) -> str:
         ", ".join(f"{source.tool}/{source.rule_id}" for source in finding.sources)
         or "unattributed"
     )
+
+
+def _markdown_secret_provenance_context(finding: Finding) -> list[str]:
+    context = finding.evidence.get("secret_provenance")
+    if not isinstance(context, dict):
+        return []
+    membership = "; ".join(
+        (
+            _secret_membership_text(
+                "source",
+                context.get("source_inventory_available"),
+                context.get("source_inventory_member"),
+            ),
+            _secret_membership_text(
+                "graph",
+                context.get("graph_available"),
+                context.get("graph_path_member"),
+            ),
+            _secret_membership_text(
+                "artifact",
+                context.get("artifact_manifest_available"),
+                context.get("artifact_manifest_member"),
+            ),
+        )
+    )
+    lines = [
+        "- **Secret candidate provenance:** `"
+        + _markdown_code(str(context.get("secret_context_id") or "unknown"))
+        + "`; content `"
+        + _markdown_code(str(context.get("content_lane") or "unknown"))
+        + "`; disposition `"
+        + _markdown_code(str(context.get("review_disposition") or "unknown"))
+        + "`; verification `"
+        + _markdown_code(str(context.get("verification_status") or "not-established"))
+        + "`; history `"
+        + _markdown_code(str(context.get("history_status") or "not-established"))
+        + "`; "
+        + _markdown_text(membership)
+        + "; scanner `"
+        + _markdown_code(str(context.get("scanner_perspective") or "single-scanner"))
+        + "`; assurance `"
+        + _markdown_code(
+            str(context.get("evidence_assurance_status") or "not-assessed")
+        )
+        + "`; redacted `"
+        + _markdown_code("yes" if context.get("redacted") is True else "no")
+        + "`. **Lane-specific action:** "
+        + _markdown_text(
+            str(context.get("recommended_action") or "Review the redacted candidate.")
+        )
+        + " This context does not establish that the candidate is a real, active, "
+        "exploitable, or unique credential, and test/generated placement is not an "
+        "automatic false-positive disposition."
+    ]
+    intersections = context.get("secret_exposure_intersections")
+    values = intersections if isinstance(intersections, list) else []
+    for item in values[:3]:
+        if not isinstance(item, dict):
+            continue
+        sink_path = str(item.get("sink_path") or "unknown")
+        if item.get("sink_line"):
+            sink_path += f":{item['sink_line']}"
+        handoff = item.get("validation_handoff")
+        handoff = handoff if isinstance(handoff, dict) else {}
+        candidate_tests = handoff.get("candidate_test_files")
+        candidate_tests = candidate_tests if isinstance(candidate_tests, list) else []
+        lines.append(
+            "- **Secret-to-sensitive-sink intersection:** `"
+            + _markdown_code(str(item.get("intersection_id") or "unknown"))
+            + "`; relationship `"
+            + _markdown_code(str(item.get("association_kind") or "unknown"))
+            + "`; sink `"
+            + _markdown_code(sink_path)
+            + "`; family `"
+            + _markdown_code(str(item.get("sink_family") or "unknown"))
+            + "`; boundary `"
+            + _markdown_code(str(item.get("trust_boundary") or "unknown"))
+            + "`; protection `"
+            + _markdown_code(str(item.get("protection_status") or "unknown"))
+            + "`; distance `"
+            + _markdown_code(str(item.get("distance_to_sink") or 0))
+            + "` file hop(s); temporal `"
+            + _markdown_code(str(item.get("temporal_alignment") or "not-established"))
+            + "`; validation handoff `"
+            + _markdown_code(
+                str(handoff.get("supporting_evidence_readiness") or "not-established")
+            )
+            + "`; candidate tests `"
+            + _markdown_code(
+                ", ".join(str(value) for value in candidate_tests[:3]) or "none"
+            )
+            + "`; combined assurance prerequisite `"
+            + _markdown_code(
+                "met"
+                if item.get("combined_assurance_prerequisite_met") is True
+                else "not met"
+            )
+            + "`; canary `"
+            + _markdown_code(
+                str(item.get("canary_validation_status") or "not-established")
+            )
+            + "`. **Cross-reference action:** "
+            + _markdown_text(
+                str(item.get("recommended_action") or "Trace and protect the route.")
+            )
+            + " Static file-route co-location does not prove value flow, runtime "
+            "execution, credential validity, or disclosure."
+        )
+        compounds = item.get("secret_exposure_advisory_intersections")
+        compound_values = compounds if isinstance(compounds, list) else []
+        for compound in compound_values[:2]:
+            if not isinstance(compound, dict):
+                continue
+            lines.append(
+                "- **Secret / sensitive-boundary / advisory intersection:** `"
+                + _markdown_code(str(compound.get("intersection_id") or "unknown"))
+                + "`; package `"
+                + _markdown_code(str(compound.get("package") or "unknown"))
+                + "`; advisory `"
+                + _markdown_code(str(compound.get("primary_identifier") or "unknown"))
+                + "`; known exploited `"
+                + _markdown_code(
+                    "yes" if compound.get("known_exploited") is True else "no"
+                )
+                + "`; fix available `"
+                + _markdown_code(
+                    "yes" if compound.get("fix_available") is True else "no"
+                )
+                + "`; canary `"
+                + _markdown_code(
+                    str(compound.get("canary_validation_status") or "not-established")
+                )
+                + "`. This exact-route join does not prove value flow, disclosure, vulnerable-function execution, or exploitability."
+            )
+    omitted = int(context.get("secret_exposure_intersections_omitted") or 0)
+    if omitted:
+        lines.append(
+            f"- **Additional secret-to-sink intersections omitted from finding context:** {omitted}; inspect `risk-paths.json`."
+        )
+    return lines
+
+
+def _html_secret_provenance_context(finding: Finding) -> str:
+    context = finding.evidence.get("secret_provenance")
+    if not isinstance(context, dict):
+        return ""
+    membership = "; ".join(
+        (
+            _secret_membership_text(
+                "source",
+                context.get("source_inventory_available"),
+                context.get("source_inventory_member"),
+            ),
+            _secret_membership_text(
+                "graph",
+                context.get("graph_available"),
+                context.get("graph_path_member"),
+            ),
+            _secret_membership_text(
+                "artifact",
+                context.get("artifact_manifest_available"),
+                context.get("artifact_manifest_member"),
+            ),
+        )
+    )
+    intersections = context.get("secret_exposure_intersections")
+    values = intersections if isinstance(intersections, list) else []
+    intersection_html = ""
+    if values:
+        items: list[str] = []
+        for item in values[:3]:
+            if not isinstance(item, dict):
+                continue
+            sink_path = str(item.get("sink_path") or "unknown")
+            if item.get("sink_line"):
+                sink_path += f":{item['sink_line']}"
+            handoff = item.get("validation_handoff")
+            handoff = handoff if isinstance(handoff, dict) else {}
+            candidate_tests = handoff.get("candidate_test_files")
+            candidate_tests = (
+                candidate_tests if isinstance(candidate_tests, list) else []
+            )
+            compounds = item.get("secret_exposure_advisory_intersections")
+            compound_values = compounds if isinstance(compounds, list) else []
+            compound_html = ""
+            if compound_values and isinstance(compound_values[0], dict):
+                compound = compound_values[0]
+                compound_html = (
+                    " Compound scope <code>"
+                    + html.escape(str(compound.get("intersection_id") or "unknown"))
+                    + "</code> joins package <code>"
+                    + html.escape(str(compound.get("package") or "unknown"))
+                    + "</code> / advisory <code>"
+                    + html.escape(str(compound.get("primary_identifier") or "unknown"))
+                    + "</code>; canary <code>"
+                    + html.escape(
+                        str(
+                            compound.get("canary_validation_status")
+                            or "not-established"
+                        )
+                    )
+                    + "</code>."
+                )
+            items.append(
+                "<li><code>"
+                + html.escape(str(item.get("intersection_id") or "unknown"))
+                + "</code>: relationship <code>"
+                + html.escape(str(item.get("association_kind") or "unknown"))
+                + "</code>; sink <code>"
+                + html.escape(sink_path)
+                + "</code>; family <code>"
+                + html.escape(str(item.get("sink_family") or "unknown"))
+                + "</code>; boundary <code>"
+                + html.escape(str(item.get("trust_boundary") or "unknown"))
+                + "</code>; protection <code>"
+                + html.escape(str(item.get("protection_status") or "unknown"))
+                + "</code>; distance <code>"
+                + html.escape(str(item.get("distance_to_sink") or 0))
+                + "</code> file hop(s); temporal <code>"
+                + html.escape(str(item.get("temporal_alignment") or "not-established"))
+                + "</code>; validation handoff <code>"
+                + html.escape(
+                    str(
+                        handoff.get("supporting_evidence_readiness")
+                        or "not-established"
+                    )
+                )
+                + "</code>; candidate tests <code>"
+                + html.escape(
+                    ", ".join(str(value) for value in candidate_tests[:3]) or "none"
+                )
+                + "</code>; combined assurance prerequisite <code>"
+                + (
+                    "met"
+                    if item.get("combined_assurance_prerequisite_met") is True
+                    else "not met"
+                )
+                + "</code>; canary <code>"
+                + html.escape(
+                    str(item.get("canary_validation_status") or "not-established")
+                )
+                + "</code>. <strong>Cross-reference action:</strong> "
+                + html.escape(
+                    str(
+                        item.get("recommended_action") or "Trace and protect the route."
+                    )
+                )
+                + " Static file-route co-location does not prove value flow, runtime "
+                "execution, credential validity, or disclosure."
+                + compound_html
+                + "</li>"
+            )
+        if items:
+            omitted = int(context.get("secret_exposure_intersections_omitted") or 0)
+            omitted_text = (
+                f"<p>{omitted} additional intersection(s) are retained in "
+                "<code>risk-paths.json</code>.</p>"
+                if omitted
+                else ""
+            )
+            intersection_html = (
+                "<section class='source-context'><h4>Secret-to-sensitive-sink "
+                "intersections</h4><ul class='compact'>"
+                + "".join(items)
+                + "</ul>"
+                + omitted_text
+                + "</section>"
+            )
+    return (
+        "<section class='source-context'><h4>Secret candidate provenance</h4><p>"
+        "Context <code>"
+        + html.escape(str(context.get("secret_context_id") or "unknown"))
+        + "</code>; content <code>"
+        + html.escape(str(context.get("content_lane") or "unknown"))
+        + "</code>; disposition <code>"
+        + html.escape(str(context.get("review_disposition") or "unknown"))
+        + "</code>; verification <code>"
+        + html.escape(str(context.get("verification_status") or "not-established"))
+        + "</code>; history <code>"
+        + html.escape(str(context.get("history_status") or "not-established"))
+        + "</code>; "
+        + html.escape(membership)
+        + "; scanner <code>"
+        + html.escape(str(context.get("scanner_perspective") or "single-scanner"))
+        + "</code>; assurance <code>"
+        + html.escape(str(context.get("evidence_assurance_status") or "not-assessed"))
+        + "</code>; redacted <code>"
+        + ("yes" if context.get("redacted") is True else "no")
+        + "</code>. <strong>Lane-specific action:</strong> "
+        + html.escape(
+            str(context.get("recommended_action") or "Review the redacted candidate.")
+        )
+        + " This context does not establish that the candidate is a real, active, "
+        "exploitable, or unique credential, and test/generated placement is not an "
+        "automatic false-positive disposition.</p></section>" + intersection_html
+    )
+
+
+def _markdown_graph_context(finding: Finding) -> list[str]:
+    context = finding.evidence.get("graph_context")
+    if not isinstance(context, dict):
+        return []
+    upstream = int(context.get("two_hop_upstream_count", 0))
+    downstream = int(context.get("two_hop_downstream_count", 0))
+    degree = int(context.get("degree", 0))
+    interpretation = _markdown_text(str(context.get("interpretation", "")))
+    related = context.get("related_finding_ids", [])
+    related_text = ", ".join(f"`{_markdown_code(str(value))}`" for value in related[:5])
+    suffix = f" Related: {related_text}." if related_text else ""
+    corroboration = _graph_corroboration_text(context.get("corroborating_evidence", {}))
+    if corroboration:
+        suffix += f" Corroboration: {corroboration}."
+    return [
+        "- **Graph impact:** "
+        f"degree `{degree}`; two-hop upstream `{upstream}`; "
+        f"two-hop downstream `{downstream}` — {interpretation}.{suffix}"
+    ]
+
+
+def _markdown_risk_path_context(finding: Finding) -> list[str]:
+    context = finding.evidence.get("risk_path")
+    if not isinstance(context, dict):
+        return []
+    if context.get("status") != "routed":
+        applicability = context.get("route_applicability")
+        applicability = applicability if isinstance(applicability, dict) else {}
+        applicability_text = _route_applicability_text(applicability)
+        interpretation = (
+            "This is a Python route-model evidence gap, not proof that the code is unreachable."
+            if applicability.get("assessment") == "route-applicable"
+            else "The finding remains actionable in its native evidence lane; a production Python route is not expected."
+        )
+        structural_text = _unrouted_structural_context_text(
+            context.get("unrouted_structural_intersections")
+        )
+        return [
+            "- **Static risk route:** "
+            + _markdown_text(applicability_text)
+            + "; "
+            + _markdown_text(str(context.get("reason") or "review model coverage"))
+            + ". **Evidence assurance:** "
+            + _markdown_text(
+                _evidence_assurance_text(context.get("evidence_assurance"))
+            )
+            + ". **Change/lifecycle attribution:** "
+            + _markdown_text(
+                _change_lifecycle_text(context.get("change_lifecycle_attribution"))
+            )
+            + ". **Action:** "
+            + _markdown_text(
+                str(context.get("recommended_action") or "Review.").rstrip(".")
+            )
+            + ". "
+            + interpretation
+            + structural_text
+        ]
+    entry = context.get("entry_point")
+    entry = entry if isinstance(entry, dict) else {}
+    files = context.get("files")
+    file_values = files if isinstance(files, list) else []
+    route = " → ".join(str(item) for item in file_values[:6])
+    if len(file_values) > 6:
+        route += f" → … (+{len(file_values) - 6})"
+    validation = context.get("validation")
+    runtime = context.get("runtime_context")
+    validation = validation if isinstance(validation, dict) else {}
+    runtime = runtime if isinstance(runtime, dict) else {}
+    hotspot_ids = context.get("convergence_hotspot_ids")
+    hotspot_text = (
+        " **Shared control points:** "
+        + ", ".join(f"`{_markdown_code(str(value))}`" for value in hotspot_ids[:5])
+        + "."
+        if isinstance(hotspot_ids, list) and hotspot_ids
+        else ""
+    )
+    test_hotspot_ids = context.get("validation_test_hotspot_ids")
+    test_hotspot_text = (
+        " **Shared validation tests:** "
+        + ", ".join(f"`{_markdown_code(str(value))}`" for value in test_hotspot_ids[:5])
+        + "."
+        if isinstance(test_hotspot_ids, list) and test_hotspot_ids
+        else ""
+    )
+    campaigns = context.get("validation_campaigns")
+    campaign_values = campaigns if isinstance(campaigns, list) else []
+    campaign_text = ""
+    if campaign_values:
+        campaign = campaign_values[0]
+        if isinstance(campaign, dict):
+            campaign_ids = ", ".join(
+                f"`{_markdown_code(str(value.get('campaign_id') or 'unknown'))}`"
+                for value in campaign_values[:5]
+                if isinstance(value, dict)
+            )
+            selected = campaign.get("selected_test_files")
+            selected_values = selected if isinstance(selected, list) else []
+            snapshot = campaign.get("source_snapshot")
+            snapshot = snapshot if isinstance(snapshot, dict) else {}
+            control_text = _risk_campaign_control_text(campaign)
+            campaign_text = (
+                " **Shared validation campaign(s):** "
+                + campaign_ids
+                + "; first campaign selected tests "
+                + (
+                    ", ".join(
+                        f"`{_markdown_code(str(value))}`"
+                        for value in selected_values[:3]
+                    )
+                    if selected_values
+                    else "none mapped"
+                )
+                + "; execution `"
+                + _markdown_code(
+                    str(
+                        campaign.get("focused_test_validation_status")
+                        or "not-available"
+                    )
+                )
+                + "`; aggregate coverage `"
+                + _markdown_code(
+                    str(campaign.get("coverage_status") or "not-available")
+                )
+                + "`; alignment `"
+                + _markdown_code(
+                    str(campaign.get("test_coverage_alignment") or "not-selected")
+                )
+                + "`; review `"
+                + _markdown_code(str(campaign.get("review_tier") or "low"))
+                + "`/`"
+                + _markdown_code(str(int(campaign.get("review_score") or 0)))
+                + "`; revision `"
+                + _markdown_code(
+                    str(snapshot.get("evidence_revision_binding") or "not-established")
+                )
+                + "`"
+                + "; route evidence "
+                + _markdown_text(_campaign_route_assurance_text(campaign))
+                + "; shared tests "
+                + _markdown_text(_campaign_shared_test_quality_text(campaign))
+                + ("; " + _markdown_text(control_text) if control_text else "")
+                + "."
+            )
+    advisory_routes = context.get("dependency_advisory_routes")
+    advisory_values = advisory_routes if isinstance(advisory_routes, list) else []
+    advisory_text = ""
+    if advisory_values and isinstance(advisory_values[0], dict):
+        first = advisory_values[0]
+        identifiers = sorted(
+            {
+                str(item.get("primary_identifier") or item.get("advisory_cluster_id"))
+                for item in advisory_values
+                if isinstance(item, dict)
+            }
+        )
+        import_paths = sorted(
+            {
+                str(item.get("import_path"))
+                for item in advisory_values
+                if isinstance(item, dict) and item.get("import_path")
+            }
+        )
+        citations = _risk_advisory_citations_text(first.get("advisory_citations"))
+        advisory_text = (
+            " **Dependency exposure routes:** "
+            + str(len(advisory_values))
+            + " route(s) for "
+            + ", ".join(
+                f"`{_markdown_code(identifier)}`" for identifier in identifiers[:5]
+            )
+            + " through importer(s) "
+            + ", ".join(f"`{_markdown_code(path)}`" for path in import_paths[:5])
+            + ("; known exploited" if first.get("known_exploited") is True else "")
+            + ("; fixed version retained" if first.get("fix_available") is True else "")
+            + "; "
+            + _markdown_text(_package_lifecycle_text(first.get("package_lifecycle")))
+            + "; "
+            + _markdown_text(_entry_point_exposure_text(first))
+            + ("; citations " + citations if citations else "")
+            + "."
+        )
+    raw_intersections = context.get("exposure_advisory_intersections")
+    intersections = raw_intersections if isinstance(raw_intersections, list) else []
+    intersection_text = ""
+    if intersections:
+        first_intersection = (
+            intersections[0] if isinstance(intersections[0], dict) else {}
+        )
+        intersection_text = (
+            " **Sensitive-boundary dependency intersection(s):** "
+            + str(len(intersections))
+            + "; exact path `"
+            + _markdown_code(str(first_intersection.get("path") or "unknown"))
+            + "`; SDK package `"
+            + _markdown_code(str(first_intersection.get("package") or "unknown"))
+            + "`; advisory `"
+            + _markdown_code(
+                str(first_intersection.get("primary_identifier") or "unknown")
+            )
+            + "`; protection `"
+            + _markdown_code(
+                str(first_intersection.get("protection_status") or "unknown")
+            )
+            + "`; "
+            + _markdown_text(
+                _package_lifecycle_text(first_intersection.get("package_lifecycle"))
+            )
+            + "; entry exposure `"
+            + _markdown_code(
+                str(int(first_intersection.get("entry_point_exposure_count") or 0))
+            )
+            + "` declared route(s); "
+            + _markdown_text(
+                _entry_runtime_status_text(
+                    first_intersection.get("entry_point_runtime_statuses")
+                )
+            )
+            + ". This is compound review context, not leakage or vulnerable-function proof."
+        )
+    compound_values = [
+        compound
+        for intersection in intersections
+        if isinstance(intersection, dict)
+        for compound in (
+            intersection.get("secret_exposure_advisory_intersections") or []
+        )
+        if isinstance(compound, dict)
+    ]
+    compound_text = ""
+    if compound_values:
+        first_compound = compound_values[0]
+        compound_text = (
+            " **Secret / sensitive-boundary / advisory intersection(s):** "
+            + str(len(compound_values))
+            + "; secret `"
+            + _markdown_code(str(first_compound.get("secret_path") or "unknown"))
+            + "`; package `"
+            + _markdown_code(str(first_compound.get("package") or "unknown"))
+            + "`; advisory `"
+            + _markdown_code(str(first_compound.get("primary_identifier") or "unknown"))
+            + "`; canary `"
+            + _markdown_code(
+                str(first_compound.get("canary_validation_status") or "not-established")
+            )
+            + "`. The exact sensitive-route join does not prove value flow, disclosure, or vulnerable-function execution."
+        )
+    sensitive_route = context.get("sensitive_data_route")
+    sensitive_route = sensitive_route if isinstance(sensitive_route, dict) else {}
+    sensitive_route_text = ""
+    if sensitive_route:
+        sensitive_route_citations = _risk_advisory_citations_text(
+            sensitive_route.get("citations")
+        )
+        sensitive_route_text = (
+            " **End-to-end sensitive-data route:** `"
+            + _markdown_code(
+                str(sensitive_route.get("sensitive_route_id") or "unknown")
+            )
+            + "`; evidence `"
+            + _markdown_code(str(sensitive_route.get("evidence_basis") or "unknown"))
+            + "`; sink `"
+            + _markdown_code(str(sensitive_route.get("sink_family") or "unknown"))
+            + "`; boundary `"
+            + _markdown_code(str(sensitive_route.get("trust_boundary") or "unknown"))
+            + "`; protection `"
+            + _markdown_code(str(sensitive_route.get("protection_status") or "unknown"))
+            + "`; scanner assurance `"
+            + _markdown_code(
+                str(sensitive_route.get("evidence_assurance_status") or "not-assessed")
+            )
+            + "`; validation `"
+            + _markdown_code(
+                str(sensitive_route.get("validation_status") or "not-assessed")
+            )
+            + "`"
+            + (
+                "; guidance " + sensitive_route_citations
+                if sensitive_route_citations
+                else "; guidance citation unavailable"
+            )
+            + ". Citations support classification and remediation guidance; this "
+            "static route is not proof of disclosure."
+        )
+    return [
+        "- **Static risk route:** `"
+        + _markdown_code(str(context.get("route_id") or "unknown"))
+        + "` from `"
+        + _markdown_code(str(entry.get("declared_as") or entry.get("id") or "unknown"))
+        + "` in `"
+        + _markdown_code(str(int(context.get("hop_count") or 0)))
+        + "` file hop(s): "
+        + _markdown_text(route or str(entry.get("path") or "same file"))
+        + ". **Entry exposure:** "
+        + _markdown_text(_entry_point_exposure_text(context))
+        + ". **Validation:** "
+        + _markdown_text(_risk_path_validation_signals(validation, runtime))
+        + ". **Evidence assurance:** "
+        + _markdown_text(_evidence_assurance_text(context.get("evidence_assurance")))
+        + ". **Change/lifecycle attribution:** "
+        + _markdown_text(
+            _change_lifecycle_text(context.get("change_lifecycle_attribution"))
+        )
+        + ". **Route ownership:** "
+        + _markdown_text(_route_ownership_text(context.get("ownership_context")))
+        + "."
+        + hotspot_text
+        + test_hotspot_text
+        + campaign_text
+        + advisory_text
+        + intersection_text
+        + compound_text
+        + sensitive_route_text
+    ]
+
+
+def _markdown_fusion_context(finding: Finding) -> list[str]:
+    fusion = finding.evidence.get("fusion")
+    if not isinstance(fusion, dict):
+        return []
+    reasons = fusion.get("review_reasons", [])
+    reason_text = "; ".join(_markdown_text(str(value)) for value in reasons[:5])
+    related = fusion.get("related_finding_ids", [])
+    related_text = ", ".join(f"`{_markdown_code(str(value))}`" for value in related[:5])
+    details = []
+    if reason_text:
+        details.append(reason_text)
+    if related_text:
+        details.append(f"related findings {related_text}")
+    advisory = fusion.get("advisory_context")
+    if isinstance(advisory, dict) and advisory.get("cluster_id"):
+        primary = str(advisory.get("primary_identifier") or advisory["cluster_id"])
+        usage = _dependency_usage_summary(advisory.get("dependency_usage"))
+        remediation = advisory.get("remediation_context")
+        remediation_summary = _remediation_context_summary(remediation)
+        details.append(
+            "advisory `"
+            + _markdown_code(primary)
+            + "`"
+            + ("; dependency use " + _markdown_text(usage) if usage else "")
+            + (
+                "; remediation " + _markdown_text(remediation_summary)
+                if remediation_summary
+                else ""
+            )
+        )
+        if isinstance(remediation, dict) and remediation.get("recommended_action"):
+            details.append(
+                "action " + _markdown_text(str(remediation["recommended_action"]))
+            )
+    suffix = " — " + "; ".join(details) if details else ""
+    return [
+        "- **Evidence fusion:** "
+        f"review tier `{_markdown_code(str(fusion.get('review_tier', 'standard')))}`; "
+        f"corroboration `{_markdown_code(str(fusion.get('corroboration', 'single-tool')))}`"
+        f"{suffix}"
+    ]
+
+
+def _markdown_data_exposure_context(finding: Finding) -> list[str]:
+    context = finding.evidence.get("data_exposure")
+    if not isinstance(context, dict):
+        return []
+    sdk = str(context.get("sdk") or "none identified")
+    exact_sink = str(context.get("sink") or context.get("sink_family") or "unknown")
+    sanitizer = context.get("sanitizer_visible")
+    sanitizer_text = (
+        "visible; verify effectiveness"
+        if sanitizer is True
+        else "not visible"
+        if sanitizer is False
+        else "unknown"
+    )
+    data_classes = (
+        ", ".join(str(value) for value in context.get("data_classes", []))
+        or "unclassified"
+    )
+    risk_factors = (
+        ", ".join(str(value) for value in context.get("risk_factors", [])[:5])
+        or "none recorded"
+    )
+    cross = context.get("cross_references")
+    cross = cross if isinstance(cross, dict) else {}
+    cross_signals = _exposure_cross_reference_signals(cross)
+    result = [
+        "- **Sensitive-data path:** concern `"
+        + _markdown_code(str(context.get("concern", "review")))
+        + "`; sink `"
+        + _markdown_code(exact_sink)
+        + "` (family `"
+        + _markdown_code(str(context.get("sink_family", "unknown")))
+        + "`)"
+        + "; SDK `"
+        + _markdown_code(sdk)
+        + "`; structural relevance `"
+        + _markdown_code(str(context.get("structural_relevance", "unknown")))
+        + "`; priority `"
+        + _markdown_code(str(context.get("review_priority", "medium")))
+        + "`; cross-tool triage `"
+        + _markdown_code(str(context.get("triage_tier", "standard")))
+        + "`; data classes `"
+        + _markdown_code(data_classes)
+        + "`; trust boundary `"
+        + _markdown_code(str(context.get("trust_boundary", "unknown")))
+        + "`; risk factors `"
+        + _markdown_code(risk_factors)
+        + "`; sanitizer `"
+        + _markdown_code(sanitizer_text)
+        + "`; joined evidence `"
+        + _markdown_code(cross_signals)
+        + "` - "
+        + _markdown_text(str(context.get("recommended_action", "Review the path.")))
+    ]
+    result.extend(
+        _markdown_sdk_dependency_context(context.get("sdk_dependency_context"))
+    )
+    steps = context.get("verification_steps")
+    if isinstance(steps, list) and steps:
+        result.append(
+            "- **Exposure verification:** "
+            + " ".join(
+                f"{index}. {_markdown_text(str(step))}"
+                for index, step in enumerate(steps, start=1)
+            )
+        )
+    return result
+
+
+def _markdown_sdk_dependency_context(value: Any) -> list[str]:
+    summary = _sdk_dependency_context_summary(value)
+    if not summary:
+        return []
+    citations = value.get("citations") if isinstance(value, dict) else None
+    links: list[str] = []
+    if isinstance(citations, list):
+        for item in citations[:5]:
+            if not isinstance(item, dict):
+                continue
+            identifier = _markdown_text(str(item.get("identifier") or "reference"))
+            uri = item.get("uri")
+            links.append(
+                f"[{identifier}]({uri})"
+                if isinstance(uri, str) and uri.startswith(("https://", "http://"))
+                else f"`{_markdown_code(identifier)}`"
+            )
+    suffix = "; citations " + ", ".join(links) if links else ""
+    result = [
+        "- **SDK dependency cross-reference:** "
+        + _markdown_text(summary)
+        + suffix
+        + ". This context raises review priority but does not prove SDK-mediated disclosure."
+    ]
+    clusters = value.get("advisory_clusters") if isinstance(value, dict) else None
+    if isinstance(clusters, list):
+        actions = [
+            (
+                str(
+                    item.get("primary_identifier")
+                    or item.get("cluster_id")
+                    or "advisory"
+                ),
+                str(remediation.get("priority") or "P4"),
+                str(remediation.get("recommended_action") or ""),
+            )
+            for item in clusters[:5]
+            if isinstance(item, dict)
+            and isinstance((remediation := item.get("remediation_context")), dict)
+            and remediation.get("recommended_action")
+        ]
+        if actions:
+            result.append(
+                "- **SDK advisory action:** "
+                + " ".join(
+                    f"`{_markdown_code(priority)}` `{_markdown_code(identifier)}`: {_markdown_text(action)}"
+                    for identifier, priority, action in actions[:3]
+                )
+            )
+    return result
+
+
+def _exposure_cross_reference_signals(context: dict[str, Any]) -> str:
+    if not context.get("fusion_available"):
+        return "fusion unavailable"
+    signals = [
+        "fusion " + str(context.get("fusion_review_tier") or "standard"),
+        "corroboration " + str(context.get("corroboration") or "single-tool"),
+    ]
+    if context.get("changed_line") is True:
+        signals.append("changed line")
+    if context.get("line_covered") is False:
+        signals.append("uncovered line")
+    elif context.get("line_covered") is True:
+        signals.append("covered line")
+    states = context.get("reachability_states")
+    if isinstance(states, list) and states:
+        signals.append("reachability " + "/".join(str(value) for value in states[:3]))
+    observations = context.get("runtime_observations")
+    if isinstance(observations, list) and observations:
+        signals.append("runtime " + "/".join(str(value) for value in observations[:3]))
+    upstream = context.get("graph_upstream_files")
+    if isinstance(upstream, int):
+        signals.append(f"{upstream} upstream files")
+    owners = context.get("owners")
+    if isinstance(owners, list) and owners:
+        signals.append("owners " + ", ".join(str(value) for value in owners[:3]))
+    mapped = context.get("mapped_test_files")
+    if isinstance(mapped, list) and mapped:
+        signals.append("mapped tests " + ", ".join(str(value) for value in mapped[:3]))
+    alignment = context.get("test_coverage_alignment")
+    if isinstance(alignment, str):
+        signals.append("validation " + alignment)
+    priority = context.get("change_risk_priority")
+    score = context.get("change_risk_score")
+    if isinstance(priority, str):
+        signals.append(
+            f"change risk {priority}" + (f"/{score}" if isinstance(score, int) else "")
+        )
+    risks = context.get("structural_risk_kinds")
+    if isinstance(risks, list) and risks:
+        signals.append("structural " + ", ".join(str(value) for value in risks[:3]))
+    return "; ".join(signals)
+
+
+def _markdown_structural_context(finding: Finding) -> list[str]:
+    structural = finding.evidence.get("structural_synthesis")
+    if not isinstance(structural, dict):
+        return []
+    parts: list[str] = []
+    disposition = structural.get("disposition")
+    confidence = structural.get("confidence")
+    if disposition:
+        label = f"dead-code `{_markdown_code(str(disposition))}`"
+        if confidence:
+            label += f" ({_markdown_code(str(confidence))} confidence)"
+        parts.append(label)
+    island = structural.get("island")
+    if isinstance(island, dict):
+        parts.append(
+            "island `"
+            + _markdown_code(str(island.get("classification", "review")))
+            + "` ("
+            + str(int(island.get("lines_of_code", 0)))
+            + " LOC, `"
+            + _markdown_code(str(island.get("priority", "low")))
+            + "` priority)"
+        )
+    cycle = structural.get("import_cycle")
+    if isinstance(cycle, dict):
+        parts.append(
+            "import cycle `"
+            + str(int(cycle.get("file_count", 0)))
+            + "` files (`"
+            + _markdown_code(str(cycle.get("priority", "low")))
+            + "` priority)"
+        )
+    change = structural.get("change_impact")
+    if isinstance(change, dict):
+        test_count = (
+            len(change.get("direct_test_files", []))
+            + len(change.get("transitive_test_files", []))
+            + len(change.get("associated_test_files", []))
+        )
+        parts.append(
+            "change impact `"
+            + _markdown_code(str(change.get("classification", "review")))
+            + "` (risk `"
+            + str(int(change.get("risk_score", 0)))
+            + "`, mapped tests `"
+            + str(test_count)
+            + "`, validation `"
+            + _markdown_code(
+                str(change.get("test_coverage_alignment", "not-available"))
+            )
+            + "`)"
+        )
+    boundary = structural.get("island_boundary")
+    if isinstance(boundary, dict):
+        parts.append(
+            "island boundary `"
+            + _markdown_code(str(boundary.get("boundary_classification", "review")))
+            + "`"
+        )
+    if not parts:
+        return []
+    action = structural.get("recommended_action")
+    if not action and isinstance(island, dict):
+        action = island.get("recommended_action")
+    if not action and isinstance(cycle, dict):
+        action = cycle.get("recommended_action")
+    if not action and isinstance(change, dict):
+        action = change.get("recommended_action")
+    if not action and isinstance(boundary, dict):
+        action = boundary.get("recommended_action")
+    suffix = f" - {_markdown_text(str(action))}" if action else ""
+    return ["- **Structural synthesis:** " + "; ".join(parts) + suffix]
+
+
+def _html_graph_context(finding: Finding) -> str:
+    context = finding.evidence.get("graph_context")
+    if not isinstance(context, dict):
+        return ""
+    degree = int(context.get("degree", 0))
+    upstream = int(context.get("two_hop_upstream_count", 0))
+    downstream = int(context.get("two_hop_downstream_count", 0))
+    interpretation = html.escape(str(context.get("interpretation", "")))
+    corroboration = html.escape(
+        _graph_corroboration_text(context.get("corroborating_evidence", {}))
+    )
+    corroboration_html = f" Corroboration: {corroboration}." if corroboration else ""
+    return (
+        "<section class='source-context'><h4>Graph-aware impact context</h4>"
+        f"<p>Degree <strong>{degree}</strong>; two-hop upstream "
+        f"<strong>{upstream}</strong>; two-hop downstream "
+        f"<strong>{downstream}</strong>. {interpretation}.{corroboration_html}</p></section>"
+    )
+
+
+def _html_risk_path_context(finding: Finding) -> str:
+    context = finding.evidence.get("risk_path")
+    if not isinstance(context, dict):
+        return ""
+    if context.get("status") != "routed":
+        reason = html.escape(str(context.get("reason") or "review model coverage"))
+        applicability = context.get("route_applicability")
+        applicability = applicability if isinstance(applicability, dict) else {}
+        applicability_text = html.escape(_route_applicability_text(applicability))
+        action = html.escape(
+            str(context.get("recommended_action") or "Review.").rstrip(".")
+        )
+        interpretation = (
+            "This is a Python route-model evidence gap, not proof that the code is unreachable."
+            if applicability.get("assessment") == "route-applicable"
+            else "The finding remains actionable in its native evidence lane; a production Python route is not expected."
+        )
+        assurance = html.escape(
+            _evidence_assurance_text(context.get("evidence_assurance"))
+        )
+        lifecycle = html.escape(
+            _change_lifecycle_text(context.get("change_lifecycle_attribution"))
+        )
+        structural_text = html.escape(
+            _unrouted_structural_context_text(
+                context.get("unrouted_structural_intersections")
+            )
+        )
+        return (
+            "<section class='source-context'><h4>Static risk route</h4>"
+            f"<p>{applicability_text}: {reason}. "
+            f"<strong>Evidence assurance:</strong> {assurance}. "
+            f"<strong>Change/lifecycle attribution:</strong> {lifecycle}. "
+            f"<strong>Action:</strong> {action}. {html.escape(interpretation)}"
+            f"{structural_text}</p></section>"
+        )
+    entry = context.get("entry_point")
+    entry = entry if isinstance(entry, dict) else {}
+    files = context.get("files")
+    file_values = files if isinstance(files, list) else []
+    route = " → ".join(str(item) for item in file_values[:6])
+    if len(file_values) > 6:
+        route += f" → … (+{len(file_values) - 6})"
+    validation = context.get("validation")
+    runtime = context.get("runtime_context")
+    validation = validation if isinstance(validation, dict) else {}
+    runtime = runtime if isinstance(runtime, dict) else {}
+    hotspot_ids = context.get("convergence_hotspot_ids")
+    hotspot_html = (
+        " <strong>Shared control points:</strong> "
+        + ", ".join(
+            "<code>" + html.escape(str(value)) + "</code>" for value in hotspot_ids[:5]
+        )
+        + "."
+        if isinstance(hotspot_ids, list) and hotspot_ids
+        else ""
+    )
+    test_hotspot_ids = context.get("validation_test_hotspot_ids")
+    test_hotspot_html = (
+        " <strong>Shared validation tests:</strong> "
+        + ", ".join(
+            "<code>" + html.escape(str(value)) + "</code>"
+            for value in test_hotspot_ids[:5]
+        )
+        + "."
+        if isinstance(test_hotspot_ids, list) and test_hotspot_ids
+        else ""
+    )
+    campaigns = context.get("validation_campaigns")
+    campaign_values = campaigns if isinstance(campaigns, list) else []
+    campaign_html = ""
+    if campaign_values and isinstance(campaign_values[0], dict):
+        campaign = campaign_values[0]
+        campaign_ids = ", ".join(
+            str(value.get("campaign_id") or "unknown")
+            for value in campaign_values[:5]
+            if isinstance(value, dict)
+        )
+        selected = campaign.get("selected_test_files")
+        selected_values = selected if isinstance(selected, list) else []
+        snapshot = campaign.get("source_snapshot")
+        snapshot = snapshot if isinstance(snapshot, dict) else {}
+        control_text = _risk_campaign_control_text(campaign)
+        factor_text = _risk_campaign_factor_text(campaign)
+        tests = ", ".join(str(value) for value in selected_values[:3]) or "none mapped"
+        campaign_html = (
+            " <strong>Shared validation campaign(s):</strong> <code>"
+            + html.escape(campaign_ids)
+            + "</code>; first campaign selected tests "
+            + html.escape(tests)
+            + "; execution <code>"
+            + html.escape(
+                str(campaign.get("focused_test_validation_status") or "not-available")
+            )
+            + "</code>; aggregate coverage <code>"
+            + html.escape(str(campaign.get("coverage_status") or "not-available"))
+            + "</code>; alignment <code>"
+            + html.escape(
+                str(campaign.get("test_coverage_alignment") or "not-selected")
+            )
+            + "</code>; review <code>"
+            + html.escape(str(campaign.get("review_tier") or "low"))
+            + "/"
+            + str(int(campaign.get("review_score") or 0))
+            + "</code>"
+            + ("; factors " + html.escape(factor_text) if factor_text else "")
+            + "; revision <code>"
+            + html.escape(
+                str(snapshot.get("evidence_revision_binding") or "not-established")
+            )
+            + "</code>; route evidence "
+            + html.escape(_campaign_route_assurance_text(campaign))
+            + "; shared tests "
+            + html.escape(_campaign_shared_test_quality_text(campaign))
+            + ("; " + html.escape(control_text) if control_text else "")
+            + "."
+        )
+    advisory_routes = context.get("dependency_advisory_routes")
+    advisory_values = advisory_routes if isinstance(advisory_routes, list) else []
+    advisory_html = ""
+    if advisory_values:
+        first_advisory = (
+            advisory_values[0] if isinstance(advisory_values[0], dict) else {}
+        )
+        identifiers = sorted(
+            {
+                str(item.get("primary_identifier") or item.get("advisory_cluster_id"))
+                for item in advisory_values
+                if isinstance(item, dict)
+            }
+        )
+        import_paths = sorted(
+            {
+                str(item.get("import_path"))
+                for item in advisory_values
+                if isinstance(item, dict) and item.get("import_path")
+            }
+        )
+        citation_html = _risk_advisory_citations_html(
+            first_advisory.get("advisory_citations")
+        )
+        advisory_html = (
+            " <strong>Dependency exposure routes:</strong> "
+            + str(len(advisory_values))
+            + " route(s) for <code>"
+            + html.escape(", ".join(identifiers[:5]))
+            + "</code> through importer(s) <code>"
+            + html.escape(", ".join(import_paths[:5]))
+            + "</code>"
+            + "; "
+            + html.escape(
+                _package_lifecycle_text(first_advisory.get("package_lifecycle"))
+            )
+            + "; "
+            + html.escape(_entry_point_exposure_text(first_advisory))
+            + ("; citations " + citation_html if citation_html else "")
+            + "."
+        )
+    raw_intersections = context.get("exposure_advisory_intersections")
+    intersections = raw_intersections if isinstance(raw_intersections, list) else []
+    intersection_html = ""
+    if intersections:
+        first_intersection = (
+            intersections[0] if isinstance(intersections[0], dict) else {}
+        )
+        intersection_html = (
+            " <strong>Sensitive-boundary dependency intersection(s):</strong> "
+            + str(len(intersections))
+            + "; exact path <code>"
+            + html.escape(str(first_intersection.get("path") or "unknown"))
+            + "</code>; SDK package <code>"
+            + html.escape(str(first_intersection.get("package") or "unknown"))
+            + "</code>; advisory <code>"
+            + html.escape(
+                str(first_intersection.get("primary_identifier") or "unknown")
+            )
+            + "</code>; protection <code>"
+            + html.escape(str(first_intersection.get("protection_status") or "unknown"))
+            + "</code>; "
+            + html.escape(
+                _package_lifecycle_text(first_intersection.get("package_lifecycle"))
+            )
+            + "; entry exposure <code>"
+            + str(int(first_intersection.get("entry_point_exposure_count") or 0))
+            + "</code> declared route(s); "
+            + html.escape(
+                _entry_runtime_status_text(
+                    first_intersection.get("entry_point_runtime_statuses")
+                )
+            )
+            + ". This is compound review context, not leakage or vulnerable-function proof."
+        )
+    compound_values = [
+        compound
+        for intersection in intersections
+        if isinstance(intersection, dict)
+        for compound in (
+            intersection.get("secret_exposure_advisory_intersections") or []
+        )
+        if isinstance(compound, dict)
+    ]
+    compound_html = ""
+    if compound_values:
+        first_compound = compound_values[0]
+        compound_html = (
+            " <strong>Secret / sensitive-boundary / advisory intersection(s):</strong> "
+            + str(len(compound_values))
+            + "; secret <code>"
+            + html.escape(str(first_compound.get("secret_path") or "unknown"))
+            + "</code>; package <code>"
+            + html.escape(str(first_compound.get("package") or "unknown"))
+            + "</code>; advisory <code>"
+            + html.escape(str(first_compound.get("primary_identifier") or "unknown"))
+            + "</code>; canary <code>"
+            + html.escape(
+                str(first_compound.get("canary_validation_status") or "not-established")
+            )
+            + "</code>. The exact sensitive-route join does not prove value flow, disclosure, or vulnerable-function execution."
+        )
+    sensitive_route = context.get("sensitive_data_route")
+    sensitive_route = sensitive_route if isinstance(sensitive_route, dict) else {}
+    sensitive_route_html = ""
+    if sensitive_route:
+        sensitive_route_citations = _risk_advisory_citations_html(
+            sensitive_route.get("citations")
+        )
+        sensitive_route_html = (
+            " <strong>End-to-end sensitive-data route:</strong> <code>"
+            + html.escape(str(sensitive_route.get("sensitive_route_id") or "unknown"))
+            + "</code>; evidence <code>"
+            + html.escape(str(sensitive_route.get("evidence_basis") or "unknown"))
+            + "</code>; sink <code>"
+            + html.escape(str(sensitive_route.get("sink_family") or "unknown"))
+            + "</code>; boundary <code>"
+            + html.escape(str(sensitive_route.get("trust_boundary") or "unknown"))
+            + "</code>; protection <code>"
+            + html.escape(str(sensitive_route.get("protection_status") or "unknown"))
+            + "</code>; scanner assurance <code>"
+            + html.escape(
+                str(sensitive_route.get("evidence_assurance_status") or "not-assessed")
+            )
+            + "</code>; validation <code>"
+            + html.escape(
+                str(sensitive_route.get("validation_status") or "not-assessed")
+            )
+            + "</code>"
+            + (
+                "; guidance " + sensitive_route_citations
+                if sensitive_route_citations
+                else "; guidance citation unavailable"
+            )
+            + ". Citations support classification and remediation guidance; this "
+            "static route is not proof of disclosure."
+        )
+    return (
+        "<section class='source-context'><h4>Static risk route</h4><p>"
+        "Route <code>"
+        + html.escape(str(context.get("route_id") or "unknown"))
+        + "</code> from <code>"
+        + html.escape(str(entry.get("declared_as") or entry.get("id") or "unknown"))
+        + "</code> in <strong>"
+        + str(int(context.get("hop_count") or 0))
+        + "</strong> file hop(s): "
+        + html.escape(route or str(entry.get("path") or "same file"))
+        + ". <strong>Entry exposure:</strong> "
+        + html.escape(_entry_point_exposure_text(context))
+        + ". <strong>Validation:</strong> "
+        + html.escape(_risk_path_validation_signals(validation, runtime))
+        + ". <strong>Evidence assurance:</strong> "
+        + html.escape(_evidence_assurance_text(context.get("evidence_assurance")))
+        + ". <strong>Change/lifecycle attribution:</strong> "
+        + html.escape(
+            _change_lifecycle_text(context.get("change_lifecycle_attribution"))
+        )
+        + ". <strong>Route ownership:</strong> "
+        + html.escape(_route_ownership_text(context.get("ownership_context")))
+        + "."
+        + hotspot_html
+        + test_hotspot_html
+        + campaign_html
+        + advisory_html
+        + intersection_html
+        + compound_html
+        + sensitive_route_html
+        + "</p></section>"
+    )
+
+
+def _risk_campaign_control_text(campaign: dict[str, Any]) -> str:
+    raw = campaign.get("control_point_context")
+    control = raw if isinstance(raw, dict) else {}
+    parts: list[str] = []
+    if isinstance(control.get("graph_degree"), int):
+        parts.append(f"degree {int(control['graph_degree'])}")
+    if isinstance(control.get("maximum_complexity"), int):
+        parts.append(
+            "complexity "
+            + str(int(control["maximum_complexity"]))
+            + (
+                f" ({control['maximum_complexity_rank']})"
+                if control.get("maximum_complexity_rank")
+                else ""
+            )
+        )
+    if isinstance(control.get("change_risk_score"), int):
+        parts.append(
+            "change risk "
+            + str(int(control["change_risk_score"]))
+            + (
+                f" ({control['change_priority']})"
+                if control.get("change_priority")
+                else ""
+            )
+        )
+    uncovered = control.get("uncovered_changed_lines")
+    if isinstance(uncovered, list) and uncovered:
+        lines = ", ".join(str(line) for line in uncovered[:5])
+        if len(uncovered) > 5:
+            lines += f" (+{len(uncovered) - 5})"
+        parts.append(f"uncovered changed lines {lines}")
+    observations = control.get("runtime_observations")
+    if isinstance(observations, list) and observations:
+        parts.append("runtime " + ", ".join(str(value) for value in observations[:3]))
+    return "; ".join(parts)
+
+
+def _risk_campaign_factor_text(campaign: dict[str, Any]) -> str:
+    raw = campaign.get("review_factors")
+    factors = raw if isinstance(raw, list) else []
+    values = [
+        f"{factor.get('id')} +{int(factor.get('points') or 0)}"
+        for factor in factors[:8]
+        if isinstance(factor, dict) and factor.get("id") and factor.get("points")
+    ]
+    if len(factors) > 8:
+        values.append(f"+{len(factors) - 8} more")
+    return "; ".join(values)
+
+
+def _html_fusion_context(finding: Finding) -> str:
+    fusion = finding.evidence.get("fusion")
+    if not isinstance(fusion, dict):
+        return ""
+    tier = html.escape(str(fusion.get("review_tier", "standard")))
+    corroboration = html.escape(str(fusion.get("corroboration", "single-tool")))
+    reasons = fusion.get("review_reasons", [])
+    reason_text = "; ".join(str(value) for value in reasons[:5])
+    advisory = fusion.get("advisory_context")
+    advisory_text = ""
+    if isinstance(advisory, dict) and advisory.get("cluster_id"):
+        primary = str(advisory.get("primary_identifier") or advisory["cluster_id"])
+        usage = _dependency_usage_summary(advisory.get("dependency_usage"))
+        remediation = advisory.get("remediation_context")
+        remediation_summary = _remediation_context_summary(remediation)
+        action = (
+            str(remediation.get("recommended_action") or "")
+            if isinstance(remediation, dict)
+            else ""
+        )
+        advisory_text = (
+            " Advisory "
+            + primary
+            + ("; dependency use " + usage if usage else "")
+            + ("; remediation " + remediation_summary if remediation_summary else "")
+            + ("; action " + action if action else "")
+            + "."
+        )
+    reason_html = f" {html.escape(reason_text)}." if reason_text else ""
+    return (
+        "<section class='source-context'><h4>Cross-referenced evidence</h4>"
+        f"<p>Review tier <strong>{tier}</strong>; corroboration "
+        f"<strong>{corroboration}</strong>.{reason_html}"
+        f"{html.escape(advisory_text)}</p></section>"
+    )
+
+
+def _html_data_exposure_context(finding: Finding) -> str:
+    context = finding.evidence.get("data_exposure")
+    if not isinstance(context, dict):
+        return ""
+    concern = html.escape(str(context.get("concern", "review")))
+    family = html.escape(str(context.get("sink_family", "unknown")))
+    exact_sink = html.escape(str(context.get("sink") or family))
+    sdk = html.escape(str(context.get("sdk") or "none identified"))
+    relevance = html.escape(str(context.get("structural_relevance", "unknown")))
+    priority = html.escape(str(context.get("review_priority", "medium")))
+    data_classes = html.escape(
+        ", ".join(str(value) for value in context.get("data_classes", []))
+        or "unclassified"
+    )
+    trust_boundary = html.escape(str(context.get("trust_boundary", "unknown")))
+    risk_factors = html.escape(
+        ", ".join(str(value) for value in context.get("risk_factors", [])[:5])
+        or "none recorded"
+    )
+    cross = context.get("cross_references")
+    cross = cross if isinstance(cross, dict) else {}
+    cross_signals = html.escape(_exposure_cross_reference_signals(cross))
+    dependency = context.get("sdk_dependency_context")
+    dependency_summary = _sdk_dependency_context_summary(dependency)
+    dependency_html = ""
+    if dependency_summary:
+        citation_links: list[str] = []
+        citations = (
+            dependency.get("citations") if isinstance(dependency, dict) else None
+        )
+        if isinstance(citations, list):
+            for item in citations[:5]:
+                if not isinstance(item, dict):
+                    continue
+                identifier = html.escape(str(item.get("identifier") or "reference"))
+                uri = item.get("uri")
+                citation_links.append(
+                    f"<a href='{html.escape(uri, quote=True)}' rel='noreferrer'>{identifier}</a>"
+                    if isinstance(uri, str) and uri.startswith(("https://", "http://"))
+                    else identifier
+                )
+        citations_html = (
+            " Citations: " + ", ".join(citation_links) + "." if citation_links else ""
+        )
+        dependency_html = (
+            "<h5>SDK dependency cross-reference</h5><p>"
+            + html.escape(dependency_summary)
+            + "."
+            + citations_html
+            + " This context raises review priority but does not prove SDK-mediated disclosure.</p>"
+        )
+    triage_tier = html.escape(str(context.get("triage_tier", "standard")))
+    steps = context.get("verification_steps")
+    steps_html = ""
+    if isinstance(steps, list) and steps:
+        steps_html = (
+            "<h5>Verification plan</h5><ol>"
+            + "".join(f"<li>{html.escape(str(step))}</li>" for step in steps)
+            + "</ol>"
+        )
+    action = html.escape(str(context.get("recommended_action", "Review the path.")))
+    return (
+        "<section class='source-context'><h4>Sensitive-data exposure path</h4>"
+        f"<p>Concern <strong>{concern}</strong>; sink <strong>{exact_sink}</strong> "
+        f"(family <strong>{family}</strong>); "
+        f"SDK <strong>{sdk}</strong>; structural relevance "
+        f"<strong>{relevance}</strong>; priority <strong>{priority}</strong>; "
+        f"cross-tool triage <strong>{triage_tier}</strong>; "
+        f"data classes <strong>{data_classes}</strong>; trust boundary "
+        f"<strong>{trust_boundary}</strong>; risk factors "
+        f"<strong>{risk_factors}</strong>; joined evidence "
+        f"<strong>{cross_signals}</strong>. {action}</p>{dependency_html}{steps_html}</section>"
+    )
+
+
+def _html_structural_context(finding: Finding) -> str:
+    structural = finding.evidence.get("structural_synthesis")
+    if not isinstance(structural, dict):
+        return ""
+    parts: list[str] = []
+    disposition = structural.get("disposition")
+    if disposition:
+        parts.append(
+            "Dead-code disposition <strong>"
+            + html.escape(str(disposition))
+            + "</strong>"
+        )
+    island = structural.get("island")
+    if isinstance(island, dict):
+        parts.append(
+            "island <strong>"
+            + html.escape(str(island.get("classification", "review")))
+            + "</strong> ("
+            + str(int(island.get("lines_of_code", 0)))
+            + " LOC)"
+        )
+    cycle = structural.get("import_cycle")
+    if isinstance(cycle, dict):
+        parts.append(
+            "import cycle across <strong>"
+            + str(int(cycle.get("file_count", 0)))
+            + "</strong> files"
+        )
+    change = structural.get("change_impact")
+    if isinstance(change, dict):
+        parts.append(
+            "change impact <strong>"
+            + html.escape(str(change.get("classification", "review")))
+            + "</strong> (risk "
+            + str(int(change.get("risk_score", 0)))
+            + ")"
+        )
+    boundary = structural.get("island_boundary")
+    if isinstance(boundary, dict):
+        parts.append(
+            "island boundary <strong>"
+            + html.escape(str(boundary.get("boundary_classification", "review")))
+            + "</strong>"
+        )
+    if not parts:
+        return ""
+    action = structural.get("recommended_action")
+    if not action and isinstance(island, dict):
+        action = island.get("recommended_action")
+    if not action and isinstance(cycle, dict):
+        action = cycle.get("recommended_action")
+    if not action and isinstance(change, dict):
+        action = change.get("recommended_action")
+    if not action and isinstance(boundary, dict):
+        action = boundary.get("recommended_action")
+    action_html = f" {html.escape(str(action))}" if action else ""
+    return (
+        "<section class='source-context'><h4>Structural synthesis</h4><p>"
+        + "; ".join(parts)
+        + "."
+        + action_html
+        + "</p></section>"
+    )
+
+
+def _graph_corroboration_text(value: Any) -> str:
+    if not isinstance(value, dict):
+        return ""
+    parts: list[str] = []
+    coverage = value.get("coverage_percent")
+    if isinstance(coverage, (int, float)) and not isinstance(coverage, bool):
+        parts.append(f"coverage {float(coverage):.1f}%")
+    states = value.get("reachability_states", [])
+    if isinstance(states, list) and states:
+        parts.append("reachability " + "/".join(str(item) for item in states[:3]))
+    rank = value.get("maximum_complexity_rank")
+    complexity = value.get("maximum_complexity")
+    if rank and isinstance(complexity, int):
+        parts.append(f"max complexity {complexity} ({rank})")
+    scanners = value.get("neighboring_scanners", [])
+    if isinstance(scanners, list) and scanners:
+        parts.append("nearby scanners " + ", ".join(str(item) for item in scanners[:5]))
+    return "; ".join(parts)
 
 
 def _markdown_source_excerpt(finding: Finding) -> list[str]:
@@ -2220,7 +7059,114 @@ def _write_json(path: Path, value: Any) -> None:
 
 
 def _write_text(path: Path, value: str) -> None:
-    path.write_text(value, encoding="utf-8", newline="\n")
+    payload = value.replace("\r\n", "\n").replace("\r", "\n").encode("utf-8")
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_BINARY", 0)
+    descriptor = os.open(path, flags, 0o600)  # noqa: S103 - private report artifact
+    try:
+        with os.fdopen(descriptor, "wb", closefd=False) as handle:
+            handle.write(payload)
+            handle.flush()
+    finally:
+        os.close(descriptor)
+    os.chmod(path, 0o600)  # noqa: S103 - repair pre-existing staged permissions
+
+
+def _harden_report_tree(output: Path) -> None:
+    for path in output.rglob("*"):
+        os.chmod(
+            path,
+            0o700 if path.is_dir() else 0o600,
+        )  # noqa: S103 - private security evidence tree
+    os.chmod(output, 0o700)  # noqa: S103 - private security evidence tree
+    if os.name == "nt":
+        _harden_windows_acl(output)
+
+
+def _harden_windows_acl(output: Path) -> None:
+    system_root = Path(os.environ.get("SYSTEMROOT") or "C:/Windows").resolve()
+    whoami = system_root / "System32" / "whoami.exe"
+    icacls = system_root / "System32" / "icacls.exe"
+    if not whoami.is_file() or not icacls.is_file():
+        raise OSError("Windows ACL utilities are unavailable")
+    sid = _current_windows_sid(whoami)
+
+    subprocess.run(  # noqa: S603  # nosec B603
+        [
+            str(icacls),
+            str(output),
+            "/inheritance:r",
+            "/grant:r",
+            f"*{sid}:F",
+            "/T",
+            "/C",
+            "/Q",
+        ],
+        check=True,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        timeout=30,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+
+
+def _current_windows_sid(whoami: Path) -> str:
+    identity = subprocess.run(  # noqa: S603  # nosec B603
+        [str(whoami), "/user", "/fo", "csv", "/nh"],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=10,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    ).stdout.strip()
+    rows = list(csv.reader([identity]))
+    sid = rows[0][1] if len(rows) == 1 and len(rows[0]) == 2 else ""
+    if re.fullmatch(r"S-1-(?:\d+-)+\d+", sid) is None:
+        raise OSError("could not establish the current Windows security identifier")
+    return sid
+
+
+def _verify_report_permissions(output: Path) -> None:
+    if os.name != "nt":
+        exposed = [
+            path for path in (output, *output.rglob("*")) if path.stat().st_mode & 0o077
+        ]
+        if exposed:
+            raise PermissionError(
+                f"report permission postcondition failed for {exposed[0]}"
+            )
+        return
+    system_root = Path(os.environ.get("SYSTEMROOT") or "C:/Windows").resolve()
+    icacls = system_root / "System32" / "icacls.exe"
+    whoami = system_root / "System32" / "whoami.exe"
+    if not icacls.is_file() or not whoami.is_file():
+        raise OSError("Windows ACL verification utility is unavailable")
+    subprocess.run(  # noqa: S603  # nosec B603
+        [str(icacls), str(output), "/verify", "/T", "/C", "/Q"],
+        check=True,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        timeout=30,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+    sid = _current_windows_sid(whoami)
+    with tempfile.TemporaryDirectory(prefix="pysec-acl-verification-") as directory:
+        acl = Path(directory) / "report.acl"
+        subprocess.run(  # noqa: S603  # nosec B603
+            [str(icacls), str(output), "/save", str(acl), "/T", "/C", "/Q"],
+            check=True,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            timeout=30,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        raw = acl.read_bytes()
+    rendered = raw.decode("utf-16", errors="ignore")
+    observed_sids = set(re.findall(r"S-1-(?:\d+-)+\d+", rendered))
+    if observed_sids != {sid}:
+        raise PermissionError("report Windows ACL postcondition failed")
 
 
 def _write_checksums(output: Path) -> None:
@@ -2295,7 +7241,10 @@ def _entrypoint_integrity_states(
                     tool.tool,
                     "primary",
                     tool.executable_sha256,
-                    tool.executable_integrity_verified,
+                    (
+                        tool.executable_integrity_verified is True
+                        and tool.executable_organization_approved
+                    ),
                     tool.executable_unchanged,
                 )
             )
@@ -2305,7 +7254,10 @@ def _entrypoint_integrity_states(
                     tool.tool,
                     "helper",
                     tool.auxiliary_executable_sha256,
-                    tool.auxiliary_executable_integrity_verified,
+                    (
+                        tool.auxiliary_executable_integrity_verified is True
+                        and tool.auxiliary_executable_organization_approved
+                    ),
                     tool.auxiliary_executable_unchanged,
                 )
             )
@@ -2315,14 +7267,20 @@ def _entrypoint_integrity_states(
 def _executable_integrity_label(run: ToolRun) -> str:
     primary = _integrity_label(
         run.executable_sha256,
-        run.executable_integrity_verified,
+        (
+            run.executable_integrity_verified is True
+            and run.executable_organization_approved
+        ),
         run.executable_unchanged,
     )
     if run.auxiliary_executable_sha256 is None:
         return primary
     auxiliary = _integrity_label(
         run.auxiliary_executable_sha256,
-        run.auxiliary_executable_integrity_verified,
+        (
+            run.auxiliary_executable_integrity_verified is True
+            and run.auxiliary_executable_organization_approved
+        ),
         run.auxiliary_executable_unchanged,
     )
     return f"{primary}; helper: {auxiliary}"
@@ -2368,6 +7326,16 @@ def _next_action(outcome: Outcome) -> str:
             "do not interpret this result as clean."
         ),
     }[outcome]
+
+
+def _next_action_for_manifest(manifest: ScanManifest) -> str:
+    if manifest.outcome is Outcome.INCOMPLETE and manifest.policy_reasons:
+        return f"Resolve the first blocking evidence gap: {manifest.policy_reasons[0]}"
+    return _next_action(manifest.outcome)
+
+
+def _report_release_status(outcome: Outcome) -> str:
+    return "PENDING EXTERNAL CONTROLS" if outcome is Outcome.PASS else "NOT APPROVED"
 
 
 def _policy_disposition(outcome: Outcome) -> str:

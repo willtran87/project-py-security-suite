@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:doctor-readiness:1.1",
+  "title": "Python Security Suite non-executing preflight readiness",
+  "type": "object",
+  "required": ["schema_version", "schema_id", "target", "profile", "ready", "decision", "scope", "summary", "blocking_tools", "optional_attention_tools", "conditional_actions", "action_groups", "next_actions", "context_errors", "tools", "scanner_trust"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": "1.1"},
+    "schema_id": {"const": "urn:project-py-security-suite:schema:doctor-readiness:1.1"},
+    "target": {"type": "string", "minLength": 1, "maxLength": 4096},
+    "profile": {"type": "string", "minLength": 1, "maxLength": 128},
+    "ready": {"type": "boolean"},
+    "decision": {
+      "type": "object",
+      "required": ["disposition", "stage", "release_approval", "blocking_reasons"],
+      "additionalProperties": false,
+      "properties": {
+        "disposition": {"enum": ["proceed", "block"]},
+        "stage": {"const": "preflight"},
+        "release_approval": {"const": false},
+        "blocking_reasons": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["kind", "subject", "reason"],
+            "additionalProperties": false,
+            "properties": {
+              "kind": {"enum": ["required_tool", "governed_context"]},
+              "subject": {"type": "string", "minLength": 1, "maxLength": 4096},
+              "reason": {"type": "string", "minLength": 1, "maxLength": 16000}
+            }
+          }
+        }
+      }
+    },
+    "scope": {"type": "string", "minLength": 1, "maxLength": 4000},
+    "summary": {
+      "type": "object",
+      "required": ["selected", "applicable", "ready", "not_applicable", "disabled", "unavailable", "attention", "required_applicable", "required_ready", "content_absent", "missing_evidence", "missing_configuration", "missing_approvals", "platform_constraints"],
+      "additionalProperties": false,
+      "properties": {
+        "selected": {"$ref": "#/$defs/count"},
+        "applicable": {"$ref": "#/$defs/count"},
+        "ready": {"$ref": "#/$defs/count"},
+        "not_applicable": {"$ref": "#/$defs/count"},
+        "disabled": {"$ref": "#/$defs/count"},
+        "unavailable": {"$ref": "#/$defs/count"},
+        "attention": {"$ref": "#/$defs/count"},
+        "required_applicable": {"$ref": "#/$defs/count"},
+        "required_ready": {"$ref": "#/$defs/count"},
+        "content_absent": {"$ref": "#/$defs/count"},
+        "missing_evidence": {"$ref": "#/$defs/count"},
+        "missing_configuration": {"$ref": "#/$defs/count"},
+        "missing_approvals": {"$ref": "#/$defs/count"},
+        "platform_constraints": {"$ref": "#/$defs/count"}
+      }
+    },
+    "blocking_tools": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/name"}},
+    "optional_attention_tools": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/name"}},
+    "conditional_actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["tool", "category", "reason", "required_action"],
+        "additionalProperties": false,
+        "properties": {
+          "tool": {"$ref": "#/$defs/name"},
+          "category": {"enum": ["missing_configuration", "missing_evidence", "platform_constraint"]},
+          "reason": {"type": "string", "maxLength": 16000},
+          "required_action": {"type": "string", "minLength": 1, "maxLength": 16000}
+        }
+      }
+    },
+    "action_groups": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["priority", "blocking", "category", "subjects", "count", "required_action"],
+        "additionalProperties": false,
+        "properties": {
+          "priority": {"enum": ["P0", "P2"]},
+          "blocking": {"type": "boolean"},
+          "category": {"$ref": "#/$defs/category"},
+          "subjects": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/name"}},
+          "count": {"type": "integer", "minimum": 1},
+          "required_action": {"type": "string", "minLength": 1, "maxLength": 16000}
+        }
+      }
+    },
+    "next_actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["priority", "blocking", "subject", "category", "reason", "required_action"],
+        "additionalProperties": false,
+        "properties": {
+          "priority": {"enum": ["P0", "P2"]},
+          "blocking": {"type": "boolean"},
+          "subject": {"$ref": "#/$defs/name"},
+          "category": {"$ref": "#/$defs/category"},
+          "reason": {"type": "string", "maxLength": 16000},
+          "required_action": {"type": "string", "minLength": 1, "maxLength": 16000}
+        }
+      }
+    },
+    "context_errors": {"type": "array", "items": {"type": "string", "minLength": 1, "maxLength": 16000}},
+    "tools": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["tool", "status", "required", "reason", "category", "required_action"],
+        "additionalProperties": false,
+        "properties": {
+          "tool": {"$ref": "#/$defs/name"},
+          "status": {"enum": ["ready", "disabled", "unavailable", "not_applicable"]},
+          "required": {"type": "boolean"},
+          "reason": {"type": ["string", "null"], "maxLength": 16000},
+          "category": {"$ref": "#/$defs/category"},
+          "required_action": {"type": "string", "minLength": 1, "maxLength": 16000},
+          "executable": {"type": ["string", "null"], "maxLength": 4096},
+          "executable_sha256": {"type": ["string", "null"], "pattern": "^[a-fA-F0-9]{64}$"},
+          "executable_integrity_verified": {"type": ["boolean", "null"]},
+          "executable_organization_approved": {"type": "boolean"}
+        }
+      }
+    },
+    "scanner_trust": {"type": "object"}
+  },
+  "$defs": {
+    "count": {"type": "integer", "minimum": 0},
+    "name": {"type": "string", "minLength": 1, "maxLength": 4096},
+    "category": {"enum": ["ready", "disabled", "unavailable", "attention", "content_absent", "missing_approval", "missing_evidence", "missing_configuration", "platform_constraint", "governed_context"]}
+  }
+}

@@ -15,6 +15,11 @@ class JsonFileScannerAdapter(ScannerAdapter):
     """Scanner adapter for CLIs that can only emit JSON to a file."""
 
     output_filename = "results.json"
+    minimum_json_output_bytes = 0
+
+    def json_output_limit_bytes(self) -> int:
+        """Return the bounded file allowance without enlarging process streams."""
+        return max(self.max_output_bytes, self.minimum_json_output_bytes)
 
     def build_command(self, executable: str, target: Path) -> list[str]:
         raise NotImplementedError("this adapter requires a temporary output path")
@@ -75,7 +80,7 @@ class JsonFileScannerAdapter(ScannerAdapter):
             try:
                 if not output.is_file() or output.is_symlink():
                     raise ValueError("scanner did not create its JSON output file")
-                if output.stat().st_size > self.max_output_bytes:
+                if output.stat().st_size > self.json_output_limit_bytes():
                     raise ValueError(
                         "scanner JSON output exceeded the configured limit"
                     )

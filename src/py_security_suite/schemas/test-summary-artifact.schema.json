@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:test-summary-artifact:1.0",
+  "type": "object",
+  "required": ["kind", "failures", "test_cases"],
+  "properties": {
+    "kind": {"const": "junit"},
+    "source_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "failures": {"type": "array", "maxItems": 250000, "items": {"type": "object"}},
+    "test_cases": {"type": "array", "maxItems": 1000000, "items": {"type": "object"}},
+    "test_case_inventory_complete": {"type": "boolean"}
+  }
+}

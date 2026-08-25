@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import os
 from pathlib import Path
 from typing import Any
@@ -16,6 +15,7 @@ from ..models import (
     finding_identity,
     normalize_repo_path,
 )
+from ..strict_json import loads as strict_json_loads
 from .base import ScannerAdapter
 from .common import map_severity, string_list
 from .staging import maintained_files
@@ -57,7 +57,7 @@ class GuardDogAdapter(ScannerAdapter):
         ]
 
     def parse(self, payload: str, target: Path) -> list[Finding]:
-        document = json.loads(payload)
+        document = strict_json_loads(payload)
         if isinstance(document, list):
             documents = document
         elif isinstance(document, dict):

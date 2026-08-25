@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:assurance-profile:2.0",
+  "title": "Checkpointed threshold-signed assurance admission profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "profile_id", "generation", "issued_at", "expires_at", "minimum_contract_versions", "required_features", "minimum_slsa_level", "required_provenance_verifiers", "minimum_authority_signatures", "checkpoint_backend", "checkpoint", "trusted_time", "authorities"],
+  "properties": {
+    "schema_version": {"const": "2.0"},
+    "profile_id": {"type": "string", "minLength": 1, "maxLength": 200},
+    "generation": {"type": "integer", "minimum": 1},
+    "issued_at": {"type": "string", "format": "date-time"},
+    "expires_at": {"type": "string", "format": "date-time"},
+    "minimum_contract_versions": {"type": "object", "minProperties": 1, "maxProperties": 128, "propertyNames": {"type": "string", "minLength": 1, "maxLength": 200}, "additionalProperties": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+$"}},
+    "required_features": {"type": "object", "minProperties": 1, "maxProperties": 128, "additionalProperties": {"type": "array", "maxItems": 128, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 200}}},
+    "minimum_slsa_level": {"type": "integer", "minimum": 1, "maximum": 3},
+    "required_provenance_verifiers": {"type": "array", "minItems": 4, "maxItems": 4, "uniqueItems": true, "allOf": [{"contains": {"const": "slsa"}}, {"contains": {"const": "sigstore"}}, {"contains": {"const": "vsa"}}, {"contains": {"const": "dependency-closure"}}], "items": {"enum": ["dependency-closure", "sigstore", "slsa", "vsa"]}},
+    "minimum_authority_signatures": {"type": "integer", "minimum": 2, "maximum": 16},
+    "checkpoint_backend": {"enum": ["https-cas-transparency", "rfc6962-transparency-log"]},
+    "checkpoint": {"$ref": "#/$defs/checkpoint"},
+    "trusted_time": {"type": "object"},
+    "authorities": {"type": "array", "minItems": 2, "maxItems": 16, "items": {"$ref": "#/$defs/authority"}}
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "authority": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schema_version", "algorithm", "signer_id", "collector_id", "signed_at", "expires_at", "public_key_file", "public_key_sha256", "signature_file", "signature_sha256"],
+      "properties": {
+        "schema_version": {"const": "2.0"}, "algorithm": {"enum": ["ed25519", "ecdsa-p256-sha256"]}, "signer_id": {"$ref": "#/$defs/digest"}, "collector_id": {"type": "string", "minLength": 1, "maxLength": 200}, "signed_at": {"type": "string", "format": "date-time"}, "expires_at": {"type": "string", "format": "date-time"}, "public_key_file": {"type": "string", "minLength": 1, "maxLength": 200}, "public_key_sha256": {"$ref": "#/$defs/digest"}, "signature_file": {"type": "string", "minLength": 1, "maxLength": 200}, "signature_sha256": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "checkpoint": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schema_version", "backend", "sequence", "generation", "profile_subject_sha256", "previous_checkpoint_sha256", "authorities"],
+      "properties": {"schema_version": {"const": "1.0"}, "backend": {"enum": ["https-cas-transparency", "rfc6962-transparency-log"]}, "sequence": {"type": "integer", "minimum": 1}, "generation": {"type": "integer", "minimum": 1}, "profile_subject_sha256": {"$ref": "#/$defs/digest"}, "previous_checkpoint_sha256": {"$ref": "#/$defs/digest"}, "authorities": {"type": "array", "minItems": 2, "maxItems": 16, "items": {"$ref": "#/$defs/authority"}}}
+    }
+  }
+}

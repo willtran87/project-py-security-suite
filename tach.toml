@@ -23,13 +23,53 @@ depends_on = []
 layer = "core"
 
 [[modules]]
+path = "py_security_suite.path_safety"
+depends_on = []
+layer = "core"
+
+[[modules]]
+path = "py_security_suite.reachability"
+depends_on = ["py_security_suite.path_safety"]
+layer = "core"
+
+[[modules]]
+path = "py_security_suite.prioritization"
+depends_on = []
+layer = "core"
+
+[[modules]]
+path = "py_security_suite.project_init"
+depends_on = ["py_security_suite.config"]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.ci_workflow"
+depends_on = ["py_security_suite.config", "py_security_suite.scaffold_safety"]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.precommit_config"
+depends_on = ["py_security_suite.config", "py_security_suite.scaffold_safety"]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.scaffold_safety"
+depends_on = []
+layer = "core"
+
+[[modules]]
 path = "py_security_suite.config"
-depends_on = ["py_security_suite.models"]
+depends_on = ["py_security_suite.models", "py_security_suite.path_safety"]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.config_advisor"
+depends_on = ["py_security_suite.config", "py_security_suite.path_safety"]
 layer = "services"
 
 [[modules]]
 path = "py_security_suite.inventory"
-depends_on = ["py_security_suite.models"]
+depends_on = ["py_security_suite.execution", "py_security_suite.models"]
 layer = "services"
 
 [[modules]]
@@ -38,18 +78,304 @@ depends_on = ["py_security_suite.models"]
 layer = "services"
 
 [[modules]]
+path = "py_security_suite.graph_analysis"
+depends_on = ["py_security_suite.models"]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.risk_paths"
+depends_on = ["py_security_suite.models", "py_security_suite.ownership", "py_security_suite.prioritization", "py_security_suite.validation_alignment"]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.advanced_analysis"
+depends_on = ["py_security_suite.models", "py_security_suite.path_safety"]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.advanced_delta"
+depends_on = ["py_security_suite.execution", "py_security_suite.path_safety"]
+layer = "services"
+
+[[modules]]
 path = "py_security_suite.source_context"
 depends_on = ["py_security_suite.models"]
 layer = "services"
 
 [[modules]]
+path = "py_security_suite.effectiveness"
+depends_on = ["py_security_suite.models"]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.evidence_fusion"
+depends_on = ["py_security_suite.advisory_fusion", "py_security_suite.models", "py_security_suite.ownership", "py_security_suite.validation_alignment"]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.ownership"
+depends_on = []
+layer = "core"
+
+[[modules]]
+path = "py_security_suite.validation_alignment"
+depends_on = []
+layer = "core"
+
+[[modules]]
+path = "py_security_suite.data_exposure"
+depends_on = ["py_security_suite.advisory_fusion", "py_security_suite.models"]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.advisory_fusion"
+depends_on = ["py_security_suite.models", "py_security_suite.prioritization"]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.structural_synthesis"
+depends_on = ["py_security_suite.models", "py_security_suite.structural_leverage"]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.structural_leverage"
+depends_on = ["py_security_suite.models", "py_security_suite.validation_alignment"]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.source_inventory"
+depends_on = ["py_security_suite.path_safety"]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.readiness_guidance"
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.effectiveness_corpus"
+depends_on = [
+    "py_security_suite.execution",
+    "py_security_suite.passport",
+    "py_security_suite.path_safety",
+    "py_security_suite.source_inventory",
+]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.portfolio_health"
+depends_on = ["py_security_suite.models", "py_security_suite.readiness_guidance"]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.admission"
+depends_on = ["py_security_suite.models"]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.trust_catalog"
+depends_on = [
+    "py_security_suite.config",
+    "py_security_suite.execution",
+    "py_security_suite.path_safety",
+]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.governance"
+depends_on = [
+    "py_security_suite.config",
+    "py_security_suite.execution",
+    "py_security_suite.path_safety",
+]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.release_readiness"
+depends_on = [
+    "py_security_suite.execution",
+    "py_security_suite.passport",
+    "py_security_suite.path_safety",
+]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.reachability_delta"
+depends_on = [
+    "py_security_suite.execution",
+    "py_security_suite.path_safety",
+]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.evidence_draft"
+depends_on = [
+    "py_security_suite.passport",
+    "py_security_suite.path_safety",
+]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.release_payload"
+depends_on = [
+    "py_security_suite.execution",
+    "py_security_suite.passport",
+    "py_security_suite.path_safety",
+]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.promotion"
+depends_on = [
+    "py_security_suite.execution",
+    "py_security_suite.passport",
+    "py_security_suite.path_safety",
+]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.baseline_candidate"
+depends_on = [
+    "py_security_suite.execution",
+    "py_security_suite.passport",
+    "py_security_suite.path_safety",
+]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.operational_trend"
+depends_on = ["py_security_suite.passport", "py_security_suite.path_safety"]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.closure_plan"
+depends_on = [
+    "py_security_suite.execution",
+    "py_security_suite.models",
+    "py_security_suite.ownership",
+    "py_security_suite.passport",
+    "py_security_suite.path_safety",
+]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.reproducibility"
+depends_on = ["py_security_suite.execution", "py_security_suite.path_safety"]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.release_manifest"
+depends_on = [
+    "py_security_suite.execution",
+    "py_security_suite.passport",
+    "py_security_suite.path_safety",
+]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.policy_simulation"
+depends_on = ["py_security_suite.passport", "py_security_suite.path_safety"]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.finding_register"
+depends_on = ["py_security_suite.execution", "py_security_suite.passport", "py_security_suite.path_safety"]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.github_annotations"
+depends_on = ["py_security_suite.execution", "py_security_suite.passport", "py_security_suite.path_safety"]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.audit_package"
+depends_on = ["py_security_suite.execution", "py_security_suite.passport", "py_security_suite.path_safety", "py_security_suite.release_manifest"]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.coverage_merge"
+depends_on = ["py_security_suite.execution", "py_security_suite.path_safety"]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.portfolio_dashboard"
+depends_on = ["py_security_suite.passport", "py_security_suite.path_safety"]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.config_provenance"
+depends_on = ["py_security_suite.config", "py_security_suite.execution", "py_security_suite.path_safety"]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.audience_report"
+depends_on = ["py_security_suite.execution", "py_security_suite.passport", "py_security_suite.path_safety"]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.finding_delta"
+depends_on = [
+    "py_security_suite.execution",
+    "py_security_suite.models",
+    "py_security_suite.ownership",
+    "py_security_suite.path_safety",
+]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.risk_acceptance"
+depends_on = ["py_security_suite.models", "py_security_suite.path_safety"]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.risk_intelligence"
+depends_on = [
+    "py_security_suite.config",
+    "py_security_suite.models",
+    "py_security_suite.path_safety",
+]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.passport"
+depends_on = [
+    "py_security_suite",
+    "py_security_suite.execution",
+    "py_security_suite.models",
+    "py_security_suite.path_safety",
+    "py_security_suite.source_inventory",
+]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.report_inspection"
+depends_on = [
+    "py_security_suite.execution",
+    "py_security_suite.models",
+    "py_security_suite.passport",
+    "py_security_suite.path_safety",
+    "py_security_suite.prioritization",
+]
+layer = "services"
+
+[[modules]]
 path = "py_security_suite.policy"
-depends_on = ["py_security_suite.config", "py_security_suite.models"]
+depends_on = [
+    "py_security_suite.config",
+    "py_security_suite.models",
+    "py_security_suite.risk_acceptance",
+]
 layer = "services"
 
 [[modules]]
 path = "py_security_suite.reports"
-depends_on = ["py_security_suite.models", "py_security_suite.source_context"]
+depends_on = [
+    "py_security_suite.admission",
+    "py_security_suite.models",
+    "py_security_suite.passport",
+    "py_security_suite.prioritization",
+    "py_security_suite.portfolio_health",
+    "py_security_suite.source_context",
+]
 layer = "services"
 
 [[modules]]
@@ -58,21 +384,108 @@ depends_on = [
     "py_security_suite.config",
     "py_security_suite.execution",
     "py_security_suite.models",
+    "py_security_suite.path_safety",
 ]
 layer = "integrations"
+
+[[modules]]
+path = "py_security_suite.evidence_pack"
+depends_on = [
+    "py_security_suite.audience_report",
+    "py_security_suite.audit_package",
+    "py_security_suite.baseline_candidate",
+    "py_security_suite.config_provenance",
+    "py_security_suite.evidence_draft",
+    "py_security_suite.execution",
+    "py_security_suite.finding_register",
+    "py_security_suite.github_annotations",
+    "py_security_suite.operational_trend",
+    "py_security_suite.passport",
+    "py_security_suite.path_safety",
+    "py_security_suite.policy_simulation",
+    "py_security_suite.portfolio_dashboard",
+    "py_security_suite.promotion",
+    "py_security_suite.reachability_delta",
+    "py_security_suite.release_manifest",
+    "py_security_suite.release_readiness",
+    "py_security_suite.release_payload",
+    "py_security_suite.report_inspection",
+]
+layer = "application"
+
+[[modules]]
+path = "py_security_suite.provisioning"
+depends_on = ["py_security_suite.config", "py_security_suite.doctor"]
+layer = "application"
+
+[[modules]]
+path = "py_security_suite.adapter_conformance"
+depends_on = ["py_security_suite.adapters", "py_security_suite.config"]
+layer = "application"
+
+[[modules]]
+path = "py_security_suite.bundle_qualification"
+depends_on = [
+    "py_security_suite.adapter_conformance",
+    "py_security_suite.config",
+    "py_security_suite.doctor",
+    "py_security_suite.execution",
+    "py_security_suite.passport",
+    "py_security_suite.path_safety",
+]
+layer = "application"
+
+[[modules]]
+path = "py_security_suite.native_bundle"
+depends_on = [
+    "py_security_suite.execution",
+    "py_security_suite.path_safety",
+]
+layer = "services"
 
 [[modules]]
 path = "py_security_suite.orchestrator"
 depends_on = [
     "py_security_suite",
+    "py_security_suite.advanced_analysis",
+    "py_security_suite.admission",
     "py_security_suite.adapters",
+    "py_security_suite.closure_plan",
     "py_security_suite.config",
     "py_security_suite.correlation",
+    "py_security_suite.data_exposure",
+    "py_security_suite.effectiveness",
+    "py_security_suite.evidence_fusion",
+    "py_security_suite.finding_delta",
+    "py_security_suite.graph_analysis",
     "py_security_suite.inventory",
+    "py_security_suite.governance",
     "py_security_suite.models",
     "py_security_suite.policy",
+    "py_security_suite.portfolio_health",
+    "py_security_suite.path_safety",
     "py_security_suite.reports",
+    "py_security_suite.risk_intelligence",
+    "py_security_suite.risk_paths",
     "py_security_suite.source_context",
+    "py_security_suite.structural_synthesis",
+    "py_security_suite.trust_catalog",
+]
+layer = "application"
+
+[[modules]]
+path = "py_security_suite.doctor"
+depends_on = [
+    "py_security_suite.adapters",
+    "py_security_suite.config",
+    "py_security_suite.finding_delta",
+    "py_security_suite.inventory",
+    "py_security_suite.orchestrator",
+    "py_security_suite.path_safety",
+    "py_security_suite.readiness_guidance",
+    "py_security_suite.risk_acceptance",
+    "py_security_suite.risk_intelligence",
+    "py_security_suite.trust_catalog",
 ]
 layer = "application"
 
@@ -80,9 +493,45 @@ layer = "application"
 path = "py_security_suite.cli"
 depends_on = [
     "py_security_suite",
+    "py_security_suite.advanced_delta",
+    "py_security_suite.baseline_candidate",
+    "py_security_suite.bundle_qualification",
+    "py_security_suite.audit_package",
+    "py_security_suite.audience_report",
+    "py_security_suite.adapter_conformance",
+    "py_security_suite.ci_workflow",
+    "py_security_suite.closure_plan",
     "py_security_suite.config",
+    "py_security_suite.config_advisor",
+    "py_security_suite.config_provenance",
+    "py_security_suite.doctor",
+    "py_security_suite.execution",
+    "py_security_suite.effectiveness_corpus",
+    "py_security_suite.evidence_draft",
+    "py_security_suite.evidence_pack",
+    "py_security_suite.finding_register",
+    "py_security_suite.github_annotations",
+    "py_security_suite.native_bundle",
     "py_security_suite.orchestrator",
+    "py_security_suite.operational_trend",
+    "py_security_suite.passport",
+    "py_security_suite.path_safety",
     "py_security_suite.policy",
+    "py_security_suite.policy_simulation",
+    "py_security_suite.precommit_config",
+    "py_security_suite.portfolio_dashboard",
+    "py_security_suite.project_init",
+    "py_security_suite.provisioning",
+    "py_security_suite.promotion",
+    "py_security_suite.coverage_merge",
+    "py_security_suite.reachability",
+    "py_security_suite.reachability_delta",
+    "py_security_suite.release_payload",
+    "py_security_suite.release_manifest",
+    "py_security_suite.report_inspection",
+    "py_security_suite.release_readiness",
+    "py_security_suite.reports",
+    "py_security_suite.reproducibility",
 ]
 layer = "entrypoints"
 
@@ -93,5 +542,5 @@ layer = "entrypoints"
 
 [[modules]]
 path = "py_security_suite.evidence_ingest"
-depends_on = ["py_security_suite"]
+depends_on = ["py_security_suite", "py_security_suite.inventory"]
 layer = "entrypoints"

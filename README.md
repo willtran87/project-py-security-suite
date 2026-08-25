@@ -7,11 +7,19 @@ creates a GitHub-friendly report artifact.
 
 | Area | Capability |
 |---|---|
-| Portfolio | 62 governed adapters across source security, secrets, dependencies, architecture, quality, delivery, artifacts, and assurance evidence |
+| Portfolio | 64 governed adapters across source security, secrets, dependencies, architecture, quality, delivery, artifacts, and assurance evidence |
 | Decisions | Explicit `PASS`, `WARN`, `FAIL`, and `INCOMPLETE` outcomes |
-| Reports | Markdown, self-contained HTML, SARIF 2.1.0, SonarQube external issues, normalized JSON, and SHA-256 manifests |
-| Risk context | Digest-pinned CISA KEV, FIRST EPSS, CycloneDX VEX, finding lifecycle, CODEOWNERS, and governed acceptances |
+| Reports | Markdown, self-contained HTML, SARIF 2.1.0, SonarQube external issues, normalized JSON, an owned closure backlog, and SHA-256 manifests |
+| Risk context | Digest-pinned CISA KEV, FIRST EPSS, CycloneDX VEX, alias-aware advisory decisions, scanner-attributed fix candidates, finding lifecycle, CODEOWNERS, and governed acceptances |
 | Supply chain | Source and artifact SBOMs, package checks, provenance findings, and a locally verifiable Security Passport |
+| Reachability | Offline three-state executable/load-only/disconnected graph with explained dispatch paths, ranked islands, and optional coverage corroboration |
+| Graph context | Graphify code-only topology joined to findings for blast radius, structural hotspots, and cross-tool neighborhoods |
+| Advanced analysis | Typed evidence graph with control dominance and bypass detection, scanner-confirmed SARIF taint paths, artifact activation parity, threat-control-test traceability, security mutation leverage, telemetry privacy topology, dependency trust routes, and digest-bound attack-surface regression comparison |
+| Risk routes | Bounded multi-entry exposure matrices from every retained declared interface to findings, sensitive sinks, and exact dependency-advisory importers. End-to-end sensitive-data route records join scanner-confirmed or inventory-only sink evidence to data classes, trust boundaries, protections, entry/runtime breadth, validation, scanner assurance, lifecycle, ownership, and applicable bounded citations. A separate secret-provenance ledger joins redacted credential candidates to source/graph/artifact membership, current-tree or history origin, verification, scanner trust, lifecycle, and owners. Exact-file and bounded Graphify-route intersections then highlight production secret candidates co-located with logging, telemetry, URL, or network sinks while explicitly remaining non-taint review evidence. Their validation handoff names candidate tests and joins retained execution, coverage, source binding, assurance, shared-test quality, findings, and ownership without claiming that a synthetic canary assertion already exists. When that same retained sensitive route also has an exact SDK-advisory intersection, a bounded compound ledger coordinates credential, boundary-protection, and dependency-remediation review without claiming disclosure or vulnerable-function execution. Routes also retain fail-closed source/artifact package lifecycle checks, comparable-baseline finding/change attribution, ordered CODEOWNERS handoffs, shared validation campaigns, shared-test quality, and explicit model gaps. Graph/source/artifact applicability fusion separates genuine Python route gaps from artifact, generated-evidence, test, and non-Python controls without dropping findings; exact structural-island joins then distinguish missing entry models, runtime conflicts, test-only scope, and dormant-capability retirement review without declaring code dead. |
+| Evidence fusion | Source-to-artifact package lineage, semantic finding links, changed-line/test/graph context, exact selected-test execution, full-chain RFC 3161 run context and signature timestamps, threshold/external DSSE signatures, signed atomic replay receipts, downgrade-resistant assurance profiles, composed SLSA/Sigstore/VSA/dependency verification, and feedback into owned exposure and SDK-package verification plans |
+| Structural synthesis | Cross-validated dead code, island boundaries, structural orphans, import-cycle hotspots, change-risk scoring, graph-guided test targets, exact execution status, and test/changed-line coverage alignment |
+| Advisory fusion | Package-scoped CVE/GHSA/PYSEC/OSV alias clustering across source and artifact scanners, with distinct-risk/observation counts plus CycloneDX introducing-root paths, pipdeptree environment health, Graphify imports, reachability/runtime state, and deptry-use context |
+| Data exposure | CWE-grounded flows into logs, telemetry, URL queries, client errors, runtime-state dumps, and process streams; monorepo SDK/configuration inventory; owner-, graph-, change-risk-, runtime-, test-, and SDK-package-aware disclosure triage |
 | Runtime | Python 3.11+; scanners are installed separately from approved offline bundles |
 
 Key trust properties:
@@ -33,10 +41,20 @@ egress-denied container, VM, or enterprise runner, then pass
 
 Markdown is the canonical documentation format:
 
-- [Documentation index](docs/index.md)
+- [Published documentation](https://willtran87.github.io/project-py-security-suite/)
+- [Documentation source](docs/index.md)
 - [Solution design and Mermaid diagrams](docs/design.md)
 - [Native and GitHub operations](docs/operations.md)
 - [Configuration reference](docs/configuration.md)
+- [Python reachability and code-island analysis](docs/reachability.md)
+- [Graphify code-graph integration](docs/graphify.md)
+- [Static risk-route synthesis](docs/risk-paths.md)
+- [Advanced cross-evidence analysis and release regression](docs/advanced-analysis.md)
+- [Cross-tool evidence fusion](docs/evidence-fusion.md)
+- [Structural synthesis for dead code and islands](docs/structural-synthesis.md)
+- [Sensitive-data exposure analysis](docs/data-exposure.md)
+- [Detection effectiveness and operational coverage](docs/effectiveness.md)
+- [Governed release readiness](docs/release-readiness.md)
 - [Compatibility and coverage matrix](docs/compatibility-matrix.md)
 - [Tool-selection and portfolio governance](docs/tool-selection.md)
 - [Production security gate](docs/production-security.md)
@@ -54,31 +72,114 @@ flowchart LR
     Bundle --> Transfer["Approved transfer"]
     subgraph Boundary["Externally isolated execution boundary"]
         Project["Python project"] --> Doctor["Preflight applicability and trust"]
-        Doctor --> Scan["Run applicable adapters"]
+        Doctor --> Plan["Offline provisioning plan"]
+        Plan --> Scan["Run applicable adapters"]
         Scan --> Findings["Normalize and correlate"]
         Findings --> Policy["PASS | WARN | FAIL | INCOMPLETE"]
         Policy --> Reports["Seal reports and evidence"]
+        Reports --> Pack["Atomic evidence pack<br/>role views + audit archive"]
     end
     Transfer --> Doctor
-    Reports --> Verify["Verify | inspect | attest"]
+    Pack --> Verify["Verify | inspect | attest"]
     Verify --> Publish["GitHub summary, SARIF, and artifact"]
 ```
 
 ## Development run
+
+Bootstrap a new repository with a minimal, valid configuration tailored to its
+shape. The command is offline, never installs tools, and refuses to replace an
+existing configuration unless `--overwrite` is explicit:
+
+```text
+pysec init PATH_TO_PROJECT --template library
+pysec init PATH_TO_API --template api --format json
+```
+
+Templates are available for `library`, `api`, `cli`, `worker`, and `monorepo`
+projects. Each receipt provides argument-safe next-step arrays and clearly
+separates repository setup from external isolation and release authority.
 
 Preflight the exact profile first. This validates applicability, executables,
 approved digests, local rules, vulnerability snapshots, baselines, and risk
 governance without running a scanner or importing target code:
 
 ```text
-pysec doctor PATH_TO_PROJECT --config pysec.toml --profile production
+pysec doctor PATH_TO_PROJECT --config pysec.toml --profile production --explain
+pysec doctor PATH_TO_PROJECT --config pysec.toml --profile production \
+  --format markdown --output .artifacts/pysec-preflight.md
 ```
 
 `READY` and `PROCEED TO ISOLATED SCAN` mean every applicable required
 prerequisite is present. Optional tools that need attention remain visible but
 do not create a false required-tool blocker. This preflight decision never
 replaces the scan, the external network boundary, or release approval. Use
-`--format json` for CI and inventory automation.
+`--format json` for schema-governed CI automation or `--format markdown` for a
+GitHub-ready prerequisite artifact. Equivalent remediation is consolidated
+into root-cause batches, with every tool-specific reason retained in expandable
+evidence. Both formats can be published atomically with `--output`; replacement
+requires `--overwrite`.
+
+Turn the same evidence into an offline, non-mutating acquisition and staging
+plan. JSON is strict for enterprise workflow automation; Markdown is ready to
+upload as a GitHub artifact:
+
+```text
+pysec provision-plan PATH_TO_PROJECT --config pysec.toml --profile production \
+  --format markdown --output .artifacts/pysec-provision-plan.md
+pysec schema provision-plan-1.0 --output contracts/provision-plan.schema.json
+```
+
+Portable configurations can declare `[paths] bundle_root` and use
+`@bundle/...` for executables, rules, databases, trust material, and evidence.
+The namespace is resolved beneath the governed root and rejects parent
+traversal; it does not expand environment variables or contact a network.
+
+Validate configuration, qualify the staged bundle without starting scanners,
+and generate local or CI integration without installing packages:
+
+```text
+pysec config-check --config pysec.toml --format markdown \
+  --output .artifacts/config-assessment.md
+pysec adapter-check --format json --output .artifacts/adapter-conformance.json
+pysec verify-native-bundle PATH_TO_NATIVE_BUNDLE \
+  --manifest-sha256 APPROVED_SHA256 --python PATH_TO_TRUSTED_PYTHON \
+  --require-wheelhouse-closure --format markdown \
+  --output .artifacts/native-bundle-verification.md
+pysec qualify-bundle PATH_TO_PROJECT --config pysec.toml --profile production \
+  --effectiveness-evaluation effectiveness-evaluation.json \
+  --effectiveness-report PATH_TO_CORPUS_SCAN_REPORT \
+  --effectiveness-sha256 APPROVED_SHA256 \
+  --minimum-effectiveness-labels 25 \
+  --required-effectiveness-tool bandit \
+  --format markdown --output .artifacts/bundle-qualification.md
+pysec generate-hooks PATH_TO_PROJECT --profile quick
+pysec generate-ci PATH_TO_PROJECT \
+  --checkout-sha APPROVED_COMMIT_SHA \
+  --upload-artifact-sha APPROVED_COMMIT_SHA \
+  --upload-sarif-sha APPROVED_COMMIT_SHA
+```
+
+`config-check` returns a strict, read-only compatibility receipt even for an
+unsupported schema or invalid setting, inventories portable and absolute paths,
+and explains why repository digest pins are not organization approval.
+`verify-native-bundle` rejects missing, changed, injected, linked, or malformed
+bundle content and can prove each declared Python environment resolves entirely
+from the staged wheelhouse. `qualify-bundle` joins all adapter contracts with
+profile-specific executable, asset, applicability, trust readiness, and optional
+digest-bound labeled effectiveness evidence. `generate-hooks` writes local,
+activation-free adapter and readiness diagnostics; it deliberately does not run
+the portfolio or claim a production boundary.
+
+The workflow preserves the scan decision until the sealed report and verification
+receipt are uploaded, then applies the original exit code. Its isolation command,
+runner labels, action pins, and organization policy variable remain enterprise-
+owned inputs.
+
+When the suite is invoked as `python -m py_security_suite`, executable
+discovery also checks the invoking interpreter's script directory. This keeps
+preflight and scans usable without activating that virtual environment;
+ordinary `PATH` resolution retains precedence and every resolved executable is
+still hashed.
 
 After a scan, verify and understand the result from one concise command:
 
@@ -131,6 +232,23 @@ Finding order uses the derived P0-P4 priority rather than native severity alone:
 known-exploited findings are P0 and qualifying high-EPSS findings are P1. Within
 a priority, blocking and new or regressed work appears first. Terminal actions
 show the same decision context, summary, and impact before cited evidence.
+Alias-aware dependency work also joins scanner fix candidates, KEV/EPSS/VEX,
+exact import paths, CycloneDX introducing-root paths, pipdeptree environment
+health, Graphify-selected tests, bounded case-level execution, coverage, and
+CODEOWNERS-derived owners. `closure-plan.json` emits one stable
+owned item per distinct advisory while retaining every native scanner
+observation and citation. Current passing test evidence is never substituted
+for the required post-remediation rerun.
+Changed-file validation mismatches receive the same treatment: structural
+change risk, Graphify-selected tests, exact case results, changed-line and
+whole-file coverage, and CODEOWNERS routing become one stable closure item per
+file. Production `release-check` consumes this backlog as a causal gate, so
+passing focused tests cannot hide uncovered changed behavior.
+The Markdown closure view summarizes those subjects by owner and evidence
+condition before the exact file ledger. Release readiness 1.3 consolidates only
+operationally identical subjects and reports both group and subject counts, so
+large changes remain auditable without producing one repetitive release action
+per file.
 The optional output is published atomically, refuses accidental replacement
 unless `--overwrite` is explicit, and must remain outside the report's exact
 checksum boundary. Exported entry points and finding-detail links are artifact-
@@ -148,11 +266,264 @@ The verification receipt has its own installable strict
 and is atomically published outside the sealed report for audit retention.
 `verify-report` can atomically retain its own strict receipt before any derived
 inspection is trusted. The receipt proves report integrity and semantic
-binding, not signer authenticity or release approval. `schema` reads all three
+binding, not signer authenticity or release approval. Verification requires
+the canonical `source-inventory.json`, recomputes its strictly sorted
+path/size/SHA-256 aggregate, and rejects removal, duplicate or unsafe paths,
+boundedness violations, or disagreement with the scan manifest before trusting
+Passport claims. `schema` reads all three
 exact contracts from the installed package and prints them
 or atomically exports them for disconnected validators. Names are deliberately
 version-explicit; there is no network lookup and no ambiguous `latest` alias.
 Existing exports are preserved unless `--overwrite` is supplied.
+
+Scanner children are placed under OS-enforced CPU, memory, process-count,
+descriptor, and output quotas. On Windows, a trusted gate prevents the scanner
+from starting until Job Object assignment succeeds. Production isolation is
+also challenged with active network-denial and source-write canaries; a signed
+capability claim alone is not treated as proof that the current boundary works.
+
+Every report also includes `admission-decisions.json`, which separates source,
+test, dependency, built-artifact, and governance disposition so a missing
+signature is not presented as a source-code defect. The same five cards lead
+the Markdown and self-contained HTML reports. `portfolio-health.json` adds a
+12-domain scorecard with separate execution, observed-risk, and evidence grades;
+it never lets a clean execution grade disguise active findings or missing approval.
+Every conditional control also carries an owner, activation trigger, required
+action, and required evidence. `effectiveness.json` 1.1 measures attribution,
+actionability, corroboration, normalized/unique tool contribution, and exact
+per-tool completion, evidence lane, executable integrity/continuity, and
+organization approval. Risk routes join those records to the exact contributing
+tools and report assured, perspective-gap, trust-gap, execution-gap,
+not-assessed, or explicitly suite-derived evidence without changing native
+severity or treating scanner approval as finding truth.
+They also join `finding-delta.json` lifecycle to exact changed-line, validation,
+runtime-entry, owner, and scanner-assurance context. A finding is described as
+baseline-new or regressed on a changed line only when the digest-approved
+baseline is comparable; an absent, unconfigured, or incompatible baseline
+fails closed as `baseline-not-established` instead of mislabeling default
+`new` status as change origin.
+For every retained route, CODEOWNERS is also applied to the ordered entry,
+transit, and target files. The report distinguishes missing ownership evidence
+from a proven unowned segment, identifies exact owner-to-owner handoffs and
+target-owner mismatches, and places the same route in each responsible team's
+coordination queue without replacing the finding's attributed target owner.
+This observed posture does not measure detection accuracy. Measure actual
+precision and recall with a separately reviewed labeled corpus:
+
+```text
+pysec benchmark REPORT --corpus CORPUS.json \
+  --corpus-sha256 APPROVED_SHA256 --format json \
+  --output effectiveness-evaluation.json
+```
+
+The strict contracts are exported offline with `pysec schema effectiveness-1.1`,
+`effectiveness-corpus-1.0`, and `effectiveness-evaluation-1.0`. The corpus
+contract accepts legacy schema 1.0 for non-governed benchmarking and governed
+schema 2.0 for production/release; production/release reject unsigned legacy
+evaluations.
+
+Confidential reports are published with a verified owner-only ACL and a sealed
+retention deadline. `pysec retention-status REPORT` evaluates that deadline;
+`pysec purge-expired-report REPORT --trusted-time-context CONTEXT.json` deletes
+only a verified, expired report after a deployment-pinned RFC 3161 receipt proves
+the deadline. Retention and encryption accept only advanced RFC 3161 evidence
+with the pinned TSA chain, policy, revocation snapshot, nonce, and challenge.
+The purge receipt is bound to the report checksum and action. `encrypt-report`
+also requires separately signed, digest-pinned key-lifecycle and provider
+attestations proving the exact non-exportable recipient generation, decrypt-only
+usage, and provider cryptographic-erasure capability. Trusted time binds both
+attestations to the recipient before authenticated X25519/AES-256-GCM
+encryption; `--delete-plaintext-after-encryption` removes the verified plaintext
+only after the encrypted output has been atomically committed.
+
+Turn the sealed scan, organization-authorized isolation and intelligence
+receipts, scanner trust, mandatory production/release effectiveness benchmark, and signed Passport
+verification into one fail-closed promotion decision:
+
+For the normal operator path, publish and verify the complete decision-support
+set with two commands. Publication is atomic: no output directory appears until
+every sidecar, relative-path manifest, completion marker, and embedded audit
+archive has verified successfully.
+
+```text
+pysec evidence-pack REPORT --output security-evidence
+pysec verify-evidence-pack security-evidence --report REPORT \
+  --pack-sha256 PACK_MANIFEST_SHA256 \
+  --output security-evidence-verification.json
+```
+
+For a governed production handoff, bind the independently reviewed inputs and
+historical runtime policy in the same atomic operation:
+
+```text
+pysec evidence-pack REPORT --output security-evidence \
+  --previous-report PREVIOUS_REPORT \
+  --effectiveness-evaluation effectiveness-evaluation.json \
+  --effectiveness-sha256 APPROVED_EVALUATION_SHA256 \
+  --minimum-effectiveness-labels 25 \
+  --minimum-effectiveness-positive-labels 10 \
+  --minimum-effectiveness-negative-labels 10 \
+  --minimum-effectiveness-tools 2 \
+  --minimum-effectiveness-labels-per-tool 2 \
+  --required-effectiveness-tool bandit \
+  --required-effectiveness-tool semgrep \
+  --passport-verification passport-verification.json \
+  --passport-verification-sha256 APPROVED_PASSPORT_SHA256 \
+  --require-passport \
+  --performance-regression-percent 25 \
+  --maximum-total-seconds 600 \
+  --tool-budget bandit=30 --tool-budget semgrep=120
+```
+
+Open `security-evidence/README.md` first. It links the promotion plan and five
+role-specific views, while the directory retains normalized lifecycle, policy
+simulation, GitHub annotations, closed release evidence, and a portable audit
+ZIP. The verified `report/` copy makes the full HTML report and Markdown finding
+cards directly browsable; every finding retains tool/rule attribution,
+classification, file and line, code or artifact evidence, reference, and next
+action. Use `--previous-register PREVIOUS.json
+--previous-register-sha256 SHA256` to carry finding lifecycle and SLA state.
+Use `--previous-report PREVIOUS_REPORT` to add report trend, reachability delta,
+and automatically derived prior lifecycle state. `--artifacts dist` adds an
+exact-set signing request and local receipt; `--config`, `--policy`, and
+`--profile` add portable, value-redacted configuration origins only when the
+effective profile matches the sealed scan.
+The commands below remain available when a workflow must issue or transfer one
+sidecar independently.
+
+```text
+pysec release-check REPORT --format json \
+  --effectiveness-evaluation effectiveness-evaluation.json \
+  --effectiveness-sha256 APPROVED_SHA256 \
+  --minimum-effectiveness-labels 25 \
+  --minimum-effectiveness-positive-labels 10 \
+  --minimum-effectiveness-negative-labels 10 \
+  --minimum-effectiveness-labels-per-tool 2 \
+  --required-effectiveness-tool bandit \
+  --required-effectiveness-tool semgrep \
+  --passport-verification passport-verification.json \
+  --passport-verification-sha256 APPROVED_SHA256 \
+  --require-passport --output release-readiness.json
+
+pysec evidence-draft REPORT --format json \
+  --output governance-evidence-draft.json
+
+pysec promotion-plan REPORT --format json \
+  --release-readiness release-readiness.json \
+  --release-readiness-sha256 APPROVED_SHA256 \
+  --operational-trend operational-trend.json \
+  --operational-trend-sha256 APPROVED_TREND_SHA256 \
+  --output promotion-plan.json
+
+pysec promotion-plan REPORT --format markdown --output promotion-plan.md
+pysec promotion-plan REPORT --format html --output promotion-plan.html
+pysec closure-plan REPORT --coverage-target 90 --hotspot-limit 10 \
+  --format markdown --output closure-plan.md
+pysec baseline-candidate REPORT --format json --output baseline-candidate.json
+pysec trend PREVIOUS_REPORT CURRENT_REPORT --format json \
+  --output operational-trend.json
+pysec trend PREVIOUS_REPORT CURRENT_REPORT --format markdown \
+  --output operational-trend.md
+
+pysec prepare-signing REPORT dist --output signing-request.json
+pysec verify-signing-request signing-request.json dist \
+  --request-sha256 APPROVED_SHA256 \
+  --format json --output signing-request-verification.json
+
+pysec normalize-sdist clean-build-a/project.tar.gz \
+  --output clean-build-a/project.tar.gz --source-date-epoch REVIEWED_EPOCH \
+  --overwrite --format json
+pysec normalize-sdist clean-build-b/project.tar.gz \
+  --output clean-build-b/project.tar.gz --source-date-epoch REVIEWED_EPOCH \
+  --overwrite --format json
+pysec compare-builds clean-build-a clean-build-b --format json \
+  --output reproducible-build.json
+
+pysec release-manifest REPORT \
+  --evidence release-readiness=release-readiness.json@APPROVED_SHA256 \
+  --evidence promotion-plan=promotion-plan.json@APPROVED_SHA256 \
+  --output release-evidence-manifest.json
+
+pysec verify-release-manifest release-evidence-manifest.json \
+  --manifest-sha256 APPROVED_MANIFEST_SHA256 \
+  --report REPORT \
+  --required-evidence promotion-plan \
+  --format json --output release-evidence-verification.json
+
+pysec policy-simulate REPORT \
+  --block-severity critical --block-severity high \
+  --minimum-confidence medium \
+  --require-tool bandit --require-tool semgrep \
+  --format json --output policy-simulation.json
+
+pysec finding-register REPORT --format json --output finding-register.json
+pysec config-provenance --config pysec.toml --policy ORGANIZATION.toml \
+  --format json --output config-provenance.json
+pysec audience-report promotion-plan.json --plan-sha256 APPROVED_SHA256 \
+  --report REPORT --audience developer --format markdown \
+  --output developer-view.md
+pysec github-annotations promotion-plan.json --plan-sha256 APPROVED_SHA256 \
+  --report REPORT --format github
+pysec audit-package REPORT \
+  --evidence promotion-plan=promotion-plan.json@APPROVED_SHA256 \
+  --output audit.zip
+pysec verify-audit-package audit.zip --package-sha256 APPROVED_SHA256 \
+  --format json --output audit-verification.json
+pysec merge-coverage \
+  --scenario api=api-coverage.json@APPROVED_SHA256 \
+  --scenario worker=worker-coverage.json@APPROVED_SHA256 \
+  --output merged-coverage.json
+pysec portfolio REPORT_ONE REPORT_TWO --format json --output portfolio.json
+```
+
+Promotion plan 1.2 automatically joins the sealed report's closure plan and,
+when supplied, verifies both the trend digest and that its latest scan ID and
+report seal match `REPORT`. It turns changed-file test and coverage gaps into
+stable CODEOWNER queues, carries validation regressions into causal blockers,
+and gives every audience a bounded view of current debt, trajectory, owners,
+actions, anomalies, and evidence bindings. A missing trend is reported as
+unavailable and never interpreted as zero historical debt.
+
+A report `PASS` is necessary but does not itself authorize promotion. See
+[Governed release readiness](docs/release-readiness.md). Release-readiness 1.3
+separates causal root blockers from derived policy outcomes and includes owner-,
+authority-, and command-bearing remediation actions. The draft
+collects exact observed digests for independent review but is deliberately
+non-authoritative and cannot satisfy an approval control.
+The promotion plan joins the evidence into executive, developer, security,
+release, and auditor views without granting approval; Markdown and HTML formats
+are dependency-free GitHub artifacts. Equivalent work is consolidated without
+dropping finding or artifact references; each rendered action shows priority,
+owner, required authority, SLA target, evidence subjects, and safe suggested
+commands. `trend` compares only checksum-verified reports. Operational trend
+1.3 adds validation-debt churn, state and ownership transitions, CODEOWNER queue
+history, and explicit comparability gaps from each report's closure-plan 1.2
+ledger and retained diff-coverage assessment scope. Missing ledger or scope
+evidence is not treated as zero or resolved debt. The release manifest
+closes the evidence set but cannot approve it;
+`verify-release-manifest` independently rechecks the report and every evidence
+digest after transfer (`--evidence-location NAME=PATH` safely remaps relocated
+files). `policy-simulate` previews stricter policy without rewriting evidence.
+`finding-register` carries stable fingerprints, ownership, reopen/resolution
+state, and severity SLAs across digest-bound runs. `config-provenance` explains
+which layer supplied each effective key without exporting values. Audience and
+GitHub exports verify the promotion-plan digest and report seal before rendering.
+The deterministic audit ZIP verifies every embedded file and the report after
+relocation. Coverage merging unions independently hashed runtime scenarios;
+portfolio aggregation accepts only distinct, independently verified reports.
+`evidence-pack` composes these primitives without weakening their checks: its
+manifest closes the complete directory, `checksums.sha256` gives portable file
+identities, `COMPLETE` prevents partial publication from being mistaken for a
+finished result, and `verify-evidence-pack` re-verifies the audit archive and
+optional source report. Supplied effectiveness and Passport receipts require
+lowercase approved SHA-256 values, are copied byte-for-byte, and become required
+members of both the release manifest and audit archive. Performance thresholds
+flow into the retained trend when a previous report is supplied. The pack
+remains explicitly non-authoritative.
+The signing request is a
+closed-set distribution manifest for transfer to an independent controlled
+signing lane; its verifier rejects changed, missing, or added wheel, sdist, and
+zip payloads.
 
 Commands with `--format json` return failures on standard error using one stable
 envelope with `status`, `command`, and a coded `error`; `attest` uses the same
@@ -182,12 +553,12 @@ uv run python -m pytest
 - `osv-scanner` plus a preloaded offline vulnerability database
 
 The stable `quick` and `standard` profiles retain their original contracts.
-Use `extended`, `deep`, `supply-chain`, `artifact`, `quality`, `iac-deep`,
+Use `extended`, `deep`, `supply-chain`, `artifact`, `quality`, `iac-deep`, `runtime`,
 `governance`, `repo-health`, `repo`, or `comprehensive` to select additional
 perspectives.
-`quality` runs correctness,
-formatting, typing, dead-code, complexity, architectural-boundary, workflow,
-Dockerfile, license-metadata, and pre-generated test-evidence checks.
+`quality` runs correctness, formatting, typing, dead-code, entry-point
+reachability, complexity, architectural-boundary, workflow, Dockerfile,
+license-metadata, and pre-generated test-evidence checks.
 `repo` combines the strict
 source-security portfolio with those quality controls while excluding built
 artifact checks. Use `production` for the strict source gate:
@@ -250,10 +621,27 @@ The isolation switch attests an external runner, firewall, or VM boundary; it
 does not alter the host firewall. Omitting it performs a diagnostic scan and
 correctly yields `INCOMPLETE`.
 
+Deployment-owned checkpoint authorities and native hardware-attestation
+verifiers have executable conformance harnesses. Run them against the same
+pinned commands, trust roots, failure-domain registry, and policy used by the
+production lane:
+
+```powershell
+uv run --frozen python scripts/validate-checkpoint-authority.py --prefix PYSEC_CHECKPOINT_CONFORMANCE
+uv run --frozen python scripts/validate-native-attestation-fixtures.py security-data/native-attestation-fixtures/manifest.json --manifest-sha256 $env:APPROVED_NATIVE_FIXTURE_MANIFEST_SHA256
+```
+
 The native installer records SHA-256 bindings for installed scanner entry
 points. `production` and `release` require those approved digests, rehash the
-entry points after execution, and verify that the target source and built
-distributions have the same before/after content digest. A target mutation or
+entry points and transitive loader closure after execution, and verify that the
+target source and built distributions have the same before/after content digest.
+Scanners read a private, read-only copy of the exact inventoried files, so an
+in-scan source rewrite cannot create a mixed-version result. Native scanners
+may declare out-of-tree or dynamically loaded plugins in
+`SCANNER.runtime-closure.json`; every declared path and digest becomes part of
+the approved closure. Production requires a schema-1.2 loader observation with
+two independently signed, organization-pinned authority receipts. A source
+mutation, omitted/mismatched declared plugin, unauthenticated observation, or
 tool substitution produces `INCOMPLETE`, never a clean result.
 
 See the [native operations guide](docs/operations.md) for trust-boundary,
@@ -311,6 +699,9 @@ python-security-report/
 |-- security-passport.json         # in-toto Statement / SLSA VSA predicate
 |-- checksums.sha256
 |-- risk-intelligence.json         # bounded offline snapshot provenance/results
+|-- source-inventory.json          # exact file identities behind source digest
+|-- isolation-attestation.json     # isolation validation and policy authority
+|-- intelligence-approval.json     # snapshot approval validation and authority
 |-- finding-delta.json             # new/existing/regressed/resolved lifecycle
 |-- effectiveness.json             # observed attribution/actionability/tool yield
 |-- assurance-claims.json          # NIST SSDF claim-to-evidence mapping
@@ -320,8 +711,26 @@ python-security-report/
 |-- scancode-inventory.json        # when applicable
 |-- pylint-summary.json            # when Pylint is applicable
 |-- radon-complexity.json           # rank C+ complexity evidence
+|-- reachability.json               # three-state topology, explained paths, coverage, and islands
+|-- graphify.json                    # validated code-only nodes, edges, and file topology
+|-- graph-analysis.json              # graph-aware finding context and hotspots
+|-- boundary-graph.json              # unified Python/JS/native process, network, import, and FFI boundaries
+|-- semantic-language-coverage.json  # exact per-language file ledgers plus pairwise cross-language data-flow coverage
+|-- isolation-boundary.json          # external-attested or digest-pinned sandbox enforcement mode
+|-- isolation-probe.json             # TCP/UDP v4/v6, host, Unix/raw-socket, proxy, target, link, and scratch canaries
+|-- security-requirements-coverage.json # versioned ASVS/MASVS/TCASVS evidence crosswalk and gaps
+|-- trust-policy.json                # redacted digest seal over deployment-owned trust inputs
+|-- dependency-surface.json          # digest-bound analyzer receipt for each dependency manifest
+|-- resource-limits.json             # per-scanner OS quotas; governed profiles also require external write quota
+|-- runtime-closure.json             # recursive native/plugin, interpreter, and platform loader closure
+|-- report-security.json             # classification, owner ACL, retention, and encryption policy
+|-- risk-paths.json                  # entry-to-risk routes, shared controls, campaigns, owners, and validation gaps
+|-- advanced-analysis.json           # typed controls, taint, artifact, threat, privacy, and dependency relationships
+|-- structural-synthesis.json        # dead code, island boundaries, change risk, and graph-guided tests
+|-- data-exposure.json               # prioritized disclosure paths joined with graph, coverage, reachability, and fusion
+|-- evidence-fusion.json             # cross-scanner, advisory-alias, and source/artifact evidence joins
 |-- coverage-summary.json           # validated pre-generated test coverage
-|-- junit-summary.json              # validated test outcome metadata
+|-- junit-summary.json              # bounded output-free test case/file/result ledger
 |-- reuse-compliance.json           # when a REUSE marker opts the repo in
 |-- deptry-dependencies.json        # normalized dependency hygiene evidence
 |-- diff-coverage.json              # coverage of changed executable lines
@@ -334,15 +743,23 @@ python-security-report/
 ```
 
 Evidence files contain sanitized execution diagnostics, not raw scanner output
-or detected secret values.
+or detected secret values. Coverage and JUnit producers can create adjacent,
+payload-verified source bindings with `pysec-evidence bind`; see the
+[native operations guide](docs/operations.md#ingest-test-evidence-without-executing-the-project).
+Risk-route campaigns accept revision alignment only when every retained test
+and coverage summary carries the exact sealed source digest and a valid
+producer-verified receipt for its own payload digest. A matching source string
+without that receipt is reported as `unverified`, never as aligned.
 
 `scan-manifest.json`, `summary.md`, and `index.html` expose target-content
 integrity and per-tool entry-point integrity. The CodeQL record separately
 binds its `run-codeql` wrapper and the governed CodeQL CLI helper.
 The self-contained HTML dashboard shows the scan-policy decision as a visible
 badge and separates applicable execution gaps from expandable, informational
-not-applicable controls. Its summary grid includes completed/applicable,
-execution-gap, conditional-control, and target-integrity counts.
+not-applicable controls. Its summary grid keeps execution coverage, observed
+risk, evidence completeness, and release disposition visibly distinct. Each
+conditional row says who owns activation, what condition activates it, and what
+evidence closes it.
 The Markdown reports lead with an explicit `ALLOW`, `REVIEW`, or `BLOCK`
 scan-policy disposition. Applicable scanner failures remain in the primary
 action table, while not-applicable conditional controls are retained in a
@@ -438,9 +855,19 @@ Binary artifact findings carry the exact SHA-256 and byte size in normalized
 JSON and render a copy-ready identity block in Markdown and HTML, so signing,
 rejection, and rebuild actions can target the precise wheel or source archive.
 
+Trusted runtime producers use companion-assurance v2. A clean document is
+accepted only when it is fresh, complete, coverage-bearing, canary-verified,
+bound to exact producer/rules/config/environment digests, and authenticated by
+an Ed25519 DSSE/in-toto signature whose public key is SHA-256 pinned. Conditional
+adapters add multi-role and stateful authorization, Nuclei, OAST, RESTler,
+non-HTTP protocol contracts, fuzz-harness depth, cloud attack paths, connected
+secret verification, Prowler, RASP, native sanitizers, MobSF, TLS, and polyglot
+semantic evidence without allowing the core scanner to execute target code or
+contact those targets.
+
 ## Current boundaries
 
-This is an alpha foundation. All 62 offline/static, evidence-ingestion, and
+This is an alpha foundation. All 88 offline/static, evidence-ingestion, and
 artifact adapters are
 implemented, but enterprise
 rollout still requires pinned approved assets, framework-specific Pysa models,
@@ -449,6 +876,30 @@ measured false-positive policy. The current automated native bundle is Windows
 x86-64 and Python 3.11; other platforms can use organization-managed native
 executables through the same CLI and report contract.
 
+Governed polyglot scans can require signed compiler-semantic evidence in
+addition to the bundled syntax ASTs. The retained evidence includes exact
+qualified symbol identities, source spans, signatures, callsite context, CFG,
+dataflow, and interprocedural ledgers for every governed language,
+including Python. Runtime coverage retains three independently signed route
+source documents and separately signed collector accounting; recovery drills
+retain run-bound, replay-consumed, signed observer quorums. External KMS and
+monotonic-state helpers execute through pinned launchers and retain exact
+request/challenge, endpoint, mTLS, sandbox, executable, TLS-session, backend,
+and independent witness identities. Production Git provenance retains the
+allowed-signers bytes plus the lifecycle-checked commit/tag signer ledger in
+the published source inventory, together with raw Git objects, exact security
+configuration bytes, and the verifier runtime closure for clean-host replay.
+Pinned helpers retain signed per-invocation effective-policy attestations;
+runtime analysis cross-checks raw parent-linked spans with an independent
+observer, and compiler evidence requires distinct engines with replay artifacts
+and explicit taint paths. Optional persistent operation-receipt state rejects
+cross-report replay, while RFC 3161 quorum mode rejects authority disagreement
+and monotonic-time rollback.
+
 No scanner portfolio can prove that software is vulnerability-free. Production
 approval must bind this report, an SBOM, the final artifact digest, test
 evidence, provenance, and governed risk acceptances to the same release.
+Encryption requires a signed KMS/HSM lifecycle receipt for the exact recipient
+key generation, a distinct provider-authority attestation of non-exportability,
+decrypt-only usage, and cryptographic erasure, plus advanced trusted time. These
+identities and validity evidence are carried inside the authenticated envelope.

@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:portfolio-health:1.0",
+  "title": "Operational portfolio coverage",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "scope", "overall", "domains"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "scope": {"type": "string", "minLength": 1},
+    "overall": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["grade", "applicable_control_slots", "completed_control_slots", "completion_percent", "domains_with_execution_gaps", "domains_not_selected"],
+      "properties": {
+        "grade": {"$ref": "#/$defs/grade"},
+        "applicable_control_slots": {"type": "integer", "minimum": 0},
+        "completed_control_slots": {"type": "integer", "minimum": 0},
+        "completion_percent": {"$ref": "#/$defs/nullablePercent"},
+        "domains_with_execution_gaps": {"type": "integer", "minimum": 0},
+        "domains_not_selected": {"type": "integer", "minimum": 0}
+      }
+    },
+    "domains": {
+      "type": "array",
+      "minItems": 12,
+      "maxItems": 12,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["domain", "purpose", "status", "grade", "selected_tools", "applicable_tools", "completed_tools", "completion_percent", "execution_gaps", "active_findings", "blocking_findings"],
+        "properties": {
+          "domain": {"type": "string", "minLength": 1},
+          "purpose": {"type": "string", "minLength": 1},
+          "status": {"enum": ["not_selected", "conditional_only", "gap", "complete"]},
+          "grade": {"$ref": "#/$defs/grade"},
+          "selected_tools": {"type": "integer", "minimum": 0},
+          "applicable_tools": {"type": "integer", "minimum": 0},
+          "completed_tools": {"type": "integer", "minimum": 0},
+          "completion_percent": {"$ref": "#/$defs/nullablePercent"},
+          "execution_gaps": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {"type": "string", "minLength": 1}
+          },
+          "active_findings": {"type": "integer", "minimum": 0},
+          "blocking_findings": {"type": "integer", "minimum": 0}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "grade": {"enum": ["A", "B", "C", "D", "F", "N/A"]},
+    "nullablePercent": {
+      "anyOf": [
+        {"type": "number", "minimum": 0, "maximum": 100},
+        {"type": "null"}
+      ]
+    }
+  }
+}

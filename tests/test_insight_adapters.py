@@ -174,6 +174,7 @@ class InsightAdapterTests(unittest.TestCase):
         payload = json.dumps(
             {
                 "results": {
+                    "passed_checks": [],
                     "failed_checks": [
                         {
                             "check_id": "CKV_DOCKER_3",
@@ -182,7 +183,8 @@ class InsightAdapterTests(unittest.TestCase):
                             "resource": "Dockerfile",
                             "check_result": {"start_line": 1, "end_line": 4},
                         }
-                    ]
+                    ],
+                    "skipped_checks": [],
                 }
             }
         )

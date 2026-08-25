@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from ..execution import CommandEnvironment
+from ..execution import CommandEnvironment, RawExecution
 from ..models import (
     Citation,
     Confidence,
@@ -17,10 +17,11 @@ from ..models import (
 from .base import ScannerAdapter
 from .staging import maintained_files
 
-
 _ANSI = re.compile(r"\x1b\[[0-9;]*m")
 _VIOLATION = re.compile(
-    r"^(?:[^\w\s]+\s*)?(?P<path>.+?)\[L(?P<line>\d+)\]:\s*(?P<message>.+)$"
+    r"^(?:\[[A-Z]+\]\s*)?(?P<path>.+?)"
+    r"(?:\[L(?P<bracket_line>\d+)\]|:(?P<colon_line>\d+)):"
+    r"\s*(?P<message>.+)$"
 )
 
 
@@ -48,6 +49,12 @@ class TachAdapter(ScannerAdapter):
             ".artifacts,.pysec-tools,.venv,build,dist,node_modules",
         ]
 
+    def result_payload(self, execution: RawExecution) -> str:
+        """Tach 0.35 writes contract violations to stderr."""
+        return "\n".join(
+            value for value in (execution.stdout, execution.stderr) if value
+        )
+
     def parse(self, payload: str, target: Path) -> list[Finding]:
         findings: list[Finding] = []
         unexpected_locations: list[str] = []
@@ -55,13 +62,15 @@ class TachAdapter(ScannerAdapter):
             line = _ANSI.sub("", raw_line).strip()
             if not line:
                 continue
+            if "\x00" in line:
+                raise ValueError("Tach output contains a NUL byte")
             match = _VIOLATION.match(line)
             if match is None:
-                if "[L" in line:
+                if "[L" in line or line.startswith("[FAIL]"):
                     unexpected_locations.append(line)
                 continue
             path = normalize_repo_path(target, match.group("path"))
-            start_line = int(match.group("line"))
+            start_line = int(match.group("bracket_line") or match.group("colon_line"))
             message = match.group("message").strip()
             rule_id = _rule_id(message)
             finding_id, fingerprint = finding_identity(

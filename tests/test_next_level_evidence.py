@@ -210,6 +210,10 @@ class FindingDeltaTests(unittest.TestCase):
         )
         self.assertEqual(current_exact.evidence["owners"], ["@security-team"])
         self.assertEqual(result.artifact["counts"]["resolved"], 1)
+        self.assertEqual(
+            result.artifact["ownership_rule_details"],
+            [{"pattern": "src/*.py", "owners": ["@security-team"]}],
+        )
 
     def test_invalid_baseline_digest_is_an_explicit_error(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -254,6 +258,103 @@ class FindingDeltaTests(unittest.TestCase):
                 baseline_sha256=_digest(baseline),
             )
         self.assertIn("does not match", result.errors[0])
+
+    def test_incompatible_profile_and_tool_set_are_not_labeled_as_new(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            baseline = root / "baseline.json"
+            baseline.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "1.0",
+                        "target": root.name,
+                        "profile": "quick",
+                        "source_sha256": "a" * 64,
+                        "selected_tools": ["bandit"],
+                        "findings": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            finding = _finding()
+            result = apply_finding_delta(
+                [finding],
+                target=root,
+                baseline_path=baseline,
+                baseline_sha256=_digest(baseline),
+                current_profile="comprehensive",
+                current_tools=("bandit", "semgrep"),
+                current_source_sha256="b" * 64,
+            )
+
+        self.assertEqual(finding.status, FindingStatus.UNCLASSIFIED)
+        self.assertFalse(result.artifact["comparison"]["comparable"])
+        self.assertEqual(result.artifact["counts"]["new"], 0)
+        self.assertEqual(result.artifact["counts"]["unclassified"], 1)
+        self.assertIn("profile", result.errors[0])
+
+    @patch("py_security_suite.finding_delta.resolve_executable", return_value="git")
+    @patch("py_security_suite.finding_delta.run_command")
+    def test_production_baseline_requires_and_verifies_local_ancestry(
+        self, run_mock, _resolve_mock
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            baseline = root / "baseline.json"
+            baseline.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "1.0",
+                        "target": root.name,
+                        "profile": "production",
+                        "selected_tools": ["bandit"],
+                        "source_sha256": "a" * 64,
+                        "vcs_revision": "1" * 40,
+                        "findings": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            run_mock.return_value = RawExecution(
+                command=["git"],
+                exit_code=0,
+                stdout="",
+                stderr="",
+                duration_seconds=0.1,
+            )
+            result = apply_finding_delta(
+                [_finding()],
+                target=root,
+                baseline_path=baseline,
+                baseline_sha256=_digest(baseline),
+                current_profile="production",
+                current_tools=("bandit",),
+                current_vcs_revision="2" * 40,
+            )
+            self.assertEqual(result.errors, [])
+            self.assertTrue(
+                result.artifact["comparison"]["source"]["ancestry_verified"]
+            )
+
+            run_mock.return_value = RawExecution(
+                command=["git"],
+                exit_code=1,
+                stdout="",
+                stderr="",
+                duration_seconds=0.1,
+            )
+            finding = _finding()
+            result = apply_finding_delta(
+                [finding],
+                target=root,
+                baseline_path=baseline,
+                baseline_sha256=_digest(baseline),
+                current_profile="production",
+                current_tools=("bandit",),
+                current_vcs_revision="2" * 40,
+            )
+            self.assertEqual(finding.status, FindingStatus.UNCLASSIFIED)
+            self.assertIn("not an ancestor", result.errors[0])
 
 
 class PassportTests(unittest.TestCase):
@@ -478,6 +579,41 @@ class PassportTests(unittest.TestCase):
                     with self.assertRaisesRegex(ValueError, message):
                         verify_report(report)
                     manifest["artifacts"].pop(key)
+
+    def test_report_validation_requires_semantic_source_inventory(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            report = _fixture_report(Path(directory))
+            manifest_path = report / "scan-manifest.json"
+            source_path = report / "source-inventory.json"
+
+            source_path.unlink()
+            _write_checksums(report)
+            with self.assertRaisesRegex(ValueError, "artifact is missing"):
+                verify_report(report)
+
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            write_embedded_statement(report, manifest)
+            malformed = json.loads(source_path.read_text(encoding="utf-8"))
+            malformed["unexpected"] = True
+            source_path.write_text(json.dumps(malformed), encoding="utf-8")
+            _write_checksums(report)
+            with self.assertRaisesRegex(ValueError, "fields do not match"):
+                verify_report(report)
+
+            write_embedded_statement(report, manifest)
+            manifest["inventory"]["hashed_files"] = 1
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            _write_checksums(report)
+            with self.assertRaisesRegex(ValueError, "not bound to the scan manifest"):
+                verify_report(report)
+
+            manifest["artifacts"].pop("source-inventory.json")
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            _write_checksums(report)
+            with self.assertRaisesRegex(
+                ValueError, "binding is invalid: source-inventory.json"
+            ):
+                verify_report(report)
 
     def test_report_validation_binds_embedded_security_passport(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

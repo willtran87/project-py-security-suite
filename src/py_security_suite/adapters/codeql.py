@@ -21,7 +21,6 @@ from .base import AdapterResult, ScannerAdapter
 from .sarif import parse_sarif_findings
 from .staging import maintained_files
 
-
 _MIRROR_SKIP_DIRECTORIES = {
     ".artifacts",
     ".codeql",

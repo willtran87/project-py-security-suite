@@ -27,6 +27,37 @@ _CONFIDENCE_ORDER = {
     Confidence.HIGH: 3,
 }
 _T = TypeVar("_T")
+_RUNTIME_TOOLS = frozenset(
+    {
+        "browser-security",
+        "authorization-security",
+        "falco",
+        "iast",
+        "kubescape",
+        "mobsf",
+        "nuclei",
+        "oast",
+        "restler",
+        "protocol-security",
+        "prowler",
+        "cloud-attack-path",
+        "rasp",
+        "tls-scan",
+        "zap",
+        "secret-verification",
+    }
+)
+_DYNAMIC_TOOLS = _RUNTIME_TOOLS | frozenset(
+    {
+        "atheris",
+        "clusterfuzzlite",
+        "crosshair",
+        "native-sanitizers",
+        "polyglot",
+        "fuzz-introspector",
+        "schemathesis",
+    }
+)
 
 
 def correlate_findings(findings: list[Finding]) -> list[Finding]:
@@ -73,6 +104,19 @@ def correlate_findings(findings: list[Finding]) -> list[Finding]:
                 value for item in observations for value in item.classifications
             )
         )
+        tools = sorted({source.tool for source in primary.sources})
+        dynamic_tools = sorted(set(tools) & _DYNAMIC_TOOLS)
+        primary.evidence["cross_tool_corroboration"] = {
+            "observation_count": len(observations),
+            "tools": tools,
+            "dynamic_tools": dynamic_tools,
+            "runtime_observed": bool(set(tools) & _RUNTIME_TOOLS),
+            "independent_perspectives": len(tools),
+            "claim_boundary": (
+                "Co-located observations with the same normalized weakness; this "
+                "does not by itself prove exploitability or production exposure."
+            ),
+        }
         correlated.append(primary)
 
     return sorted(correlated, key=_sort_key)

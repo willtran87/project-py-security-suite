@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import hashlib
-import json
+
+from .strict_json import loads as strict_json_loads
 import re
 from collections import Counter
 from importlib.resources import files
@@ -25,6 +26,90 @@ _REPORT_VERIFICATION_SCHEMA_ID = (
     "urn:project-py-security-suite:schema:report-verification:1.0"
 )
 BUNDLED_SCHEMA_RESOURCES = {
+    "boundary-graph-1.0": "boundary-graph-1.0.schema.json",
+    "dependency-surface-1.1": "dependency-surface-1.1.schema.json",
+    "isolation-probe-1.0": "isolation-probe-1.0.schema.json",
+    "isolation-boundary-1.0": "isolation-boundary-1.0.schema.json",
+    "report-security-1.0": "report-security-1.0.schema.json",
+    "resource-limits-1.0": "resource-limits-1.0.schema.json",
+    "runtime-closure-1.0": "runtime-closure-1.0.schema.json",
+    "semantic-language-coverage-1.0": "semantic-language-coverage-1.0.schema.json",
+    "trust-policy-1.0": "trust-policy-1.0.schema.json",
+    "trust-policy-attestation-1.0": "trust-policy-attestation-1.0.schema.json",
+    "advanced-analysis-1.0": "advanced-analysis.schema.json",
+    "advanced-analysis-delta-1.0": "advanced-analysis-delta.schema.json",
+    "data-exposure-1.0": "data-exposure-1.0.schema.json",
+    "data-exposure-1.1": "data-exposure-1.1.schema.json",
+    "data-exposure-1.2": "data-exposure-1.2.schema.json",
+    "data-exposure-1.3": "data-exposure-1.3.schema.json",
+    "data-exposure-1.4": "data-exposure-1.4.schema.json",
+    "data-exposure-1.5": "data-exposure-1.5.schema.json",
+    "evidence-fusion-1.0": "evidence-fusion-1.0.schema.json",
+    "evidence-fusion-1.1": "evidence-fusion-1.1.schema.json",
+    "evidence-fusion-1.2": "evidence-fusion-1.2.schema.json",
+    "evidence-fusion-1.3": "evidence-fusion.schema.json",
+    "graphify-evidence-1.0": "graphify-evidence.schema.json",
+    "graph-analysis-1.0": "graph-analysis.schema.json",
+    "risk-paths-1.0": "risk-paths.schema.json",
+    "structural-synthesis-1.0": "structural-synthesis.schema.json",
+    "structural-synthesis-1.1": "structural-synthesis-1.1.schema.json",
+    "structural-synthesis-1.2": "structural-synthesis-1.2.schema.json",
+    "adapter-conformance-1.0": "adapter-conformance.schema.json",
+    "companion-assurance-1.0": "companion-assurance.schema.json",
+    "companion-assurance-2.0": "companion-assurance-2.0.schema.json",
+    "bundle-qualification-1.0": "bundle-qualification.schema.json",
+    "bundle-qualification-1.1": "bundle-qualification-1.1.schema.json",
+    "native-bundle-verification-1.0": "native-bundle-verification.schema.json",
+    "config-advice-1.0": "config-advice.schema.json",
+    "github-workflow-1.0": "github-workflow.schema.json",
+    "precommit-config-1.0": "precommit-config.schema.json",
+    "project-init-1.0": "project-init.schema.json",
+    "doctor-readiness-1.1": "doctor-readiness-1.1.schema.json",
+    "provision-plan-1.0": "provision-plan.schema.json",
+    "admission-decisions-1.0": "admission-decisions.schema.json",
+    "evidence-pack-1.0": "evidence-pack.schema.json",
+    "evidence-pack-verification-1.0": "evidence-pack-verification.schema.json",
+    "baseline-candidate-1.0": "baseline-candidate.schema.json",
+    "effectiveness-corpus-1.0": "effectiveness-corpus.schema.json",
+    "effectiveness-evaluation-1.0": "effectiveness-evaluation.schema.json",
+    "security-requirements-policy-1.0": "security-requirements-policy-1.0.schema.json",
+    "effectiveness-1.1": "effectiveness-1.1.schema.json",
+    "scanner-trust-catalog-1.0": "scanner-trust-catalog.schema.json",
+    "portfolio-health-1.0": "portfolio-health.schema.json",
+    "portfolio-health-1.1": "portfolio-health-1.1.schema.json",
+    "source-inventory-1.0": "source-inventory.schema.json",
+    "isolation-attestation-1.0": "isolation-attestation.schema.json",
+    "intelligence-approval-1.0": "intelligence-approval.schema.json",
+    "release-readiness-1.0": "release-readiness.schema.json",
+    "release-readiness-1.1": "release-readiness-1.1.schema.json",
+    "release-readiness-1.2": "release-readiness-1.2.schema.json",
+    "release-readiness-1.3": "release-readiness-1.3.schema.json",
+    "governance-evidence-draft-1.0": "governance-evidence-draft.schema.json",
+    "signing-request-1.0": "signing-request.schema.json",
+    "signing-request-verification-1.0": "signing-request-verification.schema.json",
+    "promotion-plan-1.0": "promotion-plan.schema.json",
+    "promotion-plan-1.1": "promotion-plan-1.1.schema.json",
+    "promotion-plan-1.2": "promotion-plan-1.2.schema.json",
+    "operational-trend-1.0": "operational-trend.schema.json",
+    "operational-trend-1.1": "operational-trend-1.1.schema.json",
+    "operational-trend-1.2": "operational-trend-1.2.schema.json",
+    "operational-trend-1.3": "operational-trend-1.3.schema.json",
+    "release-evidence-manifest-1.0": "release-evidence-manifest.schema.json",
+    "release-evidence-manifest-verification-1.0": "release-evidence-manifest-verification.schema.json",
+    "policy-simulation-1.0": "policy-simulation.schema.json",
+    "finding-register-1.0": "finding-register.schema.json",
+    "github-annotations-1.0": "github-annotations.schema.json",
+    "audit-package-verification-1.0": "audit-package-verification.schema.json",
+    "coverage-merge-1.0": "coverage-merge.schema.json",
+    "portfolio-dashboard-1.0": "portfolio-dashboard.schema.json",
+    "config-provenance-1.0": "config-provenance.schema.json",
+    "closure-plan-1.0": "closure-plan-1.0.schema.json",
+    "closure-plan-1.1": "closure-plan-1.1.schema.json",
+    "closure-plan-1.2": "closure-plan.schema.json",
+    "reproducible-build-1.0": "reproducible-build.schema.json",
+    "sdist-normalization-1.0": "sdist-normalization.schema.json",
+    "audience-report-1.0": "audience-report.schema.json",
+    "reachability-delta-1.0": "reachability-delta.schema.json",
     "report-inspection-1.0": "report-inspection.schema.json",
     "report-inspection-1.1": "report-inspection-1.1.schema.json",
     "report-inspection-1.2": "report-inspection-1.2.schema.json",
@@ -378,7 +463,12 @@ def _read_object_payload(path: Path) -> tuple[dict[str, Any], bytes]:
     payload = path.read_bytes()
     if len(payload) > _MAX_JSON_BYTES:
         raise ValueError(f"report JSON is not a bounded regular file: {path}")
-    value = json.loads(payload, object_pairs_hook=_unique_json_object)
+    try:
+        value = strict_json_loads(payload)
+    except ValueError as exc:
+        if "duplicate property" in str(exc):
+            raise ValueError("report JSON contains a duplicate object key") from exc
+        raise
     if not isinstance(value, dict):
         raise ValueError(f"report JSON root must be an object: {path}")
     return value, payload
@@ -558,14 +648,20 @@ def _entrypoint_integrity(tools: list[dict[str, Any]]) -> dict[str, Any]:
                 _safe_text(tool.get("tool") or "unknown"),
                 "primary",
                 tool.get("executable_sha256"),
-                tool.get("executable_integrity_verified"),
+                (
+                    tool.get("executable_integrity_verified") is True
+                    and tool.get("executable_organization_approved") is True
+                ),
                 tool.get("executable_unchanged"),
             ),
             (
                 _safe_text(tool.get("tool") or "unknown"),
                 "helper",
                 tool.get("auxiliary_executable_sha256"),
-                tool.get("auxiliary_executable_integrity_verified"),
+                (
+                    tool.get("auxiliary_executable_integrity_verified") is True
+                    and tool.get("auxiliary_executable_organization_approved") is True
+                ),
                 tool.get("auxiliary_executable_unchanged"),
             ),
         )

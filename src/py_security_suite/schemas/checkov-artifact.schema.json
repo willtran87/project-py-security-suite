@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:checkov-artifact:1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "reports", "passed_checks", "failed_checks", "skipped_checks", "total_checks", "frameworks", "native_report_sha256", "native_report_size_bytes", "native_report_records", "native_report_redacted_utf8", "native_report_redacted_sha256", "native_report_redacted_size_bytes", "native_report_classification", "native_report_adapter", "native_report_replayable", "native_report_storage", "normalization_sha256"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "reports": {"type": "integer", "minimum": 1, "maximum": 10000},
+    "passed_checks": {"type": "integer", "minimum": 0, "maximum": 10000000},
+    "failed_checks": {"type": "integer", "minimum": 0, "maximum": 10000000},
+    "skipped_checks": {"type": "integer", "minimum": 0, "maximum": 10000000},
+    "total_checks": {"type": "integer", "minimum": 0, "maximum": 30000000},
+    "frameworks": {"type": "array", "maxItems": 1000, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 100}},
+    "native_report_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "native_report_size_bytes": {"type": "integer", "minimum": 1, "maximum": 1073741824},
+    "native_report_records": {"type": "integer", "minimum": 0, "maximum": 30000000},
+    "native_report_redacted_utf8": {"type": "string", "minLength": 1, "maxLength": 67108864},
+    "native_report_redacted_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "native_report_redacted_size_bytes": {"type": "integer", "minimum": 1, "maximum": 67108864},
+    "native_report_classification": {"const": "confidential"},
+    "native_report_adapter": {"const": "checkov"},
+    "native_report_replayable": {"type": "boolean"},
+    "native_report_storage": {"$ref": "#/$defs/storage"},
+    "normalization_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  },
+  "$defs": {"storage": {"type": "object", "additionalProperties": false, "required": ["mode", "object_id", "ciphertext_sha256", "key_sha256", "custody_receipt_sha256", "custody_level", "wrapped_data_key_base64", "custody_receipt", "custody_authority_receipt", "effective_policy_attestation", "recovery_drill"], "properties": {"mode": {"enum": ["redacted-inline", "encrypted-cas"]}, "object_id": {"type": "string"}, "ciphertext_sha256": {"type": "string", "pattern": "^$|^[0-9a-f]{64}$"}, "key_sha256": {"type": "string", "pattern": "^$|^[0-9a-f]{64}$"}, "custody_receipt_sha256": {"type": "string", "pattern": "^$|^[0-9a-f]{64}$"}, "custody_level": {"enum": ["none", "hardware-kms-envelope"]}, "wrapped_data_key_base64": {"type": "string", "maxLength": 16384}, "custody_receipt": {"type": ["object", "null"]}, "custody_authority_receipt": {"type": ["object", "null"]}, "effective_policy_attestation": {"type": ["object", "null"]}, "recovery_drill": {"type": ["object", "null"]}}}}
+}

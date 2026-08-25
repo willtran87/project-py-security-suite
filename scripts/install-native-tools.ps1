@@ -89,21 +89,75 @@ if (-not (Test-Path -LiteralPath $bundleManifestPath)) {
 }
 $bundleManifest = Get-Content -Raw -LiteralPath $bundleManifestPath |
     ConvertFrom-Json
-if ($bundleManifest.schema_version -ne "1") {
+if ($bundleManifest.schema_version -notin @("1", "2.0")) {
     throw "Unsupported native bundle schema."
 }
 if ($bundleManifest.platform -ne "windows-amd64") {
     throw "This installer requires a windows-amd64 native bundle."
 }
+$expectedBundleFiles = [Collections.Generic.HashSet[string]]::new(
+    [StringComparer]::OrdinalIgnoreCase
+)
+[void]$expectedBundleFiles.Add("bundle-manifest.json")
 foreach ($entry in $bundleManifest.files) {
-    $path = Join-Path $bundle ($entry.path.Replace("/", "\"))
+    $relative = [string]$entry.path
+    if (
+        -not $relative -or
+        $relative.Contains("\") -or
+        [IO.Path]::IsPathRooted($relative) -or
+        ($relative -split "/") -contains ".." -or
+        -not $expectedBundleFiles.Add($relative)
+    ) {
+        throw "Bundle manifest contains an unsafe or duplicate path: $relative"
+    }
+    $path = [IO.Path]::GetFullPath(
+        (Join-Path $bundle ($relative.Replace("/", "\")))
+    )
+    if (-not $path.StartsWith(
+        $bundle + [IO.Path]::DirectorySeparatorChar,
+        [StringComparison]::OrdinalIgnoreCase
+    )) {
+        throw "Bundle manifest path escaped the bundle: $relative"
+    }
     if (-not (Test-Path -LiteralPath $path)) {
         throw "Bundle file is missing: $($entry.path)"
+    }
+    $item = Get-Item -LiteralPath $path -Force
+    if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw "Bundle file cannot be a link or reparse point: $relative"
+    }
+    if ($item.Length -ne [long]$entry.size) {
+        throw "Bundle file size mismatch: $relative"
     }
     $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $path).Hash.ToLowerInvariant()
     if ($actual -ne $entry.sha256) {
         throw "Bundle checksum mismatch: $($entry.path)"
     }
+}
+$bundleEntries = Get-ChildItem -LiteralPath $bundle -Recurse -Force
+foreach ($item in $bundleEntries) {
+    if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw "Bundle cannot contain links or reparse points: $($item.FullName)"
+    }
+}
+$actualBundleFiles = [Collections.Generic.HashSet[string]]::new(
+    [StringComparer]::OrdinalIgnoreCase
+)
+foreach ($item in ($bundleEntries | Where-Object { -not $_.PSIsContainer })) {
+    $relative = $item.FullName.Substring($bundle.Length + 1).Replace("\", "/")
+    [void]$actualBundleFiles.Add($relative)
+}
+$unexpectedBundleFiles = @(
+    $actualBundleFiles | Where-Object { -not $expectedBundleFiles.Contains($_) }
+)
+if ($unexpectedBundleFiles.Count -gt 0) {
+    throw "Bundle contains unmanifested files: $($unexpectedBundleFiles -join ', ')"
+}
+$missingBundleFiles = @(
+    $expectedBundleFiles | Where-Object { -not $actualBundleFiles.Contains($_) }
+)
+if ($missingBundleFiles.Count -gt 0) {
+    throw "Bundle is missing manifested files: $($missingBundleFiles -join ', ')"
 }
 
 if (Test-Path -LiteralPath $toolDirectory) {
@@ -168,6 +222,17 @@ $scanCodePython = Join-Path $scanCodeDirectory "Scripts\python.exe"
     "scancode-toolkit==$($bundleManifest.tools.'scancode-toolkit')"
 if ($LASTEXITCODE -ne 0) {
     throw "Offline ScanCode sidecar installation failed."
+}
+$graphifyDirectory = Join-Path $toolDirectory "graphify-env"
+& $Python -m venv $graphifyDirectory
+if ($LASTEXITCODE -ne 0) {
+    throw "Creating the Graphify sidecar environment failed."
+}
+$graphifyPython = Join-Path $graphifyDirectory "Scripts\python.exe"
+& $graphifyPython -m pip install --no-index --no-compile `
+    --find-links $wheelhouse "graphifyy==$($bundleManifest.tools.graphify)"
+if ($LASTEXITCODE -ne 0) {
+    throw "Offline Graphify sidecar installation failed."
 }
 $artifactDirectory = Join-Path $toolDirectory "artifact-env"
 & $Python -m venv $artifactDirectory
@@ -442,6 +507,16 @@ $toTomlPath = {
     param([string]$Value)
     return $Value.Replace("\", "/").Replace('"', '\"')
 }
+$toPortablePath = {
+    param([string]$Value)
+    $absolute = [IO.Path]::GetFullPath($Value.Replace("/", "\"))
+    $root = $toolDirectory.TrimEnd("\") + "\"
+    if ($absolute.StartsWith($root, [StringComparison]::OrdinalIgnoreCase)) {
+        $relative = $absolute.Substring($root.Length).Replace("\", "/")
+        return "@bundle/$relative"
+    }
+    return & $toTomlPath $absolute
+}
 $toSha256 = {
     param([Parameter(Mandatory = $true)][string]$Value)
     return (
@@ -457,9 +532,13 @@ $deptry = & $toTomlPath (Join-Path $toolDirectory "Scripts\deptry.exe")
 $diffCover = & $toTomlPath (Join-Path $toolDirectory "Scripts\diff-cover.exe")
 $vulture = & $toTomlPath (Join-Path $toolDirectory "Scripts\vulture.exe")
 $tach = & $toTomlPath (Join-Path $toolDirectory "Scripts\tach.exe")
+$graphify = & $toTomlPath (
+    Join-Path $graphifyDirectory "Scripts\graphify.exe"
+)
 $pylint = & $toTomlPath (Join-Path $toolDirectory "Scripts\pylint.exe")
 $radon = & $toTomlPath (Join-Path $toolDirectory "Scripts\radon.exe")
 $reuse = & $toTomlPath (Join-Path $toolDirectory "Scripts\reuse.exe")
+$pysec = & $toTomlPath (Join-Path $toolDirectory "Scripts\pysec.exe")
 $pysecEvidence = & $toTomlPath (
     Join-Path $toolDirectory "Scripts\pysec-evidence.exe"
 )
@@ -513,9 +592,11 @@ $deptrySha256 = & $toSha256 $deptry
 $diffCoverSha256 = & $toSha256 $diffCover
 $vultureSha256 = & $toSha256 $vulture
 $tachSha256 = & $toSha256 $tach
+$graphifySha256 = & $toSha256 $graphify
 $pylintSha256 = & $toSha256 $pylint
 $radonSha256 = & $toSha256 $radon
 $reuseSha256 = & $toSha256 $reuse
+$pysecSha256 = & $toSha256 $pysec
 $pysecEvidenceSha256 = & $toSha256 $pysecEvidence
 $flawfinderSha256 = & $toSha256 $flawfinder
 $cycloneDxSha256 = & $toSha256 $cycloneDx
@@ -546,20 +627,47 @@ $checkWheelContentsSha256 = & $toSha256 $checkWheelContents
 $twineSha256 = & $toSha256 $twine
 $pipdeptreeSha256 = & $toSha256 $pipdeptree
 $validatePyprojectSha256 = & $toSha256 $validatePyproject
-$database = & $toTomlPath $databaseRoot
-$trivyDatabase = & $toTomlPath $trivyCache
-$grypeDatabase = & $toTomlPath $grypeCache
-$rules = & $toTomlPath $rulesPath
-$gitleaksRules = & $toTomlPath $gitleaksRulesPath
-$truffleHogExcludes = & $toTomlPath $truffleHogExcludesPath
-$mypyRules = & $toTomlPath $mypyRulesPath
-$vultureRules = & $toTomlPath $vultureRulesPath
-$pylintRules = & $toTomlPath $pylintRulesPath
-$actionlintRules = & $toTomlPath $actionlintRulesPath
-$hadolintRules = & $toTomlPath $hadolintRulesPath
+$portableVariables = @(
+    "bandit", "semgrep", "detectSecrets", "ruff", "mypy", "deptry",
+    "diffCover", "vulture", "tach", "graphify", "pylint", "radon", "reuse", "pysec",
+    "pysecEvidence", "flawfinder", "cycloneDx", "uv", "zizmor", "scanCode",
+    "osvScanner", "trivy", "gitleaks", "truffleHog", "syft", "grype",
+    "actionlint", "conftest", "gitSizer", "vale", "kubeLinter", "hadolint",
+    "devSkim", "shellCheck", "cosign", "node", "pyright", "pyrightRules",
+    "powerShell", "powerShellModules", "psscriptAnalyzerRules", "checkov",
+    "runCodeQl", "pypiAttestations", "checkWheelContents", "twine",
+    "pipdeptree", "validatePyproject"
+)
+foreach ($variableName in $portableVariables) {
+    $current = Get-Variable -Name $variableName -ValueOnly
+    Set-Variable -Name $variableName -Value (& $toPortablePath $current)
+}
+$database = & $toPortablePath $databaseRoot
+$trivyDatabase = & $toPortablePath $trivyCache
+$grypeDatabase = & $toPortablePath $grypeCache
+$rules = & $toPortablePath $rulesPath
+$gitleaksRules = & $toPortablePath $gitleaksRulesPath
+$truffleHogExcludes = & $toPortablePath $truffleHogExcludesPath
+$mypyRules = & $toPortablePath $mypyRulesPath
+$vultureRules = & $toPortablePath $vultureRulesPath
+$pylintRules = & $toPortablePath $pylintRulesPath
+$actionlintRules = & $toPortablePath $actionlintRulesPath
+$hadolintRules = & $toPortablePath $hadolintRulesPath
+$workspacePrefix = $workspace.TrimEnd("\") + "\"
+$bundleRootConfig = if ($toolDirectory.StartsWith(
+    $workspacePrefix,
+    [StringComparison]::OrdinalIgnoreCase
+)) {
+    $toolDirectory.Substring($workspacePrefix.Length).Replace("\", "/")
+} else {
+    & $toTomlPath $toolDirectory
+}
 $config = @"
 schema_version = "1"
 profile = "standard"
+
+[paths]
+bundle_root = "$bundleRootConfig"
 
 [isolation]
 network = "deny"
@@ -677,6 +785,20 @@ enabled = true
 executable = "$tach"
 executable_sha256 = "$tachSha256"
 timeout_seconds = 300
+
+[tools.reachability]
+enabled = true
+executable = "$pysec"
+executable_sha256 = "$pysecSha256"
+timeout_seconds = 600
+minimum_island_loc = 100
+discover_framework_roots = true
+
+[tools.graphify]
+enabled = true
+executable = "$graphify"
+executable_sha256 = "$graphifySha256"
+timeout_seconds = 900
 
 [tools.coverage]
 enabled = true
@@ -1027,6 +1149,9 @@ $versions = [ordered]@{
     tach = Get-NativeToolVersion (
         Join-Path $toolDirectory "Scripts\tach.exe"
     )
+    graphify = Get-NativeToolVersion (
+        Join-Path $graphifyDirectory "Scripts\graphify.exe"
+    )
     pylint = Get-NativeToolVersion (
         Join-Path $toolDirectory "Scripts\pylint.exe"
     )
@@ -1108,6 +1233,7 @@ $installManifest = [ordered]@{
     scancode_packages = @(& $scanCodePython -m pip freeze --all)
     artifact_packages = @(& $artifactPython -m pip freeze --all)
     checkov_packages = @(& $checkovPython -m pip freeze --all)
+    graphify_packages = @(& $graphifyPython -m pip freeze --all)
 }
 $installManifest | ConvertTo-Json -Depth 8 |
     Set-Content -LiteralPath (Join-Path $toolDirectory "native-install.json") `

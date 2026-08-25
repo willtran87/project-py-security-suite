@@ -1,0 +1,26 @@
+{
+  "cases": [
+    {
+      "id": "grpc-authorized-read",
+      "protocol": "grpc",
+      "endpoint": "127.0.0.1:50051",
+      "method": "/example.Inventory/GetItem",
+      "request_env": "PYSEC_GRPC_READ_B64",
+      "role": "reader",
+      "control": "contract",
+      "expected_status": ["OK"],
+      "expected_response_sha256": ""
+    },
+    {
+      "id": "grpc-malformed-request",
+      "protocol": "grpc",
+      "endpoint": "127.0.0.1:50051",
+      "method": "/example.Inventory/GetItem",
+      "request_env": "PYSEC_GRPC_FAULT_B64",
+      "role": "anonymous",
+      "control": "fault",
+      "expected_status": ["INVALID_ARGUMENT", "PERMISSION_DENIED"],
+      "expected_response_sha256": ""
+    }
+  ]
+}

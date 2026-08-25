@@ -1,0 +1,14 @@
+{
+  "schema_version": "1.0",
+  "nodes": [
+    {"id": "inventory-id-1", "type": "public-endpoint", "public_entry": true, "sensitive_asset": false},
+    {"id": "inventory-id-2", "type": "workload-identity", "public_entry": false, "sensitive_asset": false},
+    {"id": "inventory-id-3", "type": "secret-store", "public_entry": false, "sensitive_asset": true}
+  ],
+  "edges": [
+    {"source": "inventory-id-1", "target": "inventory-id-2", "type": "network-reachability"},
+    {"source": "inventory-id-2", "target": "inventory-id-3", "type": "identity-permission"}
+  ],
+  "canary_path": {"source": "inventory-id-1", "target": "inventory-id-3"},
+  "drift_checked": true
+}

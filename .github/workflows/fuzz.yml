@@ -1,0 +1,170 @@
+name: Continuous parser fuzzing
+
+on:
+  pull_request:
+    paths:
+      - src/py_security_suite/**
+      - scripts/fuzz_security_parsers.py
+      - fuzz/**
+      - pyproject.toml
+      - uv.lock
+      - .github/workflows/fuzz.yml
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fuzz-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  discover-targets:
+    name: Discover parser targets
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      targets: ${{ steps.targets.outputs.targets }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.11.19"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - name: Install locked fuzzing environment
+        run: uv sync --locked --all-groups --python "3.13"
+      - name: Build the adapter-complete target matrix
+        id: targets
+        shell: bash
+        run: echo "targets=$(uv run --frozen python scripts/fuzz_security_parsers.py --list-targets)" >> "$GITHUB_OUTPUT"
+
+  parser-fuzz:
+    name: Fuzz ${{ matrix.target }}
+    needs: discover-targets
+    strategy:
+      fail-fast: false
+      max-parallel: 12
+      matrix:
+        include: ${{ fromJSON(needs.discover-targets.outputs.targets) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      FUZZ_TARGET: ${{ matrix.target }}
+      FUZZ_ARTIFACT: ${{ matrix.artifact }}
+      FUZZ_SECONDS: ${{ matrix.seconds }}
+      FUZZ_COVERAGE_FLOOR: ${{ matrix.coverage_floor }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.11.19"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - name: Install locked fuzzing environment
+        run: uv sync --locked --all-groups --python "3.13"
+      - name: Find the previous successful corpus
+        id: previous
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          run_id="$(gh run list --workflow fuzz.yml --branch main --status success --limit 1 --json databaseId --jq '.[0].databaseId // empty')"
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+      - name: Restore previous evolved corpus
+        if: steps.previous.outputs.run_id != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PREVIOUS_RUN_ID: ${{ steps.previous.outputs.run_id }}
+        shell: bash
+        run: |
+          artifact_name="parser-fuzz-corpus-$FUZZ_ARTIFACT"
+          artifact_id="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$PREVIOUS_RUN_ID/artifacts" --paginate --jq ".artifacts[] | select(.name == \"$artifact_name\") | .id" | head -n 1)"
+          if [[ -n "$artifact_id" ]]; then
+            gh run download "$PREVIOUS_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$artifact_name" --dir ".fuzz-corpus/$FUZZ_ARTIFACT"
+            echo "Restored corpus artifact $artifact_id"
+          else
+            echo "::notice::No prior corpus exists for $FUZZ_TARGET; starting from committed seeds"
+          fi
+      - name: Seed missing corpus entries
+        shell: bash
+        run: |
+          mkdir -p ".fuzz-corpus/$FUZZ_ARTIFACT" .fuzz-results
+          cp -n fuzz/corpus/security-parsers/* ".fuzz-corpus/$FUZZ_ARTIFACT/" 2>/dev/null || true
+      - name: Run coverage-guided parser fuzzing
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv run --frozen python scripts/fuzz_security_parsers.py \
+            --target="$FUZZ_TARGET" \
+            -max_total_time="$FUZZ_SECONDS" \
+            -timeout=10 \
+            -rss_limit_mb=2048 \
+            -dict=fuzz/security-json.dict \
+            -print_final_stats=1 \
+            -entropic=1 \
+            -use_value_profile=1 \
+            ".fuzz-corpus/$FUZZ_ARTIFACT" 2>&1 | tee ".fuzz-results/$FUZZ_ARTIFACT.log"
+          coverage="$(grep -oE 'cov: [0-9]+' ".fuzz-results/$FUZZ_ARTIFACT.log" | awk '{if ($2 > max) max=$2} END {print max}')"
+          if [[ -z "$coverage" || "$coverage" -lt "$FUZZ_COVERAGE_FLOOR" ]]; then
+            echo "::error::Fuzz coverage $coverage is below floor $FUZZ_COVERAGE_FLOOR for $FUZZ_TARGET"
+            exit 1
+          fi
+          baseline_file=".fuzz-corpus/$FUZZ_ARTIFACT/.pysec-coverage-baseline"
+          if [[ -f "$baseline_file" ]]; then
+            previous="$(tr -d '[:space:]' < "$baseline_file")"
+            if [[ "$previous" =~ ^[0-9]+$ ]] && (( coverage * 100 < previous * 90 )); then
+              echo "::error::Fuzz coverage regressed by more than 10% ($previous to $coverage) for $FUZZ_TARGET"
+              exit 1
+            fi
+          fi
+          printf '%s\n' "$coverage" > "$baseline_file"
+      - name: Retain fuzz failures
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: parser-fuzz-failures-${{ matrix.artifact }}
+          path: |
+            crash-*
+            leak-*
+            timeout-*
+            oom-*
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Retain evolved parser corpus
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: parser-fuzz-corpus-${{ matrix.artifact }}
+          path: .fuzz-corpus/${{ matrix.artifact }}
+          if-no-files-found: error
+          retention-days: 30
+
+  required-gate:
+    name: Fuzz required gate
+    if: always()
+    needs: [discover-targets, parser-fuzz]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require complete parser-fuzz coverage
+        shell: bash
+        env:
+          DISCOVERY_RESULT: ${{ needs.discover-targets.result }}
+          FUZZ_RESULT: ${{ needs.parser-fuzz.result }}
+        run: |
+          set -euo pipefail
+          [[ "$DISCOVERY_RESULT" == "success" ]]
+          [[ "$FUZZ_RESULT" == "success" ]]

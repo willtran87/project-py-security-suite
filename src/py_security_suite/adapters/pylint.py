@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +14,7 @@ from ..models import (
     finding_identity,
     normalize_repo_path,
 )
+from ..strict_json import loads as strict_json_loads
 from .base import AdapterResult, ScannerAdapter
 from .staging import maintained_files, mirrored_source_tree
 
@@ -64,7 +64,7 @@ class PylintAdapter(ScannerAdapter):
         ]
 
     def parse(self, payload: str, target: Path) -> list[Finding]:
-        document = json.loads(payload)
+        document = strict_json_loads(payload)
         if not isinstance(document, dict) or not isinstance(
             document.get("messages"), list
         ):
@@ -134,7 +134,7 @@ class PylintAdapter(ScannerAdapter):
         return findings
 
     def derived_artifacts(self, payload: str, target: Path) -> dict[str, Any]:
-        document = json.loads(payload)
+        document = strict_json_loads(payload)
         return {
             "pylint-summary.json": {
                 "schema_version": "1.0",

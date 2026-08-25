@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:deptry-artifact:1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "findings"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "findings": {"type": "array", "maxItems": 250000, "items": {"type": "object"}}
+  }
+}

@@ -1,0 +1,26 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    cooldown:
+      default-days: 7
+    schedule:
+      interval: weekly
+  - package-ecosystem: pip
+    directory: /
+    cooldown:
+      default-days: 7
+    schedule:
+      interval: weekly
+  - package-ecosystem: pip
+    directory: /docs
+    cooldown:
+      default-days: 7
+    schedule:
+      interval: weekly
+  - package-ecosystem: pip
+    directory: /companion
+    cooldown:
+      default-days: 7
+    schedule:
+      interval: weekly

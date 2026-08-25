@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:kics-artifact:1.0",
+  "type": "object",
+  "required": ["queries"],
+  "properties": {
+    "queries": {
+      "type": "array",
+      "maxItems": 250000,
+      "items": {"type": "object", "required": ["files"], "properties": {"files": {"type": "array", "maxItems": 250000}}}
+    }
+  }
+}

@@ -39,23 +39,37 @@ def production_runs(suite: SuiteConfig) -> list[ToolRun]:
     runs: list[ToolRun] = []
     for name in suite.required_tools:
         suite.tools[name].executable_sha256 = "a" * 64
+        suite.tools[name].executable_organization_approved = True
+        if suite.tools[name].require_assurance_profile:
+            suite.tools[name].assurance_profile_path = Path("profile-v2.json")
+            suite.tools[name].assurance_profile_sha256 = "c" * 64
         runs.append(
             ToolRun(
                 tool=name,
                 status=ToolStatus.COMPLETED,
                 command=[name],
                 duration_seconds=0.1,
+                version="1.0.0",
                 executable_sha256="a" * 64,
                 executable_integrity_verified=True,
+                executable_organization_approved=True,
                 executable_unchanged=True,
             )
         )
     suite.tools["codeql"].auxiliary_executable_sha256 = "b" * 64
+    suite.tools["codeql"].auxiliary_executable_organization_approved = True
     codeql = next(run for run in runs if run.tool == "codeql")
     codeql.auxiliary_executable_sha256 = "b" * 64
     codeql.auxiliary_executable_integrity_verified = True
+    codeql.auxiliary_executable_organization_approved = True
     codeql.auxiliary_executable_unchanged = True
     return runs
+
+
+def _unknown_version_run(runs: list[ToolRun]) -> ToolRun:
+    run = runs[0]
+    run.version = "unknown"
+    return run
 
 
 class PolicyTests(unittest.TestCase):
@@ -72,13 +86,58 @@ class PolicyTests(unittest.TestCase):
         ]
 
     def test_missing_attestation_is_incomplete(self) -> None:
+        item = finding(Severity.HIGH)
         decision = evaluate_policy(
             config=self.config,
-            findings=[],
+            findings=[item],
             tool_runs=self.completed,
             network_isolation_attested=False,
         )
         self.assertEqual(decision.outcome, Outcome.INCOMPLETE)
+        self.assertTrue(item.blocking)
+
+    def test_production_gate_requires_known_scanner_versions(self) -> None:
+        config = load_config(profile_override="production")
+        runs = production_runs(config)
+        unknown = _unknown_version_run(runs)
+        decision = evaluate_policy(
+            config=config,
+            findings=[],
+            tool_runs=runs,
+            network_isolation_attested=True,
+            inventory=Inventory(
+                python_files=1,
+                dependency_files=[],
+                total_files=1,
+                skipped_symlinks=0,
+                vcs_history_available=True,
+            ),
+        )
+        self.assertEqual(decision.outcome, Outcome.INCOMPLETE)
+        self.assertTrue(
+            any(
+                unknown.tool in reason and "version" in reason
+                for reason in decision.reasons
+            )
+        )
+
+    def test_release_provenance_is_blocking_even_when_severity_policy_is_weak(
+        self,
+    ) -> None:
+        item = finding(Severity.LOW)
+        item.area = "artifact-provenance"
+        self.config.profile = "release"
+        self.config.policy.block_severities = (Severity.CRITICAL,)
+
+        decision = evaluate_policy(
+            config=self.config,
+            findings=[item],
+            tool_runs=self.completed,
+            network_isolation_attested=False,
+        )
+
+        self.assertEqual(decision.outcome, Outcome.INCOMPLETE)
+        self.assertTrue(item.blocking)
 
     def test_required_tool_failure_is_incomplete_not_clean(self) -> None:
         self.completed[0].status = ToolStatus.PARSE_ERROR
@@ -115,6 +174,26 @@ class PolicyTests(unittest.TestCase):
             network_isolation_attested=True,
         )
         self.assertEqual(decision.outcome, Outcome.PASS)
+
+    def test_explicitly_required_tool_cannot_fail_open_as_not_applicable(self) -> None:
+        config = load_config(profile_override="quick")
+        config.policy.required_scanners = ("authorization-security",)
+        run = ToolRun(
+            tool="authorization-security",
+            status=ToolStatus.SKIPPED,
+            command=["authorization-security"],
+            duration_seconds=0.0,
+            applicable=False,
+            error="no authorization contract was detected",
+        )
+        decision = evaluate_policy(
+            config=config,
+            findings=[],
+            tool_runs=[run],
+            network_isolation_attested=True,
+        )
+        self.assertEqual(decision.outcome, Outcome.INCOMPLETE)
+        self.assertIn("explicitly required scanner", decision.reasons[0])
 
     def test_high_finding_fails(self) -> None:
         item = finding(Severity.HIGH)
@@ -250,6 +329,33 @@ class PolicyTests(unittest.TestCase):
         self.assertIn("cyclonedx-py", reasons)
         self.assertIn("guarddog", reasons)
 
+    def test_production_gate_rejects_repository_only_scanner_pin(self) -> None:
+        config = load_config(profile_override="production")
+        runs = production_runs(config)
+        config.tools["bandit"].executable_organization_approved = False
+        bandit = next(run for run in runs if run.tool == "bandit")
+        bandit.executable_organization_approved = False
+
+        decision = evaluate_policy(
+            config=config,
+            findings=[],
+            tool_runs=runs,
+            network_isolation_attested=True,
+            inventory=Inventory(
+                python_files=1,
+                dependency_files=[],
+                total_files=1,
+                skipped_symlinks=0,
+                vcs_history_available=True,
+            ),
+        )
+
+        self.assertEqual(decision.outcome, Outcome.INCOMPLETE)
+        self.assertIn(
+            "organization-approved executable_sha256 for bandit",
+            " ".join(decision.reasons),
+        )
+
     def test_production_gate_requires_dynamic_and_governance_evidence(self) -> None:
         config = load_config(profile_override="production")
         runs = production_runs(config)
@@ -295,6 +401,34 @@ class PolicyTests(unittest.TestCase):
             ),
         )
         self.assertEqual(decision.outcome, Outcome.FAIL)
+
+    def test_production_gate_requires_only_applicable_runtime_evidence(self) -> None:
+        config = load_config(profile_override="production")
+        runs = production_runs(config)
+        iast = next(run for run in runs if run.tool == "iast")
+        iast.status = ToolStatus.FAILED
+        falco = next(run for run in runs if run.tool == "falco")
+        falco.status = ToolStatus.SKIPPED
+        falco.applicable = False
+
+        decision = evaluate_policy(
+            config=config,
+            findings=[],
+            tool_runs=runs,
+            network_isolation_attested=True,
+            inventory=Inventory(
+                python_files=1,
+                dependency_files=[],
+                total_files=1,
+                skipped_symlinks=0,
+                vcs_history_available=True,
+            ),
+        )
+
+        reasons = " ".join(decision.reasons)
+        self.assertEqual(decision.outcome, Outcome.INCOMPLETE)
+        self.assertIn("iast evidence for this repository shape", reasons)
+        self.assertNotIn("falco evidence", reasons)
 
 
 if __name__ == "__main__":

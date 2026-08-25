@@ -1,0 +1,98 @@
+name: Closed release evidence admission
+
+on:
+  workflow_dispatch:
+    inputs:
+      evidence_run_id:
+        description: Run ID containing the release-evidence artifact
+        required: true
+        type: string
+      manifest_sha256:
+        description: Independently approved release manifest SHA-256
+        required: true
+        type: string
+      expected_head_sha:
+        description: Exact source commit that produced the evidence
+        required: true
+        type: string
+      expected_ref:
+        description: Exact source branch or tag recorded by the producer run
+        required: true
+        type: string
+
+permissions:
+  actions: read # Read and download the approved producer run.
+  contents: read # Check out the immutable verifier revision.
+
+concurrency:
+  group: release-promotion-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify-closed-evidence:
+    name: Verify closed release evidence
+    environment: release-admission
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out verifier
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ inputs.expected_head_sha }}
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.11.19"
+          enable-cache: false
+      - name: Install locked verifier
+        run: uv sync --locked --all-groups --python "3.13"
+      - name: Download externally assembled closed evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVIDENCE_RUN_ID: ${{ inputs.evidence_run_id }}
+          EXPECTED_HEAD_SHA: ${{ inputs.expected_head_sha }}
+          EXPECTED_REF: ${{ inputs.expected_ref }}
+          EXPECTED_WORKFLOW_PATH: .github/workflows/release-evidence.yml
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .promotion
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$EVIDENCE_RUN_ID" > .promotion/producer-run.json
+          jq -e \
+            --arg sha "$EXPECTED_HEAD_SHA" \
+            --arg ref "$EXPECTED_REF" \
+            --arg workflow_path "$EXPECTED_WORKFLOW_PATH" \
+            --arg repository "$GITHUB_REPOSITORY" \
+            '.head_sha == $sha and .head_branch == $ref and .path == $workflow_path and .head_repository.full_name == $repository and .repository.full_name == $repository and .run_attempt == 1 and .event == "workflow_dispatch" and .conclusion == "success"' \
+            .promotion/producer-run.json >/dev/null
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$EVIDENCE_RUN_ID/artifacts" > .promotion/producer-artifacts.json
+          artifact_count="$(jq '[.artifacts[] | select(.name == "release-evidence" and .expired == false)] | length' .promotion/producer-artifacts.json)"
+          [[ "$artifact_count" == "1" ]]
+          artifact_id="$(jq -r '.artifacts[] | select(.name == "release-evidence" and .expired == false) | .id' .promotion/producer-artifacts.json)"
+          artifact_digest="$(jq -r '.artifacts[] | select(.name == "release-evidence" and .expired == false) | .digest' .promotion/producer-artifacts.json)"
+          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$artifact_id/zip" > .promotion/release-evidence.zip
+          observed_digest="sha256:$(sha256sum .promotion/release-evidence.zip | cut -d' ' -f1)"
+          [[ "$artifact_digest" == "$observed_digest" ]]
+          unzip -q .promotion/release-evidence.zip -d .promotion/evidence
+      - name: Verify every hardened evidence class and report binding
+        env:
+          PYSEC_REQUIRE_HARDENED_RELEASE_EVIDENCE: "1"
+          MANIFEST_SHA256: ${{ inputs.manifest_sha256 }}
+        shell: bash
+        run: >-
+          uv run pysec verify-release-manifest
+          .promotion/evidence/release-evidence-manifest.json
+          --manifest-sha256 "$MANIFEST_SHA256"
+          --report .promotion/evidence/report/report.json
+          --format json
+          --output .promotion/release-evidence-verification.json
+      - name: Retain admission receipt
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-evidence-admission-${{ github.run_id }}
+          path: |
+            .promotion/release-evidence-verification.json
+            .promotion/producer-run.json
+            .promotion/producer-artifacts.json
+          if-no-files-found: error

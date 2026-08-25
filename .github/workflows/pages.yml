@@ -1,0 +1,68 @@
+name: Publish documentation
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/pages.yml
+      - docs/**
+      - mkdocs.yml
+      - overrides/**
+      - scripts/audit_pages.py
+      - scripts/mkdocs_hooks.py
+  workflow_dispatch:
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  build:
+    name: Build and audit site
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: docs/requirements-pages.txt
+      - name: Install exact documentation dependencies
+        run: python -m pip install --disable-pip-version-check --require-hashes -r docs/requirements-pages.txt
+      - name: Build strict documentation site
+        run: mkdocs build --strict
+      - name: Audit generated Pages artifact
+        run: python scripts/audit_pages.py site
+      - name: Configure Pages
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: site
+
+  deploy:
+    name: Deploy audited site
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      id-token: write # Authenticate the Pages deployment with OIDC.
+      pages: write # Publish the artifact to the Pages environment.
+    steps:
+      - name: Deploy Pages
+        id: deployment
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0

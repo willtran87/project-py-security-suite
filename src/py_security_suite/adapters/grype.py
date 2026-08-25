@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import sqlite3
 import tempfile
 from contextlib import closing
@@ -17,6 +16,8 @@ from ..models import (
     finding_identity,
     normalize_repo_path,
 )
+from ..strict_json import loads as strict_json_loads
+from ..trusted_observation import governed_now
 from .artifacts import (
     configured_path,
     distribution_files,
@@ -85,7 +86,9 @@ class GrypeAdapter(ScannerAdapter):
                 self._scan_root = None
 
     def parse(self, payload: str, target: Path) -> list[Finding]:
-        document = json.loads(payload)
+        document = strict_json_loads(payload)
+        if not isinstance(document, dict):
+            raise TypeError("Grype output must be an object")
         matches = document.get("matches") or []
         if not isinstance(matches, list):
             raise TypeError("Grype matches must be a list")
@@ -178,7 +181,12 @@ class GrypeAdapter(ScannerAdapter):
                             uri=uri,
                         )
                     ],
-                    evidence={"fixed_versions": list(versions or [])},
+                    evidence={
+                        "fixed_versions": list(versions or []),
+                        "fixed_versions_by_tool": {
+                            self.name: list(versions or []),
+                        },
+                    },
                 )
             )
         return findings
@@ -206,9 +214,7 @@ def _grype_database_freshness_error(root: Path, maximum_age_days: float) -> str 
         built_at = datetime.fromisoformat(str(row[0]).replace("Z", "+00:00"))
         if built_at.tzinfo is None:
             built_at = built_at.replace(tzinfo=UTC)
-        age_days = (
-            datetime.now(UTC) - built_at.astimezone(UTC)
-        ).total_seconds() / 86400
+        age_days = (governed_now() - built_at.astimezone(UTC)).total_seconds() / 86400
     except (OSError, sqlite3.Error, ValueError) as exc:
         return f"offline Grype database metadata is invalid: {type(exc).__name__}"
     if age_days < -1:

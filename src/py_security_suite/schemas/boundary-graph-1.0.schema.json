@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:boundary-graph:1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "analysis", "languages", "language_file_sets", "scanned_files", "scanned_bytes", "truncated", "complete", "semantic_complete", "semantic_parsers", "semantic_parser_provenance", "compiler_semantic_complete", "compiler_semantic_evidence", "compiler_semantic_differential", "compiler_semantic_authority_receipt", "compiler_semantic_reexecution", "heuristic_languages", "special_surfaces", "special_surface_complete", "errors", "omitted_errors", "edges", "summary", "graph_sha256"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "analysis": {"const": "bounded-static-polyglot-boundary-graph"},
+    "languages": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 1}},
+    "language_file_sets": {"type": "object", "additionalProperties": {"type": "object", "additionalProperties": false, "required": ["files", "files_sha256"], "properties": {"files": {"type": "array", "items": {"$ref": "#/$defs/file"}}, "files_sha256": {"$ref": "#/$defs/digest"}}}},
+    "scanned_files": {"type": "integer", "minimum": 0},
+    "scanned_bytes": {"type": "integer", "minimum": 0},
+    "truncated": {"type": "boolean"},
+    "complete": {"type": "boolean"},
+    "semantic_complete": {"type": "boolean"},
+    "semantic_parsers": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+    "semantic_parser_provenance": {"type": "array", "uniqueItems": true, "items": {"type": "object", "additionalProperties": false, "required": ["language", "engine", "version", "module_sha256", "extractor_sha256"], "properties": {"language": {"type": "string"}, "engine": {"type": "string"}, "version": {"type": "string"}, "module_sha256": {"$ref": "#/$defs/digest"}, "extractor_sha256": {"$ref": "#/$defs/digest"}}}},
+    "compiler_semantic_complete": {"type": "boolean"},
+    "compiler_semantic_evidence": {"type": ["object", "null"]},
+    "compiler_semantic_differential": {"type": ["object", "null"]},
+    "compiler_semantic_authority_receipt": {"type": ["object", "null"]},
+    "compiler_semantic_reexecution": {"type": ["object", "null"]},
+    "heuristic_languages": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+    "special_surfaces": {"type": "array", "maxItems": 50000, "items": {"type": "object", "additionalProperties": false, "required": ["path", "kind", "analysis", "covered"], "properties": {"path": {"type": "string", "minLength": 1, "maxLength": 1000}, "kind": {"enum": ["notebook", "template", "bytecode", "native-extension", "webassembly", "generated-source", "dynamic-code"]}, "analysis": {"enum": ["unsupported", "semantic", "heuristic", "inventory-only"]}, "covered": {"type": "boolean"}}}},
+    "special_surface_complete": {"type": "boolean"},
+    "errors": {"type": "array", "maxItems": 100, "items": {"type": "object", "additionalProperties": false, "required": ["path", "reason"], "properties": {"path": {"type": "string"}, "reason": {"type": "string"}}}},
+    "omitted_errors": {"type": "integer", "minimum": 0},
+    "edges": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["source", "line", "kind", "target", "language"], "properties": {"source": {"type": "string"}, "line": {"type": "integer", "minimum": 1}, "kind": {"enum": ["module-import", "process-execution", "network-endpoint", "native-ffi", "dynamic-dispatch", "binary-import", "binary-hardening", "template-include", "security-control"]}, "target": {"type": "string", "maxLength": 500}, "language": {"type": "string"}}}},
+    "summary": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}},
+    "graph_sha256": {"$ref": "#/$defs/digest"}
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "file": {"type": "object", "additionalProperties": false, "required": ["path", "size_bytes", "sha256", "line_count"], "properties": {"path": {"type": "string", "minLength": 1, "maxLength": 1000}, "size_bytes": {"type": "integer", "minimum": 0}, "sha256": {"$ref": "#/$defs/digest"}, "line_count": {"type": "integer", "minimum": 0}}}
+  }
+}

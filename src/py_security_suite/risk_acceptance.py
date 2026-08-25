@@ -3,12 +3,14 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
 from .models import Finding, FindingStatus
-from .path_safety import resolve_regular_file
+from .path_safety import read_regular_file
+from .strict_json import loads as strict_loads
+from .trusted_observation import governed_now
 
 
 _MAX_FILE_BYTES = 1024 * 1024
@@ -27,7 +29,7 @@ def apply_risk_acceptances(
     """Apply bounded, expiring acceptances and return fail-closed policy errors."""
     if path is None:
         return []
-    current = today or datetime.now(UTC).date()
+    current = today or governed_now().date()
     try:
         document, digest = _load_document(path)
         if expected_sha256 and digest != expected_sha256:
@@ -94,7 +96,7 @@ def validate_risk_acceptances(
     """Validate acceptance governance without requiring current findings."""
     if path is None:
         return []
-    current = today or datetime.now(UTC).date()
+    current = today or governed_now().date()
     try:
         document, digest = _load_document(path)
         if expected_sha256 and digest != expected_sha256:
@@ -118,11 +120,10 @@ def validate_risk_acceptances(
 
 
 def _load_document(path: Path) -> tuple[dict[str, Any], str]:
-    resolved = resolve_regular_file(path, "risk-acceptance file")
-    data = resolved.read_bytes()
-    if len(data) > _MAX_FILE_BYTES:
-        raise ValueError("risk-acceptance file exceeds 1 MiB")
-    value = json.loads(data.decode("utf-8"))
+    _, data = read_regular_file(
+        path, "risk-acceptance file", maximum_bytes=_MAX_FILE_BYTES
+    )
+    value = strict_loads(data)
     if not isinstance(value, dict):
         raise TypeError("risk-acceptance root must be an object")
     return value, hashlib.sha256(data).hexdigest()

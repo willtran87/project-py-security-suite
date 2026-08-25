@@ -21,7 +21,7 @@
           "title": { "type": "string", "minLength": 1, "maxLength": 300 },
           "message": { "type": "string", "maxLength": 1000 },
           "path": { "type": "string", "maxLength": 500 },
-          "line": { "type": "integer", "minimum": 1 },
+          "line": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
           "severity": {
             "enum": ["critical", "high", "medium", "low", "informational", "info"]
           },

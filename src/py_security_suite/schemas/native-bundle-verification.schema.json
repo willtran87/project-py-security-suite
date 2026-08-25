@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:native-bundle-verification:1.0",
+  "title": "Native scanner bundle verification receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "schema_id", "authoritative", "verified", "bundle", "summary", "missing", "unexpected", "changed", "wheels", "wheelhouse_resolution", "errors", "scope"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "schema_id": {"const": "urn:project-py-security-suite:schema:native-bundle-verification:1.0"},
+    "authoritative": {"const": false},
+    "verified": {"type": "boolean"},
+    "bundle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["platform", "manifest_schema_version", "manifest_sha256", "inventory_sha256"],
+      "properties": {
+        "platform": {"type": "string", "maxLength": 200},
+        "manifest_schema_version": {"enum": ["1", "2.0"]},
+        "manifest_sha256": {"$ref": "#/$defs/sha256"},
+        "inventory_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["declared_files", "verified_files", "verified_bytes", "missing_files", "unexpected_files", "changed_files", "wheels", "wheel_errors", "python_environments"],
+      "properties": {
+        "declared_files": {"$ref": "#/$defs/count"},
+        "verified_files": {"$ref": "#/$defs/count"},
+        "verified_bytes": {"$ref": "#/$defs/count"},
+        "missing_files": {"$ref": "#/$defs/count"},
+        "unexpected_files": {"$ref": "#/$defs/count"},
+        "changed_files": {"$ref": "#/$defs/count"},
+        "wheels": {"$ref": "#/$defs/count"},
+        "wheel_errors": {"$ref": "#/$defs/count"},
+        "python_environments": {"$ref": "#/$defs/count"}
+      }
+    },
+    "missing": {"type": "array", "maxItems": 200000, "items": {"$ref": "#/$defs/path"}},
+    "unexpected": {"type": "array", "maxItems": 200000, "items": {"$ref": "#/$defs/path"}},
+    "changed": {
+      "type": "array",
+      "maxItems": 200000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "expected_sha256", "observed_sha256", "expected_size", "observed_size"],
+        "properties": {
+          "path": {"$ref": "#/$defs/path"},
+          "expected_sha256": {"$ref": "#/$defs/sha256"},
+          "observed_sha256": {"$ref": "#/$defs/sha256"},
+          "expected_size": {"$ref": "#/$defs/count"},
+          "observed_size": {"$ref": "#/$defs/count"}
+        }
+      }
+    },
+    "wheels": {
+      "type": "array",
+      "maxItems": 200000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "name", "version", "members", "expanded_bytes", "declared_dependencies"],
+        "properties": {
+          "path": {"$ref": "#/$defs/path"},
+          "name": {"$ref": "#/$defs/text"},
+          "version": {"$ref": "#/$defs/text"},
+          "members": {"$ref": "#/$defs/count"},
+          "expanded_bytes": {"$ref": "#/$defs/count"},
+          "declared_dependencies": {"$ref": "#/$defs/count"}
+        }
+      }
+    },
+    "wheelhouse_resolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "declared", "passed", "python", "environments"],
+      "properties": {
+        "status": {"enum": ["passed", "failed", "not_checked", "not_declared"]},
+        "declared": {"$ref": "#/$defs/count"},
+        "passed": {"$ref": "#/$defs/count"},
+        "python": {"type": ["string", "null"], "maxLength": 500},
+        "environments": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "requirements", "status", "action"],
+            "properties": {
+              "name": {"$ref": "#/$defs/text"},
+              "requirements": {"$ref": "#/$defs/count"},
+              "status": {"enum": ["passed", "failed", "not_checked"]},
+              "resolved_distributions": {"$ref": "#/$defs/count"},
+              "action": {"$ref": "#/$defs/text"}
+            }
+          }
+        }
+      }
+    },
+    "errors": {"type": "array", "maxItems": 400000, "items": {"type": "string", "minLength": 1, "maxLength": 4600}},
+    "scope": {"$ref": "#/$defs/text"}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "count": {"type": "integer", "minimum": 0},
+    "path": {"type": "string", "minLength": 1, "maxLength": 4096},
+    "text": {"type": "string", "minLength": 1, "maxLength": 16000}
+  }
+}

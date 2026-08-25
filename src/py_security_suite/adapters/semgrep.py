@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -14,6 +13,7 @@ from ..models import (
     finding_identity,
     normalize_repo_path,
 )
+from ..strict_json import loads as strict_json_loads
 from .base import ScannerAdapter
 from .common import map_confidence, map_severity, string_list
 
@@ -71,7 +71,9 @@ class SemgrepAdapter(ScannerAdapter):
         ]
 
     def parse(self, payload: str, target: Path) -> list[Finding]:
-        document = json.loads(payload)
+        document = strict_json_loads(payload)
+        if not isinstance(document, dict):
+            raise TypeError("Semgrep output must be an object")
         results = document.get("results", [])
         if not isinstance(results, list):
             raise TypeError("results must be a list")

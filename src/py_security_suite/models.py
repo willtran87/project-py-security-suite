@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import re
 from dataclasses import asdict, dataclass, field, is_dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -26,6 +28,7 @@ class Confidence(StrEnum):
 
 
 class FindingStatus(StrEnum):
+    UNCLASSIFIED = "unclassified"
     NEW = "new"
     EXISTING = "existing"
     RESOLVED = "resolved"
@@ -115,9 +118,11 @@ class ToolRun:
     applicable: bool = True
     executable_sha256: str | None = None
     executable_integrity_verified: bool | None = None
+    executable_organization_approved: bool = False
     executable_unchanged: bool | None = None
     auxiliary_executable_sha256: str | None = None
     auxiliary_executable_integrity_verified: bool | None = None
+    auxiliary_executable_organization_approved: bool = False
     auxiliary_executable_unchanged: bool | None = None
 
 
@@ -130,6 +135,8 @@ class Inventory:
     declared_dependencies: bool = False
     lock_files: list[str] = field(default_factory=list)
     vcs_history_available: bool = False
+    vcs_revision: str = ""
+    vcs_revision_verified: bool = False
     distribution_files: list[str] = field(default_factory=list)
     source_sha256: str = ""
     source_sha256_after: str = ""
@@ -183,7 +190,10 @@ def isoformat(value: datetime) -> str:
 
 
 def normalize_repo_path(target: Path, path: str | Path) -> str:
-    candidate = Path(path)
+    raw_path = str(path).replace("\\", "/")
+    if re.match(r"^[a-zA-Z]:/", raw_path) and os.name != "nt":
+        return "<outside-target>"
+    candidate = Path(raw_path)
     if not candidate.is_absolute() and ".." in candidate.parts:
         return "<outside-target>"
     try:

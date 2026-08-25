@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:audience-report:1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "authoritative", "scope", "audience", "status", "report", "promotion_plan_sha256", "view"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "authoritative": {"const": false},
+    "scope": {"type": "string", "minLength": 1},
+    "audience": {"enum": ["executive", "developer", "security", "release_engineering", "auditor"]},
+    "status": {"type": "string", "minLength": 1},
+    "report": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scan_id", "checksums_sha256"],
+      "properties": {
+        "scan_id": {"type": "string", "minLength": 1},
+        "checksums_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "promotion_plan_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "view": {"type": "object"}
+  }
+}

@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:governance-evidence-draft:1.0",
+  "title": "Non-authoritative governance evidence handoff",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "status", "authoritative", "scope", "report", "scanner_trust_candidates", "scanner_digest_groups", "intelligence_candidates", "isolation_candidate", "artifact_signing_candidates", "handoff"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "status": {"const": "candidate"},
+    "authoritative": {"const": false},
+    "scope": {"type": "string", "minLength": 1},
+    "report": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scan_id", "checksums_sha256", "source_sha256", "target"],
+      "properties": {
+        "scan_id": {"type": "string", "minLength": 1},
+        "checksums_sha256": {"$ref": "#/$defs/digest"},
+        "source_sha256": {"$ref": "#/$defs/digest"},
+        "target": {"type": "string", "minLength": 1}
+      }
+    },
+    "scanner_trust_candidates": {
+      "type": "array",
+      "maxItems": 5000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["tool", "role", "sha256", "version", "organization_approved", "unchanged"],
+        "properties": {
+          "tool": {"type": "string", "minLength": 1},
+          "role": {"enum": ["primary", "auxiliary"]},
+          "sha256": {"$ref": "#/$defs/digest"},
+          "version": {"type": "string", "minLength": 1},
+          "organization_approved": {"type": "boolean"},
+          "unchanged": {"type": "boolean"}
+        }
+      }
+    },
+    "scanner_digest_groups": {
+      "type": "array",
+      "maxItems": 5000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["sha256", "entrypoints", "tools", "roles", "versions", "organization_approved", "unchanged"],
+        "properties": {
+          "sha256": {"$ref": "#/$defs/digest"},
+          "entrypoints": {"type": "integer", "minimum": 1},
+          "tools": {"$ref": "#/$defs/nonEmptyTextArray"},
+          "roles": {"type": "array", "uniqueItems": true, "items": {"enum": ["primary", "auxiliary"]}},
+          "versions": {"$ref": "#/$defs/nonEmptyTextArray"},
+          "organization_approved": {"type": "boolean"},
+          "unchanged": {"type": "boolean"}
+        }
+      }
+    },
+    "intelligence_candidates": {
+      "type": "array",
+      "maxItems": 20,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "sha256"],
+        "properties": {
+          "kind": {"type": "string", "minLength": 1},
+          "sha256": {"$ref": "#/$defs/digest"}
+        }
+      }
+    },
+    "isolation_candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target", "source_sha256", "network_policy", "required_review"],
+      "properties": {
+        "target": {"type": "string", "minLength": 1},
+        "source_sha256": {"$ref": "#/$defs/digest"},
+        "network_policy": {"const": "deny"},
+        "required_review": {"$ref": "#/$defs/textArray"}
+      }
+    },
+    "artifact_signing_candidates": {
+      "type": "array",
+      "maxItems": 1000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["finding_id", "path", "sha256"],
+        "properties": {
+          "finding_id": {"type": "string", "minLength": 1},
+          "path": {"type": "string", "minLength": 1},
+          "sha256": {"$ref": "#/$defs/digest"}
+        }
+      }
+    },
+    "handoff": {"$ref": "#/$defs/textArray"}
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "textArray": {"type": "array", "minItems": 1, "maxItems": 20, "items": {"type": "string", "minLength": 1}},
+    "nonEmptyTextArray": {"type": "array", "minItems": 1, "maxItems": 5000, "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+  }
+}

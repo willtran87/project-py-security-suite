@@ -15,6 +15,34 @@ _PRODUCTION_EVIDENCE = (
     "pytm",
     "scorecard",
 )
+_CONDITIONAL_PRODUCTION_EVIDENCE = (
+    "surface-inventory",
+    "event-security",
+    "database-security",
+    "ai-security",
+    "ruleset-regression",
+    "schemathesis",
+    "clusterfuzzlite",
+    "zap",
+    "nuclei",
+    "oast",
+    "restler",
+    "protocol-security",
+    "fuzz-introspector",
+    "browser-security",
+    "authorization-security",
+    "iast",
+    "falco",
+    "kubescape",
+    "prowler",
+    "cloud-attack-path",
+    "rasp",
+    "native-sanitizers",
+    "mobsf",
+    "tls-scan",
+    "polyglot",
+    "secret-verification",
+)
 _RELEASE_EVIDENCE = (
     "check-manifest",
     "clamav",
@@ -56,6 +84,11 @@ def evaluate_policy(
         reasons.append(
             "required external network-isolation attestation was not provided"
         )
+    if (
+        config.isolation.enforcement_mode == "sandbox-launcher"
+        and not config.isolation.sandbox_organization_approved
+    ):
+        reasons.append("sandbox launcher is not bound by the organization policy")
 
     if (
         inventory is not None
@@ -67,6 +100,7 @@ def evaluate_policy(
             "result and investigate scanner or concurrent-process writes"
         )
 
+    explicitly_required = set(config.policy.required_scanners)
     for tool in config.required_tools:
         run = by_tool.get(tool)
         if run is None:
@@ -74,6 +108,11 @@ def evaluate_policy(
                 f"required scanner {tool} did not produce a tool-health record"
             )
         elif not run.applicable:
+            if tool in explicitly_required:
+                reasons.append(
+                    f"explicitly required scanner {tool} was classified not applicable: "
+                    f"{run.error or 'no applicability evidence was retained'}"
+                )
             continue
         elif run.status is not ToolStatus.COMPLETED:
             reasons.append(f"required scanner {tool} status is {run.status}")
@@ -82,9 +121,6 @@ def evaluate_policy(
         reasons.extend(_production_integrity_reasons(config, by_tool))
         reasons.extend(_production_context_reasons(config, by_tool, inventory))
         reasons.extend(_required_evidence_reasons(config.profile, by_tool))
-
-    if reasons:
-        return PolicyDecision(Outcome.INCOMPLETE, reasons)
 
     active_findings = [
         finding
@@ -97,11 +133,20 @@ def evaluate_policy(
         known_exploited = bool(
             isinstance(intelligence, dict) and intelligence.get("known_exploited")
         )
+        release_provenance = config.profile == "release" and finding.area in {
+            "artifact-provenance",
+            "build-provenance",
+        }
         finding.blocking = (
-            finding.severity in config.policy.block_severities or known_exploited
+            finding.severity in config.policy.block_severities
+            or known_exploited
+            or release_provenance
         )
         if finding.blocking:
             blocked += 1
+
+    if reasons:
+        return PolicyDecision(Outcome.INCOMPLETE, reasons)
     if blocked:
         severities = ", ".join(
             severity.value for severity in config.policy.block_severities
@@ -153,9 +198,13 @@ def _production_integrity_reasons(
         run = by_tool.get(tool)
         if run is None or not run.applicable:
             continue
-        if not config.tools[tool].executable_sha256:
+        if (
+            not config.tools[tool].executable_sha256
+            or not config.tools[tool].executable_organization_approved
+        ):
             reasons.append(
-                f"production scan requires an approved executable_sha256 for {tool}"
+                "production scan requires an organization-approved "
+                f"executable_sha256 for {tool}"
             )
         elif (
             run.executable_integrity_verified is not True
@@ -164,6 +213,24 @@ def _production_integrity_reasons(
             reasons.append(
                 f"production scan could not verify the approved executable "
                 f"digest and post-execution integrity for {tool}"
+            )
+        if config.tools[tool].runtime_closure_sha256 and not (
+            config.tools[tool].runtime_closure_organization_approved
+        ):
+            reasons.append(
+                "production scan requires the configured runtime_closure_sha256 "
+                f"to be organization-approved for {tool}"
+            )
+        if str(run.version or "unknown").casefold() == "unknown":
+            reasons.append(
+                f"production scan could not establish the version of required scanner {tool}"
+            )
+        if config.tools[tool].require_assurance_profile and (
+            config.tools[tool].assurance_profile_path is None
+            or not config.tools[tool].assurance_profile_sha256
+        ):
+            reasons.append(
+                f"production assurance evidence from {tool} lacks a checkpointed assurance profile"
             )
     for tool in config.required_tools:
         run = by_tool.get(tool)
@@ -175,9 +242,12 @@ def _production_integrity_reasons(
         )
         if not uses_auxiliary:
             continue
-        if not tool_config.auxiliary_executable_sha256:
+        if (
+            not tool_config.auxiliary_executable_sha256
+            or not tool_config.auxiliary_executable_organization_approved
+        ):
             reasons.append(
-                "production scan requires an approved "
+                "production scan requires an organization-approved "
                 f"auxiliary_executable_sha256 for {tool}"
             )
         elif (
@@ -236,5 +306,16 @@ def _required_evidence_reasons(profile: str, by_tool: dict[str, ToolRun]) -> lis
         if run is None or not run.applicable or run.status is not ToolStatus.COMPLETED:
             reasons.append(
                 f"{profile} assurance requires completed, revision-bound {tool} evidence"
+            )
+    for tool in _CONDITIONAL_PRODUCTION_EVIDENCE:
+        run = by_tool.get(tool)
+        if run is None:
+            reasons.append(
+                f"{profile} assurance could not establish {tool} applicability"
+            )
+        elif run.applicable and run.status is not ToolStatus.COMPLETED:
+            reasons.append(
+                f"{profile} assurance requires completed, revision-bound {tool} "
+                "evidence for this repository shape"
             )
     return reasons

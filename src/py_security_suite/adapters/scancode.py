@@ -24,6 +24,7 @@ from ..models import (
     finding_identity,
     normalize_repo_path,
 )
+from ..strict_json import loads as strict_json_loads
 from .base import AdapterResult, ScannerAdapter
 
 
@@ -297,7 +298,7 @@ class ScanCodeAdapter(ScannerAdapter):
 
 
 def _document(payload: str) -> dict[str, Any]:
-    value = json.loads(payload)
+    value = strict_json_loads(payload)
     if not isinstance(value, dict):
         raise TypeError("ScanCode output must be an object")
     return value

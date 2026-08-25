@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:reuse-artifact:1.0",
+  "type": "object",
+  "properties": {
+    "non_compliant": {"type": "object", "maxProperties": 100},
+    "summary": {"type": "object", "maxProperties": 100}
+  },
+  "anyOf": [{"required": ["non_compliant"]}, {"required": ["summary"]}]
+}

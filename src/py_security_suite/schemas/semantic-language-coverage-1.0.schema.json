@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:semantic-language-coverage:1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "analysis", "languages", "polyglot_evidence_authenticated", "uncovered_languages", "cross_language_pairs", "cross_language_complete", "limitations", "complete"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "analysis": {"const": "source-bound-semantic-language-coverage"},
+    "languages": {"type": "array", "items": {"$ref": "#/$defs/language"}},
+    "polyglot_evidence_authenticated": {"type": "boolean"},
+    "uncovered_languages": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+    "cross_language_pairs": {"type": "array", "maxItems": 2016, "items": {"$ref": "#/$defs/cross"}},
+    "cross_language_complete": {"type": "boolean"},
+    "limitations": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+    "complete": {"type": "boolean"}
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^$|^[0-9a-f]{64}$"},
+    "file": {"type": "object", "additionalProperties": false, "required": ["path", "size_bytes", "sha256", "line_count"], "properties": {"path": {"type": "string", "minLength": 1, "maxLength": 1000}, "size_bytes": {"type": "integer", "minimum": 0}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "line_count": {"type": "integer", "minimum": 0}}},
+    "language": {
+      "type": "object", "additionalProperties": false,
+      "required": ["language", "engine", "engine_version", "query_pack_sha256", "source_files_sha256", "files_discovered", "files_analyzed", "exclusions", "files", "analysis_modes", "semantic", "source_bound", "cross_language_correlation"],
+      "properties": {
+        "language": {"type": "string", "minLength": 1, "maxLength": 50}, "engine": {"type": "string", "maxLength": 100}, "engine_version": {"type": "string", "maxLength": 100}, "query_pack_sha256": {"$ref": "#/$defs/digest"}, "source_files_sha256": {"$ref": "#/$defs/digest"}, "files_discovered": {"type": "integer", "minimum": 1}, "files_analyzed": {"type": "integer", "minimum": 0},
+        "exclusions": {"type": "array", "maxItems": 10000, "items": {"type": "object", "additionalProperties": false, "required": ["path", "reason"], "properties": {"path": {"type": "string", "minLength": 1, "maxLength": 1000}, "reason": {"type": "string", "minLength": 1, "maxLength": 200}}}},
+        "files": {"type": "array", "maxItems": 50000, "items": {"$ref": "#/$defs/file"}}, "analysis_modes": {"type": "array", "maxItems": 32, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 160}}, "semantic": {"type": "boolean"}, "source_bound": {"type": "boolean"}, "cross_language_correlation": {"enum": ["native-graph", "normalized-finding-fusion", "authenticated-contract-dataflow", "compiler-ledger", "syntax-graph-only", "not-established"]}
+      }
+    },
+    "cross": {
+      "type": "object", "additionalProperties": false,
+      "required": ["languages", "engine", "engine_version", "query_pack_sha256", "source_file_sets_sha256", "boundaries_analyzed", "flows_found", "boundaries_sha256", "flows_sha256", "independently_detected_boundaries", "boundary_ledger_complete", "source_locations_validated", "independently_reproduced", "analysis_modes", "complete"],
+      "properties": {"languages": {"type": "array", "minItems": 2, "maxItems": 2, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 50}}, "engine": {"type": "string", "maxLength": 100}, "engine_version": {"type": "string", "maxLength": 100}, "query_pack_sha256": {"$ref": "#/$defs/digest"}, "source_file_sets_sha256": {"$ref": "#/$defs/digest"}, "boundaries_analyzed": {"type": "integer", "minimum": 0}, "flows_found": {"type": "integer", "minimum": 0}, "boundaries_sha256": {"$ref": "#/$defs/digest"}, "flows_sha256": {"$ref": "#/$defs/digest"}, "independently_detected_boundaries": {"type": "integer", "minimum": 0}, "boundary_ledger_complete": {"type": "boolean"}, "source_locations_validated": {"type": "boolean"}, "independently_reproduced": {"type": "boolean"}, "analysis_modes": {"type": "array", "maxItems": 32, "uniqueItems": true, "items": {"type": "string"}}, "complete": {"type": "boolean"}}
+    }
+  }
+}

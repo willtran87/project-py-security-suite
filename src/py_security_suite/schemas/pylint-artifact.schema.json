@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:pylint-artifact:1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "score", "statistics", "message_count"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "score": {"type": ["number", "null"]},
+    "statistics": {"type": "object"},
+    "message_count": {"type": "integer", "minimum": 0, "maximum": 250000}
+  }
+}

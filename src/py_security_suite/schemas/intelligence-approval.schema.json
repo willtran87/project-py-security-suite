@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:intelligence-approval:1.0",
+  "title": "Approved offline intelligence validation receipt",
+  "oneOf": [
+    {"$ref": "#/$defs/validated"},
+    {"$ref": "#/$defs/validatedV2"},
+    {"$ref": "#/$defs/unvalidated"}
+  ],
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "authority": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schema_version", "signer_id", "collector_id", "public_key_file", "public_key_sha256", "signature_file", "signature_sha256", "signed_at", "expires_at"],
+      "properties": {
+        "schema_version": {"const": "1.0"}, "signer_id": {"$ref": "#/$defs/digest"},
+        "collector_id": {"type": "string", "minLength": 1, "maxLength": 500},
+        "public_key_file": {"type": "string", "minLength": 1, "maxLength": 500},
+        "public_key_sha256": {"$ref": "#/$defs/digest"},
+        "signature_file": {"type": "string", "minLength": 1, "maxLength": 500},
+        "signature_sha256": {"$ref": "#/$defs/digest"},
+        "signed_at": {"type": "string", "format": "date-time"},
+        "expires_at": {"type": "string", "format": "date-time"}
+      }
+    },
+    "snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "sha256"],
+      "properties": {
+        "kind": {"type": "string", "minLength": 1, "maxLength": 500},
+        "sha256": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "validated": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "status", "manifest_id", "revision", "approved_by", "valid_until", "signature_verified", "verifier", "trust_root_sha256", "snapshots", "configured", "validated", "organization_approved", "evidence_sha256"],
+      "properties": {
+        "schema_version": {"const": "1.0"},
+        "status": {"const": "approved"},
+        "manifest_id": {"type": "string", "minLength": 1, "maxLength": 500},
+        "revision": {"type": "string", "minLength": 1, "maxLength": 500},
+        "approved_by": {"type": "string", "minLength": 1, "maxLength": 500},
+        "valid_until": {"type": "string", "format": "date-time"},
+        "signature_verified": {"const": true},
+        "verifier": {"type": "string", "minLength": 1, "maxLength": 500},
+        "trust_root_sha256": {"$ref": "#/$defs/digest"},
+        "snapshots": {"type": "array", "maxItems": 20, "items": {"$ref": "#/$defs/snapshot"}},
+        "configured": {"const": true},
+        "validated": {"const": true},
+        "organization_approved": {"type": "boolean"},
+        "evidence_sha256": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "validatedV2": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "status", "manifest_id", "revision", "approved_by", "issued_at", "valid_until", "trust_root_sha256", "snapshots", "generation", "nonce", "minimum_authority_signatures", "authorities", "configured", "validated", "organization_approved", "evidence_sha256", "governance_contract", "authority_signers", "authority_collectors", "authority_organizations", "replay_backend", "trusted_consumed_at"],
+      "properties": {
+        "schema_version": {"const": "2.0"},
+        "status": {"const": "approved"},
+        "manifest_id": {"type": "string", "minLength": 1, "maxLength": 500},
+        "revision": {"type": "string", "minLength": 1, "maxLength": 500},
+        "approved_by": {"type": "string", "minLength": 1, "maxLength": 500},
+        "issued_at": {"type": "string", "format": "date-time"},
+        "valid_until": {"type": "string", "format": "date-time"},
+        "trust_root_sha256": {"$ref": "#/$defs/digest"},
+        "snapshots": {"type": "array", "maxItems": 20, "items": {"$ref": "#/$defs/snapshot"}},
+        "generation": {"type": "integer", "minimum": 1},
+        "nonce": {"type": "string", "minLength": 16, "maxLength": 500},
+        "minimum_authority_signatures": {"type": "integer", "minimum": 2, "maximum": 16},
+        "authorities": {"type": "array", "minItems": 2, "maxItems": 16, "items": {"$ref": "#/$defs/authority"}},
+        "configured": {"const": true},
+        "validated": {"const": true},
+        "organization_approved": {"type": "boolean"},
+        "evidence_sha256": {"$ref": "#/$defs/digest"},
+        "governance_contract": {"const": "v2-quorum"},
+        "authority_signers": {"type": "array", "minItems": 2, "uniqueItems": true, "items": {"$ref": "#/$defs/digest"}},
+        "authority_collectors": {"type": "array", "minItems": 2, "uniqueItems": true, "items": {"type": "string"}},
+        "authority_organizations": {"type": "array", "minItems": 2, "uniqueItems": true, "items": {"type": "string"}},
+        "replay_backend": {"enum": ["local-sqlite", "remote-mtls-monotonic"]},
+        "replay_token_sha256": {"$ref": "#/$defs/digest"},
+        "replay_receipt_sequence": {"type": "integer", "minimum": 1},
+        "replay_receipt_sha256": {"$ref": "#/$defs/digest"},
+        "replay_receipt_key_id": {"$ref": "#/$defs/digest"},
+        "trusted_consumed_at": {"type": ["string", "null"], "format": "date-time"}
+      }
+    },
+    "unvalidated": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "configured", "validated", "required", "organization_approved"],
+      "properties": {
+        "schema_version": {"const": "1.0"},
+        "configured": {"type": "boolean"},
+        "validated": {"const": false},
+        "required": {"type": "boolean"},
+        "organization_approved": {"type": "boolean"},
+        "snapshot_count": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}

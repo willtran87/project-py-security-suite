@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import tempfile
 import uuid
 from pathlib import Path
@@ -16,6 +15,7 @@ from ..models import (
     finding_identity,
     normalize_repo_path,
 )
+from ..strict_json import loads as strict_json_loads
 from .base import AdapterResult, ScannerAdapter
 
 
@@ -77,7 +77,7 @@ class GitleaksAdapter(ScannerAdapter):
         try:
             if not self._report_path.is_file():
                 return []
-            document = json.loads(self._report_path.read_text(encoding="utf-8"))
+            document = strict_json_loads(self._report_path.read_text(encoding="utf-8"))
         finally:
             self._report_path.unlink(missing_ok=True)
         if not isinstance(document, list):

@@ -1,6 +1,6 @@
 # Security Passport, intelligence, and lifecycle evidence
 
-Last reviewed: 2026-08-06
+Last reviewed: 2026-08-07
 
 ## Objective
 
@@ -84,7 +84,7 @@ does not silently weaken the full-repository production policy.
 |---|---|
 | `security-passport.json` | Unsigned in-toto/SLSA statement generated with every scan |
 | `risk-intelligence.json` | Snapshot hashes, ages, record counts, thresholds, matches, and validation errors |
-| `finding-delta.json` | Baseline identity, match strategies, lifecycle counts, and bounded resolved records |
+| `finding-delta.json` | Baseline identity, match strategies, lifecycle counts, bounded resolved records, and bounded CODEOWNERS rules for routing files without separate findings |
 | `effectiveness.json` | Tool completion, attribution, actionability, corroboration, and unique contribution |
 | `assurance-claims.json` | NIST SSDF claim-to-evidence graph |
 
@@ -175,7 +175,9 @@ Recomputing unsigned transport checksums cannot redirect an authentic statement
 to a report carrying different claims.
 
 Add `--format text` for a concise operator decision. JSON remains the default
-for integrations. Verification output deliberately separates five concepts:
+for integrations. Add `--output FILE` to atomically retain the JSON receipt
+outside the sealed report; this receipt can be digest-bound into
+`pysec release-check`. Verification output deliberately separates five concepts:
 
 | Field | Meaning |
 |---|---|

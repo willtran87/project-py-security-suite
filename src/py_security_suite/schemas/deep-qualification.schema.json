@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:deep-qualification:2.0",
+  "title": "Run-bound independent deep-assurance qualification manifest",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "context", "trusted_time", "areas"],
+  "properties": {
+    "schema_version": {"const": "2.0"}, "context": {"$ref": "#/$defs/context"}, "trusted_time": {"type": "object"},
+    "areas": {"type": "array", "minItems": 9, "maxItems": 9, "uniqueItems": true, "items": {"$ref": "#/$defs/area"}, "allOf": [
+      {"contains": {"properties": {"area": {"const": "ai"}}, "required": ["area"]}, "minContains": 1, "maxContains": 1},
+      {"contains": {"properties": {"area": {"const": "browser"}}, "required": ["area"]}, "minContains": 1, "maxContains": 1},
+      {"contains": {"properties": {"area": {"const": "ci"}}, "required": ["area"]}, "minContains": 1, "maxContains": 1},
+      {"contains": {"properties": {"area": {"const": "kafka"}}, "required": ["area"]}, "minContains": 1, "maxContains": 1},
+      {"contains": {"properties": {"area": {"const": "postgresql"}}, "required": ["area"]}, "minContains": 1, "maxContains": 1},
+      {"contains": {"properties": {"area": {"const": "sarif"}}, "required": ["area"]}, "minContains": 1, "maxContains": 1},
+      {"contains": {"properties": {"area": {"const": "supply-chain"}}, "required": ["area"]}, "minContains": 1, "maxContains": 1},
+      {"contains": {"properties": {"area": {"const": "surface"}}, "required": ["area"]}, "minContains": 1, "maxContains": 1},
+      {"contains": {"properties": {"area": {"const": "trust-state"}}, "required": ["area"]}, "minContains": 1, "maxContains": 1}
+    ]}
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "context": {"type": "object", "additionalProperties": false, "required": ["run_id", "environment_sha256", "target_sha256", "source_sha256", "profile_sha256", "profile_generation", "trust_policy_sha256", "issued_at", "expires_at", "nonce"], "properties": {"run_id": {"type": "string", "minLength": 8, "maxLength": 200}, "environment_sha256": {"$ref": "#/$defs/digest"}, "target_sha256": {"$ref": "#/$defs/digest"}, "source_sha256": {"$ref": "#/$defs/digest"}, "profile_sha256": {"$ref": "#/$defs/digest"}, "profile_generation": {"type": "integer", "minimum": 1}, "trust_policy_sha256": {"$ref": "#/$defs/digest"}, "issued_at": {"type": "string", "format": "date-time"}, "expires_at": {"type": "string", "format": "date-time"}, "nonce": {"$ref": "#/$defs/digest"}}},
+    "authority": {"type": "object", "additionalProperties": false, "required": ["schema_version", "algorithm", "signer_id", "collector_id", "signed_at", "expires_at", "public_key_file", "public_key_sha256", "signature_file", "signature_sha256"], "properties": {"schema_version": {"const": "2.0"}, "algorithm": {"enum": ["ed25519", "ecdsa-p256-sha256"]}, "signer_id": {"$ref": "#/$defs/digest"}, "collector_id": {"type": "string", "minLength": 1, "maxLength": 200}, "signed_at": {"type": "string", "format": "date-time"}, "expires_at": {"type": "string", "format": "date-time"}, "public_key_file": {"type": "string", "minLength": 1, "maxLength": 200}, "public_key_sha256": {"$ref": "#/$defs/digest"}, "signature_file": {"type": "string", "minLength": 1, "maxLength": 200}, "signature_sha256": {"$ref": "#/$defs/digest"}}},
+    "area": {"type": "object", "additionalProperties": false, "required": ["area", "file", "sha256", "authorities"], "properties": {"area": {"enum": ["ai", "browser", "ci", "kafka", "postgresql", "sarif", "supply-chain", "surface", "trust-state"]}, "file": {"type": "string", "minLength": 1, "maxLength": 200}, "sha256": {"$ref": "#/$defs/digest"}, "authorities": {"type": "array", "minItems": 2, "maxItems": 16, "items": {"$ref": "#/$defs/authority"}}}}
+  }
+}

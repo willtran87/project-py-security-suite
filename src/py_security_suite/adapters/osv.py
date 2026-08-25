@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-import json
+import hashlib
+import re
 from pathlib import Path
 from typing import Any
 
@@ -15,12 +16,20 @@ from ..models import (
     finding_identity,
     normalize_repo_path,
 )
+from ..path_safety import read_regular_file
+from ..strict_json import canonical_bytes
+from ..strict_json import loads as strict_json_loads
 from .base import ScannerAdapter
 from .common import database_freshness_error, map_severity
+
+_ADVISORY_IDENTIFIER = re.compile(r"^(?:CVE|GHSA|OSV|PYSEC)-[A-Z0-9._-]+$")
 
 
 class OsvScannerAdapter(ScannerAdapter):
     name = "osv-scanner"
+    # OSV-Scanner exits 1 when vulnerabilities are found. The JSON payload is
+    # still a successful scan result and must be parsed instead of discarded.
+    accepted_exit_codes = frozenset({0, 1})
 
     def prerequisite_error(self) -> str | None:
         database = self.config.database_path
@@ -64,7 +73,9 @@ class OsvScannerAdapter(ScannerAdapter):
         ]
 
     def parse(self, payload: str, target: Path) -> list[Finding]:
-        document = json.loads(payload)
+        document = strict_json_loads(payload)
+        if not isinstance(document, dict):
+            raise TypeError("OSV output must be an object")
         results = document.get("results") or []
         if not isinstance(results, list):
             raise TypeError("results must be a list")
@@ -81,6 +92,48 @@ class OsvScannerAdapter(ScannerAdapter):
             for package_result in packages:
                 findings.extend(self._package_findings(package_result, path))
         return findings
+
+    def derived_artifacts(self, payload: str, target: Path) -> dict[str, Any]:
+        """Retain source records emitted by OSV instead of inferring scan scope."""
+        document = strict_json_loads(payload)
+        if not isinstance(document, dict):
+            raise TypeError("OSV output must be an object")
+        results = document.get("results") or []
+        if not isinstance(results, list):
+            raise TypeError("results must be a list")
+        manifests: dict[str, dict[str, str]] = {}
+        for result in results:
+            if not isinstance(result, dict):
+                raise TypeError("OSV result must be an object")
+            source = result.get("source")
+            source_path = source.get("path") if isinstance(source, dict) else None
+            if not isinstance(source_path, str) or not source_path.strip():
+                continue
+            relative = normalize_repo_path(target, source_path)
+            if relative in {".", "<outside-target>"}:
+                continue
+            try:
+                _, raw = read_regular_file(
+                    target / relative,
+                    "OSV-reported dependency manifest",
+                    maximum_bytes=256 * 1024 * 1024,
+                    boundary=target,
+                )
+            except (OSError, ValueError):
+                continue
+            manifests[relative] = {
+                "manifest": relative,
+                "manifest_sha256": hashlib.sha256(raw).hexdigest(),
+            }
+        receipt = {
+            "schema_version": "1.0",
+            "analysis": "osv-scanner-manifest-output-receipts",
+            "tool": self.name,
+            "raw_output_sha256": hashlib.sha256(payload.encode("utf-8")).hexdigest(),
+            "manifests": [manifests[path] for path in sorted(manifests)],
+        }
+        receipt["receipt_sha256"] = hashlib.sha256(canonical_bytes(receipt)).hexdigest()
+        return {"osv-manifest-receipts.json": receipt}
 
     def _package_findings(self, package_result: Any, path: str) -> list[Finding]:
         if not isinstance(package_result, dict):
@@ -99,6 +152,8 @@ class OsvScannerAdapter(ScannerAdapter):
             if not isinstance(vulnerability, dict):
                 continue
             advisory = str(vulnerability.get("id") or "OSV-UNKNOWN")
+            aliases = _advisory_aliases(vulnerability, advisory)
+            fixed_versions = _fixed_versions(vulnerability)
             summary = str(
                 vulnerability.get("summary") or vulnerability.get("details") or advisory
             )
@@ -128,7 +183,7 @@ class OsvScannerAdapter(ScannerAdapter):
                     severity=severity,
                     confidence=Confidence.HIGH,
                     area="dependencies",
-                    classifications=[advisory],
+                    classifications=sorted({advisory, *aliases}),
                     locations=[
                         Location(
                             path=path,
@@ -152,10 +207,76 @@ class OsvScannerAdapter(ScannerAdapter):
                             title=summary[:200],
                             uri=f"https://osv.dev/vulnerability/{advisory}",
                         )
+                    ]
+                    + [
+                        Citation(
+                            kind="advisory_alias",
+                            identifier=alias,
+                            title=f"{alias} (alias of {advisory})",
+                            uri=f"https://osv.dev/vulnerability/{alias}",
+                        )
+                        for alias in aliases[:10]
                     ],
+                    evidence={
+                        "advisory_aliases": aliases,
+                        "fixed_versions": fixed_versions,
+                        "fixed_versions_by_tool": {
+                            self.name: fixed_versions,
+                        },
+                    },
                 )
             )
         return findings
+
+
+def _advisory_aliases(vulnerability: dict[str, Any], primary: str) -> list[str]:
+    raw = vulnerability.get("aliases")
+    if not isinstance(raw, list):
+        return []
+    normalized_primary = primary.upper()
+    return sorted(
+        {
+            value
+            for item in raw[:100]
+            if isinstance(item, str)
+            and (value := item.strip().upper()) != normalized_primary
+            and _ADVISORY_IDENTIFIER.fullmatch(value)
+        }
+    )[:50]
+
+
+def _fixed_versions(vulnerability: dict[str, Any]) -> list[str]:
+    affected = vulnerability.get("affected")
+    if not isinstance(affected, list):
+        return []
+    versions: set[str] = set()
+    for record in affected[:100]:
+        if not isinstance(record, dict):
+            continue
+        ranges = record.get("ranges")
+        if not isinstance(ranges, list):
+            continue
+        for version_range in ranges[:100]:
+            if not isinstance(version_range, dict):
+                continue
+            range_type = str(version_range.get("type") or "").upper()
+            if range_type not in {"ECOSYSTEM", "SEMVER"}:
+                continue
+            events = version_range.get("events")
+            if not isinstance(events, list):
+                continue
+            for event in events[:500]:
+                if not isinstance(event, dict):
+                    continue
+                value = event.get("fixed")
+                if not isinstance(value, (str, int, float)):
+                    continue
+                normalized = " ".join(str(value).split())[:100]
+                if normalized and not any(
+                    ord(character) < 32 for character in normalized
+                ):
+                    versions.add(normalized)
+    return sorted(versions)[:100]
 
 
 def _native_severity(vulnerability: dict[str, Any]) -> str:

@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:promotion-plan:1.1",
+  "title": "Release promotion decision-support plan",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "status", "authoritative", "scope", "report", "summary", "release_blockers", "blocker_graph", "lifecycle", "assurance_closure", "finding_evidence_quality", "detection_perspectives", "baseline_comparability", "conditional_coverage", "scanner_reliability", "evidence_freshness", "configuration_provenance", "artifact_graph", "audiences", "retention", "github_annotations", "next_actions"],
+  "properties": {
+    "schema_version": {"const": "1.1"},
+    "status": {"enum": ["ready", "blocked"]},
+    "authoritative": {"const": false},
+    "scope": {"type": "string", "minLength": 1},
+    "report": {"type": "object"},
+    "summary": {"type": "object"},
+    "release_blockers": {"type": "array", "items": {"type": "string"}},
+    "blocker_graph": {"type": "array", "items": {"type": "object"}},
+    "lifecycle": {"type": "array", "minItems": 7, "maxItems": 7, "items": {"type": "object"}},
+    "assurance_closure": {"type": "array", "items": {"type": "object"}},
+    "finding_evidence_quality": {"type": "array", "items": {"type": "object"}},
+    "detection_perspectives": {"type": "object"},
+    "baseline_comparability": {"type": "object"},
+    "conditional_coverage": {"type": "array", "items": {"type": "object"}},
+    "scanner_reliability": {"type": "object"},
+    "evidence_freshness": {"type": "array", "minItems": 3, "items": {"type": "object"}},
+    "configuration_provenance": {"type": "object"},
+    "artifact_graph": {"type": "object"},
+    "audiences": {"type": "object"},
+    "retention": {"type": "array", "items": {"type": "object"}},
+    "github_annotations": {"type": "array", "items": {"type": "object"}},
+    "next_actions": {"type": "array", "items": {"type": "object"}}
+  }
+}

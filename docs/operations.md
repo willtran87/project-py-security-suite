@@ -1,6 +1,6 @@
 # Python Security Suite operations
 
-Last reviewed: 2026-08-06
+Last reviewed: 2026-08-10
 
 ## Operating model
 
@@ -18,6 +18,25 @@ flowchart LR
 
 The native workflow does not require Docker. Docker remains an optional Linux
 execution mode.
+
+## Evidence publication flow
+
+```mermaid
+flowchart LR
+    Config["Validated layered configuration"] --> Provenance["Value-redacted origin map"]
+    Scan["Sealed repository scan"] --> Register["Finding lifecycle + SLA register"]
+    Scan --> Plan["Promotion plan"]
+    Plan --> Views["Audience views + GitHub annotations"]
+    Plan --> Package["Deterministic audit package"]
+    Scan --> Package
+    Package --> Verify["Independent digest and report verification"]
+    Verify --> Authority["Enterprise archive and admission authority"]
+```
+
+All sidecars are written outside the sealed report. Inputs that can affect a
+decision are SHA-256-bound, and every derived view remains non-authoritative.
+For the complete command sequence, use
+[`examples/github-actions.yml`](../examples/github-actions.yml).
 
 ## Prerequisites
 
@@ -42,7 +61,8 @@ Run only in an approved connected update lane:
 The default output is `.artifacts/native-bundle`. It contains:
 
 - pinned top-level Bandit, Semgrep, detect-secrets, Ruff, Pylint, mypy,
-  Vulture, Radon, Tach, REUSE, Flawfinder, CycloneDX Python, zizmor, ScanCode,
+  Vulture, Radon, Tach, Graphify, the bundled reachability analyzer, REUSE, Flawfinder,
+  CycloneDX Python, zizmor, ScanCode,
   `run-codeql`, PyPI attestations,
   check-wheel-contents, Twine, and suite wheels, plus their resolved
   transitive wheel set;
@@ -53,7 +73,10 @@ The default output is `.artifacts/native-bundle`. It contains:
   NuGet configuration;
 - the pinned PyPI OSV advisory snapshot and a connected-lane Grype database;
   and
-- `bundle-manifest.json` with the size and SHA-256 digest of every file.
+- schema 2.0 `bundle-manifest.json` with the size and SHA-256 digest of every
+  file plus the exact root requirements for each isolated Python environment.
+  Graphify is installed into its own sidecar environment and runs in code-only
+  AST mode; see the [Graphify integration](graphify.md).
 
 Use `-Force` only to replace a previously marked bundle:
 
@@ -65,9 +88,13 @@ The script refuses unsafe workspace and drive-root destinations.
 
 The upstream OSV `all.zip` endpoint is a rolling database export. The script
 therefore accepts only the explicitly reviewed SHA-256 snapshot embedded in
-the preparation script. Updating advisory data is a governed source change:
-validate every JSON record, review additions and removals, update the approved
-digest, and rebuild the bundle. A checksum mismatch stops preparation.
+the preparation script. `scripts/validate-osv-snapshot.py` then checks bounded
+archive/member/record/expanded sizes, safe paths, JSON-only members, CRCs,
+unique advisory IDs, `affected` arrays, and parseable `modified` timestamps.
+It emits a compact validation receipt before the snapshot can enter the bundle.
+Updating advisory data is a governed source change: validate every record,
+review additions and removals, update the approved digest, and rebuild the
+bundle. A checksum, structure, or semantic failure stops preparation.
 
 The runtime accepts a Grype database for at most ten days from its build time,
 allowing a bounded approval and transfer window. Preflight reads the database's
@@ -93,6 +120,32 @@ resolution captured by that bundle build. Treat `bundle-manifest.json` as the
 exact immutable transfer record; identical rebuilds require an
 organization-maintained fully pinned constraints set or artifact mirror.
 
+Before installation, independently verify the transferred artifact. Supply the
+manifest digest through a separately controlled channel:
+
+```powershell
+pysec verify-native-bundle .artifacts\native-bundle `
+  --manifest-sha256 APPROVED_SHA256 `
+  --python C:\Approved\Python311\python.exe `
+  --require-wheelhouse-closure `
+  --format json `
+  --output .artifacts\native-bundle-verification.json
+```
+
+This performs a closed-set comparison, so an injected file fails even if every
+declared digest remains correct. It rejects links and junctions, unsafe or
+case-colliding paths, size or digest changes, malformed/encrypted wheels, CRC
+failures, and a wheelhouse that cannot resolve every declared environment with
+`pip --isolated --no-index --dry-run`. Schema 1 manifests remain verifiable but
+cannot claim dependency closure; rebuild them to schema 2.0.
+
+The current dogfood schema-2 proof verified 5,779 declared files and 274 wheels
+with no missing, unexpected, changed, or structurally invalid entry. All four
+declared Python environments resolved from the wheelhouse with `--no-index`.
+That proves closed-set integrity and offline dependency closure for the tested
+bundle; publisher identity, malware absence, network enforcement, and
+organization approval remain independent controls.
+
 ## 3. Install without package-index access
 
 Inside the secure boundary:
@@ -104,7 +157,7 @@ Inside the secure boundary:
 The installer:
 
 1. validates the bundle schema and Windows platform;
-2. verifies every recorded bundle digest;
+2. rejects undeclared, missing, linked, resized, or digest-changed bundle files;
 3. creates `.pysec-tools`;
 4. installs wheels with `pip --no-index --no-compile`;
 5. copies OSV-Scanner and its advisory data;
@@ -224,16 +277,76 @@ $env:COVERAGE_FILE = ".artifacts/test-evidence/.coverage"
 python -m coverage run --branch -m pytest `
   --junitxml=.artifacts/test-evidence/junit.xml
 python -m coverage json -o .artifacts/test-evidence/coverage.json
+python -m coverage xml -o .artifacts/test-evidence/coverage.xml
+pysec-evidence bind --source-root . `
+  .artifacts/test-evidence/coverage.json `
+  .artifacts/test-evidence/coverage.xml `
+  .artifacts/test-evidence/junit.xml
 ```
+
+Bind every report from the same test run in one invocation, after report
+generation and before scanning. The helper excludes those reports and their
+sidecars from the source digest, writes each `*.pysec-binding.json` atomically,
+and records both the common source digest and exact evidence-payload digest.
+This includes Cobertura XML when diff-cover consumes it; omitting any configured
+test-evidence payload from the binding set can make the scan's excluded-source
+inventory differ from the digest declared by the remaining evidence.
+Ingestion rejects a sidecar after its report changes. Use `--overwrite` only
+when intentionally replacing bindings for newly generated evidence.
+Downstream validation campaigns require both the matching sealed source digest
+and the producer-verified payload receipt retained by the normalized evidence.
+A hand-authored or legacy summary containing only `source_sha256` is
+`unverified`, not aligned. Regenerate it with the current trusted
+`pysec-evidence` helper and preserve its sidecar; never copy a source digest into
+a summary to satisfy revision checks.
+
+Campaign acceptance has a separate route-evidence prerequisite. The suite
+resolves every campaign route ID and aggregates the execution, integrity, and
+organization-approval posture of each exact contributing scanner. Passing tests
+and complete coverage do not satisfy closure while that aggregate reports a
+trust, execution, unassessed, or missing-route gap. Complete or approve the
+named scanner bindings, regenerate the scan, and retain `effectiveness.json`,
+`scanner-trust.json`, and `risk-paths.json` with the test evidence. A
+single-perspective state requires an independent applicable scan or a governed
+concentration-risk disposition.
 
 Configure `tools.coverage.artifacts_path`,
 `tools.coverage.minimum_coverage_percent`, and `tools.junit.artifacts_path`.
 The bundled `pysec-evidence` helper validates and normalizes those files using
 bounded standard-library I/O and the hardened `defusedxml` parser. It never
 imports the target, invokes a test runner, retains captured process output, or
-expands XML entities. Missing
+expands XML entities. The normalized JUnit artifact retains at most 100,000
+case identities, repository-relative files, result states, and durations so
+Graphify-selected tests can be matched to actual execution evidence. A green
+aggregate without an exact case/file ledger does not prove a selected test ran.
+When xUnit2 omits `file`, the adapter maps a dotted classname only to an existing,
+non-linked repository module and labels the attribution. Current passing
+evidence must still be regenerated after remediation. Missing
 evidence is visibly `not applicable` outside organization policies that make
 the companion test lane mandatory.
+Structural and advisory synthesis also compare passing selected-test evidence
+with changed-line or affected import-path coverage. A `coverage-gap` is an
+actionable contradiction: extend the selected tests and regenerate both the
+case ledger and coverage artifact before approval.
+
+The sidecar proves digest agreement, not producer identity, test isolation, or
+that the declared source was the code executed. Preserve the test lane's
+attestation and access controls separately. A validation campaign reports
+`aligned` only when every retained case/coverage artifact declares the sealed
+scan source digest; missing declarations remain `not-established`, and a
+different digest is `mismatch` with a regenerate-evidence action.
+
+When separate API, worker, CLI, or scheduled-job lanes produce coverage, merge
+their exact artifacts before reachability analysis:
+
+```powershell
+pysec merge-coverage `
+  --scenario api=.artifacts/api-coverage.json@APPROVED_SHA256 `
+  --scenario worker=.artifacts/worker-coverage.json@APPROVED_SHA256 `
+  --output .artifacts/merged-coverage.json
+```
+
+The merge is a line union, not an average, and records every source digest.
 
 ### Ingest trusted-lane assurance evidence
 
@@ -466,6 +579,9 @@ are not traversed.
 The project needs a supported lockfile, manifest with resolved versions, or
 SBOM for useful dependency evidence. `--no-resolve` is deliberate: the scanner
 must not contact package indexes during an isolated scan.
+The suite recognizes OSV-Scanner exit code `1` as a successful scan containing
+vulnerabilities; those findings remain available to policy and cross-tool
+correlation. Exit codes outside `0` and `1` remain scanner failures.
 
 ### Native bundle preparation rejects the OSV snapshot checksum
 
@@ -496,6 +612,23 @@ temporary tree so Syft and Grype can recognize Python package metadata. The
 generated `artifact-manifest.json` binds the evidence to the unexpanded
 release files by SHA-256 and byte size.
 
+### An unrouted target recommends the wrong kind of entry point
+
+Inspect `route_applicability` in `risk-paths.json` and the **Unrouted target
+dispositions** table in `summary.md`. Only `python-runtime-source` is an
+actionable Python route-model gap. The suite separately classifies
+`artifact-control`, `generated-evidence`, `test-validation-source`, and
+`outside-python-runtime-model`; these retain the finding and point to packaging/
+provenance, evidence-producer, test-quality, or native repository controls.
+
+For a Python target, compare `graph_path_member` with
+`source_inventory_member`: graph `false` identifies a Graphify/model-membership
+gap, while graph `true` with no route identifies a declared-entry connectivity
+gap. For artifact findings, confirm `artifact_manifest_member` and follow the
+release evidence action. Do not add an artificial Python entry point merely to
+make an artifact, test, generated report, or configuration finding appear
+routed.
+
 ### Result is INCOMPLETE although all scanners completed
 
 Check `network_isolation_attested` in `scan-manifest.json`. A diagnostic run on
@@ -513,6 +646,26 @@ manifest are independently read back and verified before one final rename.
 Rendering or self-verification failures remove staging and never leave a partial
 report at the requested destination. A destination that appears during
 generation is not overwritten.
+
+## Compare cross-evidence attack surfaces
+
+Every scan emits `advanced-analysis.json`. Before promotion, compare the
+approved baseline and candidate by exact SHA-256 identity:
+
+```text
+pysec advanced-diff previous/advanced-analysis.json current/advanced-analysis.json \
+  --baseline-sha256 BASELINE_SHA256 \
+  --current-sha256 CURRENT_SHA256 \
+  --format markdown --output advanced-delta.md
+```
+
+Exit code `1` means the retained attack surface regressed: a candidate control
+became bypass-capable, telemetry protection weakened, dependency trust rose, or
+a new confirmed taint path, unmodeled published entry point, or wheel identity
+gap appeared. Exit code `0` means no retained regression; it is not a safety or
+exploitability claim. Both inputs are bounded regular files and are rejected
+unless their supplied digests match. See
+[Advanced cross-evidence analysis](advanced-analysis.md).
 
 ## Verification
 
@@ -553,7 +706,11 @@ For finding triage, open `index.html` first. Its prioritized table leads to a
 finding card containing the exact file/range, highlighted source context,
 scanner and rule, classification links, impact, and recommended action.
 The decision badge and scanner-health grid provide the release-log summary;
-the primary coverage-gap table contains only applicable execution gaps. Expand
+execution, observed-risk, and evidence grades remain separate from the release
+disposition, so `Execution A` cannot conceal a high-severity finding or missing
+approval. Conditional rows include an owner, activation trigger, required
+action, and closure evidence. The primary coverage-gap table contains only
+applicable execution gaps. Expand
 the not-applicable controls beneath it when reviewing conditional coverage.
 `summary.md` carries the same first 20 actionable findings into the GitHub job
 summary. Secret-bearing content is deliberately absent from every format; use
@@ -567,17 +724,102 @@ Before committing runner time to a production scan, perform the same offline
 readiness assessment against the target and governed configuration:
 
 ```powershell
-pysec doctor . --config .pysec-tools\pysec.native.toml --profile production
+pysec doctor . --config .pysec-tools\pysec.native.toml `
+  --profile production --explain
+pysec doctor . --config .pysec-tools\pysec.native.toml `
+  --profile production --format markdown `
+  --output .artifacts\pysec-preflight.md
+pysec provision-plan . --config .pysec-tools\pysec.native.toml `
+  --profile production --format markdown `
+  --output .artifacts\pysec-provision-plan.md
 ```
 
 The text view leads with `PROCEED TO ISOLATED SCAN` or `BLOCK PRE-FLIGHT`, then
 shows required and applicable readiness counts. Attention items are labeled
 `required`, `optional`, or `required context`, so an operator can distinguish a
-hard prerequisite from a useful conditional control. The decision is preflight
-only and never grants release approval. Use `--format json` to archive the same
-structured decision and blocking reasons in runner diagnostics. Discovery
+hard prerequisite from a useful conditional control. `--explain` gives each
+gap an ordered priority, reason, action, and selected-control identity.
+Equivalent actions are consolidated into root-cause batches while per-control
+reasons remain in expandable evidence. The decision is preflight only and
+never grants release approval. Use `--format json` for the strict
+`doctor-readiness-1.1` contract or `--format markdown` for a readable GitHub
+artifact. `--output` is atomic and overwrite-safe. Discovery
 prunes generated artifacts, virtual environments, installed scanner trees,
 build outputs, and symlinked directories before descent.
+
+`provision-plan` reuses that evidence but performs no acquisition or filesystem
+mutation. It groups work into priority-ordered root-cause batches, retains each
+control-specific reason, emits argument arrays for verification, and states
+that trust and release authority remain external. Native installer
+configurations use relocatable `@bundle/...` references whenever the tool root
+is inside the repository; moving the repository and scanner tree together does
+not require rewriting executable or rule paths.
+
+Before rolling out a configuration, bundle, adapter, or workflow change,
+publish the activation-free qualification receipts and generate reviewed local
+and CI integration:
+
+```powershell
+pysec config-check --config .pysec-tools\pysec.native.toml `
+  --format markdown --output .artifacts\config-assessment.md
+pysec adapter-check --format json `
+  --output .artifacts\adapter-conformance.json
+pysec verify-native-bundle .artifacts\native-bundle `
+  --manifest-sha256 APPROVED_SHA256 `
+  --python C:\Approved\Python311\python.exe `
+  --require-wheelhouse-closure `
+  --format markdown --output .artifacts\native-bundle-verification.md
+pysec qualify-bundle . --config .pysec-tools\pysec.native.toml `
+  --profile production `
+  --effectiveness-evaluation effectiveness-evaluation.json `
+  --effectiveness-report .artifacts\detection-validation `
+  --effectiveness-sha256 APPROVED_SHA256 `
+  --minimum-effectiveness-labels 25 `
+  --minimum-effectiveness-tools 2 `
+  --required-effectiveness-tool bandit `
+  --required-effectiveness-tool semgrep `
+  --format markdown `
+  --output .artifacts\bundle-qualification.md
+pysec generate-hooks . --config .pysec-tools\pysec.native.toml `
+  --profile quick
+pysec generate-ci . `
+  --checkout-sha APPROVED_40_CHARACTER_COMMIT `
+  --upload-artifact-sha APPROVED_40_CHARACTER_COMMIT `
+  --upload-sarif-sha APPROVED_40_CHARACTER_COMMIT
+```
+
+`adapter-check` proves registry completeness, concrete implementations,
+identity/config bindings, bounded exit-code contracts, and fail-closed
+environment construction without executing a scanner. `verify-native-bundle`
+proves the transferred file set and optional no-index dependency closure before
+installation. `qualify-bundle` adds target applicability, local assets,
+executable digests, required-control readiness, organization-approval state,
+and an optional digest-bound result from the separate labeled corpus gate to one
+strict receipt. The producing report is independently verified and every named
+behavioral tool must have completed unchanged with the same executable digest as
+the currently staged bundle. It never represents retained evidence as a scanner execution.
+`config-check` tolerantly reports invalid or unsupported
+configuration, never rewrites it, and supplies reviewed migration and portable-
+path actions. `generate-hooks` creates only local adapter/readiness diagnostics;
+it is not a scan or isolation claim. `generate-ci` refuses floating action tags, unsafe repository
+paths, multiline isolation commands, and output outside the target. It assumes
+the enterprise runner is already provisioned; it never performs package
+installation or claims the external boundary is active.
+
+```mermaid
+flowchart LR
+    Config["config-check<br/>syntax + compatibility"] --> Hooks["generate-hooks<br/>developer diagnostics"]
+    Transfer["transferred native bundle"] --> VerifyBundle["verify-native-bundle<br/>closed set + wheel closure"]
+    Config --> Qualify["qualify-bundle<br/>contracts + readiness + behavior"]
+    VerifyBundle --> Qualify
+    Corpus["benchmark<br/>digest-bound corpus"] --> Qualify
+    Qualify --> CI["generate-ci<br/>pinned isolated-runner workflow"]
+    CI --> Scan["scan<br/>runtime evidence + policy"]
+    Scan --> Verify["verify-report<br/>sealed artifact integrity"]
+    Verify --> Admission["release-check<br/>external approval boundary"]
+    Hooks -. "does not replace" .-> Scan
+    Qualify -. "does not execute" .-> Scan
+```
 
 After scanning, use `pysec inspect REPORT` as the terminal and release-log entry
 point. It verifies checksums first and then shows the scan-policy disposition
@@ -668,6 +910,12 @@ as plain citation labels rather than active links.
 
 ## Intelligence, baseline, and Security Passport lanes
 
+Production/release evidence paths and SHA-256 values for external isolation and
+snapshot approval belong in organization policy. The scan emits receipts that
+distinguish structural validity from organization authority. Run
+`pysec release-check` after report and Passport verification; see
+[Governed release readiness](release-readiness.md).
+
 The connected preparation lane downloads the authoritative CISA KEV JSON and
 FIRST EPSS CSV, receives the product-specific CycloneDX VEX from its approved
 owner, validates each native format, and records SHA-256 plus acquisition time.
@@ -677,6 +925,252 @@ The isolated scan rejects an unbound, stale, oversized, malformed, symlinked,
 or digest-mismatched snapshot. KEV matches become `P0` and block policy even if
 the originating scanner assigned a lower severity. EPSS affects priority, not
 severity. VEX state is displayed but never suppresses a finding by itself.
+Evidence fusion joins those matches with OSV/Grype fixed-version candidates and
+dependency-use evidence. Treat candidates as scanner assertions, not an
+automatic upgrade selection: review the supported release branch and release
+notes, choose an organization-approved version, regenerate source locks and
+built-artifact SBOMs, run focused tests, and rescan. A bounded/resolved VEX state
+requires product, component, version, justification, and approval-provenance
+validation before disposition.
+
+Configure `[reports] baseline_path` and `baseline_sha256` when release review
+needs change-origin context. Risk routes consume `finding-delta.json` only when
+its profile, scanner set, and revision ancestry checks establish comparability,
+then join lifecycle to exact changed-line, validation, entry-runtime, owner, and
+scanner-assurance evidence. Without that proof, reports say baseline attribution
+is not established; never interpret the default `new` label from an unbaselined
+scan as proof that the current change introduced a defect.
+
+Retain a reviewed `.github/CODEOWNERS`, `CODEOWNERS`, or
+`docs/CODEOWNERS` file to enable route ownership topology. The suite applies the
+bounded retained rules with last-match semantics to each ordered entry,
+transit, and target file. Treat `not-established` as missing ownership evidence,
+not as proof that files are unowned. When evidence is available, resolve every
+reported unowned segment, target-owner mismatch, and cross-team handoff before
+closing the route; owner queues intentionally duplicate a route across all
+teams that must coordinate its remediation and regression evidence.
+
+Scanner executable approvals follow the same connected-preparation pattern.
+Validate publisher provenance and custody outside the scan, create an approved
+catalog conforming to `scanner-trust-catalog-1.0`, calculate its SHA-256, and
+bind both path and digest in organization policy. The isolated scan never
+self-approves an observed executable.
+
+Create a bounded review package directly from the verified report:
+
+```text
+pysec evidence-draft REPORT --format json \
+  --output governance-evidence-draft.json
+```
+
+This removes transcription work without collapsing the trust boundary. The
+output is a candidate, never an approval: security tooling reviews provenance,
+platform security issues isolation evidence, vulnerability management approves
+the snapshot set, and release engineering signs the exact artifact digests.
+
+### Publish the complete evidence pack
+
+Use the consolidated workflow for routine CI and operator handoff:
+
+```text
+pysec evidence-pack REPORT --output security-evidence
+pysec verify-evidence-pack security-evidence --report REPORT \
+  --pack-sha256 PACK_MANIFEST_SHA256 \
+  --output security-evidence-verification.json
+```
+
+`evidence-pack` performs report and inspection verification, release readiness,
+governance handoff, promotion rendering, finding lifecycle, GitHub annotations,
+all five audience views, baseline candidacy, policy simulation, portfolio
+summary, release-evidence closure, and deterministic audit packaging. It builds
+in a sibling staging directory, verifies the result, and publishes it with one
+rename. An interrupted or failed build leaves no destination. Existing packs
+are preserved unless `--overwrite` is explicit; replacement is accepted only
+after the existing closed set verifies against the report.
+The sealed report is retained under `report/` for direct browsing, so
+`report/summary.md`, `report/index.html`, and `report/action-plan.md` preserve
+the original cited finding cards and stable anchors without extracting the ZIP.
+When `--previous-report` is supplied, the pack builds JSON and Markdown trend
+artifacts before promotion. Promotion verifies the trend digest and exact latest
+report binding, then propagates validation trajectory, CODEOWNER queues,
+regressions, and actions into all role views.
+
+```mermaid
+flowchart LR
+    Report["Sealed scan report"] --> Stage["Private staging directory"]
+    Stage --> Views["Decision + role views"]
+    Stage --> Trend["Operational trend<br/>validation debt + owner continuity"]
+    Trend --> Views
+    Stage --> Lifecycle["Findings + SLA + policy"]
+    Stage --> Closure["Closed release manifest"]
+    Closure --> Audit["Deterministic audit ZIP"]
+    Audit --> Verify["Verify files + report + archive"]
+    Verify --> Publish["Atomic directory publication"]
+    Publish --> External["Independent approval and admission"]
+```
+
+The pack SHA-256 printed by the command is the digest of
+`pack-manifest.json`. Retain that digest through an independently controlled
+channel. `checksums.sha256` covers every payload plus the manifest; `COMPLETE`
+binds the manifest digest. The pack uses relative internal paths and verifies
+after relocation. It cannot sign, approve, or admit itself.
+
+Optional inputs keep adjacent workflows inside the same integrity boundary:
+
+- `--previous-report` adds longitudinal scanner/performance evidence,
+  reachability changes, validation-debt and CODEOWNER queue continuity from
+  closure-plan 1.2, and an automatically chained finding register. Validation
+  new/resolved and owner-delta claims require retained diff-coverage assessment
+  scope in both reports; otherwise trend 1.3 records a comparability gap;
+- `--effectiveness-evaluation` and `--passport-verification`, each paired with
+  its approved SHA-256, flow into release readiness and are retained as required
+  release-manifest and audit-package evidence;
+- effectiveness minimums and `--require-passport` make those governed inputs
+  fail-closed rather than informational;
+- `--performance-regression-percent`, `--maximum-total-seconds`, and repeatable
+  `--tool-budget TOOL=SECONDS` govern the retained trend when history is present;
+- `--artifacts` inventories and re-verifies the exact wheel, sdist, and zip set
+  for controlled signing; and
+- `--config`, `--policy`, and `--profile` add value-redacted configuration
+  origins after requiring the effective profile to match the sealed report.
+
+An input path without its approved digest is rejected. A digest without its
+input path is also rejected. `verify-evidence-pack` derives the required
+optional evidence names from the closed directory and re-verifies their
+membership after transfer.
+
+Consolidate lifecycle state and audience-specific actions without granting
+approval:
+
+```text
+pysec promotion-plan REPORT --release-readiness release-readiness.json \
+  --release-readiness-sha256 READINESS_SHA256 \
+  --operational-trend operational-trend.json \
+  --operational-trend-sha256 TREND_SHA256 --format json \
+  --output promotion-plan.json
+
+pysec promotion-plan REPORT --format markdown --output promotion-plan.md
+pysec promotion-plan REPORT --format html --output promotion-plan.html
+pysec closure-plan REPORT --coverage-target 90 --hotspot-limit 10 \
+  --format markdown --output closure-plan.md
+pysec baseline-candidate REPORT --format json --output baseline-candidate.json
+pysec trend PREVIOUS_REPORT REPORT --format json --output operational-trend.json
+pysec trend PREVIOUS_REPORT REPORT --format markdown --output operational-trend.md
+```
+
+Every newly sealed report also contains `closure-plan.json`. It combines active
+findings, admission integrity gaps, conditional-control activation recipes,
+coverage hotspots, dynamic-reachability warnings, and changed-file validation
+mismatches into stable owned work items. Change items join Graphify-selected
+tests, exact case results, changed-line and whole-file coverage, findings, and
+CODEOWNERS ownership; overlapping coverage work is consolidated by file. Each
+item distinguishes repository, organization, and external authority;
+lists acceptance evidence; and stores commands as argument arrays. The plan is
+non-authoritative and cannot approve trust, isolation, signing, or release.
+Consolidation retains native Coverage/diff-cover finding IDs and tool names in
+the file item; the unmodified scanner observations remain in `findings.json`.
+The Markdown view adds an owner/evidence-condition queue above the detailed
+ledger. `release-check` 1.3 applies a stricter grouping key—owner, priority,
+authority, action, and blocker must all match—and publishes separate validation
+group and subject totals. Inspect the referenced closure items for exact files,
+changed lines, and focused tests.
+Release readiness and promotion require retained `diff-coverage.json` scope in
+addition to the closure ledger; zero queue entries without that assessment are
+reported as unproven, never aligned.
+If the bounded structural artifact omits changed-file details, the plan emits a
+P1 completeness item and release readiness remains closed until a replacement
+report contains every assessment.
+
+Generate native reproducibility evidence from two separately produced artifact
+directories:
+
+```text
+pysec normalize-sdist clean-build-a/project.tar.gz \
+  --output clean-build-a/project.tar.gz --source-date-epoch REVIEWED_EPOCH \
+  --overwrite --format json
+pysec normalize-sdist clean-build-b/project.tar.gz \
+  --output clean-build-b/project.tar.gz --source-date-epoch REVIEWED_EPOCH \
+  --overwrite --format json
+pysec compare-builds clean-build-a clean-build-b --format json \
+  --output reproducible-build.json
+```
+
+`normalize-sdist` rejects unsafe paths, links, devices, duplicate members, and
+boundedness violations before applying the reviewed epoch, canonical modes and
+ownership, stable member order, and deterministic gzip metadata. The comparison
+then includes hidden files, rejects filesystem links, requires an exact relative
+file set, and compares size plus SHA-256. A mismatch returns a nonzero status and
+emits a high-severity finding consumable by the `reproducible-build` adapter.
+Source identity, independent builder identity, and custody remain separate
+governed evidence.
+
+Before transferring distributions to the controlled signing lane, bind the
+closed subject set to the verified scan and verify it again at receipt:
+
+```text
+pysec prepare-signing REPORT dist --output signing-request.json
+pysec verify-signing-request signing-request.json dist \
+  --request-sha256 REQUEST_SHA256 --format json \
+  --output signing-request-verification.json
+```
+
+Any added, missing, or changed distribution invalidates the handoff. Retain the
+request, verification receipt, signer output, release decision, promotion plan,
+and Passport according to the classes in `promotion-plan.json`.
+
+After every input is independently issued, create one closed evidence index:
+
+```text
+pysec release-manifest REPORT \
+  --evidence release-readiness=release-readiness.json@READINESS_SHA256 \
+  --evidence promotion-plan=promotion-plan.json@PLAN_SHA256 \
+  --evidence passport-verification=passport-verification.json@PASSPORT_SHA256 \
+  --output release-evidence-manifest.json
+```
+
+Every JSON input must bind the same report checksum seal. The manifest is still
+non-authoritative; the admission controller verifies and approves it.
+Set `PYSEC_REQUIRE_HARDENED_RELEASE_EVIDENCE=1` in that controller to require
+authenticated, complete ClusterFuzzLite, GitHub-attestation, in-toto,
+OCI-image, YARA, ClamAV, check-manifest, reproducible-build, surface-inventory,
+release-readiness, passport-verification, and promotion-plan records.
+Reproducibility must be a byte-for-byte match, and surface evidence must carry
+the structured independent v4 reconciliation proof. The pinned `Release
+artifact assurance` workflow builds on two independent runners from the commit
+epoch, separately attests both outputs, compares exact bytes, and exercises the
+retained wheel against a hash-locked offline wheelhouse. The manual `Closed
+release evidence assembly` workflow accepts exactly one source-run artifact
+from the hard-pinned `Governed release evidence source` workflow. That source
+workflow runs only on a deployment-managed `release-evidence` runner, under its
+own protected environment, and re-verifies the closed directory at the
+independently approved manifest digest before it uploads anything. Assembly
+verifies that run's repository, branch, commit, attempt, conclusion, artifact
+digest, and independently approved manifest digest, then re-verifies every
+hardened evidence class under the protected `release-admission` environment. It
+emits the sole `release-evidence` artifact accepted by promotion. The `Promote
+verified release evidence` workflow is hard-pinned to that workflow path,
+attempt one, the same repository and commit, the protected `main` ref, a
+successful manual event, one unexpired artifact, and the artifact archive digest
+before it extracts anything. Repository administrators should disable
+environment bypass, prohibit self-review, require an independent reviewer, and
+restrict deployment branches to `main`.
+
+Before release promotion, sign every distribution into a separate provenance
+directory:
+
+```text
+pysec sign-artifacts dist --output release-provenance \
+  --signing-key RELEASE_KEY \
+  --signing-password-file PASSWORD_FILE \
+  --cosign-executable APPROVED_COSIGN \
+  --cosign-sha256 APPROVED_COSIGN_SHA256
+```
+
+This creates one Sigstore bundle per wheel, sdist, or zip plus a checksummed
+`release-signing-manifest.json`. Cosign 3 network use remains blocked unless
+`--allow-signing-network` is explicitly supplied in the controlled signing
+lane. Configure the release-profile Cosign adapter to consume the transferred
+bundles; missing or invalid provenance is a blocking release finding.
 
 After the isolated scan, move the complete report into an approval lane. Keep
 the release private key and optional password file outside the checkout and
@@ -693,7 +1187,10 @@ At the first handoff, validate the report itself with
 `pysec verify-report REPORT`. This checks every checksum entry, requires the
 complete canonical report set, and validates its scan-manifest artifact bindings
 without requiring a signing key. Missing, duplicate, ambiguous, unsafe, or
-linked declared evidence is rejected. The embedded in-toto/SLSA statement must
+linked declared evidence is rejected. The required `source-inventory.json` is
+recomputed from its strictly sorted, duplicate-free path/size/SHA-256 records;
+its totals and aggregate must match the scan manifest before Passport claims
+are considered. The embedded in-toto/SLSA statement must
 bind every report input and agree with the manifest's source, policy, outcome,
 finding counts, and tool statuses. Its exact source and release-artifact subject
 set must agree with the source inventory and `artifact-manifest.json`.

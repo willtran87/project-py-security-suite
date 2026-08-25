@@ -1,10 +1,853 @@
 # Changelog
 
+- Eliminate the residual trust-boundary shortcuts: raw hardware attestation
+  replay now binds a digest-pinned native verifier in an independent registered
+  failure domain; registry transparency uses witness-quorum checkpoints,
+  consistency proofs, and durable fork/rollback state; explicit trust policy
+  uses threshold signatures, trusted scan time, durable predecessor state, and
+  operation-scoped activation. Kernel events now bind boot, program, runtime,
+  configuration, namespaces, loss accounting, and canonical source events.
+  Surface admission validates a signed structured reconciliation proof instead
+  of feature labels; every JSON scanner adapter uses the strict bounded parser;
+  Atheris covers the full adapter registry; and release builds run on two
+  independent runners before a closed hardened-evidence promotion gate.
+
+- Close eight residual assurance gaps: independently replay raw TPM2, Nitro,
+  and SEV-SNP evidence; require fresh threshold-signed failure-domain registries
+  with transparency inclusion; correlate runtime traces with independently
+  authorized kernel events; distinguish syntax AST coverage from compiler
+  semantics; load deployment trust from one signed, expiring policy; continuously
+  fuzz strict JSON and SARIF parsers; require a server-authenticated external
+  surface denominator; and produce reproducible, offline-tested, GitHub-attested
+  release artifacts behind a closed evidence gate.
+
+- Parse format-specific TPM2, Nitro, and SEV-SNP evidence instead of accepting
+  opaque quotes; require deployment-rooted offline receipt context and optional
+  registered failure-domain identities. Make secondary Git verification read
+  the immutable CAS version, reverify persisted checkpoint acknowledgements,
+  support independent checkpoint quorums, and cross-bind fresh compiler replay
+  outputs to attested requests. Add event-level runtime observer commitments,
+  independent KMS audit readback, CycloneDX graph and OCI layer/diff-ID checks,
+  replay-protected blinded secret commitments, and DSSE/JWS/COSE/Sigstore
+  envelope discovery.
+
+- Require governed compiler results to retain complete hermetic replay
+  materials and pass a third, remotely attested reexecution; require runtime
+  collectors and observers to differ by organization, host, control plane, and
+  implementation while binding lossless kernel-monotonic event sequencing.
+  Publish qualified Git bundles to an independently signed external CAS and
+  require a second verifier in a third failure domain. Bind privileged
+  operation receipts to the scan's trusted-time context, publish local replay
+  checkpoints to external monotonic authorities, require provider-signed KMS
+  unwrap audit events, reconcile procedure SBOMs with exact runtime closures,
+  require authority-verified secret commitments, and discover versioned signed
+  envelopes structurally so new receipt revisions cannot bypass validation.
+
+- Reproduce compiler semantic artifacts under two independently signed engine
+  operations and verify every taint-path edge; replay Git signatures from the
+  sealed bundle on a clean clone; require clean-host KMS recovery after local
+  key zeroization; bind sandbox claims to OS measurement artifacts; compare
+  independent raw runtime telemetry; retain and rehash complete requirements
+  runtime materials with keyed secret commitments; add deployment-anchored,
+  hash-chained replay and trusted-time state; and discover missing semantic
+  receipt validators from artifact content.
+
+- Close the remaining offline-verification gaps: execute every pinned helper
+  through a digest-bound launcher; retain launcher argv, endpoint/mTLS
+  transcripts, and original trusted verification time; require two independent
+  witnesses for external monotonic state; replay-protect every signed recovery
+  observation; retain compiler symbol/CFG/dataflow/interprocedural ledgers for
+  Python and polyglot sources; preserve Git allowed-signers bytes and actual
+  commit/tag signer ledgers; retain signed runtime inventory source documents;
+  and preserve complete requirements fixtures, mutations, and execution
+  materials for independent replay.
+
+- Require exact request-bound receipts from monotonic-state and KMS backends,
+  bind pinned helper execution to endpoint, mTLS, sandbox, and executable
+  identities, and retain predecessor state for offline fork verification. Add
+  independently signed recovery observers, compiler-semantic frontends,
+  requirements procedure runs, runtime source inventories, collector
+  accounting, and gossip checkpoints. Pin Git verifier/configuration state,
+  enforce signer lifecycle and organizational diversity, verify signed tags,
+  and authorize the complete ref/object manifest.
+
+- Retain and independently revalidate complete portable authority receipts,
+  back deployment generations with durable fork-detecting state, require
+  signed hardware-KMS envelope custody, and bind runtime traces to pinned
+  collectors, instrumented builds, exact static edges, full sampling, and an
+  explicit route matrix. Add pre/post recovery oracle commitments, isolated
+  resource-contained native parsing, template/WebAssembly hardening signals,
+  witness-quorum transparency checkpoints, SHA-1/SHA-256 Git object-format
+  binding, and freshness-, producer-, procedure-, and negative-control-aware
+  requirements replay.
+
+- Replace digest-only deployment approvals with reusable, externally pinned
+  Ed25519 receipts bound to purpose, subject, scan challenge, validity window,
+  and anti-rollback generation; make signed runtime traces mandatory for
+  production/release admission and reconcile their exact deployment, boundary
+  graph, decisions, sinks, and counts. Retain run-bound recovery receipts;
+  verify portable effectiveness Merkle inclusion/consistency proofs; require
+  value-bearing canonical requirements replays; semantically disassemble
+  isolated Python bytecode; tokenize template dependencies; inventory native
+  ASLR/DEP/CFG/PIE/NX/RELRO/BIND_NOW state; and make Git object ledgers
+  canonical and truncation-failing.
+
+- Require deployment-pinned effective sandbox-policy attestations, signed
+  restart/failover instance-transition receipts, portable effectiveness replay
+  checkpoints, requirement-specific evidence allowlists, and encrypted raw
+  evidence custody receipts; use per-object HKDF keys and opaque HMAC object
+  identifiers; reject unreachable Git objects; deepen notebook, template, PE,
+  and ELF analysis; and correlate deployment-pinned request traces with exact
+  static request-to-sink edges.
+
+- Reverify portable detached semantic-authority receipts at final manifest
+  admission; use one advanced RFC 3161 scan time for governed loader, policy,
+  catalog, and assessment decisions; compare complete Git refs and security
+  state across history sealing; require digest-bound seccomp and macOS launcher
+  policy; add independent authorization state oracles with mandatory process-
+  restart and replica-failover invariants; require remote signed
+  effectiveness replay with query budgets and aggregate-only feedback; replay
+  requirement-specific assertions against deployment-pinned standard catalogs;
+  analyze notebook, template, bytecode, native, WebAssembly, reflection, and
+  plugin surfaces; and move sensitive native payloads to redacted projections
+  with optional AES-GCM content-addressed storage.
+
+- Preserve verified Git history, recursive submodule history, and working-tree
+  diff semantics in immutable scan snapshots; reject Git LFS pointer
+  placeholders and symlink omissions; execute scanners against private,
+  before/after-verified rules and database snapshots; and require
+  independently authenticated loader-observed native plugin/OS runtime closure
+  manifests. Reject shallow/partial/promisor/sparse/replace/alternate Git
+  states and verify sealed bundle prerequisites. Add distinct process,
+  shared-memory IPC, device, host-read, credential, network, Linux policy, and
+  Windows mitigation canaries plus
+  token-verified zero-capability AppContainer governance. Require
+  multi-organization-signed, training-separated, diversity-checked release
+  effectiveness evidence with RFC 3161 time and atomic replay consumption;
+  retain replayable Checkov, pipdeptree, and git-sizer native reports with
+  byte/record/normalization commitments; independently authenticate reproduced
+  source-bound cross-language boundary/flow ledgers; support a threshold-signed
+  full-catalog ASVS/MASVS/TCASVS applicability crosswalk; inventory generated,
+  templated, bytecode, native, WebAssembly, and dynamic-code gaps; and exercise resettable business-logic
+  sequence, replay/idempotency, concurrency/atomicity, and durable-state
+  postcondition campaigns.
+
+- Add a threshold-signed, generation-pinned assurance profile that prevents
+  producer-contract and feature downgrades at admission. Compose SLSA,
+  Sigstore, VSA, and dependency-closure receipts; add P-256 authority support;
+  require independently signed deep-qualification receipts for browser,
+  Kafka, PostgreSQL, AI, SARIF, surface, CI, supply-chain, and distributed
+  checkpoint claims; preserve additional SARIF semantics with entropy-aware
+  redaction; add surface history/server-receipt v4, AI v5, event v5, and
+  database v3 gates; and exercise authenticated Chromium, Firefox, and WebKit
+  plus TLS/channel-bound PostgreSQL in CI.
+
+- Make assurance-profile attachment mandatory for assurance producers; bind
+  the profile into the governed evidence digest; add RFC 3161 time and signed
+  monotonic checkpoints; context-bind and atomically consume qualification
+  manifests through a locked ledger or HTTPS/mTLS replay service; validate
+  native AI and SARIF artifacts; require SLSA/VSA dependency closure and
+  Sigstore transparency entries; and exercise Kafka TLS 1.3, SCRAM, ACL denial,
+  transactions, and fencing with real authenticated browser sessions in CI.
+
+- Externally anchor RFC 3161 TSA roots/policies and SLSA builder identities;
+  serialize continuity checkpoints; require signed, CA-pinned mutual-TLS replay
+  receipts; correct AI result-signing chronology and paired-run uniqueness;
+  require authenticated Playwright role state; correlate Kafka transaction
+  canaries; constrain PostgreSQL oracles and restore manifests; hash-link
+  surface pagination; redact SARIF secrets; and pin the browser CI image.
+
+- Add least-privilege, SHA-pinned CI and CodeQL workflows; test the locked
+  environment across Python 3.11–3.13; enforce explicit security linting,
+  pedantic workflow auditing, typing, dependency auditing, and package builds;
+  expand Dependabot to the root lock; and harden Pages jobs with credential
+  isolation and timeouts. Classify Windows and POSIX absolute configuration
+  paths consistently on every host while retaining fail-closed interpreter
+  symlink rejection. Add an early fail-closed boundary that discards all
+  scanner-controlled text and non-allowlisted evidence from secret findings
+  before correlation or derived analysis.
+- Load the integrity-checked Mermaid runtime only when diagrams approach the
+  viewport, remove blocking remote fonts and release probes, name the search
+  dialog, distinguish content links without color alone, and gate those
+  properties in Pages audits.
+- Harden Pages with a hash-locked dependency closure, SRI-protected Mermaid,
+  complete metadata, a custom 404, reduced-motion and responsive defaults,
+  accessible table headers, automated artifact auditing, and Dependabot upkeep.
+- Publish the complete documentation set as a strict, searchable GitHub Pages
+  site with pinned workflow actions, exact direct build dependencies, dark-mode
+  support, Mermaid diagrams, source links, and deployment-safe navigation.
+
 All notable changes are documented here. The project follows semantic versioning
 for published releases.
 
 ## Unreleased
 
+- Gate scanner launch on successful OS quota assignment; add active isolation
+  canaries, Windows held-handle path traversal, mTLS monotonic governance replay
+  with trusted receipt time, per-manifest resolved dependency coverage, native
+  runtime closure, authenticated semantic language coverage, strict schemas for
+  every new assurance artifact, exact Windows report ACL verification, and
+  enforceable encrypted-report retention and purge commands.
+- Bound scanner output before it reaches memory, remove ambient loader/search
+  paths, add digest-pinned sandbox-launcher and Python runtime-closure checks,
+  independently verify governance documents with Ed25519, single-open governed
+  files, authenticate production organization policy, seal deployment trust
+  inputs, generate a unified polyglot boundary graph, privatize report ACLs,
+  and audit platform-resolved dependencies across Linux, Windows, and macOS.
+- Add full-chain/CRL/policy/ESS RFC 3161 verification and signature
+  countersigning, SLSA provenance v2 policy, externally signed DSSE envelopes,
+  root-signed compromise-aware keyrings, signed hash-chained replay receipts
+  with mTLS, signed independent discovery/judge/ruleset authorities, TLS/schema/
+  transaction Kafka oracles, TLS/channel-bound PostgreSQL oracles and disposable
+  restore drills, service-worker/WebSocket browser interception, statistical
+  drift/power/multiplicity controls, and richer privacy-bounded SARIF flows.
+- Require organization-issued context for v2 evidence and cryptographically
+  verify its RFC 3161 challenge imprint, nonce, timestamp signer, EKU, validity,
+  and pinned receipt. Bind raw native reports, normalizers, builders,
+  invocations, and materials into signed provenance and replay identity. Add
+  lifecycle-aware threshold Ed25519 keyrings and an authenticated HTTPS atomic
+  replay backend. Add native loopback Kafka and read-only PostgreSQL drivers,
+  independent multi-source surface reconciliation, statistical ruleset and AI
+  assurance, deeper browser DOM/WebSocket/mixed-content checks, and SARIF
+  normalizers for additional JavaScript, JVM, Ruby, Kotlin, and Go tools.
+- Enforce bounded I-JSON parsing and RFC 8785 canonicalization for signed
+  evidence, rejecting duplicate keys, non-finite numbers, unsafe integers, and
+  excessive structures. Bind v2 evidence to organization-issued target,
+  deployment, surface, challenge, and trusted-time identities. Add semantic
+  surface-inventory, event, database, ruleset-regression, and optional AI/agent
+  assurance lanes; deepen browser controls; and parse native gosec, Cargo Audit,
+  and npm Audit reports with independent canary output.
+- Add six fail-closed companion lanes for self-hosted OAST correlation,
+  stateful RESTler API exploration, loopback gRPC/WebSocket/TCP contracts,
+  Fuzz Introspector reachability and corpus quality, redacted cloud
+  identity/network attack paths, and provider-side secret-verification
+  receipts. Derive execution scope from native normalized output, require
+  state-transition/replay/concurrency/approval authorization cases, bind
+  evidence to expected run and environment identities, and atomically reject
+  authenticated evidence replay.
+- Add companion-assurance v2 with RFC 3339 freshness and expiry, producer,
+  ruleset, configuration, environment, source, and artifact identities;
+  execution scope and coverage; mandatory canaries; and Ed25519 DSSE/in-toto
+  authentication with SHA-pinned public keys. Add multi-role authorization,
+  Nuclei, Prowler, RASP, native-sanitizer, MobSF, TLS, and polyglot evidence
+  adapters, bounded Nuclei/ZAP/Prowler/Datadog-IAST/Falco normalizers, locked
+  boofuzz companion support, TLS-scanner evidence integration, and an executable
+  signed Nuclei workflow template.
+- Add a dedicated runtime profile and source-bound companion adapters for IAST,
+  authenticated browser assertions, ClusterFuzzLite, Falco, and Kubescape.
+  Preserve producer and revision identity through correlation, fail closed when
+  runtime evidence is applicable, and record bounded static/runtime
+  corroboration without claiming exploitability. Add a loopback-only Playwright
+  producer that blocks external browser requests and never retains cookie
+  names, values, authorization data, or page content.
+- Correlate complete multi-thread SARIF code flows by their global
+  `executionOrder` instead of analyzing each thread in isolation. Cross-thread
+  source/sink evidence is fused only when every bounded thread and step is
+  retained and ordered; incomplete threads remain separate, simultaneous
+  cross-thread endpoints do not gain an arbitrary order, and duplicate order
+  values within one thread invalidate promotion. Bounded thread/order
+  completeness remains portable.
+- Resolve SARIF `threadFlowLocation.index` through the run-level cached location
+  table before native source/sink correlation. Cached self-index and nested
+  overlay agreement are verified, resolved execution metadata participates in
+  deterministic ordering, and invalid, conflicting, or out-of-range references
+  receive explicit markers and cannot be promoted as scanner-confirmed flows.
+  Per-flow resolution counts remain available in normalized and portable SARIF.
+- Complete component-aware SARIF message and invocation lookup. Result message
+  IDs now fall back to the selected driver or extension's own
+  `globalMessageStrings` table after rule-local lookup, preventing a colliding
+  driver message from replacing extension output. A present provenance object
+  with one run invocation now honors SARIF's default `invocationIndex` of zero,
+  with explicit/default/unresolved index provenance retained for audit.
+- Resolve SARIF rule descriptors across both the tool driver and declared tool
+  extensions. Standard component index or unique GUID references select the
+  correct rule table; component name/GUID and rule ID/index/GUID agreement are
+  verified before extension titles, severity defaults, classifications, or
+  guidance can influence a finding. Ambiguous and cross-component references
+  fail closed, invocation overrides now target extension rules through the same
+  standard references, and normalized plus portable evidence records the
+  attribution.
+- Resolve bounded SARIF invocation-level `ruleConfigurationOverrides` through
+  `result.provenance.invocationIndex` before applying rule severity defaults.
+  Driver-rule descriptor IDs and indexes must agree, exactly one matching
+  override may supply level/rank, and malformed, ambiguous, out-of-range, or
+  conflicting references remain auditable without changing priority.
+- Make SARIF severity normalization standards-aware and auditable. Finite
+  bounded security scores retain precedence without losing a valid zero;
+  malformed scores cannot inflate severity, rule `defaultConfiguration.level`
+  and the SARIF failure default are honored, and non-failure kinds remain
+  informational. Result/rule rank is retained with its basis but never mapped
+  across tools as severity.
+- Resolve SARIF `artifactLocation.index` references through each run's artifact
+  table for both finding locations and native-flow steps. Chained references are
+  bounded and cycle-safe; malformed, missing, external, and outside-target
+  artifacts fail closed instead of being mistaken for repository-level evidence.
+  Resolution summaries expose whether retained paths came through indirection.
+- Resolve chained SARIF `originalUriBaseIds` for both result locations and
+  native-flow steps before graph or route correlation. Missing, malformed,
+  cyclic, over-deep, and external bases produce explicit non-repository markers
+  instead of false file matches; bounded resolution state is retained without
+  persisting base identifiers or credential-bearing URIs.
+- Resolve SARIF inline, rule-level, and driver-global message templates with
+  bounded numeric argument substitution and escaped-brace handling. Findings
+  retain scanner context plus explicit unresolved, invalid, omitted, and
+  truncation counts without persisting raw arguments as evidence; secret lanes
+  continue to discard the complete dynamic message fail closed. Portable SARIF
+  now emits the resolved finding description as the result message. Credential
+  redaction precedes dynamic-text truncation to prevent boundary fragments.
+- Resolve SARIF rules by both `ruleId` and positional `ruleIndex`, preserving
+  exact descriptor titles, severity, classifications, and guidance for
+  index-only results. Contradictory, out-of-range, malformed, and ambiguous
+  references now fail closed instead of attaching unrelated rule metadata, and
+  normalized plus portable SARIF record the attribution basis.
+- Honor SARIF result semantics without weakening policy authority. Explicit
+  pass, not-applicable, and baseline-absent results no longer become false
+  active findings, while unknown future states remain conservatively reviewable.
+  Accepted, rejected, under-review, unknown, and malformed native suppressions
+  are retained as counts only; they cannot substitute for a digest-bound suite
+  policy acceptance. Portable SARIF preserves this decision evidence.
+- Retain bounded multi-location SARIF evidence instead of silently collapsing
+  every result to its first location. Stable finding identity remains anchored
+  to the ordered primary location, while deduplication and explicit reported,
+  retained, malformed, duplicate, and limit-omitted counts expose evidence
+  loss. Secondary affected files now participate in downstream graph, exposure,
+  source-context, and native sink correlation without multiplying findings, and
+  portable SARIF output preserves the retained location set and summary.
+- Sanitize SARIF-controlled finding, native-flow text, and artifact locations
+  before normalization.
+  Credential assignments, authorization values, URL userinfo, JWTs, known token
+  formats, and private-key material are removed without discarding source/sink
+  semantics; secret-scanner lanes replace unstructured messages fail closed so
+  normalized evidence cannot become a secondary secret store. Non-file URI
+  locations are retained only as an explicit external-artifact marker.
+- Make wheel `RECORD` validation standards-aware and fail closed. Ordinary
+  members now require a hash and size, duplicate rows and non-empty self
+  metadata are reported, negative sizes are invalid, and stronger SHA-384,
+  SHA-512, and BLAKE2 digests are verified instead of being false positives.
+- Deepen wheel integrity analysis beyond `RECORD` hashes. Digest-bound artifact
+  inspection now detects duplicate and case-colliding ZIP members, unsafe or
+  platform-ambiguous paths, symlinks, encryption, unverifiably large members,
+  suspicious compression ratios, and excessive total expansion without losing
+  duplicate central-directory entries during normalization.
+- Make dependency trust scoring version-aware. Artifact inventory availability
+  no longer counts as package presence; exact advisory/artifact intersections,
+  fixed-version intersections, comparable absence, unresolved versions, and
+  missing composition evidence receive distinct dispositions and review weight.
+- Make control and threat test assurance source-bound and execution-aware.
+  Threats now follow mapped control campaign IDs instead of incorrectly looking
+  for campaigns at the sink path; selected filenames remain candidates until a
+  complete case inventory proves that exact file passed against aligned source
+  evidence. Evidence-graph relationships distinguish selection from passing
+  observations, stale or partial test evidence cannot reduce gap counts, and a
+  passing test still requires explicit review of its abuse-case intent.
+- Scope candidate-control dominance to each route's exact retained entry IDs.
+  Unrelated application roots can no longer manufacture a bypass for another
+  route, and missing entry identity or graph connectivity now produces an
+  explicit `not-established` evidence gap with report and closure-plan handoffs
+  instead of inheriting confidence from global roots.
+- Deepen telemetry privacy analysis with per-path, sink-anchored redaction
+  ordering and exact pre-sink candidate-control correlation. A single protected
+  path can no longer hide an aligned path without observed redaction, broad
+  exporter substrings no longer determine order, native sanitizer kinds remain
+  distinguishable from heuristic step labels, and incomplete control-flow
+  correlation withholds a protected decision without overstating runtime bypass.
+- Make scanner-confirmed taint correlation endpoint- and order-aware. Native
+  SARIF flow execution order, nesting, importance, and source/sink kinds are
+  retained without snippets; contradictory endpoint markers are rejected; and
+  route alignment now requires the exact finding sink plus the complete ordered
+  source-to-sink file sequence within one retained entry exposure. Sink-only,
+  unordered, line-conflicting, and partial overlaps remain visible as
+  `not-established` instead of receiving false route corroboration. Digest-bound
+  advanced deltas treat a transition from aligned to not established as a
+  release regression and the reverse transition as an evidence improvement.
+  Generic quality and control-flow `codeFlows` remain retained but unclassified;
+  only security `path-problem` evidence or ordered native source/sink kinds can
+  contribute a scanner-confirmed taint path.
+- Harden report redaction as a fail-closed persistence boundary. Source context
+  now removes quoted, structured, and whitespace-bearing credential assignments
+  from neighboring excerpts, distinguishes assignments from comparisons, and
+  replaces any secret-bearing or pre-marked snippet again immediately before
+  report serialization. Adversarial tests cover Python, JSON/TOML-style, YAML,
+  dictionary, future-adapter, and forged redaction-marker cases.
+- Add `advanced-analysis.json`, a bounded typed evidence graph joining static
+  control dominance and alternate paths, native SARIF source-to-sink steps,
+  wheel activation/`RECORD` parity, pytm threats, mutmut survivors, focused
+  tests, telemetry privacy routes, and dependency trust evidence. Markdown and
+  HTML lead with actionable bypass, privacy, artifact, and dependency signals.
+  Add digest-bound `pysec advanced-diff` release regression analysis for new
+  taint paths, unmodeled artifact entries, wheel identity gaps, degraded
+  controls, privacy posture, and dependency trust tiers. Structural joins stay
+  explicitly distinct from exploitability and control-effectiveness claims.
+  Promote actionable advanced records into the owned closure plan, and make the
+  native dogfood profile inspect the freshly built `dist/` candidates instead
+  of a historical staging directory.
+- Add bounded `unrouted_structural_intersections` that join Python route gaps
+  to exact retained structural-island path or line membership. The ledger
+  combines reachability state, Graphify boundary classification, candidate
+  entry paths, Vulture corroboration, runtime counter-evidence, coverage,
+  focused tests, scanner assurance, and owners into an explicit model-path,
+  separate-test-scope, remediate-or-retire, or further-review decision. Stable
+  IDs flow through JSON, Markdown, HTML, SARIF, schemas, and closure criteria;
+  bounds are referentially closed. Island membership never becomes proof of
+  dead code, safety, exploitability, or production inaccessibility.
+- Add bounded `secret_exposure_advisory_intersections` that join a production
+  secret-to-sink record with an SDK advisory only when both cite the identical
+  retained sensitive route. The compound ledger combines candidate
+  verification/history, sink protection, KEV/EPSS/fix and package-lifecycle
+  context, entry/runtime breadth, source-bound validation handoffs, scanner
+  assurance, owners, findings, citations, and coordinated closure actions. It
+  remains explicit that the join proves neither credential flow nor disclosure,
+  vulnerable-function execution, or exploitability.
+- Cross-reference redacted production-source secret candidates with retained
+  sensitive-data sink routes when they share the exact sink file or the secret
+  file occurs on the bounded Graphify route to the sink. The new bounded ledger
+  preserves distance, current-tree/history alignment, verification, protection,
+  validation, scanner assurance, owners, citations, and lane-specific closure
+  actions in Markdown, HTML, SARIF, JSON schema, and finding evidence. Each
+  intersection also carries a fail-closed validation handoff that joins
+  Graphify-selected or route-mapped tests with exact retained execution,
+  aggregate coverage, source-revision binding, scanner assurance, shared-test
+  quality, findings, and ownership. Candidate tests never imply a canary
+  assertion: reports explicitly require a synthetic credential canary. It never
+  retains secret material or presents file-route proximity as symbol-level data
+  flow, credential validity, runtime execution, or proof of disclosure.
+- Add a bounded secret-provenance assessment ledger that cross-references every
+  retained secret candidate with its source, graph, built-artifact, Git-history,
+  scanner-assurance, verification, lifecycle, ownership, and redaction context.
+  Markdown, HTML, SARIF, schemas, and closure work now provide lane-specific
+  review actions for production source, tests, generated evidence, artifacts,
+  and repository controls without retaining secret values, suppressing a
+  finding, or treating test/generated context as proof of a false positive.
+- Add a bounded end-to-end sensitive-data route ledger that joins confirmed
+  exposure findings and review-worthy sink inventory to every retained entry
+  point, runtime state, data class, trust boundary, observed protection,
+  scanner assurance, validation status, lifecycle, and ownership handoff.
+  Applicable CWE, OWASP, OpenTelemetry, and scanner citations now remain
+  bounded and attributable through the ledger, Markdown/HTML finding context,
+  SARIF, schemas, and closure criteria. Missing citation provenance becomes an
+  explicit closure gap, while citations remain classification and remediation
+  guidance rather than proof of attacker control, data flow, or disclosure.
+- Cross-reference every review target with Graphify file membership, the sealed
+  source inventory, built-artifact manifest, target kind, scanner, area, and
+  path type before interpreting a missing Python entry-point route. Unrouted
+  targets now distinguish actionable Python model gaps from artifact controls,
+  generated evidence, validation code, and non-Python repository controls.
+  Reports, finding/SARIF context, schemas, and closure work preserve the native
+  evidence-lane action without dropping the finding or inventing an irrelevant
+  Python entry point.
+- Cross-reference shared validation-test hotspots with active findings in the
+  exact test file and retained CODEOWNERS. Campaigns now grade shared-test
+  evidence as strong, qualified, weak, or not established; carry finding/tool/
+  severity and campaign-to-test owner alignment; and propagate quality gaps to
+  review factors, owner queues, reports, and closure criteria. This expanded
+  factor contract is versioned as `shared-control-review-v5`.
+- Cross-reference each shared validation campaign with the exact contributing
+  scanner posture of every retained route. Campaigns now retain assessed and
+  missing route counts, trust/execution/perspective states, contributing and
+  approved tools, evidence lanes, and a fail-closed prerequisite. Scanner trust,
+  execution, or unresolved-route gaps raise transparent review factors, flow to
+  owner queues and reports, and prevent passing tests from serving as closure
+  evidence until the underlying route evidence is assured. The expanded factor
+  contract is versioned as `shared-control-review-v4`.
+- Require a valid producer-verified payload-binding receipt, not merely a
+  matching declared source digest, before validation-campaign evidence is
+  revision-aligned. Risk routes now distinguish mismatched, unverified,
+  undeclared, and unavailable source identity; retain exact evidence payload
+  digests and binding filenames; and propagate the state through review
+  factors, owner queues, reports, schemas, and closure criteria. The changed
+  factor contract is explicitly versioned as `shared-control-review-v3`.
+- Join every retained entry, transit, and target file on a risk route to the
+  bounded CODEOWNERS rule set, preserving exact path order. Reports now expose
+  stable ownership handoffs, collaborating owners, unowned route segments,
+  target-owner mismatches, owner coordination queues, and closure criteria.
+  Missing ownership evidence remains distinct from evidence proving an unowned
+  file. Alternate entry-path ordering is covered by adversarial tests.
+- Cross-reference comparable finding lifecycle with exact route change scope,
+  validation state, declared-entry runtime observations, owners, and scanner
+  assurance. Routes, finding/SARIF evidence, Markdown/HTML, owner queues, and
+  closure work now distinguish baseline-new/regressed changed-line work,
+  modified pre-existing debt, and lifecycle evidence gaps. Missing,
+  unconfigured, malformed, or incomparable baseline evidence fails closed and
+  never turns a finding's default `new` value into a change-origin claim.
+- Cross-reference every routed and unrouted target with the exact contributing
+  scanner's execution, evidence lane, normalized/unique contribution, primary
+  and helper integrity, before/after continuity, and organization approval.
+  `effectiveness.json` 1.1 and its bundled schema now expose per-tool posture;
+  risk routes separately report perspective, trust, execution, unassessed, and
+  suite-derived states through findings, SARIF, Markdown/HTML, boundary/advisory
+  intersections, owner queues, and closure criteria. The join does not alter
+  native severity or treat tool approval as finding correctness.
+- Clarify that every configured output from one test lane—including Cobertura
+  XML used by diff-cover—must participate in the same source-binding operation,
+  preventing an excluded evidence payload from creating a false revision
+  mismatch between coverage, JUnit, and the sealed scan inventory.
+- Add `risk-paths.json`, a bounded offline synthesis of declared reachability
+  entry points, Graphify file relations, normalized findings, review-worthy
+  sensitive-data sinks, runtime state, coverage, focused tests, structural
+  risks, and CODEOWNERS. Stable routes and explicit unrouted model gaps flow
+  back into finding JSON, Markdown, HTML, and SARIF with actionable validation
+  steps and explicit aligned/gap/partial/not-assessed states, while
+  interpretation remains conservative about exploitability and leakage.
+  Cross-route convergence now identifies shared transit/target control points,
+  consolidates validation work, and creates exact owner queues without merging
+  or multiplying native findings. Each hotspot now produces a stable shared
+  validation campaign by joining direct/transitive Graphify test selection,
+  exact retained case execution, and hotspot file coverage. Campaigns bind
+  control points and selected tests to the source inventory, distinguish
+  aligned, mismatched, and unbound test/coverage revisions, and expose a
+  factor-by-factor shared-control review score. Review model v2 cross-references
+  structural change risk, exact uncovered changed lines, and runtime observation
+  gaps, while failed-test factors cite only the retained execution artifacts.
+  Cross-campaign validation-test hotspots now identify one source-bound test file
+  selected for multiple shared controls, retain direct/transitive/context
+  selection modes without double-counting JUnit cases, expose sole-test
+  dependencies, and propagate stable IDs into routes, findings, SARIF, owner
+  queues, reports, and closure criteria.
+  Alias-aware dependency advisories now become bounded importer targets by
+  joining evidence-fusion clusters to exact Graphify source importers and
+  declared entry points. Citation-bearing routes retain package lineage,
+  KEV/EPSS/VEX context, scanner-attributed fixed versions, path-specific
+  runtime/coverage, owners, focused tests, validation, and closure actions;
+  they link back to every native cluster finding without multiplying findings
+  and explicitly do not claim vulnerable-function invocation or exploitability.
+  A bounded per-importer assessment ledger prevents one importer's passing tests,
+  ownership, or coverage from masking a validation gap at another importer.
+  Exact-path exposure/advisory intersections now connect a sensitive SDK sink
+  route to the same package/advisory importer route, retaining trust boundary,
+  data class, protection, threat, validation, owner, citation, report, SARIF,
+  and closure context without claiming disclosure or vulnerable-function use.
+  Advisory importer routes now cross-reference source and built-artifact SBOM
+  package lineage. Comparable inventories distinguish matched versions, drift,
+  source-only, and artifact-only components; missing inventories fail closed as
+  evidence gaps. Reports and closure work retain exact versions and exact-match
+  fixed-version evidence without inferring semantic-version safety.
+  Risk routes now retain a bounded exposure matrix for every declared entry
+  point that Graphify can connect to the same target. Stable exposure IDs,
+  exact file/edge sequences, entry kinds, omissions, owner-queue counts,
+  finding/SARIF context, and interface-aware closure criteria preserve attack-
+  surface breadth without multiplying findings or claiming runtime exposure.
+  Each exposure now joins its exact declared reachability target node and
+  distinguishes observed, unobserved, and unavailable runtime evidence.
+  Interface-specific runtime gaps flow into intersections, owner queues,
+  reports, SARIF, and closure criteria without treating non-observation as
+  proof that an interface is dead or inaccessible.
+  Campaign IDs, scores, revision state, evidence gaps, and actions propagate
+  through findings, SARIF, reports, owner queues, and closure work. Add
+  `pysec-evidence bind` to atomically create
+  payload-verified source-binding sidecars for coverage and JUnit evidence.
+  Bundle and document the version 1.0 schema.
+- Version promotion plans at 1.2 and cross-reference sealed closure-plan 1.2
+  validation work with optional digest-bound operational-trend 1.3 evidence.
+  Promotion now fails closed on current validation debt or blocking validation
+  regressions, preserves stable CODEOWNER work queues and exact closure
+  references, and surfaces concise trajectory, owner, action, anomaly, and
+  evidence-binding views for developers, security, release engineering,
+  executives, and auditors. Evidence packs build trend evidence before
+  promotion, retain a readable trend Markdown artifact, and bind the trend's
+  latest snapshot to the exact promoted report.
+- Version operational trend at 1.3 and require both a current closure ledger and
+  retained diff-coverage change-assessment scope before claiming validation
+  subjects are new or resolved. Missing assessment scope now produces an
+  explicit comparability reason and anomaly; owner deltas become unavailable
+  instead of falsely reporting debt resolution. Release readiness and promotion
+  apply the same fail-closed rule, so an empty closure queue without retained
+  change scope cannot approve a candidate.
+- Give Graphify JSON files a bounded 64 MiB adapter allowance while retaining
+  the generic scanner-stream cap for stdout and stderr. This prevents healthy
+  medium-sized AST graphs from becoming parse errors without relaxing node,
+  edge, path, origin, token, or report-artifact validation.
+- Cross-reference structural change impacts, graph-selected tests, case-level
+  execution, changed-line coverage, whole-file coverage, and retained
+  CODEOWNERS rules into one stable owned closure item per changed file. Closure
+  plan 1.2 consolidates overlapping coverage work, cites exact uncovered lines
+  and tests, and defines evidence-based acceptance criteria. `release-check`
+  now fails closed on missing current closure evidence or unresolved validation
+  mismatches and preserves those owners and citations in causal remediation.
+  Omitted change-impact details become an explicit P1 completeness item rather
+  than silently passing a large change at the bounded artifact limit. Release
+  actions cite the closure item plus a compact decisive evidence set while the
+  full test ledger remains available in the sealed closure plan. Native
+  Coverage/diff-cover observations for the same file are folded into that work
+  item with their finding IDs and scanner attribution, while `findings.json`
+  remains unchanged.
+- Add owner/evidence-condition rollups above the detailed closure ledger and
+  version release readiness at 1.3. File-level validation subjects remain exact
+  in `closure-plan.json`, while release remediation groups only subjects with
+  identical owner, priority, authority, action, and blocker. Stable group IDs,
+  explicit group/subject totals, and closure-item-first evidence preserve
+  causality while reducing repetitive production actions.
+- Version operational trend at 1.2 and join each independently verified
+  closure-plan 1.2 ledger into longitudinal repository health. Stable validation
+  subjects now expose new/resolved/unchanged debt, state/priority/owner/routing
+  transitions, owner-queue history, first-to-latest deltas, and adjacent-scan
+  anomalies for debt growth, ownership erosion, failing-test regression, or
+  missing comparable evidence. Missing closure evidence is never interpreted as
+  zero validation debt.
+  `pysec trend --format markdown` renders bounded GitHub tables for movement,
+  validation continuity, owner queues, state/routing transitions, anomalies,
+  scanner reliability, and the verified timeline; terminal output degrades
+  unsupported glyphs safely while the UTF-8 artifact remains intact.
+- Version evidence fusion at 1.2 and sensitive-data exposure synthesis at 1.4.
+  Passive JUnit, Hypothesis, and Schemathesis ingestion now retains a bounded,
+  output-free case/file/result ledger. Advisory remediation cross-references
+  Graphify-selected focused tests with exact current execution evidence and
+  reports passing, failing, incomplete, unobserved, unavailable, and unselected
+  states without treating aggregate green totals or pre-remediation passes as
+  future-build validation. Closure and release-readiness actions retain the
+  contributing test-evidence artifacts. CycloneDX dependency relationships now
+  identify bounded introducing-root paths for transitive advisories, while
+  pipdeptree environment-health evidence qualifies path confidence and exposes
+  missing, cyclic, or conflicting installed dependencies. Bounded CODEOWNERS rule metadata now
+  routes exact advisory import paths even when those files have no separate
+  normalized finding; prior schemas remain bundled.
+- Cross-reference Graphify-selected tests with bounded JUnit, Hypothesis, and
+  Schemathesis case execution plus diff/file coverage. Structural synthesis 1.2
+  now distinguishes aligned, failing, incomplete, unobserved, unavailable, and
+  unselected validation evidence for changed files. Evidence fusion 1.3 and
+  data exposure 1.5 explicitly flag the contradiction where focused tests pass
+  while affected changed lines or dependency import paths remain uncovered.
+- Consolidate scanner-reported fixed versions, approved offline CISA KEV/FIRST
+  EPSS/CycloneDX VEX intelligence, alias-aware advisories, source dependency
+  relationship, exact imports, reachability, runtime observations, and deptry
+  signals into one conservative remediation context per distinct advisory.
+  Reports now show P0-P4 priority, action kind, scanner-attributed fixed-version
+  candidates, evidence basis, uncertainties, and verification steps. VEX
+  bounded/resolved states require scope and provenance validation and never
+  suppress the native finding automatically. SDK disclosure-boundary reports
+  surface the same decisions and dedicated summary counters.
+- Join advisory import paths to reverse Graphify test dependencies, retained
+  file coverage, and CODEOWNERS-derived finding ownership. Remediation records
+  now name focused direct/transitive tests, selection confidence, responsible
+  owners, and import paths below 80% coverage. Closure planning uses the stable
+  advisory cluster ID to create one owned work item across alias-equivalent
+  scanner observations while retaining all finding IDs, tools, citations,
+  uncertainties, and acceptance evidence. Version closure-plan output at 1.1
+  with distinct-advisory/observation counters and retain schema 1.0. Release
+  readiness now performs the same advisory-ID consolidation and carries fused
+  priority, ownership, import paths, and focused tests into its operational
+  remediation actions.
+- Version evidence fusion at 1.1 with package-scoped, transitive advisory-alias
+  clustering. CVE, GHSA, PYSEC, and OSV identifiers can now converge across
+  OSV-Scanner, Grype, and other normalized package findings while retaining
+  every native scanner source. Reports distinguish distinct actionable
+  advisories from alias-equivalent observations and feed that cleaner count,
+  canonical identifiers, tools, versions, and citations into SDK disclosure
+  review. Retain the evidence-fusion 1.0 schema for existing consumers.
+- Cross-reference distinct package advisories with CycloneDX direct/transitive
+  relationships, exact Graphify external-import edges, importing-file
+  reachability/runtime state, and deptry declaration findings. Report
+  executable, load-only, disconnected, incomplete, unused, and contradictory
+  use evidence without changing severity or claiming vulnerable-function
+  exploitability.
+- Treat OSV-Scanner exit code `1` as a completed scan with vulnerabilities,
+  preserving its valid offline JSON findings for normalization, policy, and
+  SDK/data-exposure correlation instead of misreporting the required scanner as
+  failed.
+- Version sensitive-data exposure synthesis at 1.3 and close the evidence loop:
+  finalized fusion tiers, corroboration, changed-line coverage, runtime and
+  reachability state, graph blast radius, and related findings now flow back
+  into exposure assessments and portable reports. Cross-reference inventory-only
+  sink surfaces with changed-line, coverage, reachability, runtime, graph, and
+  nearby-finding evidence so reviewers can prioritize unconfirmed disclosure
+  controls without treating them as vulnerabilities. Join CODEOWNERS-derived
+  ownership, graph-selected tests, structural hotspot IDs, and change-risk
+  scores into both confirmed findings and review surfaces. Correlate disclosure
+  SDKs with normalized package findings and finalized source/artifact lineage,
+  retaining advisory citations and distinguishing matched lineage from package
+  risk. Generate bounded contextual verification plans without changing scanner
+  severity; retain schemas 1.2, 1.1, and 1.0 for existing consumers.
+- Version sensitive-data exposure synthesis at 1.2 with local alias propagation,
+  credential/personal/financial/health/request-content context, trust-boundary
+  and risk-factor evidence, explicit protection kinds, and prioritized review
+  surfaces. Add scanner-backed detection for secrets interpolated into outbound
+  URLs and broad runtime or environment state exported to telemetry; retain 1.1
+  and 1.0 schemas for existing consumers.
+- Add CWE-532/200/201/209/359/598 sensitive-data rules for logging, telemetry,
+  request collections, URL queries, raw client errors, and risky Sentry PII
+  configuration. Expand the non-executing SDK/sink inventory with custom and
+  bound loggers, process streams, OpenTelemetry header capture, and additional
+  observability SDKs; strengthen transformation handling so generic hashes,
+  masks, filters, HMACs, and tokens no longer suppress taint by name alone.
+- Harden sensitive-data detection with credential-named object/dictionary
+  sources, runtime-state dump detection, additional tracing SDK sinks, precise
+  request-versus-response payload modeling, recursive monorepo dependency
+  discovery, and bounded `.env`/TOML/YAML/INI capture-configuration review.
+  Add OpenTelemetry GenAI content-capture and wildcard HTTP-header controls,
+  expand cloud and GenAI observability SDK coverage, and version the exposure
+  artifact at 1.1 while retaining schema 1.0 for existing consumers.
+
+- Add pinned Graphify code-only scanning, strict AST/token/path validation,
+  normalized graph evidence, and graph-aware finding blast radius, structural
+  hotspots, and cross-tool neighborhoods.
+- Add bounded cross-tool evidence fusion across semantic classifications,
+  changed-line coverage, reachability, runtime observations, graph centrality,
+  complexity, source/artifact SBOMs, and artifact manifests. Findings now carry
+  explicit review tiers and cross-stage lineage without changing severity.
+- Add structural synthesis across Graphify, reachability, Vulture, runtime
+  coverage, Radon, Tach, ownership, and normalized findings. Reports now
+  distinguish likely removable from likely dynamic dead-code candidates,
+  classify latent attack-surface and missing-entry-point islands, and correlate
+  import cycles with architecture and security findings.
+- Version structural synthesis at 1.1 with graph-guided direct/transitive test
+  targeting, compound changed-file risk scoring, conservative orphan-symbol
+  discovery, and concrete island boundary evidence that distinguishes test-only
+  fixtures from probable missing production entry points. Schema 1.0 remains
+  available for existing consumers.
+
+- Add a verified, machine-readable closure plan that turns findings, governance
+  gaps, conditional controls, coverage hotspots, and reachability warnings into
+  stable owner-routed actions with acceptance criteria and evidence references.
+- Add closed-set reproducible-build comparison and deterministic Python sdist
+  normalization. Comparison rejects self-comparison, emits scanner-consumable
+  mismatch findings, and preserves the external boundary for independent build
+  provenance.
+- Publish a 52-item findings-driven enhancement register, wire the closure plan
+  into every report, and document the activation, ownership, and authority
+  boundary for controls that cannot be honestly completed inside one repository.
+- Version portfolio health at 1.1 with separate execution, observed-risk,
+  evidence, and release grades. Conditional controls now carry deterministic
+  owner-routed activation recipes in JSON, Markdown, and offline HTML, backed
+  by one shared readiness classifier so preflight and reports cannot drift.
+- Validate the rolling OSV PyPI archive before bundling with bounded size,
+  path, CRC, JSON, unique-ID, affected-record, and timestamp checks; emit a
+  compact connected-lane validation receipt.
+- Seal `source-inventory.json` with every source path, size, and SHA-256;
+  path-based clean effectiveness labels must now exist in that unchanged,
+  aggregate-bound inventory instead of passing on an invented filename.
+  Independent report verification now also rejects malformed, non-canonical,
+  unsorted, duplicate, aggregate-mismatched, or manifest-unbound inventories.
+- Expand the retained behavioral qualification to 10 reviewed labels across
+  Bandit, Semgrep, and detect-secrets (7 TP, 3 TN, no FP/FN) with exact current
+  executable-digest continuity.
+- Dogfood the final candidate with all 36 applicable controls completed and no
+  unavailable/failed scanner; six newly exposed implementation findings were
+  corrected, leaving only the two expected unsigned-distribution findings.
+- Repair the pinned Actionlint Windows bundle asset name (`windows_amd64`),
+  retaining exact SHA-256 verification and fail-closed connected preparation.
+- Include hidden files in native-bundle inventory generation so PowerShell
+  Gallery metadata participates in the exact closed-set transfer contract.
+
+- Add `verify-native-bundle` with independent manifest-digest binding,
+  closed-set file verification, link and path defenses, bounded wheel/CRC
+  inspection, and optional fail-closed `pip --isolated --no-index` resolution
+  for every schema 2.0 Python environment. Native installation now rejects
+  injected files, links, size changes, and case-insensitive path collisions.
+- Upgrade `qualify-bundle` to schema 1.1 so a digest-bound labeled-corpus
+  evaluation and its verified source report can enforce minimum labels, named
+  tools, required perspectives, and exact unchanged scanner-digest continuity
+  in the same decision without claiming that qualification reran scanners or
+  granted release authority.
+
+- Add relocatable, traversal-safe `@bundle/...` configuration paths; generate
+  portable native scanner configurations; add a non-mutating, schema-governed
+  `provision-plan`; and separate source, test, dependency, artifact, and
+  governance admission decisions in JSON, Markdown, and offline HTML reports.
+- Add `adapter-check`, a strict non-executing 63-adapter SDK qualification
+  receipt, and `generate-ci`, a no-install GitHub workflow generator that
+  requires immutable action pins and an explicit enterprise isolation check.
+- Add `qualify-bundle` to join adapter contracts with target-specific readiness
+  and executable identity, `config-check` for tolerant schema/portability advice,
+  and `generate-hooks` for local non-executing pre-commit diagnostics. All three
+  emit strict, non-authoritative contracts and perform no acquisition.
+- Add `pysec init` with safe library, API, CLI, worker, and monorepo templates;
+  version doctor readiness at 1.1 with ordered actions, explain mode, and atomic
+  JSON or GitHub-ready Markdown publication. Activation-free module invocation
+  now discovers console scripts beside its interpreter before declaring them
+  unavailable, while retaining executable integrity checks. Equivalent
+  prerequisites are grouped into root-cause remediation batches without
+  dropping per-control reasons, and top-level help now leads operators through
+  initialize, preflight, scan, and inspect.
+- Consolidate semantically equivalent finding remediation into one owner-routed
+  action without losing finding or artifact evidence. Promotion Markdown and
+  HTML now surface priority, action ID, authority, target date, evidence
+  subjects, and safely encoded suggested commands.
+- Add atomic `evidence-pack` and `verify-evidence-pack` workflows that compose
+  verified decision, lifecycle, audience, annotation, policy, release-manifest,
+  and audit artifacts into one portable closed directory. Optional previous
+  reports add trend/reachability context; optional distributions add an exact
+  controlled-signing handoff; optional configuration adds value-redacted,
+  profile-matched provenance. Approved effectiveness and Passport receipts now
+  flow through release readiness and become required release-manifest/audit
+  evidence; historical performance thresholds flow into the retained trend.
+- Add durable finding lifecycle/SLA registers, verified GitHub annotations,
+  audience-specific promotion exports, value-redacted configuration provenance,
+  absolute scanner performance budgets, multi-scenario coverage union, and
+  cross-repository portfolio aggregation.
+- Add deterministic portable audit packages whose verifier rechecks every file,
+  every evidence digest, and the embedded sealed report after relocation.
+
+- Add locally verified VCS ancestry to production/release finding baselines and
+  `baseline-candidate` for exact-digest external approval handoff.
+- Version release readiness at 1.2 with causal root/derived blocker hierarchy,
+  eliminating umbrella policy failures from the actionable root count.
+- Add `trend` for longitudinal comparison of 2-100 sealed reports and
+  `release-manifest` for a closed, digest-bound release evidence index.
+- Add GitHub-ready Markdown and standalone offline HTML promotion views, plus
+  digest-grouped scanner identity review in governance evidence drafts.
+- Add exact-set, checksum-bound `prepare-signing` and
+  `verify-signing-request` handoffs so a controlled signer receives precisely
+  the distributions scanned, with no private key entering the scan lane.
+- Add `promotion-plan`, a non-authoritative consolidated view of lifecycle
+  state, assurance-claim closure, evidence quality, scanner reliability,
+  conditional domains, retention, artifact relationships, audience views, and
+  prioritized actions.
+- Reject incomparable finding baselines when profiles or selected scanner sets
+  differ; findings become `unclassified` instead of being mislabeled as new.
+- Require known versions for applicable production scanners and parse Cosign's
+  machine-readable version output.
+- Let release policy require positive and negative effectiveness labels, a
+  minimum perspective count, named scanners, and minimum labels per scanner.
+- Remove the redundant generic scan-policy action when specific failed controls
+  already explain the release block.
+- Distinguish digest matching from organization authorization for every primary
+  and auxiliary scanner entry point; repository-local pins no longer satisfy
+  the release trust gate.
+- Version release readiness at 1.1 with prioritized, owner-routed remediation
+  actions grouped by repository, signing, organization-security, approver, and
+  cross-functional authority.
+- Add `evidence-draft`, a checksum-bound but explicitly non-authoritative handoff
+  of scanner identities, intelligence snapshots, isolation bindings, and exact
+  artifacts requiring controlled signing.
+- Add organization-authorized, digest-bound isolation and offline-intelligence
+  receipts; production and release fail closed when required authority is absent.
+- Add `release-check`, a unified decision over report integrity, policy,
+  findings, claims, operational coverage, isolation, scanner trust,
+  intelligence approval, effectiveness, and Passport verification.
+- Add digest-bound `reachability-diff` gating for new disconnected code, state
+  regressions, new reportable islands, and lost runtime observations.
+- Add atomic JSON receipt output to `pysec verify` and strict offline schemas for
+  all new governed sidecars.
+- Make Markdown and HTML summaries distinguish operational coverage, scan policy,
+  and release readiness, with the first evidence gap as the next action.
+
+- Add process-tree termination on timeout and interruption so scanner children
+  do not survive aborted scans.
+- Add digest-bound, expiring organization scanner-trust catalogs and retain all
+  application decisions as sealed evidence.
+- Add release distribution signing with per-artifact Sigstore bundles and a
+  checksummed provenance manifest.
+- Make SSDF assurance claims fail closed on provenance findings, stale governed
+  context, security findings, and missing isolation attestations.
+- Add verified, digest-bound labeled-corpus benchmarking with confusion-matrix,
+  precision, recall, specificity, and F1 output.
+- Add a 12-domain operational coverage scorecard to Markdown and JSON reports.
+- Add per-island reachability confidence factors and stricter graph-output path
+  validation; generated reachability documents now use schema 1.2.
+
+- Add bounded offline Python reachability analysis with packaging, main,
+  framework, and configured roots; three-state executable/load-only/disconnected
+  classification; confidence-bearing direct, framework, callback, and polymorphic
+  dispatch paths; optional bounded coverage.py corroboration; ranked module and
+  symbol islands; state-appropriate normalized findings; and a sealed schema-1.2
+  `reachability.json` graph artifact.
+- Improve reachability precision with constructor lifecycle edges, concrete
+  imported/local/chained receiver resolution, literal internal dynamic-import
+  loading, statically false and `TYPE_CHECKING` branch pruning, WSGI/ASGI runtime
+  roots, Django configuration and registration paths, and per-island evidence
+  strength, removal readiness, blockers, and ordered actions.
+- Parse Tach 0.35 violations from its native stderr stream and expand the
+  dogfood architecture contract so every production module and dependency is
+  explicit instead of silently treating an exit-code-1 run as clean.
 - Restructure the documentation index around operator goals, add trust-boundary
   and coverage-flow Mermaid diagrams, condense the README capability summary,
   and refresh verified scanner, test, coverage, and self-scan evidence through

@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:cyclonedx-artifact:1.0",
+  "type": "object",
+  "required": ["bomFormat", "specVersion", "components"],
+  "properties": {
+    "bomFormat": {"const": "CycloneDX"},
+    "specVersion": {"type": "string", "pattern": "^1\\.[4-9][0-9]*$"},
+    "version": {"type": "integer", "minimum": 1},
+    "components": {"type": "array", "maxItems": 250000},
+    "dependencies": {"type": "array", "maxItems": 750000}
+  }
+}

@@ -1,6 +1,6 @@
 # Python Security Suite compatibility and coverage matrix
 
-Last reviewed: 2026-08-06
+Last reviewed: 2026-08-12
 
 See the [documentation index](index.md), [solution design](design.md), and
 [operations guide](operations.md) for the surrounding architecture.
@@ -37,10 +37,12 @@ query or model bundles remain deployment responsibilities.
 Conditional tools report `not applicable` when their input does not exist.
 
 Every adapter uses the same execution-integrity contract: resolve an explicit
-entry point, hash it before execution, compare an optional approved SHA-256,
+entry point, hash it before execution, compare an optional expected SHA-256,
 and hash it again afterward. `production` and `release` require approved
 digests for every applicable scanner. CodeQL additionally binds its CLI helper.
-For Python console scripts this authenticates the entry point, while the
+Repository-local expectations detect substitution but do not establish
+organization authority; only organization policy or its bound catalog can do
+that. For Python console scripts this authenticates the entry point, while the
 approved bundle manifest and package inventory remain the evidence for the
 imported runtime.
 
@@ -65,8 +67,24 @@ closed instead of hiding findings.
 | CycloneDX VEX | Yes | Bounded CycloneDX JSON, mandatory approved SHA-256, maximum age, state validation | Product-context state without automatic suppression |
 | Finding lifecycle | Yes | Bounded prior `findings.json` and mandatory approved SHA-256 | New, existing, regressed, and resolved evidence |
 | CODEOWNERS routing | Yes | Repository-local bounded file | Owner metadata in reports and SARIF |
-| Effectiveness summary | Yes | Current normalized findings and tool health | Attribution, actionability, corroboration, and tool contribution; not a precision/recall claim |
+| Effectiveness summary | Yes | Current normalized findings, tool runs, primary/helper executable identities, trust approval, and continuity | Attribution, actionability, corroboration, tool contribution, and exact per-tool evidence posture consumed by risk routes; not a precision/recall or finding-truth claim |
+| Labeled effectiveness benchmark | Yes | Verified report plus digest-bound corpus; production/release require schema 2.0, separate training/holdout identities, and lifecycle-valid signatures from two trusted organizations | TP/TN/FP/FN, precision, recall, specificity, F1, exact failed labels, and enforced CWE/language/parser/boundary/severity/mutation diversity |
+| Operational domain scorecard | Yes | Applicable tool status, normalized findings, policy reasons, and executable identity | Separate A-F execution, observed-risk, and evidence grades across 12 domains; release disposition and N/A remain distinct |
+| Conditional-control activation | Yes | Not-applicable reason and selected adapter identity | Owner, activation trigger, concrete action, required closure evidence, and tool reference |
+| Scanner trust catalog | Yes | Organization-approved catalog bound by SHA-256, platform, role, version, source, approver, and expiry | Reusable executable approval with per-entry audit evidence and explicit-pin precedence |
 | SSDF claims | Yes | Current manifest and generated evidence | Machine-readable claim-to-evidence status |
+| External isolation receipt | Yes | Digest-bound, time-bounded evidence authorized in organization policy and tied to target/source digest | Separates structural validation, organization authorization, and the operator isolation assertion |
+| Active isolation canaries | Yes | Actual scanner boundary with TCP/UDP IPv4/IPv6, host-interface, Unix/raw-socket, host IPC, process visibility, device namespace, proxy, target/link, and scratch probes | Unsupported or reachable channels remain incomplete; CI exercises default-deny Bubblewrap and Seatbelt plus a token-verified zero-capability Windows AppContainer and Job Objects |
+| Immutable analysis snapshot | Yes | Exact regular-file path, size, and SHA-256 inventory copied race-safely to a private read-only tree; Git histories and nested submodule histories are bundled, and unresolved LFS pointers fail closed | Prevents mixed-version analyzer results and fails closed on snapshot or original-tree mutation |
+| Derived artifact schemas | Yes | Closed filename registry plus artifact-specific bounded JSON Schema validation | Unknown or shape-invalid evidence cannot be sealed into a report |
+| Intelligence approval receipt | Yes | Organization-policy-bound approval listing the exact KEV/EPSS/VEX digests consumed | Prevents an unapproved snapshot refresh from inheriting an earlier approval |
+| Reachability regression gate | Yes | Two schema-1.1/1.2 graphs, each bound to an explicit SHA-256 | New disconnected code, new reportable islands, state regressions, and lost observations |
+| Cross-tool evidence fusion | Yes | Normalized findings, tool status, source/artifact SBOMs, pipdeptree environment health, graph, reachability, coverage, bounded test-case ledgers, complexity, structural synthesis, CODEOWNERS, source inventory, artifact manifest, scanner fix records, and approved KEV/EPSS/VEX | Per-finding review reasons, semantic/cross-stage corroboration, package lineage drift, bounded introducing-root paths, digest agreement, compound hotspots, alias-aware advisory decisions with attributed fix candidates, exposure ownership/test execution/change-risk feedback, SDK-package disclosure-boundary joins, and evidence-lane gaps |
+| Static risk-route synthesis | Yes | Reachability entry declarations, exact target-node runtime observations, Graphify file/reverse-test/import edges and file membership, normalized findings, exact contributing-scanner execution/trust posture, digest-approved finding lifecycle comparison, alias-aware dependency advisory/remediation clusters, source/artifact SBOM package lineage, sensitive-data findings and sink surfaces with SDK/package identity, structural islands/boundaries and change-risk synthesis, sealed source inventory, built-artifact manifest, file/diff coverage, bounded JUnit/Hypothesis/Schemathesis cases with producer-verified payload receipts, Vulture evidence, active findings in shared tests, and retained CODEOWNERS rules | Stable bounded multi-entry exposure matrices with per-interface runtime state; an end-to-end sensitive-data ledger separating scanner-confirmed flows from inventory-only review surfaces while joining data classes, boundary, protection, assurance, validation, lifecycle, and ownership; fail-closed finding/change attribution and package lifecycle; exact-path sensitive-boundary/advisory intersections; exact unrouted-target/island decisions for missing entry models, runtime conflicts, test-only scope, and dormant-capability review; shared controls and validation campaigns; shared-test quality; source-revision coherence; coordination queues; and explicit model gaps. Route applicability preserves native actions for artifact, generated-evidence, test, and non-Python controls. No static join implies production exposure, attacker control, runtime data flow, dead code, vulnerable-function invocation, exploitability, or leakage |
+| Advanced cross-evidence analysis | Yes | Risk routes, Graphify file topology, declared entry roots, native SARIF `codeFlows`, wheel `entry_points.txt` and `RECORD`, artifact digests, pytm, mutmut, focused tests, sensitive-data routes, advisory intelligence, source/artifact package lineage, and scanner assurance | Typed evidence graph; mandatory and bypass-capable candidate controls; scanner-confirmed taint sequences; published activation parity; threat-control-test and security-mutation handoffs; telemetry privacy topology; dependency trust routes; and digest-bound cross-release regression decisions. Structural dominance is not control-effectiveness or exploitability proof |
+| Advisory validation handoff | Yes | Exact Graphify import/reverse-test topology and import lines, retained file coverage, CODEOWNERS-derived finding ownership, bounded JUnit/Hypothesis/Schemathesis cases, alias-aware advisory clusters, and remediation context | Per-importer reachability/runtime, direct/transitive focused tests with confidence, exact current execution status, owners, low-coverage validation gaps, and one closure-plan item per distinct advisory while all scanner observations remain auditable; importer records remain isolated so aggregate evidence cannot mask a weaker path |
+| Structural synthesis | Yes | Graphify node/file topology, reachability states and islands, Vulture, runtime and diff coverage, bounded case-level test execution, Radon, Tach, CODEOWNERS, and normalized findings | Dead-code disposition with counter-evidence, structural orphans, concrete island boundaries, test-only versus missing-root classification, import-cycle hotspots, change-risk scoring, direct/transitive test targets, exact execution status, and passing-test/coverage contradictions |
+| Unified release readiness | Yes | Verified report plus optional digest-bound effectiveness and Passport verification receipts | Strict control-by-control `approved` or `not_approved` CI decision |
 
 This is distinct from `unavailable`, which means relevant analysis could not be
 performed.
@@ -76,9 +94,9 @@ performed.
 | Tool | Primary perspective | Isolation behavior | Profile placement | Adapter |
 |---|---|---|---|---:|
 | Bandit | Python AST security patterns | Local source only | quick, standard, all broader profiles | Yes |
-| Semgrep CE | Organization-defined structural Python rules | Local immutable rules; metrics and version checks disabled | standard and broader | Yes |
-| detect-secrets | Credential-shaped and high-entropy values | Online verification disabled; values never retained | quick, standard, broader | Yes |
-| OSV-Scanner | Known vulnerable dependencies | Local OSV snapshot, offline mode, no resolution | standard and broader | Yes |
+| Semgrep CE | Organization-defined structural and taint rules, including credential fields, private fields, precise request collections, runtime/environment-state dumps, logs, telemetry, direct URL interpolation and query parameters, raw client errors, and risky SDK/configuration capture | Local immutable rules; generic configuration and Python analysis; metrics and version checks disabled | standard and broader | Yes |
+| detect-secrets | Credential-shaped and high-entropy values | Online verification disabled; values never retained; findings join source/graph/artifact, lifecycle, ownership, and redaction provenance | quick, standard, broader | Yes |
+| OSV-Scanner | Known vulnerable dependencies and advisory aliases | Local OSV snapshot, offline mode, no resolution; exit 1 is retained as findings-present success | standard and broader | Yes |
 | CycloneDX Python | Reproducible Python SBOM evidence | Reads Poetry/Pipenv/pinned requirements directly; `uv.lock` uses hash-verified `uv export --frozen --offline` before CycloneDX conversion | extended and broader | Yes |
 | Ruff `S` | Independent, fast Python security AST checks | `--isolated`, no cache, local source only | extended and broader | Yes |
 | Ruff quality | Python correctness, bug, complexity, performance, and upgrade checks | Same Ruff binary; isolated and cacheless | quality, repo, comprehensive, release | Yes |
@@ -86,12 +104,15 @@ performed.
 | Pylint | Independent Python correctness, exception, logging, and design analysis | Suite policy; one worker; temporary source mirror | quality, repo, comprehensive, production, release | Yes |
 | mypy | Static type-contract analysis | Suite-owned configuration; imports and site packages are not followed | quality, repo, comprehensive, release | Yes |
 | Pyright | Independent type inference and contract analysis | Pinned Node runtime and staged JavaScript CLI; stable suite `basic` baseline over `src/` and `tests/` | quality, repo, comprehensive, production, release | Yes |
-| deptry | Python dependency declaration correctness | Local source and dependency metadata; JSON output written outside the target | quality, repo, comprehensive, production, release | Yes |
+| deptry | Python dependency declaration correctness; unused/transitive signals join package advisories as non-exploitability use context | Local source and dependency metadata; JSON output written outside the target | quality, repo, comprehensive, production, release | Yes |
 | Vulture | High-confidence unreachable and unused Python code | Reports only 100% confidence; generated roots excluded | quality, repo, comprehensive, release | Yes |
 | Radon | Cyclomatic-complexity measurement | Local source; C+ retained as evidence and E/F normalized as findings | quality, repo, comprehensive, production, release | Yes |
 | Tach | Declared Python module boundaries, dependency direction, cycles, and public interfaces | Reads local source and repository-owned `tach.toml`; no target imports or execution | quality, repo, comprehensive, production, release | Yes |
-| Coverage evidence | Branch and statement test adequacy | Validates pre-generated coverage.py JSON; never runs tests | quality, repo, comprehensive, production, release | Yes |
-| JUnit evidence | Automated test outcomes | Validates bounded XML metadata; drops output and failure bodies | quality, repo, comprehensive, production, release | Yes |
+| Reachability | Three-state executable/load-only/disconnected topology, entry-point sequences, runtime corroboration, and ranked Python islands | Bundled bounded AST analysis; typed confidence-bearing edges; framework and polymorphic dispatch; optional bounded coverage.py JSON; explicit dynamic roots; no target imports or execution | quality, repo, comprehensive, production, release | Yes |
+| Graphify | Code-property graph, symbol/file relationships, edge confidence, centrality, and impact neighborhoods | Dedicated `graphifyy` environment; `--code-only --no-cluster`; zero model tokens; AST origins and paths validated; no target imports or execution | quality, repo, comprehensive, production, release | Yes |
+| Coverage evidence | Branch and statement test adequacy | Validates pre-generated coverage.py JSON; optional adjacent binding verifies its payload digest and declares the shared source-inventory digest; never runs tests | quality, repo, comprehensive, production, release | Yes |
+| JUnit evidence | Automated test outcomes and exact selected-test execution | Validates bounded XML metadata; retains an output-free case/file/result ledger, drops output/failure bodies, and verifies an optional adjacent source-binding sidecar | quality, repo, comprehensive, production, release | Yes |
+| pipdeptree | Installed dependency-environment integrity | Reads a local isolated environment and emits aggregate direct/transitive, missing, cyclic, and conflict evidence; does not provide the CycloneDX package path itself | repo, comprehensive, production, release | Yes |
 | Hypothesis evidence | Property-based security invariants and minimized edge cases | Executes only in a disposable test lane; bounded producer-attributed JUnit ingestion | repo, comprehensive, production, release | Yes |
 | Schemathesis evidence | OpenAPI/GraphQL negative, stateful, and schema-conformance testing | Exercises only a loopback test service in a companion lane; bounded JUnit ingestion | repo, comprehensive, production, release when a schema exists | Yes |
 | diff-cover | Changed-line test adequacy | Reads local Git history and pre-generated Cobertura XML; does not execute tests | quality, repo, comprehensive, production, release | Yes |
@@ -106,8 +127,8 @@ performed.
 | GuardDog | Malicious Python package and source heuristics | Local target only; GuardDog's own sandbox remains enabled | supply-chain and comprehensive | Yes |
 | ScanCode Toolkit | License, origin, and package-metadata inventory | Local rules and files; no target execution | supply-chain and comprehensive | Yes |
 | REUSE | SPDX license and copyright metadata compliance | Local lint; explicit repository marker required | quality, repo, comprehensive, production, release | Yes |
-| Gitleaks | Current-tree, archive, and Git-history secrets | Local Git or directory mode; 100% secret redaction | supply-chain and broader | Yes |
-| TruffleHog | Independent credential detectors | Filesystem mode; verification and update checks disabled; raw values discarded | supply-chain and broader | Yes |
+| Gitleaks | Current-tree, archive, and Git-history secrets | Local Git or directory mode; 100% secret redaction; history and content-lane provenance retained without secret material | supply-chain and broader | Yes |
+| TruffleHog | Independent credential detectors | Filesystem mode; verification and update checks disabled; raw values discarded; verification-disabled state remains explicit in provenance | supply-chain and broader | Yes |
 | Microsoft DevSkim CLI | Security-sensitive implementation patterns across supported source formats | Scans a generated/tool-free temporary source mirror; SARIF output | repo, comprehensive, production, release | Yes |
 | Flawfinder | C/C++ native-extension weakness patterns | Local staged source only; conditional on native source files | repo, comprehensive, production, release | Yes |
 | CodeQL through `run-codeql` | Deep semantic and data-flow queries | Pre-staged local CLI and packs; auto-download rejected; temporary source mirror | deep, comprehensive, production, release | Yes |
@@ -132,6 +153,30 @@ performed.
 | ClamAV evidence | Malware scanning of vendored/release bytes | Scanner and signed database run in a separate bounded artifact lane | artifact and broader | Yes |
 | GitHub attestation evidence | Offline GitHub artifact-attestation verification | Verification bundle and trusted root are collected separately; bounded result ingestion | artifact and broader | Yes |
 | OWASP ZAP evidence | Dynamic web vulnerability testing | Native Java automation runs against an isolated local service; bounded JSON ingestion | repo, comprehensive, production, release when applicable | Yes |
+| Browser security evidence | Authenticated browser response, cookie, navigation, WebSocket proxying, runtime sink use, and egress assertions | Pinned Playwright browser against explicit loopback only; non-loopback requests blocked; page and credential content never retained; real Chromium CI qualification | runtime, repo, comprehensive, production, release when applicable | Yes |
+| Authorization security evidence | Multi-role BOLA/IDOR, tenant, state-transition, replay, concurrency, and approval-limit contracts | Explicit loopback service; bearer tokens and request bodies are read from named environment variables and never retained; activates only when a project-owned contract exists | runtime and broader when configured | Yes |
+| IAST evidence | Runtime-confirmed Python source-to-sink data flow | Optional `ddtrace` 4.x companion instrumentation and separately administered agent; only bounded exported findings are imported | runtime, repo, comprehensive, production, release when a Python web surface exists | Yes |
+| ClusterFuzzLite evidence | Continuous change and scheduled coverage-guided fuzzing | Linux/Docker companion lane; crash corpus and reproducers remain outside bounded JSON | runtime, repo, comprehensive, production, release when configured | Yes |
+| Falco evidence | Runtime host, container, and Kubernetes behavior | Native Linux runtime lane; bounded normalized alerts only | runtime, repo, comprehensive, production, release when container inputs exist | Yes |
+| Kubescape evidence | Deployed Kubernetes posture and runtime threat detection | Read-only cluster/agent lane; bounded normalized findings only | runtime, repo, comprehensive, production, release when Kubernetes inputs exist | Yes |
+| Nuclei evidence | Independent targeted DAST and technology-aware workflows | Signed local templates only; update and Interactsh disabled; raw request/response and encoded templates omitted | runtime and broader when a web surface exists | Yes |
+| OAST evidence | Correlated DNS/HTTP/SMTP/LDAP callbacks | Self-hosted service and explicitly approved egress scope only; callback bodies and network payloads are rejected from normalized evidence | runtime and broader when a web surface exists | Yes |
+| RESTler evidence | Stateful producer/consumer REST API sequence exploration | Disposable API target; only successfully replayed bug buckets and bounded execution coverage are accepted | runtime and broader when an OpenAPI surface exists | Yes |
+| Protocol security evidence | gRPC, WebSocket, and TCP contract plus fault cases | Bundled producer permits loopback endpoints only and never retains environment-supplied request bytes | runtime and broader when `.proto` or a protocol contract exists | Yes |
+| Fuzz Introspector evidence | Static reachability, dynamic coverage, corpus health, and blockers | Bounded summary only; fuzz corpora, crashes, and process output remain in the companion lane | runtime and broader when fuzz targets exist | Yes |
+| Prowler evidence | Live cloud posture and declared-to-deployed drift | Read-only provider identity; account/project/region scope retained without credentials or raw resource objects | runtime and broader when cloud IaC exists | Yes |
+| Cloud attack-path evidence | Public-entry to sensitive-asset paths across identity/network edges and IaC/live drift | Read-only bounded graph; raw node/resource identities are hashed and removed from findings | runtime and broader when cloud IaC exists | Yes |
+| Secret-verification evidence | Provider-side active/revoked/invalid credential status | Authorized connected verifier; secret values, tokens, credentials, and request/response content are structurally rejected | runtime and broader when a verification policy exists | Yes |
+| RASP evidence | Runtime exploit prevention effectiveness | Observe and block-mode canaries in a disposable lane; never changes production enforcement | runtime and broader when a web surface exists | Yes |
+| Native sanitizer evidence | ASan, UBSan, libFuzzer, and binary hardening | Native-source projects only; reproducers and process output remain outside bounded evidence | runtime and broader when native source exists | Yes |
+| MobSF evidence | Mobile static and emulator-backed dynamic security | Mobile projects only; application and emulator bytes stay in the companion lane | runtime and broader when mobile shape exists | Yes |
+| TLS scan evidence | Certificate, protocol, and cipher behavior | Explicitly authorized ephemeral endpoint; bounded metadata only | runtime and broader when a web surface exists | Yes |
+| Polyglot evidence | Language-specific semantic/data-flow packs | Native gosec, Cargo Audit, and npm Audit plus SARIF 2.1.0 from ESLint, SpotBugs, Detekt, Brakeman, and govulncheck; exact raw-report and normalizer provenance | runtime and broader when non-Python source exists | Yes |
+| Surface inventory evidence | Declared, observed, retired, versioned, owned, and shadow API/service surfaces | Schema v3 binds independent organization, collector, signer, adapter, endpoint, query, freshness, and pagination-completeness evidence; opaque identities only | runtime and broader | Yes |
+| Event security evidence | Producer/consumer authorization, transactional commit/abort, message signing, replay, idempotency, schema, dead-letter, and poison-message behavior | Native `aiokafka` driver forces TLS hostname verification, idempotent production, and read-committed consumption against an explicit loopback disposable broker; timeouts are inconclusive | runtime and broader when configured | Yes |
+| Database security evidence | Least privilege, FORCE RLS, migration, query-boundary, restore, negotiated TLS, and audit behavior | Native Psycopg driver attests the negotiated TLS protocol/cipher, rejects superuser/BYPASSRLS/owner RLS oracles, and uses read-only canary transactions | runtime and broader when configured | Yes |
+| Ruleset regression evidence | TP/TN, parser variants, false-positive budget, and mutation sensitivity | Exact corpus/ruleset digests, minimum samples, confidence level, point scores, and Wilson intervals are compared with the signed baseline | runtime and broader | Yes |
+| AI security evidence | Prompt injection, tool authorization, agency, memory, output handling, and exfiltration | Repeated sanitized trials bind model/provider/prompt/dataset digests and enforce per-control sample sizes plus confidence-bounded failure policy | runtime and broader when configured | Yes |
 | OWASP pytm evidence | Threat model, DFD, trust boundaries, and enumerated threats | Model executes in a design lane; reviewed threats are ingested | repo, comprehensive, production, release when a model exists | Yes |
 | in-toto evidence | Authorized build steps, materials, products, and functionaries | Offline layout/link verification in the release lane | artifact, comprehensive, release | Yes |
 | Reproducible-build evidence | Independent build equivalence and explained differences | `reprotest`/`diffoscope` execute in a build lane | artifact, comprehensive, release | Yes |
@@ -148,6 +193,7 @@ conditional, and `-` not intended.
 | Python AST patterns | P | S | - | - | - | S | - | - | - | S | - | - | - | S |
 | Custom enterprise rules | C | P | C | - | - | C | C | P | C | C | C | C | C | P |
 | Cross-file data flow | - | C | - | - | - | - | - | P | - | - | - | - | - | P |
+| Sensitive data to logs/telemetry | - | P | - | - | - | - | - | P | - | C | - | - | - | P |
 | Working-tree secrets | S | C | P | - | - | S | - | - | - | - | - | P | P | C |
 | Git-history secrets | - | - | - | - | - | - | - | - | - | - | - | P | C | - |
 | Vulnerable dependencies | - | - | - | P | E | - | - | - | - | - | C | - | - | C |
@@ -184,6 +230,17 @@ confirmed vulnerability:
 | File-level license metadata | - | - | - | - | - | - | - | - | - | P | - | - |
 | Multi-language security patterns | - | - | - | - | - | - | - | - | - | - | P | - |
 | Native extension security | - | - | - | - | - | - | - | - | - | - | S | P |
+
+Reachability is kept separate from this already-wide comparison because its
+output is graph evidence rather than another per-line linter:
+
+| Capability | Reachability contribution | Complementary evidence |
+|---|---|---|
+| Entry-point discovery | Packaging scripts, Python mains, configured roots, and recognized framework decorators | Deployment review confirms externally or dynamically registered roots |
+| Execution sequences | Representative direct-call, callback, framework, and bounded polymorphic-dispatch paths with edge confidence | Coverage and traces show paths observed in a disposable runtime lane |
+| Dead/unreachable code | Executable, load-only, and disconnected states; constructor and concrete-receiver paths; framework configuration/registration; runtime corroboration; connected islands ranked by LOC with removal-readiness blockers and actions | Vulture supplies high-confidence individual unused symbols |
+| Architecture | Actual static path topology and disconnected components | Tach enforces intended boundaries, layers, cycles, and public interfaces |
+| Dynamic behavior | Detects dynamic loading, explains bounded dispatch inference, and correlates optional runtime coverage | Explicit roots and runtime tests cover reflection, injection, plugins, and generated code |
 
 | Capability | Syft | Grype | Wheel contents | Twine | PyPI attestations |
 |---|:---:|:---:|:---:|:---:|:---:|
@@ -267,7 +324,17 @@ No Docker image is required for any suite adapter.
 | KubeLinter | No Kubernetes-shaped YAML or Helm chart exists |
 | Hypothesis | No evidence exists; for a Python target this remains applicable and fails closed |
 | Schemathesis | No OpenAPI schema and no pre-generated Schemathesis JUnit exists |
-| CrossHair, Atheris, mutmut, ZAP, pytm | The corresponding pre-generated evidence is absent and no project-specific opt-in input exists |
+| CrossHair, Atheris, mutmut, pytm | The corresponding pre-generated evidence is absent and no project-specific opt-in input exists |
+| Authorization security | No project-owned authorization contract and no pre-generated evidence exists |
+| Nuclei, OAST, RASP, TLS scan | No web application surface and no pre-generated evidence exists |
+| RESTler | No OpenAPI surface and no pre-generated evidence exists |
+| Protocol security | No `.proto` file, protocol contract, or pre-generated evidence exists |
+| Fuzz Introspector | No fuzz-target declaration and no pre-generated evidence exists |
+| Prowler, cloud attack paths | No cloud deployment/IaC shape and no pre-generated evidence exists |
+| Secret verification | No verification policy and no pre-generated evidence exists |
+| Native sanitizers | No native source and no pre-generated evidence exists |
+| MobSF | No mobile application shape and no pre-generated evidence exists |
+| Polyglot | No supported non-Python source and no pre-generated evidence exists |
 | in-toto, reproducible-build, YARA | The corresponding release evidence is absent |
 | check-manifest, ClamAV, GitHub attestation | The corresponding packaging/release evidence is absent |
 | REUSE | No `REUSE.toml`, `.reuse/dep5`, or `LICENSES` opt-in marker exists |
@@ -287,6 +354,19 @@ deep scan `INCOMPLETE`; `run-codeql` is never permitted to download them.
 
 ## Report behavior
 
+The orchestration layer also supplies offline, schema-versioned governance
+contracts that complement scanner coverage:
+
+| Capability | Command | Domain contribution | Authority |
+|---|---|---|---|
+| Unified release decision | `release-check` | Integrity, policy, claims, trust, isolation, intelligence, effectiveness, Passport | Decision support; admission remains external |
+| Governance review handoff | `evidence-draft` | Exact scanner, snapshot, runner, source, and artifact digests | Candidate only |
+| Promotion operating view | `promotion-plan` | Lifecycle, evidence quality, reliability, retention, digest-bound validation trajectory, ledger/assessment comparability, CODEOWNER queues, audiences, actions | Non-authoritative |
+| Controlled-signing handoff | `prepare-signing` | Closed wheel/sdist/zip subject set bound to report and source | Candidate only; keys remain external |
+| Signing-request receipt | `verify-signing-request` | Detects added, missing, and changed distributions | Integrity proof, not signer identity |
+| Comparable lifecycle | scan baseline + `finding-delta.json` | New, unchanged, resolved, and unclassified findings | Requires same profile and scanner set |
+
+
 - CycloneDX produces `sbom.cdx.json`.
 - Syft safely expands wheels and source distributions into a bounded temporary
   tree, produces `artifact-sbom.cdx.json`, and produces
@@ -302,12 +382,30 @@ deep scan `INCOMPLETE`; `run-codeql` is never permitted to download them.
 - Coverage produces an overall threshold finding plus at most ten lowest-file
   hotspots and retains the complete validated report in `coverage-summary.json`.
   JUnit produces one normalized finding per failed/error test and retains only
-  bounded metadata in `junit-summary.json`.
+  bounded metadata plus at most 100,000 output-free test case/file/result records
+  in `junit-summary.json`.
 - REUSE produces `reuse-compliance.json` when a repository explicitly opts in.
 - deptry produces `deptry-dependencies.json`; diff-cover produces
   `diff-coverage.json`; and Checkov produces `checkov-iac.json`.
 - KICS produces `kics-iac.json`; git-sizer produces `git-sizer.json`; and
   pipdeptree produces `pipdeptree-summary.json`.
+- Checkov, git-sizer, and pipdeptree normalized artifacts retain a deterministic
+  projection with every string value redacted, raw and redacted commitments,
+  classification, and replay
+  policy. When `PYSEC_RAW_EVIDENCE_DIRECTORY` and a digest-pinned KMS data-key
+  command are configured, exact raw bytes are encrypted with AES-GCM in a content-addressed
+  sidecar; per-object keys are derived with HKDF, object names use keyed HMACs,
+  and a deployment-pinned KMS/storage custody receipt binds retention and key
+  version. Otherwise the public artifact is explicitly non-replayable.
+- `boundary-graph.json` parses Python notebook cells and WebAssembly imports,
+  validates and inventories Python bytecode, reads PE/ELF/Mach-O imports, models
+  template includes, and records reflection, plugin, entry-point, and dynamic
+  import dispatch. Malformed, unsupported, or heuristic-only surfaces prevent
+  complete or semantic-complete claims instead of disappearing from the denominator.
+- `runtime-trace-correlation.json` accepts only deployment-pinned traces whose
+  request-to-sink source and target match an exact retained static edge. It
+  preserves authorization decisions, operations, sinks, and span counts without
+  inferring execution from static reachability alone.
 - Trusted-lane evidence produces a bounded `<tool>-summary.json` and never
   forwards raw crash logs, process output, artifact bytes, or malware samples.
 - Every scan emits `sonarqube-external-issues.json` in addition to SARIF, so a
@@ -319,9 +417,32 @@ deep scan `INCOMPLETE`; `run-codeql` is never permitted to download them.
   with findings. Use a separate full-tree ScanCode job when forensic
   copyright/origin due diligence is required.
 - Gitleaks is invoked with full redaction, and the adapter discards `Secret`,
-  `Match`, and source-line content.
+  `Match`, and source-line content. Its current-tree/history mode is retained in
+  the bounded secret-provenance assessment.
 - TruffleHog disables verification and updates, then discards `Raw`, `RawV2`,
-  and all detected secret material.
+  and all detected secret material. The suite reports verification as disabled,
+  not as evidence that the credential is inactive.
+- Secret findings from detect-secrets, Gitleaks, and TruffleHog are
+  cross-referenced with source, Graphify, built-artifact, lifecycle, ownership,
+  scanner-assurance, history, and redaction evidence. Test/generated context
+  guides the review action but never suppresses or downgrades the finding.
+- Production-source secret candidates are further joined to Semgrep/Pysa/CodeQL
+  exposure findings and the sensitive-sink inventory only for exact-file or
+  bounded Graphify-route membership. The resulting route intersection carries
+  sink protection, temporal alignment, verification, assurance, validation,
+  ownership, and citations, but is never represented as symbol-level taint or
+  proof that a credential reached a log, telemetry SDK, URL, or network sink.
+- Linked risk-route campaigns turn these intersections into an actionable
+  validation handoff by combining Graphify-selected or route-mapped tests with
+  exact retained JUnit execution, aggregate coverage, producer-verified source
+  binding, scanner assurance, shared-test findings/quality, and CODEOWNERS gaps.
+  The join fails closed and always distinguishes candidate tests from proof of an
+  explicit synthetic credential-canary assertion.
+- The secret/sink and sink/advisory ledgers are then joined only by identical
+  retained sensitive-route identity. This adds a coordinated credential,
+  boundary-protection, and dependency-remediation view with KEV/EPSS/fix,
+  package-lifecycle, runtime, validation, assurance, ownership, and citations;
+  it never infers disclosure, vulnerable-function execution, or exploitability.
 - DevSkim excludes its generic token/key rule because checksum-pinned bundle
   assets create high-volume false positives and three dedicated secret
   scanners already cover that class. All other default rules remain enabled.

@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:adapter-conformance:1.0",
+  "type": "object",
+  "required": ["schema_version", "schema_id", "authoritative", "status", "registry", "summary", "adapters", "scope"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "schema_id": {"const": "urn:project-py-security-suite:schema:adapter-conformance:1.0"},
+    "authoritative": {"const": false},
+    "status": {"enum": ["pass", "fail"]},
+    "registry": {"type": "object", "required": ["supported", "registered", "missing", "unexpected"], "additionalProperties": false, "properties": {"supported": {"type": "integer", "minimum": 0}, "registered": {"type": "integer", "minimum": 0}, "missing": {"type": "array", "items": {"type": "string"}}, "unexpected": {"type": "array", "items": {"type": "string"}}}},
+    "summary": {"type": "object", "required": ["adapters", "passed", "failed", "checks"], "additionalProperties": false, "properties": {"adapters": {"type": "integer", "minimum": 0}, "passed": {"type": "integer", "minimum": 0}, "failed": {"type": "integer", "minimum": 0}, "checks": {"type": "integer", "minimum": 0}}},
+    "adapters": {"type": "array", "items": {"type": "object", "required": ["adapter", "class", "status", "checks", "limitations"], "additionalProperties": false, "properties": {"adapter": {"type": "string", "minLength": 1}, "class": {"type": "string", "minLength": 1}, "status": {"enum": ["pass", "fail"]}, "checks": {"type": "array", "minItems": 5, "items": {"type": "object", "required": ["check", "passed"], "additionalProperties": false, "properties": {"check": {"type": "string"}, "passed": {"type": "boolean"}}}}, "limitations": {"type": "string", "minLength": 1}}}},
+    "scope": {"type": "string", "minLength": 1}
+  }
+}

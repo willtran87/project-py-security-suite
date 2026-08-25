@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:operational-trend:1.0",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "authoritative", "scope", "summary", "delta", "timeline"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "authoritative": {"const": false},
+    "scope": {"type": "string", "minLength": 1},
+    "summary": {"type": "object"},
+    "delta": {"type": "object", "additionalProperties": {"type": "integer"}},
+    "timeline": {"type": "array", "minItems": 2, "maxItems": 100, "items": {"type": "object"}}
+  }
+}

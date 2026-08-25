@@ -22,6 +22,13 @@ customer data, signing keys, or restricted scanner databases.
 Maintainers will coordinate disclosure and remediation through the private
 advisory. Publish details only after an agreed fix and disclosure plan.
 
+Expected response targets are acknowledgment within two business days, initial
+severity and ownership within five business days, and a remediation/disclosure
+plan within ten business days. Critical issues that can bypass report integrity,
+trust separation, or release admission are handled as expedited incidents.
+These are response objectives, not a promise to publish sensitive details on a
+fixed date.
+
 ## Security boundaries
 
 The suite orchestrates locally installed tools; it does not create a network

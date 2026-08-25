@@ -1,0 +1,96 @@
+name: Release evidence assembly
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: Run ID containing one release-evidence-input artifact
+        required: true
+        type: string
+      manifest_sha256:
+        description: Independently approved release manifest SHA-256
+        required: true
+        type: string
+      expected_head_sha:
+        description: Exact source commit bound to the evidence
+        required: true
+        type: string
+      expected_ref:
+        description: Exact source branch or tag recorded by the source run
+        required: true
+        type: string
+
+permissions:
+  actions: read # Read the source run and its immutable artifact digest.
+  contents: read # Check out the verifier at the evidence-bound revision.
+
+concurrency:
+  group: release-evidence-assembly-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  assemble:
+    name: Validate and assemble closed evidence
+    environment: release-admission
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out evidence-bound verifier
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ inputs.expected_head_sha }}
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.11.19"
+          enable-cache: false
+      - name: Install locked verifier
+        run: uv sync --locked --all-groups --python "3.13"
+      - name: Download the exact source artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+          EXPECTED_HEAD_SHA: ${{ inputs.expected_head_sha }}
+          EXPECTED_REF: ${{ inputs.expected_ref }}
+          EXPECTED_WORKFLOW_PATH: .github/workflows/release-evidence-source.yml
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .assembly/evidence
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN_ID" > .assembly/source-run.json
+          jq -e \
+            --arg sha "$EXPECTED_HEAD_SHA" \
+            --arg ref "$EXPECTED_REF" \
+            --arg workflow_path "$EXPECTED_WORKFLOW_PATH" \
+            --arg repository "$GITHUB_REPOSITORY" \
+            '.head_sha == $sha and .head_branch == $ref and .path == $workflow_path and .head_repository.full_name == $repository and .repository.full_name == $repository and .run_attempt == 1 and .conclusion == "success" and .event == "workflow_dispatch"' \
+            .assembly/source-run.json >/dev/null
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN_ID/artifacts" > .assembly/source-artifacts.json
+          artifact_count="$(jq '[.artifacts[] | select(.name == "release-evidence-input" and .expired == false)] | length' .assembly/source-artifacts.json)"
+          [[ "$artifact_count" == "1" ]]
+          artifact_id="$(jq -r '.artifacts[] | select(.name == "release-evidence-input" and .expired == false) | .id' .assembly/source-artifacts.json)"
+          artifact_digest="$(jq -r '.artifacts[] | select(.name == "release-evidence-input" and .expired == false) | .digest' .assembly/source-artifacts.json)"
+          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$artifact_id/zip" > .assembly/source.zip
+          observed_digest="sha256:$(sha256sum .assembly/source.zip | cut -d' ' -f1)"
+          [[ "$artifact_digest" == "$observed_digest" ]]
+          unzip -q .assembly/source.zip -d .assembly/evidence
+      - name: Verify all hardened evidence before assembly
+        env:
+          PYSEC_REQUIRE_HARDENED_RELEASE_EVIDENCE: "1"
+          MANIFEST_SHA256: ${{ inputs.manifest_sha256 }}
+        shell: bash
+        run: >-
+          uv run pysec verify-release-manifest
+          .assembly/evidence/release-evidence-manifest.json
+          --manifest-sha256 "$MANIFEST_SHA256"
+          --report .assembly/evidence/report/report.json
+          --format json
+          --output .assembly/evidence/release-evidence-assembly-verification.json
+      - name: Publish the validated closed evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-evidence
+          path: .assembly/evidence
+          if-no-files-found: error
+          retention-days: 30

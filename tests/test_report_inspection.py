@@ -250,7 +250,7 @@ class ReportInspectionTests(unittest.TestCase):
         self.assertFalse(document["entrypoint_integrity"]["fully_approved"])
         self.assertEqual(
             document["entrypoint_integrity"]["approval_gap_entrypoints"],
-            ["bandit:helper"],
+            ["bandit:helper", "semgrep"],
         )
         self.assertEqual(
             document["entrypoint_integrity"]["postcheck_gap_entrypoints"],
@@ -271,7 +271,11 @@ class ReportInspectionTests(unittest.TestCase):
         self.assertEqual(trust_actions[0]["priority"], "P1")
         self.assertEqual(
             trust_actions[0]["required_actions"],
-            ["restore_post_execution_verification"],
+            [
+                "restore_post_execution_verification",
+                "verify_provenance_before_approval",
+                "approve_exact_digest",
+            ],
         )
         self.assertFalse(trust_actions[0]["approval_candidate"])
         self.assertIsNone(trust_actions[0]["configuration_key"])
@@ -457,6 +461,7 @@ class ReportInspectionTests(unittest.TestCase):
                     {
                         "executable_sha256": "a" * 64,
                         "executable_integrity_verified": True,
+                        "executable_organization_approved": True,
                         "executable_unchanged": True,
                     }
                 ]
@@ -612,9 +617,11 @@ def _write_report(
                 "status": "completed",
                 "executable_sha256": "a" * 64,
                 "executable_integrity_verified": True,
+                "executable_organization_approved": True,
                 "executable_unchanged": True,
                 "auxiliary_executable_sha256": "b" * 64,
                 "auxiliary_executable_integrity_verified": None,
+                "auxiliary_executable_organization_approved": False,
                 "auxiliary_executable_unchanged": True,
             },
             {"tool": "osv-scanner", "status": "skipped", "applicable": False},
@@ -624,6 +631,7 @@ def _write_report(
                 "applicable": True,
                 "executable_sha256": "c" * 64,
                 "executable_integrity_verified": True,
+                "executable_organization_approved": False,
                 "executable_unchanged": None,
             },
         ],

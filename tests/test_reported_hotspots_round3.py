@@ -99,7 +99,10 @@ class ReportedSecurityAdapterContractTests(unittest.TestCase):
         with self.assertRaisesRegex(TypeError, "results must be an object"):
             adapter.parse('{"results":[]}', self.root)
         with self.assertRaisesRegex(TypeError, "failed_checks must be a list"):
-            adapter.parse('{"results":{"failed_checks":{}}}', self.root)
+            adapter.parse(
+                '{"results":{"passed_checks":[],"failed_checks":{},"skipped_checks":[]}}',
+                self.root,
+            )
         with self.assertRaisesRegex(TypeError, "finding must be an object"):
             checkov_finding([], self.root)
         finding = checkov_finding(
@@ -113,9 +116,8 @@ class ReportedSecurityAdapterContractTests(unittest.TestCase):
         )
         self.assertIsNone(finding.locations[0].start_line)
         self.assertEqual(finding.severity, Severity.CRITICAL)
-        self.assertEqual(
-            adapter.derived_artifacts("", self.root), {"checkov-iac.json": {}}
-        )
+        with self.assertRaisesRegex(ValueError, "empty report"):
+            adapter.derived_artifacts("", self.root)
         self.assertIsNone(checkov_integer([]))
         self.assertEqual(checkov_severity("high"), Severity.HIGH)
         self.assertEqual(checkov_severity("low"), Severity.LOW)

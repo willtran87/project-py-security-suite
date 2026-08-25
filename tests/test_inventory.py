@@ -4,7 +4,16 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from py_security_suite.inventory import inventory_target, source_snapshot
+from py_security_suite.inventory import (
+    inventory_target,
+    inventory_target_with_evidence,
+    source_snapshot,
+)
+from py_security_suite.report_inspection import read_bundled_schema
+
+# The isolated Pylint lane intentionally omits locked test-only dependencies.
+from jsonschema import Draft202012Validator  # pylint: disable=import-error
+import json
 from py_security_suite.models import normalize_repo_path
 
 
@@ -83,6 +92,20 @@ class InventoryTests(unittest.TestCase):
             after = source_snapshot(target, excluded_paths=(output,))
 
         self.assertEqual(initial, after)
+
+    def test_source_inventory_is_exact_and_schema_valid(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            target = Path(temporary_directory)
+            (target / "b.py").write_text("b = 2\n", encoding="utf-8")
+            (target / "a.py").write_text("a = 1\n", encoding="utf-8")
+            inventory, evidence = inventory_target_with_evidence(target)
+
+        self.assertEqual([item["path"] for item in evidence["files"]], ["a.py", "b.py"])
+        self.assertEqual(evidence["source_sha256"], inventory.source_sha256)
+        self.assertEqual(evidence["total_files"], inventory.hashed_files)
+        schema = json.loads(read_bundled_schema("source-inventory-1.0"))
+        Draft202012Validator.check_schema(schema)
+        Draft202012Validator(schema).validate(evidence)
 
 
 if __name__ == "__main__":

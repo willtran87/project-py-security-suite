@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:effectiveness-evaluation:1.0",
+  "title": "Scanner effectiveness evaluation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "verdict", "report", "corpus", "time_authority", "replay_protected", "replay_receipt", "confusion_matrix", "metrics", "feedback_policy", "failures", "label_outcomes"],
+  "properties": {
+    "schema_version": {"enum": ["1.0", "2.0"]},
+    "verdict": {"enum": ["pass", "fail"]},
+    "report": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scan_id", "outcome", "checksums_sha256", "files_verified"],
+      "properties": {
+        "scan_id": {"type": "string", "minLength": 1, "maxLength": 200},
+        "outcome": {"enum": ["pass", "fail", "incomplete"]},
+        "checksums_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "files_verified": {"type": "integer", "minimum": 1}
+      }
+    },
+    "corpus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "revision", "sha256", "labels"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1, "maxLength": 200},
+        "revision": {"type": "string", "maxLength": 200},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "labels": {"type": "integer", "minimum": 1, "maximum": 10000},
+        "authority": {"type": "object"},
+        "diversity": {"type": "object", "additionalProperties": false, "required": ["cwe", "language", "parser_variant", "boundary_type", "severity", "mutation_operator"], "properties": {"cwe": {"type": "integer", "minimum": 0}, "language": {"type": "integer", "minimum": 0}, "parser_variant": {"type": "integer", "minimum": 0}, "boundary_type": {"type": "integer", "minimum": 0}, "severity": {"type": "integer", "minimum": 0}, "mutation_operator": {"type": "integer", "minimum": 0}}}
+      }
+    },
+    "time_authority": {"type": "object", "additionalProperties": false, "required": ["validated", "observed_at", "trusted_time_sha256", "receipt_sha256"], "properties": {"validated": {"type": "boolean"}, "observed_at": {"type": "string"}, "trusted_time_sha256": {"type": "string", "pattern": "^$|^[0-9a-f]{64}$"}, "receipt_sha256": {"type": "string", "pattern": "^$|^[0-9a-f]{64}$"}}},
+    "replay_protected": {"type": "boolean"},
+    "replay_receipt": {"anyOf": [{"type": "null"}, {"type": "object", "additionalProperties": false, "required": ["mode", "replay_key", "request_sha256", "service_key_sha256", "sequence", "holdout_uses", "checkpoint_size", "checkpoint_root_sha256", "signature_base64", "signed_statement", "public_key_pem_base64", "leaf_sha256", "leaf_index", "inclusion_proof_sha256", "previous_checkpoint_size", "previous_checkpoint_root_sha256", "consistency_proof_sha256", "witnesses"], "properties": {"mode": {"enum": ["local-ledger", "remote-signed-checkpoint"]}, "replay_key": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "request_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "service_key_sha256": {"type": "string", "pattern": "^$|^[0-9a-f]{64}$"}, "sequence": {"type": "integer", "minimum": 0}, "holdout_uses": {"type": "integer", "minimum": 1}, "checkpoint_size": {"type": "integer", "minimum": 0}, "checkpoint_root_sha256": {"type": "string", "pattern": "^$|^[0-9a-f]{64}$"}, "signature_base64": {"type": "string"}, "signed_statement": {"type": ["object", "null"]}, "public_key_pem_base64": {"type": "string"}, "leaf_sha256": {"type": "string", "pattern": "^$|^[0-9a-f]{64}$"}, "leaf_index": {"type": "integer", "minimum": 0}, "inclusion_proof_sha256": {"type": "array", "maxItems": 256, "items": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}, "previous_checkpoint_size": {"type": "integer", "minimum": 0}, "previous_checkpoint_root_sha256": {"type": "string", "pattern": "^$|^[0-9a-f]{64}$"}, "consistency_proof_sha256": {"type": "array", "maxItems": 256, "items": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}, "witnesses": {"type": "array", "maxItems": 32, "items": {"type": "object", "additionalProperties": false, "required": ["key_sha256", "signature_base64"], "properties": {"key_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "signature_base64": {"type": "string", "minLength": 1}}}}}, "allOf": [{"if": {"properties": {"mode": {"const": "remote-signed-checkpoint"}}}, "then": {"properties": {"witnesses": {"minItems": 2}}}}]}]},
+    "confusion_matrix": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["true_positive", "true_negative", "false_positive", "false_negative"],
+      "properties": {
+        "true_positive": {"type": "integer", "minimum": 0},
+        "true_negative": {"type": "integer", "minimum": 0},
+        "false_positive": {"type": "integer", "minimum": 0},
+        "false_negative": {"type": "integer", "minimum": 0}
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["precision", "recall", "specificity", "f1"],
+      "properties": {
+        "precision": {"$ref": "#/$defs/nullableRatio"},
+        "recall": {"$ref": "#/$defs/nullableRatio"},
+        "specificity": {"$ref": "#/$defs/nullableRatio"},
+        "f1": {"$ref": "#/$defs/nullableRatio"}
+      }
+    },
+    "feedback_policy": {"enum": ["detailed", "aggregate-only"]},
+    "failures": {
+      "type": "array",
+      "maxItems": 10000,
+      "items": {"$ref": "#/$defs/labelOutcome"}
+    },
+    "label_outcomes": {
+      "type": "array",
+      "maxItems": 10000,
+      "items": {"$ref": "#/$defs/labelOutcome"}
+    }
+  },
+  "$defs": {
+    "nullableRatio": {
+      "anyOf": [
+        {"type": "number", "minimum": 0, "maximum": 1},
+        {"type": "null"}
+      ]
+    },
+    "match": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tool", "rule_id", "path", "classification"],
+      "properties": {
+        "tool": {"type": "string", "maxLength": 500},
+        "rule_id": {"type": "string", "maxLength": 500},
+        "path": {"type": "string", "maxLength": 500},
+        "classification": {"type": "string", "maxLength": 500}
+      }
+    },
+    "labelOutcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "expected", "match", "outcome", "matching_finding_ids", "matching_findings_omitted"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1, "maxLength": 200},
+        "expected": {"enum": ["finding", "clean"]},
+        "match": {"$ref": "#/$defs/match"},
+        "outcome": {"enum": ["true_positive", "true_negative", "false_positive", "false_negative"]},
+        "matching_finding_ids": {
+          "type": "array",
+          "maxItems": 20,
+          "items": {"type": "string", "minLength": 1, "maxLength": 200}
+        },
+        "matching_findings_omitted": {"type": "integer", "minimum": 0},
+        "strata": {"type": "object", "additionalProperties": false, "required": ["cwe", "language", "parser_variant", "boundary_type", "severity", "mutation_operator"], "properties": {"cwe": {"type": "string", "minLength": 1, "maxLength": 160}, "language": {"type": "string", "minLength": 1, "maxLength": 160}, "parser_variant": {"type": "string", "minLength": 1, "maxLength": 160}, "boundary_type": {"type": "string", "minLength": 1, "maxLength": 160}, "severity": {"type": "string", "minLength": 1, "maxLength": 160}, "mutation_operator": {"type": "string", "minLength": 1, "maxLength": 160}}}
+      }
+    }
+  }
+}

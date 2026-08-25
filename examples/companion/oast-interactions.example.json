@@ -1,0 +1,8 @@
+{
+  "service_mode": "self-hosted",
+  "egress_scope_approved": true,
+  "interactions": [
+    {"correlation_id": "health-correlation", "protocol": "dns", "health_canary": true},
+    {"correlation_id": "bounded-correlation", "protocol": "http", "template_id": "blind-ssrf", "severity": "high", "classification": "CWE-918"}
+  ]
+}

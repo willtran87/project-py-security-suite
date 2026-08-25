@@ -1,17 +1,57 @@
 from __future__ import annotations
 
+import json
+import re
 import time
 from pathlib import Path
 
-from ..execution import run_command, sanitize_diagnostic
-from ..models import Citation, Confidence, Finding, Location, Severity, Source
-from ..models import ToolRun, ToolStatus, finding_identity, normalize_repo_path
+from ..execution import run_command, sanitize_diagnostic, sha256_file
+from ..models import (
+    Citation,
+    Confidence,
+    Finding,
+    Location,
+    Severity,
+    Source,
+    ToolRun,
+    ToolStatus,
+    finding_identity,
+    normalize_repo_path,
+)
+from ..strict_json import loads as strict_json_loads
 from .artifacts import artifact_identity_evidence, configured_path, distribution_files
 from .base import AdapterResult, ScannerAdapter
 
 
 class CosignAdapter(ScannerAdapter):
     name = "cosign"
+
+    def _detect_version(self, executable: str, target: Path) -> str:
+        result = run_command(
+            [executable, "version", "--json"],
+            cwd=target,
+            timeout_seconds=min(30, self.config.timeout_seconds),
+            max_output_bytes=64 * 1024,
+            environment=self.environment(),
+        )
+        if result.timed_out or result.exit_code != 0:
+            return "unknown"
+        try:
+            document = strict_json_loads(result.stdout)
+        except json.JSONDecodeError:
+            document = {}
+        if isinstance(document, dict):
+            version = str(
+                document.get("gitVersion") or document.get("git_version") or ""
+            ).strip()
+            if version:
+                return f"cosign {sanitize_diagnostic(version, maximum=100)}"
+        match = re.search(r"(?i)gitversion\s*[:=]\s*['\"]?([^\s,'\"}]+)", result.stdout)
+        return (
+            f"cosign {sanitize_diagnostic(match.group(1), maximum=100)}"
+            if match
+            else "unknown"
+        )
 
     def not_applicable_reason(self, target: Path) -> str | None:
         return (
@@ -22,8 +62,17 @@ class CosignAdapter(ScannerAdapter):
 
     def prerequisite_error(self) -> str | None:
         if self.config.public_key_path:
-            if not self.config.public_key_path.expanduser().resolve().is_file():
+            public_key = self.config.public_key_path.expanduser().resolve()
+            if not public_key.is_file() or public_key.is_symlink():
                 return "the configured Cosign public key does not exist"
+            if not self.config.public_key_sha256:
+                return "Cosign public-key verification requires public_key_sha256"
+            try:
+                observed = sha256_file(public_key)
+            except OSError:
+                return "the configured Cosign public key could not be hashed"
+            if observed != self.config.public_key_sha256:
+                return "the configured Cosign public key SHA-256 is not approved"
             return None
         if (
             not self.config.certificate_identity

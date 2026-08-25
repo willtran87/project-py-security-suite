@@ -1,0 +1,57 @@
+name: Governed release evidence source
+
+on:
+  workflow_dispatch:
+    inputs:
+      manifest_sha256:
+        description: Independently approved release manifest SHA-256
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-evidence-source-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate-source:
+    name: Validate deployment-produced release evidence
+    environment: release-evidence-source
+    runs-on: [self-hosted, release-evidence]
+    timeout-minutes: 20
+    steps:
+      - name: Check out immutable verifier
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.11.19"
+          enable-cache: false
+      - name: Install locked verifier
+        run: uv sync --locked --all-groups --python "3.13"
+      - name: Verify the deployment-owned closed evidence directory
+        env:
+          PYSEC_REQUIRE_HARDENED_RELEASE_EVIDENCE: "1"
+          EVIDENCE_ROOT: ${{ vars.RELEASE_EVIDENCE_INPUT_PATH }}
+          MANIFEST_SHA256: ${{ inputs.manifest_sha256 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -n "$EVIDENCE_ROOT" && "$EVIDENCE_ROOT" = /* ]]
+          uv run pysec verify-release-manifest \
+            "$EVIDENCE_ROOT/release-evidence-manifest.json" \
+            --manifest-sha256 "$MANIFEST_SHA256" \
+            --report "$EVIDENCE_ROOT/report/report.json" \
+            --format json \
+            --output "$RUNNER_TEMP/release-evidence-source-verification.json"
+      - name: Publish the sole assembly input
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-evidence-input
+          path: ${{ vars.RELEASE_EVIDENCE_INPUT_PATH }}
+          if-no-files-found: error
+          retention-days: 7

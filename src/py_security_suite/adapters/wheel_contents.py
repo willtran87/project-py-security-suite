@@ -19,7 +19,6 @@ from ..models import (
 from .artifacts import artifact_identity_evidence, wheel_files
 from .base import ScannerAdapter
 
-
 _ISSUE = re.compile(r"^(?P<path>.+?):\s+(?P<rule>W\d{3}):\s+(?P<message>.+)$")
 
 

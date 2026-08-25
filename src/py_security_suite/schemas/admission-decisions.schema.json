@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:admission-decisions:1.0",
+  "type": "object",
+  "required": ["schema_version", "schema_id", "scope", "counts", "axes"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "schema_id": {"const": "urn:project-py-security-suite:schema:admission-decisions:1.0"},
+    "scope": {"type": "string", "minLength": 1},
+    "counts": {"type": "object", "required": ["allow", "block", "incomplete", "not_applicable"], "additionalProperties": false, "properties": {"allow": {"type": "integer", "minimum": 0}, "block": {"type": "integer", "minimum": 0}, "incomplete": {"type": "integer", "minimum": 0}, "not_applicable": {"type": "integer", "minimum": 0}}},
+    "axes": {"type": "array", "minItems": 5, "maxItems": 5, "items": {"type": "object", "required": ["axis", "label", "purpose", "decision", "selected_tools", "applicable_tools", "completed_tools", "execution_gaps", "active_findings", "blocking_findings", "integrity_gaps", "required_action"], "additionalProperties": false, "properties": {"axis": {"enum": ["source", "tests", "dependencies", "artifacts", "governance"]}, "label": {"type": "string"}, "purpose": {"type": "string"}, "decision": {"enum": ["allow", "block", "incomplete", "not_applicable"]}, "selected_tools": {"type": "integer", "minimum": 0}, "applicable_tools": {"type": "integer", "minimum": 0}, "completed_tools": {"type": "integer", "minimum": 0}, "execution_gaps": {"type": "array", "items": {"type": "string"}}, "active_findings": {"type": "integer", "minimum": 0}, "blocking_findings": {"type": "integer", "minimum": 0}, "integrity_gaps": {"type": "array", "items": {"type": "string"}}, "required_action": {"type": "string"}}}}
+  }
+}

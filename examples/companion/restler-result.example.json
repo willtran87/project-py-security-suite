@@ -1,0 +1,18 @@
+{
+  "summary": {
+    "status": "completed",
+    "targets_discovered": 12,
+    "targets_exercised": 12,
+    "requests": 640,
+    "coverage_percent": 92.0,
+    "coverage_metric": "restler-request-sequence-coverage",
+    "roles": ["api-test-principal"],
+    "features": ["stateful-sequences", "producer-consumer", "replay"],
+    "skipped_checks": [],
+    "canaries_expected": 1,
+    "canaries_observed": 1
+  },
+  "bugs": [
+    {"checker": "ResourceHierarchyChecker", "sequence_length": 5, "replay_succeeded": true}
+  ]
+}

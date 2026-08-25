@@ -3,10 +3,34 @@ schema_version = "1"
 # repo | iac-deep | governance | comprehensive | production | release
 profile = "standard"
 
+[paths]
+# `@bundle/...` references resolve beneath this root without environment expansion.
+bundle_root = ".pysec-tools"
+
 [isolation]
 network = "deny"
+enforcement_mode = "external-attested"
 require_attestation = true
+require_evidence = false
 execute_target_code = false
+# Production and release force require_evidence = true. Put these bindings in
+# the organization policy—not repository config—to establish authorization.
+# evidence_path = "security-data/isolation-attestation.json"
+# evidence_sha256 = "<organization-approved-attestation-sha256>"
+# evidence_public_key_path = "security-data/governance-ed25519.pem"
+# evidence_public_key_sha256 = "<organization-approved-key-sha256>"
+# evidence_signature_path = "security-data/isolation-attestation.sig"
+# Governance v2 production evidence also requires a unique replay ledger.
+# replay_ledger_path = "security-data/isolation-replay.sqlite3"
+# To enforce locally, select sandbox-launcher and configure an approved command
+# prefix whose final arguments introduce the scanner command (for example `--`).
+# enforcement_mode = "sandbox-launcher"
+# sandbox_executable = "/usr/bin/bwrap"
+# sandbox_executable_sha256 = "<organization-approved-launcher-sha256>"
+# sandbox_runtime_closure_sha256 = "<launcher-and-transitive-native-closure-sha256>"
+# sandbox_arguments = ["--unshare-net", "--die-with-parent", "--"]
+# The external boundary must attest resource-limits and file-write-quota for
+# production/release; local scratch polling is diagnostic, not a hard quota.
 
 [execution]
 max_workers = 4
@@ -23,6 +47,8 @@ incomplete_is_blocking = true
 
 [reports]
 include_sanitized_evidence = true
+classification = "confidential"
+retention_days = 30
 # Optional prior findings report for new/existing/regressed/resolved analysis.
 # Both values are required together; organization policy should pin the digest.
 # baseline_path = "security-data/previous/findings.json"
@@ -37,9 +63,30 @@ include_sanitized_evidence = true
 # epss_sha256 = "<organization-approved-epss-sha256>"
 # vex_path = "security-data/intelligence/product-vex.cdx.json"
 # vex_sha256 = "<organization-approved-vex-sha256>"
+# Production and release require an organization-policy-bound approval manifest
+# whenever any snapshot above is consumed.
+# approval_path = "security-data/intelligence/approval.json"
+# approval_sha256 = "<organization-approved-approval-sha256>"
+# approval_public_key_path = "security-data/governance-ed25519.pem"
+# approval_public_key_sha256 = "<organization-approved-key-sha256>"
+# approval_signature_path = "security-data/intelligence/approval.sig"
+# replay_ledger_path = "security-data/intelligence-replay.sqlite3"
+require_approval = false
 maximum_age_days = 3
 epss_high_probability = 0.10
 epss_high_percentile = 0.90
+
+[trust]
+# Optional organization-approved scanner catalog. Both values are required.
+# The catalog binds tool/role digests to version, provenance source, approver,
+# platform, and expiry. Repository config cannot replace the approved digest.
+# catalog_path = "security-data/scanner-trust.json"
+# catalog_sha256 = "<organization-approved-catalog-sha256>"
+# Production/release authenticate the exact frozen environment snapshot through
+# a quorum-signed, expiring policy and consume it exactly once.
+# policy_path = "security-data/execution-trust-policy.json"
+# policy_sha256 = "<organization-approved-policy-attestation-sha256>"
+# replay_ledger_path = "security-data/trust-policy-replay.sqlite3"
 
 [tools.bandit]
 enabled = true
@@ -47,6 +94,10 @@ executable = "bandit"
 # Set every applicable tool entry point to its organization-approved SHA-256.
 # Production and release profiles fail closed when this binding is absent.
 # executable_sha256 = "<organization-approved-sha256>"
+# Python console scripts may additionally pin the recursively installed runtime.
+# runtime_closure_sha256 = "<organization-approved-runtime-closure-sha256>"
+# Native scanners with dynamically loaded plugins outside the executable tree
+# declare exact relative paths and digests in SCANNER.runtime-closure.json.
 timeout_seconds = 300
 
 [tools.semgrep]
@@ -132,6 +183,20 @@ timeout_seconds = 300
 enabled = true
 executable = "radon"
 timeout_seconds = 300
+
+[tools.reachability]
+enabled = true
+# This is the suite's own AST-only analyzer; it never imports target modules.
+executable = "pysec"
+timeout_seconds = 600
+minimum_island_loc = 100
+discover_framework_roots = true
+# Optional roots for plugin, reflection, dependency-injection, or library APIs.
+# entry_points = ["package.plugin:activate", "package.public:Client"]
+# Optional target-relative roots override package-layout discovery.
+# source_roots = ["src"]
+# Optional coverage.py JSON corroborates static states without executing target code.
+# coverage_path = ".artifacts/test-evidence/coverage.json"
 
 [tools.coverage]
 enabled = true
@@ -305,6 +370,22 @@ artifacts_path = "dist"
 provenance_path = "dist"
 # Choose public-key verification:
 # public_key_path = "security-data/release-signing.pub"
+# public_keyring_path = "security-data/evidence-keyring.json"
+# public_keyring_sha256 = "replace-with-lowercase-sha256"
+# replay_service_url = "https://replay.security.example/v1/consume"
+# replay_service_token_env = "PYSEC_REPLAY_SERVICE_TOKEN"
+# replay_service_ca_path = "security-data/replay-service-ca.pem"
+# replay_service_ca_sha256 = "replace-with-lowercase-sha256"
+# replay_service_receipt_key_path = "security-data/replay-receipt.pub.pem"
+# replay_service_receipt_key_sha256 = "replace-with-lowercase-sha256"
+# replay_service_client_cert_path = "security-data/replay-client.pem"
+# replay_service_client_cert_sha256 = "replace-with-lowercase-sha256"
+# replay_service_client_key_path = "security-data/replay-client.key"
+# replay_service_client_key_sha256 = "replace-with-lowercase-sha256"
+# allowed_builder_ids = ["https://github.com/example/builders/release@v1"]
+# expected_build_type = "https://slsa.dev/build-type/v1"
+# expected_source_repository = "https://github.com/example/repository"
+# public_key_sha256 = "approved-public-key-sha256"
 # Or keyless verification with all three settings:
 # database_path = "security-data/sigstore-trusted-root.json"
 # certificate_identity = "https://github.com/org/repo/.github/workflows/release.yml@refs/heads/main"
@@ -363,6 +444,11 @@ timeout_seconds = 600
 # The remaining tools execute target behavior, build metadata, scan release
 # bytes, or verify host-bound provenance in separately controlled lanes. This
 # suite only validates and ingests their bounded JSON evidence.
+# Companion and release evidence defaults to contract v2 plus an authenticated
+# Ed25519 DSSE/in-toto binding. Configure public_key_path and its exact
+# public_key_sha256 under every activated evidence tool, preferably from the
+# organization policy. maximum_evidence_age_days and minimum_coverage_percent
+# can make an individual lane stricter but cannot weaken organization policy.
 [tools.crosshair]
 enabled = true
 executable = "pysec-evidence"
@@ -374,6 +460,12 @@ enabled = true
 executable = "pysec-evidence"
 timeout_seconds = 60
 artifacts_path = "atheris.json"
+
+[tools.clusterfuzzlite]
+enabled = true
+executable = "pysec-evidence"
+timeout_seconds = 60
+artifacts_path = "clusterfuzzlite.json"
 
 [tools.mutmut]
 enabled = true
@@ -404,6 +496,149 @@ enabled = true
 executable = "pysec-evidence"
 timeout_seconds = 60
 artifacts_path = "zap.json"
+
+[tools.nuclei]
+enabled = true
+executable = "pysec-evidence"
+timeout_seconds = 60
+artifacts_path = "nuclei.json"
+
+[tools.browser-security]
+enabled = true
+executable = "pysec-evidence"
+timeout_seconds = 60
+artifacts_path = "browser-security.json"
+# Organization policy can bind one threshold-signed, downgrade-resistant
+# profile across every enabled assurance producer.
+require_assurance_profile = true
+# assurance_profile_path = "security-data/production-assurance-profile.json"
+# assurance_profile_sha256 = "<sha256>"
+
+[tools.authorization-security]
+enabled = true
+executable = "pysec-evidence"
+timeout_seconds = 60
+artifacts_path = "authorization-security.json"
+
+[tools.oast]
+enabled = true
+executable = "pysec-evidence"
+timeout_seconds = 60
+artifacts_path = "oast.json"
+
+[tools.restler]
+enabled = true
+executable = "pysec-evidence"
+timeout_seconds = 60
+artifacts_path = "restler.json"
+
+[tools.protocol-security]
+enabled = true
+executable = "pysec-evidence"
+timeout_seconds = 60
+artifacts_path = "protocol-security.json"
+
+[tools.fuzz-introspector]
+enabled = true
+executable = "pysec-evidence"
+timeout_seconds = 60
+artifacts_path = "fuzz-introspector.json"
+
+[tools.cloud-attack-path]
+enabled = true
+executable = "pysec-evidence"
+timeout_seconds = 60
+artifacts_path = "cloud-attack-path.json"
+
+[tools.secret-verification]
+enabled = true
+executable = "pysec-evidence"
+timeout_seconds = 60
+artifacts_path = "secret-verification.json"
+
+[tools.iast]
+enabled = true
+executable = "pysec-evidence"
+timeout_seconds = 60
+artifacts_path = "iast.json"
+
+[tools.falco]
+enabled = true
+executable = "pysec-evidence"
+timeout_seconds = 60
+artifacts_path = "falco.json"
+
+[tools.kubescape]
+enabled = true
+executable = "pysec-evidence"
+timeout_seconds = 60
+artifacts_path = "kubescape.json"
+
+[tools.prowler]
+enabled = true
+executable = "pysec-evidence"
+timeout_seconds = 60
+artifacts_path = "prowler.json"
+
+[tools.rasp]
+enabled = true
+executable = "pysec-evidence"
+timeout_seconds = 60
+artifacts_path = "rasp.json"
+
+[tools.native-sanitizers]
+enabled = true
+executable = "pysec-evidence"
+timeout_seconds = 60
+artifacts_path = "native-sanitizers.json"
+
+[tools.mobsf]
+enabled = true
+executable = "pysec-evidence"
+timeout_seconds = 60
+artifacts_path = "mobsf.json"
+
+[tools.tls-scan]
+enabled = true
+executable = "pysec-evidence"
+timeout_seconds = 60
+artifacts_path = "tls-scan.json"
+
+[tools.polyglot]
+enabled = true
+executable = "pysec-evidence"
+timeout_seconds = 60
+artifacts_path = "polyglot.json"
+
+[tools.surface-inventory]
+enabled = true
+executable = "pysec-evidence"
+timeout_seconds = 60
+artifacts_path = "surface-inventory.json"
+
+[tools.event-security]
+enabled = true
+executable = "pysec-evidence"
+timeout_seconds = 60
+artifacts_path = "event-security.json"
+
+[tools.database-security]
+enabled = true
+executable = "pysec-evidence"
+timeout_seconds = 60
+artifacts_path = "database-security.json"
+
+[tools.ruleset-regression]
+enabled = true
+executable = "pysec-evidence"
+timeout_seconds = 60
+artifacts_path = "ruleset-regression.json"
+
+[tools.ai-security]
+enabled = true
+executable = "pysec-evidence"
+timeout_seconds = 60
+artifacts_path = "ai-security.json"
 
 [tools.pytm]
 enabled = true

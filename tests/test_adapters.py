@@ -140,8 +140,37 @@ class AdapterParserTests(unittest.TestCase):
                                 "vulnerabilities": [
                                     {
                                         "id": "GHSA-AAAA-BBBB-CCCC",
+                                        "aliases": [
+                                            "CVE-2026-12345",
+                                            "PYSEC-2026-42",
+                                            "not an identifier",
+                                        ],
                                         "summary": "Example vulnerability",
                                         "database_specific": {"severity": "CRITICAL"},
+                                        "affected": [
+                                            {
+                                                "ranges": [
+                                                    {
+                                                        "type": "ECOSYSTEM",
+                                                        "events": [
+                                                            {"introduced": "0"},
+                                                            {"fixed": "1.2.3"},
+                                                            {"introduced": "2.0"},
+                                                            {"fixed": "2.1.4"},
+                                                        ],
+                                                    },
+                                                    {
+                                                        "type": "GIT",
+                                                        "events": [
+                                                            {"introduced": "0"},
+                                                            {
+                                                                "fixed": "c45d7c49ea75133e"
+                                                            },
+                                                        ],
+                                                    },
+                                                ]
+                                            }
+                                        ],
                                     }
                                 ],
                             }
@@ -154,6 +183,19 @@ class AdapterParserTests(unittest.TestCase):
         self.assertEqual(finding.severity, Severity.CRITICAL)
         self.assertEqual(finding.locations[0].package, "example")
         self.assertEqual(finding.citations[0].identifier, "GHSA-AAAA-BBBB-CCCC")
+        self.assertEqual(
+            finding.evidence["advisory_aliases"],
+            ["CVE-2026-12345", "PYSEC-2026-42"],
+        )
+        self.assertEqual(finding.evidence["fixed_versions"], ["1.2.3", "2.1.4"])
+        self.assertEqual(
+            finding.classifications,
+            ["CVE-2026-12345", "GHSA-AAAA-BBBB-CCCC", "PYSEC-2026-42"],
+        )
+        self.assertEqual(
+            [citation.identifier for citation in finding.citations],
+            ["GHSA-AAAA-BBBB-CCCC", "CVE-2026-12345", "PYSEC-2026-42"],
+        )
 
     def test_osv_empty_results_are_valid(self) -> None:
         findings = OsvScannerAdapter(ToolConfig(), 4096).parse(
@@ -166,6 +208,11 @@ class AdapterParserTests(unittest.TestCase):
             "osv-scanner", self.target
         )
         self.assertEqual(command[-1], str(self.target))
+
+    def test_osv_accepts_findings_exit_code(self) -> None:
+        adapter = OsvScannerAdapter(ToolConfig(), 4096)
+
+        self.assertEqual(adapter.accepted_exit_codes, frozenset({0, 1}))
 
 
 if __name__ == "__main__":

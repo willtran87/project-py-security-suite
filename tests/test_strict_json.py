@@ -1,0 +1,121 @@
+from __future__ import annotations
+
+import math
+from pathlib import Path
+
+import pytest
+
+from companion.strict_json import canonical_bytes as companion_canonical_bytes
+from companion.strict_json import loads as companion_loads
+from py_security_suite.adapters.bandit import BanditAdapter
+from py_security_suite.adapters.detect_secrets import DetectSecretsAdapter
+from py_security_suite.adapters.grype import GrypeAdapter
+from py_security_suite.adapters.osv import OsvScannerAdapter
+from py_security_suite.adapters.sarif import parse_sarif_findings
+from py_security_suite.adapters.semgrep import SemgrepAdapter
+from py_security_suite.adapters.trivy import TrivyAdapter
+from py_security_suite.config import ToolConfig
+from py_security_suite.evidence_ingest import _assurance_execution
+from py_security_suite.strict_json import canonical_bytes, dumps, loads
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        '{"value":1,"value":2}',
+        '{"value":NaN}',
+        '{"value":Infinity}',
+        '{"value":-Infinity}',
+        '{"value":9007199254740992}',
+    ],
+)
+def test_strict_json_rejects_ambiguous_or_non_interoperable_input(
+    payload: str,
+) -> None:
+    with pytest.raises(ValueError):
+        loads(payload)
+    with pytest.raises(ValueError):
+        companion_loads(payload)
+
+
+def test_strict_json_rejects_excessive_nesting() -> None:
+    payload = "[" * 65 + "0" + "]" * 65
+
+    with pytest.raises(ValueError, match="nesting|safety"):
+        loads(payload)
+    with pytest.raises(ValueError, match="safety"):
+        companion_loads(payload)
+
+
+def test_scanner_adapters_reject_duplicate_json_properties() -> None:
+    target = Path("/strict-json-target")
+    with pytest.raises(ValueError, match="duplicate property"):
+        BanditAdapter(ToolConfig(), 1024).parse('{"results":[],"results":[]}', target)
+    with pytest.raises(ValueError, match="duplicate property"):
+        parse_sarif_findings(
+            '{"runs":[],"runs":[]}',
+            target,
+            tool_name="sarif",
+            default_area="security",
+            default_impact="impact",
+            default_remediation="remediation",
+        )
+
+
+def test_object_scanner_adapters_reject_non_object_roots() -> None:
+    target = Path("/strict-json-target")
+    with pytest.raises(TypeError, match="Bandit output must be an object"):
+        BanditAdapter(ToolConfig(), 1024).parse("[]", target)
+    with pytest.raises(TypeError, match="SARIF output must be an object"):
+        parse_sarif_findings(
+            "[]",
+            target,
+            tool_name="sarif",
+            default_area="security",
+            default_impact="impact",
+            default_remediation="remediation",
+        )
+
+
+@pytest.mark.parametrize(
+    "adapter_type",
+    [
+        DetectSecretsAdapter,
+        GrypeAdapter,
+        OsvScannerAdapter,
+        SemgrepAdapter,
+        TrivyAdapter,
+    ],
+)
+def test_additional_object_adapters_reject_non_object_roots(adapter_type: type) -> None:
+    with pytest.raises(TypeError, match="output must be an object"):
+        adapter_type(ToolConfig(), 1024).parse("[]", Path("/strict-json-target"))
+
+
+def test_canonical_json_is_stable_across_implementations() -> None:
+    value = {"z": 1.0, "é": "line\nvalue", "a": [3, True, None]}
+    expected = b'{"a":[3,true,null],"z":1,"\xc3\xa9":"line\\nvalue"}'
+
+    assert canonical_bytes(value) == expected
+    assert companion_canonical_bytes(value) == expected
+
+
+def test_serialization_and_execution_metadata_reject_nonfinite_numbers() -> None:
+    for value in (math.nan, math.inf, -math.inf):
+        with pytest.raises(ValueError, match="finite"):
+            dumps({"coverage": value})
+        execution = {
+            "status": "completed",
+            "targets_discovered": 1,
+            "targets_exercised": 1,
+            "requests": 1,
+            "coverage_percent": value,
+            "coverage_metric": "cases",
+            "roles": ["anonymous"],
+            "features": ["canary"],
+            "skipped_checks": [],
+            "canaries_expected": 1,
+            "canaries_observed": 1,
+        }
+        with pytest.raises(TypeError, match="finite"):
+            _assurance_execution(execution, 80.0)

@@ -79,6 +79,18 @@ class SecurityPropertyTests(unittest.TestCase):
                 "<outside-target>",
             )
 
+    def test_normalize_repo_path_treats_backslashes_as_separators(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory)
+            self.assertEqual(
+                normalize_repo_path(target, r"docs\guide.md"),
+                "docs/guide.md",
+            )
+            self.assertEqual(
+                normalize_repo_path(target, r"..\secret.txt"),
+                "<outside-target>",
+            )
+
     @settings(deadline=None)
     @given(
         tool=st.text(min_size=16, max_size=50),

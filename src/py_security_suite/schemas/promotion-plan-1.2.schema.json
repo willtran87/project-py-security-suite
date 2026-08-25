@@ -1,0 +1,145 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:promotion-plan:1.2",
+  "title": "Release promotion decision-support plan with validation accountability and trend evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "status", "authoritative", "scope", "report", "summary", "evidence_bindings", "release_blockers", "blocker_graph", "lifecycle", "assurance_closure", "finding_evidence_quality", "detection_perspectives", "baseline_comparability", "conditional_coverage", "scanner_reliability", "evidence_freshness", "validation_accountability", "operational_trend", "configuration_provenance", "artifact_graph", "audiences", "retention", "github_annotations", "next_actions"],
+  "properties": {
+    "schema_version": {"const": "1.2"},
+    "status": {"enum": ["ready", "blocked"]},
+    "authoritative": {"const": false},
+    "scope": {"type": "string", "minLength": 1},
+    "report": {"type": "object"},
+    "summary": {"type": "object"},
+    "evidence_bindings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["closure_plan", "release_readiness", "operational_trend"],
+      "properties": {
+        "closure_plan": {"$ref": "#/$defs/binding"},
+        "release_readiness": {"$ref": "#/$defs/binding"},
+        "operational_trend": {"$ref": "#/$defs/binding"}
+      }
+    },
+    "release_blockers": {"type": "array", "maxItems": 100, "items": {"type": "string"}},
+    "blocker_graph": {"type": "array", "items": {"type": "object"}},
+    "lifecycle": {"type": "array", "minItems": 7, "maxItems": 7, "items": {"type": "object"}},
+    "assurance_closure": {"type": "array", "items": {"type": "object"}},
+    "finding_evidence_quality": {"type": "array", "items": {"type": "object"}},
+    "detection_perspectives": {"type": "object"},
+    "baseline_comparability": {"type": "object"},
+    "conditional_coverage": {"type": "array", "items": {"type": "object"}},
+    "scanner_reliability": {"type": "object"},
+    "evidence_freshness": {"type": "array", "minItems": 3, "items": {"type": "object"}},
+    "validation_accountability": {"$ref": "#/$defs/validation"},
+    "operational_trend": {"$ref": "#/$defs/trend"},
+    "configuration_provenance": {"type": "object"},
+    "artifact_graph": {"type": "object"},
+    "audiences": {"type": "object"},
+    "retention": {"type": "array", "items": {"type": "object"}},
+    "github_annotations": {"type": "array", "items": {"type": "object"}},
+    "next_actions": {"type": "array", "maxItems": 100000, "items": {"type": "object"}}
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["supplied", "sha256", "schema_version", "binding"],
+      "properties": {
+        "supplied": {"type": "boolean"},
+        "sha256": {"oneOf": [{"$ref": "#/$defs/digest"}, {"type": "null"}]},
+        "schema_version": {"type": "string", "minLength": 1},
+        "binding": {"type": "string", "minLength": 1}
+      }
+    },
+    "countQueue": {
+      "type": "object",
+      "additionalProperties": {"type": ["string", "integer"]},
+      "required": ["items"],
+      "properties": {"items": {"type": "integer", "minimum": 0}}
+    },
+    "workQueue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "priority", "owner", "authority", "blocker", "alignment", "items", "action", "evidence"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^validation-queue:[A-F0-9]{12}$"},
+        "priority": {"enum": ["P0", "P1", "P2", "P3", "P4"]},
+        "owner": {"type": "string", "minLength": 1},
+        "authority": {"const": "repository"},
+        "blocker": {"const": "change-validation-alignment"},
+        "alignment": {"type": "string", "minLength": 1},
+        "items": {"type": "integer", "minimum": 1},
+        "action": {"type": "string", "minLength": 1},
+        "evidence": {"type": "array", "maxItems": 200, "items": {"type": "string"}}
+      }
+    },
+    "validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evidence_available", "ledger_available", "assessment_available", "schema_version", "reason", "items", "codeowner_backed_items", "items_with_failing_tests", "items_with_coverage_gaps", "owner_queues", "priority_queues", "alignment_queues", "work_queues"],
+      "properties": {
+        "evidence_available": {"type": "boolean"},
+        "ledger_available": {"type": "boolean"},
+        "assessment_available": {"type": "boolean"},
+        "schema_version": {"type": "string", "minLength": 1},
+        "reason": {"type": "string", "minLength": 1},
+        "items": {"type": "integer", "minimum": 0},
+        "codeowner_backed_items": {"type": "integer", "minimum": 0},
+        "items_with_failing_tests": {"type": "integer", "minimum": 0},
+        "items_with_coverage_gaps": {"type": "integer", "minimum": 0},
+        "owner_queues": {"type": "array", "maxItems": 2000, "items": {"$ref": "#/$defs/countQueue"}},
+        "priority_queues": {"type": "array", "maxItems": 5, "items": {"$ref": "#/$defs/countQueue"}},
+        "alignment_queues": {"type": "array", "maxItems": 100, "items": {"$ref": "#/$defs/countQueue"}},
+        "work_queues": {"type": "array", "maxItems": 10000, "items": {"$ref": "#/$defs/workQueue"}}
+      }
+    },
+    "ownerTrajectory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["owner", "first_items", "latest_items", "comparable", "delta"],
+      "properties": {
+        "owner": {"type": "string", "minLength": 1},
+        "first_items": {"type": "integer", "minimum": 0},
+        "latest_items": {"type": "integer", "minimum": 0},
+        "comparable": {"type": "boolean"},
+        "delta": {"type": ["integer", "null"]}
+      }
+    },
+    "anomaly": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "severity", "detail"],
+      "properties": {
+        "kind": {"type": "string", "minLength": 1},
+        "severity": {"type": "string", "minLength": 1},
+        "detail": {"type": "string", "minLength": 1}
+      }
+    },
+    "trend": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["available", "sha256", "reports", "first_scan", "last_scan", "latest_outcome", "validation_evidence_comparable", "validation_comparability_reasons", "latest_validation_items", "validation_debt_delta", "new_validation_items", "resolved_validation_items", "unchanged_validation_items", "validation_state_transitions", "owner_trajectories", "anomalies"],
+      "properties": {
+        "available": {"type": "boolean"},
+        "sha256": {"oneOf": [{"$ref": "#/$defs/digest"}, {"type": "null"}]},
+        "reports": {"type": "integer", "minimum": 0},
+        "first_scan": {"type": ["string", "null"]},
+        "last_scan": {"type": ["string", "null"]},
+        "latest_outcome": {"type": ["string", "null"]},
+        "validation_evidence_comparable": {"type": "boolean"},
+        "validation_comparability_reasons": {"type": "array", "maxItems": 20, "items": {"type": "string"}},
+        "latest_validation_items": {"type": "integer", "minimum": 0},
+        "validation_debt_delta": {"type": ["integer", "null"]},
+        "new_validation_items": {"type": "integer", "minimum": 0},
+        "resolved_validation_items": {"type": "integer", "minimum": 0},
+        "unchanged_validation_items": {"type": "integer", "minimum": 0},
+        "validation_state_transitions": {"type": "integer", "minimum": 0},
+        "owner_trajectories": {"type": "array", "maxItems": 1000, "items": {"$ref": "#/$defs/ownerTrajectory"}},
+        "anomalies": {"type": "array", "maxItems": 100, "items": {"$ref": "#/$defs/anomaly"}}
+      }
+    }
+  }
+}

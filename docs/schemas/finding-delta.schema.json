@@ -5,11 +5,25 @@
   "type": "object",
   "required": ["schema_version", "configured"],
   "properties": {
-    "schema_version": {"const": "1.0"},
+    "schema_version": {"enum": ["1.0", "1.1"]},
     "configured": {"type": "boolean"},
     "baseline": {"type": "object"},
     "counts": {"type": "object"},
     "match_strategies": {"type": "object"},
-    "resolved": {"type": "array", "items": {"type": "object"}}
+    "resolved": {"type": "array", "items": {"type": "object"}},
+    "ownership_rules": {"type": "integer", "minimum": 0},
+    "ownership_rule_details": {
+      "type": "array",
+      "maxItems": 10000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["pattern", "owners"],
+        "properties": {
+          "pattern": {"type": "string", "minLength": 1},
+          "owners": {"type": "array", "maxItems": 20, "items": {"type": "string", "minLength": 1}}
+        }
+      }
+    }
   }
 }

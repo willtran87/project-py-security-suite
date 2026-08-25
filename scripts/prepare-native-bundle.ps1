@@ -11,6 +11,7 @@ param(
     [string]$MypyVersion = "2.1.0",
     [string]$VultureVersion = "2.16",
     [string]$TachVersion = "0.35.0",
+    [string]$GraphifyVersion = "0.9.40",
     [string]$PylintVersion = "4.0.6",
     [string]$RadonVersion = "6.0.1",
     [string]$ReuseVersion = "6.2.0",
@@ -62,8 +63,8 @@ param(
     [string]$HadolintWindowsSha256 = "8e0ee174f88edb14f207a68430c7a53c2883ed509cdbde9a3a26fffa140fa5e4", # pragma: allowlist secret
     [string]$DevSkimVersion = "1.0.70",
     [string]$DevSkimNuGetSha256 = "31e3a53b5d5d7427a260d14b922c69737a1f0e20110864189c2a0117eceabed4", # pragma: allowlist secret
-    # Approved PyPI OSV snapshot retrieved and structurally validated 2026-07-23.
-    [string]$OsvDatabaseSha256 = "3e32a8bf2f2af38718e572a96859823f162030df235ec78f773ab0f5df12d9c2" # pragma: allowlist secret
+    # Official PyPI OSV snapshot retrieved and structurally validated 2026-08-09.
+    [string]$OsvDatabaseSha256 = "af55ef8a334f99586fe691c582e19778689276a2272c30a672b8c2efa1adbfb2" # pragma: allowlist secret
 )
 
 $ErrorActionPreference = "Stop"
@@ -177,6 +178,12 @@ $requirements = @(
 & $Python -m pip download --only-binary=:all: --dest $wheelhouse @requirements
 if ($LASTEXITCODE -ne 0) {
     throw "Downloading the pinned native Python wheels failed."
+}
+$graphifyRequirements = @("graphifyy==$GraphifyVersion")
+& $Python -m pip download --only-binary=:all: --dest $wheelhouse `
+    @graphifyRequirements
+if ($LASTEXITCODE -ne 0) {
+    throw "Downloading the pinned Graphify wheels failed."
 }
 # REUSE 6.2.0 is distributed as an sdist. Build its wheel only in this
 # connected preparation lane, then install the resulting immutable wheel in
@@ -294,7 +301,7 @@ if (
 $actionlintArchive = Join-Path $archiveDirectory "actionlint-windows-amd64.zip"
 $actionlintUrl = (
     "https://github.com/rhysd/actionlint/releases/download/" +
-    "v$ActionlintVersion/actionlint_$($ActionlintVersion)_windows_x86_64.zip"
+    "v$ActionlintVersion/actionlint_$($ActionlintVersion)_windows_amd64.zip"
 )
 Receive-PinnedFile -Uri $actionlintUrl -Destination $actionlintArchive
 $actualActionlintHash = (
@@ -466,9 +473,16 @@ $actualDatabaseHash = (
 if ($actualDatabaseHash -ne $OsvDatabaseSha256.ToLowerInvariant()) {
     throw "PyPI OSV database checksum mismatch: $actualDatabaseHash"
 }
+$databaseValidator = Join-Path $PSScriptRoot "validate-osv-snapshot.py"
+$databaseSummaryJson = & $Python $databaseValidator $databaseArchive `
+    --expected-sha256 $actualDatabaseHash
+if ($LASTEXITCODE -ne 0 -or -not $databaseSummaryJson) {
+    throw "PyPI OSV database structural validation failed."
+}
+$databaseSummary = $databaseSummaryJson | ConvertFrom-Json
 
 $files = @(
-    Get-ChildItem -LiteralPath $bundle -Recurse -File |
+    Get-ChildItem -LiteralPath $bundle -Recurse -File -Force |
         Sort-Object FullName |
         ForEach-Object {
             [ordered]@{
@@ -480,8 +494,34 @@ $files = @(
             }
         }
 )
+$pythonEnvironments = @(
+    [ordered]@{
+        name = "core"
+        requirements = @(
+            $requirements +
+            "reuse[charset-normalizer]==$ReuseVersion" +
+            "py-security-suite==0.1.0"
+        )
+    },
+    [ordered]@{
+        name = "artifact"
+        requirements = @($artifactRequirements)
+    },
+    [ordered]@{
+        name = "scancode"
+        requirements = @("scancode-toolkit==$ScanCodeVersion")
+    },
+    [ordered]@{
+        name = "checkov"
+        requirements = @("checkov==$CheckovVersion")
+    },
+    [ordered]@{
+        name = "graphify"
+        requirements = @($graphifyRequirements)
+    }
+)
 $manifest = [ordered]@{
-    schema_version = "1"
+    schema_version = "2.0"
     created_at = (Get-Date).ToUniversalTime().ToString("o")
     platform = "windows-amd64"
     python = (& $Python --version 2>&1 | Out-String).Trim()
@@ -496,6 +536,7 @@ $manifest = [ordered]@{
         mypy = $MypyVersion
         vulture = $VultureVersion
         tach = $TachVersion
+        graphify = $GraphifyVersion
         pylint = $PylintVersion
         radon = $RadonVersion
         reuse = $ReuseVersion
@@ -551,6 +592,18 @@ $manifest = [ordered]@{
         psscriptanalyzer = "https://www.powershellgallery.com/packages/PSScriptAnalyzer"
         pyright = "https://registry.npmjs.org/pyright"
         osv_database = $databaseUrl
+    }
+    python_environments = $pythonEnvironments
+    intelligence_snapshots = [ordered]@{
+        osv_pypi = [ordered]@{
+            source = $databaseUrl
+            sha256 = $actualDatabaseHash
+            size = (Get-Item -LiteralPath $databaseArchive).Length
+            records = $databaseSummary.records
+            expanded_bytes = $databaseSummary.expanded_bytes
+            newest_modified = $databaseSummary.newest_modified
+            structurally_validated = $true
+        }
     }
     files = $files
 }

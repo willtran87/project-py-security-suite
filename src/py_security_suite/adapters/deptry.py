@@ -1,11 +1,19 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
-from ..models import Citation, Confidence, Finding, Location, Severity, Source
-from ..models import finding_identity, normalize_repo_path
+from ..models import (
+    Citation,
+    Confidence,
+    Finding,
+    Location,
+    Severity,
+    Source,
+    finding_identity,
+    normalize_repo_path,
+)
+from ..strict_json import loads as strict_json_loads
 from .file_output import JsonFileScannerAdapter
 from .staging import maintained_files
 
@@ -47,7 +55,7 @@ class DeptryAdapter(JsonFileScannerAdapter):
         ]
 
     def parse(self, payload: str, target: Path) -> list[Finding]:
-        results = json.loads(payload or "[]")
+        results = strict_json_loads(payload or "[]")
         if not isinstance(results, list):
             raise TypeError("deptry output must be a JSON list")
         findings: list[Finding] = []
@@ -112,7 +120,7 @@ class DeptryAdapter(JsonFileScannerAdapter):
         return {
             "deptry-dependencies.json": {
                 "schema_version": "1.0",
-                "findings": json.loads(payload or "[]"),
+                "findings": strict_json_loads(payload or "[]"),
             }
         }
 
