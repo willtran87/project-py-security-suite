@@ -451,6 +451,9 @@ def python_runtime_closure_sha256(
                 "size": len(payload),
             }
         )
+    darwin_runtime = _darwin_system_runtime_record()
+    if darwin_runtime is not None:
+        records.append(darwin_runtime)
     result = hashlib.sha256(canonical_bytes(records)).hexdigest()
     if include_environment:
         with _RUNTIME_CLOSURE_LOCK:
@@ -483,6 +486,9 @@ def native_runtime_closure_sha256(
                 "size": len(payload),
             }
         )
+    darwin_runtime = _darwin_system_runtime_record()
+    if darwin_runtime is not None:
+        records.append(darwin_runtime)
     return hashlib.sha256(canonical_bytes(records)).hexdigest()
 
 
@@ -827,13 +833,65 @@ def _macho_dependencies(path: Path, application_root: Path) -> set[Path]:
         located = next((item for item in candidates if item.is_file()), None)
         if located is not None:
             resolved.add(located.resolve())
-        elif not name.startswith("/System/Library/"):
+        elif not _darwin_shared_cache_dependency(name):
             unresolved.add(name)
     if unresolved:
         raise ValueError(
             "unresolved Mach-O dependencies: " + ", ".join(sorted(unresolved))
         )
     return resolved
+
+
+def _darwin_shared_cache_dependency(name: str) -> bool:
+    """Identify Apple system libraries supplied by the sealed dyld cache."""
+    return sys.platform == "darwin" and name.startswith(
+        ("/System/Library/", "/usr/lib/")
+    )
+
+
+def _darwin_system_runtime_record() -> dict[str, object] | None:
+    """Bind cache-resident Mach-O dependencies to the sealed OS build identity."""
+    if sys.platform != "darwin":
+        return None
+    version_files = (
+        Path("/System/Library/CoreServices/SystemVersion.plist"),
+        Path("/System/Library/CoreServices/SystemVersionCompat.plist"),
+    )
+    identities: list[dict[str, object]] = []
+    total_bytes = 0
+    for path in version_files:
+        if not path.is_file():
+            continue
+        _, payload = read_regular_file(
+            path,
+            "Darwin sealed system version identity",
+            maximum_bytes=1024 * 1024,
+        )
+        total_bytes += len(payload)
+        identities.append(
+            {
+                "path": str(path),
+                "sha256": hashlib.sha256(payload).hexdigest(),
+                "size": len(payload),
+            }
+        )
+    if not identities:
+        raise ValueError("Darwin sealed system version identity is unavailable")
+    kernel = os.uname()
+    identity = {
+        "kernel": {
+            "machine": kernel.machine,
+            "release": kernel.release,
+            "sysname": kernel.sysname,
+            "version": kernel.version,
+        },
+        "sealed_system_versions": identities,
+    }
+    return {
+        "path": "<darwin-sealed-system-runtime>",
+        "sha256": hashlib.sha256(canonical_bytes(identity)).hexdigest(),
+        "size": total_bytes,
+    }
 
 
 def _resolve_native_names(

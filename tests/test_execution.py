@@ -14,6 +14,7 @@ from unittest.mock import MagicMock, call, patch
 
 from py_security_suite.execution import (
     CommandEnvironment,
+    _darwin_shared_cache_dependency,
     _process_tree_resident_bytes,
     _terminate_process_tree,
     isolated_environment,
@@ -28,6 +29,20 @@ from py_security_suite.execution import (
 
 
 class IsolatedEnvironmentTests(unittest.TestCase):
+    def test_darwin_shared_cache_allowlist_is_system_scoped(self) -> None:
+        with patch("py_security_suite.execution.sys.platform", "darwin"):
+            self.assertTrue(
+                _darwin_shared_cache_dependency("/usr/lib/libSystem.B.dylib")
+            )
+            self.assertTrue(
+                _darwin_shared_cache_dependency(
+                    "/System/Library/Frameworks/Security.framework/Security"
+                )
+            )
+            self.assertFalse(
+                _darwin_shared_cache_dependency("/usr/local/lib/untrusted.dylib")
+            )
+
     def test_process_tree_resident_memory_is_measured(self) -> None:
         self.assertGreater(_process_tree_resident_bytes(os.getpid()), 0)
 
