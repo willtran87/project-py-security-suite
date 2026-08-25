@@ -34,7 +34,20 @@ jobs:
         run: uv sync --locked --all-groups --python "3.13"
       - name: Install Linux sandbox
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install --yes bubblewrap
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes apparmor-utils bubblewrap
+          sudo install -m 0644 /dev/stdin /etc/apparmor.d/bwrap <<'EOF'
+          abi <abi/4.0>,
+          include <tunables/global>
+
+          profile bwrap /usr/bin/bwrap flags=(unconfined) {
+            userns,
+          }
+          EOF
+          sudo apparmor_parser --replace /etc/apparmor.d/bwrap
       - name: Exercise real process, disk, and rollback controls
         run: uv run --frozen pytest -q tests/integration/test_containment_live.py
       - name: Exercise real platform sandbox
@@ -111,9 +124,9 @@ jobs:
             docker.redpanda.com/redpandadata/redpanda:v25.2.1@sha256:930ca743dd41d91311fc1b28f505269814ccab142483daad773516c0544fa502 \
             redpanda start --overprovisioned --smp 1 --memory 512M \
             --reserve-memory 0M --node-id 0 --check=false \
-            --set 'redpanda.kafka_api=[{address:0.0.0.0,port:9092,name:sasl_tls,authentication_method:sasl}]' \
-            --set 'redpanda.advertised_kafka_api=[{address:localhost,port:9092,name:sasl_tls}]' \
-            --set 'redpanda.kafka_api_tls=[{name:sasl_tls,enabled:true,cert_file:/certs/server.crt,key_file:/certs/server.key,truststore_file:/certs/ca.crt,require_client_auth:false}]' \
+            --set 'redpanda.kafka_api=[{"address":"0.0.0.0","port":9092,"name":"sasl_tls","authentication_method":"sasl"}]' \
+            --set 'redpanda.advertised_kafka_api=[{"address":"localhost","port":9092,"name":"sasl_tls"}]' \
+            --set 'redpanda.kafka_api_tls=[{"name":"sasl_tls","enabled":true,"cert_file":"/certs/server.crt","key_file":"/certs/server.key","truststore_file":"/certs/ca.crt","require_client_auth":false}]' \
             --set redpanda.enable_sasl=true \
             --set 'redpanda.superusers=[pysec-admin]'
       - name: Wait for Kafka
@@ -179,6 +192,8 @@ jobs:
   companion-browser-integration:
     name: Companion authenticated multi-engine browser integration
     runs-on: ubuntu-latest
+    env:
+      HOME: /root
     container:
       image: mcr.microsoft.com/playwright/python:v1.62.0-noble@sha256:51d31fdfacb0cff99a1a724152e34ae408d2bd4e7da310ff157450f49261cc59
     timeout-minutes: 20

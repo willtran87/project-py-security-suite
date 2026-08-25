@@ -35,8 +35,13 @@ gate, report = sys.argv[1:3]
 enforced, errors = [], []
 if os.name != "nt":
     import resource
+    memory_limit = (
+        ("data-segment", "RLIMIT_DATA", 8 * 1024**3)
+        if sys.platform == "darwin"
+        else ("address-space", "RLIMIT_AS", 8 * 1024**3)
+    )
     requested_limits = (
-        ("address-space", "RLIMIT_AS", 8 * 1024**3),
+        memory_limit,
         ("process-count", "RLIMIT_NPROC", 256),
         ("open-files", "RLIMIT_NOFILE", 2048),
         ("file-size", "RLIMIT_FSIZE", int(sys.argv[5])),
