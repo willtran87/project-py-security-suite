@@ -78,7 +78,9 @@ def security_requirements_coverage_artifact(
             }
         )
 
-    sast = sorted({name for name in ("bandit", "semgrep") if name in successful_tools})
+    sast: list[str] = sorted(
+        {name for name in ("bandit", "semgrep") if name in successful_tools}
+    )
     add(
         "OWASP-ASVS",
         "5.0.0",
