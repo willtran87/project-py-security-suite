@@ -245,7 +245,8 @@ def test_macos_sandbox_enforces_network_and_read_only_target() -> None:
     )
     read_rules = "".join(f'(allow file-read* (subpath "{path}"))' for path in readable)
     profile = (
-        "(version 1)(deny default)(allow process-exec)(allow sysctl-read)"
+        '(version 1)(deny default)(import "system.sb")'
+        "(allow process-exec)(allow sysctl-read)"
         '(allow mach-lookup)(allow file-read* file-write* (subpath "{PYSEC_PRIVATE_ROOT}"))'
         + read_rules
     )
