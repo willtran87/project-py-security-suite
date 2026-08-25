@@ -57,6 +57,19 @@ def _semantic_edge(
 
 
 class BoundaryGraphTests(unittest.TestCase):
+    def test_unrecognized_semantic_language_cannot_silently_disappear(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "agent.dart").write_text(
+                "void main() { print('hello'); }\n", encoding="utf-8"
+            )
+            graph = build_boundary_graph(root)
+        self.assertFalse(graph["complete"])
+        self.assertFalse(graph["semantic_complete"])
+        self.assertEqual(
+            graph["special_surfaces"][0]["kind"], "unsupported-semantic-source"
+        )
+
     def test_compiler_differential_preserves_engine_unique_facts(self) -> None:
         evidence = {
             "frontends": [

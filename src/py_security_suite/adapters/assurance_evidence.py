@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-import tomllib
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -17,23 +16,11 @@ from ..models import (
     normalize_repo_path,
 )
 from ..strict_json import loads as strict_json_loads
+from ..repository_surfaces import classify_repository_surfaces
 from ..surface_proof import verify_surface_proof
 from .artifacts import configured_path
 from .base import ScannerAdapter
 from .staging import maintained_repository_files
-
-_WEB_DEPENDENCY = re.compile(
-    r"(?im)^[^#\n]*(?:django|flask|fastapi|starlette|litestar|quart|sanic)"
-    r"(?:\s|[<>=~!\[\],;\"']|$)"
-)
-_OPENAPI_NAMES = {
-    "openapi.json",
-    "openapi.yaml",
-    "openapi.yml",
-    "swagger.json",
-    "swagger.yaml",
-    "swagger.yml",
-}
 
 
 class AssuranceEvidenceAdapter(ScannerAdapter):
@@ -542,7 +529,11 @@ class AuthorizationSecurityAdapter(AssuranceEvidenceAdapter):
             target / "security" / "authorization-contract.json",
             target / "authorization-contract.json",
         )
-        if configured.is_file() or any(path.is_file() for path in contracts):
+        if (
+            configured.is_file()
+            or any(path.is_file() for path in contracts)
+            or "authorization" in classify_repository_surfaces(target)
+        ):
             return None
         return "no authorization contract or pre-generated authorization evidence was found"
 
@@ -554,6 +545,16 @@ class SurfaceInventoryAdapter(AssuranceEvidenceAdapter):
     default_domain = "security"
     default_area = "api-and-service-surface-inventory"
     reference = "https://owasp.org/API-Security/editions/2023/en/0xa9-improper-inventory-management/"
+
+    def not_applicable_reason(self, target: Path) -> str | None:
+        configured = configured_path(
+            target, self.config.artifacts_path, self.default_report
+        )
+        if configured.is_file() or "service" in classify_repository_surfaces(target):
+            return None
+        return (
+            "no service surface or pre-generated surface inventory evidence was found"
+        )
 
     def parse(self, payload: str, target: Path) -> list[Finding]:
         document = strict_json_loads(payload)
@@ -575,6 +576,9 @@ class EventSecurityAdapter(AssuranceEvidenceAdapter):
         "https://owasp.org/www-project-application-security-verification-standard/"
     )
 
+    def not_applicable_reason(self, target: Path) -> str | None:
+        return _classified_evidence_applicability(self, target, "event")
+
 
 class DatabaseSecurityAdapter(AssuranceEvidenceAdapter):
     name = "database-security"
@@ -586,6 +590,9 @@ class DatabaseSecurityAdapter(AssuranceEvidenceAdapter):
         "https://owasp.org/www-project-application-security-verification-standard/"
     )
 
+    def not_applicable_reason(self, target: Path) -> str | None:
+        return _classified_evidence_applicability(self, target, "database")
+
 
 class RulesetRegressionAdapter(AssuranceEvidenceAdapter):
     name = "ruleset-regression"
@@ -594,6 +601,34 @@ class RulesetRegressionAdapter(AssuranceEvidenceAdapter):
     default_domain = "testing"
     default_area = "semantic-scanner-ruleset-regression"
     reference = "https://csrc.nist.gov/projects/ssdf"
+
+    def not_applicable_reason(self, target: Path) -> str | None:
+        configured = configured_path(
+            target, self.config.artifacts_path, self.default_report
+        )
+        if configured.is_file() or any(
+            path.suffix.casefold()
+            in {
+                ".c",
+                ".cc",
+                ".cpp",
+                ".cs",
+                ".go",
+                ".java",
+                ".js",
+                ".kt",
+                ".php",
+                ".py",
+                ".rb",
+                ".rs",
+                ".swift",
+                ".ts",
+                ".tsx",
+            }
+            for path in maintained_repository_files(target)
+        ):
+            return None
+        return "no analyzable source or pre-generated ruleset regression evidence was found"
 
 
 class AiSecurityAdapter(AssuranceEvidenceAdapter):
@@ -605,6 +640,9 @@ class AiSecurityAdapter(AssuranceEvidenceAdapter):
     reference = (
         "https://owasp.org/www-project-top-10-for-large-language-model-applications/"
     )
+
+    def not_applicable_reason(self, target: Path) -> str | None:
+        return _classified_evidence_applicability(self, target, "ai")
 
 
 class ClusterFuzzLiteAdapter(AssuranceEvidenceAdapter):
@@ -859,6 +897,20 @@ def _web_evidence_applicability(
     )
 
 
+def _classified_evidence_applicability(
+    adapter: AssuranceEvidenceAdapter, target: Path, surface: str
+) -> str | None:
+    configured = configured_path(
+        target, adapter.config.artifacts_path, adapter.default_report
+    )
+    if configured.is_file() or surface in classify_repository_surfaces(target):
+        return None
+    return (
+        f"no {surface} runtime surface or pre-generated {adapter.evidence_kind} "
+        "evidence was found"
+    )
+
+
 def _runtime_evidence_applicability(
     adapter: AssuranceEvidenceAdapter, target: Path, label: str
 ) -> str | None:
@@ -871,47 +923,11 @@ def _runtime_evidence_applicability(
 
 
 def _has_web_surface(target: Path) -> bool:
-    for path in maintained_repository_files(target):
-        if path.name.casefold() in _OPENAPI_NAMES:
-            return True
-        name = path.name.casefold()
-        if name == "pyproject.toml" and _pyproject_declares_web_runtime(path):
-            return True
-        if name not in {"requirements.txt", "requirements.in"}:
-            continue
-        try:
-            if path.stat().st_size <= 4 * 1024 * 1024 and _WEB_DEPENDENCY.search(
-                path.read_text(encoding="utf-8", errors="replace")
-            ):
-                return True
-        except OSError:
-            continue
-    return False
-
-
-def _pyproject_declares_web_runtime(path: Path) -> bool:
-    try:
-        if path.stat().st_size > 4 * 1024 * 1024:
-            return False
-        document = tomllib.loads(path.read_text(encoding="utf-8"))
-    except (OSError, tomllib.TOMLDecodeError):
-        return False
-    project = document.get("project")
-    if not isinstance(project, dict):
-        return False
-    dependencies = project.get("dependencies")
-    return isinstance(dependencies, list) and any(
-        isinstance(value, str) and _WEB_DEPENDENCY.search(value)
-        for value in dependencies
-    )
+    return "web" in classify_repository_surfaces(target)
 
 
 def _has_container_shape(target: Path) -> bool:
-    return any(
-        path.name.casefold() in {"dockerfile", "compose.yaml", "compose.yml"}
-        or _looks_like_kubernetes_manifest(path)
-        for path in maintained_repository_files(target)
-    )
+    return "container" in classify_repository_surfaces(target)
 
 
 def _has_kubernetes_shape(target: Path) -> bool:
@@ -934,18 +950,7 @@ def _looks_like_kubernetes_manifest(path: Path) -> bool:
 
 
 def _has_cloud_shape(target: Path) -> bool:
-    cloud_names = {
-        "cdk.json",
-        "serverless.yml",
-        "serverless.yaml",
-        "pulumi.yaml",
-        "main.tf",
-    }
-    return any(
-        path.name.casefold() in cloud_names
-        or path.suffix.casefold() in {".tf", ".tfvars"}
-        for path in maintained_repository_files(target)
-    )
+    return "cloud" in classify_repository_surfaces(target)
 
 
 def _has_native_source(target: Path) -> bool:
@@ -956,47 +961,8 @@ def _has_native_source(target: Path) -> bool:
 
 
 def _has_mobile_shape(target: Path) -> bool:
-    names = {"androidmanifest.xml", "info.plist", "podfile"}
-    return any(
-        path.name.casefold() in names
-        or path.suffix.casefold() in {".apk", ".aab", ".ipa", ".xcodeproj"}
-        for path in maintained_repository_files(target)
-    )
+    return "mobile" in classify_repository_surfaces(target)
 
 
 def _has_non_python_source(target: Path) -> bool:
-    return any(
-        path.suffix.casefold()
-        in {
-            ".js",
-            ".jsx",
-            ".ts",
-            ".tsx",
-            ".java",
-            ".kt",
-            ".kts",
-            ".go",
-            ".cs",
-            ".fs",
-            ".vb",
-            ".rb",
-            ".php",
-            ".rs",
-            ".swift",
-        }
-        or path.name.casefold()
-        in {
-            "package-lock.json",
-            "npm-shrinkwrap.json",
-            "pnpm-lock.yaml",
-            "yarn.lock",
-            "cargo.lock",
-            "go.sum",
-            "gemfile.lock",
-            "composer.lock",
-            "pom.xml",
-            "gradle.lockfile",
-            "packages.lock.json",
-        }
-        for path in maintained_repository_files(target)
-    )
+    return "polyglot" in classify_repository_surfaces(target)

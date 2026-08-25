@@ -13,6 +13,7 @@ with atheris.instrument_imports():
     from py_security_suite.adapters import ADAPTER_TYPES
     from py_security_suite.adapters.sarif import parse_sarif_findings
     from py_security_suite.config import ToolConfig
+    from py_security_suite.models import Finding, json_ready
     from py_security_suite.strict_json import canonical_bytes
     from py_security_suite.strict_json import loads as strict_loads
 
@@ -66,6 +67,7 @@ def test_one_input(data: bytes) -> None:
             )
             if first != second:
                 raise RuntimeError("SARIF normalization is nondeterministic")
+            _assert_normalized_findings(first)
         except (TypeError, ValueError):
             pass
         return
@@ -76,8 +78,40 @@ def test_one_input(data: bytes) -> None:
         second = selected[selector][1].parse(text, _TARGET)
         if first != second:
             raise RuntimeError("adapter normalization is nondeterministic")
+        _assert_normalized_findings(first)
     except (TypeError, ValueError):
         pass
+
+
+def _assert_normalized_findings(findings: object) -> None:
+    if not isinstance(findings, list) or len(findings) > 100_000:
+        raise RuntimeError("parser returned an unbounded or non-list finding result")
+    if any(not isinstance(item, Finding) for item in findings):
+        raise RuntimeError("parser returned a non-Finding result")
+    normalized = json_ready(findings)
+    encoded = canonical_bytes(normalized)
+    if (
+        strict_loads(encoded) != normalized
+        or canonical_bytes(strict_loads(encoded)) != encoded
+    ):
+        raise RuntimeError("normalized findings do not have a stable strict-JSON form")
+    for finding in findings:
+        if (
+            not finding.finding_id
+            or not finding.fingerprint
+            or "\x00" in finding.description
+        ):
+            raise RuntimeError("normalized finding identity or text is invalid")
+        for location in finding.locations:
+            path = str(location.path).replace("\\", "/")
+            if (
+                not path
+                or "\x00" in path
+                or path.startswith("/")
+                or re.match(r"^[a-zA-Z]:/", path)
+                or ".." in path.split("/")
+            ):
+                raise RuntimeError("normalized finding path escapes the repository")
 
 
 def _selected_adapters(target: str) -> tuple[tuple[str, Any], ...]:
@@ -124,8 +158,8 @@ def main() -> None:
             {
                 "target": f"adapter:{name}",
                 "artifact": f"adapter-{index:03d}-{re.sub(r'[^a-z0-9-]', '-', name.casefold())}",
-                "seconds": 120,
-                "coverage_floor": 4,
+                "seconds": 180,
+                "coverage_floor": 12,
             }
             for index, (name, _adapter) in enumerate(_NAMED_ADAPTERS)
         )

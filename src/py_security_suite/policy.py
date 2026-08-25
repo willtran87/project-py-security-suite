@@ -16,6 +16,11 @@ _PRODUCTION_EVIDENCE = (
     "scorecard",
 )
 _CONDITIONAL_PRODUCTION_EVIDENCE = (
+    "surface-inventory",
+    "event-security",
+    "database-security",
+    "ai-security",
+    "ruleset-regression",
     "schemathesis",
     "clusterfuzzlite",
     "zap",
@@ -95,6 +100,7 @@ def evaluate_policy(
             "result and investigate scanner or concurrent-process writes"
         )
 
+    explicitly_required = set(config.policy.required_scanners)
     for tool in config.required_tools:
         run = by_tool.get(tool)
         if run is None:
@@ -102,6 +108,11 @@ def evaluate_policy(
                 f"required scanner {tool} did not produce a tool-health record"
             )
         elif not run.applicable:
+            if tool in explicitly_required:
+                reasons.append(
+                    f"explicitly required scanner {tool} was classified not applicable: "
+                    f"{run.error or 'no applicability evidence was retained'}"
+                )
             continue
         elif run.status is not ToolStatus.COMPLETED:
             reasons.append(f"required scanner {tool} status is {run.status}")

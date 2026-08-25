@@ -54,6 +54,8 @@ from .path_safety import resolve_regular_directory, resolve_unlinked_path
 from .reports import write_reports
 from .risk_intelligence import enrich_findings
 from .risk_paths import build_risk_paths
+from .runtime_reachability import apply_runtime_trace_observations
+from .runtime_surface import runtime_surface_binding_artifact
 from .source_context import attach_source_context, sanitize_secret_findings
 from .semantic_coverage import semantic_language_coverage_artifact
 from .requirements_coverage import security_requirements_coverage_artifact
@@ -311,6 +313,27 @@ def _scan_sealed_project(
             context_errors.append(
                 "multi-ecosystem dependency analysis is incomplete for: " + uncovered
             )
+        runtime_surface = runtime_surface_binding_artifact(tool_runs, derived_artifacts)
+        derived_artifacts["runtime-surface-binding.json"] = runtime_surface
+        if (
+            config.profile in {"production", "release"}
+            and not runtime_surface["complete"]
+        ):
+            context_errors.append(
+                "runtime assurance lanes do not share one canonical surface context "
+                "with independently corroborated clean claims"
+            )
+        reachability_feedback = apply_runtime_trace_observations(
+            derived_artifacts.get("reachability.json"), runtime_trace, boundary_graph
+        )
+        if (
+            config.profile in {"production", "release"}
+            and runtime_trace["complete"]
+            and not reachability_feedback["complete"]
+        ):
+            context_errors.append(
+                "authenticated Python runtime traces could not be mapped back to exact reachability nodes"
+            )
         sanitize_secret_findings(findings)
         findings = correlate_findings(findings)
         intelligence = enrich_findings(findings, config.intelligence)
@@ -398,6 +421,10 @@ def _scan_sealed_project(
         _annotate_tool_authority(tool_runs, diagnostics, config)
         derived_artifacts["effectiveness.json"] = effectiveness_artifact(
             findings, tool_runs
+        )
+    if "runtime-surface-binding.json" not in derived_artifacts:
+        derived_artifacts["runtime-surface-binding.json"] = (
+            runtime_surface_binding_artifact(tool_runs, derived_artifacts)
         )
     if "semantic-language-coverage.json" not in derived_artifacts:
         derived_artifacts["semantic-language-coverage.json"] = (

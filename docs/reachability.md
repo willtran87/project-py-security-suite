@@ -143,6 +143,15 @@ model gap, not dead code. It may be a test-only path, indirect dispatch, or miss
 production root. The distinction preserves runtime evidence without silently
 promoting every imported symbol to executable.
 
+When deployment-authenticated runtime request-to-sink evidence is available,
+the orchestrator hashes each retained boundary edge, resolves its exact Python
+file and line, and maps it to the enclosing reachability node. Only an exact
+edge/file/line match changes that node to `observed`; unmatched Python traces
+make production admission incomplete. Summary observation counts are refreshed
+before graph analysis, structural synthesis, evidence fusion, and risk-path
+construction consume the artifact. This closes dynamic-dispatch blind spots
+without treating an unrelated trace or a shared filename as execution proof.
+
 ## Reading the artifact
 
 `reachability.json` contains:

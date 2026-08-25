@@ -201,6 +201,16 @@ with an Ed25519 public key pinned by SHA-256 in organization policy. Legacy v1
 evidence remains parseable only for explicit compatibility use; configured
 evidence adapters require v2 and authenticated bindings by default.
 
+Repository applicability uses a shared semantic classifier rather than a small
+filename allowlist. PEP 621, Poetry, PDM, dependency groups, lockfiles, and
+Python imports can activate web, event, database, and AI lanes. Containerfile
+variants, Compose, Kubernetes and Helm activate container lanes; Terraform,
+CloudFormation/SAM, CDK, Serverless, Pulumi, Bicep, and ARM shapes activate cloud
+lanes. OpenAPI and discovered web runtimes activate authorization and canonical
+service-surface assurance even when a hand-authored authorization contract is
+missing. An organization-explicit `required_scanners` entry can never be waived
+by an adapter's not-applicable result.
+
 For Python web projects, browser, ZAP, Nuclei, OAST, RESTler, RASP, TLS, and
 IAST evidence becomes applicable;
 OpenAPI inputs make Schemathesis applicable. Container and Kubernetes inputs
@@ -227,6 +237,13 @@ Semantic execution now emits a canonical `control_proof` for every claimed
 feature, committing the exact case IDs, observations, case count, and failed
 case count. Governed ingestion requires those records for semantic lanes, so a
 feature label without executed-case commitments cannot satisfy admission.
+Applicable runtime summaries are also reconciled into
+`runtime-surface-binding.json`. Every lane must bind the same surface,
+deployment, and target-manifest digests as the independently collected surface
+inventory. A clean lane additionally needs a complete canary plus either an
+independent/differential qualification feature or corroboration by a distinct
+producer on that exact context; signatures alone do not establish semantic
+truth.
 
 For higher-authority evidence, use the native drivers instead of hand-authored
 oracle outcomes: `surface_inventory.py` reconciles a declared catalog against at
@@ -357,8 +374,13 @@ computing base. Their exact versions and transitive dependencies are recorded
 in `uv.lock`; acquire the locked wheels in the connected preparation lane.
 The pinned `Continuous parser fuzzing` workflow runs Atheris 3 against strict
 JSON, SARIF, and every registered scanner adapter parser on pull requests,
-pushes, and a daily schedule. It retains both the seed corpus and the evolved
-coverage corpus under `fuzz/corpus/security-parsers`.
+pushes, and a daily schedule. Adapter campaigns run for at least 180 seconds and
+must reach a coverage floor of 12. The oracle checks determinism, bounded result
+types, stable canonical strict-JSON serialization, identities, text, and
+repository-confined locations. An aggregate `Fuzz required gate` fails if target
+discovery or any campaign is skipped or unsuccessful. The workflow retains both
+the seed corpus and the evolved coverage corpus under
+`fuzz/corpus/security-parsers`.
 
 Package wheels, native archives, rules, databases, trusted roots, and Java
 runtime must be prepared in a connected update lane, checksum-verified, and

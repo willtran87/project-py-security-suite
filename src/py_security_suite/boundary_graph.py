@@ -84,6 +84,13 @@ _LANGUAGES = {
     ".tsx": "typescript",
 }
 _SPECIAL_SUFFIXES = {
+    ".dart": "unsupported-semantic-source",
+    ".groovy": "unsupported-semantic-source",
+    ".m": "unsupported-semantic-source",
+    ".mm": "unsupported-semantic-source",
+    ".scala": "unsupported-semantic-source",
+    ".svelte": "unsupported-semantic-source",
+    ".vue": "unsupported-semantic-source",
     ".ipynb": "notebook",
     ".j2": "template",
     ".jinja": "template",

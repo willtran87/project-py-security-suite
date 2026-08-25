@@ -175,6 +175,26 @@ class PolicyTests(unittest.TestCase):
         )
         self.assertEqual(decision.outcome, Outcome.PASS)
 
+    def test_explicitly_required_tool_cannot_fail_open_as_not_applicable(self) -> None:
+        config = load_config(profile_override="quick")
+        config.policy.required_scanners = ("authorization-security",)
+        run = ToolRun(
+            tool="authorization-security",
+            status=ToolStatus.SKIPPED,
+            command=["authorization-security"],
+            duration_seconds=0.0,
+            applicable=False,
+            error="no authorization contract was detected",
+        )
+        decision = evaluate_policy(
+            config=config,
+            findings=[],
+            tool_runs=[run],
+            network_isolation_attested=True,
+        )
+        self.assertEqual(decision.outcome, Outcome.INCOMPLETE)
+        self.assertIn("explicitly required scanner", decision.reasons[0])
+
     def test_high_finding_fails(self) -> None:
         item = finding(Severity.HIGH)
         decision = evaluate_policy(

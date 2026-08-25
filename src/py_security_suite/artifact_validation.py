@@ -65,6 +65,7 @@ _ARTIFACT_SCHEMAS = {
     "resource-limits.json": "resource-limits-1.0.schema.json",
     "risk-paths.json": "risk-paths.schema.json",
     "runtime-closure.json": "runtime-closure-1.0.schema.json",
+    "runtime-surface-binding.json": "runtime-surface-binding-1.0.schema.json",
     "runtime-trace-correlation.json": "runtime-trace-correlation-1.0.schema.json",
     "semantic-language-coverage.json": "semantic-language-coverage-1.0.schema.json",
     "security-requirements-coverage.json": "security-requirements-coverage-1.0.schema.json",

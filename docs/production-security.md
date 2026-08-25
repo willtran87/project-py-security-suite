@@ -236,10 +236,17 @@ Production now fails closed without completed Hypothesis, CrossHair, Atheris,
 mutmut, pytm, and Scorecard evidence. Release additionally requires
 check-manifest, ClamAV, GitHub attestation, in-toto, reproducibility, YARA,
 final OCI-image evidence, and offline PyPI attestation verification.
-Applicable web, OpenAPI/protocol, authorization-contract, fuzz-target, cloud,
+Applicable web, OpenAPI/protocol, authorization, service-surface, event,
+database, AI, ruleset-regression, fuzz-target, cloud,
 secret-verification, container, Kubernetes, native, mobile, TLS, and non-Python
 shapes additionally require their corresponding v2 runtime evidence; absence
 is `INCOMPLETE`, not a clean pass.
+Semantic applicability includes package metadata and lockfiles, Python imports,
+Containerfile variants, CloudFormation/SAM, and broader mobile and polyglot
+source shapes. Unsupported semantic source languages are retained as uncovered
+surfaces and block governed completeness instead of disappearing from the
+language denominator. Explicit organization-required scanners remain required
+even if a repository adapter reports them as not applicable.
 
 Dynamic tools execute application behavior and must use disposable test
 credentials, synthetic data, resource limits, and a network policy appropriate

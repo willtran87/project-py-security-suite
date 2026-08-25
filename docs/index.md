@@ -201,6 +201,7 @@ and zero findings on the safe negative control.
 | Local hook configuration | [1.0](../src/py_security_suite/schemas/precommit-config.schema.json) | Non-authoritative local diagnostic scaffold |
 | GitHub workflow | [1.0](../src/py_security_suite/schemas/github-workflow.schema.json) | Pinned no-install isolated-runner workflow scaffold |
 | Admission decisions | [1.0](../src/py_security_suite/schemas/admission-decisions.schema.json) | Source, test, dependency, artifact, and governance evidence decomposition |
+| Runtime surface binding | [1.0](../src/py_security_suite/schemas/runtime-surface-binding-1.0.schema.json) | One canonical surface/deployment/target denominator across applicable runtime lanes, complete canaries, and independent or cross-producer semantic corroboration for clean claims |
 | Portfolio health | [1.1](../src/py_security_suite/schemas/portfolio-health-1.1.schema.json) | Separate execution, observed-risk, evidence, and release grades plus conditional-control activation recipes |
 | Source inventory | [1.0](../src/py_security_suite/schemas/source-inventory.schema.json) | Exact path, size, and SHA-256 identities behind the sealed source aggregate and clean-fixture proof |
 | Graphify evidence | [1.0](../src/py_security_suite/schemas/graphify-evidence.schema.json) | Validated code-only nodes, edges, confidence, and bounded file topology |

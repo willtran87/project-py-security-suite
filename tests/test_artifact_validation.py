@@ -55,6 +55,30 @@ def test_malformed_governed_artifact_blocks_publication_validation() -> None:
         )
 
 
+def test_runtime_surface_binding_has_a_governed_publication_contract() -> None:
+    digest = "a" * 64
+    context = {
+        "surface_sha256": digest,
+        "deployment_sha256": "b" * 64,
+        "target_manifest_sha256": "c" * 64,
+    }
+    artifact = {
+        "schema_version": "1.0",
+        "analysis": "canonical-runtime-surface-and-truth-diversity",
+        "complete": True,
+        "canonical_context": context,
+        "applicable_lanes": ["surface-inventory"],
+        "bound_lanes": ["surface-inventory"],
+        "missing_lanes": [],
+        "invalid_context_lanes": [],
+        "mismatched_context_lanes": [],
+        "truth_diversity_gaps": [],
+        "lane_contexts": {"surface-inventory": context},
+    }
+    validated = validate_governed_artifacts({"runtime-surface-binding.json": artifact})
+    assert "runtime-surface-binding.json" in validated
+
+
 def test_retained_git_provenance_reverifies_signers_and_manifest(
     tmp_path: Path,
 ) -> None:

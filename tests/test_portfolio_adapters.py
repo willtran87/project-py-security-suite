@@ -13,6 +13,8 @@ from py_security_suite.adapters.assurance_evidence import (
     AuthorizationSecurityAdapter,
     ClusterFuzzLiteAdapter,
     CrossHairAdapter,
+    DatabaseSecurityAdapter,
+    EventSecurityAdapter,
     FalcoAdapter,
     IastAdapter,
     InTotoAdapter,
@@ -28,6 +30,8 @@ from py_security_suite.adapters.assurance_evidence import (
     PyTmAdapter,
     ReproducibleBuildAdapter,
     SurfaceInventoryAdapter,
+    AiSecurityAdapter,
+    RulesetRegressionAdapter,
     YaraAdapter,
     ZapAdapter,
 )
@@ -434,9 +438,8 @@ class PortfolioAdapterTests(unittest.TestCase):
                 '[[package]]\nname = "fastapi"\nversion = "1.0"\n',
                 encoding="utf-8",
             )
-            self.assertIn(
-                "no web application surface",
-                IastAdapter(ToolConfig(), 4096).not_applicable_reason(root) or "",
+            self.assertIsNone(
+                IastAdapter(ToolConfig(), 4096).not_applicable_reason(root)
             )
             (root / "pyproject.toml").write_text(
                 '[project]\ndependencies = ["fastapi>=0.100"]\n',
@@ -471,12 +474,10 @@ class PortfolioAdapterTests(unittest.TestCase):
             (root / ".clusterfuzzlite").mkdir()
             self.assertIsNone(fuzz.not_applicable_reason(root))
 
-            self.assertIn(
-                "authorization contract",
+            self.assertIsNone(
                 AuthorizationSecurityAdapter(ToolConfig(), 4096).not_applicable_reason(
                     root
                 )
-                or "",
             )
             (root / "security").mkdir()
             (root / "security" / "authorization-contract.json").write_text(
@@ -505,6 +506,44 @@ class PortfolioAdapterTests(unittest.TestCase):
             (root / "app.ts").write_text("export const value = 1;\n", encoding="utf-8")
             self.assertIsNone(
                 PolyglotAdapter(ToolConfig(), 4096).not_applicable_reason(root)
+            )
+
+    def test_semantic_repository_shapes_activate_deep_assurance_lanes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "pyproject.toml").write_text(
+                "[tool.poetry.dependencies]\npython = '^3.12'\nfastapi = '^1'\n"
+                "sqlalchemy = '^2'\naiokafka = '^0.12'\nopenai = '^2'\n",
+                encoding="utf-8",
+            )
+            for adapter in (
+                IastAdapter(ToolConfig(), 4096),
+                AuthorizationSecurityAdapter(ToolConfig(), 4096),
+                SurfaceInventoryAdapter(ToolConfig(), 4096),
+                EventSecurityAdapter(ToolConfig(), 4096),
+                DatabaseSecurityAdapter(ToolConfig(), 4096),
+                AiSecurityAdapter(ToolConfig(), 4096),
+            ):
+                with self.subTest(tool=adapter.name):
+                    self.assertIsNone(adapter.not_applicable_reason(root))
+
+            (root / "Containerfile.production").write_text(
+                "FROM scratch\n", encoding="utf-8"
+            )
+            self.assertIsNone(
+                FalcoAdapter(ToolConfig(), 4096).not_applicable_reason(root)
+            )
+            (root / "cloudformation.yml").write_text(
+                "AWSTemplateFormatVersion: '2010-09-09'\nResources:\n"
+                "  Bucket:\n    Type: AWS::S3::Bucket\n",
+                encoding="utf-8",
+            )
+            self.assertIsNone(
+                ProwlerAdapter(ToolConfig(), 4096).not_applicable_reason(root)
+            )
+            (root / "service.py").write_text("VALUE = 1\n", encoding="utf-8")
+            self.assertIsNone(
+                RulesetRegressionAdapter(ToolConfig(), 4096).not_applicable_reason(root)
             )
 
     def test_property_and_api_junit_preserve_producer_attribution(self) -> None:

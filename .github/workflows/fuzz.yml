@@ -151,3 +151,20 @@ jobs:
           path: .fuzz-corpus/${{ matrix.artifact }}
           if-no-files-found: error
           retention-days: 30
+
+  required-gate:
+    name: Fuzz required gate
+    if: always()
+    needs: [discover-targets, parser-fuzz]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require complete parser-fuzz coverage
+        shell: bash
+        env:
+          DISCOVERY_RESULT: ${{ needs.discover-targets.result }}
+          FUZZ_RESULT: ${{ needs.parser-fuzz.result }}
+        run: |
+          set -euo pipefail
+          [[ "$DISCOVERY_RESULT" == "success" ]]
+          [[ "$FUZZ_RESULT" == "success" ]]

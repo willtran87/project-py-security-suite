@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:runtime-surface-binding:1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "analysis", "complete", "canonical_context", "applicable_lanes", "bound_lanes", "missing_lanes", "invalid_context_lanes", "mismatched_context_lanes", "truth_diversity_gaps", "lane_contexts"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "analysis": {"const": "canonical-runtime-surface-and-truth-diversity"},
+    "complete": {"type": "boolean"},
+    "canonical_context": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/context"}]},
+    "applicable_lanes": {"$ref": "#/$defs/lanes"},
+    "bound_lanes": {"$ref": "#/$defs/lanes"},
+    "missing_lanes": {"$ref": "#/$defs/lanes"},
+    "invalid_context_lanes": {"$ref": "#/$defs/lanes"},
+    "mismatched_context_lanes": {"$ref": "#/$defs/lanes"},
+    "truth_diversity_gaps": {"$ref": "#/$defs/lanes"},
+    "lane_contexts": {"type": "object", "maxProperties": 64, "additionalProperties": {"$ref": "#/$defs/context"}}
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "context": {"type": "object", "additionalProperties": false, "required": ["surface_sha256", "deployment_sha256", "target_manifest_sha256"], "properties": {"surface_sha256": {"$ref": "#/$defs/digest"}, "deployment_sha256": {"$ref": "#/$defs/digest"}, "target_manifest_sha256": {"$ref": "#/$defs/digest"}}},
+    "lanes": {"type": "array", "maxItems": 64, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 100}}
+  }
+}
