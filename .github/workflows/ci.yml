@@ -313,17 +313,27 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          audit_requirements() {
+            local requirements="$1"
+            for attempt in 1 2 3; do
+              if uv run --frozen pip-audit \
+                --requirement "$requirements" \
+                --disable-pip --strict --progress-spinner off; then
+                return 0
+              fi
+              if [ "$attempt" -eq 3 ]; then
+                return 1
+              fi
+              sleep $((attempt * 5))
+            done
+          }
           uv export --quiet --frozen --all-groups --no-emit-project \
             --output-file "$RUNNER_TEMP/requirements-audit.txt"
-          uv run --frozen pip-audit \
-            --requirement "$RUNNER_TEMP/requirements-audit.txt" \
-            --disable-pip --strict --progress-spinner off
+          audit_requirements "$RUNNER_TEMP/requirements-audit.txt"
           uv export --project companion --quiet --frozen --all-groups \
             --no-emit-project --no-emit-local \
             --output-file "$RUNNER_TEMP/companion-requirements-audit.txt"
-          uv run --frozen pip-audit \
-            --requirement "$RUNNER_TEMP/companion-requirements-audit.txt" \
-            --disable-pip --strict --progress-spinner off
+          audit_requirements "$RUNNER_TEMP/companion-requirements-audit.txt"
 
   required-gate:
     name: CI required gate

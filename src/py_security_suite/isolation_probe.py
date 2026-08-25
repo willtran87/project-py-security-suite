@@ -586,6 +586,7 @@ def probe_isolation_boundary(
         and not execution.timed_out
         and not execution.output_limit_exceeded
         and not execution.scratch_limit_exceeded
+        and not execution.resident_memory_limit_exceeded
         and capabilities
         and all(capabilities.values())
     )
@@ -599,6 +600,7 @@ def probe_isolation_boundary(
         "timed_out": execution.timed_out,
         "output_limit_exceeded": execution.output_limit_exceeded,
         "scratch_limit_exceeded": execution.scratch_limit_exceeded,
+        "resident_memory_limit_exceeded": execution.resident_memory_limit_exceeded,
         "resource_limits_enforced": list(execution.resource_limits_enforced),
         "resource_limit_errors": list(execution.resource_limit_errors),
         "probe_sha256": hashlib.sha256(_PROBE_SOURCE.encode()).hexdigest(),

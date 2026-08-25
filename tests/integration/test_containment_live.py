@@ -74,6 +74,24 @@ def test_real_posix_scanner_cannot_raise_hard_quota(tmp_path: Path) -> None:
     assert result.stdout.strip() == "denied"
 
 
+@pytest.mark.skipif(
+    sys.platform != "darwin", reason="Darwin uses the process-tree RSS watchdog"
+)
+def test_real_macos_resident_memory_watchdog_terminates_scanner(
+    tmp_path: Path,
+) -> None:
+    scanner = "import time; payload=bytearray(128*1024**2); time.sleep(5)"
+    result = run_command(
+        [sys.executable, "-c", scanner],
+        cwd=tmp_path,
+        timeout_seconds=10,
+        max_output_bytes=4096,
+        environment=CommandEnvironment(max_resident_memory_bytes=64 * 1024**2),
+    )
+    assert result.resident_memory_limit_exceeded
+    assert result.process_tree_terminated
+
+
 def test_replay_checkpoint_rejects_gap_without_mutating_state(tmp_path: Path) -> None:
     state = tmp_path / "replay-state.json"
     first = {

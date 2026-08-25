@@ -525,7 +525,10 @@ isolation; Windows evidence must additionally assert `windows-appcontainer`
 because a Job Object alone is not a security boundary. Unsupported host
 canaries remain explicitly untested and cannot satisfy required capability
 coverage. `resource-limits.json` records CPU, memory, process, open-file, output,
-and scratch controls; production/release additionally require an external
+and scratch controls. Linux uses an irreversible address-space rlimit, Windows
+uses Job Object process/job memory ceilings, and macOS uses a fail-closed
+recursive resident-memory watchdog because Darwin rejects finite
+`RLIMIT_AS` ceilings. Production/release additionally require an external
 `file-write-quota` capability, because post-run directory polling is not a hard
 write limit.
 Optional exact native reports use `PYSEC_RAW_EVIDENCE_DIRECTORY` and an actual

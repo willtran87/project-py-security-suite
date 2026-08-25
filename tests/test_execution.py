@@ -14,6 +14,7 @@ from unittest.mock import MagicMock, call, patch
 
 from py_security_suite.execution import (
     CommandEnvironment,
+    _process_tree_resident_bytes,
     _terminate_process_tree,
     isolated_environment,
     native_runtime_closure_sha256,
@@ -27,6 +28,19 @@ from py_security_suite.execution import (
 
 
 class IsolatedEnvironmentTests(unittest.TestCase):
+    def test_process_tree_resident_memory_is_measured(self) -> None:
+        self.assertGreater(_process_tree_resident_bytes(os.getpid()), 0)
+
+    def test_resident_memory_limit_rejects_unsafe_floor(self) -> None:
+        with self.assertRaisesRegex(ValueError, "at least 64 MiB"):
+            run_command(
+                [sys.executable, "-c", "pass"],
+                cwd=Path.cwd(),
+                timeout_seconds=10,
+                max_output_bytes=1024,
+                environment=CommandEnvironment(max_resident_memory_bytes=1),
+            )
+
     def test_file_sha256_is_streamed_and_stable(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "scanner"

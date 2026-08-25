@@ -35,8 +35,13 @@ gate, report = sys.argv[1:3]
 enforced, errors = [], []
 if os.name != "nt":
     import resource
+    memory_limits = (
+        ()
+        if sys.platform == "darwin"
+        else (("address-space", "RLIMIT_AS", 8 * 1024**3),)
+    )
     requested_limits = (
-        ("address-space", "RLIMIT_AS", 8 * 1024**3),
+        *memory_limits,
         ("process-count", "RLIMIT_NPROC", 256),
         ("open-files", "RLIMIT_NOFILE", 2048),
         ("file-size", "RLIMIT_FSIZE", int(sys.argv[5])),
@@ -83,6 +88,7 @@ class RawExecution:
     process_tree_terminated: bool = False
     output_limit_exceeded: bool = False
     scratch_limit_exceeded: bool = False
+    resident_memory_limit_exceeded: bool = False
     resource_limits_enforced: tuple[str, ...] = ()
     resource_limit_errors: tuple[str, ...] = ()
 
@@ -94,6 +100,7 @@ class CommandEnvironment:
     sandbox_executable_sha256: str = ""
     sandbox_runtime_closure_sha256: str = ""
     max_scratch_bytes: int = 512 * 1024**2
+    max_resident_memory_bytes: int = 8 * 1024**3
 
 
 class _BoundedPipeCollector:
@@ -970,6 +977,8 @@ def run_command(
     max_output_bytes: int,
     environment: CommandEnvironment | None = None,
 ) -> RawExecution:
+    if environment is not None and environment.max_resident_memory_bytes < 64 * 1024**2:
+        raise ValueError("scanner resident-memory limit must be at least 64 MiB")
     sandbox_path: Path | None = None
     sandbox_digest = ""
     sandbox_runtime_digest = ""
@@ -1066,6 +1075,8 @@ def run_command(
             limit_report=limit_report,
         )
         containment_failed = bool(limit_errors)
+        if sys.platform == "darwin" and not containment_failed:
+            limits = (*limits, "resident-memory-watchdog")
         if not containment_failed and "pre-execution-assignment" not in limits:
             limits = (*limits, "pre-execution-assignment")
         limits = (*limits, "bounded-output-pipes", "bounded-private-scratch")
@@ -1092,9 +1103,14 @@ def run_command(
         timed_out = False
         output_limit_exceeded = False
         scratch_limit_exceeded = False
+        resident_memory_limit_exceeded = False
         terminated = terminate_tree() if containment_failed else False
         deadline = started + timeout_seconds
         scratch_limit = environment.max_scratch_bytes if environment else 512 * 1024**2
+        resident_memory_limit = (
+            environment.max_resident_memory_bytes if environment else 8 * 1024**3
+        )
+        next_memory_check = time.monotonic() if sys.platform == "darwin" else 0.0
         if scratch_limit < 1024 * 1024:
             terminate_tree()
             raise ValueError("scanner scratch limit must be at least 1 MiB")
@@ -1115,6 +1131,20 @@ def run_command(
                     scratch_limit_exceeded = True
                     terminated = terminate_tree()
                     break
+                if sys.platform == "darwin" and time.monotonic() >= next_memory_check:
+                    try:
+                        resident_memory_limit_exceeded = (
+                            _process_tree_resident_bytes(process.pid)
+                            > resident_memory_limit
+                        )
+                    except RuntimeError as exc:
+                        limit_errors = (*limit_errors, str(exc))
+                        terminated = terminate_tree()
+                        break
+                    if resident_memory_limit_exceeded:
+                        terminated = terminate_tree()
+                        break
+                    next_memory_check = time.monotonic() + 0.05
                 time.sleep(0.01)
             if process.poll() is None:
                 process.wait(timeout=10)
@@ -1166,9 +1196,30 @@ def run_command(
             process_tree_terminated=terminated,
             output_limit_exceeded=output_limit_exceeded,
             scratch_limit_exceeded=scratch_limit_exceeded,
+            resident_memory_limit_exceeded=resident_memory_limit_exceeded,
             resource_limits_enforced=limits,
             resource_limit_errors=limit_errors,
         )
+
+
+def _process_tree_resident_bytes(pid: int) -> int:
+    """Return current aggregate RSS for one live process tree."""
+    import psutil
+
+    try:
+        root = psutil.Process(pid)
+        processes = [root, *root.children(recursive=True)]
+        total = 0
+        for candidate in processes:
+            try:
+                total += candidate.memory_info().rss
+            except psutil.NoSuchProcess:
+                continue
+        return total
+    except psutil.NoSuchProcess:
+        return 0
+    except (psutil.AccessDenied, OSError) as exc:
+        raise RuntimeError("resident-memory-watchdog:unavailable") from exc
 
 
 def _apply_process_resource_limits(

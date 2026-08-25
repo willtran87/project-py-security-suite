@@ -53,6 +53,7 @@
     "timed_out": {"type": "boolean"},
     "output_limit_exceeded": {"type": "boolean"},
     "scratch_limit_exceeded": {"type": "boolean"},
+    "resident_memory_limit_exceeded": {"type": "boolean"},
     "resource_limits_enforced": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
     "resource_limit_errors": {"type": "array", "items": {"type": "string"}},
     "probe_sha256": {"$ref": "#/$defs/digest"},

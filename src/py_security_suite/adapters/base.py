@@ -246,6 +246,21 @@ class ScannerAdapter(ABC):
                 tool_run=tool_run,
                 diagnostic=self._diagnostic(tool_run, execution),
             )
+        if execution.resident_memory_limit_exceeded:
+            tool_run = self._tool_run(
+                execution,
+                ToolStatus.FAILED,
+                error=(
+                    "scanner process-tree resident memory exceeded the enforced "
+                    "limit and its process tree was terminated"
+                ),
+                version=version,
+            )
+            return AdapterResult(
+                findings=[],
+                tool_run=tool_run,
+                diagnostic=self._diagnostic(tool_run, execution),
+            )
         if execution.exit_code not in self.accepted_exit_codes:
             tool_run = self._tool_run(
                 execution,
@@ -575,5 +590,8 @@ class ScannerAdapter(ABC):
             ),
             "resource_limit_errors": (
                 list(execution.resource_limit_errors) if execution else []
+            ),
+            "resident_memory_limit_exceeded": (
+                execution.resident_memory_limit_exceeded if execution else False
             ),
         }
