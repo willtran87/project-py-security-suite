@@ -80,12 +80,14 @@ jobs:
           mkdir -p "$certs"
           openssl req -x509 -newkey rsa:3072 -nodes -days 2 -sha256 \
             -subj "/CN=pysec-test-ca" \
+            -addext "basicConstraints=critical,CA:TRUE" \
+            -addext "keyUsage=critical,keyCertSign,cRLSign" \
             -keyout "$certs/ca.key" -out "$certs/ca.crt"
           openssl req -newkey rsa:3072 -nodes -sha256 \
             -subj "/CN=localhost" \
             -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" \
             -keyout "$certs/server.key" -out "$certs/server.csr"
-          printf 'subjectAltName=DNS:localhost,IP:127.0.0.1\nextendedKeyUsage=serverAuth\n' > "$certs/server.ext"
+          printf 'basicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\nsubjectAltName=DNS:localhost,IP:127.0.0.1\nextendedKeyUsage=serverAuth\n' > "$certs/server.ext"
           openssl x509 -req -days 2 -sha256 \
             -in "$certs/server.csr" -CA "$certs/ca.crt" -CAkey "$certs/ca.key" \
             -CAcreateserial -extfile "$certs/server.ext" -out "$certs/server.crt"
@@ -109,12 +111,14 @@ jobs:
           mkdir -p "$certs"
           openssl req -x509 -newkey rsa:3072 -nodes -days 2 -sha256 \
             -subj "/CN=pysec-kafka-test-ca" \
+            -addext "basicConstraints=critical,CA:TRUE" \
+            -addext "keyUsage=critical,keyCertSign,cRLSign" \
             -keyout "$certs/ca.key" -out "$certs/ca.crt"
           openssl req -newkey rsa:3072 -nodes -sha256 \
             -subj "/CN=localhost" \
             -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" \
             -keyout "$certs/server.key" -out "$certs/server.csr"
-          printf 'subjectAltName=DNS:localhost,IP:127.0.0.1\nextendedKeyUsage=serverAuth\n' > "$certs/server.ext"
+          printf 'basicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\nsubjectAltName=DNS:localhost,IP:127.0.0.1\nextendedKeyUsage=serverAuth\n' > "$certs/server.ext"
           openssl x509 -req -days 2 -sha256 \
             -in "$certs/server.csr" -CA "$certs/ca.crt" -CAkey "$certs/ca.key" \
             -CAcreateserial -extfile "$certs/server.ext" -out "$certs/server.crt"

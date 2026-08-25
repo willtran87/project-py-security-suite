@@ -168,6 +168,10 @@ def test_linux_bubblewrap_enforces_network_and_read_only_target() -> None:
             Path("/lib"),
             Path("/lib64"),
             Path(sys.base_prefix),
+            Path(getattr(sys, "_base_executable", sys.executable))
+            .resolve()
+            .parent.parent,
+            Path(sys.executable).resolve().parent.parent,
             Path.cwd(),
         )
         if path.exists()

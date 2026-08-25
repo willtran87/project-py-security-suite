@@ -1005,7 +1005,11 @@ def run_command(
     with tempfile.TemporaryDirectory(
         prefix="pysec-process-home-", ignore_cleanup_errors=True
     ) as private_home:
-        private_root = Path(private_home)
+        # macOS exposes its temporary root through ``/var`` -> ``/private/var``.
+        # Resolve that operating-system alias before establishing the private
+        # boundary so the link-rejecting report reader sees only real path
+        # components without weakening its symlink checks.
+        private_root = Path(private_home).resolve()
         process_environment = isolated_environment(
             environment.extra if environment else None,
             executable=command[0] if command else None,

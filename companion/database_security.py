@@ -241,22 +241,20 @@ def _verify_negotiated_connection(connection: Any) -> None:
     pgconn = getattr(connection, "pgconn", None)
     if pgconn is None or getattr(pgconn, "ssl_in_use", False) is not True:
         raise ValueError("database connection did not negotiate TLS")
-
-    def ssl_attribute(name: bytes) -> str:
-        getter = getattr(pgconn, "ssl_attribute", None)
-        if not callable(getter):
-            raise ValueError("database driver cannot attest negotiated TLS")
-        value = getter(name)
-        if isinstance(value, bytes):
-            return value.decode("ascii", errors="strict")
-        return str(value or "")
-
-    protocol = ssl_attribute(b"protocol")
-    cipher = ssl_attribute(b"cipher")
-    bits = ssl_attribute(b"key_bits")
-    if protocol not in {"TLSv1.2", "TLSv1.3"} or not cipher:
+    row = connection.execute(
+        "SELECT ssl, version, cipher, bits FROM pg_catalog.pg_stat_ssl "
+        "WHERE pid = pg_backend_pid()"
+    ).fetchone()
+    if not isinstance(row, (tuple, list)) or len(row) != 4 or row[0] is not True:
+        raise ValueError("database server cannot attest negotiated TLS")
+    protocol, cipher, bits = row[1:]
+    if (
+        protocol not in {"TLSv1.2", "TLSv1.3"}
+        or not isinstance(cipher, str)
+        or not cipher
+    ):
         raise ValueError("database negotiated TLS parameters are below policy")
-    if bits and (not bits.isdigit() or int(bits) < 128):
+    if not isinstance(bits, int) or isinstance(bits, bool) or bits < 128:
         raise ValueError("database negotiated TLS key strength is below policy")
 
 

@@ -111,10 +111,9 @@ def test_postgresql_row_security_blocks_cross_tenant_reads(
 
 
 def _assert_postgresql_tls(connection: Any) -> None:
-    pgconn = connection.pgconn
-    assert pgconn.ssl_in_use is True
-    protocol = pgconn.ssl_attribute(b"protocol")
-    assert protocol in {b"TLSv1.2", b"TLSv1.3"}
+    from companion.database_security import _verify_negotiated_connection
+
+    _verify_negotiated_connection(connection)
 
 
 def test_kafka_read_committed_hides_aborts_and_exposes_commits(

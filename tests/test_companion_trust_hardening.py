@@ -585,16 +585,18 @@ def test_database_transport_attests_negotiated_tls() -> None:
     class PGconn:
         ssl_in_use = True
 
+    class Cursor:
         @staticmethod
-        def ssl_attribute(name: bytes) -> bytes:
-            return {
-                b"protocol": b"TLSv1.3",
-                b"cipher": b"TLS_AES_256_GCM_SHA384",
-                b"key_bits": b"256",
-            }[name]
+        def fetchone() -> tuple[bool, str, str, int]:
+            return True, "TLSv1.3", "TLS_AES_256_GCM_SHA384", 256
 
     class Connection:
         pgconn = PGconn()
+
+        @staticmethod
+        def execute(statement: str) -> Cursor:
+            assert "pg_catalog.pg_stat_ssl" in statement
+            return Cursor()
 
     _verify_negotiated_connection(Connection())
     Connection.pgconn.ssl_in_use = False
