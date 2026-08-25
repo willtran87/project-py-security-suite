@@ -107,7 +107,7 @@ jobs:
           for artifact in .artifacts/release-a/* .artifacts/release-b/*; do
             gh attestation verify "$artifact" \
               --repo "$GITHUB_REPOSITORY" \
-              --signer-workflow .github/workflows/release-assurance.yml \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release-assurance.yml" \
               --source-digest "$GITHUB_SHA" \
               --source-ref "$GITHUB_REF"
           done
