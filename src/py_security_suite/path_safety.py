@@ -255,7 +255,7 @@ def _open_windows_component_safe(path: Path, flags: int) -> int:
             ("file_index_low", wintypes.DWORD),
         ]
 
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
     create_file = kernel32.CreateFileW
     create_file.argtypes = (
         wintypes.LPCWSTR,
@@ -298,11 +298,11 @@ def _open_windows_component_safe(path: Path, flags: int) -> int:
             )
             handle_value = ctypes.cast(handle, ctypes.c_void_p).value
             if handle_value is None or handle_value == invalid_handle:
-                raise ctypes.WinError(ctypes.get_last_error())
+                raise ctypes.WinError(ctypes.get_last_error())  # type: ignore[attr-defined]
             held.append(handle_value)
             information = _ByHandleFileInformation()
             if not get_information(handle, ctypes.byref(information)):
-                raise ctypes.WinError(ctypes.get_last_error())
+                raise ctypes.WinError(ctypes.get_last_error())  # type: ignore[attr-defined]
             if information.file_attributes & reparse_attribute:
                 raise OSError(f"path contains a Windows reparse point: {component}")
         return os.open(path, flags)
@@ -315,7 +315,7 @@ def _hold_windows_components(path: Path) -> list[int]:
     import ctypes
     from ctypes import wintypes
 
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
     create_file = kernel32.CreateFileW
     create_file.argtypes = (
         wintypes.LPCWSTR,
@@ -350,7 +350,7 @@ def _hold_windows_components(path: Path) -> list[int]:
             )
             handle_value = ctypes.cast(handle, ctypes.c_void_p).value
             if handle_value is None or handle_value == invalid_handle:
-                raise ctypes.WinError(ctypes.get_last_error())
+                raise ctypes.WinError(ctypes.get_last_error())  # type: ignore[attr-defined]
             held.append(handle_value)
         return held
     except BaseException:
@@ -364,7 +364,9 @@ def _close_windows_handles(handles: list[int]) -> None:
     import ctypes
     from ctypes import wintypes
 
-    close_handle = ctypes.WinDLL("kernel32", use_last_error=True).CloseHandle
+    close_handle = ctypes.WinDLL(  # type: ignore[attr-defined]
+        "kernel32", use_last_error=True
+    ).CloseHandle
     close_handle.argtypes = (wintypes.HANDLE,)
     close_handle.restype = wintypes.BOOL
     for handle in reversed(handles):

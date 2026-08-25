@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - codex/improve-reachability-analysis
     paths:
       - .github/workflows/pages.yml
       - docs/**
@@ -53,6 +52,7 @@ jobs:
 
   deploy:
     name: Deploy audited site
+    if: github.ref == 'refs/heads/main'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

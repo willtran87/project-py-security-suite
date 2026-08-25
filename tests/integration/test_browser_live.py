@@ -80,12 +80,12 @@ class _HardenedHandler(BaseHTTPRequestHandler):
     os.environ.get("PYSEC_RUN_LIVE_INTEGRATION") != "1",
     reason="live integration lane is opt-in",
 )
-@pytest.mark.parametrize("browser_name", ["chromium", "firefox", "webkit"])
+@pytest.mark.parametrize("browser_engine", ["chromium", "firefox", "webkit"])
 @pytest.mark.parametrize("role", ["anonymous", "tenant-a", "tenant-b"])
 def test_real_browser_security_matrix(
     socket_enabled: None,
     tmp_path: Path,
-    browser_name: str,
+    browser_engine: str,
     role: str,
 ) -> None:
     server = ThreadingHTTPServer(("127.0.0.1", 0), _HardenedHandler)
@@ -95,14 +95,14 @@ def test_real_browser_security_matrix(
         origin = f"http://127.0.0.1:{server.server_port}"
         if role == "anonymous":
             target = loopback_target(f"{origin}/public")
-            findings = inspect_browser_surface(target, browser_name=browser_name)
+            findings = inspect_browser_surface(target, browser_name=browser_engine)
         else:
             from companion.browser_security import _inspect_browser_surface
             from playwright.sync_api import sync_playwright
 
             state = tmp_path / f"{role}.json"
             with sync_playwright() as playwright:
-                browser = getattr(playwright, browser_name).launch(headless=True)
+                browser = getattr(playwright, browser_engine).launch(headless=True)
                 authenticated = browser.new_context(service_workers="block")
                 response = authenticated.new_page().goto(
                     f"{origin}/login?role={role}", wait_until="networkidle"
@@ -118,7 +118,7 @@ def test_real_browser_security_matrix(
             target = loopback_target(f"{origin}/?tenant={role}")
             findings, _, canary = _inspect_browser_surface(
                 target,
-                browser_name=browser_name,
+                browser_name=browser_engine,
                 role=role,
                 storage_state=state,
             )

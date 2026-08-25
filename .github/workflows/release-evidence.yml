@@ -53,6 +53,7 @@ jobs:
           SOURCE_RUN_ID: ${{ inputs.source_run_id }}
           EXPECTED_HEAD_SHA: ${{ inputs.expected_head_sha }}
           EXPECTED_REF: ${{ inputs.expected_ref }}
+          EXPECTED_WORKFLOW_PATH: .github/workflows/release-evidence-source.yml
         shell: bash
         run: |
           set -euo pipefail
@@ -61,8 +62,9 @@ jobs:
           jq -e \
             --arg sha "$EXPECTED_HEAD_SHA" \
             --arg ref "$EXPECTED_REF" \
+            --arg workflow_path "$EXPECTED_WORKFLOW_PATH" \
             --arg repository "$GITHUB_REPOSITORY" \
-            '.head_sha == $sha and .head_branch == $ref and .head_repository.full_name == $repository and .repository.full_name == $repository and .run_attempt == 1 and .conclusion == "success" and (.event == "push" or .event == "workflow_dispatch")' \
+            '.head_sha == $sha and .head_branch == $ref and .path == $workflow_path and .head_repository.full_name == $repository and .repository.full_name == $repository and .run_attempt == 1 and .conclusion == "success" and .event == "workflow_dispatch"' \
             .assembly/source-run.json >/dev/null
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN_ID/artifacts" > .assembly/source-artifacts.json
           artifact_count="$(jq '[.artifacts[] | select(.name == "release-evidence-input" and .expired == false)] | length' .assembly/source-artifacts.json)"

@@ -5,7 +5,10 @@ import hashlib
 import uuid
 from typing import Any
 
-from py_security_suite.checkpoint_authority import publish_checkpoint
+from py_security_suite.checkpoint_authority import (
+    CheckpointTransitionRejected,
+    publish_checkpoint,
+)
 from py_security_suite.strict_json import canonical_bytes, dumps
 
 
@@ -24,10 +27,16 @@ def _receipt_digest(receipt: dict[str, Any] | None) -> str:
     return hashlib.sha256(canonical_bytes(receipt)).hexdigest()
 
 
-def _must_reject(prefix: str, subject: dict[str, Any], label: str) -> None:
+def _must_reject(
+    prefix: str, subject: dict[str, Any], label: str, reason_code: str
+) -> None:
     try:
         publish_checkpoint(prefix, subject, required=True)
-    except ValueError:
+    except CheckpointTransitionRejected as exc:
+        if exc.reason_code != reason_code:
+            raise ValueError(
+                f"checkpoint authority rejected {label} with {exc.reason_code}"
+            ) from exc
         return
     raise ValueError(f"checkpoint authority accepted {label}")
 
@@ -39,12 +48,23 @@ def validate(prefix: str, namespace: str) -> dict[str, Any]:
     second = _subject(namespace, 2, "second")
     first_receipt = publish_checkpoint(prefix, first, required=True)
     repeated_receipt = publish_checkpoint(prefix, first, required=True)
-    _receipt_digest(repeated_receipt)
+    if _receipt_digest(first_receipt) != _receipt_digest(repeated_receipt):
+        raise ValueError("checkpoint authority idempotent receipt changed")
 
-    _must_reject(prefix, _subject(namespace, 1, "fork"), "a same-sequence fork")
+    _must_reject(
+        prefix,
+        _subject(namespace, 1, "fork"),
+        "a same-sequence fork",
+        "same-sequence-fork",
+    )
     second_receipt = publish_checkpoint(prefix, second, required=True)
-    _must_reject(prefix, _subject(namespace, 1, "rollback"), "a rollback")
-    _must_reject(prefix, _subject(namespace, 4, "gap"), "a sequence gap")
+    _must_reject(prefix, _subject(namespace, 1, "rollback"), "a rollback", "rollback")
+    _must_reject(
+        prefix, _subject(namespace, 4, "gap"), "a sequence gap", "sequence-gap"
+    )
+    final_receipt = publish_checkpoint(prefix, second, required=True)
+    if _receipt_digest(second_receipt) != _receipt_digest(final_receipt):
+        raise ValueError("checkpoint authority lost liveness after rejection")
 
     return {
         "schema_version": "1.0",
@@ -58,6 +78,7 @@ def validate(prefix: str, namespace: str) -> dict[str, Any]:
             "next_transition": "accepted",
             "rollback": "rejected",
             "sequence_gap": "rejected",
+            "post_rejection_liveness": "accepted-and-stable",
         },
         "receipt_sha256": {
             "sequence_1": _receipt_digest(first_receipt),

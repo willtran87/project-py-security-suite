@@ -106,7 +106,7 @@ jobs:
             -in "$certs/server.csr" -CA "$certs/ca.crt" -CAkey "$certs/ca.key" \
             -CAcreateserial -extfile "$certs/server.ext" -out "$certs/server.crt"
           chmod 644 "$certs/server.key" "$certs/server.crt" "$certs/ca.crt"
-          docker run --detach --rm --name pysec-redpanda --publish 9092:9092 \
+          docker run --detach --name pysec-redpanda --publish 9092:9092 \
             --volume "$certs:/certs:ro" \
             docker.redpanda.com/redpandadata/redpanda:v25.2.1@sha256:930ca743dd41d91311fc1b28f505269814ccab142483daad773516c0544fa502 \
             redpanda start --overprovisioned --smp 1 --memory 512M \
@@ -117,10 +117,21 @@ jobs:
             --set redpanda.enable_sasl=true \
             --set 'redpanda.superusers=[pysec-admin]'
       - name: Wait for Kafka
-        run: >-
-          timeout 60 bash -c
-          'until docker exec pysec-redpanda rpk cluster health --exit-when-healthy;
-          do sleep 2; done'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in {1..30}; do
+            if ! docker inspect pysec-redpanda --format '{{.State.Running}}' | grep -qx true; then
+              docker logs pysec-redpanda
+              exit 1
+            fi
+            if docker exec pysec-redpanda rpk cluster health --exit-when-healthy; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs pysec-redpanda
+          exit 1
       - name: Create least-privilege SCRAM users and ACLs
         shell: bash
         run: |
@@ -163,7 +174,7 @@ jobs:
           tests/integration/test_services_live.py
       - name: Stop Redpanda
         if: always()
-        run: docker stop pysec-redpanda pysec-postgres || true
+        run: docker rm --force pysec-redpanda pysec-postgres || true
 
   companion-browser-integration:
     name: Companion authenticated multi-engine browser integration
@@ -294,3 +305,24 @@ jobs:
           uv run --frozen pip-audit \
             --requirement "$RUNNER_TEMP/companion-requirements-audit.txt" \
             --disable-pip --strict --progress-spinner off
+
+  required-gate:
+    name: CI required gate
+    if: always()
+    needs:
+      - containment-integration
+      - companion-service-integration
+      - companion-browser-integration
+      - test
+      - quality
+      - dependency-audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    env:
+      NEEDS_JSON: ${{ toJSON(needs) }}
+    steps:
+      - name: Require every CI lane to pass
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -e 'all(.[]; .result == "success")' <<< "$NEEDS_JSON"

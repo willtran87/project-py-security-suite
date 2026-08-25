@@ -22,6 +22,7 @@ from jsonschema import (  # pylint: disable=import-error
 
 from py_security_suite.effectiveness_corpus import (
     _consume_remote_effectiveness_replay,
+    _validate_fixture_paths,
     _verify_consistency,
     _verify_inclusion,
     evaluate_report_corpus,
@@ -56,6 +57,14 @@ class EffectivenessCorpusTests(unittest.TestCase):
             self._file_record("src/clean.py", b"clean = True\n"),
             self._file_record("src/example.py", b"assert value\n"),
         ]
+        self.fixture_records = [
+            self._file_record(
+                f"fixtures/case-{index}.py", f"fixture {index}\n".encode()
+            )
+            for index in range(25)
+        ]
+        files.extend(self.fixture_records)
+        files.sort(key=lambda item: str(item["path"]))
         aggregate = hashlib.sha256()
         for item in files:
             encoded = item["path"].encode("utf-8")
@@ -532,7 +541,8 @@ class EffectivenessCorpusTests(unittest.TestCase):
                 "boundary_type": f"boundary-{index % 3}",
                 "severity": f"severity-{index % 3}",
                 "mutation_operator": f"mutation-{index % 2}",
-                "fixture_sha256": f"{index + 1:064x}",
+                "fixture_path": self.fixture_records[index]["path"],
+                "fixture_sha256": self.fixture_records[index]["sha256"],
             }
             for index in range(25)
         ]
@@ -684,6 +694,21 @@ class EffectivenessCorpusTests(unittest.TestCase):
                 "mutation_operator": 2,
             },
         )
+
+    def test_governed_fixture_digest_is_bound_to_source_inventory(self) -> None:
+        with self.assertRaisesRegex(ValueError, "detached from the sealed"):
+            _validate_fixture_paths(
+                [
+                    {
+                        "id": "detached-fixture",
+                        "expected": "finding",
+                        "match": {"path": "src/example.py"},
+                        "fixture_path": "src/example.py",
+                        "fixture_sha256": "0" * 64,
+                    }
+                ],
+                self.report,
+            )
 
     def test_rejects_duplicate_json_properties(self) -> None:
         corpus = self.root / "ambiguous-corpus.json"

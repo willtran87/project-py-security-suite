@@ -27,6 +27,7 @@ _SOURCE_FIELDS = {
     "pages_observed",
     "page_receipts_sha256",
     "page_receipts_base64",
+    "snapshot_records_sha256",
     "server_total_records",
     "records_observed",
     "liveness_probes",
@@ -93,6 +94,7 @@ def verify_surface_proof(execution: object) -> dict[str, Any]:
             "endpoint_identity_sha256",
             "query_sha256",
             "page_receipts_sha256",
+            "snapshot_records_sha256",
         )
         integers = (
             source.get("pages_expected"),
@@ -139,7 +141,12 @@ def verify_surface_proof(execution: object) -> dict[str, Any]:
             or source["server_total_records"] != source["records_observed"]
         ):
             raise TypeError("surface reconciliation source proof is invalid")
-        _verify_page_receipts(source)
+        page_record_sha256s = _verify_page_receipts(source)
+        if (
+            source["snapshot_records_sha256"]
+            != hashlib.sha256(canonical_bytes(sorted(page_record_sha256s))).hexdigest()
+        ):
+            raise TypeError("surface page receipts are detached from the snapshot")
         collector_subject = {
             "kind": kind,
             "sha256": source["snapshot_sha256"],
@@ -152,6 +159,7 @@ def verify_surface_proof(execution: object) -> dict[str, Any]:
             "collection_complete": True,
             "collected_at": source["collected_at"],
             "page_receipts_sha256": source["page_receipts_sha256"],
+            "snapshot_records_sha256": source["snapshot_records_sha256"],
             "server_total_records": source["server_total_records"],
         }
         server_subject = {
@@ -191,7 +199,7 @@ def verify_surface_proof(execution: object) -> dict[str, Any]:
     return proof
 
 
-def _verify_page_receipts(source: dict[str, Any]) -> None:
+def _verify_page_receipts(source: dict[str, Any]) -> list[str]:
     try:
         raw = base64.b64decode(str(source["page_receipts_base64"]), validate=True)
     except (TypeError, ValueError) as exc:
@@ -210,6 +218,7 @@ def _verify_page_receipts(source: dict[str, Any]) -> None:
         raise TypeError("surface page receipt count does not match")
     previous = ""
     total = 0
+    record_sha256s: list[str] = []
     required = {
         "page_number",
         "request_sha256",
@@ -217,6 +226,7 @@ def _verify_page_receipts(source: dict[str, Any]) -> None:
         "continuation_in_sha256",
         "continuation_out_sha256",
         "record_count",
+        "record_sha256s",
     }
     for index, item in enumerate(receipts, start=1):
         if not isinstance(item, dict) or set(item) != required:
@@ -224,6 +234,7 @@ def _verify_page_receipts(source: dict[str, Any]) -> None:
         incoming = str(item.get("continuation_in_sha256") or "")
         outgoing = str(item.get("continuation_out_sha256") or "")
         count = item.get("record_count")
+        page_records = item.get("record_sha256s")
         if (
             item.get("page_number") != index
             or incoming != previous
@@ -233,12 +244,25 @@ def _verify_page_receipts(source: dict[str, Any]) -> None:
             or isinstance(count, bool)
             or not isinstance(count, int)
             or count < 0
+            or not isinstance(page_records, list)
+            or len(page_records) != count
+            or len(page_records) != len(set(page_records))
+            or any(
+                not isinstance(digest, str) or _DIGEST.fullmatch(digest) is None
+                for digest in page_records
+            )
         ):
             raise TypeError("surface page receipt chain is invalid")
         total += count
+        record_sha256s.extend(page_records)
         previous = outgoing
-    if previous or total != source["server_total_records"]:
+    if (
+        previous
+        or total != source["server_total_records"]
+        or len(record_sha256s) != len(set(record_sha256s))
+    ):
         raise TypeError("surface page receipt chain is incomplete")
+    return record_sha256s
 
 
 def _verify_portable_authority(

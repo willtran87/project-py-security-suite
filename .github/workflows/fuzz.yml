@@ -122,6 +122,15 @@ jobs:
             echo "::error::Fuzz coverage $coverage is below floor $FUZZ_COVERAGE_FLOOR for $FUZZ_TARGET"
             exit 1
           fi
+          baseline_file=".fuzz-corpus/$FUZZ_ARTIFACT/.pysec-coverage-baseline"
+          if [[ -f "$baseline_file" ]]; then
+            previous="$(tr -d '[:space:]' < "$baseline_file")"
+            if [[ "$previous" =~ ^[0-9]+$ ]] && (( coverage * 100 < previous * 90 )); then
+              echo "::error::Fuzz coverage regressed by more than 10% ($previous to $coverage) for $FUZZ_TARGET"
+              exit 1
+            fi
+          fi
+          printf '%s\n' "$coverage" > "$baseline_file"
       - name: Retain fuzz failures
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

@@ -13,6 +13,7 @@ with atheris.instrument_imports():
     from py_security_suite.adapters import ADAPTER_TYPES
     from py_security_suite.adapters.sarif import parse_sarif_findings
     from py_security_suite.config import ToolConfig
+    from py_security_suite.strict_json import canonical_bytes
     from py_security_suite.strict_json import loads as strict_loads
 
 
@@ -35,17 +36,19 @@ def test_one_input(data: bytes) -> None:
         return
     if _TARGET_NAME == "strict-json":
         try:
-            strict_loads(
+            parsed = strict_loads(
                 payload,
                 maximum_nodes=100_000,
                 maximum_string_length=1024 * 1024,
             )
+            if strict_loads(canonical_bytes(parsed)) != parsed:
+                raise RuntimeError("strict JSON canonical round-trip changed the value")
         except (TypeError, ValueError):
             pass
         return
     if _TARGET_NAME == "sarif":
         try:
-            parse_sarif_findings(
+            first = parse_sarif_findings(
                 text,
                 _TARGET,
                 tool_name="fuzz",
@@ -53,13 +56,26 @@ def test_one_input(data: bytes) -> None:
                 default_impact="fuzz",
                 default_remediation="fuzz",
             )
+            second = parse_sarif_findings(
+                text,
+                _TARGET,
+                tool_name="fuzz",
+                default_area="parser-fuzzing",
+                default_impact="fuzz",
+                default_remediation="fuzz",
+            )
+            if first != second:
+                raise RuntimeError("SARIF normalization is nondeterministic")
         except (TypeError, ValueError):
             pass
         return
     selected = _selected_adapters(_TARGET_NAME)
     selector = data[0] % len(selected)
     try:
-        selected[selector][1].parse(text, _TARGET)
+        first = selected[selector][1].parse(text, _TARGET)
+        second = selected[selector][1].parse(text, _TARGET)
+        if first != second:
+            raise RuntimeError("adapter normalization is nondeterministic")
     except (TypeError, ValueError):
         pass
 
@@ -95,13 +111,13 @@ def main() -> None:
                 "target": "strict-json",
                 "artifact": "strict-json",
                 "seconds": 300,
-                "coverage_floor": 5,
+                "coverage_floor": 16,
             },
             {
                 "target": "sarif",
                 "artifact": "sarif",
                 "seconds": 300,
-                "coverage_floor": 5,
+                "coverage_floor": 16,
             },
         ]
         targets.extend(
@@ -109,7 +125,7 @@ def main() -> None:
                 "target": f"adapter:{name}",
                 "artifact": f"adapter-{index:03d}-{re.sub(r'[^a-z0-9-]', '-', name.casefold())}",
                 "seconds": 120,
-                "coverage_floor": 2,
+                "coverage_floor": 4,
             }
             for index, (name, _adapter) in enumerate(_NAMED_ADAPTERS)
         )

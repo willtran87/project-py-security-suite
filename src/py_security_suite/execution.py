@@ -1227,7 +1227,7 @@ def _apply_windows_job_limits(
     class CPU_RATE_CONTROL(ctypes.Structure):
         _fields_ = [("ControlFlags", wintypes.DWORD), ("CpuRate", wintypes.DWORD)]
 
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
     kernel32.CreateJobObjectW.argtypes = [ctypes.c_void_p, wintypes.LPCWSTR]
     kernel32.CreateJobObjectW.restype = wintypes.HANDLE
     kernel32.SetInformationJobObject.argtypes = [
@@ -1243,7 +1243,8 @@ def _apply_windows_job_limits(
     kernel32.CloseHandle.restype = wintypes.BOOL
     job = kernel32.CreateJobObjectW(None, None)
     if not job:
-        raise OSError(ctypes.get_last_error(), "CreateJobObjectW failed")
+        error_code = ctypes.get_last_error()  # type: ignore[attr-defined]
+        raise OSError(error_code, "CreateJobObjectW failed")
     limits = EXTENDED_LIMITS()
     limits.BasicLimitInformation.LimitFlags = 0x2000 | 0x200 | 0x100 | 0x8 | 0x4
     limits.BasicLimitInformation.PerJobUserTimeLimit = (
@@ -1255,19 +1256,19 @@ def _apply_windows_job_limits(
     if not kernel32.SetInformationJobObject(
         job, 9, ctypes.byref(limits), ctypes.sizeof(limits)
     ):
-        error = ctypes.get_last_error()
+        error = ctypes.get_last_error()  # type: ignore[attr-defined]
         kernel32.CloseHandle(job)
         raise OSError(error, "SetInformationJobObject failed")
     cpu = CPU_RATE_CONTROL(ControlFlags=0x1 | 0x4, CpuRate=8000)
     if not kernel32.SetInformationJobObject(
         job, 15, ctypes.byref(cpu), ctypes.sizeof(cpu)
     ):
-        error = ctypes.get_last_error()
+        error = ctypes.get_last_error()  # type: ignore[attr-defined]
         kernel32.CloseHandle(job)
         raise OSError(error, "CPU rate control could not be applied")
     process_handle = getattr(process, "_handle", None)
     if not process_handle or not kernel32.AssignProcessToJobObject(job, process_handle):
-        error = ctypes.get_last_error()
+        error = ctypes.get_last_error()  # type: ignore[attr-defined]
         kernel32.CloseHandle(job)
         raise OSError(error, "AssignProcessToJobObject failed")
     return (
@@ -1288,7 +1289,7 @@ def _apply_windows_job_limits(
 def _close_windows_handle(handle: int) -> None:
     import ctypes
 
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
     kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
     kernel32.CloseHandle.restype = ctypes.c_int
     kernel32.CloseHandle(handle)

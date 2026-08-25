@@ -416,7 +416,7 @@ def _compiler_semantic_evidence(
     if (
         not isinstance(value, dict)
         or set(value) != {"schema_version", "frontends"}
-        or value.get("schema_version") != "1.0"
+        or value.get("schema_version") != "2.0"
         or not isinstance(value.get("frontends"), list)
     ):
         raise ValueError("compiler semantic evidence fields do not match")
@@ -630,7 +630,7 @@ def verify_compiler_semantic_evidence(
     if (
         not isinstance(value, dict)
         or set(value) != {"schema_version", "frontends"}
-        or value.get("schema_version") != "1.0"
+        or value.get("schema_version") != "2.0"
         or not isinstance(value.get("frontends"), list)
         or not isinstance(language_file_sets, dict)
     ):
@@ -831,7 +831,7 @@ def _compiler_semantic_differential(
         )
     subject = {
         "schema_version": "1.0",
-        "normalization": "source-location-symbol-ontology-v1",
+        "normalization": "qualified-source-symbol-ontology-v2",
         "classification": (
             "consensus"
             if total_primary_only == 0 and total_secondary_only == 0
@@ -851,11 +851,25 @@ def _normalized_semantic_facts(replay: dict[str, Any]) -> dict[str, list[object]
     """Map engine-private IDs onto stable source-location semantic identities."""
 
     ledger = replay["semantic_ledger"]
+    symbol_fields = (
+        "path",
+        "start_line",
+        "start_column",
+        "end_line",
+        "end_column",
+        "kind",
+        "qualified_name",
+        "signature",
+        "language",
+    )
     symbols = {
         str(item["id"]): {
-            "path": str(item["path"]),
-            "line": int(item["line"]),
-            "kind": str(item["kind"]).casefold(),
+            name: (
+                str(item[name]).casefold()
+                if name in {"kind", "language"}
+                else item[name]
+            )
+            for name in symbol_fields
         }
         for item in ledger["symbols"]
     }
@@ -872,7 +886,15 @@ def _normalized_semantic_facts(replay: dict[str, Any]) -> dict[str, list[object]
     }
     for category in ("cfg_edges", "dataflow_edges", "interprocedural_edges"):
         result[category] = [
-            {"source": symbol(edge["source"]), "target": symbol(edge["target"])}
+            {
+                "source": symbol(edge["source"]),
+                "target": symbol(edge["target"]),
+                "kind": str(edge["kind"]).casefold(),
+                "callsite_path": str(edge["callsite_path"]),
+                "callsite_line": int(edge["callsite_line"]),
+                "callsite_column": int(edge["callsite_column"]),
+                "context": str(edge["context"]),
+            }
             for edge in ledger[category]
         ]
     result["taint_paths"] = [
@@ -938,7 +960,7 @@ def _verify_analysis_artifact(item: dict[str, Any], prefix: str) -> dict[str, An
             "canary_results",
             "analysis_capabilities",
         }
-        or replay.get("schema_version") != "1.0"
+        or replay.get("schema_version") != "2.0"
         or replay.get("engine") != item[engine_field]
         or replay.get("engine_sha256") != item[engine_digest_field]
         or replay.get("configuration_sha256") != item[config_field]
@@ -1171,14 +1193,40 @@ def _verify_semantic_ledger(
     for symbol in symbols:
         if (
             not isinstance(symbol, dict)
-            or set(symbol) != {"id", "path", "line", "kind"}
+            or set(symbol)
+            != {
+                "id",
+                "path",
+                "start_line",
+                "start_column",
+                "end_line",
+                "end_column",
+                "kind",
+                "qualified_name",
+                "signature",
+                "language",
+            }
             or not str(symbol["id"])
             or symbol["id"] in identities
             or symbol["path"] not in files
-            or isinstance(symbol["line"], bool)
-            or not isinstance(symbol["line"], int)
-            or symbol["line"] < 1
-            or not str(symbol["kind"])
+            or any(
+                isinstance(symbol[name], bool) or not isinstance(symbol[name], int)
+                for name in ("start_line", "start_column", "end_line", "end_column")
+            )
+            or symbol["start_line"] < 1
+            or symbol["start_column"] < 0
+            or symbol["end_line"] < symbol["start_line"]
+            or symbol["end_column"] < 0
+            or (
+                symbol["end_line"] == symbol["start_line"]
+                and symbol["end_column"] < symbol["start_column"]
+            )
+            or any(
+                not isinstance(symbol[name], str)
+                or not symbol[name]
+                or len(symbol[name]) > 500
+                for name in ("kind", "qualified_name", "signature", "language")
+            )
         ):
             raise ValueError("compiler semantic symbol is invalid")
         identities.add(str(symbol["id"]))
@@ -1190,9 +1238,29 @@ def _verify_semantic_ledger(
         for edge in edges:
             if (
                 not isinstance(edge, dict)
-                or set(edge) != {"source", "target"}
+                or set(edge)
+                != {
+                    "source",
+                    "target",
+                    "kind",
+                    "callsite_path",
+                    "callsite_line",
+                    "callsite_column",
+                    "context",
+                }
                 or edge["source"] not in identities
                 or edge["target"] not in identities
+                or edge["callsite_path"] not in files
+                or isinstance(edge["callsite_line"], bool)
+                or not isinstance(edge["callsite_line"], int)
+                or edge["callsite_line"] < 1
+                or isinstance(edge["callsite_column"], bool)
+                or not isinstance(edge["callsite_column"], int)
+                or edge["callsite_column"] < 0
+                or not isinstance(edge["kind"], str)
+                or not edge["kind"]
+                or not isinstance(edge["context"], str)
+                or not edge["context"]
                 or canonical_bytes(edge) in canonical
             ):
                 raise ValueError("compiler semantic edge is invalid")

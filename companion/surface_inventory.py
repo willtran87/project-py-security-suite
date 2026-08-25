@@ -11,13 +11,13 @@ from typing import Any
 
 try:
     from companion.evidence_authority import verify_authority
-    from companion.semantic_assurance import analyze
+    from companion.semantic_assurance import analyze, bind_case_observations
     from companion.strict_json import dumps as strict_dumps
     from companion.strict_json import loads as strict_loads
     from companion.trusted_time import verify_rfc3161
 except ModuleNotFoundError:  # Direct script execution.
     from evidence_authority import verify_authority  # type: ignore[import-not-found,no-redef]
-    from semantic_assurance import analyze  # type: ignore[import-not-found,no-redef]
+    from semantic_assurance import analyze, bind_case_observations  # type: ignore[import-not-found,no-redef]
     from strict_json import dumps as strict_dumps  # type: ignore[import-not-found,no-redef]
     from strict_json import loads as strict_loads  # type: ignore[import-not-found,no-redef]
     from trusted_time import verify_rfc3161  # type: ignore[import-not-found,no-redef]
@@ -118,6 +118,7 @@ def reconcile(path: Path) -> dict[str, Any]:
                 "page_receipts_file",
                 "page_receipts_sha256",
                 "server_total_records",
+                "snapshot_records_sha256",
             }
         if version == "4.0":
             expected_source |= {
@@ -181,12 +182,15 @@ def reconcile(path: Path) -> dict[str, Any]:
                         "collection_complete": True,
                         "collected_at": collected_at.isoformat(),
                         "page_receipts_sha256": value["page_receipts_sha256"],
+                        "snapshot_records_sha256": value["snapshot_records_sha256"],
                         "server_total_records": _positive_integer(
                             value.get("server_total_records"), "server total records"
                         ),
                     }
                 )
-                page_receipts_raw = _verify_page_receipts(path, value, expected_pages)
+                page_receipts_raw, page_record_sha256s = _verify_page_receipts(
+                    path, value, expected_pages
+                )
             authority = verify_authority(
                 path,
                 value.get("authority"),
@@ -253,6 +257,21 @@ def reconcile(path: Path) -> dict[str, Any]:
             and len(source_records) != value["server_total_records"]
         ):
             raise ValueError("surface inventory server total does not match records")
+        if version in {"3.0", "4.0"}:
+            actual_record_sha256s = sorted(
+                hashlib.sha256(strict_dumps(record).encode()).hexdigest()
+                for record in source_records
+            )
+            if (
+                sorted(page_record_sha256s) != actual_record_sha256s
+                or value["snapshot_records_sha256"]
+                != hashlib.sha256(
+                    strict_dumps(actual_record_sha256s).encode()
+                ).hexdigest()
+            ):
+                raise ValueError(
+                    "surface inventory page receipts are detached from the snapshot"
+                )
         if version == "4.0":
             source_proofs.append(
                 {
@@ -270,6 +289,7 @@ def reconcile(path: Path) -> dict[str, Any]:
                     "page_receipts_base64": base64.b64encode(page_receipts_raw).decode(
                         "ascii"
                     ),
+                    "snapshot_records_sha256": value["snapshot_records_sha256"],
                     "server_total_records": value["server_total_records"],
                     "records_observed": len(source_records),
                     "liveness_probes": value["liveness_probes"],
@@ -364,9 +384,9 @@ def reconcile(path: Path) -> dict[str, Any]:
         )
     result = analyze(
         {
-            "schema_version": "1.0",
+            "schema_version": "2.0",
             "kind": "surface-inventory",
-            "cases": cases,
+            "cases": bind_case_observations(cases, artifact=root, transcript=observed),
             "canary_id": f"presence:{canary_id}",
         },
         "surface-inventory",
@@ -533,7 +553,9 @@ def _positive_integer(value: object, label: str) -> int:
     return value
 
 
-def _verify_page_receipts(context: Path, source: dict[str, Any], pages: int) -> bytes:
+def _verify_page_receipts(
+    context: Path, source: dict[str, Any], pages: int
+) -> tuple[bytes, list[str]]:
     receipt_path = _pinned_sibling(
         context,
         source.get("page_receipts_file"),
@@ -545,6 +567,7 @@ def _verify_page_receipts(context: Path, source: dict[str, Any], pages: int) -> 
         raise ValueError("surface inventory page receipt count does not match")
     previous = ""
     total = 0
+    record_sha256s: list[str] = []
     for index, item in enumerate(value, start=1):
         required = {
             "page_number",
@@ -553,6 +576,7 @@ def _verify_page_receipts(context: Path, source: dict[str, Any], pages: int) -> 
             "continuation_in_sha256",
             "continuation_out_sha256",
             "record_count",
+            "record_sha256s",
         }
         if not isinstance(item, dict) or set(item) != required:
             raise ValueError("surface inventory page receipt is invalid")
@@ -567,13 +591,30 @@ def _verify_page_receipts(context: Path, source: dict[str, Any], pages: int) -> 
         ):
             raise ValueError("surface inventory page receipt chain is invalid")
         count = item.get("record_count")
-        if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+        page_records = item.get("record_sha256s")
+        if (
+            isinstance(count, bool)
+            or not isinstance(count, int)
+            or count < 0
+            or not isinstance(page_records, list)
+            or len(page_records) != count
+            or len(page_records) != len(set(page_records))
+            or any(
+                not isinstance(digest, str) or not _digest(digest)
+                for digest in page_records
+            )
+        ):
             raise ValueError("surface inventory page record count is invalid")
         total += count
+        record_sha256s.extend(page_records)
         previous = outgoing
-    if previous or total != source.get("server_total_records"):
+    if (
+        previous
+        or total != source.get("server_total_records")
+        or len(record_sha256s) != len(set(record_sha256s))
+    ):
         raise ValueError("surface inventory page chain is incomplete")
-    return raw
+    return raw, record_sha256s
 
 
 def _verify_collector_organization(signer_id: str, organization: str) -> None:

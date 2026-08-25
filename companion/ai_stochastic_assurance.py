@@ -15,6 +15,7 @@ try:
         REQUIRED_CONTROLS,
         _wilson_interval,
         analyze,
+        bind_case_observations,
     )
     from companion.strict_json import canonical_bytes
     from companion.strict_json import dumps as strict_dumps
@@ -22,7 +23,12 @@ try:
 except ModuleNotFoundError:  # Direct script execution.
     from deep_qualification import verify_area_receipt  # type: ignore[import-not-found,no-redef]
     from evidence_authority import verify_authority  # type: ignore[import-not-found,no-redef]
-    from semantic_assurance import REQUIRED_CONTROLS, _wilson_interval, analyze  # type: ignore[import-not-found,no-redef]
+    from semantic_assurance import (  # type: ignore[import-not-found,no-redef]
+        REQUIRED_CONTROLS,
+        _wilson_interval,
+        analyze,
+        bind_case_observations,
+    )
     from strict_json import canonical_bytes  # type: ignore[import-not-found,no-redef]
     from strict_json import dumps as strict_dumps  # type: ignore[import-not-found,no-redef]
     from strict_json import loads as strict_loads  # type: ignore[import-not-found,no-redef]
@@ -131,9 +137,9 @@ def analyze_trials(value: object, *, context: Path | None = None) -> dict[str, A
         raise ValueError("AI stochastic trial identities must be unique")
     result = analyze(
         {
-            "schema_version": "1.0",
+            "schema_version": "2.0",
             "kind": "ai-security",
-            "cases": cases,
+            "cases": bind_case_observations(cases, artifact=value, transcript=trials),
             "canary_id": str(value.get("canary_id") or ""),
         },
         "ai-security",

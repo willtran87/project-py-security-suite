@@ -56,6 +56,10 @@ def _proof() -> dict[str, object]:
     observed_at = datetime(2026, 8, 24, 12, tzinfo=UTC)
     sources = []
     for index, kind in enumerate(("runtime", "gateway"), start=1):
+        page_record_sha256s = [hashlib.sha256(f"record-{index}".encode()).hexdigest()]
+        snapshot_records_sha256 = hashlib.sha256(
+            canonical_bytes(page_record_sha256s)
+        ).hexdigest()
         page_receipts = canonical_bytes(
             [
                 {
@@ -65,6 +69,7 @@ def _proof() -> dict[str, object]:
                     "continuation_in_sha256": "",
                     "continuation_out_sha256": "",
                     "record_count": 1,
+                    "record_sha256s": page_record_sha256s,
                 }
             ]
         )
@@ -80,6 +85,7 @@ def _proof() -> dict[str, object]:
             "collection_complete": True,
             "collected_at": observed_at.isoformat(),
             "page_receipts_sha256": hashlib.sha256(page_receipts).hexdigest(),
+            "snapshot_records_sha256": snapshot_records_sha256,
             "server_total_records": 1,
         }
         server_subject = {
@@ -115,6 +121,7 @@ def _proof() -> dict[str, object]:
                 "pages_observed": 1,
                 "page_receipts_sha256": hashlib.sha256(page_receipts).hexdigest(),
                 "page_receipts_base64": base64.b64encode(page_receipts).decode(),
+                "snapshot_records_sha256": snapshot_records_sha256,
                 "server_total_records": 1,
                 "records_observed": 1,
                 "liveness_probes": 1,

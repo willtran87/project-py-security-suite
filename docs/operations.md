@@ -1139,7 +1139,11 @@ the structured independent v4 reconciliation proof. The pinned `Release
 artifact assurance` workflow builds on two independent runners from the commit
 epoch, separately attests both outputs, compares exact bytes, and exercises the
 retained wheel against a hash-locked offline wheelhouse. The manual `Closed
-release evidence assembly` workflow accepts exactly one source-run artifact,
+release evidence assembly` workflow accepts exactly one source-run artifact
+from the hard-pinned `Governed release evidence source` workflow. That source
+workflow runs only on a deployment-managed `release-evidence` runner, under its
+own protected environment, and re-verifies the closed directory at the
+independently approved manifest digest before it uploads anything. Assembly
 verifies that run's repository, branch, commit, attempt, conclusion, artifact
 digest, and independently approved manifest digest, then re-verifies every
 hardened evidence class under the protected `release-admission` environment. It

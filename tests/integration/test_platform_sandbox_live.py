@@ -156,6 +156,7 @@ def _exercise_sandbox(executable: str, arguments: tuple[str, ...]) -> None:
     platform.system() != "Linux" or os.environ.get("PYSEC_RUN_PLATFORM_SANDBOX") != "1",
     reason="live Bubblewrap qualification is enabled in Linux CI",
 )
+@pytest.mark.enable_socket
 def test_linux_bubblewrap_enforces_network_and_read_only_target() -> None:
     executable = shutil.which("bwrap")
     assert executable
@@ -216,6 +217,7 @@ def test_linux_bubblewrap_enforces_network_and_read_only_target() -> None:
     or os.environ.get("PYSEC_RUN_PLATFORM_SANDBOX") != "1",
     reason="live sandbox-exec qualification is enabled in macOS CI",
 )
+@pytest.mark.enable_socket
 def test_macos_sandbox_enforces_network_and_read_only_target() -> None:
     executable = shutil.which("sandbox-exec")
     assert executable

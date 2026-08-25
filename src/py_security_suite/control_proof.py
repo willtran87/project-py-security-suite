@@ -15,13 +15,13 @@ def verify_control_proof(value: object, required_features: set[str]) -> dict[str
     if (
         not isinstance(value, dict)
         or set(value) != {"schema_version", "controls", "case_ledger", "proof_sha256"}
-        or value.get("schema_version") != "1.0"
+        or value.get("schema_version") != "2.0"
         or not isinstance(value.get("controls"), dict)
         or not isinstance(value.get("case_ledger"), list)
     ):
         raise ValueError("structured control proof fields do not match")
     subject = {
-        "schema_version": "1.0",
+        "schema_version": "2.0",
         "controls": value["controls"],
         "case_ledger": value["case_ledger"],
     }
@@ -49,6 +49,9 @@ def verify_control_proof(value: object, required_features: set[str]) -> dict[str
         "observed",
         "severity",
         "classification",
+        "execution_artifact_sha256",
+        "execution_transcript_sha256",
+        "observation_sha256",
     }
     advanced_fields = base_fields | {"rule_id", "stratum", "mutation_operator"}
     for case in ledger:
@@ -69,7 +72,19 @@ def verify_control_proof(value: object, required_features: set[str]) -> dict[str
         if identifier in case_ids:
             raise ValueError("structured control proof case IDs are not unique")
         case_ids.add(identifier)
-        normalized_cases.append({str(name): str(item) for name, item in case.items()})
+        normalized_case = {str(name): str(item) for name, item in case.items()}
+        observation_sha256 = normalized_case.pop("observation_sha256")
+        if (
+            _DIGEST.fullmatch(normalized_case["execution_artifact_sha256"]) is None
+            or _DIGEST.fullmatch(normalized_case["execution_transcript_sha256"]) is None
+            or observation_sha256
+            != hashlib.sha256(canonical_bytes(normalized_case)).hexdigest()
+        ):
+            raise ValueError(
+                "structured control proof observation is detached from execution"
+            )
+        normalized_case["observation_sha256"] = observation_sha256
+        normalized_cases.append(normalized_case)
     if {case["control"] for case in normalized_cases} != required_features:
         raise ValueError("structured control proof ledger does not cover the features")
     for name, record in controls.items():

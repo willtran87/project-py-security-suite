@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import hashlib
 import json
 from pathlib import Path
 from types import ModuleType
@@ -39,11 +40,16 @@ def test_checkpoint_authority_conformance_exercises_monotonic_contract(
             current.update(sequence=sequence, checkpoint=checkpoint)
         elif sequence == current["sequence"]:
             if checkpoint != current["checkpoint"]:
-                raise ValueError("fork")
+                raise module.CheckpointTransitionRejected("same-sequence-fork")
         elif sequence == int(str(current["sequence"])) + 1:
             current.update(sequence=sequence, checkpoint=checkpoint)
         else:
-            raise ValueError("non-monotonic")
+            reason = (
+                "rollback"
+                if sequence < int(str(current["sequence"]))
+                else "sequence-gap"
+            )
+            raise module.CheckpointTransitionRejected(reason)
         return {"accepted": True, "sequence": sequence, "checkpoint": checkpoint}
 
     monkeypatch.setattr(module, "publish_checkpoint", publish)
@@ -57,6 +63,7 @@ def test_checkpoint_authority_conformance_exercises_monotonic_contract(
         "next_transition": "accepted",
         "rollback": "rejected",
         "sequence_gap": "rejected",
+        "post_rejection_liveness": "accepted-and-stable",
     }
 
 
@@ -79,6 +86,7 @@ def test_native_attestation_conformance_requires_accept_and_reject_per_format(
                     "id": identifier,
                     "format": format_name,
                     "evidence_path": evidence_path,
+                    "evidence_sha256": hashlib.sha256(expected.encode()).hexdigest(),
                     "expected": expected,
                     "expected_error": "adversarial fixture rejected"
                     if expected == "reject"
@@ -103,7 +111,9 @@ def test_native_attestation_conformance_requires_accept_and_reject_per_format(
         return {"accepted": True}
 
     monkeypatch.setattr(module, "verify_format_evidence", verify)
-    result = module.validate(manifest)
+    result = module.validate(
+        manifest, hashlib.sha256(manifest.read_bytes()).hexdigest()
+    )
 
     assert result["status"] == "pass"
     assert result["fixture_count"] == 6

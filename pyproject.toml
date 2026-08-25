@@ -55,7 +55,7 @@ Security = "https://github.com/willtran87/project-py-security-suite/security/pol
 
 [dependency-groups]
 dev = [
-  "atheris>=3.1,<4; sys_platform != 'win32' and python_version >= '3.12'",
+  "atheris>=3.1,<4; sys_platform == 'linux' and platform_machine == 'x86_64' and python_version >= '3.12'",
   "coverage[toml]>=7.10,<8",
   "hypothesis>=6.140,<7",
   "hypothesis-jsonschema>=0.23,<0.24",

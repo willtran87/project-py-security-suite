@@ -415,6 +415,59 @@ where = ["src"]
             },
         )
 
+    def test_framework_models_avoid_generic_decorator_false_roots(self) -> None:
+        module = self.root / "src" / "example" / "decorators.py"
+        module.write_text(
+            "class Cache:\n"
+            "    def get(self, name):\n"
+            "        return lambda function: function\n\n"
+            "cache = Cache()\n\n"
+            "@cache.get('value')\n"
+            "def helper():\n"
+            "    return 1\n",
+            encoding="utf-8",
+        )
+
+        document = analyze_project(self.root, minimum_island_loc=1)
+
+        self.assertNotIn(
+            "symbol:example.decorators:helper",
+            {
+                entry["target"]
+                for entry in document["entry_points"]
+                if entry["kind"] == "framework-decorator"
+            },
+        )
+
+    def test_fastapi_and_class_based_framework_dispatch_are_modeled(self) -> None:
+        module = self.root / "src" / "example" / "api.py"
+        module.write_text(
+            "from fastapi import FastAPI\n"
+            "from django.views import View\n\n"
+            "app = FastAPI()\n\n"
+            "@app.get('/items')\n"
+            "def items():\n"
+            "    return []\n\n"
+            "class HealthView(View):\n"
+            "    def get(self, request):\n"
+            "        return 'ok'\n",
+            encoding="utf-8",
+        )
+
+        document = analyze_project(self.root, minimum_island_loc=1)
+
+        self.assertIn(
+            "symbol:example.api:items",
+            {entry["target"] for entry in document["entry_points"]},
+        )
+        self.assertTrue(
+            any(
+                edge["kind"] == "framework-dispatch"
+                and edge["target"] == "symbol:example.api:HealthView.get"
+                for edge in document["edges"]
+            )
+        )
+
     def test_dynamic_loading_is_disclosed_and_lowers_confidence(self) -> None:
         service = self.root / "src" / "example" / "service.py"
         service.write_text(

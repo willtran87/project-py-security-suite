@@ -10,12 +10,12 @@ from typing import Any
 
 try:
     from companion.deep_qualification import verify_area_receipt
-    from companion.semantic_assurance import analyze
+    from companion.semantic_assurance import analyze, bind_case_observations
     from companion.strict_json import dumps as strict_dumps
     from companion.strict_json import loads as strict_loads
 except ModuleNotFoundError:
     from deep_qualification import verify_area_receipt  # type: ignore[import-not-found,no-redef]
-    from semantic_assurance import analyze  # type: ignore[import-not-found,no-redef]
+    from semantic_assurance import analyze, bind_case_observations  # type: ignore[import-not-found,no-redef]
     from strict_json import dumps as strict_dumps  # type: ignore[import-not-found,no-redef]
     from strict_json import loads as strict_loads  # type: ignore[import-not-found,no-redef]
 
@@ -75,9 +75,11 @@ def execute(value: object, *, context: Path | None = None) -> dict[str, Any]:
     ]
     result = analyze(
         {
-            "schema_version": "1.0",
+            "schema_version": "2.0",
             "kind": "database-security",
-            "cases": observed,
+            "cases": bind_case_observations(
+                observed, artifact=value, transcript=observed
+            ),
             "canary_id": str(value.get("canary_id") or ""),
         },
         "database-security",

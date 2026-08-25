@@ -628,7 +628,7 @@ production lane:
 
 ```powershell
 uv run --frozen python scripts/validate-checkpoint-authority.py --prefix PYSEC_CHECKPOINT_CONFORMANCE
-uv run --frozen python scripts/validate-native-attestation-fixtures.py security-data/native-attestation-fixtures/manifest.json
+uv run --frozen python scripts/validate-native-attestation-fixtures.py security-data/native-attestation-fixtures/manifest.json --manifest-sha256 $env:APPROVED_NATIVE_FIXTURE_MANIFEST_SHA256
 ```
 
 The native installer records SHA-256 bindings for installed scanner entry
@@ -878,7 +878,8 @@ executables through the same CLI and report contract.
 
 Governed polyglot scans can require signed compiler-semantic evidence in
 addition to the bundled syntax ASTs. The retained evidence includes exact
-symbol, CFG, dataflow, and interprocedural ledgers for every governed language,
+qualified symbol identities, source spans, signatures, callsite context, CFG,
+dataflow, and interprocedural ledgers for every governed language,
 including Python. Runtime coverage retains three independently signed route
 source documents and separately signed collector accounting; recovery drills
 retain run-bound, replay-consumed, signed observer quorums. External KMS and

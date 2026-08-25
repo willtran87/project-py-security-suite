@@ -21,6 +21,14 @@ from .strict_json import loads as strict_loads
 from .strict_json import canonical_bytes
 
 
+class CheckpointTransitionRejected(ValueError):
+    """A cryptographically verified semantic rejection from the authority."""
+
+    def __init__(self, reason_code: str) -> None:
+        super().__init__(f"checkpoint transition rejected: {reason_code}")
+        self.reason_code = reason_code
+
+
 def publish_checkpoint(
     prefix: str, subject: dict[str, Any], *, required: bool
 ) -> dict[str, Any] | None:
@@ -88,6 +96,15 @@ def _publish_single(
     expected_key = (
         os.environ.get(f"{prefix}_AUTHORITY_KEY_SHA256", "").strip().casefold()
     )
+    if response.get("accepted") is False:
+        _verify_rejected_response(
+            prefix,
+            request,
+            response,
+            policy_attestation,
+            expected_key,
+            fields | {"reason_code"},
+        )
     if (
         set(response) != fields
         or response.get("schema_version") != "1.0"
@@ -149,6 +166,80 @@ def _publish_single(
         "effective_policy_attestation": policy_attestation,
         "checkpoint_subject": request,
     }
+
+
+def _verify_rejected_response(
+    prefix: str,
+    request: dict[str, Any],
+    response: dict[str, Any],
+    policy_attestation: object,
+    expected_key: str,
+    fields: set[str],
+) -> None:
+    reason_code = response.get("reason_code")
+    if (
+        set(response) != fields
+        or response.get("schema_version") != "1.0"
+        or reason_code
+        not in {
+            "same-sequence-fork",
+            "rollback",
+            "sequence-gap",
+            "stale-sequence",
+            "conflict",
+        }
+        or response.get("checkpoint_authority_key_sha256") != expected_key
+        or not _digest(expected_key)
+        or not isinstance(policy_attestation, dict)
+    ):
+        raise ValueError("external checkpoint authority rejection is invalid")
+    failure_domain = verify_failure_domain(
+        response["failure_domain"], "checkpoint authority"
+    )
+    try:
+        configured_domain = verify_failure_domain(
+            strict_loads(os.environ.get(f"{prefix}_FAILURE_DOMAIN_JSON", "")),
+            "configured checkpoint authority",
+        )
+    except (TypeError, ValueError) as exc:
+        raise ValueError("checkpoint authority failure-domain pin is invalid") from exc
+    if failure_domain != configured_domain:
+        raise ValueError("checkpoint authority failure domain does not match its pin")
+    verify_registered_failure_domain(
+        failure_domain, expected_key, "checkpoint authority"
+    )
+    attestation_subject = policy_attestation.get("subject")
+    if not isinstance(attestation_subject, dict) or response.get(
+        "execution_nonce"
+    ) != attestation_subject.get("execution_nonce"):
+        raise ValueError("checkpoint rejection is detached from its attested execution")
+    receipt = response["checkpoint_operation_receipt"]
+    statement = receipt.get("statement") if isinstance(receipt, dict) else None
+    try:
+        observed = datetime.fromisoformat(
+            str((statement or {})["issued_at"]).replace("Z", "+00:00")
+        )
+    except (KeyError, ValueError) as exc:
+        raise ValueError(
+            "external checkpoint authority rejection time is invalid"
+        ) from exc
+    verify_operation_receipt(
+        {
+            **request,
+            "execution_nonce": response["execution_nonce"],
+            "failure_domain": response["failure_domain"],
+            "reason_code": reason_code,
+        },
+        receipt,
+        purpose="state-checkpoint-reject",
+        observed_at=observed,
+        challenge_sha256=os.environ.get("PYSEC_SCAN_TIME_CHALLENGE_SHA256", "").strip(),
+        expected_key_sha256=expected_key,
+    )
+    verify_effective_policy_subject(attestation_subject)
+    if failure_domain != remote_attested_failure_domain(policy_attestation):
+        raise ValueError("checkpoint authority failure domain is not hardware-attested")
+    raise CheckpointTransitionRejected(str(reason_code))
 
 
 def verify_retained_checkpoint(

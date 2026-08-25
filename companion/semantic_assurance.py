@@ -63,6 +63,31 @@ _OUTCOMES = {"allow", "block", "clean", "detected", "present", "absent", "pass"}
 _SEVERITIES = {"critical", "high", "medium", "low", "informational"}
 
 
+def bind_case_observations(
+    cases: list[dict[str, Any]], *, artifact: object, transcript: object
+) -> list[dict[str, Any]]:
+    """Bind derived oracle cases to the exact input and execution transcript."""
+
+    artifact_sha256 = hashlib.sha256(strict_dumps(artifact).encode()).hexdigest()
+    transcript_sha256 = hashlib.sha256(strict_dumps(transcript).encode()).hexdigest()
+    bound: list[dict[str, Any]] = []
+    for case in cases:
+        subject = {
+            **case,
+            "execution_artifact_sha256": artifact_sha256,
+            "execution_transcript_sha256": transcript_sha256,
+        }
+        bound.append(
+            {
+                **subject,
+                "observation_sha256": hashlib.sha256(
+                    strict_dumps(subject).encode()
+                ).hexdigest(),
+            }
+        )
+    return bound
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Derive bounded semantic assurance evidence from an oracle contract."
@@ -83,7 +108,7 @@ def analyze(value: object, kind: str, *, context: Path | None = None) -> dict[st
         required_root.add("baseline")
     if not isinstance(value, dict) or set(value) != required_root:
         raise ValueError("semantic assurance root fields do not match the contract")
-    if value.get("schema_version") != "1.0" or value.get("kind") != kind:
+    if value.get("schema_version") != "2.0" or value.get("kind") != kind:
         raise ValueError("semantic assurance schema or kind is invalid")
     cases = value.get("cases")
     if not isinstance(cases, list) or not 1 <= len(cases) <= 10_000:
@@ -128,7 +153,7 @@ def analyze(value: object, kind: str, *, context: Path | None = None) -> dict[st
         }
         control_records[control] = subject
     proof_subject = {
-        "schema_version": "1.0",
+        "schema_version": "2.0",
         "controls": control_records,
         "case_ledger": normalized,
     }
@@ -167,6 +192,9 @@ def _case(value: object, *, advanced_ruleset: bool = False) -> dict[str, str]:
         "observed",
         "severity",
         "classification",
+        "execution_artifact_sha256",
+        "execution_transcript_sha256",
+        "observation_sha256",
     }
     if advanced_ruleset:
         required |= {"rule_id", "stratum", "mutation_operator"}
@@ -179,6 +207,14 @@ def _case(value: object, *, advanced_ruleset: bool = False) -> dict[str, str]:
     severity = _label(value.get("severity"), "severity", 20)
     if severity not in _SEVERITIES:
         raise ValueError("semantic assurance severity is unsupported")
+    for name in ("execution_artifact_sha256", "execution_transcript_sha256"):
+        digest = value.get(name)
+        if (
+            not isinstance(digest, str)
+            or len(digest) != 64
+            or any(character not in "0123456789abcdef" for character in digest)
+        ):
+            raise ValueError(f"semantic assurance {name} is invalid")
     result = {
         "id": _label(value.get("id"), "case ID", 160),
         "target_id": _label(value.get("target_id"), "target ID", 200),
@@ -188,6 +224,8 @@ def _case(value: object, *, advanced_ruleset: bool = False) -> dict[str, str]:
         "observed": observed,
         "severity": severity,
         "classification": _label(value.get("classification"), "classification", 160),
+        "execution_artifact_sha256": str(value["execution_artifact_sha256"]),
+        "execution_transcript_sha256": str(value["execution_transcript_sha256"]),
     }
     if advanced_ruleset:
         result.update(
@@ -199,6 +237,11 @@ def _case(value: object, *, advanced_ruleset: bool = False) -> dict[str, str]:
                 ),
             }
         )
+    observation_sha256 = value.get("observation_sha256")
+    expected_observation = hashlib.sha256(strict_dumps(result).encode()).hexdigest()
+    if observation_sha256 != expected_observation:
+        raise ValueError("semantic assurance observation is detached from execution")
+    result["observation_sha256"] = expected_observation
     return result
 
 

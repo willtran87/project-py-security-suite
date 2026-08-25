@@ -9,8 +9,14 @@ from py_security_suite.strict_json import canonical_bytes
 import hashlib
 
 
+def _bind_observation(case: dict[str, object]) -> dict[str, object]:
+    case.pop("observation_sha256", None)
+    case["observation_sha256"] = hashlib.sha256(canonical_bytes(case)).hexdigest()
+    return case
+
+
 def _case(control: str, *, observed: str = "pass") -> dict[str, object]:
-    return {
+    case = {
         "id": f"case-{control}",
         "target_id": "service-primary",
         "role": "security-test",
@@ -19,7 +25,14 @@ def _case(control: str, *, observed: str = "pass") -> dict[str, object]:
         "observed": observed,
         "severity": "high",
         "classification": "CWE-693",
+        "execution_artifact_sha256": hashlib.sha256(
+            f"artifact:{control}".encode()
+        ).hexdigest(),
+        "execution_transcript_sha256": hashlib.sha256(
+            f"transcript:{control}".encode()
+        ).hexdigest(),
     }
+    return _bind_observation(case)
 
 
 @pytest.mark.parametrize(
@@ -29,7 +42,7 @@ def _case(control: str, *, observed: str = "pass") -> dict[str, object]:
 def test_semantic_lanes_require_complete_control_coverage(kind: str) -> None:
     cases = [_case(control) for control in sorted(REQUIRED_CONTROLS[kind])]
     document = {
-        "schema_version": "1.0",
+        "schema_version": "2.0",
         "kind": kind,
         "cases": cases,
         "canary_id": cases[0]["id"],
@@ -51,7 +64,7 @@ def test_semantic_control_proof_rejects_feature_label_tampering() -> None:
     cases = [_case(control) for control in sorted(REQUIRED_CONTROLS[kind])]
     result = analyze(
         {
-            "schema_version": "1.0",
+            "schema_version": "2.0",
             "kind": kind,
             "cases": cases,
             "canary_id": cases[0]["id"],
@@ -69,7 +82,7 @@ def test_semantic_control_proof_recomputes_records_from_case_ledger() -> None:
     cases = [_case(control) for control in sorted(REQUIRED_CONTROLS[kind])]
     result = analyze(
         {
-            "schema_version": "1.0",
+            "schema_version": "2.0",
             "kind": kind,
             "cases": cases,
             "canary_id": cases[0]["id"],
@@ -80,7 +93,7 @@ def test_semantic_control_proof_recomputes_records_from_case_ledger() -> None:
     proof["case_ledger"][0]["observed"] = "deny"
     subject = {name: value for name, value in proof.items() if name != "proof_sha256"}
     proof["proof_sha256"] = hashlib.sha256(canonical_bytes(subject)).hexdigest()
-    with pytest.raises(ValueError, match="case ledger"):
+    with pytest.raises(ValueError, match="detached from execution"):
         verify_control_proof(proof, REQUIRED_CONTROLS[kind])
 
 
@@ -92,7 +105,7 @@ def test_semantic_lane_derives_findings_from_oracle_mismatch() -> None:
     ]
     result = analyze(
         {
-            "schema_version": "1.0",
+            "schema_version": "2.0",
             "kind": kind,
             "cases": cases,
             "canary_id": cases[0]["id"],
@@ -110,10 +123,11 @@ def test_ruleset_regression_compares_derived_scores_to_signed_baseline() -> None
     cases = [_case(control) for control in sorted(REQUIRED_CONTROLS[kind])]
     true_positive = next(case for case in cases if case["control"] == "true-positive")
     true_positive["observed"] = "clean"
+    _bind_observation(true_positive)
     corpus_sha256 = hashlib.sha256(strict_dumps(cases).encode()).hexdigest()
     result = analyze(
         {
-            "schema_version": "1.0",
+            "schema_version": "2.0",
             "kind": kind,
             "cases": cases,
             "canary_id": cases[0]["id"],
@@ -143,7 +157,7 @@ def test_semantic_lane_rejects_missing_controls_and_failed_canary() -> None:
     with pytest.raises(ValueError, match="missing controls"):
         analyze(
             {
-                "schema_version": "1.0",
+                "schema_version": "2.0",
                 "kind": "surface-inventory",
                 "cases": [_case("declared-observed")],
                 "canary_id": "case-declared-observed",

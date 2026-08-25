@@ -35,6 +35,7 @@ class SourceInventoryIdentity:
     total_files: int
     total_bytes: int
     paths: frozenset[str]
+    file_sha256: tuple[tuple[str, str], ...]
 
 
 def load_source_inventory(path: Path) -> dict[str, Any]:
@@ -93,6 +94,7 @@ def verify_source_inventory(
 
     aggregate = hashlib.sha256()
     paths: set[str] = set()
+    file_sha256: list[tuple[str, str]] = []
     previous = ""
     total_bytes = 0
     for record in files:
@@ -126,6 +128,7 @@ def verify_source_inventory(
         if total_bytes > _MAX_U64:
             raise ValueError("source inventory total byte count exceeds uint64")
         paths.add(relative)
+        file_sha256.append((relative, digest))
 
     file_count = len(files)
     aggregate_digest = aggregate.hexdigest()
@@ -155,6 +158,7 @@ def verify_source_inventory(
         total_files=file_count,
         total_bytes=total_bytes,
         paths=frozenset(paths),
+        file_sha256=tuple(file_sha256),
     )
 
 

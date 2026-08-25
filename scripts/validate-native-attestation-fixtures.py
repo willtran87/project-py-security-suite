@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +15,7 @@ _FIXTURE_FIELDS = {
     "id",
     "format",
     "evidence_path",
+    "evidence_sha256",
     "expected",
     "expected_error",
     "challenge_sha256",
@@ -33,12 +35,18 @@ def _digest(value: object) -> bool:
     )
 
 
-def validate(manifest_path: Path) -> dict[str, Any]:
+def validate(manifest_path: Path, expected_manifest_sha256: str) -> dict[str, Any]:
     manifest_file, raw = read_regular_file(
         manifest_path,
         "native attestation fixture manifest",
         maximum_bytes=1_048_576,
     )
+    manifest_sha256 = hashlib.sha256(raw).hexdigest()
+    if (
+        not _digest(expected_manifest_sha256)
+        or manifest_sha256 != expected_manifest_sha256
+    ):
+        raise ValueError("native attestation fixture manifest does not match its pin")
     manifest = strict_loads(raw)
     if (
         not isinstance(manifest, dict)
@@ -73,6 +81,7 @@ def validate(manifest_path: Path) -> dict[str, Any]:
                     "pcrs_sha256",
                     "implementation_sha256",
                     "authority_key_sha256",
+                    "evidence_sha256",
                 )
             )
             or not isinstance(fixture.get("failure_domain"), dict)
@@ -89,6 +98,8 @@ def validate(manifest_path: Path) -> dict[str, Any]:
             maximum_bytes=4 * 1024 * 1024,
             boundary=manifest_file.parent,
         )
+        if hashlib.sha256(evidence).hexdigest() != fixture["evidence_sha256"]:
+            raise ValueError(f"{label} evidence does not match its manifest pin")
         try:
             verify_format_evidence(
                 evidence,
@@ -130,6 +141,7 @@ def validate(manifest_path: Path) -> dict[str, Any]:
     return {
         "schema_version": "1.0",
         "status": "pass",
+        "manifest_sha256": manifest_sha256,
         "fixture_count": len(results),
         "coverage": coverage,
         "fixtures": results,
@@ -141,8 +153,13 @@ def main() -> int:
         description="Validate positive and adversarial native attestation fixtures."
     )
     parser.add_argument("manifest", type=Path)
+    parser.add_argument(
+        "--manifest-sha256",
+        required=True,
+        help="deployment-approved SHA-256 of the exact fixture manifest",
+    )
     args = parser.parse_args()
-    print(dumps(validate(args.manifest), indent=2))
+    print(dumps(validate(args.manifest, args.manifest_sha256), indent=2))
     return 0
 
 

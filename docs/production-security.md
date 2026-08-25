@@ -401,7 +401,9 @@ implicit-flow-sensitive analysis plus positive and negative canaries spanning
 multiple rule families. Primary and secondary semantic ledgers no longer have
 to be byte-identical: the sealed boundary graph retains consensus,
 primary-only, secondary-only, and union commitments for symbols, edges, and
-taint paths. Any engine-unique fact marks compiler semantics review-required
+taint paths after normalizing qualified names, signatures, languages, exact
+source spans, edge kinds, callsites, and execution context. Any engine-unique
+fact marks compiler semantics review-required
 instead of silently discarding the disagreement.
 
 Remote sandbox evidence is never treated as an opaque quote. The retained,
@@ -430,7 +432,8 @@ or registry setup cannot masquerade as a successful rejection test:
 
 ```text
 uv run --frozen python scripts/validate-native-attestation-fixtures.py \
-  security-data/native-attestation-fixtures/manifest.json
+  security-data/native-attestation-fixtures/manifest.json \
+  --manifest-sha256 "$APPROVED_NATIVE_FIXTURE_MANIFEST_SHA256"
 ```
 
 The harness performs the same strict parsing, raw replay, verifier identity,

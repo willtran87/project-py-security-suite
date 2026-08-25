@@ -1054,7 +1054,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "atheris", marker = "python_full_version >= '3.12' and sys_platform != 'win32'" },
+    { name = "atheris", marker = "python_full_version >= '3.12' and platform_machine == 'x86_64' and sys_platform == 'linux'" },
     { name = "coverage", extra = ["toml"] },
     { name = "hypothesis" },
     { name = "hypothesis-jsonschema" },
@@ -1104,7 +1104,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "atheris", marker = "python_full_version >= '3.12' and sys_platform != 'win32'", specifier = ">=3.1,<4" },
+    { name = "atheris", marker = "python_full_version >= '3.12' and platform_machine == 'x86_64' and sys_platform == 'linux'", specifier = ">=3.1,<4" },
     { name = "coverage", extras = ["toml"], specifier = ">=7.10,<8" },
     { name = "hypothesis", specifier = ">=6.140,<7" },
     { name = "hypothesis-jsonschema", specifier = ">=0.23,<0.24" },

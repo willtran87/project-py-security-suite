@@ -94,7 +94,7 @@ def evaluate_report_corpus(
         replay_service_receipt_key_sha256,
         replay_query_budget,
     )
-    _validate_clean_paths(labels, report_root)
+    _validate_fixture_paths(labels, report_root)
     _validate_unique_finding_assignments(labels, findings)
     outcomes = [_evaluate_label(label, findings) for label in labels]
     counts = {
@@ -228,6 +228,7 @@ def _labels(document: dict[str, Any]) -> list[dict[str, Any]]:
                 "severity",
                 "mutation_operator",
                 "fixture_sha256",
+                "fixture_path",
             }
             if set(value) != required:
                 raise ValueError("governed effectiveness label fields do not match")
@@ -250,8 +251,20 @@ def _labels(document: dict[str, Any]) -> list[dict[str, Any]]:
                     "governed effectiveness fixture identities must be unique digests"
                 )
             fixture_identities.add(fixture_sha256)
+            fixture_path = str(value.get("fixture_path") or "").strip()
+            if (
+                not fixture_path
+                or len(fixture_path) > 500
+                or Path(fixture_path).is_absolute()
+                or ".." in Path(fixture_path).parts
+                or "\\" in fixture_path
+            ):
+                raise ValueError(
+                    "governed effectiveness fixture paths must be repository-relative"
+                )
             label["strata"] = strata
             label["fixture_sha256"] = fixture_sha256
+            label["fixture_path"] = fixture_path
         labels.append(label)
     return labels
 
@@ -959,8 +972,12 @@ def _diversity(labels: list[dict[str, Any]]) -> dict[str, int]:
     return result
 
 
-def _validate_clean_paths(labels: list[dict[str, Any]], report: Path) -> None:
-    required = _required_clean_paths(labels)
+def _validate_fixture_paths(labels: list[dict[str, Any]], report: Path) -> None:
+    clean_paths = _required_clean_paths(labels)
+    governed_paths = {
+        str(label["fixture_path"]) for label in labels if "fixture_path" in label
+    }
+    required = clean_paths | governed_paths
     if not required:
         return
     manifest = _read_object(report / "scan-manifest.json", 128 * 1024 * 1024)
@@ -977,6 +994,18 @@ def _validate_clean_paths(labels: list[dict[str, Any]], report: Path) -> None:
         raise ValueError(
             "clean effectiveness label path is absent from the sealed source inventory: "
             + ", ".join(missing)
+        )
+    file_sha256 = dict(identity.file_sha256)
+    detached = sorted(
+        str(label["id"])
+        for label in labels
+        if "fixture_path" in label
+        and file_sha256.get(str(label["fixture_path"])) != label["fixture_sha256"]
+    )
+    if detached:
+        raise ValueError(
+            "governed effectiveness fixture digest is detached from the sealed "
+            "source inventory: " + ", ".join(detached[:20])
         )
 
 

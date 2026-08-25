@@ -18,6 +18,44 @@ from py_security_suite.strict_json import canonical_bytes
 from tests.deployment_authority import authority_environment, operation_receipt
 
 
+def _semantic_symbol(
+    identity: str,
+    path: str,
+    line: int,
+    kind: str,
+    *,
+    language: str = "python",
+    qualified_name: str | None = None,
+) -> dict[str, object]:
+    semantic_name = qualified_name or identity
+    return {
+        "id": identity,
+        "path": path,
+        "start_line": line,
+        "start_column": 0,
+        "end_line": line,
+        "end_column": 1,
+        "kind": kind,
+        "qualified_name": semantic_name,
+        "signature": f"{semantic_name}()",
+        "language": language,
+    }
+
+
+def _semantic_edge(
+    source: str, target: str, path: str, *, kind: str = "control-flow"
+) -> dict[str, object]:
+    return {
+        "source": source,
+        "target": target,
+        "kind": kind,
+        "callsite_path": path,
+        "callsite_line": 1,
+        "callsite_column": 0,
+        "context": "root",
+    }
+
+
 class BoundaryGraphTests(unittest.TestCase):
     def test_compiler_differential_preserves_engine_unique_facts(self) -> None:
         evidence = {
@@ -34,8 +72,8 @@ class BoundaryGraphTests(unittest.TestCase):
         primary = {
             "semantic_ledger": {
                 "symbols": [
-                    {"id": "shared", "path": "app.py", "line": 1, "kind": "function"},
-                    {"id": "primary", "path": "app.py", "line": 2, "kind": "call"},
+                    _semantic_symbol("shared", "app.py", 1, "function"),
+                    _semantic_symbol("primary", "app.py", 2, "call"),
                 ],
                 "cfg_edges": [],
                 "dataflow_edges": [],
@@ -46,13 +84,14 @@ class BoundaryGraphTests(unittest.TestCase):
         secondary = {
             "semantic_ledger": {
                 "symbols": [
-                    {
-                        "id": "engine-shared",
-                        "path": "app.py",
-                        "line": 1,
-                        "kind": "function",
-                    },
-                    {"id": "secondary", "path": "app.py", "line": 3, "kind": "call"},
+                    _semantic_symbol(
+                        "engine-shared",
+                        "app.py",
+                        1,
+                        "function",
+                        qualified_name="shared",
+                    ),
+                    _semantic_symbol("secondary", "app.py", 3, "call"),
                 ],
                 "cfg_edges": [],
                 "dataflow_edges": [],
@@ -74,7 +113,7 @@ class BoundaryGraphTests(unittest.TestCase):
         self.assertEqual(differential["primary_only"], 1)
         self.assertEqual(differential["secondary_only"], 1)
         self.assertEqual(
-            differential["normalization"], "source-location-symbol-ontology-v1"
+            differential["normalization"], "qualified-source-symbol-ontology-v2"
         )
 
     def test_python_parser_failure_marks_graph_incomplete(self) -> None:
@@ -190,7 +229,7 @@ class BoundaryGraphTests(unittest.TestCase):
                 }
             ]
             evidence = {
-                "schema_version": "1.0",
+                "schema_version": "2.0",
                 "frontends": [
                     {
                         "language": "c",
@@ -208,14 +247,11 @@ class BoundaryGraphTests(unittest.TestCase):
                         "interprocedural_edges": 0,
                         "semantic_ledger": {
                             "symbols": [
-                                {
-                                    "id": "main",
-                                    "path": "native.c",
-                                    "line": 1,
-                                    "kind": "function",
-                                }
+                                _semantic_symbol(
+                                    "main", "native.c", 1, "function", language="c"
+                                )
                             ],
-                            "cfg_edges": [{"source": "main", "target": "main"}],
+                            "cfg_edges": [_semantic_edge("main", "main", "native.c")],
                             "dataflow_edges": [],
                             "interprocedural_edges": [],
                         },
@@ -266,7 +302,7 @@ class BoundaryGraphTests(unittest.TestCase):
             for prefix in ("primary", "secondary"):
                 engine_prefix = "" if prefix == "primary" else "secondary_"
                 replay = {
-                    "schema_version": "1.0",
+                    "schema_version": "2.0",
                     "engine": evidence["frontends"][0][f"{engine_prefix}engine"],
                     "engine_sha256": evidence["frontends"][0][
                         f"{engine_prefix}engine_sha256"

@@ -1694,8 +1694,9 @@ def _exclusive_state_lock(path: Path) -> Any:
                 if os.name == "nt":
                     import msvcrt
 
+                    msvcrt_module: Any = msvcrt
                     handle.seek(0)
-                    msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+                    msvcrt_module.locking(handle.fileno(), msvcrt_module.LK_NBLCK, 1)
                 else:
                     fcntl_module: Any = __import__("fcntl")
                     fcntl_module.flock(
@@ -1714,8 +1715,9 @@ def _exclusive_state_lock(path: Path) -> Any:
             if os.name == "nt":
                 import msvcrt
 
+                msvcrt_module = msvcrt
                 handle.seek(0)
-                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+                msvcrt_module.locking(handle.fileno(), msvcrt_module.LK_UNLCK, 1)
             else:
                 fcntl_module = __import__("fcntl")
                 fcntl_module.flock(handle.fileno(), fcntl_module.LOCK_UN)

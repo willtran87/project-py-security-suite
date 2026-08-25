@@ -58,15 +58,56 @@ _FRAMEWORK_DECORATORS = frozenset(
 )
 _FRAMEWORK_REGISTRATION_CALLS = frozenset(
     {
+        "add_api_route",
         "add_listener",
         "add_url_rule",
+        "add_websocket_route",
         "connect",
+        "include",
+        "include_router",
         "path",
         "register",
+        "register_blueprint",
+        "register_task",
         "re_path",
         "subscribe",
     }
 )
+_FRAMEWORK_CONSTRUCTORS = frozenset(
+    {
+        "APIRouter",
+        "Blueprint",
+        "Celery",
+        "FastAPI",
+        "Flask",
+        "Litestar",
+        "Router",
+        "Sanic",
+    }
+)
+_FRAMEWORK_MODULE_PREFIXES = (
+    "celery",
+    "django",
+    "fastapi",
+    "flask",
+    "litestar",
+    "sanic",
+    "sqlalchemy",
+    "starlette",
+)
+_FRAMEWORK_CLASS_DISPATCH = {
+    "APIView": frozenset({"delete", "get", "head", "options", "patch", "post", "put"}),
+    "AsyncConsumer": frozenset({"connect", "disconnect", "receive"}),
+    "BaseCommand": frozenset({"handle"}),
+    "Consumer": frozenset({"connect", "disconnect", "receive"}),
+    "MiddlewareMixin": frozenset(
+        {"process_exception", "process_request", "process_response", "process_view"}
+    ),
+    "View": frozenset({"delete", "get", "head", "options", "patch", "post", "put"}),
+    "ViewSet": frozenset(
+        {"create", "destroy", "list", "partial_update", "retrieve", "update"}
+    ),
+}
 _FRAMEWORK_MODULE_SETTINGS = frozenset(
     {"ASGI_APPLICATION", "ROOT_URLCONF", "WSGI_APPLICATION"}
 )
@@ -146,6 +187,8 @@ class ModuleRecord:
     definitions: dict[str, str] = field(default_factory=dict)
     framework_roots: list[tuple[str, int, str]] = field(default_factory=list)
     dispatch_members: set[str] = field(default_factory=set)
+    framework_receivers: set[str] = field(default_factory=set)
+    framework_symbols: set[str] = field(default_factory=set)
 
 
 def analyze_project(
@@ -670,6 +713,7 @@ def _load_modules(
             tree=tree,
             lines_of_code=_lines_of_code(text),
         )
+        _collect_framework_bindings(record)
         _collect_definitions(record)
         records[name] = record
     return records, errors
@@ -703,7 +747,7 @@ def _walk_definitions(record: ModuleRecord, body: list[ast.stmt], prefix: str) -
             continue
         qualname = f"{prefix}.{statement.name}" if prefix else statement.name
         record.definitions[qualname] = _symbol_id(record.name, qualname)
-        if _framework_decorator(statement.decorator_list):
+        if _framework_decorator(statement.decorator_list, record):
             record.framework_roots.append(
                 (
                     qualname,
@@ -723,13 +767,54 @@ def _collect_dispatch_members(
         _dotted_name(base).rpartition(".")[2] == "NodeVisitor"
         for base in statement.bases
     )
-    if not node_visitor:
+    framework_methods: set[str] = set()
+    for base in statement.bases:
+        framework_methods.update(
+            _FRAMEWORK_CLASS_DISPATCH.get(
+                _dotted_name(base).rpartition(".")[2], frozenset()
+            )
+        )
+    if not node_visitor and not framework_methods:
         return
     for member in statement.body:
         if isinstance(member, (ast.FunctionDef, ast.AsyncFunctionDef)) and (
-            member.name.startswith("visit_")
+            (node_visitor and member.name.startswith("visit_"))
+            or member.name in framework_methods
         ):
             record.dispatch_members.add(f"{qualname}.{member.name}")
+
+
+def _collect_framework_bindings(record: ModuleRecord) -> None:
+    for statement in record.tree.body:
+        if isinstance(statement, ast.Import):
+            for alias in statement.names:
+                if alias.name.startswith(_FRAMEWORK_MODULE_PREFIXES):
+                    record.framework_symbols.add(
+                        alias.asname or alias.name.split(".")[0]
+                    )
+        elif isinstance(statement, ast.ImportFrom) and (
+            statement.module or ""
+        ).startswith(_FRAMEWORK_MODULE_PREFIXES):
+            record.framework_symbols.update(
+                alias.asname or alias.name
+                for alias in statement.names
+                if alias.name != "*"
+            )
+        elif isinstance(statement, (ast.Assign, ast.AnnAssign)):
+            value = statement.value
+            if not isinstance(value, ast.Call):
+                continue
+            constructor = _dotted_name(value.func).rpartition(".")[2]
+            if constructor not in _FRAMEWORK_CONSTRUCTORS:
+                continue
+            targets = (
+                statement.targets
+                if isinstance(statement, ast.Assign)
+                else [statement.target]
+            )
+            record.framework_receivers.update(
+                name for target in targets if (name := _assignment_name(target))
+            )
 
 
 def _definition_nodes(
@@ -1006,6 +1091,13 @@ class _GraphVisitor(ast.NodeVisitor):
             return
         for argument in [*node.args, *(keyword.value for keyword in node.keywords)]:
             target = self._resolve_call(argument)
+            if (
+                target is None
+                and isinstance(argument, ast.Call)
+                and isinstance(argument.func, ast.Attribute)
+                and argument.func.attr == "as_view"
+            ):
+                target = self._resolve_call(argument.func.value)
             definition = self.nodes.get(target) if target else None
             if definition and definition.kind in {"function", "method", "class"}:
                 self._add_edge(target, "registration-dispatch", node.lineno)
@@ -1361,16 +1453,24 @@ def _has_main_guard(tree: ast.Module) -> bool:
     return False
 
 
-def _framework_decorator(decorators: list[ast.expr]) -> bool:
-    return any(
-        (
+def _framework_decorator(decorators: list[ast.expr], record: ModuleRecord) -> bool:
+    for item in decorators:
+        name = (
             _dotted_name(item.func)
             if isinstance(item, ast.Call)
             else _dotted_name(item)
-        ).split(".")[-1]
-        in _FRAMEWORK_DECORATORS
-        for item in decorators
-    )
+        )
+        parts = name.split(".")
+        if not parts or parts[-1] not in _FRAMEWORK_DECORATORS | {"listens_for"}:
+            continue
+        if (
+            len(parts) == 1
+            and parts[0] in record.framework_symbols
+            or len(parts) > 1
+            and parts[0] in record.framework_receivers | record.framework_symbols
+        ):
+            return True
+    return False
 
 
 def _decorator_name(decorators: list[ast.expr]) -> str:
@@ -1380,7 +1480,7 @@ def _decorator_name(decorators: list[ast.expr]) -> str:
             if isinstance(item, ast.Call)
             else _dotted_name(item)
         )
-        if name.split(".")[-1] in _FRAMEWORK_DECORATORS:
+        if name.split(".")[-1] in _FRAMEWORK_DECORATORS | {"listens_for"}:
             return f"@{name}"
     return "@framework-handler"
 

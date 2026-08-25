@@ -280,6 +280,7 @@ def test_surface_page_receipts_require_a_complete_hash_chain(tmp_path: Path) -> 
             "continuation_in_sha256": "",
             "continuation_out_sha256": "3" * 64,
             "record_count": 2,
+            "record_sha256s": ["6" * 64, "7" * 64],
         },
         {
             "page_number": 2,
@@ -288,6 +289,7 @@ def test_surface_page_receipts_require_a_complete_hash_chain(tmp_path: Path) -> 
             "continuation_in_sha256": "3" * 64,
             "continuation_out_sha256": "",
             "record_count": 1,
+            "record_sha256s": ["8" * 64],
         },
     ]
     receipt_path = tmp_path / "pages.json"
