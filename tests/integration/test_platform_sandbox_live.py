@@ -234,12 +234,14 @@ def test_linux_bubblewrap_enforces_network_and_read_only_target() -> None:
 def test_macos_sandbox_enforces_network_and_read_only_target() -> None:
     executable = shutil.which("sandbox-exec")
     assert executable
+    probe_executable = Path(sys.executable).resolve()
     readable = sorted(
         {
             "/System",
             "/usr",
             "/Library",
             str(Path(sys.base_prefix).resolve()),
+            str(probe_executable.parent.parent),
             str(Path.cwd().resolve()),
         }
     )
@@ -250,4 +252,6 @@ def test_macos_sandbox_enforces_network_and_read_only_target() -> None:
         '(allow mach-lookup)(allow file-read* file-write* (subpath "{PYSEC_PRIVATE_ROOT}"))'
         + read_rules
     )
-    _exercise_sandbox(executable, ("-p", profile))
+    _exercise_sandbox(
+        executable, ("-p", profile), probe_executable=str(probe_executable)
+    )
