@@ -42,7 +42,11 @@ if os.name != "nt":
     )
     requested_limits = (
         *memory_limits,
-        ("process-count", "RLIMIT_NPROC", 256),
+        (
+            "process-count",
+            "RLIMIT_NPROC",
+            None if sys.platform == "darwin" else 256,
+        ),
         ("open-files", "RLIMIT_NOFILE", 2048),
         ("file-size", "RLIMIT_FSIZE", int(sys.argv[5])),
         ("cpu-time", "RLIMIT_CPU", max(1, int(sys.argv[4]))),
@@ -52,6 +56,12 @@ if os.name != "nt":
             kind = getattr(resource, constant)
             current_soft, current_hard = resource.getrlimit(kind)
             value = requested
+            if requested is None:
+                value = (
+                    current_soft
+                    if current_soft != resource.RLIM_INFINITY
+                    else 4096
+                )
             if current_hard != resource.RLIM_INFINITY:
                 value = min(value, current_hard)
             if current_soft != resource.RLIM_INFINITY:

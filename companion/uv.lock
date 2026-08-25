@@ -1203,6 +1203,7 @@ dependencies = [
     { name = "jsonschema" },
     { name = "macholib" },
     { name = "pefile" },
+    { name = "psutil" },
     { name = "pyelftools" },
     { name = "rfc3161ng" },
     { name = "rfc8785" },
@@ -1229,6 +1230,7 @@ requires-dist = [
     { name = "jsonschema", specifier = ">=4.23,<5" },
     { name = "macholib", specifier = ">=1.16.4,<2" },
     { name = "pefile", specifier = ">=2024.8.26,<2025" },
+    { name = "psutil", specifier = ">=7.2,<8" },
     { name = "pyelftools", specifier = ">=0.33,<0.34" },
     { name = "rfc3161ng", specifier = ">=2.1.3,<3" },
     { name = "rfc8785", specifier = ">=0.1.4,<1" },
@@ -1269,6 +1271,7 @@ dev = [
     { name = "ruff", specifier = ">=0.12,<1" },
     { name = "time-machine", specifier = ">=2.19,<3" },
     { name = "tox", specifier = ">=4.30,<5" },
+    { name = "types-psutil", specifier = ">=7.2,<8" },
     { name = "zizmor", specifier = ">=1.28,<2" },
 ]
 
