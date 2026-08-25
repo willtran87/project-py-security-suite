@@ -51,7 +51,9 @@ if os.name != "nt":
                 value = min(value, current_hard)
             if current_soft != resource.RLIM_INFINITY:
                 value = min(value, current_soft)
-            resource.setrlimit(kind, (value, current_hard))
+            # Drop the hard ceiling too: an untrusted scanner must not be able
+            # to raise its soft quota back to the inherited parent maximum.
+            resource.setrlimit(kind, (value, value))
             enforced.append(name)
         except (AttributeError, OSError, ValueError) as exc:
             errors.append(f"{name}:{exc}")

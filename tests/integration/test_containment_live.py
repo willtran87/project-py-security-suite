@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 import time
 from pathlib import Path
@@ -51,6 +52,26 @@ def test_real_private_scratch_quota_terminates_writer(tmp_path: Path) -> None:
     )
     assert result.scratch_limit_exceeded
     assert result.process_tree_terminated
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX rlimits do not apply on Windows")
+def test_real_posix_scanner_cannot_raise_hard_quota(tmp_path: Path) -> None:
+    scanner = (
+        "import resource; "
+        "soft,hard=resource.getrlimit(resource.RLIMIT_NOFILE); "
+        "denied=False; "
+        "\ntry: resource.setrlimit(resource.RLIMIT_NOFILE,(hard+1,hard+1))"
+        "\nexcept (OSError,ValueError): denied=True"
+        "\nprint('denied' if denied and soft == hard else 'raised')"
+    )
+    result = run_command(
+        [sys.executable, "-c", scanner],
+        cwd=tmp_path,
+        timeout_seconds=10,
+        max_output_bytes=4096,
+    )
+    assert result.exit_code == 0, result.stderr
+    assert result.stdout.strip() == "denied"
 
 
 def test_replay_checkpoint_rejects_gap_without_mutating_state(tmp_path: Path) -> None:

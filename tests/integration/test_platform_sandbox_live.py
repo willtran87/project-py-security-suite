@@ -192,6 +192,9 @@ def test_linux_bubblewrap_enforces_network_and_read_only_target() -> None:
         key=str,
     )
     bind_arguments: list[str] = []
+    for alias in (Path("/bin"), Path("/lib"), Path("/lib64")):
+        if alias.is_symlink():
+            bind_arguments.extend(("--symlink", os.readlink(alias), str(alias)))
     created: set[Path] = set()
     for root in readable_roots:
         for parent in reversed(root.resolve().parents):
