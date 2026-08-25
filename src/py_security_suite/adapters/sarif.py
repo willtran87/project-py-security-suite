@@ -67,6 +67,8 @@ def parse_sarif_findings(
     default_remediation: str,
 ) -> list[Finding]:
     document = strict_json_loads(payload)
+    if not isinstance(document, dict):
+        raise TypeError("SARIF output must be an object")
     findings: list[Finding] = []
     for run in _object_list(document.get("runs", []), "runs"):
         tool = _object(run.get("tool"))

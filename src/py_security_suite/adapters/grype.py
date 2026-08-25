@@ -87,6 +87,8 @@ class GrypeAdapter(ScannerAdapter):
 
     def parse(self, payload: str, target: Path) -> list[Finding]:
         document = strict_json_loads(payload)
+        if not isinstance(document, dict):
+            raise TypeError("Grype output must be an object")
         matches = document.get("matches") or []
         if not isinstance(matches, list):
             raise TypeError("Grype matches must be a list")

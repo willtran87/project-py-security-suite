@@ -8,7 +8,12 @@ import pytest
 from companion.strict_json import canonical_bytes as companion_canonical_bytes
 from companion.strict_json import loads as companion_loads
 from py_security_suite.adapters.bandit import BanditAdapter
+from py_security_suite.adapters.detect_secrets import DetectSecretsAdapter
+from py_security_suite.adapters.grype import GrypeAdapter
+from py_security_suite.adapters.osv import OsvScannerAdapter
 from py_security_suite.adapters.sarif import parse_sarif_findings
+from py_security_suite.adapters.semgrep import SemgrepAdapter
+from py_security_suite.adapters.trivy import TrivyAdapter
 from py_security_suite.config import ToolConfig
 from py_security_suite.evidence_ingest import _assurance_execution
 from py_security_suite.strict_json import canonical_bytes, dumps, loads
@@ -55,6 +60,36 @@ def test_scanner_adapters_reject_duplicate_json_properties() -> None:
             default_impact="impact",
             default_remediation="remediation",
         )
+
+
+def test_object_scanner_adapters_reject_non_object_roots() -> None:
+    target = Path("/strict-json-target")
+    with pytest.raises(TypeError, match="Bandit output must be an object"):
+        BanditAdapter(ToolConfig(), 1024).parse("[]", target)
+    with pytest.raises(TypeError, match="SARIF output must be an object"):
+        parse_sarif_findings(
+            "[]",
+            target,
+            tool_name="sarif",
+            default_area="security",
+            default_impact="impact",
+            default_remediation="remediation",
+        )
+
+
+@pytest.mark.parametrize(
+    "adapter_type",
+    [
+        DetectSecretsAdapter,
+        GrypeAdapter,
+        OsvScannerAdapter,
+        SemgrepAdapter,
+        TrivyAdapter,
+    ],
+)
+def test_additional_object_adapters_reject_non_object_roots(adapter_type: type) -> None:
+    with pytest.raises(TypeError, match="output must be an object"):
+        adapter_type(ToolConfig(), 1024).parse("[]", Path("/strict-json-target"))
 
 
 def test_canonical_json_is_stable_across_implementations() -> None:

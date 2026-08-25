@@ -72,6 +72,8 @@ class SemgrepAdapter(ScannerAdapter):
 
     def parse(self, payload: str, target: Path) -> list[Finding]:
         document = strict_json_loads(payload)
+        if not isinstance(document, dict):
+            raise TypeError("Semgrep output must be an object")
         results = document.get("results", [])
         if not isinstance(results, list):
             raise TypeError("results must be a list")

@@ -74,6 +74,8 @@ class OsvScannerAdapter(ScannerAdapter):
 
     def parse(self, payload: str, target: Path) -> list[Finding]:
         document = strict_json_loads(payload)
+        if not isinstance(document, dict):
+            raise TypeError("OSV output must be an object")
         results = document.get("results") or []
         if not isinstance(results, list):
             raise TypeError("results must be a list")
@@ -94,6 +96,8 @@ class OsvScannerAdapter(ScannerAdapter):
     def derived_artifacts(self, payload: str, target: Path) -> dict[str, Any]:
         """Retain source records emitted by OSV instead of inferring scan scope."""
         document = strict_json_loads(payload)
+        if not isinstance(document, dict):
+            raise TypeError("OSV output must be an object")
         results = document.get("results") or []
         if not isinstance(results, list):
             raise TypeError("results must be a list")

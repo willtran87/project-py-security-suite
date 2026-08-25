@@ -76,6 +76,8 @@ class TrivyAdapter(ScannerAdapter):
 
     def parse(self, payload: str, target: Path) -> list[Finding]:
         document = strict_json_loads(payload)
+        if not isinstance(document, dict):
+            raise TypeError("Trivy output must be an object")
         results = document.get("Results") or []
         if not isinstance(results, list):
             raise TypeError("Trivy Results must be a list")

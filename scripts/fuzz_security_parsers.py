@@ -4,6 +4,7 @@ import json
 import os
 import re
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any, cast
 
@@ -19,6 +20,7 @@ with atheris.instrument_imports():
 
 
 _TARGET = Path("/fuzz-target")
+_GITLEAKS_REPORT = Path(tempfile.gettempdir()) / "pysec-gitleaks-fuzz.json"
 _NAMED_ADAPTERS: tuple[tuple[str, Any], ...] = tuple(
     (name, cast(Any, adapter_type)(ToolConfig(), 1024 * 1024))
     for name, adapter_type in sorted(ADAPTER_TYPES.items())
@@ -74,13 +76,24 @@ def test_one_input(data: bytes) -> None:
     selected = _selected_adapters(_TARGET_NAME)
     selector = data[0] % len(selected)
     try:
-        first = selected[selector][1].parse(text, _TARGET)
-        second = selected[selector][1].parse(text, _TARGET)
+        name, adapter = selected[selector]
+        first = _parse_adapter(name, adapter, text)
+        second = _parse_adapter(name, adapter, text)
         if first != second:
             raise RuntimeError("adapter normalization is nondeterministic")
         _assert_normalized_findings(first)
     except (TypeError, ValueError):
         pass
+
+
+def _parse_adapter(name: str, adapter: Any, text: str) -> list[Finding]:
+    if name == "gitleaks":
+        # Gitleaks writes JSON to --report-path instead of stdout. Recreate that
+        # production boundary for every pass because the adapter deliberately
+        # removes the sensitive report immediately after parsing it.
+        adapter._report_path = _GITLEAKS_REPORT
+        _GITLEAKS_REPORT.write_text(text, encoding="utf-8")
+    return cast(list[Finding], adapter.parse(text, _TARGET))
 
 
 def _assert_normalized_findings(findings: object) -> None:
