@@ -21,6 +21,16 @@ def test_ci_enforces_coverage_and_cross_platform_python_314() -> None:
     assert "- test-assurance" in workflow
 
 
+def test_cross_platform_tests_use_a_canonical_temporary_root() -> None:
+    workflow = _workflow("ci.yml")
+
+    assert "Prepare canonical test temporary directory" in workflow
+    assert "PYSEC_TEST_TEMP: ${{ runner.temp }}/pysec-tests" in workflow
+    assert "TMP: ${{ runner.temp }}/pysec-tests" in workflow
+    assert "TEMP: ${{ runner.temp }}/pysec-tests" in workflow
+    assert "TMPDIR: ${{ runner.temp }}/pysec-tests" in workflow
+
+
 def test_deep_assurance_executes_self_scan_and_mutation_testing() -> None:
     workflow = _workflow("deep-assurance.yml")
 

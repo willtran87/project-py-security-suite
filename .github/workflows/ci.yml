@@ -259,7 +259,18 @@ jobs:
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
         run: uv sync --locked --all-groups --python "$PYTHON_VERSION"
+      - name: Prepare canonical test temporary directory
+        env:
+          PYSEC_TEST_TEMP: ${{ runner.temp }}/pysec-tests
+        run: >-
+          uv run --frozen python -c
+          "import os; from pathlib import Path;
+          Path(os.environ['PYSEC_TEST_TEMP']).mkdir(parents=True, exist_ok=True)"
       - name: Run tests
+        env:
+          TMP: ${{ runner.temp }}/pysec-tests
+          TEMP: ${{ runner.temp }}/pysec-tests
+          TMPDIR: ${{ runner.temp }}/pysec-tests
         run: uv run --frozen pytest -q
 
   test-assurance:
