@@ -307,11 +307,11 @@ def _seed_target_corpus(target: str, destination: Path) -> None:
                 "w",
                 compression=zipfile.ZIP_DEFLATED,
             ) as archive:
-                info = zipfile.ZipInfo(member_name, date_time=(1980, 1, 1, 0, 0, 0))
-                info.compress_type = zipfile.ZIP_DEFLATED
+                zip_info = zipfile.ZipInfo(member_name, date_time=(1980, 1, 1, 0, 0, 0))
+                zip_info.compress_type = zipfile.ZIP_DEFLATED
                 if mode:
-                    info.external_attr = mode << 16
-                archive.writestr(info, payload)
+                    zip_info.external_attr = mode << 16
+                archive.writestr(zip_info, payload)
     elif target == "tar-archive":
         tar_cases = (
             ("tar-safe", "reports/finding.json", tarfile.REGTYPE),
@@ -321,13 +321,13 @@ def _seed_target_corpus(target: str, destination: Path) -> None:
         for seed_name, member_name, member_type in tar_cases:
             with tarfile.open(destination / seed_name, "w") as archive:
                 payload = b"{}" if member_type == tarfile.REGTYPE else b""
-                info = tarfile.TarInfo(member_name)
-                info.mtime = 0
-                info.size = len(payload)
-                info.type = member_type
+                tar_info = tarfile.TarInfo(member_name)
+                tar_info.mtime = 0
+                tar_info.size = len(payload)
+                tar_info.type = member_type
                 if member_type == tarfile.SYMTYPE:
-                    info.linkname = "target"
-                archive.addfile(info, io.BytesIO(payload))
+                    tar_info.linkname = "target"
+                archive.addfile(tar_info, io.BytesIO(payload))
 
 
 def main() -> None:
