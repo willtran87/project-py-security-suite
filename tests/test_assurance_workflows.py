@@ -39,6 +39,13 @@ def test_deep_assurance_executes_self_scan_and_mutation_testing() -> None:
     assert "--suspicious-policy=failure --untested-policy=failure" in workflow
 
 
+def test_fuzz_workflow_extracts_missing_coverage_without_shell_short_circuit() -> None:
+    workflow = _workflow("fuzz.yml")
+
+    assert "match($0, /cov: [0-9]+/)" in workflow
+    assert 'if [[ -z "$coverage"' in workflow
+
+
 def test_external_security_workflow_fails_closed_on_authority_gaps() -> None:
     workflow = _workflow("external-security-assurance.yml")
 

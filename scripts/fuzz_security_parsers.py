@@ -29,6 +29,12 @@ with atheris.instrument_imports() if atheris is not None else nullcontext():
     from py_security_suite.strict_json import loads as strict_loads
 
 
+def _instrument_fuzz_function(function: Any) -> Any:
+    """Instrument harness-owned Python code while retaining portable unit imports."""
+
+    return atheris.instrument_func(function) if atheris is not None else function
+
+
 _TARGET = Path("/fuzz-target")
 _GITLEAKS_REPORT = Path(tempfile.gettempdir()) / "pysec-gitleaks-fuzz.json"
 _NAMED_ADAPTERS: tuple[tuple[str, Any], ...] = tuple(
@@ -39,6 +45,7 @@ _TARGET_NAME = os.environ.get("PYSEC_FUZZ_TARGET", "strict-json")
 _ADAPTER_SHARDS = 8
 
 
+@_instrument_fuzz_function
 def test_one_input(data: bytes) -> None:
     if not data or len(data) > 1024 * 1024:
         return
@@ -132,6 +139,7 @@ def test_one_input(data: bytes) -> None:
         pass
 
 
+@_instrument_fuzz_function
 def _safe_archive_path(name: str) -> str:
     normalized = name.replace("\\", "/")
     parts = normalized.split("/")
@@ -146,6 +154,7 @@ def _safe_archive_path(name: str) -> str:
     return normalized
 
 
+@_instrument_fuzz_function
 def _inspect_xml(payload: bytes) -> tuple[int, int, int]:
     root = safe_element_tree.fromstring(payload)
     nodes = 0
@@ -165,6 +174,7 @@ def _inspect_xml(payload: bytes) -> tuple[int, int, int]:
     return nodes, attributes, text_bytes
 
 
+@_instrument_fuzz_function
 def _inspect_zip(payload: bytes) -> tuple[tuple[str, int, int], ...]:
     records: list[tuple[str, int, int]] = []
     total_size = 0
@@ -188,6 +198,7 @@ def _inspect_zip(payload: bytes) -> tuple[tuple[str, int, int], ...]:
     return tuple(records)
 
 
+@_instrument_fuzz_function
 def _inspect_tar(payload: bytes) -> tuple[tuple[str, int, str], ...]:
     records: list[tuple[str, int, str]] = []
     total_size = 0

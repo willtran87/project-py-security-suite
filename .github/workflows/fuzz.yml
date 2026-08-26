@@ -110,7 +110,7 @@ jobs:
             -entropic=1 \
             -use_value_profile=1 \
             ".fuzz-corpus/$FUZZ_ARTIFACT" 2>&1 | tee ".fuzz-results/$FUZZ_ARTIFACT.log"
-          coverage="$(grep -oE 'cov: [0-9]+' ".fuzz-results/$FUZZ_ARTIFACT.log" | awk '{if ($2 > max) max=$2} END {print max}')"
+          coverage="$(awk 'match($0, /cov: [0-9]+/) { value=substr($0, RSTART + 5, RLENGTH - 5); if (value > max) max=value } END { if (max > 0) print max }' ".fuzz-results/$FUZZ_ARTIFACT.log")"
           if [[ -z "$coverage" || "$coverage" -lt "$FUZZ_COVERAGE_FLOOR" ]]; then
             echo "::error::Fuzz coverage $coverage is below floor $FUZZ_COVERAGE_FLOOR for $FUZZ_TARGET"
             exit 1
