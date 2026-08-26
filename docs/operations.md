@@ -1,6 +1,6 @@
 # Python Security Suite operations
 
-Last reviewed: 2026-08-10
+Last reviewed: 2026-08-26
 
 ## Operating model
 
@@ -774,7 +774,7 @@ pysec qualify-bundle . --config .pysec-tools\pysec.native.toml `
   --effectiveness-evaluation effectiveness-evaluation.json `
   --effectiveness-report .artifacts\detection-validation `
   --effectiveness-sha256 APPROVED_SHA256 `
-  --minimum-effectiveness-labels 25 `
+  --minimum-effectiveness-labels 200 `
   --minimum-effectiveness-tools 2 `
   --required-effectiveness-tool bandit `
   --required-effectiveness-tool semgrep `

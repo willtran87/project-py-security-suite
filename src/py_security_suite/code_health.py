@@ -17,6 +17,7 @@ from .models import (
     finding_identity,
 )
 from .path_safety import read_regular_file
+from .strict_json import loads as strict_loads
 
 
 _SKIP = frozenset(
@@ -33,11 +34,26 @@ _SKIP = frozenset(
 )
 _MAX_FILES = 50_000
 _MAX_ISSUES = 500
+_POLICY_PATH = "security/code-health-policy.json"
+_DEFAULT_THRESHOLDS = {
+    "cognitive_complexity": 15,
+    "function_lines": 100,
+    "parameters": 8,
+    "class_lines": 800,
+    "duplicate_function_lines": 12,
+    "semantic_clone_lines": 20,
+    "nesting_depth": 5,
+    "function_call_targets": 20,
+    "class_methods": 30,
+}
 
 
 def analyze_code_health(target: Path) -> tuple[list[Finding], dict[str, Any]]:
     issues: list[dict[str, Any]] = []
     parse_errors: list[str] = []
+    thresholds, policy_present, policy_error = _load_policy(target)
+    if policy_error:
+        parse_errors.append(policy_error)
     bodies: dict[str, list[dict[str, Any]]] = defaultdict(list)
     semantic_bodies: dict[str, list[dict[str, Any]]] = defaultdict(list)
     eligible_paths = [
@@ -76,17 +92,59 @@ def analyze_code_health(target: Path) -> tuple[list[Finding], dict[str, Any]]:
                     parameters += 1
                 if node.args.kwarg:
                     parameters += 1
-                if complexity > 15:
+                nesting = _maximum_nesting(node)
+                call_targets = _call_target_count(node)
+                if complexity > thresholds["cognitive_complexity"]:
                     issues.append(
-                        _issue("cognitive-complexity", relative, node, complexity, 15)
+                        _issue(
+                            "cognitive-complexity",
+                            relative,
+                            node,
+                            complexity,
+                            thresholds["cognitive_complexity"],
+                        )
                     )
-                if length > 100:
-                    issues.append(_issue("long-function", relative, node, length, 100))
-                if parameters > 8:
+                if length > thresholds["function_lines"]:
                     issues.append(
-                        _issue("parameter-coupling", relative, node, parameters, 8)
+                        _issue(
+                            "long-function",
+                            relative,
+                            node,
+                            length,
+                            thresholds["function_lines"],
+                        )
                     )
-                if length >= 12:
+                if parameters > thresholds["parameters"]:
+                    issues.append(
+                        _issue(
+                            "parameter-coupling",
+                            relative,
+                            node,
+                            parameters,
+                            thresholds["parameters"],
+                        )
+                    )
+                if nesting > thresholds["nesting_depth"]:
+                    issues.append(
+                        _issue(
+                            "deep-nesting",
+                            relative,
+                            node,
+                            nesting,
+                            thresholds["nesting_depth"],
+                        )
+                    )
+                if call_targets > thresholds["function_call_targets"]:
+                    issues.append(
+                        _issue(
+                            "excessive-call-coupling",
+                            relative,
+                            node,
+                            call_targets,
+                            thresholds["function_call_targets"],
+                        )
+                    )
+                if length >= thresholds["duplicate_function_lines"]:
                     normalized_body = ast.Module(body=node.body, type_ignores=[])
                     digest = hashlib.sha256(
                         (
@@ -102,13 +160,35 @@ def analyze_code_health(target: Path) -> tuple[list[Finding], dict[str, Any]]:
                         "exact_digest": digest,
                     }
                     bodies[digest].append(record)
-                    if length >= 20:
+                    if length >= thresholds["semantic_clone_lines"]:
                         semantic_bodies[_semantic_digest(node)].append(record)
             elif isinstance(node, ast.ClassDef):
                 end = int(node.end_lineno or node.lineno)
                 length = end - int(node.lineno) + 1
-                if length > 800:
-                    issues.append(_issue("large-class", relative, node, length, 800))
+                methods = sum(
+                    isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef))
+                    for child in node.body
+                )
+                if length > thresholds["class_lines"]:
+                    issues.append(
+                        _issue(
+                            "large-class",
+                            relative,
+                            node,
+                            length,
+                            thresholds["class_lines"],
+                        )
+                    )
+                if methods > thresholds["class_methods"]:
+                    issues.append(
+                        _issue(
+                            "excessive-class-responsibilities",
+                            relative,
+                            node,
+                            methods,
+                            thresholds["class_methods"],
+                        )
+                    )
     for group in bodies.values():
         distinct_paths = {str(item["path"]) for item in group}
         if len(group) < 2 or len(distinct_paths) < 2:
@@ -158,7 +238,7 @@ def analyze_code_health(target: Path) -> tuple[list[Finding], dict[str, Any]]:
     issues = issues[:_MAX_ISSUES]
     findings = [_finding(item) for item in issues]
     return findings, {
-        "schema_version": "1.0",
+        "schema_version": "1.1",
         "analysis": "python-cognitive-complexity-size-coupling-and-duplication",
         "files_analyzed": files_analyzed,
         "complete": not parse_errors
@@ -170,14 +250,9 @@ def analyze_code_health(target: Path) -> tuple[list[Finding], dict[str, Any]]:
         "parse_errors_detected": len(parse_errors),
         "parse_errors_omitted": max(0, len(parse_errors) - 100),
         "parse_errors": parse_errors[:100],
-        "thresholds": {
-            "cognitive_complexity": 15,
-            "function_lines": 100,
-            "parameters": 8,
-            "class_lines": 800,
-            "duplicate_function_lines": 12,
-            "semantic_clone_lines": 20,
-        },
+        "policy_path": _POLICY_PATH if policy_present else None,
+        "policy_present": policy_present,
+        "thresholds": thresholds,
         "limitations": [
             "Structural metrics prioritize review; they do not prove incorrect behavior or an architectural defect.",
             *(
@@ -187,6 +262,37 @@ def analyze_code_health(target: Path) -> tuple[list[Finding], dict[str, Any]]:
             ),
         ],
     }
+
+
+def _load_policy(target: Path) -> tuple[dict[str, int], bool, str | None]:
+    thresholds = dict(_DEFAULT_THRESHOLDS)
+    path = target / Path(_POLICY_PATH)
+    if not path.is_file():
+        return thresholds, False, None
+    try:
+        _, payload = read_regular_file(
+            path, "code health policy", maximum_bytes=64 * 1024, boundary=target
+        )
+        document = strict_loads(payload)
+        if (
+            not isinstance(document, dict)
+            or set(document) != {"schema_version", "thresholds"}
+            or document.get("schema_version") != "1.0"
+            or not isinstance(document.get("thresholds"), dict)
+            or not set(document["thresholds"]).issubset(thresholds)
+        ):
+            raise ValueError("invalid policy fields")
+        for name, value in document["thresholds"].items():
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, int)
+                or not 1 <= value <= 10000
+            ):
+                raise ValueError(f"invalid threshold: {name}")
+            thresholds[name] = value
+        return thresholds, True, None
+    except (OSError, TypeError, ValueError) as exc:
+        return thresholds, True, f"{_POLICY_PATH}: {type(exc).__name__}"
 
 
 class _SemanticNormalizer(ast.NodeTransformer):
@@ -253,6 +359,63 @@ def _cognitive_complexity(function: ast.AST) -> int:
     return score
 
 
+def _maximum_nesting(function: ast.AST) -> int:
+    maximum = 0
+
+    def walk(node: ast.AST, depth: int) -> None:
+        nonlocal maximum
+        nested = isinstance(
+            node,
+            (
+                ast.If,
+                ast.For,
+                ast.AsyncFor,
+                ast.While,
+                ast.Try,
+                ast.TryStar,
+                ast.With,
+                ast.AsyncWith,
+                ast.Match,
+            ),
+        )
+        next_depth = depth + 1 if nested else depth
+        maximum = max(maximum, next_depth)
+        for child in ast.iter_child_nodes(node):
+            if child is not function and isinstance(
+                child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)
+            ):
+                continue
+            walk(child, next_depth)
+
+    walk(function, 0)
+    return maximum
+
+
+def _call_target_count(function: ast.AST) -> int:
+    targets: set[str] = set()
+
+    def walk(node: ast.AST) -> None:
+        if isinstance(node, ast.Call):
+            current: ast.expr = node.func
+            parts: list[str] = []
+            while isinstance(current, ast.Attribute):
+                parts.append(current.attr)
+                current = current.value
+            if isinstance(current, ast.Name):
+                parts.append(current.id)
+            if parts:
+                targets.add(".".join(reversed(parts)))
+        for child in ast.iter_child_nodes(node):
+            if child is not function and isinstance(
+                child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)
+            ):
+                continue
+            walk(child)
+
+    walk(function)
+    return len(targets)
+
+
 def _issue(
     kind: str, path: Path, node: ast.AST, value: int, threshold: int
 ) -> dict[str, Any]:
@@ -292,6 +455,21 @@ def _finding(issue: dict[str, Any]) -> Finding:
             "Structurally duplicated function implementation",
             Severity.LOW,
             "CODE-SEMANTIC-CLONE",
+        ),
+        "deep-nesting": (
+            "Deeply nested control flow",
+            Severity.MEDIUM,
+            "CODE-DEEP-NESTING",
+        ),
+        "excessive-call-coupling": (
+            "Excessive function call coupling",
+            Severity.LOW,
+            "CODE-EXCESSIVE-CALL-COUPLING",
+        ),
+        "excessive-class-responsibilities": (
+            "Class has excessive responsibilities",
+            Severity.MEDIUM,
+            "CODE-EXCESSIVE-CLASS-RESPONSIBILITIES",
         ),
     }
     title, severity, rule_id = metadata[kind]

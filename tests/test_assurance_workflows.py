@@ -54,8 +54,9 @@ def test_external_security_workflow_fails_closed_on_authority_gaps() -> None:
     assert "enterprise-verify-pysec-isolation.exe" in workflow
     assert "-ScanProfile production -NetworkIsolated" in workflow
     assert 'schema_version -ne "2.0"' in workflow
-    assert "true_positive -lt 10" in workflow
-    assert "true_negative -lt 10" in workflow
+    assert "$evaluation.corpus.labels -lt 200" in workflow
+    assert "true_positive -lt 80" in workflow
+    assert "true_negative -lt 80" in workflow
     assert "environment: authorized-dynamic-security" in workflow
     assert "--phases examples,coverage,fuzzing,stateful" in workflow
     assert "--require-tools nuclei,zap,restler,oast,datadog-iast,mobsf" in workflow

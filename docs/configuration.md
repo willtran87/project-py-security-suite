@@ -1,6 +1,6 @@
 # Python Security Suite configuration
 
-Last reviewed: 2026-08-08
+Last reviewed: 2026-08-26
 
 ## Loading and protection
 
@@ -122,6 +122,68 @@ introduced binaries.
 | `comprehensive` | Every implemented offline/static, companion-evidence, or artifact adapter |
 | `production` | Strict source-security set plus fail-closed applicable runtime evidence, including actionlint, Hadolint, DevSkim, Flawfinder, TruffleHog, and `run-codeql` |
 | `release` | Comprehensive plus production completeness rules and a required built distribution |
+
+## Repository engineering-analysis policies
+
+Structural profiles read two optional strict JSON policies from the sealed
+source snapshot. Invalid files make the corresponding analysis incomplete.
+
+`security/code-health-policy.json` calibrates bounded review thresholds:
+
+```json
+{
+  "schema_version": "1.0",
+  "thresholds": {
+    "cognitive_complexity": 12,
+    "nesting_depth": 4,
+    "function_call_targets": 16,
+    "class_methods": 24
+  }
+}
+```
+
+Unspecified values retain conservative defaults. Supported names also include
+`function_lines`, `parameters`, `class_lines`,
+`duplicate_function_lines`, and `semantic_clone_lines`.
+
+`security/architecture-policy.json` makes intended dependency direction
+explicit rather than asking graph heuristics to guess the design:
+
+```json
+{
+  "schema_version": "1.0",
+  "layers": [
+    {
+      "name": "application",
+      "modules": ["service.application", "service.application.*"],
+      "may_depend_on": ["domain"]
+    },
+    {
+      "name": "domain",
+      "modules": ["service.domain", "service.domain.*"],
+      "may_depend_on": []
+    }
+  ],
+  "forbidden_edges": [
+    {
+      "source": "service.domain*",
+      "destination": "service.infrastructure*",
+      "reason": "Domain code must not own infrastructure adapters"
+    }
+  ],
+  "thresholds": {
+    "module_fan_out": 10,
+    "hub_total_degree": 18,
+    "instability_delta": 0.4
+  }
+}
+```
+
+Module patterns use deterministic case-sensitive glob matching. Same-layer
+dependencies are allowed; cross-layer dependencies must be named in
+`may_depend_on`. Exact forbidden-edge and layer-direction violations produce
+high-confidence findings. Fan-out, hub, and instability findings remain
+calibrated structural review signals.
 
 If `policy.required_scanners` is empty, every selected and applicable tool is
 required. A conditional tool with no matching input is reported as

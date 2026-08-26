@@ -68,6 +68,7 @@ class ReleaseReadinessTests(unittest.TestCase):
         )
         self.assertIn("Governed corpus required: True", control["detail"])
         self.assertIn("validated: False", control["detail"])
+        self.assertIn("minimums 200 total, 80 positive, 80 negative", control["detail"])
 
     @patch("py_security_suite.release_readiness.verify_report")
     def test_complete_governed_evidence_is_approved(self, verify_report_mock) -> None:

@@ -1,6 +1,6 @@
 # Detection effectiveness and operational coverage
 
-Last reviewed: 2026-08-24
+Last reviewed: 2026-08-26
 
 The suite separates five questions that are often incorrectly collapsed into
 one score:
@@ -202,7 +202,9 @@ For meaningful empirical calibration, use a separately maintained holdout of at
 least 200 labels with balanced positive and negative controls across every
 required scanner, representative frameworks, real historical defects, parser
 variants, custom wrappers and sanitizers, and mutation operators. The built-in
-production floor is an anti-triviality minimum, not a claim that 25 labels are
-statistically representative. Track precision, recall, false-positive rate, and
+production floor now enforces 200 labels, including at least 80 positive and 80
+negative cases, three engines, and 20 labels for every required engine. It is
+still a minimum rather than proof that the sample is representative. Track
+precision, recall, false-positive rate, and
 false-negative rate per tool, rule, CWE, framework, and parser variant; do not
 replace the governed holdout with fixtures used to tune scanner rules.

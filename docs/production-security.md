@@ -325,7 +325,7 @@ additional-properties-closed contracts.
 Production and release decisions always require schema-2.0 labeled-corpus
 effectiveness evidence with a distinct training digest, an exact holdout-label
 digest, a lifecycle-valid quorum from at least two trusted organizations, at
-least 25 labels, 10 positive labels, 10 negative labels, two tools, and five
+least 200 labels, 80 positive labels, 80 negative labels, three tools, and 20
 labels for each required tool. CWE, language, parser, boundary, severity, and
 mutation diversity minimums are enforced, and every required tool needs both
 positive and negative cases. Omitting CLI flags cannot disable this gate.

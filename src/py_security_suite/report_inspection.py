@@ -26,6 +26,12 @@ _REPORT_VERIFICATION_SCHEMA_ID = (
     "urn:project-py-security-suite:schema:report-verification:1.0"
 )
 BUNDLED_SCHEMA_RESOURCES = {
+    "application-contract-analysis-1.0": "application-contract-analysis-1.0.schema.json",
+    "application-contract-analysis-1.1": "application-contract-analysis-1.1.schema.json",
+    "code-health-1.0": "code-health-1.0.schema.json",
+    "code-health-1.1": "code-health-1.1.schema.json",
+    "static-architecture-1.0": "static-architecture-1.0.schema.json",
+    "static-architecture-1.1": "static-architecture-1.1.schema.json",
     "boundary-graph-1.0": "boundary-graph-1.0.schema.json",
     "dependency-surface-1.1": "dependency-surface-1.1.schema.json",
     "isolation-probe-1.0": "isolation-probe-1.0.schema.json",

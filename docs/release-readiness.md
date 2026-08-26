@@ -1,6 +1,6 @@
 # Governed release readiness
 
-Last reviewed: 2026-08-13
+Last reviewed: 2026-08-26
 
 `pysec release-check` produces one fail-closed promotion decision from sealed,
 digest-bound evidence. It is intended for an enterprise admission job after the
@@ -190,7 +190,7 @@ pysec verify passport --report report --artifact-root payload `
 pysec release-check report --format json `
   --effectiveness-evaluation effectiveness-evaluation.json `
   --effectiveness-sha256 EVALUATION_SHA256 `
-  --minimum-effectiveness-labels 25 `
+  --minimum-effectiveness-labels 200 `
   --minimum-effectiveness-positive-labels 10 `
   --minimum-effectiveness-negative-labels 10 `
   --minimum-effectiveness-tools 2 `

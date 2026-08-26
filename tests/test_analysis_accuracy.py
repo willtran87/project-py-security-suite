@@ -583,6 +583,14 @@ def test_application_contracts_detect_auth_drift_and_exact_vulnerable_call(
         "app.run_update",
         "vulnerable.lib.dangerous",
     ]
+    scenario_kinds = {
+        scenario["kind"] for scenario in artifact["generated_test_scenarios"]
+    }
+    assert {
+        "constraint-boundary",
+        "cross-tenant-deny",
+        "replay-safety",
+    } == scenario_kinds
     assert any(
         regression["subject"].endswith(":enum-expanded-or-removed")
         for regression in artifact["openapi"]["contract_regressions"]
@@ -632,6 +640,43 @@ def test_application_contracts_require_deny_and_tenant_isolation_evidence(
     validate_governed_artifacts({"application-contract-analysis.json": artifact})
 
 
+def test_application_contracts_generate_secured_operation_scenarios(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "openapi.json").write_text(
+        json.dumps(
+            {
+                "paths": {
+                    "/accounts/{tenant_id}": {
+                        "get": {
+                            "security": [{"bearer": []}],
+                            "parameters": [
+                                {
+                                    "name": "tenant_id",
+                                    "in": "path",
+                                    "required": True,
+                                    "schema": {"type": "string", "minLength": 1},
+                                }
+                            ],
+                        }
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    _, artifact = analyze_application_contracts(tmp_path, {})
+
+    assert {
+        "anonymous-deny",
+        "authenticated-allow",
+        "constraint-boundary",
+        "cross-tenant-deny",
+        "required-input-negative",
+    } == {item["kind"] for item in artifact["generated_test_scenarios"]}
+
+
 def test_application_contracts_handle_route_variants_and_invalid_source(
     tmp_path: Path,
 ) -> None:
@@ -674,6 +719,101 @@ def test_static_architecture_detects_local_dependency_cycle(tmp_path: Path) -> N
     assert artifact["cycles_detected"] == 1
     assert artifact["cycles"][0]["modules"] == ["sample.left", "sample.right"]
     assert findings[0].classifications == ["ARCH-DEPENDENCY-CYCLE"]
+    validate_governed_artifacts({"static-architecture.json": artifact})
+
+
+def test_code_health_policy_adds_nesting_call_and_class_responsibility_signals(
+    tmp_path: Path,
+) -> None:
+    security = tmp_path / "security"
+    security.mkdir()
+    (security / "code-health-policy.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "1.0",
+                "thresholds": {
+                    "nesting_depth": 1,
+                    "function_call_targets": 1,
+                    "class_methods": 1,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "service.py").write_text(
+        "def coordinate(value):\n"
+        "    if value:\n"
+        "        if value > 1:\n"
+        "            first()\n"
+        "            second()\n"
+        "class Service:\n"
+        "    def left(self):\n"
+        "        return 1\n"
+        "    def right(self):\n"
+        "        return 2\n",
+        encoding="utf-8",
+    )
+
+    findings, artifact = analyze_code_health(tmp_path)
+
+    kinds = {item["kind"] for item in artifact["issues"]}
+    assert {
+        "deep-nesting",
+        "excessive-call-coupling",
+        "excessive-class-responsibilities",
+    }.issubset(kinds)
+    assert artifact["policy_present"] is True
+    assert artifact["thresholds"]["nesting_depth"] == 1
+    assert len(findings) >= 3
+    validate_governed_artifacts({"code-health.json": artifact})
+
+
+def test_static_architecture_enforces_declared_layers_and_forbidden_edges(
+    tmp_path: Path,
+) -> None:
+    package = tmp_path / "src" / "sample"
+    package.mkdir(parents=True)
+    (package / "__init__.py").write_text("", encoding="utf-8")
+    (package / "api.py").write_text("from . import infrastructure\n", encoding="utf-8")
+    (package / "infrastructure.py").write_text("", encoding="utf-8")
+    security = tmp_path / "security"
+    security.mkdir()
+    (security / "architecture-policy.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "1.0",
+                "layers": [
+                    {"name": "api", "modules": ["sample.api"], "may_depend_on": []},
+                    {
+                        "name": "infrastructure",
+                        "modules": ["sample.infrastructure"],
+                        "may_depend_on": [],
+                    },
+                ],
+                "forbidden_edges": [
+                    {
+                        "source": "sample.api",
+                        "destination": "sample.infrastructure",
+                        "reason": "API layer cannot own persistence adapters",
+                    }
+                ],
+                "thresholds": {"module_fan_out": 1},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    findings, artifact = analyze_static_architecture(tmp_path)
+
+    assert artifact["policy_present"] is True
+    assert artifact["policy_violations_detected"] == 2
+    assert {item["kind"] for item in artifact["policy_violations"]} == {
+        "forbidden-edge",
+        "layer-dependency",
+    }
+    assert any(
+        finding.classifications == ["ARCH-POLICY-VIOLATION"] for finding in findings
+    )
     validate_governed_artifacts({"static-architecture.json": artifact})
 
 

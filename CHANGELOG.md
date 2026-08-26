@@ -1,5 +1,13 @@
 # Changelog
 
+- Correlate exact semantic subjects and shared native flow sinks across scanner
+  presentation-line differences; generate OpenAPI-derived authorization,
+  tenant-boundary, constraint, and replay test scenarios; add calibrated
+  nesting, call-coupling, and class-responsibility analysis; enforce declared
+  architecture layers and forbidden dependency edges; and raise protected
+  production calibration to 200 independently governed labels with balanced
+  positive and negative evidence across at least three engines.
+
 - Add conservative multi-axis per-finding validation, exact proof-bound
   reproduction and graph-bound runtime promotion, executed digest-bound
   framework model canaries, OpenAPI/auth and business-test contract analysis,

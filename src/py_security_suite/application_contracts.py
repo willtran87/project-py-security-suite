@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import re
 from pathlib import Path
 from typing import Any
 
@@ -75,6 +76,9 @@ def analyze_application_contracts(
     )
 
     business_records = _business_records(contract["endpoints"], passed_test_ids)
+    generated_scenarios = _generated_test_scenarios(
+        current_operations, contract["endpoints"]
+    )
     vulnerable_matches = _vulnerable_matches(
         contract["vulnerable_functions"], calls, routes
     )
@@ -94,7 +98,7 @@ def analyze_application_contracts(
         or vulnerable_matches
     )
     artifact = {
-        "schema_version": "1.0",
+        "schema_version": "1.1",
         "analysis": "application-contract-and-vulnerable-call-analysis",
         "complete": complete,
         "routes": routes,
@@ -113,6 +117,7 @@ def analyze_application_contracts(
         "observed_test_ids": sorted({str(item["id"]) for item in test_cases})[:10_000],
         "observed_test_cases": test_cases,
         "business_logic": business_records,
+        "generated_test_scenarios": generated_scenarios,
         "vulnerable_call_matches": vulnerable_matches,
         "errors": errors[:1000],
         "claim_boundary": (
@@ -752,6 +757,117 @@ def _business_records(
             }
         )
     return records
+
+
+def _generated_test_scenarios(
+    operations: dict[str, dict[str, Any]], declared: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Generate reviewable scenario identities without claiming they were executed."""
+
+    declared_operations = {f"{item['method']} {item['path']}" for item in declared}
+    scenarios: list[dict[str, Any]] = []
+    for operation, details in sorted(operations.items()):
+        method, path = operation.split(" ", 1)
+        slug = re.sub(r"[^a-z0-9]+", "-", f"{method}-{path}".casefold()).strip("-")
+
+        if details.get("security_required") is True:
+            _add_scenario(
+                scenarios,
+                slug,
+                method,
+                path,
+                "authenticated-allow",
+                "P1",
+                "Prove an authorized principal can complete the operation.",
+                operation in declared_operations,
+            )
+            _add_scenario(
+                scenarios,
+                slug,
+                method,
+                path,
+                "anonymous-deny",
+                "P0",
+                "Prove the operation rejects a request without credentials.",
+                operation in declared_operations,
+            )
+        placeholder_names = {
+            value.casefold() for value in re.findall(r"\{([^{}]+)\}", path)
+        }
+        if placeholder_names & {
+            "tenant",
+            "tenant_id",
+            "org",
+            "org_id",
+            "organization_id",
+        }:
+            _add_scenario(
+                scenarios,
+                slug,
+                method,
+                path,
+                "cross-tenant-deny",
+                "P0",
+                "Prove a valid principal cannot cross the tenant or organization boundary.",
+                operation in declared_operations,
+            )
+        if details.get("required_inputs"):
+            _add_scenario(
+                scenarios,
+                slug,
+                method,
+                path,
+                "required-input-negative",
+                "P1",
+                "Prove every required input fails closed when omitted.",
+                operation in declared_operations,
+            )
+        if details.get("constraints"):
+            _add_scenario(
+                scenarios,
+                slug,
+                method,
+                path,
+                "constraint-boundary",
+                "P1",
+                "Exercise values immediately inside and outside every retained request constraint.",
+                operation in declared_operations,
+            )
+        if method in {"DELETE", "PATCH", "POST", "PUT"}:
+            _add_scenario(
+                scenarios,
+                slug,
+                method,
+                path,
+                "replay-safety",
+                "P2",
+                "Exercise duplicate and replayed mutations to expose unsafe state transitions.",
+                operation in declared_operations,
+            )
+    return scenarios[:10_000]
+
+
+def _add_scenario(
+    scenarios: list[dict[str, Any]],
+    slug: str,
+    method: str,
+    path: str,
+    kind: str,
+    priority: str,
+    rationale: str,
+    declared: bool,
+) -> None:
+    scenarios.append(
+        {
+            "id": f"pysec-{slug}-{kind}",
+            "method": method,
+            "path": path,
+            "kind": kind,
+            "priority": priority,
+            "rationale": rationale,
+            "declared_contract_present": declared,
+        }
+    )
 
 
 def _vulnerable_matches(

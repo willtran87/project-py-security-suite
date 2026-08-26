@@ -126,13 +126,22 @@ wrapper calls are followed back to recognizable API handlers. A retained chain
 proves bounded static entry-point reachability, while attacker control, runtime
 execution, and advisory exploit preconditions remain separate evidence.
 
+Schema 1.1 also generates deterministic test scenarios from retained OpenAPI
+security, required-input, constraint, tenant-path, and state-changing operation
+metadata. The plan covers authenticated allow, anonymous deny, cross-tenant
+deny, negative required-input, constraint-boundary, and replay cases. These are
+review targets only; they do not satisfy a declared obligation until matching
+source-bound execution evidence is retained.
+
 ## Code and architecture health
 
 Broad structural profiles emit three additional artifacts:
 
-- `code-health.json` measures bounded Python cognitive complexity, long
-  functions, parameter coupling, large classes, exact duplicated function ASTs,
-  and lower-severity identifier/literal-normalized semantic clones.
+- `code-health.json` measures bounded Python cognitive complexity, control-flow
+  nesting, function call coupling, long functions, parameter coupling, large
+  classes, class responsibility count, exact duplicated function ASTs, and
+  lower-severity identifier/literal-normalized semantic clones. A strict
+  `security/code-health-policy.json` can calibrate every threshold.
 - `architecture-history.json` mines at most 500 commits from the already sealed
   Git history. It reports persistent high-ratio file co-change and the
   intersection of frequently changed files with active findings.
@@ -140,7 +149,11 @@ Broad structural profiles emit three additional artifacts:
   identifies strongly connected dependency cycles, excessive direct fan-out,
   high-degree hubs, fan-in/fan-out instability, stable-to-unstable dependency
   edges, and new edges relative to an optional
-  `security/baselines/architecture-edges.json` baseline.
+  `security/baselines/architecture-edges.json` baseline. A strict
+  `security/architecture-policy.json` additionally declares module layers,
+  allowed layer directions, forbidden edges, reasons, and calibrated graph
+  thresholds; exact violations are high-confidence findings rather than
+  heuristic smells.
 
 The architecture baseline is deliberately simple and reviewable:
 

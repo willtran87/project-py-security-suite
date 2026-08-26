@@ -730,6 +730,64 @@ class CorrelationTests(unittest.TestCase):
 
         self.assertEqual(len(result), 2)
 
+    def test_correlation_joins_exact_semantic_subject_across_reported_lines(
+        self,
+    ) -> None:
+        first = self._finding(
+            "semgrep",
+            "auth-check",
+            severity=Severity.HIGH,
+            confidence=Confidence.HIGH,
+            classification="CWE-862",
+        )
+        second = self._finding(
+            "codeql",
+            "auth-check",
+            severity=Severity.HIGH,
+            confidence=Confidence.HIGH,
+            classification="CWE-862",
+        )
+        first.evidence["application_contracts"] = {"operation": "GET /admin"}
+        second.evidence["application_contracts"] = {"operation": "GET /admin"}
+        second.locations = [Location(path="app.py", start_line=12)]
+
+        merged = correlate_findings([first, second])
+
+        self.assertEqual(len(merged), 1)
+        self.assertEqual(
+            merged[0].evidence["cross_tool_corroboration"]["independent_perspectives"],
+            2,
+        )
+
+    def test_correlation_joins_matching_flow_sink_across_primary_locations(
+        self,
+    ) -> None:
+        first = self._finding(
+            "semgrep",
+            "sql",
+            severity=Severity.HIGH,
+            confidence=Confidence.HIGH,
+            classification="CWE-89",
+        )
+        second = self._finding(
+            "codeql",
+            "sql",
+            severity=Severity.HIGH,
+            confidence=Confidence.HIGH,
+            classification="CWE-89",
+        )
+        second.locations = [Location(path="query.py", start_line=30)]
+        flow = {
+            "steps": [
+                {"path": "request.py", "line": 1},
+                {"path": "query.py", "line": 30},
+            ]
+        }
+        first.evidence["sarif_code_flows"] = [flow]
+        second.evidence["sarif_code_flows"] = [flow]
+
+        self.assertEqual(len(correlate_findings([first, second])), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

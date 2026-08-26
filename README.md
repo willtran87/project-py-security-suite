@@ -155,7 +155,7 @@ pysec qualify-bundle PATH_TO_PROJECT --config pysec.toml --profile production \
   --effectiveness-evaluation effectiveness-evaluation.json \
   --effectiveness-report PATH_TO_CORPUS_SCAN_REPORT \
   --effectiveness-sha256 APPROVED_SHA256 \
-  --minimum-effectiveness-labels 25 \
+  --minimum-effectiveness-labels 200 \
   --required-effectiveness-tool bandit \
   --format markdown --output .artifacts/bundle-qualification.md
 pysec generate-hooks PATH_TO_PROJECT --profile quick
@@ -366,7 +366,7 @@ pysec evidence-pack REPORT --output security-evidence \
   --previous-report PREVIOUS_REPORT \
   --effectiveness-evaluation effectiveness-evaluation.json \
   --effectiveness-sha256 APPROVED_EVALUATION_SHA256 \
-  --minimum-effectiveness-labels 25 \
+  --minimum-effectiveness-labels 200 \
   --minimum-effectiveness-positive-labels 10 \
   --minimum-effectiveness-negative-labels 10 \
   --minimum-effectiveness-tools 2 \
@@ -401,7 +401,7 @@ sidecar independently.
 pysec release-check REPORT --format json \
   --effectiveness-evaluation effectiveness-evaluation.json \
   --effectiveness-sha256 APPROVED_SHA256 \
-  --minimum-effectiveness-labels 25 \
+  --minimum-effectiveness-labels 200 \
   --minimum-effectiveness-positive-labels 10 \
   --minimum-effectiveness-negative-labels 10 \
   --minimum-effectiveness-labels-per-tool 2 \

@@ -300,6 +300,11 @@ def _write_primary_report_files(
     data_exposure = (derived_artifacts or {}).get("data-exposure.json")
     risk_paths = (derived_artifacts or {}).get("risk-paths.json")
     advanced = (derived_artifacts or {}).get("advanced-analysis.json")
+    application_contracts = (derived_artifacts or {}).get(
+        "application-contract-analysis.json"
+    )
+    code_health = (derived_artifacts or {}).get("code-health.json")
+    static_architecture = (derived_artifacts or {}).get("static-architecture.json")
     _write_text(
         output / "summary.md",
         render_summary(
@@ -310,6 +315,15 @@ def _write_primary_report_files(
             data_exposure=data_exposure if isinstance(data_exposure, dict) else None,
             risk_paths=risk_paths if isinstance(risk_paths, dict) else None,
             advanced_analysis=advanced if isinstance(advanced, dict) else None,
+            application_contracts=(
+                application_contracts
+                if isinstance(application_contracts, dict)
+                else None
+            ),
+            code_health=code_health if isinstance(code_health, dict) else None,
+            static_architecture=(
+                static_architecture if isinstance(static_architecture, dict) else None
+            ),
         ),
     )
     _write_text(
@@ -379,6 +393,9 @@ def render_summary(
     data_exposure: dict[str, Any] | None = None,
     risk_paths: dict[str, Any] | None = None,
     advanced_analysis: dict[str, Any] | None = None,
+    application_contracts: dict[str, Any] | None = None,
+    code_health: dict[str, Any] | None = None,
+    static_architecture: dict[str, Any] | None = None,
 ) -> str:
     active_findings = [
         finding
@@ -401,6 +418,11 @@ def render_summary(
     )
     lines.extend(["", closure_backlog])
     lines.extend(_render_validation_summary(active_findings))
+    lines.extend(
+        _render_contextual_analysis_summary(
+            application_contracts, code_health, static_architecture
+        )
+    )
     lines.extend(_render_fusion_summary(evidence_fusion))
     lines.extend(_render_structural_summary(structural_synthesis))
     lines.extend(_render_data_exposure_summary(data_exposure))
@@ -435,6 +457,37 @@ def _render_validation_summary(findings: list[Finding]) -> list[str]:
         f"| Static candidate | {counts.get('static-candidate', 0)} |",
         "",
         "The tier is independent of severity and lifecycle. Missing runtime evidence never establishes a false positive.",
+    ]
+
+
+def _render_contextual_analysis_summary(
+    application: dict[str, Any] | None,
+    health: dict[str, Any] | None,
+    architecture: dict[str, Any] | None,
+) -> list[str]:
+    if not any(
+        isinstance(value, dict) for value in (application, health, architecture)
+    ):
+        return []
+    application = application or {}
+    health = health or {}
+    architecture = architecture or {}
+    scenarios = application.get("generated_test_scenarios", [])
+    policy_violations = architecture.get("policy_violations", [])
+    return [
+        "",
+        "## Contextual security and engineering analysis",
+        "",
+        "| Signal | Count |",
+        "|---|---:|",
+        f"| Statically recognized API routes | {len(application.get('routes', []))} |",
+        f"| Generated security test scenarios | {len(scenarios) if isinstance(scenarios, list) else 0} |",
+        f"| Exact vulnerable-function calls | {len(application.get('vulnerable_call_matches', []))} |",
+        f"| Code-health issues | {int(health.get('issues_detected', 0))} |",
+        f"| Architecture cycles | {int(architecture.get('cycles_detected', 0))} |",
+        f"| Declared architecture-policy violations | {len(policy_violations) if isinstance(policy_violations, list) else 0} |",
+        "",
+        "Generated scenarios are a test plan, not execution evidence. Architecture and code-health signals prioritize review; declared policy violations remain distinct from heuristic structural smells.",
     ]
 
 

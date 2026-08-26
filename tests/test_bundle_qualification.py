@@ -267,6 +267,30 @@ class BundleQualificationTests(unittest.TestCase):
         )
         self.assertFalse(stale["behavioral_evidence"]["tool_bindings"][0]["matched"])
 
+    def test_production_qualification_requires_representative_calibration(
+        self,
+    ) -> None:
+        with (
+            patch(
+                "py_security_suite.bundle_qualification.assess_adapter_conformance",
+                return_value=_conformance("pass"),
+            ),
+            patch(
+                "py_security_suite.bundle_qualification.assess_readiness",
+                return_value=_readiness(ready=True),
+            ),
+        ):
+            document = qualify_bundle(
+                target=Path("."),
+                config=load_config(profile_override="production"),
+            )
+
+        evidence = document["behavioral_evidence"]
+        self.assertEqual(evidence["minimum_labels"], 200)
+        self.assertEqual(evidence["minimum_tools"], 3)
+        self.assertEqual(evidence["required_tools"], ["bandit", "codeql", "semgrep"])
+        self.assertEqual(document["decision"]["disposition"], "block")
+
     def test_effectiveness_limits_are_bounded(self) -> None:
         config = load_config(profile_override="quick")
         with self.assertRaisesRegex(ValueError, "labels must be between"):

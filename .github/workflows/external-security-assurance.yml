@@ -118,9 +118,9 @@ jobs:
             ConvertFrom-Json
           if ($evaluation.schema_version -ne "2.0" -or
               $evaluation.verdict -ne "pass" -or
-              $evaluation.corpus.labels -lt 25 -or
-              $evaluation.confusion_matrix.true_positive -lt 10 -or
-              $evaluation.confusion_matrix.true_negative -lt 10 -or
+              $evaluation.corpus.labels -lt 200 -or
+              $evaluation.confusion_matrix.true_positive -lt 80 -or
+              $evaluation.confusion_matrix.true_negative -lt 80 -or
               -not $evaluation.corpus.authority.validated -or
               -not $evaluation.time_authority.validated -or
               -not $evaluation.replay_protected) {

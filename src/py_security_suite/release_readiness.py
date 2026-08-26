@@ -13,11 +13,11 @@ from .artifact_validation import validate_governed_artifacts
 
 _MAX_JSON_BYTES = 128 * 1024 * 1024
 _GOVERNED_EFFECTIVENESS_MINIMUMS = {
-    "labels": 25,
-    "positive_labels": 10,
-    "negative_labels": 10,
-    "tools": 2,
-    "labels_per_tool": 5,
+    "labels": 200,
+    "positive_labels": 80,
+    "negative_labels": 80,
+    "tools": 3,
+    "labels_per_tool": 20,
 }
 _CONTROL_REMEDIATION = {
     "scan-policy": (
@@ -149,7 +149,8 @@ def assess_release_readiness(
         }
         required_effectiveness_tools = tuple(
             sorted(
-                set(required_effectiveness_tools) | ({"bandit", "semgrep"} & run_names)
+                set(required_effectiveness_tools)
+                | ({"bandit", "codeql", "semgrep"} & run_names)
             )
         )
     findings_document = _read_object(root / "findings.json")

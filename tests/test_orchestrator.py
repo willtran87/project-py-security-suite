@@ -275,7 +275,20 @@ class OrchestratorTests(unittest.TestCase):
                 "owners": ["@release", "@security"],
             },
         )
-        artifact_summary = render_summary(manifest, [artifact_finding])
+        artifact_summary = render_summary(
+            manifest,
+            [artifact_finding],
+            application_contracts={
+                "routes": [{"method": "POST", "path": "/tenant"}],
+                "generated_test_scenarios": [{"kind": "anonymous-deny"}],
+                "vulnerable_call_matches": [],
+            },
+            code_health={"issues_detected": 2},
+            static_architecture={
+                "cycles_detected": 1,
+                "policy_violations": [{"kind": "forbidden-edge"}],
+            },
+        )
         artifact_html = render_html(manifest, [artifact_finding])
         artifact_action_plan = render_action_plan(manifest, [artifact_finding])
         self.assertIn(
@@ -284,6 +297,13 @@ class OrchestratorTests(unittest.TestCase):
         )
         self.assertIn(f"sha256:{'c' * 64}", artifact_summary)
         self.assertIn("size: 1234 bytes", artifact_summary)
+        self.assertIn(
+            "## Contextual security and engineering analysis", artifact_summary
+        )
+        self.assertIn("| Generated security test scenarios | 1 |", artifact_summary)
+        self.assertIn(
+            "| Declared architecture-policy violations | 1 |", artifact_summary
+        )
         self.assertIn("Artifact identity evidence", artifact_html)
         self.assertIn("aria-label='Artifact identity'", artifact_html)
         self.assertIn("### Release artifact bindings", artifact_action_plan)

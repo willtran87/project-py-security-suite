@@ -75,11 +75,7 @@ _ENGINE_FAMILIES = {
 def correlate_findings(findings: list[Finding]) -> list[Finding]:
     grouped: dict[tuple[str, int | None, str], list[Finding]] = defaultdict(list)
     for finding in findings:
-        location = finding.locations[0] if finding.locations else None
-        path = location.path if location else "<unknown>"
-        line = location.start_line if location else None
-        logical_rule = _logical_rule(finding)
-        grouped[(path, line, logical_rule)].append(finding)
+        grouped[_correlation_subject(finding)].append(finding)
 
     correlated: list[Finding] = []
     partitioned: list[tuple[tuple[str, int | None, str], list[Finding]]] = []
@@ -160,6 +156,49 @@ def correlate_findings(findings: list[Finding]) -> list[Finding]:
         correlated.append(primary)
 
     return sorted(correlated, key=_sort_key)
+
+
+def _correlation_subject(finding: Finding) -> tuple[str, int | None, str]:
+    """Prefer an exact semantic subject or flow sink over presentation location."""
+
+    logical_rule = _logical_rule(finding)
+    anchors = _semantic_anchors(finding)
+    if len(anchors) == 1:
+        return f"<semantic:{next(iter(anchors))}>", None, logical_rule
+    sinks = _flow_sinks(finding)
+    if len(sinks) == 1:
+        path, line = next(iter(sinks))
+        return path, line, logical_rule
+    location = finding.locations[0] if finding.locations else None
+    return (
+        location.path if location else "<unknown>",
+        location.start_line if location else None,
+        logical_rule,
+    )
+
+
+def _flow_sinks(finding: Finding) -> set[tuple[str, int | None]]:
+    flows = finding.evidence.get("sarif_code_flows")
+    if not isinstance(flows, list):
+        return set()
+    sinks: set[tuple[str, int | None]] = set()
+    for flow in flows:
+        if not isinstance(flow, dict) or not isinstance(flow.get("steps"), list):
+            continue
+        steps = [step for step in flow["steps"] if isinstance(step, dict)]
+        if len(steps) < 2:
+            continue
+        sink = steps[-1]
+        path = str(sink.get("path") or "")
+        raw_line = sink.get("line")
+        line = (
+            raw_line
+            if isinstance(raw_line, int) and not isinstance(raw_line, bool)
+            else None
+        )
+        if path:
+            sinks.add((path, line))
+    return sinks
 
 
 def _flow_partitions(observations: list[Finding]) -> list[list[Finding]]:
