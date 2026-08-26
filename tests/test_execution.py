@@ -149,7 +149,7 @@ class IsolatedEnvironmentTests(unittest.TestCase):
             ) as terminate,
             patch(
                 "py_security_suite.execution.time.monotonic",
-                side_effect=[0.0, 2.0, 2.0],
+                side_effect=[0.0, *([2.0] * 8)],
             ),
         ):
             result = run_command(
@@ -179,7 +179,7 @@ class IsolatedEnvironmentTests(unittest.TestCase):
             ) as terminate,
             patch(
                 "py_security_suite.execution.time.monotonic",
-                side_effect=[0.0, 0.0],
+                side_effect=[0.0] * 8,
             ),
             patch(
                 "py_security_suite.execution._directory_size_exceeds",

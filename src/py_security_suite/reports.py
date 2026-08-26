@@ -7086,7 +7086,10 @@ def _harden_windows_acl(output: Path) -> None:
     system_root = Path(os.environ.get("SYSTEMROOT") or "C:/Windows").resolve()
     whoami = system_root / "System32" / "whoami.exe"
     icacls = system_root / "System32" / "icacls.exe"
-    if not whoami.is_file() or not icacls.is_file():
+    powershell = (
+        system_root / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
+    )
+    if not whoami.is_file() or not icacls.is_file() or not powershell.is_file():
         raise OSError("Windows ACL utilities are unavailable")
     sid = _current_windows_sid(whoami)
 
@@ -7108,6 +7111,31 @@ def _harden_windows_acl(output: Path) -> None:
         timeout=30,
         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
+    # Some managed Windows volumes materialize explicit service or
+    # administrator ACEs instead of inherited ACEs. Removing inheritance does
+    # not remove those entries, so close the DACL over the current principal
+    # explicitly before publishing the report.
+    retained_sids = {
+        rule_sid for rule_sid, _, _ in _windows_acl_rules(output, powershell)
+    }
+    for unexpected_sid in sorted(retained_sids - {sid}):
+        subprocess.run(  # noqa: S603  # nosec B603
+            [
+                str(icacls),
+                str(output),
+                "/remove",
+                f"*{unexpected_sid}",
+                "/T",
+                "/C",
+                "/Q",
+            ],
+            check=True,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            timeout=30,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
 
 
 def _current_windows_sid(whoami: Path) -> str:
@@ -7139,7 +7167,10 @@ def _verify_report_permissions(output: Path) -> None:
     system_root = Path(os.environ.get("SYSTEMROOT") or "C:/Windows").resolve()
     icacls = system_root / "System32" / "icacls.exe"
     whoami = system_root / "System32" / "whoami.exe"
-    if not icacls.is_file() or not whoami.is_file():
+    powershell = (
+        system_root / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
+    )
+    if not icacls.is_file() or not whoami.is_file() or not powershell.is_file():
         raise OSError("Windows ACL verification utility is unavailable")
     subprocess.run(  # noqa: S603  # nosec B603
         [str(icacls), str(output), "/verify", "/T", "/C", "/Q"],
@@ -7151,22 +7182,83 @@ def _verify_report_permissions(output: Path) -> None:
         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
     sid = _current_windows_sid(whoami)
-    with tempfile.TemporaryDirectory(prefix="pysec-acl-verification-") as directory:
-        acl = Path(directory) / "report.acl"
-        subprocess.run(  # noqa: S603  # nosec B603
-            [str(icacls), str(output), "/save", str(acl), "/T", "/C", "/Q"],
-            check=True,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-            timeout=30,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-        )
-        raw = acl.read_bytes()
-    rendered = raw.decode("utf-16", errors="ignore")
-    observed_sids = set(re.findall(r"S-1-(?:\d+-)+\d+", rendered))
-    if observed_sids != {sid}:
+    rules = _windows_acl_rules(output, powershell)
+    full_control = 0x1F01FF
+    if not rules or any(
+        rule_sid != sid
+        or access_type != "Allow"
+        or rights & full_control != full_control
+        for rule_sid, access_type, rights in rules
+    ):
         raise PermissionError("report Windows ACL postcondition failed")
+
+
+def _windows_acl_rules(output: Path, powershell: Path) -> list[tuple[str, str, int]]:
+    """Read every effective report DACL rule with names translated to SIDs."""
+    script = """
+$ErrorActionPreference = 'Stop'
+Import-Module (
+  Join-Path $env:SystemRoot 'System32/WindowsPowerShell/v1.0/Modules/Microsoft.PowerShell.Security/Microsoft.PowerShell.Security.psd1'
+)
+$paths = @((Get-Item -LiteralPath $env:PYSEC_ACL_PATH -Force))
+$paths += @(Get-ChildItem -LiteralPath $env:PYSEC_ACL_PATH -Force -Recurse)
+$rules = @(
+  foreach ($path in $paths) {
+    foreach ($rule in (Get-Acl -LiteralPath $path.FullName).Access) {
+      [PSCustomObject]@{
+        sid = $rule.IdentityReference.Translate(
+          [System.Security.Principal.SecurityIdentifier]
+        ).Value
+        type = $rule.AccessControlType.ToString()
+        rights = [Int64]$rule.FileSystemRights
+      }
+    }
+  }
+)
+ConvertTo-Json -InputObject $rules -Compress
+"""
+    environment = os.environ.copy()
+    environment["PYSEC_ACL_PATH"] = str(output)
+    completed = subprocess.run(  # noqa: S603  # nosec B603
+        [
+            str(powershell),
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            script,
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=environment,
+        timeout=30,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+    if completed.returncode != 0:
+        diagnostic = completed.stderr.strip().replace("\r", " ").replace("\n", " ")
+        raise OSError("Windows ACL inspection failed: " + diagnostic[:512])
+    payload = json.loads(completed.stdout)
+    if not isinstance(payload, list):
+        raise OSError("Windows ACL inspection returned an invalid contract")
+    rules: list[tuple[str, str, int]] = []
+    for entry in payload:
+        if not isinstance(entry, dict):
+            raise OSError("Windows ACL inspection returned an invalid rule")
+        rule_sid = entry.get("sid")
+        access_type = entry.get("type")
+        rights = entry.get("rights")
+        if (
+            not isinstance(rule_sid, str)
+            or re.fullmatch(r"S-1-(?:\d+-)+\d+", rule_sid) is None
+            or access_type not in {"Allow", "Deny"}
+            or not isinstance(rights, int)
+        ):
+            raise OSError("Windows ACL inspection returned an invalid rule")
+        rules.append((rule_sid, access_type, rights))
+    return rules
 
 
 def _write_checksums(output: Path) -> None:
