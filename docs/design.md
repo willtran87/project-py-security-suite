@@ -79,10 +79,10 @@ flowchart TB
     Source --> Contracts["Application contracts<br/>code/OpenAPI/auth + exact advisory calls"]
     OpenAPI["OpenAPI + approved baseline"] --> Contracts
     ContractPolicy["Declared endpoint/test obligations"] --> Contracts
-    Contracts --> Scenarios["Generated security review scenarios<br/>auth | tenant | boundary | replay"]
-    Source --> Health["Code health<br/>complexity + nesting + coupling + responsibilities + clones"]
+    Contracts --> Scenarios["Actionable security scenario manifests<br/>actor + oracle + consumer + subject + repeat"]
+    Source --> Health["Code health<br/>complexity + cohesion + async/exception/state risks + clones"]
     HealthPolicy["Code-health threshold policy"] --> Health
-    Source --> Architecture["Static architecture<br/>layers + forbidden edges + graph signals"]
+    Source --> Architecture["Static architecture<br/>module/symbol calls + entry points + dynamic imports + policy"]
     ArchitecturePolicy["Architecture policy + edge baseline"] --> Architecture
     History["Bounded sealed Git history"] --> Temporal["Architecture history<br/>co-change + finding hotspots"]
     ToolEvidence["Normalized scanner evidence"] --> Correlate["Conservative finding correlation<br/>semantic anchor | flow sink | location"]
@@ -100,8 +100,9 @@ flowchart TB
 ```
 
 Framework and contract analysis run for every profile so model and behavioral
-gaps stay visible. Generated contract scenarios remain review plans until
-source-bound passing evidence satisfies a declared obligation. Code health,
+gaps stay visible. Generated contract scenarios remain machine-actionable
+review plans until source-bound passing evidence satisfies a declared
+obligation. Code health,
 static architecture, and architecture history run for `audit`, `quality`,
 `repo`, `comprehensive`, `production`, and `release`. Declared architecture
 violations remain distinct from heuristic topology and maintainability signals.

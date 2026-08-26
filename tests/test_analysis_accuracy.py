@@ -591,6 +591,23 @@ def test_application_contracts_detect_auth_drift_and_exact_vulnerable_call(
         "cross-tenant-deny",
         "replay-safety",
     } == scenario_kinds
+    replay = next(
+        item
+        for item in artifact["generated_test_scenarios"]
+        if item["kind"] == "replay-safety"
+    )
+    assert replay["subjects"] == [
+        "request-body",
+        "idempotency-key",
+        "resource-state",
+    ]
+    assert replay["execution"] == {
+        "actor": "authorized-principal",
+        "oracle": "state-invariant",
+        "consumers": ["authorization-security", "schemathesis"],
+        "repeat": 2,
+        "source_bound_evidence_required": True,
+    }
     assert any(
         regression["subject"].endswith(":enum-expanded-or-removed")
         for regression in artifact["openapi"]["contract_regressions"]
@@ -861,6 +878,129 @@ def test_static_architecture_reports_hubs_instability_fanout_and_new_edges(
     assert artifact["baseline_present"] is True
     assert artifact["new_dependency_edges"]
     assert artifact["parse_errors"] == ["src/sample/invalid.py: SyntaxError"]
+    validate_governed_artifacts({"static-architecture.json": artifact})
+
+
+def test_application_contracts_trace_relative_imports_and_class_wrappers(
+    tmp_path: Path,
+) -> None:
+    package = tmp_path / "src" / "sample"
+    package.mkdir(parents=True)
+    (package / "__init__.py").write_text("", encoding="utf-8")
+    (package / "api.py").write_text(
+        "from .worker import run\n"
+        "class Controller:\n"
+        "    def delegate(self):\n"
+        "        return run()\n"
+        "    @router.post('/execute')\n"
+        "    def endpoint(self):\n"
+        "        return self.delegate()\n",
+        encoding="utf-8",
+    )
+    (package / "worker.py").write_text(
+        "from vulnerable import dangerous\ndef run():\n    return dangerous()\n",
+        encoding="utf-8",
+    )
+    security = tmp_path / "security"
+    security.mkdir()
+    (security / "application-contracts.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "1.0",
+                "endpoints": [],
+                "vulnerable_functions": [
+                    {
+                        "package": "vulnerable",
+                        "advisory_id": "GHSA-wrapper",
+                        "symbols": ["vulnerable.dangerous"],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    _, artifact = analyze_application_contracts(tmp_path, {})
+
+    match = artifact["vulnerable_call_matches"][0]
+    assert match["entrypoint"] == "POST /execute"
+    assert match["call_chain"] == [
+        "sample.api.Controller.endpoint",
+        "sample.api.Controller.delegate",
+        "sample.worker.run",
+        "vulnerable.dangerous",
+    ]
+    validate_governed_artifacts({"application-contract-analysis.json": artifact})
+
+
+def test_code_health_detects_behavioral_maintainability_risks(tmp_path: Path) -> None:
+    (tmp_path / "service.py").write_text(
+        "import time\n"
+        "cache = {}\n"
+        "def clear_cache(): cache.clear()\n"
+        "async def refresh():\n"
+        "    try:\n"
+        "        time.sleep(1)\n"
+        "    except Exception:\n"
+        "        pass\n"
+        "class SplitResponsibilities:\n"
+        "    def first(self): return self.alpha\n"
+        "    def second(self): return self.beta\n"
+        "    def third(self): return self.gamma\n"
+        "    def fourth(self): return self.delta\n",
+        encoding="utf-8",
+    )
+
+    findings, artifact = analyze_code_health(tmp_path)
+
+    kinds = {item["kind"] for item in artifact["issues"]}
+    assert {
+        "async-blocking-call",
+        "low-class-cohesion",
+        "module-mutable-globals",
+        "swallowed-broad-exception",
+    }.issubset(kinds)
+    assert {
+        "CODE-ASYNC-BLOCKING-CALL",
+        "CODE-LOW-CLASS-COHESION",
+        "CODE-MUTABLE-GLOBAL-STATE",
+        "CODE-SWALLOWED-BROAD-EXCEPTION",
+    }.issubset({finding.classifications[0] for finding in findings})
+    validate_governed_artifacts({"code-health.json": artifact})
+
+
+def test_static_architecture_retains_symbol_entrypoint_and_dynamic_import_evidence(
+    tmp_path: Path,
+) -> None:
+    package = tmp_path / "src" / "sample"
+    package.mkdir(parents=True)
+    (package / "__init__.py").write_text("", encoding="utf-8")
+    (package / "service.py").write_text("def run(): return 1\n", encoding="utf-8")
+    (package / "plugin.py").write_text("", encoding="utf-8")
+    (package / "api.py").write_text(
+        "import importlib\n"
+        "from . import service\n"
+        "@router.get('/items')\n"
+        "def items():\n"
+        "    importlib.import_module('.plugin', package=__package__)\n"
+        "    return service.run()\n"
+        "def load(name):\n"
+        "    return importlib.import_module(name)\n",
+        encoding="utf-8",
+    )
+
+    _, artifact = analyze_static_architecture(tmp_path)
+
+    assert artifact["symbol_edges_detected"] == 1
+    assert artifact["symbol_edges"][0]["source"] == "sample.api.items"
+    assert artifact["symbol_edges"][0]["destination"] == "sample.service.run"
+    assert artifact["dynamic_imports_detected"] == 2
+    assert artifact["unresolved_dynamic_imports"] == 1
+    assert any(
+        item["resolved_module"] == "sample.plugin"
+        for item in artifact["dynamic_imports"]
+    )
+    assert artifact["entrypoint_symbols"][0]["symbol"] == "sample.api.items"
     validate_governed_artifacts({"static-architecture.json": artifact})
 
 

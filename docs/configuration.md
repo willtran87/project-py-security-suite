@@ -135,8 +135,8 @@ flowchart LR
     Snapshot --> Graph["Static import graph"]
     ArchitecturePolicy["security/architecture-policy.json"] --> Graph
     EdgeBaseline["security/baselines/architecture-edges.json"] --> Graph
-    Health --> HealthArtifact["code-health.json 1.1<br/>metrics + applied thresholds"]
-    Graph --> ArchitectureArtifact["static-architecture.json 1.1<br/>policy violations + structural signals"]
+    Health --> HealthArtifact["code-health.json 1.2<br/>metrics + behavioral maintainability risks"]
+    Graph --> ArchitectureArtifact["static-architecture.json 1.2<br/>module/symbol graph + dynamic gaps + policy"]
     HealthPolicy -->|"invalid"| Incomplete["Analysis incomplete"]
     ArchitecturePolicy -->|"invalid"| Incomplete
 ```
@@ -150,14 +150,20 @@ flowchart LR
     "cognitive_complexity": 12,
     "nesting_depth": 4,
     "function_call_targets": 16,
-    "class_methods": 24
+    "class_methods": 24,
+    "class_lack_of_cohesion_percent": 70,
+    "swallowed_broad_exceptions": 0,
+    "async_blocking_calls": 0,
+    "module_mutable_globals": 0
   }
 }
 ```
 
 Unspecified values retain conservative defaults. Supported names also include
 `function_lines`, `parameters`, `class_lines`,
-`duplicate_function_lines`, and `semantic_clone_lines`.
+`duplicate_function_lines`, and `semantic_clone_lines`. Zero is valid only for
+the three count-based behavioral-risk thresholds, making the first occurrence
+reportable by default.
 
 `security/architecture-policy.json` makes intended dependency direction
 explicit rather than asking graph heuristics to guess the design:

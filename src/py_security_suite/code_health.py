@@ -45,7 +45,23 @@ _DEFAULT_THRESHOLDS = {
     "nesting_depth": 5,
     "function_call_targets": 20,
     "class_methods": 30,
+    "class_lack_of_cohesion_percent": 80,
+    "swallowed_broad_exceptions": 0,
+    "async_blocking_calls": 0,
+    "module_mutable_globals": 0,
 }
+
+_BLOCKING_CALLS = frozenset(
+    {
+        "os.system",
+        "subprocess.call",
+        "subprocess.check_call",
+        "subprocess.check_output",
+        "subprocess.run",
+        "time.sleep",
+        "urllib.request.urlopen",
+    }
+)
 
 
 def analyze_code_health(target: Path) -> tuple[list[Finding], dict[str, Any]]:
@@ -78,6 +94,18 @@ def analyze_code_health(target: Path) -> tuple[list[Finding], dict[str, Any]]:
             parse_errors.append(f"{relative.as_posix()}: {type(exc).__name__}")
             continue
         files_analyzed += 1
+        mutable_globals = _mutable_module_globals(tree)
+        if len(mutable_globals) > thresholds["module_mutable_globals"]:
+            issues.append(
+                _issue(
+                    "module-mutable-globals",
+                    relative,
+                    mutable_globals[0][1],
+                    len(mutable_globals),
+                    thresholds["module_mutable_globals"],
+                    symbol=", ".join(name for name, _ in mutable_globals[:5]),
+                )
+            )
         for node in ast.walk(tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 end = int(node.end_lineno or node.lineno)
@@ -94,6 +122,12 @@ def analyze_code_health(target: Path) -> tuple[list[Finding], dict[str, Any]]:
                     parameters += 1
                 nesting = _maximum_nesting(node)
                 call_targets = _call_target_count(node)
+                swallowed = _swallowed_broad_exceptions(node)
+                blocking_calls = (
+                    _async_blocking_calls(node)
+                    if isinstance(node, ast.AsyncFunctionDef)
+                    else []
+                )
                 if complexity > thresholds["cognitive_complexity"]:
                     issues.append(
                         _issue(
@@ -144,6 +178,27 @@ def analyze_code_health(target: Path) -> tuple[list[Finding], dict[str, Any]]:
                             thresholds["function_call_targets"],
                         )
                     )
+                if swallowed > thresholds["swallowed_broad_exceptions"]:
+                    issues.append(
+                        _issue(
+                            "swallowed-broad-exception",
+                            relative,
+                            node,
+                            swallowed,
+                            thresholds["swallowed_broad_exceptions"],
+                        )
+                    )
+                if len(blocking_calls) > thresholds["async_blocking_calls"]:
+                    issues.append(
+                        _issue(
+                            "async-blocking-call",
+                            relative,
+                            node,
+                            len(blocking_calls),
+                            thresholds["async_blocking_calls"],
+                            symbol=f"{node.name}: {', '.join(blocking_calls[:5])}",
+                        )
+                    )
                 if length >= thresholds["duplicate_function_lines"]:
                     normalized_body = ast.Module(body=node.body, type_ignores=[])
                     digest = hashlib.sha256(
@@ -187,6 +242,20 @@ def analyze_code_health(target: Path) -> tuple[list[Finding], dict[str, Any]]:
                             node,
                             methods,
                             thresholds["class_methods"],
+                        )
+                    )
+                lack_of_cohesion = _class_lack_of_cohesion_percent(node)
+                if (
+                    lack_of_cohesion is not None
+                    and lack_of_cohesion > thresholds["class_lack_of_cohesion_percent"]
+                ):
+                    issues.append(
+                        _issue(
+                            "low-class-cohesion",
+                            relative,
+                            node,
+                            lack_of_cohesion,
+                            thresholds["class_lack_of_cohesion_percent"],
                         )
                     )
     for group in bodies.values():
@@ -238,7 +307,7 @@ def analyze_code_health(target: Path) -> tuple[list[Finding], dict[str, Any]]:
     issues = issues[:_MAX_ISSUES]
     findings = [_finding(item) for item in issues]
     return findings, {
-        "schema_version": "1.1",
+        "schema_version": "1.2",
         "analysis": "python-cognitive-complexity-size-coupling-and-duplication",
         "files_analyzed": files_analyzed,
         "complete": not parse_errors
@@ -283,10 +352,21 @@ def _load_policy(target: Path) -> tuple[dict[str, int], bool, str | None]:
         ):
             raise ValueError("invalid policy fields")
         for name, value in document["thresholds"].items():
+            minimum = (
+                0
+                if name
+                in {
+                    "swallowed_broad_exceptions",
+                    "async_blocking_calls",
+                    "module_mutable_globals",
+                }
+                else 1
+            )
+            maximum = 100 if name == "class_lack_of_cohesion_percent" else 10000
             if (
                 isinstance(value, bool)
                 or not isinstance(value, int)
-                or not 1 <= value <= 10000
+                or not minimum <= value <= maximum
             ):
                 raise ValueError(f"invalid threshold: {name}")
             thresholds[name] = value
@@ -416,15 +496,195 @@ def _call_target_count(function: ast.AST) -> int:
     return len(targets)
 
 
+def _call_name(node: ast.expr) -> str | None:
+    parts: list[str] = []
+    current = node
+    while isinstance(current, ast.Attribute):
+        parts.append(current.attr)
+        current = current.value
+    if isinstance(current, ast.Name):
+        parts.append(current.id)
+    return ".".join(reversed(parts)) if parts else None
+
+
+def _swallowed_broad_exceptions(function: ast.AST) -> int:
+    count = 0
+    pending = list(ast.iter_child_nodes(function))
+    while pending:
+        node = pending.pop()
+        if node is not function and isinstance(
+            node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)
+        ):
+            continue
+        if not isinstance(node, ast.ExceptHandler):
+            pending.extend(ast.iter_child_nodes(node))
+            continue
+        broad = node.type is None or (
+            isinstance(node.type, ast.Name)
+            and node.type.id in {"BaseException", "Exception"}
+        )
+        raises = any(
+            isinstance(descendant, ast.Raise)
+            for child in node.body
+            for descendant in ast.walk(child)
+        )
+        if broad and not raises:
+            calls = {
+                name
+                for child in node.body
+                for call in ast.walk(child)
+                if isinstance(call, ast.Call)
+                if (name := _call_name(call.func))
+            }
+            if not any(
+                name.casefold().endswith(
+                    (".debug", ".error", ".exception", ".info", ".log", ".warning")
+                )
+                for name in calls
+            ):
+                count += 1
+        pending.extend(ast.iter_child_nodes(node))
+    return count
+
+
+def _async_blocking_calls(function: ast.AST) -> list[str]:
+    found: set[str] = set()
+
+    def walk(node: ast.AST, suppressed: bool = False) -> None:
+        if node is not function and isinstance(
+            node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)
+        ):
+            return
+        if isinstance(node, ast.Call):
+            name = _call_name(node.func)
+            offloaded = bool(
+                name == "asyncio.to_thread" or (name or "").endswith(".run_in_executor")
+            )
+            if (
+                not suppressed
+                and name
+                and (name in _BLOCKING_CALLS or name.startswith("requests."))
+            ):
+                found.add(name)
+            suppressed = suppressed or offloaded
+        for child in ast.iter_child_nodes(node):
+            walk(child, suppressed)
+
+    walk(function)
+    return sorted(found)
+
+
+def _mutable_module_globals(tree: ast.Module) -> list[tuple[str, ast.AST]]:
+    candidates: dict[str, ast.AST] = {}
+    for node in tree.body:
+        name: str | None = None
+        value: ast.AST | None = None
+        if isinstance(node, ast.Assign) and len(node.targets) == 1:
+            if isinstance(node.targets[0], ast.Name):
+                name, value = node.targets[0].id, node.value
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            name, value = node.target.id, node.value
+        if not name or value is None or name.isupper():
+            continue
+        mutable = isinstance(value, (ast.List, ast.Dict, ast.Set)) or (
+            isinstance(value, ast.Call)
+            and _call_name(value.func)
+            in {"collections.defaultdict", "defaultdict", "dict", "list", "set"}
+        )
+        if mutable:
+            candidates[name] = node
+    mutated: set[str] = set()
+    mutators = {
+        "add",
+        "append",
+        "clear",
+        "discard",
+        "extend",
+        "insert",
+        "pop",
+        "popitem",
+        "remove",
+        "reverse",
+        "setdefault",
+        "sort",
+        "update",
+    }
+    for current in ast.walk(tree):
+        if (
+            isinstance(current, ast.Call)
+            and isinstance(current.func, ast.Attribute)
+            and current.func.attr in mutators
+            and isinstance(current.func.value, ast.Name)
+            and current.func.value.id in candidates
+        ):
+            mutated.add(current.func.value.id)
+        targets: list[ast.AST] = []
+        if isinstance(current, (ast.Assign, ast.Delete)):
+            targets.extend(current.targets)
+        elif isinstance(current, (ast.AnnAssign, ast.AugAssign)):
+            targets.append(current.target)
+        for target in targets:
+            if (
+                isinstance(target, ast.Subscript)
+                and isinstance(target.value, ast.Name)
+                and target.value.id in candidates
+            ):
+                mutated.add(target.value.id)
+    return [(name, candidates[name]) for name in sorted(mutated)]
+
+
+def _class_lack_of_cohesion_percent(node: ast.ClassDef) -> int | None:
+    fields: list[set[str]] = []
+    for method in node.body:
+        if not isinstance(method, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        parents = {
+            child: parent
+            for parent in ast.walk(method)
+            for child in ast.iter_child_nodes(parent)
+        }
+        used = {
+            child.attr
+            for child in ast.walk(method)
+            if isinstance(child, ast.Attribute)
+            and isinstance(child.value, ast.Name)
+            and child.value.id in {"self", "cls"}
+            and not _is_call_target(child, parents)
+        }
+        fields.append(used)
+    if len(fields) < 4:
+        return None
+    pairs = [
+        (left, right)
+        for index, left in enumerate(fields)
+        for right in fields[index + 1 :]
+    ]
+    if not pairs or not any(left or right for left, right in pairs):
+        return None
+    disjoint = sum(not (left & right) for left, right in pairs)
+    return round(disjoint * 100 / len(pairs))
+
+
+def _is_call_target(node: ast.Attribute, parents: dict[ast.AST, ast.AST]) -> bool:
+    parent = parents.get(node)
+    return isinstance(parent, ast.Call) and parent.func is node
+
+
 def _issue(
-    kind: str, path: Path, node: ast.AST, value: int, threshold: int
+    kind: str,
+    path: Path,
+    node: ast.AST,
+    value: int,
+    threshold: int,
+    *,
+    symbol: str | None = None,
 ) -> dict[str, Any]:
     return {
         "kind": kind,
         "path": path.as_posix(),
         "line": int(getattr(node, "lineno", 1)),
         "end_line": int(getattr(node, "end_lineno", getattr(node, "lineno", 1))),
-        "symbol": str(getattr(node, "name", "<block>")),
+        "symbol": symbol or str(getattr(node, "name", "<block>")),
         "value": value,
         "threshold": threshold,
         "duplicates": [],
@@ -470,6 +730,26 @@ def _finding(issue: dict[str, Any]) -> Finding:
             "Class has excessive responsibilities",
             Severity.MEDIUM,
             "CODE-EXCESSIVE-CLASS-RESPONSIBILITIES",
+        ),
+        "low-class-cohesion": (
+            "Class methods have low state cohesion",
+            Severity.MEDIUM,
+            "CODE-LOW-CLASS-COHESION",
+        ),
+        "swallowed-broad-exception": (
+            "Broad exception is swallowed",
+            Severity.MEDIUM,
+            "CODE-SWALLOWED-BROAD-EXCEPTION",
+        ),
+        "async-blocking-call": (
+            "Blocking call is made from async code",
+            Severity.MEDIUM,
+            "CODE-ASYNC-BLOCKING-CALL",
+        ),
+        "module-mutable-globals": (
+            "Module exposes mutable global state",
+            Severity.LOW,
+            "CODE-MUTABLE-GLOBAL-STATE",
         ),
     }
     title, severity, rule_id = metadata[kind]

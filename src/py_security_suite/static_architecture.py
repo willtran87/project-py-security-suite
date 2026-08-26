@@ -24,6 +24,9 @@ _SKIP = frozenset(
 )
 _MAX_FILES = 50_000
 _MAX_EDGES = 250_000
+_MAX_SYMBOL_EDGES = 250_000
+_MAX_DYNAMIC_IMPORTS = 10_000
+_MAX_ENTRYPOINTS = 50_000
 _MAX_FINDINGS = 500
 _MAX_POLICY_VIOLATIONS = 1000
 _FAN_OUT_THRESHOLD = 12
@@ -49,6 +52,9 @@ def analyze_static_architecture(target: Path) -> tuple[list[Finding], dict[str, 
         if module:
             modules[module] = path
     edges: set[tuple[str, str]] = set()
+    symbol_edges: set[tuple[str, str, str, int]] = set()
+    dynamic_imports: list[dict[str, Any]] = []
+    entrypoint_symbols: list[dict[str, Any]] = []
     parse_errors: list[str] = []
     for module, path in sorted(modules.items()):
         relative = path.relative_to(target).as_posix()
@@ -69,8 +75,42 @@ def analyze_static_architecture(target: Path) -> tuple[list[Finding], dict[str, 
                 edges.add((module, destination))
                 if len(edges) >= _MAX_EDGES:
                     break
+        module_dynamic = _dynamic_imports(
+            module, relative, path.name == "__init__.py", tree, modules
+        )
+        for record in module_dynamic:
+            destination = record.get("resolved_module")
+            if isinstance(destination, str) and len(edges) < _MAX_EDGES:
+                edges.add((module, destination))
+        dynamic_remaining = _MAX_DYNAMIC_IMPORTS + 1 - len(dynamic_imports)
+        if dynamic_remaining > 0:
+            dynamic_imports.extend(module_dynamic[:dynamic_remaining])
+        local_symbol_edges, local_entrypoints = _symbol_graph(
+            module, relative, tree, modules
+        )
+        if len(symbol_edges) <= _MAX_SYMBOL_EDGES:
+            for edge in sorted(local_symbol_edges):
+                symbol_edges.add(edge)
+                if len(symbol_edges) > _MAX_SYMBOL_EDGES:
+                    break
+        entrypoint_remaining = _MAX_ENTRYPOINTS + 1 - len(entrypoint_symbols)
+        if entrypoint_remaining > 0:
+            entrypoint_symbols.extend(local_entrypoints[:entrypoint_remaining])
         if len(edges) >= _MAX_EDGES:
             break
+    symbol_truncated = len(symbol_edges) > _MAX_SYMBOL_EDGES
+    dynamic_truncated = len(dynamic_imports) > _MAX_DYNAMIC_IMPORTS
+    entrypoint_truncated = len(entrypoint_symbols) > _MAX_ENTRYPOINTS
+    if symbol_truncated:
+        parse_errors.append(
+            f"symbol dependency graph exceeded {_MAX_SYMBOL_EDGES} edges"
+        )
+    if dynamic_truncated:
+        parse_errors.append(
+            f"dynamic import inventory exceeded {_MAX_DYNAMIC_IMPORTS} records"
+        )
+    if entrypoint_truncated:
+        parse_errors.append(f"entrypoint inventory exceeded {_MAX_ENTRYPOINTS} records")
     adjacency: dict[str, set[str]] = {module: set() for module in modules}
     incoming: dict[str, set[str]] = {module: set() for module in modules}
     for source, destination in edges:
@@ -186,9 +226,12 @@ def analyze_static_architecture(target: Path) -> tuple[list[Finding], dict[str, 
         and not file_truncated
         and len(edges) < _MAX_EDGES
         and findings_detected <= _MAX_FINDINGS
+        and not symbol_truncated
+        and not dynamic_truncated
+        and not entrypoint_truncated
     )
     return findings, {
-        "schema_version": "1.1",
+        "schema_version": "1.2",
         "analysis": "python-local-module-dependency-graph",
         "complete": complete,
         "files_analyzed": len(modules),
@@ -198,6 +241,31 @@ def analyze_static_architecture(target: Path) -> tuple[list[Finding], dict[str, 
         "fan_out_hotspots_detected": len(fan_out),
         "hub_modules_detected": len(hubs),
         "unstable_dependency_edges_detected": len(unstable_edges),
+        "symbol_edges_detected": len(symbol_edges),
+        "symbol_edges": [
+            {
+                "source": source,
+                "destination": destination,
+                "path": path,
+                "line": line,
+            }
+            for source, destination, path, line in sorted(symbol_edges)[
+                :_MAX_SYMBOL_EDGES
+            ]
+        ],
+        "dynamic_imports_detected": len(dynamic_imports),
+        "unresolved_dynamic_imports": sum(
+            item["resolved_module"] is None for item in dynamic_imports
+        ),
+        "dynamic_imports": sorted(
+            dynamic_imports,
+            key=lambda item: (str(item["path"]), int(item["line"])),
+        )[:_MAX_DYNAMIC_IMPORTS],
+        "entrypoint_symbols_detected": len(entrypoint_symbols),
+        "entrypoint_symbols": sorted(
+            entrypoint_symbols,
+            key=lambda item: (str(item["path"]), int(item["line"])),
+        )[:_MAX_ENTRYPOINTS],
         "cycles": cycle_records[:500],
         "fan_out_hotspots": fan_out[:500],
         "module_metrics": module_metrics,
@@ -214,12 +282,17 @@ def analyze_static_architecture(target: Path) -> tuple[list[Finding], dict[str, 
         "truncated": file_truncated
         or len(edges) >= _MAX_EDGES
         or findings_detected > _MAX_FINDINGS
-        or policy_truncated,
+        or policy_truncated
+        or symbol_truncated
+        or dynamic_truncated
+        or entrypoint_truncated,
         "thresholds": thresholds,
         "claim_boundary": (
             "The graph resolves statically recognizable imports among Python modules in the "
-            "repository. Dynamic imports, plugin registration, generated modules, and runtime "
-            "dependency injection may add or remove effective coupling."
+            "repository. Literal dynamic imports and decorator-defined entry points are retained, "
+            "but non-literal imports, plugin registration, generated modules, and runtime "
+            "dependency injection may add or remove effective coupling. Symbol edges are "
+            "syntactic call relationships rather than runtime dispatch proof."
         ),
     }
 
@@ -494,6 +567,206 @@ def _local_destination(imported: str, modules: dict[str, Path]) -> str | None:
             return candidate
         candidate = candidate.rpartition(".")[0]
     return None
+
+
+def _dynamic_imports(
+    module: str,
+    path: str,
+    is_package: bool,
+    tree: ast.AST,
+    modules: dict[str, Path],
+) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    package = module if is_package else module.rpartition(".")[0]
+    aliases = _architecture_aliases(tree, module, is_package)
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        name = _architecture_name(node.func, aliases)
+        if name not in {"__import__", "importlib.import_module"}:
+            continue
+        target = (
+            node.args[0].value
+            if node.args
+            and isinstance(node.args[0], ast.Constant)
+            and isinstance(node.args[0].value, str)
+            else None
+        )
+        normalized = target
+        if target and target.startswith("."):
+            levels = len(target) - len(target.lstrip("."))
+            parent = package.split(".") if package else []
+            trim = max(0, levels - 1)
+            prefix = parent[: len(parent) - trim] if trim else parent
+            normalized = ".".join([*prefix, target.lstrip(".")]).strip(".")
+        records.append(
+            {
+                "caller_module": module,
+                "target": target,
+                "literal": target is not None,
+                "resolved_module": (
+                    _local_destination(normalized, modules) if normalized else None
+                ),
+                "path": path,
+                "line": int(getattr(node, "lineno", 1)),
+            }
+        )
+    return records
+
+
+def _symbol_graph(
+    module: str,
+    path: str,
+    tree: ast.Module,
+    modules: dict[str, Path],
+) -> tuple[set[tuple[str, str, str, int]], list[dict[str, Any]]]:
+    aliases = _architecture_aliases(
+        tree, module, module in modules and path.endswith("__init__.py")
+    )
+    functions: list[tuple[ast.FunctionDef | ast.AsyncFunctionDef, str, str | None]] = []
+    definitions: dict[str, str] = {}
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            symbol = f"{module}.{node.name}"
+            functions.append((node, symbol, None))
+            definitions[node.name] = symbol
+        elif isinstance(node, ast.ClassDef):
+            definitions[node.name] = f"{module}.{node.name}"
+            for child in node.body:
+                if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    functions.append(
+                        (child, f"{module}.{node.name}.{child.name}", node.name)
+                    )
+    edges: set[tuple[str, str, str, int]] = set()
+    entrypoints: list[dict[str, Any]] = []
+    for function, source, owner in functions:
+        decorators = sorted(
+            {
+                name
+                for decorator in function.decorator_list
+                if (name := _decorator_name(decorator, aliases))
+            }
+        )
+        recognized = [
+            name
+            for name in decorators
+            if name.rsplit(".", 1)[-1].casefold()
+            in {
+                "api_route",
+                "command",
+                "consumer",
+                "delete",
+                "get",
+                "handler",
+                "listener",
+                "patch",
+                "post",
+                "put",
+                "receiver",
+                "route",
+                "subscribe",
+                "task",
+            }
+        ]
+        if recognized:
+            entrypoints.append(
+                {
+                    "symbol": source,
+                    "decorators": recognized,
+                    "path": path,
+                    "line": int(function.lineno),
+                }
+            )
+        for call in _owned_calls(function):
+            destination = _architecture_name(
+                call.func,
+                aliases,
+                module=module,
+                owner_class=owner,
+            )
+            if destination in definitions:
+                destination = definitions[destination]
+            if not destination or not _local_symbol(destination, modules):
+                continue
+            edges.add((source, destination, path, int(getattr(call, "lineno", 1))))
+    return edges, entrypoints
+
+
+def _architecture_aliases(
+    tree: ast.AST, module: str, is_package: bool
+) -> dict[str, str]:
+    aliases: dict[str, str] = {}
+    package = module if is_package else module.rpartition(".")[0]
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                aliases[alias.asname or alias.name.split(".", 1)[0]] = alias.name
+        elif isinstance(node, ast.ImportFrom):
+            base = node.module or ""
+            if node.level:
+                parent = package.split(".") if package else []
+                trim = max(0, node.level - 1)
+                prefix = parent[: len(parent) - trim] if trim else parent
+                base = ".".join([*prefix, *base.split(".")]).strip(".")
+            for alias in node.names:
+                if alias.name != "*":
+                    aliases[alias.asname or alias.name] = ".".join(
+                        part for part in (base, alias.name) if part
+                    )
+    return aliases
+
+
+def _architecture_name(
+    node: ast.expr,
+    aliases: dict[str, str],
+    *,
+    module: str = "",
+    owner_class: str | None = None,
+) -> str | None:
+    if isinstance(node, ast.Name):
+        if owner_class and node.id in {"self", "cls"}:
+            return f"{module}.{owner_class}"
+        return aliases.get(node.id, node.id)
+    if isinstance(node, ast.Attribute):
+        parent = _architecture_name(
+            node.value,
+            aliases,
+            module=module,
+            owner_class=owner_class,
+        )
+        return f"{parent}.{node.attr}" if parent else None
+    return None
+
+
+def _decorator_name(node: ast.expr, aliases: dict[str, str]) -> str | None:
+    target = node.func if isinstance(node, ast.Call) else node
+    return _architecture_name(target, aliases)
+
+
+def _owned_calls(
+    function: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> list[ast.Call]:
+    calls: list[ast.Call] = []
+    pending: list[ast.AST] = list(reversed(function.body))
+    while pending:
+        node = pending.pop()
+        if isinstance(
+            node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)
+        ):
+            continue
+        if isinstance(node, ast.Call):
+            calls.append(node)
+        pending.extend(reversed(list(ast.iter_child_nodes(node))))
+    return calls
+
+
+def _local_symbol(symbol: str, modules: dict[str, Path]) -> bool:
+    candidate = symbol
+    while candidate:
+        if candidate in modules:
+            return True
+        candidate = candidate.rpartition(".")[0]
+    return False
 
 
 def _strong_components(adjacency: dict[str, set[str]]) -> list[list[str]]:

@@ -485,9 +485,12 @@ def _render_contextual_analysis_summary(
         f"| Exact vulnerable-function calls | {len(application.get('vulnerable_call_matches', []))} |",
         f"| Code-health issues | {int(health.get('issues_detected', 0))} |",
         f"| Architecture cycles | {int(architecture.get('cycles_detected', 0))} |",
+        f"| Local symbol-call edges | {int(architecture.get('symbol_edges_detected', 0))} |",
+        f"| Decorator-defined entry points | {int(architecture.get('entrypoint_symbols_detected', 0))} |",
+        f"| Unresolved dynamic imports | {int(architecture.get('unresolved_dynamic_imports', 0))} |",
         f"| Declared architecture-policy violations | {len(policy_violations) if isinstance(policy_violations, list) else 0} |",
         "",
-        "Generated scenarios are a test plan, not execution evidence. Architecture and code-health signals prioritize review; declared policy violations remain distinct from heuristic structural smells.",
+        "Generated scenario manifests are machine-actionable test plans, not execution evidence. Symbol calls and entry points are syntactic evidence, while unresolved dynamic imports expose model gaps. Architecture and code-health signals prioritize review; declared policy violations remain distinct from heuristic structural smells.",
     ]
 
 

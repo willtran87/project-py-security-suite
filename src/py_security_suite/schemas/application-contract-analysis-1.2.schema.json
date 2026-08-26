@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:application-contract-analysis:1.2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "analysis", "complete", "routes", "openapi", "contract_path", "contract_present", "observed_test_ids", "observed_test_cases", "business_logic", "generated_test_scenarios", "vulnerable_call_matches", "errors", "claim_boundary"],
+  "properties": {
+    "schema_version": {"const": "1.2"},
+    "analysis": {"const": "application-contract-and-vulnerable-call-analysis"},
+    "complete": {"type": "boolean"},
+    "routes": {"type": "array", "maxItems": 100000, "items": {"$ref": "#/$defs/route"}},
+    "openapi": {"$ref": "#/$defs/openapi"},
+    "contract_path": {"type": ["string", "null"], "maxLength": 1000},
+    "contract_present": {"type": "boolean"},
+    "observed_test_ids": {"$ref": "#/$defs/strings"},
+    "observed_test_cases": {"type": "array", "maxItems": 10000, "items": {"$ref": "#/$defs/testCase"}},
+    "business_logic": {"type": "array", "maxItems": 10000, "items": {"$ref": "#/$defs/business"}},
+    "generated_test_scenarios": {"type": "array", "maxItems": 10000, "items": {"$ref": "#/$defs/scenario"}},
+    "vulnerable_call_matches": {"type": "array", "maxItems": 10000, "items": {"$ref": "#/$defs/vulnerable"}},
+    "errors": {"$ref": "#/$defs/strings"},
+    "claim_boundary": {"type": "string", "minLength": 1, "maxLength": 2000}
+  },
+  "$defs": {
+    "strings": {"type": "array", "maxItems": 10000, "items": {"type": "string", "minLength": 1, "maxLength": 2000}},
+    "route": {"type": "object", "additionalProperties": false, "required": ["method", "path", "source_path", "line", "handler", "handler_symbol"], "properties": {"method": {"$ref": "#/$defs/method"}, "path": {"type": "string", "minLength": 1, "maxLength": 2000}, "source_path": {"type": "string", "minLength": 1, "maxLength": 2000}, "line": {"type": "integer", "minimum": 1}, "handler": {"type": "string", "minLength": 1, "maxLength": 500}, "handler_symbol": {"type": "string", "minLength": 1, "maxLength": 1000}}},
+    "openapi": {"type": "object", "additionalProperties": false, "required": ["current_path", "baseline_path", "current_operations", "baseline_operations", "undocumented_code_routes", "unimplemented_spec_operations", "authorization_regressions", "contract_regressions"], "properties": {"current_path": {"type": ["string", "null"], "maxLength": 1000}, "baseline_path": {"type": ["string", "null"], "maxLength": 1000}, "current_operations": {"$ref": "#/$defs/strings"}, "baseline_operations": {"$ref": "#/$defs/strings"}, "undocumented_code_routes": {"$ref": "#/$defs/strings"}, "unimplemented_spec_operations": {"$ref": "#/$defs/strings"}, "authorization_regressions": {"$ref": "#/$defs/strings"}, "contract_regressions": {"type": "array", "maxItems": 10000, "items": {"$ref": "#/$defs/contractRegression"}}}},
+    "contractRegression": {"type": "object", "additionalProperties": false, "required": ["operation", "kind", "subject"], "properties": {"operation": {"type": "string", "minLength": 1, "maxLength": 2000}, "kind": {"enum": ["required-input-removed", "security-scope-removed", "request-constraint-weakened"]}, "subject": {"type": "string", "minLength": 1, "maxLength": 2000}}},
+    "method": {"enum": ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT", "TRACE"]},
+    "testKinds": {"type": "object", "additionalProperties": false, "required": ["allow", "deny", "cross_tenant"], "properties": {"allow": {"$ref": "#/$defs/strings"}, "deny": {"$ref": "#/$defs/strings"}, "cross_tenant": {"$ref": "#/$defs/strings"}}},
+    "testCase": {"type": "object", "additionalProperties": false, "required": ["id", "source", "result", "source_bound"], "properties": {"id": {"type": "string", "minLength": 1, "maxLength": 2000}, "source": {"type": "string", "minLength": 1, "maxLength": 1000}, "result": {"enum": ["passed", "failed", "skipped", "unknown"]}, "source_bound": {"type": "boolean"}}},
+    "business": {"type": "object", "additionalProperties": false, "required": ["method", "path", "tenant_scoped", "required_test_ids", "missing_test_ids", "gaps", "complete"], "properties": {"method": {"$ref": "#/$defs/method"}, "path": {"type": "string", "minLength": 1, "maxLength": 2000}, "tenant_scoped": {"type": "boolean"}, "required_test_ids": {"$ref": "#/$defs/testKinds"}, "missing_test_ids": {"$ref": "#/$defs/testKinds"}, "gaps": {"$ref": "#/$defs/strings"}, "complete": {"type": "boolean"}}},
+    "scenario": {"type": "object", "additionalProperties": false, "required": ["id", "method", "path", "kind", "priority", "rationale", "declared_contract_present", "subjects", "execution"], "properties": {"id": {"type": "string", "minLength": 1, "maxLength": 2200}, "method": {"$ref": "#/$defs/method"}, "path": {"type": "string", "minLength": 1, "maxLength": 2000}, "kind": {"enum": ["authenticated-allow", "anonymous-deny", "cross-tenant-deny", "required-input-negative", "constraint-boundary", "replay-safety"]}, "priority": {"enum": ["P0", "P1", "P2"]}, "rationale": {"type": "string", "minLength": 1, "maxLength": 1000}, "declared_contract_present": {"type": "boolean"}, "subjects": {"$ref": "#/$defs/strings"}, "execution": {"$ref": "#/$defs/execution"}}},
+    "execution": {"type": "object", "additionalProperties": false, "required": ["actor", "oracle", "consumers", "repeat", "source_bound_evidence_required"], "properties": {"actor": {"enum": ["anonymous", "authorized-principal", "cross-tenant-principal"]}, "oracle": {"enum": ["allow", "deny", "validation-error", "boundary-invariant", "state-invariant"]}, "consumers": {"type": "array", "minItems": 1, "maxItems": 10, "uniqueItems": true, "items": {"enum": ["authorization-security", "hypothesis", "schemathesis"]}}, "repeat": {"type": "integer", "minimum": 1, "maximum": 10}, "source_bound_evidence_required": {"const": true}}},
+    "vulnerable": {"type": "object", "additionalProperties": false, "required": ["package", "advisory_id", "symbol", "path", "line", "direct_caller", "call_chain", "entrypoint", "entrypoint_reachable"], "properties": {"package": {"type": "string", "minLength": 1, "maxLength": 500}, "advisory_id": {"type": "string", "minLength": 1, "maxLength": 500}, "symbol": {"type": "string", "minLength": 1, "maxLength": 1000}, "path": {"type": "string", "minLength": 1, "maxLength": 2000}, "line": {"type": "integer", "minimum": 1}, "direct_caller": {"type": ["string", "null"], "maxLength": 1000}, "call_chain": {"type": "array", "minItems": 1, "maxItems": 100, "items": {"type": "string", "minLength": 1, "maxLength": 1000}}, "entrypoint": {"type": ["string", "null"], "maxLength": 2000}, "entrypoint_reachable": {"type": "boolean"}}}
+  }
+}

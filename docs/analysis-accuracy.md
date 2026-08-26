@@ -47,27 +47,30 @@ flowchart TB
     OpenAPI["Retained OpenAPI + optional baseline"] --> Contracts["Contract drift + constraints"]
     Declared["Declared endpoint/test obligations"] --> Contracts
     Routes --> Contracts
-    Contracts --> Scenarios["Generated review scenarios<br/>auth | tenant | inputs | bounds | replay"]
+    Contracts --> Scenarios["Machine-actionable scenario manifests<br/>actor | oracle | consumer | subject | repeat"]
     TestEvidence["Digest-bound passing test evidence"] --> Obligations["Satisfied declared obligations"]
     Contracts --> Obligations
 
     Source --> Health["Code-health metrics"]
     HealthPolicy["code-health-policy.json"] --> Health
-    Source --> Imports["Local import graph"]
+    Source --> Imports["Module + symbol-call graph"]
     ArchitecturePolicy["architecture-policy.json"] --> Imports
     Baseline["Approved architecture edge baseline"] --> Imports
+    Imports --> RuntimeShape["Decorator entry points + dynamic-import inventory"]
     Imports --> PolicyFindings["Exact layer and forbidden-edge violations"]
     Imports --> Heuristics["Cycles | fan-out | hubs | instability | new edges"]
 
-    Scenarios --> Report["1.1 contextual artifacts + summary"]
+    Scenarios --> Report["1.2 contextual artifacts + summary"]
     Obligations --> Report
     Health --> Report
     PolicyFindings --> Report
     Heuristics --> Report
 ```
 
-Generated scenarios are a test-design queue, not execution evidence. Declared
-architecture-policy violations are exact repository-contract failures;
+Generated scenarios are a machine-actionable test-design queue, not execution
+evidence. Each record names the actor, oracle, compatible companion consumers,
+exact OpenAPI subjects, repeat count, and source-bound evidence requirement.
+Declared architecture-policy violations are exact repository-contract failures;
 complexity, coupling, co-change, and graph topology remain review signals.
 
 ## Validation tiers
@@ -168,12 +171,15 @@ wrapper calls are followed back to recognizable API handlers. A retained chain
 proves bounded static entry-point reachability, while attacker control, runtime
 execution, and advisory exploit preconditions remain separate evidence.
 
-Schema 1.1 also generates deterministic test scenarios from retained OpenAPI
+Schema 1.2 also generates deterministic test scenarios from retained OpenAPI
 security, required-input, constraint, tenant-path, and state-changing operation
 metadata. The plan covers authenticated allow, anonymous deny, cross-tenant
-deny, negative required-input, constraint-boundary, and replay cases. These are
-review targets only; they do not satisfy a declared obligation until matching
-source-bound execution evidence is retained.
+deny, negative required-input, constraint-boundary, and replay cases. Every
+scenario carries an actor, expected oracle, compatible `authorization-security`,
+Schemathesis, or Hypothesis consumer, exact subjects, and repeat semantics.
+These manifests do not satisfy a declared obligation until matching source-bound
+execution evidence is retained. Relative imports and class-method calls now
+participate in bounded wrapper-to-handler chains.
 
 ## Code and architecture health
 
@@ -181,13 +187,17 @@ Broad structural profiles emit three additional artifacts:
 
 - `code-health.json` measures bounded Python cognitive complexity, control-flow
   nesting, function call coupling, long functions, parameter coupling, large
-  classes, class responsibility count, exact duplicated function ASTs, and
-  lower-severity identifier/literal-normalized semantic clones. A strict
-  `security/code-health-policy.json` can calibrate every threshold.
+  classes, class responsibility and cohesion, swallowed broad exceptions,
+  blocking calls in async functions, mutable module state, exact duplicated
+  function ASTs, and lower-severity identifier/literal-normalized semantic
+  clones. A strict `security/code-health-policy.json` can calibrate every
+  threshold.
 - `architecture-history.json` mines at most 500 commits from the already sealed
   Git history. It reports persistent high-ratio file co-change and the
   intersection of frequently changed files with active findings.
-- `static-architecture.json` builds a bounded local Python import graph and
+- `static-architecture.json` builds a bounded local Python module and syntactic
+  symbol-call graph, inventories decorator-defined entry points, distinguishes
+  literal resolved dynamic imports from unresolved dynamic-import model gaps, and
   identifies strongly connected dependency cycles, excessive direct fan-out,
   high-degree hubs, fan-in/fan-out instability, stable-to-unstable dependency
   edges, and new edges relative to an optional

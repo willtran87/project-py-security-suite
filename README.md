@@ -741,10 +741,10 @@ python-security-report/
 |-- evidence-fusion.json             # cross-scanner, advisory-alias, and source/artifact evidence joins
 |-- finding-validation.json          # independent proof dimensions plus conservative compatibility tier
 |-- framework-model-coverage.json    # detected frameworks, model identities, canaries, and engine completion
-|-- application-contract-analysis.json # code/OpenAPI/auth drift, generated scenarios, exact vulnerable calls
+|-- application-contract-analysis.json # actionable scenario manifests, drift, wrapper reachability, vulnerable calls
 |-- capability-manifest.json         # portfolio, profile intent, applicability, completion, and execution gaps
-|-- code-health.json                 # policy-calibrated complexity, nesting, coupling, responsibilities, clones
-|-- static-architecture.json         # declared layers/forbidden edges plus cycles, hubs, instability, regressions
+|-- code-health.json                 # complexity, cohesion, async blocking, exception/state risks, duplication
+|-- static-architecture.json         # module/symbol graph, entry points, dynamic imports, policy and topology
 |-- architecture-history.json        # structural profiles: bounded co-change and finding-overlaid hotspots
 |-- coverage-summary.json           # validated pre-generated test coverage
 |-- junit-summary.json              # bounded output-free test case/file/result ledger

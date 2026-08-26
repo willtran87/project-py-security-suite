@@ -286,6 +286,9 @@ class OrchestratorTests(unittest.TestCase):
             code_health={"issues_detected": 2},
             static_architecture={
                 "cycles_detected": 1,
+                "symbol_edges_detected": 3,
+                "entrypoint_symbols_detected": 2,
+                "unresolved_dynamic_imports": 1,
                 "policy_violations": [{"kind": "forbidden-edge"}],
             },
         )
@@ -301,6 +304,9 @@ class OrchestratorTests(unittest.TestCase):
             "## Contextual security and engineering analysis", artifact_summary
         )
         self.assertIn("| Generated security test scenarios | 1 |", artifact_summary)
+        self.assertIn("| Local symbol-call edges | 3 |", artifact_summary)
+        self.assertIn("| Decorator-defined entry points | 2 |", artifact_summary)
+        self.assertIn("| Unresolved dynamic imports | 1 |", artifact_summary)
         self.assertIn(
             "| Declared architecture-policy violations | 1 |", artifact_summary
         )

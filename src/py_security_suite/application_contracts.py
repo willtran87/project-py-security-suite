@@ -98,7 +98,7 @@ def analyze_application_contracts(
         or vulnerable_matches
     )
     artifact = {
-        "schema_version": "1.1",
+        "schema_version": "1.2",
         "analysis": "application-contract-and-vulnerable-call-analysis",
         "complete": complete,
         "routes": routes,
@@ -124,6 +124,8 @@ def analyze_application_contracts(
             "Route reconciliation is limited to statically recognizable Python decorators. "
             "Business-logic coverage proves only that declared test identities passed in "
             "source-bound retained evidence. "
+            "Generated scenario manifests describe actors, oracles, consumers, subjects, "
+            "and repeat semantics but do not prove execution. "
             "Vulnerable-call matches prove an exact syntactic call to a manifest-listed symbol, "
             "not that the call executes in production or that exploit preconditions hold."
         ),
@@ -159,35 +161,47 @@ def _discover_python_surface(
         except (OSError, SyntaxError, UnicodeError, ValueError) as exc:
             errors.append(f"{relative.as_posix()}: {type(exc).__name__}")
             continue
-        aliases = _import_aliases(tree)
         module = _source_module(relative)
+        aliases = _import_aliases(tree, module, path.name == "__init__.py")
+        owned_functions = _owned_functions(tree, module)
         local_functions = {
-            node.name
-            for node in tree.body
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            node.name: symbol
+            for node, symbol, owner_class in owned_functions
+            if owner_class is None
         }
-        for node in ast.walk(tree):
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                routes.extend(_routes_for_function(relative.as_posix(), module, node))
-                caller = f"{module}.{node.name}"
-                for call in _calls_in_function(node):
-                    name = _qualified_name(call.func, aliases)
-                    if name in local_functions:
-                        name = f"{module}.{name}"
-                    if name:
-                        calls.append(
-                            {
-                                "symbol": name,
-                                "caller": caller,
-                                "path": relative.as_posix(),
-                                "line": int(getattr(call, "lineno", 1)),
-                            }
-                        )
+        for node, caller, owner_class in owned_functions:
+            routes.extend(
+                _routes_for_function(
+                    relative.as_posix(), module, node, handler_symbol=caller
+                )
+            )
+            for call in _calls_in_function(node):
+                name = _qualified_name(
+                    call.func,
+                    aliases,
+                    module=module,
+                    owner_class=owner_class,
+                )
+                if name in local_functions:
+                    name = local_functions[name]
+                if name:
+                    calls.append(
+                        {
+                            "symbol": name,
+                            "caller": caller,
+                            "path": relative.as_posix(),
+                            "line": int(getattr(call, "lineno", 1)),
+                        }
+                    )
     return _unique_dicts(routes), _unique_dicts(calls), errors[:1000]
 
 
 def _routes_for_function(
-    path: str, module: str, node: ast.FunctionDef | ast.AsyncFunctionDef
+    path: str,
+    module: str,
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+    *,
+    handler_symbol: str | None = None,
 ) -> list[dict[str, Any]]:
     routes: list[dict[str, Any]] = []
     for decorator in node.decorator_list:
@@ -225,7 +239,7 @@ def _routes_for_function(
                         getattr(decorator, "lineno", getattr(node, "lineno", 1))
                     ),
                     "handler": node.name,
-                    "handler_symbol": f"{module}.{node.name}",
+                    "handler_symbol": handler_symbol or f"{module}.{node.name}",
                 }
             )
     return routes
@@ -260,23 +274,62 @@ def _calls_in_function(
     return calls
 
 
-def _import_aliases(tree: ast.AST) -> dict[str, str]:
+def _owned_functions(
+    tree: ast.Module, module: str
+) -> list[tuple[ast.FunctionDef | ast.AsyncFunctionDef, str, str | None]]:
+    result: list[tuple[ast.FunctionDef | ast.AsyncFunctionDef, str, str | None]] = []
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            result.append((node, f"{module}.{node.name}", None))
+        elif isinstance(node, ast.ClassDef):
+            for child in node.body:
+                if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    result.append(
+                        (child, f"{module}.{node.name}.{child.name}", node.name)
+                    )
+    return result
+
+
+def _import_aliases(tree: ast.AST, module: str, is_package: bool) -> dict[str, str]:
     aliases: dict[str, str] = {}
+    package = module if is_package else module.rpartition(".")[0]
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
                 aliases[alias.asname or alias.name.split(".", 1)[0]] = alias.name
-        elif isinstance(node, ast.ImportFrom) and node.module:
+        elif isinstance(node, ast.ImportFrom):
+            base = node.module or ""
+            if node.level:
+                parent = package.split(".") if package else []
+                trim = max(0, node.level - 1)
+                prefix = parent[: len(parent) - trim] if trim else parent
+                base = ".".join([*prefix, *base.split(".")]).strip(".")
             for alias in node.names:
-                aliases[alias.asname or alias.name] = f"{node.module}.{alias.name}"
+                if alias.name != "*":
+                    aliases[alias.asname or alias.name] = ".".join(
+                        part for part in (base, alias.name) if part
+                    )
     return aliases
 
 
-def _qualified_name(node: ast.expr, aliases: dict[str, str]) -> str | None:
+def _qualified_name(
+    node: ast.expr,
+    aliases: dict[str, str],
+    *,
+    module: str = "",
+    owner_class: str | None = None,
+) -> str | None:
     if isinstance(node, ast.Name):
+        if owner_class and node.id in {"self", "cls"}:
+            return f"{module}.{owner_class}"
         return aliases.get(node.id, node.id)
     if isinstance(node, ast.Attribute):
-        parent = _qualified_name(node.value, aliases)
+        parent = _qualified_name(
+            node.value,
+            aliases,
+            module=module,
+            owner_class=owner_class,
+        )
         return f"{parent}.{node.attr}" if parent else None
     return None
 
@@ -780,6 +833,7 @@ def _generated_test_scenarios(
                 "P1",
                 "Prove an authorized principal can complete the operation.",
                 operation in declared_operations,
+                sorted(details.get("security", {})),
             )
             _add_scenario(
                 scenarios,
@@ -790,6 +844,7 @@ def _generated_test_scenarios(
                 "P0",
                 "Prove the operation rejects a request without credentials.",
                 operation in declared_operations,
+                sorted(details.get("security", {})),
             )
         placeholder_names = {
             value.casefold() for value in re.findall(r"\{([^{}]+)\}", path)
@@ -810,6 +865,16 @@ def _generated_test_scenarios(
                 "P0",
                 "Prove a valid principal cannot cross the tenant or organization boundary.",
                 operation in declared_operations,
+                sorted(
+                    placeholder_names
+                    & {
+                        "tenant",
+                        "tenant_id",
+                        "org",
+                        "org_id",
+                        "organization_id",
+                    }
+                ),
             )
         if details.get("required_inputs"):
             _add_scenario(
@@ -821,6 +886,7 @@ def _generated_test_scenarios(
                 "P1",
                 "Prove every required input fails closed when omitted.",
                 operation in declared_operations,
+                [str(value) for value in details["required_inputs"]],
             )
         if details.get("constraints"):
             _add_scenario(
@@ -832,6 +898,7 @@ def _generated_test_scenarios(
                 "P1",
                 "Exercise values immediately inside and outside every retained request constraint.",
                 operation in declared_operations,
+                sorted(str(value) for value in details["constraints"]),
             )
         if method in {"DELETE", "PATCH", "POST", "PUT"}:
             _add_scenario(
@@ -843,6 +910,7 @@ def _generated_test_scenarios(
                 "P2",
                 "Exercise duplicate and replayed mutations to expose unsafe state transitions.",
                 operation in declared_operations,
+                ["request-body", "idempotency-key", "resource-state"],
             )
     return scenarios[:10_000]
 
@@ -856,7 +924,9 @@ def _add_scenario(
     priority: str,
     rationale: str,
     declared: bool,
+    subjects: list[str],
 ) -> None:
+    actor, oracle, consumers, repeat = _scenario_execution(kind)
     scenarios.append(
         {
             "id": f"pysec-{slug}-{kind}",
@@ -866,8 +936,58 @@ def _add_scenario(
             "priority": priority,
             "rationale": rationale,
             "declared_contract_present": declared,
+            "subjects": subjects[:1000],
+            "execution": {
+                "actor": actor,
+                "oracle": oracle,
+                "consumers": consumers,
+                "repeat": repeat,
+                "source_bound_evidence_required": True,
+            },
         }
     )
+
+
+def _scenario_execution(kind: str) -> tuple[str, str, list[str], int]:
+    execution = {
+        "authenticated-allow": (
+            "authorized-principal",
+            "allow",
+            ["authorization-security", "schemathesis"],
+            1,
+        ),
+        "anonymous-deny": (
+            "anonymous",
+            "deny",
+            ["authorization-security", "schemathesis"],
+            1,
+        ),
+        "cross-tenant-deny": (
+            "cross-tenant-principal",
+            "deny",
+            ["authorization-security"],
+            1,
+        ),
+        "required-input-negative": (
+            "authorized-principal",
+            "validation-error",
+            ["schemathesis", "hypothesis"],
+            1,
+        ),
+        "constraint-boundary": (
+            "authorized-principal",
+            "boundary-invariant",
+            ["schemathesis", "hypothesis"],
+            1,
+        ),
+        "replay-safety": (
+            "authorized-principal",
+            "state-invariant",
+            ["authorization-security", "schemathesis"],
+            2,
+        ),
+    }
+    return execution[kind]
 
 
 def _vulnerable_matches(

@@ -2,9 +2,13 @@
 
 - Correlate exact semantic subjects and shared native flow sinks across scanner
   presentation-line differences; generate OpenAPI-derived authorization,
-  tenant-boundary, constraint, and replay test scenarios; add calibrated
-  nesting, call-coupling, and class-responsibility analysis; enforce declared
-  architecture layers and forbidden dependency edges; and raise protected
+  tenant-boundary, constraint, and replay test scenarios with deterministic
+  actors, oracles, consumers, subjects, and replay counts; resolve relative
+  imports and class-method wrapper chains; add calibrated nesting,
+  call-coupling, class-responsibility, cohesion, swallowed-exception,
+  async-blocking, and mutable-global analysis; retain symbol-call edges,
+  decorator entry points, and literal/unresolved dynamic imports; enforce
+  declared architecture layers and forbidden dependency edges; and raise protected
   production calibration to 200 independently governed labels with balanced
   positive and negative evidence across at least three engines.
 
