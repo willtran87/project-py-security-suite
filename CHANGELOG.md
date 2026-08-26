@@ -1,5 +1,11 @@
 # Changelog
 
+- Refresh the solution, contextual-analysis, and validation diagrams for schema
+  1.3; document capability-aware scenario routing, authorized execution boundaries,
+  ranked code-health retention, unified entry points, deterministic native/Tach
+  policy precedence, and exact Tach cycle enforcement across the README,
+  architecture guide, compatibility matrix, and tool-selection reference.
+
 - Emit argv-safe, source-bound companion execution plans for generated contract
   scenarios with exact actor/oracle/subject metadata and consumer capability
   routing; detect unawaited coroutines, discarded tasks, swallowed cancellation,

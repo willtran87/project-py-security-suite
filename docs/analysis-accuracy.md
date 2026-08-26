@@ -53,16 +53,23 @@ flowchart TB
 
     Source --> Health["Code-health metrics"]
     HealthPolicy["code-health-policy.json"] --> Health
+    Health --> HealthRank["Count every issue<br/>rank bounded detail + report omissions"]
     Source --> Imports["Module + symbol-call graph"]
-    ArchitecturePolicy["architecture-policy.json or tach.toml"] --> Imports
+    NativePolicy["architecture-policy.json"] --> PolicyChoice{"Native policy present?"}
+    TachPolicy["tach.toml fallback"] --> PolicyChoice
+    PolicyChoice --> Imports
     Baseline["Approved architecture edge baseline"] --> Imports
     Imports --> RuntimeShape["Unified entry points + dynamic-import inventory"]
     Imports --> PolicyFindings["Exact native or Tach dependency violations"]
     Imports --> Heuristics["Cycles | fan-out | hubs | instability | new edges"]
 
-    Scenarios --> Report["1.3 contextual artifacts + summary"]
+    Scenarios --> Router["Capability-aware consumer routing"]
+    Router --> AuthTask["Authorization task<br/>allow | deny | tenant | replay"]
+    Router --> PropertyTask["Schemathesis/Hypothesis task<br/>input + constraint properties"]
+    AuthTask --> Report["1.3 contextual artifacts + summary"]
+    PropertyTask --> Report
     Obligations --> Report
-    Health --> Report
+    HealthRank --> Report
     PolicyFindings --> Report
     Heuristics --> Report
 ```
@@ -75,6 +82,38 @@ authorization companion tasks plus the required environment-variable names.
 It never reads credentials or executes a target during static analysis.
 Declared architecture-policy violations are exact repository-contract failures;
 complexity, coupling, co-change, and graph topology remain review signals.
+
+### Schema 1.3 handoff and retention boundaries
+
+```mermaid
+flowchart LR
+    Scenario["Generated scenario<br/>actor + oracle + subjects + repeat"] --> Route{"Required capability"}
+    Route -->|authorization semantics| Authorization["authorization-security argv task"]
+    Route -->|request properties| Property["Schemathesis or Hypothesis argv task"]
+    Authorization --> AuthorizedLane["Separately authorized target execution"]
+    Property --> AuthorizedLane
+    AuthorizedLane --> Evidence["Source-bound validated evidence"]
+    Evidence --> Obligation["Declared obligation may be satisfied"]
+
+    RawIssues["All detected code-health issues"] --> Counts["Per-kind and per-path totals"]
+    RawIssues --> Rank["Severity + threshold overage + kind diversity"]
+    Rank --> Detail["At most 2,000 retained details"]
+    Counts --> Omitted["Explicit retained and omitted counts"]
+    Detail --> Omitted
+
+    Native["security/architecture-policy.json"] --> Select{"Present and valid?"}
+    Tach["tach.toml"] -->|fallback only| Select
+    Select --> Exact["Exact policy findings"]
+    Imports2["Static imports"] --> Exact
+    Imports2 --> Structural["Separate topology review signals"]
+```
+
+The command arrays are data, not shell programs, and contain environment-variable
+names rather than credential values. A consumer is attached only when it can
+evaluate the scenario's oracle: schema/property fuzzing is never credited as
+authorization or replay proof. The architecture-policy selector is deterministic:
+valid native JSON wins, Tach is used only when native JSON is absent, and an
+invalid native policy fails the analysis closed instead of silently falling back.
 
 ## Validation tiers
 

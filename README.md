@@ -77,13 +77,15 @@ flowchart LR
         Doctor --> Plan["Offline provisioning plan"]
         Plan --> Scan["Run applicable adapters"]
         Scan --> ToolEvidence["Scanner findings + native evidence"]
-        Policies["Repository analysis policies<br/>health thresholds | layers | forbidden edges"] --> Context
-        Scan --> Context["Context analyzers<br/>framework models | contract scenarios | code health | architecture"]
+        Policies["Repository analysis policies<br/>health thresholds | native architecture | Tach fallback"] --> Context
+        Scan --> Context["Context analyzers 1.3<br/>frameworks | scenario tasks | ranked health | architecture"]
+        Context --> Handoff["Authorized companion handoff<br/>argv + actor + oracle + subjects"]
         ToolEvidence --> Findings["Normalize and correlate<br/>semantic subject | flow sink | location"]
         Context --> Findings
         Findings --> Validate["Multi-axis validation<br/>candidate to reproduced"]
         Validate --> Policy["PASS | WARN | FAIL | INCOMPLETE"]
         Policy --> Reports["Seal reports and evidence"]
+        Handoff --> Pack
         Reports --> Pack["Atomic evidence pack<br/>role views + audit archive"]
     end
     Transfer --> Doctor
@@ -741,10 +743,10 @@ python-security-report/
 |-- evidence-fusion.json             # cross-scanner, advisory-alias, and source/artifact evidence joins
 |-- finding-validation.json          # independent proof dimensions plus conservative compatibility tier
 |-- framework-model-coverage.json    # detected frameworks, model identities, canaries, and engine completion
-|-- application-contract-analysis.json # actionable scenario manifests, drift, wrapper reachability, vulnerable calls
+|-- application-contract-analysis.json # scenario manifests/tasks, drift, wrapper reachability, vulnerable calls
 |-- capability-manifest.json         # portfolio, profile intent, applicability, completion, and execution gaps
-|-- code-health.json                 # complexity, cohesion, async blocking, exception/state risks, duplication
-|-- static-architecture.json         # module/symbol graph, entry points, dynamic imports, policy and topology
+|-- code-health.json                 # ranked complexity, async/exception lifecycle, state, cohesion, and clone risks
+|-- static-architecture.json         # module/symbol graph, unified entry points, dynamic imports, native/Tach policy
 |-- architecture-history.json        # structural profiles: bounded co-change and finding-overlaid hotspots
 |-- coverage-summary.json           # validated pre-generated test coverage
 |-- junit-summary.json              # bounded output-free test case/file/result ledger

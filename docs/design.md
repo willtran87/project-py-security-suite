@@ -79,21 +79,32 @@ flowchart TB
     Source --> Contracts["Application contracts<br/>code/OpenAPI/auth + exact advisory calls"]
     OpenAPI["OpenAPI + approved baseline"] --> Contracts
     ContractPolicy["Declared endpoint/test obligations"] --> Contracts
-    Contracts --> Scenarios["Actionable scenarios + argv-safe companion tasks<br/>actor + oracle + consumer + subject + repeat"]
-    Source --> Health["Code health<br/>complexity + cohesion + async/exception/state risks + clones"]
+    Contracts --> Scenarios["Actionable scenarios<br/>actor + oracle + subject + repeat"]
+    Scenarios --> CapabilityRoute{"Consumer capability"}
+    CapabilityRoute --> AuthTasks["Authorization tasks<br/>allow | deny | tenant | replay"]
+    CapabilityRoute --> PropertyTasks["Property tasks<br/>Schemathesis | Hypothesis"]
+    Source --> Health["Code health<br/>complexity + async/exception/state risks + clones"]
     HealthPolicy["Code-health threshold policy"] --> Health
+    Health --> RankedHealth["Ranked bounded detail<br/>per-kind/path totals + omissions"]
     Source --> Architecture["Static architecture<br/>module/symbol calls + unified entry points + dynamic imports + policy"]
-    ArchitecturePolicy["Native/Tach architecture policy + edge baseline"] --> Architecture
+    NativePolicy["Native architecture policy"] --> PolicySelect{"Native present?"}
+    TachPolicy["Tach fallback policy"] --> PolicySelect
+    PolicySelect --> Architecture
+    EdgeBaseline["Approved edge baseline"] --> Architecture
     History["Bounded sealed Git history"] --> Temporal["Architecture history<br/>co-change + finding hotspots"]
     ToolEvidence["Normalized scanner evidence"] --> Correlate["Conservative finding correlation<br/>semantic anchor | flow sink | location"]
     Frameworks --> Correlate
     Contracts --> Correlate
-    Scenarios --> Reports["Contextual artifact summaries"]
-    Health --> Correlate
+    AuthTasks --> Reports["Contextual artifact summaries"]
+    PropertyTasks --> Reports
+    RankedHealth --> Correlate
     Architecture --> Correlate
     Temporal --> Correlate
     Correlate --> Validation["Finding validation<br/>independent proof dimensions"]
-    Runtime["Digest-bound runtime and reproduction evidence"] --> Validation
+    AuthTasks --> AuthorizedLane["Separate authorized execution lane"]
+    PropertyTasks --> AuthorizedLane
+    AuthorizedLane --> Runtime["Digest-bound runtime and reproduction evidence"]
+    Runtime --> Validation
     Validation --> Policy["Policy + closure ownership"]
     Capabilities["Profile intent + tool runs"] --> Manifest["Capability manifest"]
     Manifest --> Policy

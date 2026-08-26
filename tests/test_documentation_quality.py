@@ -98,7 +98,15 @@ class DocumentationQualityTests(unittest.TestCase):
             "code-health-policy.json",
         ):
             self.assertIn(phrase, accuracy)
-        self.assertIn("Actionable scenarios + argv-safe companion tasks", design)
+        for phrase in (
+            "Consumer capability",
+            "Authorization tasks",
+            "Property tasks",
+            "Ranked bounded detail",
+            "Tach fallback policy",
+            "Separate authorized execution lane",
+        ):
+            self.assertIn(phrase, design)
         self.assertIn("Conservative finding correlation", design)
         self.assertIn("static-architecture.json 1.3", configuration)
         self.assertIn("code-health.json 1.3", configuration)
