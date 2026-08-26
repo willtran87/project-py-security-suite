@@ -1,6 +1,6 @@
 # Product enhancement matrix
 
-Last reviewed: 2026-08-10
+Last reviewed: 2026-08-26
 
 The latest findings-driven 89-item backlog is resolved in the
 [closure register](findings-closure.md), including conditional activation and
@@ -32,13 +32,13 @@ bounded handoff, but an independent enterprise control must grant approval.
 | 18 | Profile-specific gates | Implemented | Quick, comprehensive, production, and release profiles. |
 | 19 | Independent verification receipt | Implemented | Report, inspection, signing-request, and Passport verification receipts. |
 | 20 | Acceptance expiry | Implemented | Digest-bound risk-acceptance ledger with expiry and owner. |
-| 21 | Labeled detection corpus | Implemented | Bounded offline corpus and confusion-matrix evaluation. |
-| 22 | Perspective-specific effectiveness | Implemented now | Positive, negative, tool-count, named-tool, and per-tool minimum gates. |
+| 21 | Labeled detection corpus | Implemented | Bounded offline corpus and confusion-matrix evaluation; production requires at least 200 labels with 80 positive and 80 negative cases. |
+| 22 | Perspective-specific effectiveness | Implemented now | Positive, negative, three-engine, named-tool, and 20-label-per-required-engine minimum gates. |
 | 23 | Mutation evidence | Implemented | Optional `mutmut` companion adapter. |
 | 24 | Parser fuzzing | Implemented | Bounded parsing plus generative/fuzz-oriented tests. |
 | 25 | Adapter contract tests | Implemented | Shared runtime hardening and scanner-specific fixtures. |
 | 26 | Governed risk acceptance | Implemented | Exact fingerprint, scope, owner, reason, expiry, and digest. |
-| 27 | Duplicate correlation | Implemented | Normalized fingerprints retain every contributing source. |
+| 27 | Duplicate correlation | Implemented | Exact semantic subjects and native flow sinks bridge presentation-line differences; ambiguous subjects remain partitioned and every contributing source is retained. |
 | 28 | Risk thresholds | Implemented | Severity, confidence, quality, coverage, reachability, and release controls. |
 | 29 | Comparable finding baseline | Implemented now | Profile/tool-set mismatch or unverified production VCS ancestry yields `unclassified`, never false “new.” `baseline-candidate` prepares the exact approval handoff. |
 | 30 | Artifact baseline | Implemented | Artifact findings and identities participate in sealed delta evidence. |

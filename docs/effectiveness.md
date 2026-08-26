@@ -30,6 +30,8 @@ flowchart LR
     Corpus["Approved labeled corpus<br/>SHA-256 bound"] --> Benchmark["pysec benchmark"]
     Normalize --> Benchmark
     Benchmark --> Metrics["TP | TN | FP | FN<br/>precision | recall | specificity | F1"]
+    Floor["Production floor<br/>200 labels | 80 positive | 80 negative<br/>3 engines | 20 labels per required engine"] --> Release["release-check"]
+    Metrics --> Release
 ```
 
 ## Per-tool evidence posture

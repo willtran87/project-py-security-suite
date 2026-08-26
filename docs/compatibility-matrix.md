@@ -1,6 +1,6 @@
 # Python Security Suite compatibility and coverage matrix
 
-Last reviewed: 2026-08-12
+Last reviewed: 2026-08-26
 
 See the [documentation index](index.md), [solution design](design.md), and
 [operations guide](operations.md) for the surrounding architecture.
@@ -11,10 +11,13 @@ See the [documentation index](index.md), [solution design](design.md), and
 flowchart LR
     Source["Python source"] --> Static["Patterns, data flow, types, and quality"]
     Repo["Repository configuration"] --> Delivery["Workflows, IaC, containers, and architecture"]
+    AnalysisPolicy["Health thresholds + architecture policy"] --> Context["Native contextual analyzers"]
+    Source --> Context
     Dependencies["Locks and manifests"] --> Components["Vulnerabilities, SBOMs, licenses, and package behavior"]
     Artifacts["Wheel, sdist, and images"] --> Supply["Structure, metadata, malware, provenance, and signatures"]
     Evidence["Trusted companion lanes"] --> Dynamic["Tests, DAST, fuzzing, threat models, and reproducibility"]
     Static --> Model["Normalized finding and evidence model"]
+    Context --> Model
     Delivery --> Model
     Components --> Model
     Supply --> Model
@@ -66,6 +69,10 @@ closed instead of hiding findings.
 | FIRST EPSS enrichment | Yes | Bounded CSV/gzip, mandatory approved SHA-256, maximum age, numeric validation | Probability/percentile context and priority |
 | CycloneDX VEX | Yes | Bounded CycloneDX JSON, mandatory approved SHA-256, maximum age, state validation | Product-context state without automatic suppression |
 | Finding lifecycle | Yes | Bounded prior `findings.json` and mandatory approved SHA-256 | New, existing, regressed, and resolved evidence |
+| Semantic and flow correlation | Yes | Exact semantic anchors, native ordered code-flow sinks, logical rule families, and source locations | Joins presentation-line differences while partitioning ambiguous or incompatible subjects and paths; never creates independent corroboration |
+| Application contract analysis | Yes | Sealed Python routes, retained OpenAPI and optional baseline, declared endpoint/test obligations, exact advisory symbols, and source-bound test evidence | Route/auth/input drift, exact vulnerable calls, bounded wrapper reachability, and generated auth/tenant/boundary/replay review scenarios; scenarios are not execution evidence |
+| Configurable code health | Yes | Sealed Python AST plus optional strict `security/code-health-policy.json` | Policy-calibrated complexity, nesting, call coupling, size, responsibilities, exact duplicates, and semantic clones as review signals |
+| Declared architecture policy | Yes | Local Python imports, optional approved edge baseline, and strict `security/architecture-policy.json` | Exact high-confidence layer/forbidden-edge violations kept separate from cycles, fan-out, hubs, instability, co-change, and new-edge heuristics |
 | CODEOWNERS routing | Yes | Repository-local bounded file | Owner metadata in reports and SARIF |
 | Effectiveness summary | Yes | Current normalized findings, tool runs, primary/helper executable identities, trust approval, and continuity | Attribution, actionability, corroboration, tool contribution, and exact per-tool evidence posture consumed by risk routes; not a precision/recall or finding-truth claim |
 | Labeled effectiveness benchmark | Yes | Verified report plus digest-bound corpus; production/release require schema 2.0, separate training/holdout identities, and lifecycle-valid signatures from two trusted organizations | TP/TN/FP/FN, precision, recall, specificity, F1, exact failed labels, and enforced CWE/language/parser/boundary/severity/mutation diversity |

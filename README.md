@@ -77,8 +77,9 @@ flowchart LR
         Doctor --> Plan["Offline provisioning plan"]
         Plan --> Scan["Run applicable adapters"]
         Scan --> ToolEvidence["Scanner findings + native evidence"]
-        Scan --> Context["Context analyzers<br/>frameworks | contracts | code health | architecture"]
-        ToolEvidence --> Findings["Normalize and correlate"]
+        Policies["Repository analysis policies<br/>health thresholds | layers | forbidden edges"] --> Context
+        Scan --> Context["Context analyzers<br/>framework models | contract scenarios | code health | architecture"]
+        ToolEvidence --> Findings["Normalize and correlate<br/>semantic subject | flow sink | location"]
         Context --> Findings
         Findings --> Validate["Multi-axis validation<br/>candidate to reproduced"]
         Validate --> Policy["PASS | WARN | FAIL | INCOMPLETE"]
@@ -367,11 +368,12 @@ pysec evidence-pack REPORT --output security-evidence \
   --effectiveness-evaluation effectiveness-evaluation.json \
   --effectiveness-sha256 APPROVED_EVALUATION_SHA256 \
   --minimum-effectiveness-labels 200 \
-  --minimum-effectiveness-positive-labels 10 \
-  --minimum-effectiveness-negative-labels 10 \
-  --minimum-effectiveness-tools 2 \
-  --minimum-effectiveness-labels-per-tool 2 \
+  --minimum-effectiveness-positive-labels 80 \
+  --minimum-effectiveness-negative-labels 80 \
+  --minimum-effectiveness-tools 3 \
+  --minimum-effectiveness-labels-per-tool 20 \
   --required-effectiveness-tool bandit \
+  --required-effectiveness-tool codeql \
   --required-effectiveness-tool semgrep \
   --passport-verification passport-verification.json \
   --passport-verification-sha256 APPROVED_PASSPORT_SHA256 \
@@ -402,10 +404,12 @@ pysec release-check REPORT --format json \
   --effectiveness-evaluation effectiveness-evaluation.json \
   --effectiveness-sha256 APPROVED_SHA256 \
   --minimum-effectiveness-labels 200 \
-  --minimum-effectiveness-positive-labels 10 \
-  --minimum-effectiveness-negative-labels 10 \
-  --minimum-effectiveness-labels-per-tool 2 \
+  --minimum-effectiveness-positive-labels 80 \
+  --minimum-effectiveness-negative-labels 80 \
+  --minimum-effectiveness-tools 3 \
+  --minimum-effectiveness-labels-per-tool 20 \
   --required-effectiveness-tool bandit \
+  --required-effectiveness-tool codeql \
   --required-effectiveness-tool semgrep \
   --passport-verification passport-verification.json \
   --passport-verification-sha256 APPROVED_SHA256 \
@@ -737,10 +741,10 @@ python-security-report/
 |-- evidence-fusion.json             # cross-scanner, advisory-alias, and source/artifact evidence joins
 |-- finding-validation.json          # independent proof dimensions plus conservative compatibility tier
 |-- framework-model-coverage.json    # detected frameworks, model identities, canaries, and engine completion
-|-- application-contract-analysis.json # code/OpenAPI/auth drift and exact vulnerable-symbol calls
+|-- application-contract-analysis.json # code/OpenAPI/auth drift, generated scenarios, exact vulnerable calls
 |-- capability-manifest.json         # portfolio, profile intent, applicability, completion, and execution gaps
-|-- code-health.json                 # structural profiles: complexity, size, coupling, and duplicate ASTs
-|-- static-architecture.json         # structural profiles: import cycles, hubs, instability, and edge regressions
+|-- code-health.json                 # policy-calibrated complexity, nesting, coupling, responsibilities, clones
+|-- static-architecture.json         # declared layers/forbidden edges plus cycles, hubs, instability, regressions
 |-- architecture-history.json        # structural profiles: bounded co-change and finding-overlaid hotspots
 |-- coverage-summary.json           # validated pre-generated test coverage
 |-- junit-summary.json              # bounded output-free test case/file/result ledger

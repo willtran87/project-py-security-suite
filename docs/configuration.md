@@ -128,6 +128,19 @@ introduced binaries.
 Structural profiles read two optional strict JSON policies from the sealed
 source snapshot. Invalid files make the corresponding analysis incomplete.
 
+```mermaid
+flowchart LR
+    Snapshot["Sealed source snapshot"] --> Health["Code-health analyzer"]
+    HealthPolicy["security/code-health-policy.json"] --> Health
+    Snapshot --> Graph["Static import graph"]
+    ArchitecturePolicy["security/architecture-policy.json"] --> Graph
+    EdgeBaseline["security/baselines/architecture-edges.json"] --> Graph
+    Health --> HealthArtifact["code-health.json 1.1<br/>metrics + applied thresholds"]
+    Graph --> ArchitectureArtifact["static-architecture.json 1.1<br/>policy violations + structural signals"]
+    HealthPolicy -->|"invalid"| Incomplete["Analysis incomplete"]
+    ArchitecturePolicy -->|"invalid"| Incomplete
+```
+
 `security/code-health-policy.json` calibrates bounded review thresholds:
 
 ```json

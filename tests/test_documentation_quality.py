@@ -83,6 +83,42 @@ class DocumentationQualityTests(unittest.TestCase):
             self.assertIn(artifact, readme)
             self.assertIn(artifact, accuracy)
 
+    def test_contextual_analysis_diagrams_cover_current_semantics(self) -> None:
+        accuracy = (_ROOT / "docs" / "analysis-accuracy.md").read_text(encoding="utf-8")
+        design = (_ROOT / "docs" / "design.md").read_text(encoding="utf-8")
+        configuration = (_ROOT / "docs" / "configuration.md").read_text(
+            encoding="utf-8"
+        )
+        for phrase in (
+            "semantic anchor",
+            "native flow sink",
+            "Generated review scenarios",
+            "architecture-policy.json",
+            "code-health-policy.json",
+        ):
+            self.assertIn(phrase, accuracy)
+        self.assertIn("Generated security review scenarios", design)
+        self.assertIn("Conservative finding correlation", design)
+        self.assertIn("static-architecture.json 1.1", configuration)
+        self.assertIn("code-health.json 1.1", configuration)
+
+    def test_governed_effectiveness_examples_use_production_floors(self) -> None:
+        documents = (
+            _ROOT / "README.md",
+            _ROOT / "docs" / "release-readiness.md",
+        )
+        for document in documents:
+            text = document.read_text(encoding="utf-8")
+            for expected in (
+                "--minimum-effectiveness-labels 200",
+                "--minimum-effectiveness-positive-labels 80",
+                "--minimum-effectiveness-negative-labels 80",
+                "--minimum-effectiveness-tools 3",
+                "--minimum-effectiveness-labels-per-tool 20",
+                "--required-effectiveness-tool codeql",
+            ):
+                self.assertIn(expected, text)
+
 
 def _documents() -> list[Path]:
     return sorted(

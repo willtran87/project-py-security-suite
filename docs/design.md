@@ -77,12 +77,18 @@ and completeness.
 flowchart TB
     Source["Sealed source snapshot"] --> Frameworks["Framework model coverage<br/>models + positive/negative canaries"]
     Source --> Contracts["Application contracts<br/>code/OpenAPI/auth + exact advisory calls"]
-    Source --> Health["Code health<br/>complexity + size + semantic clones"]
-    Source --> Architecture["Static architecture<br/>cycles + hubs + instability + new edges"]
+    OpenAPI["OpenAPI + approved baseline"] --> Contracts
+    ContractPolicy["Declared endpoint/test obligations"] --> Contracts
+    Contracts --> Scenarios["Generated security review scenarios<br/>auth | tenant | boundary | replay"]
+    Source --> Health["Code health<br/>complexity + nesting + coupling + responsibilities + clones"]
+    HealthPolicy["Code-health threshold policy"] --> Health
+    Source --> Architecture["Static architecture<br/>layers + forbidden edges + graph signals"]
+    ArchitecturePolicy["Architecture policy + edge baseline"] --> Architecture
     History["Bounded sealed Git history"] --> Temporal["Architecture history<br/>co-change + finding hotspots"]
-    ToolEvidence["Normalized scanner evidence"] --> Correlate["Finding correlation"]
+    ToolEvidence["Normalized scanner evidence"] --> Correlate["Conservative finding correlation<br/>semantic anchor | flow sink | location"]
     Frameworks --> Correlate
     Contracts --> Correlate
+    Scenarios --> Reports["Contextual artifact summaries"]
     Health --> Correlate
     Architecture --> Correlate
     Temporal --> Correlate
@@ -94,8 +100,11 @@ flowchart TB
 ```
 
 Framework and contract analysis run for every profile so model and behavioral
-gaps stay visible. Code health, static architecture, and architecture history
-run for `audit`, `quality`, `repo`, `comprehensive`, `production`, and `release`.
+gaps stay visible. Generated contract scenarios remain review plans until
+source-bound passing evidence satisfies a declared obligation. Code health,
+static architecture, and architecture history run for `audit`, `quality`,
+`repo`, `comprehensive`, `production`, and `release`. Declared architecture
+violations remain distinct from heuristic topology and maintainability signals.
 Validation does not convert structural inference into exploitability: attacker
 control, path confirmation, runtime execution, harmful effect, reproduction,
 and production parity remain independent dimensions.
@@ -758,10 +767,11 @@ classDiagram
     Finding "1" --> "0..*" Citation
 ```
 
-Every finding has a stable suite ID and fingerprint. Scanner observations at
-the same path, line, and logical rule are correlated. Correlation preserves all
-unique sources and citations while selecting the strongest severity and
-confidence.
+Every finding has a stable suite ID and fingerprint. Correlation first prefers
+one exact semantic subject, then one native source-to-sink flow sink, and then
+falls back to the primary path, line, and logical rule. Ambiguous semantic or
+flow identities remain partitioned. Correlation preserves all unique sources
+and citations while selecting the strongest severity and confidence.
 
 Classifications favor native CWE metadata. Adapters add conservative mappings
 where a scanner does not supply one, such as CWE-798 for credential findings.

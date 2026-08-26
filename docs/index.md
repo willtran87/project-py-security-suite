@@ -55,8 +55,9 @@ flowchart LR
         Repo["Python repository"] --> Doctor
         Doctor --> Scan["88-adapter applicability-aware portfolio"]
         Scan --> Normalize["Normalize scanner evidence"]
-        Scan --> Native["Native contextual analysis<br/>frameworks, contracts, health, architecture"]
-        Normalize --> Correlate["Correlate, classify, and own"]
+        AnalysisPolicy["Repository analysis policies<br/>thresholds, layers, forbidden edges"] --> Native
+        Scan --> Native["Native contextual analysis<br/>frameworks, scenarios, health, architecture"]
+        Normalize --> Correlate["Correlate by semantic subject,<br/>flow sink, or exact location"]
         Native --> Correlate
         Correlate --> Validate["Multi-axis finding validation"]
         Validate --> Leverage["Typed evidence graph<br/>controls, taint, artifacts, privacy, trust"]

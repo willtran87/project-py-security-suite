@@ -11,7 +11,11 @@ retained positive evidence for the current finding.
 
 ```mermaid
 flowchart LR
-    Candidate["Scanner or native-analyzer candidate"] --> Corroborate["Independent engine-family correlation"]
+    Candidate["Scanner or native-analyzer candidate"] --> Subject{"Exact correlation subject"}
+    Subject -->|"one semantic anchor"| Corroborate["Independent engine-family correlation"]
+    Subject -->|"one native flow sink"| Corroborate
+    Subject -->|"otherwise"| Location["Primary location + logical rule"]
+    Location --> Corroborate
     Corroborate --> Path["Native ordered source-to-sink path"]
     Path --> Runtime["Digest-bound runtime observation"]
     Runtime --> Reproduce["Sealed reproduction proof"]
@@ -27,6 +31,44 @@ The left-to-right chain is an evidence-strength ladder, not a mandatory route
 through every state. A finding can have runtime evidence without a scanner
 retaining an ordered path, for example; the independent dimensions preserve
 that distinction instead of overstating the compatibility tier.
+
+Correlation uses the strongest exact common subject available. A unique
+semantic anchor can join observations reported on different presentation
+lines; otherwise a unique native flow sink can do so. Findings with ambiguous
+anchors or sinks fall back to primary path, line, and logical rule. Existing
+flow and semantic partitions still prevent observations for different paths or
+subjects from being merged merely because a rule family matches.
+
+## Contextual analysis map
+
+```mermaid
+flowchart TB
+    Source["Sealed Python source"] --> Routes["Route decorators + exact AST calls"]
+    OpenAPI["Retained OpenAPI + optional baseline"] --> Contracts["Contract drift + constraints"]
+    Declared["Declared endpoint/test obligations"] --> Contracts
+    Routes --> Contracts
+    Contracts --> Scenarios["Generated review scenarios<br/>auth | tenant | inputs | bounds | replay"]
+    TestEvidence["Digest-bound passing test evidence"] --> Obligations["Satisfied declared obligations"]
+    Contracts --> Obligations
+
+    Source --> Health["Code-health metrics"]
+    HealthPolicy["code-health-policy.json"] --> Health
+    Source --> Imports["Local import graph"]
+    ArchitecturePolicy["architecture-policy.json"] --> Imports
+    Baseline["Approved architecture edge baseline"] --> Imports
+    Imports --> PolicyFindings["Exact layer and forbidden-edge violations"]
+    Imports --> Heuristics["Cycles | fan-out | hubs | instability | new edges"]
+
+    Scenarios --> Report["1.1 contextual artifacts + summary"]
+    Obligations --> Report
+    Health --> Report
+    PolicyFindings --> Report
+    Heuristics --> Report
+```
+
+Generated scenarios are a test-design queue, not execution evidence. Declared
+architecture-policy violations are exact repository-contract failures;
+complexity, coupling, co-change, and graph topology remain review signals.
 
 ## Validation tiers
 

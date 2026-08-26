@@ -20,7 +20,7 @@ flowchart TD
     Closure["Current closure-plan validation alignment"] --> Gate
     Isolation["Organization-authorized isolation receipt"] --> Gate["release-check"]
     Intel["Exact snapshot approval receipt"] --> Gate
-    Benchmark["Digest-bound effectiveness evaluation"] --> Gate
+    Benchmark["Digest-bound effectiveness evaluation<br/>200 labels | 80 positive | 80 negative<br/>3 engines | 20 per required engine"] --> Gate
     Passport["Authentic Passport verification"] --> Gate
     Policy --> Gate
     Findings --> Gate
@@ -191,11 +191,12 @@ pysec release-check report --format json `
   --effectiveness-evaluation effectiveness-evaluation.json `
   --effectiveness-sha256 EVALUATION_SHA256 `
   --minimum-effectiveness-labels 200 `
-  --minimum-effectiveness-positive-labels 10 `
-  --minimum-effectiveness-negative-labels 10 `
-  --minimum-effectiveness-tools 2 `
-  --minimum-effectiveness-labels-per-tool 2 `
+  --minimum-effectiveness-positive-labels 80 `
+  --minimum-effectiveness-negative-labels 80 `
+  --minimum-effectiveness-tools 3 `
+  --minimum-effectiveness-labels-per-tool 20 `
   --required-effectiveness-tool bandit `
+  --required-effectiveness-tool codeql `
   --required-effectiveness-tool semgrep `
   --passport-verification passport-verification.json `
   --passport-verification-sha256 PASSPORT_RECEIPT_SHA256 `
