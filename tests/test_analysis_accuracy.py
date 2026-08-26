@@ -78,8 +78,17 @@ def test_framework_manifest_requires_bound_canaries_and_completed_engine(
     canary_finding = _finding("semgrep")
     canary_finding.sources[0].rule_id = "framework-rule"
     canary_finding.locations = [Location(path="positive.py", start_line=1)]
+    locationless = _finding("semgrep")
+    locationless.locations = []
+    multiple_paths = _finding("semgrep")
+    multiple_paths.locations = [
+        Location(path="positive.py", start_line=1),
+        Location(path="negative.py", start_line=1),
+    ]
     findings, artifact = framework_model_coverage(
-        tmp_path, [_run("semgrep", ToolStatus.COMPLETED)], [canary_finding]
+        tmp_path,
+        [_run("semgrep", ToolStatus.COMPLETED)],
+        [canary_finding, locationless, multiple_paths],
     )
 
     assert findings == []
@@ -87,6 +96,68 @@ def test_framework_manifest_requires_bound_canaries_and_completed_engine(
     assert artifact["frameworks"][0]["completed_model_engines"] == ["semgrep"]
     assert artifact["qualified_canary_finding_ids"] == ["finding-1"]
     validate_governed_artifacts({"framework-model-coverage.json": artifact})
+
+
+def test_framework_coverage_rejects_unverified_and_malformed_models(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "app.py").write_text("from flask import Flask\n", encoding="utf-8")
+    (tmp_path / "invalid.py").write_text("import (\n", encoding="utf-8")
+    subjects: dict[str, str] = {}
+    for name, payload in (
+        ("model.yml", "models: []\n"),
+        ("positive.py", "unsafe = True\n"),
+        ("negative.py", "unsafe = False\n"),
+    ):
+        (tmp_path / name).write_text(payload, encoding="utf-8")
+        subjects[name] = hashlib.sha256((tmp_path / name).read_bytes()).hexdigest()
+
+    model = {
+        "framework": "flask",
+        "engine": "semgrep",
+        "model_path": "model.yml",
+        "model_sha256": "0" * 64,
+        "positive_canary_path": "positive.py",
+        "positive_canary_sha256": subjects["positive.py"],
+        "negative_canary_path": "negative.py",
+        "negative_canary_sha256": subjects["negative.py"],
+        "expected_rule_ids": ["flask-rule"],
+    }
+    manifest = tmp_path / ".pysec-models.json"
+    manifest.write_text(
+        json.dumps({"schema_version": "1.1", "models": [model]}), encoding="utf-8"
+    )
+    findings, artifact = framework_model_coverage(
+        tmp_path, [_run("semgrep", ToolStatus.COMPLETED)], []
+    )
+    assert "digest verification failed" in findings[0].description
+    assert artifact["parse_errors"] == ["invalid.py: SyntaxError"]
+
+    model["model_sha256"] = subjects["model.yml"]
+    manifest.write_text(
+        json.dumps({"schema_version": "1.1", "models": [model]}), encoding="utf-8"
+    )
+    findings, _ = framework_model_coverage(
+        tmp_path, [_run("semgrep", ToolStatus.COMPLETED)], []
+    )
+    assert "canary outcomes were not observed" in findings[0].description
+
+    manifest.write_text("{", encoding="utf-8")
+    _, artifact = framework_model_coverage(tmp_path, [], [])
+    assert "manifest could not be read" in artifact["manifest_errors"][0]
+
+    manifest.write_text(json.dumps({"schema_version": "1.1"}), encoding="utf-8")
+    _, artifact = framework_model_coverage(tmp_path, [], [])
+    assert artifact["manifest_errors"] == ["manifest fields do not match schema 1.0"]
+
+    invalid_model = dict(model)
+    invalid_model["framework"] = "unknown"
+    manifest.write_text(
+        json.dumps({"schema_version": "1.1", "models": ["invalid", invalid_model]}),
+        encoding="utf-8",
+    )
+    _, artifact = framework_model_coverage(tmp_path, [], [])
+    assert len(artifact["manifest_errors"]) == 2
 
 
 def test_validation_tier_does_not_treat_missing_runtime_as_false_positive() -> None:
@@ -170,6 +241,76 @@ def test_reproducing_tool_without_bound_proof_is_only_runtime_observed() -> None
     assert artifact["summary"]["reproduced"] == 0
 
 
+def test_reproduction_bindings_reject_every_unsealed_proof_dimension() -> None:
+    finding = _finding("iast")
+    long_fingerprint = "x" * 201
+    finding.evidence["cross_tool_corroboration"] = {
+        "independent_perspectives": 2,
+        "observations": [{"fingerprint": long_fingerprint}],
+    }
+    finding.evidence["sarif_code_flows"] = [
+        {
+            "step_count": 2,
+            "steps": [
+                {"path": "src/source.py", "line": 1, "kinds": ["source"]},
+                {"path": "src/app.py", "line": 1},
+            ],
+        }
+    ]
+    valid: dict[str, Any] = {
+        "schema_version": "1.0",
+        "source_sha256": "a" * 64,
+        "finding_fingerprint": finding.fingerprint,
+        "path": "src/app.py",
+        "line": 1,
+        "payload_sha256": "b" * 64,
+        "oracle": "sensitive row returned",
+        "impact_observed": True,
+        "negative_control_passed": True,
+        "environment_sha256": "c" * 64,
+        "deployment_sha256": "d" * 64,
+    }
+
+    def changed(**values: Any) -> dict[str, Any]:
+        return {**valid, **values}
+
+    bindings: list[Any] = [
+        "not-an-object",
+        changed(schema_version="2.0"),
+        changed(source_sha256="f" * 64),
+        changed(finding_fingerprint="not-retained"),
+        changed(finding_fingerprint=long_fingerprint),
+        changed(line=True),
+        changed(payload_sha256="invalid"),
+        changed(oracle=""),
+        changed(impact_observed=False),
+        changed(negative_control_passed=False),
+        valid,
+    ]
+    bindings.extend(["overflow"] * 90)
+    finding.evidence["reproduction_bindings"] = bindings
+
+    artifact = apply_finding_validation(
+        [finding],
+        {
+            "source-inventory.json": {"source_sha256": "a" * 64},
+            "runtime-trace-correlation.json": {
+                "complete": True,
+                "deployment_sha256": "e" * 64,
+                "traces": [None, {"edge_sha256": "missing"}],
+            },
+            "boundary-graph.json": {"edges": []},
+        },
+    )
+
+    validation = finding.evidence["validation"]
+    assert finding.validation_status is ValidationStatus.REPRODUCED
+    assert validation["dimensions"]["attacker_control"] == "established"
+    assert validation["dimensions"]["production_environment_parity"] == "conflicting"
+    assert len(validation["reproduction_bindings_rejected"]) == 100
+    assert artifact["summary"]["reproduced"] == 1
+
+
 def test_code_health_detects_deep_control_flow(tmp_path: Path) -> None:
     conditions = "\n".join(
         f"    {'    ' * index}if value > {index}:" for index in range(7)
@@ -190,13 +331,70 @@ def test_code_health_detects_deep_control_flow(tmp_path: Path) -> None:
     validate_governed_artifacts({"code-health.json": artifact})
 
 
+def test_code_health_covers_size_coupling_and_clone_boundaries(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "invalid.py").write_text("def broken(:\n", encoding="utf-8")
+    oversized_body = "\n".join("    a += 1" for _ in range(101))
+    (tmp_path / "oversized.py").write_text(
+        "def oversized(a, b, c, d, e, f, g, h, i, *args, **kwargs):\n"
+        + oversized_body
+        + "\n    return a\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "giant.py").write_text(
+        "class Giant:\n"
+        + "\n".join(f"    field_{index} = {index}" for index in range(800))
+        + "\n",
+        encoding="utf-8",
+    )
+    copied = (
+        "def copied(value):\n"
+        + "\n".join(f"    value += {index}" for index in range(11))
+        + "\n    return value\n"
+    )
+    (tmp_path / "copy_a.py").write_text(copied, encoding="utf-8")
+    (tmp_path / "copy_b.py").write_text(copied, encoding="utf-8")
+
+    def semantic_clone(name: str, parameter: str, local: str, offset: int) -> str:
+        assignments = "\n".join(
+            f"    {local}_{index} = {parameter} + {index + offset}"
+            for index in range(19)
+        )
+        return f"def {name}({parameter}):\n{assignments}\n    return {local}_18\n"
+
+    (tmp_path / "semantic_a.py").write_text(
+        semantic_clone("calculate", "source", "value", 1), encoding="utf-8"
+    )
+    (tmp_path / "semantic_b.py").write_text(
+        semantic_clone("derive", "input_value", "result", 101), encoding="utf-8"
+    )
+
+    findings, artifact = analyze_code_health(tmp_path)
+
+    kinds = {item["kind"] for item in artifact["issues"]}
+    assert {
+        "duplicate-function",
+        "large-class",
+        "long-function",
+        "parameter-coupling",
+        "semantic-clone",
+    }.issubset(kinds)
+    assert artifact["complete"] is False
+    assert artifact["parse_errors_detected"] == 1
+    assert any(
+        "Matching implementations" in finding.description for finding in findings
+    )
+    validate_governed_artifacts({"code-health.json": artifact})
+
+
 def test_architecture_history_reports_strong_temporal_coupling(tmp_path: Path) -> None:
     (tmp_path / ".git").mkdir()
     (tmp_path / "src").mkdir()
     (tmp_path / "src" / "left.py").write_text("left = 1\n", encoding="utf-8")
     (tmp_path / "src" / "right.py").write_text("right = 1\n", encoding="utf-8")
     payload = "\n".join(
-        f"commit:{index:040x}\nsrc/left.py\nsrc/right.py\n" for index in range(8)
+        f"commit:{index:040x}\nsrc/left.py\nsrc/right.py\n" for index in range(10)
     )
     execution = SimpleNamespace(
         exit_code=0,
@@ -213,12 +411,48 @@ def test_architecture_history_reports_strong_temporal_coupling(tmp_path: Path) -
             "py_security_suite.architecture_history.run_command", return_value=execution
         ),
     ):
-        findings, artifact = architecture_history(tmp_path, [])
+        architecture_finding = _finding("tach")
+        architecture_finding.locations = [Location(path="src/left.py", start_line=1)]
+        findings, artifact = architecture_history(tmp_path, [architecture_finding])
 
     assert artifact["complete"] is True
     assert artifact["temporal_couplings"][0]["coupling_ratio"] == 1.0
+    assert (
+        artifact["temporal_couplings"][0]["overlaps_architecture_contract_violation"]
+        is True
+    )
+    assert artifact["change_risk_hotspots"][0]["path"] == "src/left.py"
     assert findings[0].classifications == ["ARCH-TEMPORAL-COUPLING"]
+    assert findings[-1].classifications == ["ARCH-CHANGE-RISK-HOTSPOT"]
     validate_governed_artifacts({"architecture-history.json": artifact})
+
+
+def test_architecture_history_is_fail_visible_without_usable_git(
+    tmp_path: Path,
+) -> None:
+    findings, artifact = architecture_history(tmp_path, [])
+    assert findings == []
+    assert artifact["complete"] is False
+
+    (tmp_path / ".git").mkdir()
+    execution = SimpleNamespace(
+        exit_code=1,
+        timed_out=False,
+        output_limit_exceeded=False,
+        stdout="",
+    )
+    with (
+        patch(
+            "py_security_suite.architecture_history.resolve_executable",
+            return_value="git",
+        ),
+        patch(
+            "py_security_suite.architecture_history.run_command", return_value=execution
+        ),
+    ):
+        findings, artifact = architecture_history(tmp_path, [])
+    assert findings == []
+    assert artifact["complete"] is False
 
 
 def test_capability_manifest_separates_selection_from_execution() -> None:
@@ -398,6 +632,36 @@ def test_application_contracts_require_deny_and_tenant_isolation_evidence(
     validate_governed_artifacts({"application-contract-analysis.json": artifact})
 
 
+def test_application_contracts_handle_route_variants_and_invalid_source(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "invalid.py").write_text("def invalid(:\n", encoding="utf-8")
+    (tmp_path / "api.py").write_text(
+        "import helpers as support\n"
+        "from services import execute as run\n"
+        "@app.route('/multi', methods=('GET', 'DELETE', 'INVALID'))\n"
+        "async def multi():\n"
+        "    def nested():\n"
+        "        return support.hidden()\n"
+        "    return run()\n"
+        "@app.api_route('/default')\n"
+        "def default_route():\n"
+        "    return support.visible()\n"
+        "@decorator\n"
+        "def ignored():\n"
+        "    return None\n",
+        encoding="utf-8",
+    )
+
+    _, artifact = analyze_application_contracts(tmp_path, {})
+
+    operations = {f"{route['method']} {route['path']}" for route in artifact["routes"]}
+    assert operations == {"DELETE /multi", "GET /default", "GET /multi"}
+    assert artifact["errors"] == ["invalid.py: SyntaxError"]
+    assert artifact["complete"] is False
+    validate_governed_artifacts({"application-contract-analysis.json": artifact})
+
+
 def test_static_architecture_detects_local_dependency_cycle(tmp_path: Path) -> None:
     package = tmp_path / "src" / "sample"
     package.mkdir(parents=True)
@@ -410,6 +674,53 @@ def test_static_architecture_detects_local_dependency_cycle(tmp_path: Path) -> N
     assert artifact["cycles_detected"] == 1
     assert artifact["cycles"][0]["modules"] == ["sample.left", "sample.right"]
     assert findings[0].classifications == ["ARCH-DEPENDENCY-CYCLE"]
+    validate_governed_artifacts({"static-architecture.json": artifact})
+
+
+def test_static_architecture_reports_hubs_instability_fanout_and_new_edges(
+    tmp_path: Path,
+) -> None:
+    package = tmp_path / "src" / "sample"
+    package.mkdir(parents=True)
+    (package / "__init__.py").write_text("", encoding="utf-8")
+    for index in range(13):
+        (package / f"leaf_{index}.py").write_text("", encoding="utf-8")
+    (package / "volatile.py").write_text(
+        "\n".join(f"from . import leaf_{index}" for index in range(13)) + "\n",
+        encoding="utf-8",
+    )
+    (package / "stable.py").write_text("from . import volatile\n", encoding="utf-8")
+    for index in range(21):
+        (package / f"consumer_{index}.py").write_text(
+            "from . import stable\n", encoding="utf-8"
+        )
+    (package / "invalid.py").write_text("from . import\n", encoding="utf-8")
+    baseline = tmp_path / "security" / "baselines"
+    baseline.mkdir(parents=True)
+    baseline_path = baseline / "architecture-edges.json"
+    baseline_path.write_text("{}", encoding="utf-8")
+    _, malformed_artifact = analyze_static_architecture(tmp_path)
+    assert (
+        "security/baselines/architecture-edges.json: ValueError"
+        in (malformed_artifact["parse_errors"])
+    )
+
+    baseline_path.write_text(
+        json.dumps({"schema_version": "1.0", "edges": []}), encoding="utf-8"
+    )
+
+    findings, artifact = analyze_static_architecture(tmp_path)
+
+    classifications = {finding.classifications[0] for finding in findings}
+    assert {
+        "ARCH-EXCESSIVE-MODULE-FANOUT",
+        "ARCH-HIGH-DEGREE-HUB",
+        "ARCH-NEW-DEPENDENCY-EDGE",
+        "ARCH-STABLE-DEPENDS-ON-UNSTABLE",
+    }.issubset(classifications)
+    assert artifact["baseline_present"] is True
+    assert artifact["new_dependency_edges"]
+    assert artifact["parse_errors"] == ["src/sample/invalid.py: SyntaxError"]
     validate_governed_artifacts({"static-architecture.json": artifact})
 
 
