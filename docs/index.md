@@ -115,12 +115,13 @@ platform support, and acquisition requirements.
 | Reachability states | 1,350 executable; 123 load-only; 0 disconnected; 0 reportable islands |
 | Runtime corroboration | Refreshed branch-aware coverage from every unit/property test; static states are not reclassified by runtime evidence |
 | Tests | 665 collected: 664 passed and 1 platform-limited skip; 302 subtests passed |
-| Repository automation | Locked tests on Python 3.11–3.13; explicit security/correctness lint, pedantic workflow audit, mypy, strict dependency audit, package build, CodeQL `security-extended`, and audited Pages deployment |
+| Repository automation | Locked tests on Python 3.11–3.14 with 3.14 Windows/macOS parity; enforced branch and diff coverage, security/correctness lint, mutation assurance, pedantic workflow audit, mypy, strict dependency audit, polyglot CodeQL `security-extended`, and audited Pages deployment |
 | Combined line and branch coverage | 90.07% across 13,486 statements and 4,558 branches; 92.98% statement and 81.48% branch coverage |
 | Changed-line coverage | Recomputed on every scan; uncovered changed executable lines remain explicit in `diff-coverage.json` |
 | Operational portfolio | Execution A; observed risk D; evidence F; the stale Grype database remains an explicit supply-chain evidence gap |
-| Labeled self-scan benchmark | PASS; 1 TP, 1 TN, 0 FP, 0 FN |
+| Labeled self-scan smoke benchmark | PASS; 1 TP, 1 TN, 0 FP, 0 FN; explicitly non-governed and insufficient for production |
 | Bundle behavioral qualification | PASS; 7 TP, 3 TN, 0 FP, 0 FN across Bandit, Semgrep, and detect-secrets; all three executable digests matched |
+| Protected production benchmark | Workflow-enforced schema 2.0 authority, trusted time, replay protection, at least 25 labels, 10 TP, and 10 TN; unavailable until the independent environment supplies its governed corpus |
 
 Each closure self-scan is published beneath `.artifacts/maturity-selfscan-*`
 with an external verification receipt. The artifact is intentionally ignored

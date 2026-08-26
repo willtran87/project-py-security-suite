@@ -19,6 +19,7 @@ classifiers = [
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
   "Topic :: Security",
   "Typing :: Typed",
 ]
@@ -58,9 +59,11 @@ Security = "https://github.com/willtran87/project-py-security-suite/security/pol
 dev = [
   "atheris>=3.1,<4; sys_platform == 'linux' and platform_machine == 'x86_64' and python_version >= '3.12'",
   "coverage[toml]>=7.10,<8",
+  "diff-cover>=10.2,<11",
   "hypothesis>=6.140,<7",
   "hypothesis-jsonschema>=0.23,<0.24",
   "mypy>=1.17,<3",
+  "mutmut>=3.7,<4",
   "pip-audit>=2.9,<3",
   "pyfakefs>=5.9,<7",
   "pytest>=8.4,<10",
@@ -121,8 +124,30 @@ branch = true
 source = ["py_security_suite"]
 
 [tool.coverage.report]
+fail_under = 80
 show_missing = true
 skip_covered = false
+
+[tool.mutmut]
+source_paths = ["src/"]
+only_mutate = [
+  "src/py_security_suite/artifact_validation.py",
+  "src/py_security_suite/confidential_archive.py",
+  "src/py_security_suite/path_safety.py",
+  "src/py_security_suite/strict_json.py",
+]
+pytest_add_cli_args_test_selection = [
+  "tests/test_strict_json.py",
+  "tests/test_path_safety.py",
+  "tests/test_artifact_validation.py",
+  "tests/test_confidential_archive.py",
+]
+pytest_add_cli_args = ["-p", "no:randomly", "--disable-socket", "-q"]
+mutate_only_covered_lines = true
+do_not_mutate_patterns = [
+  "src/py_security_suite/__init__.py",
+  "src/py_security_suite/__main__.py",
+]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

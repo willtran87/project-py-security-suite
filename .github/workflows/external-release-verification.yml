@@ -1,0 +1,111 @@
+name: Independent provider release verification
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_run_id:
+        description: Successful release-assurance workflow run ID
+        required: true
+        type: string
+      expected_head_sha:
+        description: Exact 40-character source commit to rebuild
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: independent-release-${{ inputs.expected_head_sha }}
+  cancel-in-progress: false
+
+jobs:
+  independent-provider:
+    name: Protected independent provider rebuild
+    environment: independent-release-verification
+    runs-on: [self-hosted, linux, x64, pysec-independent-builder]
+    timeout-minutes: 60
+    permissions:
+      actions: read # Read and download the referenced release workflow run.
+      attestations: write # Attest the independently rebuilt exact wheel.
+      contents: read
+      id-token: write # Exchange protected workflow identity for provenance signing.
+    env:
+      EXPECTED_HEAD_SHA: ${{ inputs.expected_head_sha }}
+      RELEASE_RUN_ID: ${{ inputs.release_run_id }}
+      APPROVED_UV_SHA256: ${{ vars.PYSEC_INDEPENDENT_UV_SHA256 }}
+      APPROVED_GH_SHA256: ${{ vars.PYSEC_INDEPENDENT_GH_SHA256 }}
+      APPROVED_PYTHON_SHA256: ${{ vars.PYSEC_INDEPENDENT_PYTHON_SHA256 }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Validate immutable dispatch inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$RELEASE_RUN_ID" =~ ^[1-9][0-9]*$ ]]
+      - name: Check out the exact source commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.expected_head_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify provider-controlled tool identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          for value in "$APPROVED_UV_SHA256" "$APPROVED_GH_SHA256" "$APPROVED_PYTHON_SHA256"; do
+            [[ "$value" =~ ^[0-9a-f]{64}$ ]]
+          done
+          [[ "$(sha256sum "$(command -v uv)" | cut -d' ' -f1)" == "$APPROVED_UV_SHA256" ]]
+          [[ "$(sha256sum "$(command -v gh)" | cut -d' ' -f1)" == "$APPROVED_GH_SHA256" ]]
+          [[ "$(sha256sum "$(command -v python3)" | cut -d' ' -f1)" == "$APPROVED_PYTHON_SHA256" ]]
+          [[ "$(git rev-parse HEAD)" == "$EXPECTED_HEAD_SHA" ]]
+      - name: Verify the referenced release run
+        shell: bash
+        run: |
+          set -euo pipefail
+          run="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RELEASE_RUN_ID")"
+          [[ "$(jq -r .head_sha <<< "$run")" == "$EXPECTED_HEAD_SHA" ]]
+          [[ "$(jq -r .conclusion <<< "$run")" == "success" ]]
+          [[ "$(jq -r .path <<< "$run")" == ".github/workflows/release-assurance.yml" ]]
+          [[ "$(jq -r .run_attempt <<< "$run")" == "1" ]]
+      - name: Download and verify the canonical artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .artifacts/download .artifacts/canonical
+          gh run download "$RELEASE_RUN_ID" --name release-artifacts --dir .artifacts/download
+          mapfile -t wheels < <(find .artifacts/download -type f -name '*.whl')
+          mapfile -t sdists < <(find .artifacts/download -type f -name '*.tar.gz')
+          [[ "${#wheels[@]}" == 1 && "${#sdists[@]}" == 1 ]]
+          cp "${wheels[0]}" "${sdists[0]}" .artifacts/canonical/
+          for artifact in .artifacts/canonical/*; do
+            gh attestation verify "$artifact" --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release-assurance.yml" \
+              --source-digest "$EXPECTED_HEAD_SHA"
+          done
+          python3 -I scripts/verify_release_independent.py .artifacts/canonical \
+            --source-date-epoch "$(git show -s --format=%ct HEAD)" \
+            --output .artifacts/independent-canonical-verification.json
+      - name: Rebuild the wheel on the independent provider
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv build --wheel --no-sources --out-dir .artifacts/independent
+          canonical="$(find .artifacts/canonical -type f -name '*.whl')"
+          rebuilt="$(find .artifacts/independent -type f -name '*.whl')"
+          [[ "$(basename "$canonical")" == "$(basename "$rebuilt")" ]]
+          [[ "$(sha256sum "$canonical" | cut -d' ' -f1)" == "$(sha256sum "$rebuilt" | cut -d' ' -f1)" ]]
+      - name: Attest the third-provider wheel
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        with:
+          subject-path: .artifacts/independent/*.whl
+      - name: Retain independent verification evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: independent-release-verification-${{ inputs.expected_head_sha }}
+          path: |
+            .artifacts/independent
+            .artifacts/independent-canonical-verification.json
+          if-no-files-found: error
+          retention-days: 180

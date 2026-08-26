@@ -2,24 +2,36 @@ version: 2
 updates:
   - package-ecosystem: github-actions
     directory: /
+    groups:
+      github-actions:
+        patterns: ["*"]
     cooldown:
       default-days: 7
     schedule:
       interval: weekly
   - package-ecosystem: pip
     directory: /
+    groups:
+      root-python:
+        patterns: ["*"]
     cooldown:
       default-days: 7
     schedule:
       interval: weekly
   - package-ecosystem: pip
     directory: /docs
+    groups:
+      documentation-python:
+        patterns: ["*"]
     cooldown:
       default-days: 7
     schedule:
       interval: weekly
   - package-ecosystem: pip
     directory: /companion
+    groups:
+      companion-python:
+        patterns: ["*"]
     cooldown:
       default-days: 7
     schedule:

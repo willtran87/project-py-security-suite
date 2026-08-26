@@ -1,6 +1,6 @@
 # Production security gate
 
-Last reviewed: 2026-08-21
+Last reviewed: 2026-08-25
 
 ## Purpose
 
@@ -29,17 +29,26 @@ launched process token to prove AppContainer membership and zero capabilities,
 then proves denial of multiple host-file canaries and loopback network access;
 Job Object resource controls remain a separate availability mechanism.
 
-- the locked test environment runs on Python 3.11, 3.12, and 3.13;
+- the locked test environment runs on Python 3.11 through 3.14 on Linux, with
+  Python 3.14 parity lanes on Windows and macOS;
+- the full suite enforces at least 80% combined line/branch coverage, and pull
+  requests enforce at least 90% coverage on changed executable lines;
 - an explicit Ruff baseline covers correctness, async hazards, common bugs,
   broad exception handling, and Bandit-derived security rules;
 - zizmor audits every GitHub workflow with its pedantic ruleset;
 - mypy checks production source and the Pages audit hooks;
 - `pip-audit` evaluates platform-resolved, hash-pinned exports of both the
   scanner and companion locked dependency graphs on Linux, Windows, and macOS
-  with Python 3.11 and 3.13, excluding only the unpublished local projects;
-- distributions are built from the locked checkout; and
-- CodeQL runs the Python `security-extended` query suite and uploads SARIF to
-  GitHub code scanning.
+  with Python 3.11, 3.13, and 3.14, excluding only the unpublished local projects;
+- distributions are built from the locked checkout;
+- CodeQL runs the Python `security-extended` query suite, discovers every
+  supported non-Python source language, selects no-build or autobuild extraction
+  as required, and uploads separately categorized SARIF;
+- daily parser fuzzing exercises binary ZIP/TAR structure, defused XML, strict
+  JSON, SARIF, and every evidence adapter with cross-invocation state checks;
+  evolved corpora are retained for 180 days; and
+- weekly deep assurance builds and self-scans the scanner container and
+  mutation-tests security-critical archive, path, artifact, and JSON code.
 
 Secret-bearing findings cross an additional fail-closed boundary before
 correlation or derived analysis: scanner-controlled titles, descriptions,
@@ -54,6 +63,30 @@ concurrency cancels superseded work. Dependabot covers GitHub Actions, the root
 Python lock, the companion runtime lock, and the separately hashed documentation environment with a
 seven-day version-update cooldown. Security updates are not a replacement for
 the locked dependency audit.
+
+## Protected external controls
+
+Three workflows intentionally remain inert until their fixed GitHub
+Environments, reviewers, runner labels, variables, and secrets are configured:
+
+- `external-security-assurance.yml` requires an organization-hashed isolation
+  verifier, a complete native production bundle, a separately governed
+  schema-2.0 holdout corpus, trusted time, a consume-once replay service, and an
+  allowlisted active-test target. It directly runs stateful Schemathesis and
+  requires an approved producer to execute Nuclei, ZAP, RESTler, OAST, IAST,
+  and MobSF before their raw output crosses the bounded normalizers.
+- `external-release-verification.yml` runs only on a protected
+  `pysec-independent-builder` runner. It hashes the provider-controlled Python,
+  `uv`, and GitHub CLI, verifies the exact upstream run and attestations, then
+  requires a third wheel build to match byte-for-byte.
+- `publish-pypi.yml` runs only behind `pypi-production`. It requires separately
+  approved wheel/sdist hashes, verifies provenance and archive internals, uses
+  PyPI Trusted Publishing, downloads both public files, rechecks their hashes,
+  and installs and executes the exact public wheel.
+
+Missing protected configuration is a hard failure. Repository code cannot
+provision an independent provider, approve its own target or holdout corpus, or
+review its own publication; these workflows enforce the handoff contract.
 
 ## Release flow
 

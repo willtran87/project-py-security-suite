@@ -1,0 +1,223 @@
+name: Protected production and dynamic security assurance
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_head_sha:
+        description: Exact 40-character source commit under test
+        required: true
+        type: string
+      target_base_url:
+        description: Environment-approved HTTPS target for active testing
+        required: true
+        type: string
+      schema_url:
+        description: HTTPS OpenAPI schema URL on an approved host
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: protected-security-${{ inputs.expected_head_sha }}
+  cancel-in-progress: false
+
+jobs:
+  isolated-production-scan:
+    name: Externally enforced production self-scan
+    environment: production-security-isolation
+    runs-on: [self-hosted, windows, x64, pysec-isolated]
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    env:
+      EXPECTED_HEAD_SHA: ${{ inputs.expected_head_sha }}
+      APPROVED_TOOL_ROOT: ${{ vars.PYSEC_APPROVED_TOOL_ROOT }}
+      ISOLATION_VERIFIER_SHA256: ${{ vars.PYSEC_ISOLATION_VERIFIER_SHA256 }}
+      GOVERNED_CORPUS_PATH: ${{ vars.PYSEC_GOVERNED_CORPUS_PATH }}
+      GOVERNED_CORPUS_SHA256: ${{ vars.PYSEC_GOVERNED_CORPUS_SHA256 }}
+      TRUSTED_TIME_PATH: ${{ vars.PYSEC_EFFECTIVENESS_TRUSTED_TIME_PATH }}
+      TRUSTED_TIME_SHA256: ${{ vars.PYSEC_EFFECTIVENESS_TRUSTED_TIME_SHA256 }}
+      REPLAY_SERVICE_URL: ${{ vars.PYSEC_EFFECTIVENESS_REPLAY_SERVICE_URL }}
+      REPLAY_RECEIPT_KEY_PATH: ${{ vars.PYSEC_EFFECTIVENESS_REPLAY_RECEIPT_KEY_PATH }}
+      REPLAY_RECEIPT_KEY_SHA256: ${{ vars.PYSEC_EFFECTIVENESS_REPLAY_RECEIPT_KEY_SHA256 }}
+      PYSEC_EFFECTIVENESS_REPLAY_TOKEN: ${{ secrets.PYSEC_EFFECTIVENESS_REPLAY_TOKEN }}
+    steps:
+      - name: Validate immutable dispatch input
+        shell: pwsh
+        run: |
+          if ($env:EXPECTED_HEAD_SHA -notmatch '^[0-9a-f]{40}$') {
+            throw "expected_head_sha must be a lowercase commit SHA"
+          }
+      - name: Check out the exact source commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.expected_head_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify the independent network-isolation authority
+        shell: pwsh
+        run: |
+          if ($env:ISOLATION_VERIFIER_SHA256 -notmatch '^[0-9a-f]{64}$') {
+            throw "The protected isolation verifier digest is missing or invalid."
+          }
+          $command = (Get-Command enterprise-verify-pysec-isolation.exe -ErrorAction Stop).Source
+          $digest = (Get-FileHash -Algorithm SHA256 -LiteralPath $command).Hash.ToLowerInvariant()
+          if ($digest -ne $env:ISOLATION_VERIFIER_SHA256) {
+            throw "The isolation verifier executable is not organization-approved."
+          }
+          New-Item -ItemType Directory -Force .artifacts | Out-Null
+          & $command --expected-commit $env:EXPECTED_HEAD_SHA `
+            --require-egress-deny --require-read-only-source `
+            --output .artifacts/isolation-attestation.json
+          if ($LASTEXITCODE -ne 0) {
+            throw "Independent isolation verification failed."
+          }
+      - name: Execute the complete production profile
+        shell: pwsh
+        run: |
+          if (-not $env:APPROVED_TOOL_ROOT) {
+            throw "PYSEC_APPROVED_TOOL_ROOT is not configured in the protected environment."
+          }
+          ./scripts/run-native-scan.ps1 -Target . `
+            -Output .artifacts/production-self-scan `
+            -ToolRoot $env:APPROVED_TOOL_ROOT `
+            -ScanProfile production -NetworkIsolated
+          if ($LASTEXITCODE -ne 0) {
+            throw "The production self-scan did not pass."
+          }
+      - name: Require a nontrivial governed holdout benchmark
+        shell: pwsh
+        run: |
+          foreach ($digest in @(
+            $env:GOVERNED_CORPUS_SHA256,
+            $env:TRUSTED_TIME_SHA256,
+            $env:REPLAY_RECEIPT_KEY_SHA256
+          )) {
+            if ($digest -notmatch '^[0-9a-f]{64}$') {
+              throw "A governed benchmark digest is missing or invalid."
+            }
+          }
+          $python = Join-Path $env:APPROVED_TOOL_ROOT "Scripts\python.exe"
+          & $python -m py_security_suite benchmark `
+            .artifacts/production-self-scan `
+            --corpus $env:GOVERNED_CORPUS_PATH `
+            --corpus-sha256 $env:GOVERNED_CORPUS_SHA256 `
+            --trusted-time $env:TRUSTED_TIME_PATH `
+            --trusted-time-sha256 $env:TRUSTED_TIME_SHA256 `
+            --replay-service-url $env:REPLAY_SERVICE_URL `
+            --replay-service-token-env PYSEC_EFFECTIVENESS_REPLAY_TOKEN `
+            --replay-service-receipt-key $env:REPLAY_RECEIPT_KEY_PATH `
+            --replay-service-receipt-key-sha256 $env:REPLAY_RECEIPT_KEY_SHA256 `
+            --replay-query-budget 1 --format json `
+            --output .artifacts/governed-effectiveness.json
+          if ($LASTEXITCODE -ne 0) {
+            throw "The governed effectiveness benchmark failed."
+          }
+          $evaluation = Get-Content -Raw .artifacts/governed-effectiveness.json |
+            ConvertFrom-Json
+          if ($evaluation.schema_version -ne "2.0" -or
+              $evaluation.verdict -ne "pass" -or
+              $evaluation.corpus.labels -lt 25 -or
+              $evaluation.confusion_matrix.true_positive -lt 10 -or
+              $evaluation.confusion_matrix.true_negative -lt 10 -or
+              -not $evaluation.corpus.authority.validated -or
+              -not $evaluation.time_authority.validated -or
+              -not $evaluation.replay_protected) {
+            throw "The governed benchmark did not meet the production minimums."
+          }
+      - name: Retain external isolation and production evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: protected-production-assurance-${{ inputs.expected_head_sha }}
+          path: |
+            .artifacts/isolation-attestation.json
+            .artifacts/production-self-scan
+            .artifacts/governed-effectiveness.json
+          if-no-files-found: error
+          retention-days: 180
+
+  authorized-dynamic-analysis:
+    name: Active API and runtime security producers
+    environment: authorized-dynamic-security
+    runs-on: [self-hosted, linux, x64, pysec-dynamic]
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    env:
+      EXPECTED_HEAD_SHA: ${{ inputs.expected_head_sha }}
+      TARGET_BASE_URL: ${{ inputs.target_base_url }}
+      SCHEMA_URL: ${{ inputs.schema_url }}
+      ALLOWED_HOSTS: ${{ vars.PYSEC_DYNAMIC_ALLOWED_HOSTS }}
+      PRODUCER_SHA256: ${{ vars.PYSEC_DYNAMIC_PRODUCER_SHA256 }}
+      PYSEC_DYNAMIC_AUTH_HEADER: ${{ secrets.PYSEC_DYNAMIC_AUTH_HEADER }}
+    steps:
+      - name: Check out the exact source commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.expected_head_sha }}
+          persist-credentials: false
+      - name: Validate target authorization and tool identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          import re
+          from urllib.parse import urlsplit
+
+          if not re.fullmatch(r"[0-9a-f]{40}", os.environ["EXPECTED_HEAD_SHA"]):
+              raise SystemExit("expected_head_sha must be a lowercase commit SHA")
+          allowed = {item.strip().casefold() for item in os.environ["ALLOWED_HOSTS"].split(",") if item.strip()}
+          if not allowed:
+              raise SystemExit("the protected target host allowlist is empty")
+          for label in ("TARGET_BASE_URL", "SCHEMA_URL"):
+              parsed = urlsplit(os.environ[label])
+              if parsed.scheme != "https" or not parsed.hostname or parsed.hostname.casefold() not in allowed:
+                  raise SystemExit(f"{label} is not an allowlisted HTTPS target")
+              if parsed.username or parsed.password or parsed.fragment:
+                  raise SystemExit(f"{label} contains forbidden URL components")
+          PY
+          [[ "$PRODUCER_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          producer="$(command -v enterprise-run-pysec-dynamic-assurance)"
+          [[ "$(sha256sum "$producer" | cut -d' ' -f1)" == "$PRODUCER_SHA256" ]]
+      - name: Install locked first-party dynamic dependencies
+        run: uv sync --project companion --locked --all-groups --python "3.13"
+      - name: Execute stateful OpenAPI generation directly
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .artifacts/dynamic/raw .artifacts/dynamic/normalized
+          arguments=(--no-color run "$SCHEMA_URL" --url "$TARGET_BASE_URL" \
+            --phases examples,coverage,fuzzing,stateful --workers 4 \
+            --report junit,ndjson \
+            --report-junit-path .artifacts/dynamic/schemathesis-junit.xml \
+            --report-ndjson-path .artifacts/dynamic/schemathesis.ndjson)
+          if [[ -n "$PYSEC_DYNAMIC_AUTH_HEADER" ]]; then
+            arguments+=(--header "$PYSEC_DYNAMIC_AUTH_HEADER")
+          fi
+          uv run --project companion --frozen st "${arguments[@]}"
+      - name: Execute approved authenticated DAST and runtime producers
+        shell: bash
+        run: |
+          set -euo pipefail
+          enterprise-run-pysec-dynamic-assurance \
+            --target "$TARGET_BASE_URL" --schema "$SCHEMA_URL" \
+            --expected-commit "$EXPECTED_HEAD_SHA" \
+            --output .artifacts/dynamic/raw \
+            --require-tools nuclei,zap,restler,oast,datadog-iast,mobsf
+          for tool in nuclei zap restler oast datadog-iast mobsf; do
+            test -s ".artifacts/dynamic/raw/$tool.json"
+            uv run --project companion --frozen python companion/tool_normalizers.py \
+              --tool "$tool" --input ".artifacts/dynamic/raw/$tool.json" \
+              --output ".artifacts/dynamic/normalized/$tool.json"
+          done
+      - name: Retain active security evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: protected-dynamic-assurance-${{ inputs.expected_head_sha }}
+          path: .artifacts/dynamic
+          if-no-files-found: error
+          retention-days: 180

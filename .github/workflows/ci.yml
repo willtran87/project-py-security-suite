@@ -222,13 +222,25 @@ jobs:
           tests/integration/test_browser_live.py
 
   test:
-    name: Test Python ${{ matrix.python-version }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+    name: Test ${{ matrix.os }} / Python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12", "3.13"]
+        include:
+          - os: ubuntu-latest
+            python-version: "3.11"
+          - os: ubuntu-latest
+            python-version: "3.12"
+          - os: ubuntu-latest
+            python-version: "3.13"
+          - os: ubuntu-latest
+            python-version: "3.14"
+          - os: windows-latest
+            python-version: "3.14"
+          - os: macos-latest
+            python-version: "3.14"
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -243,11 +255,58 @@ jobs:
             uv.lock
             companion/uv.lock
       - name: Install locked dependencies
+        shell: bash
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
         run: uv sync --locked --all-groups --python "$PYTHON_VERSION"
       - name: Run tests
         run: uv run --frozen pytest -q
+
+  test-assurance:
+    name: Branch and changed-line coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out full source history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.11.19"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - name: Install locked assurance dependencies
+        run: uv sync --locked --all-groups --python "3.14"
+      - name: Execute the complete suite with branch coverage
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .artifacts/test-assurance
+          uv run --frozen coverage erase
+          uv run --frozen coverage run --branch -m pytest -q \
+            --junitxml=.artifacts/test-assurance/junit.xml
+          uv run --frozen coverage xml \
+            -o .artifacts/test-assurance/coverage.xml
+          uv run --frozen coverage report --fail-under=80
+      - name: Require 90 percent changed-line coverage
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        shell: bash
+        run: >-
+          uv run --frozen diff-cover .artifacts/test-assurance/coverage.xml
+          --compare-branch "origin/$BASE_REF" --fail-under=90
+      - name: Retain test-assurance evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: test-assurance-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .artifacts/test-assurance
+          if-no-files-found: error
+          retention-days: 90
 
   quality:
     name: Quality and dependency audit
@@ -277,8 +336,10 @@ jobs:
       - name: Check types
         run: >-
           uv run --frozen mypy src companion scripts/audit_pages.py
+          scripts/discover_codeql_languages.py scripts/fuzz_security_parsers.py
           scripts/mkdocs_hooks.py scripts/validate-checkpoint-authority.py
           scripts/validate-native-attestation-fixtures.py
+          scripts/verify_release_independent.py
       - name: Build distributions
         run: uv build --no-sources
 
@@ -290,7 +351,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        python-version: ["3.11", "3.13"]
+        python-version: ["3.11", "3.13", "3.14"]
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -343,6 +404,7 @@ jobs:
       - companion-service-integration
       - companion-browser-integration
       - test
+      - test-assurance
       - quality
       - dependency-audit
     runs-on: ubuntu-latest
