@@ -1,7 +1,7 @@
 # Python Security Suite design
 
 Status: alpha foundation  
-Last reviewed: 2026-08-13
+Last reviewed: 2026-08-26
 
 ## Purpose
 
@@ -42,13 +42,16 @@ flowchart LR
         Install["install-native-tools.ps1<br/>hash verification + pip --no-index"]
         Project["Python project<br/>read-only by policy"]
         Suite["Python Security Suite"]
-        Scanners["64 governed adapters<br/>security | quality | testing | policy | architecture | supply chain | artifact | governance"]
-        Reports["Markdown | HTML | SARIF | SonarQube | JSON<br/>SBOM + delta + intelligence + Security Passport"]
+        Scanners["88 governed adapters<br/>security | quality | testing | policy | architecture | supply chain | artifact | governance"]
+        Analyzers["Native contextual analyzers<br/>framework | contract | validation | health | architecture"]
+        Reports["Markdown | HTML | SARIF | SonarQube | JSON<br/>SBOM + validation + architecture + Security Passport"]
         Contracts["Version-explicit JSON Schemas<br/>installed package resources"]
         Install --> Suite
         Project --> Suite
         Suite --> Scanners
         Scanners --> Suite
+        Suite --> Analyzers
+        Analyzers --> Suite
         Suite --> Reports
         Suite --> Contracts
     end
@@ -60,6 +63,42 @@ flowchart LR
     Reports --> GitHub
     Contracts --> GitHub
 ```
+
+The adapter portfolio and the native contextual analyzers are different
+layers. Adapters acquire or normalize independent tool and companion evidence;
+native analyzers operate on the sealed source snapshot and retained artifacts.
+`capability-manifest.json` records the former's selection and execution truth,
+while the contextual artifacts state their own bounded inputs, parse errors,
+and completeness.
+
+### Contextual analysis and validation
+
+```mermaid
+flowchart TB
+    Source["Sealed source snapshot"] --> Frameworks["Framework model coverage<br/>models + positive/negative canaries"]
+    Source --> Contracts["Application contracts<br/>code/OpenAPI/auth + exact advisory calls"]
+    Source --> Health["Code health<br/>complexity + size + semantic clones"]
+    Source --> Architecture["Static architecture<br/>cycles + hubs + instability + new edges"]
+    History["Bounded sealed Git history"] --> Temporal["Architecture history<br/>co-change + finding hotspots"]
+    ToolEvidence["Normalized scanner evidence"] --> Correlate["Finding correlation"]
+    Frameworks --> Correlate
+    Contracts --> Correlate
+    Health --> Correlate
+    Architecture --> Correlate
+    Temporal --> Correlate
+    Correlate --> Validation["Finding validation<br/>independent proof dimensions"]
+    Runtime["Digest-bound runtime and reproduction evidence"] --> Validation
+    Validation --> Policy["Policy + closure ownership"]
+    Capabilities["Profile intent + tool runs"] --> Manifest["Capability manifest"]
+    Manifest --> Policy
+```
+
+Framework and contract analysis run for every profile so model and behavioral
+gaps stay visible. Code health, static architecture, and architecture history
+run for `audit`, `quality`, `repo`, `comprehensive`, `production`, and `release`.
+Validation does not convert structural inference into exploitability: attacker
+control, path confirmation, runtime execution, harmful effect, reproduction,
+and production parity remain independent dimensions.
 
 ### Evidence-plane-aware route synthesis
 

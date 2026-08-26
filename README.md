@@ -76,8 +76,12 @@ flowchart LR
         Project["Python project"] --> Doctor["Preflight applicability and trust"]
         Doctor --> Plan["Offline provisioning plan"]
         Plan --> Scan["Run applicable adapters"]
-        Scan --> Findings["Normalize and correlate"]
-        Findings --> Policy["PASS | WARN | FAIL | INCOMPLETE"]
+        Scan --> ToolEvidence["Scanner findings + native evidence"]
+        Scan --> Context["Context analyzers<br/>frameworks | contracts | code health | architecture"]
+        ToolEvidence --> Findings["Normalize and correlate"]
+        Context --> Findings
+        Findings --> Validate["Multi-axis validation<br/>candidate to reproduced"]
+        Validate --> Policy["PASS | WARN | FAIL | INCOMPLETE"]
         Policy --> Reports["Seal reports and evidence"]
         Reports --> Pack["Atomic evidence pack<br/>role views + audit archive"]
     end
@@ -731,6 +735,13 @@ python-security-report/
 |-- structural-synthesis.json        # dead code, island boundaries, change risk, and graph-guided tests
 |-- data-exposure.json               # prioritized disclosure paths joined with graph, coverage, reachability, and fusion
 |-- evidence-fusion.json             # cross-scanner, advisory-alias, and source/artifact evidence joins
+|-- finding-validation.json          # independent proof dimensions plus conservative compatibility tier
+|-- framework-model-coverage.json    # detected frameworks, model identities, canaries, and engine completion
+|-- application-contract-analysis.json # code/OpenAPI/auth drift and exact vulnerable-symbol calls
+|-- capability-manifest.json         # portfolio, profile intent, applicability, completion, and execution gaps
+|-- code-health.json                 # structural profiles: complexity, size, coupling, and duplicate ASTs
+|-- static-architecture.json         # structural profiles: import cycles, hubs, instability, and edge regressions
+|-- architecture-history.json        # structural profiles: bounded co-change and finding-overlaid hotspots
 |-- coverage-summary.json           # validated pre-generated test coverage
 |-- junit-summary.json              # bounded output-free test case/file/result ledger
 |-- reuse-compliance.json           # when a REUSE marker opts the repo in

@@ -1,6 +1,6 @@
 # Production security gate
 
-Last reviewed: 2026-08-25
+Last reviewed: 2026-08-26
 
 ## Purpose
 
@@ -44,8 +44,9 @@ Job Object resource controls remain a separate availability mechanism.
 - CodeQL runs the Python `security-extended` query suite, discovers every
   supported non-Python source language, selects no-build or autobuild extraction
   as required, and uploads separately categorized SARIF;
-- daily parser fuzzing exercises binary ZIP/TAR structure, defused XML, strict
-  JSON, SARIF, and every evidence adapter with cross-invocation state checks;
+- pull-request, main-branch, and daily parser fuzzing exercise a discovered
+  93-target matrix covering binary ZIP/TAR structure, defused XML, strict JSON,
+  SARIF, and every evidence adapter with cross-invocation state checks;
   evolved corpora are retained for 180 days; and
 - weekly deep assurance builds and self-scans the scanner container and
   mutation-tests security-critical archive, path, artifact, and JSON code.
@@ -92,16 +93,18 @@ review its own publication; these workflows enforce the handoff contract.
 
 ```mermaid
 flowchart LR
-    Clone["Full immutable VCS checkout"] --> Static["Production profile<br/>offline static gate"]
+    Clone["Full immutable VCS checkout"] --> Static["Production profile<br/>offline static + contextual analysis"]
     Lock["Approved dependency lock<br/>and advisory snapshots"] --> Static
     Static --> Build["Hermetic build"]
     Build --> Artifact["Final wheel, image, or deployment artifact"]
     Artifact --> ArtifactScan["Release profile<br/>SBOM | vulnerability | structure | provenance"]
     Artifact --> Dynamic["Sandboxed tests, property testing,<br/>fuzzing, and applicable DAST"]
     ArtifactScan --> Provenance["Digest, signature, and<br/>SLSA/in-toto provenance"]
-    Dynamic --> Decision{"Risk owner<br/>approves release?"}
+    Artifact --> External["Independent build and release verification"]
+    Dynamic --> Decision{"Protected reviewer and<br/>risk owner approve?"}
     Provenance --> Decision
     Static --> Decision
+    External --> Decision
     Decision -->|All evidence passes| Promote["Production promotion"]
     Decision -->|Finding or missing evidence| Stop["Block release"]
 ```
@@ -178,7 +181,7 @@ Passport evidence. See [Governed release readiness](release-readiness.md).
 
 | Layer | Suite coverage | Required production companion |
 |---|---|---|
-| Python source and structure | Bandit, Semgrep, Ruff, Pylint, mypy, Pyright, deptry, Vulture, Radon, Tach, reachability, Pysa, CodeQL through `run-codeql` | Review configured dynamic roots, unreachable-island candidates, sensitive business logic, authorization, and intentional architecture changes |
+| Python source and structure | Bandit, Semgrep, Ruff, Pylint, mypy, Pyright, deptry, Vulture, Radon, Tach, reachability, Pysa, CodeQL through `run-codeql`, framework-model canaries, code/OpenAPI/auth contract drift, exact vulnerable-symbol calls, cognitive complexity and semantic clones, import cycles/hubs/instability, and bounded co-change hotspots | Review configured dynamic roots, reflection and runtime dispatch, business-logic and authorization abuse, architectural intent, and independently labeled false-negative/false-positive holdouts |
 | Secrets | detect-secrets, Gitleaks, and TruffleHog | Full history, rotation workflow, and secret-manager controls |
 | Sensitive-data disclosure | Semgrep taint/configuration rules, organization Pysa/CodeQL models, Graphify, reachability, and SDK/sink inventory | Logging, telemetry, request-body, URL-query, client-error, and automatic-PII minimization; approved transforms, third-party boundaries, retention, and synthetic-canary verification |
 | Dependencies | OSV-Scanner, GuardDog, CycloneDX | Governed lock updates, advisory freshness SLA, dependency-owner review, and a raw-output-bound OSV receipt naming and hashing every covered manifest |

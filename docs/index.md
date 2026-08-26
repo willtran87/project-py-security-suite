@@ -1,6 +1,6 @@
 # Python Security Suite documentation
 
-Last reviewed: 2026-08-25
+Last reviewed: 2026-08-26
 
 This directory is the canonical documentation set. The suite is offline-first:
 tool and data acquisition happens in a connected preparation lane; scanning and
@@ -54,8 +54,12 @@ flowchart LR
         Transfer --> Doctor["pysec doctor"]
         Repo["Python repository"] --> Doctor
         Doctor --> Scan["88-adapter applicability-aware portfolio"]
-        Scan --> Normalize["Normalize, correlate, classify, and own"]
-        Normalize --> Leverage["Typed evidence graph<br/>controls, taint, artifacts, privacy, trust"]
+        Scan --> Normalize["Normalize scanner evidence"]
+        Scan --> Native["Native contextual analysis<br/>frameworks, contracts, health, architecture"]
+        Normalize --> Correlate["Correlate, classify, and own"]
+        Native --> Correlate
+        Correlate --> Validate["Multi-axis finding validation"]
+        Validate --> Leverage["Typed evidence graph<br/>controls, taint, artifacts, privacy, trust"]
         Leverage --> Gate["Policy decision"]
         Gate --> Seal["Checksum-sealed report"]
     end
@@ -96,11 +100,29 @@ the same observation as multiple independent risk votes. See the
 [compatibility matrix](compatibility-matrix.md) for all adapters, applicability,
 platform support, and acquisition requirements.
 
-## Current verified source assurance and scan baseline
+## Implementation snapshot
+
+The implementation currently defines 88 governed adapters and 16 profiles.
+`comprehensive` and `release` select all 88; `production` selects 75; and the
+non-target-executing `audit` profile selects 44 static, architecture,
+reachability, and repository-health perspectives. Generated capability evidence
+keeps portfolio availability, profile intent, target applicability, and actual
+completion separate.
+
+Every scan emits finding validation, framework-model coverage, application
+contract analysis, and a capability manifest. `audit`, `quality`, `repo`,
+`comprehensive`, `production`, and `release` additionally emit code-health,
+static-architecture, and bounded architecture-history evidence.
+
+## Retained verified assurance baselines
+
+The following values describe named, retained evidence artifacts. They are not
+silently relabeled as measurements of the latest source revision; regenerate a
+self-scan to establish a new baseline.
 
 | Measure | Verified result |
 |---|---:|
-| Profile | `comprehensive` |
+| Retained scan profile | `comprehensive` (64-tool composition at the time of capture) |
 | Selected adapters | 64 |
 | Applicable and completed | 37 / 38 |
 | Correctly not applicable | 26 |
@@ -217,9 +239,9 @@ and zero findings on the safe negative control.
 | Sensitive-data exposure | [1.5](../src/py_security_suite/schemas/data-exposure-1.5.schema.json) | CWE-grounded source-to-sink findings, recursive monorepo SDK discovery, local data-class propagation, trust-boundary and protection context, evidence-fusion feedback, and coverage/reachability/runtime/graph/ownership/mapped-test/executed-test/coverage-alignment/change-risk/SDK-package-lineage/advisory-remediation cross-references for confirmed findings and inventory-only review surfaces; 1.4, 1.3, 1.2, 1.1, and 1.0 remain bundled |
 | Finding validation | [1.0](../src/py_security_suite/schemas/finding-validation-1.0.schema.json) | Conservative compatibility tiers plus independent evidence dimensions and exact reproduction-proof bindings |
 | Framework model coverage | [1.0](../src/py_security_suite/schemas/framework-model-coverage-1.0.schema.json) | Detected framework imports joined to digest-bound models, executed positive/negative expected-rule canaries, and completed engines |
-| Application contract analysis | [1.0](../src/py_security_suite/schemas/application-contract-analysis-1.0.schema.json) | Code/OpenAPI drift, authorization regression, declared behavioral-test obligations, and exact advisory-function AST calls |
-| Code health | [1.0](../src/py_security_suite/schemas/code-health-1.0.schema.json) | Bounded cognitive complexity, size, coupling, and duplicate-AST evidence |
-| Static architecture | [1.0](../src/py_security_suite/schemas/static-architecture-1.0.schema.json) | Bounded local Python import graph, dependency cycles, and excessive module fan-out |
+| Application contract analysis | [1.0](../src/py_security_suite/schemas/application-contract-analysis-1.0.schema.json) | Code/OpenAPI route and constraint drift, authorization regression, source-bound passing behavioral tests, exact advisory-function AST calls, and bounded wrapper-to-handler chains |
+| Code health | [1.0](../src/py_security_suite/schemas/code-health-1.0.schema.json) | Bounded cognitive complexity, function/class size, parameter coupling, exact duplicate ASTs, and identifier/literal-normalized semantic clones |
+| Static architecture | [1.0](../src/py_security_suite/schemas/static-architecture-1.0.schema.json) | Bounded local Python import graph, dependency cycles, fan-out, high-degree hubs, instability, stable-to-unstable edges, and optional baseline edge regressions |
 | Architecture history | [1.0](../src/py_security_suite/schemas/architecture-history-1.0.schema.json) | Bounded Git co-change and finding-overlaid hotspot evidence without causal claims |
 | Capability manifest | [1.0](../src/py_security_suite/schemas/capability-manifest-1.0.schema.json) | Generated separation of portfolio availability, profile intent, applicability, completion, and execution gaps |
 | Inspection | [1.3](../src/py_security_suite/schemas/report-inspection-1.3.schema.json) | Verified machine-readable decision, health, action completeness, and prioritized findings |

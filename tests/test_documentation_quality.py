@@ -5,6 +5,8 @@ import unittest
 from pathlib import Path
 from urllib.parse import unquote
 
+from py_security_suite.config import PROFILE_TOOLS, SUPPORTED_TOOLS
+
 _ROOT = Path(__file__).resolve().parents[1]
 _LINK = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
 
@@ -39,6 +41,47 @@ class DocumentationQualityTests(unittest.TestCase):
                 if end < 0 or not text[start:end].strip():
                     failures.append(str(document.relative_to(_ROOT)))
         self.assertEqual(failures, [], "invalid Mermaid fences: " + ", ".join(failures))
+
+    def test_documented_portfolio_count_matches_registry(self) -> None:
+        expected = len(SUPPORTED_TOOLS)
+        documents = (_ROOT / "README.md", _ROOT / "docs" / "design.md")
+        for document in documents:
+            text = document.read_text(encoding="utf-8")
+            counts = {
+                int(value) for value in re.findall(r"\b(\d+) governed adapters\b", text)
+            }
+            self.assertEqual(
+                counts,
+                {expected},
+                f"{document.relative_to(_ROOT)} has a stale adapter count",
+            )
+
+    def test_documented_profile_snapshot_matches_configuration(self) -> None:
+        index = (_ROOT / "docs" / "index.md").read_text(encoding="utf-8")
+        self.assertIn(f"{len(PROFILE_TOOLS)} profiles", index)
+        for profile in ("comprehensive", "release", "production", "audit"):
+            self.assertIn(
+                f"`{profile}`"
+                if profile not in {"comprehensive", "release"}
+                else profile,
+                index,
+            )
+            self.assertIn(str(len(PROFILE_TOOLS[profile])), index)
+
+    def test_new_contextual_artifacts_are_documented(self) -> None:
+        readme = (_ROOT / "README.md").read_text(encoding="utf-8")
+        accuracy = (_ROOT / "docs" / "analysis-accuracy.md").read_text(encoding="utf-8")
+        for artifact in (
+            "finding-validation.json",
+            "framework-model-coverage.json",
+            "application-contract-analysis.json",
+            "capability-manifest.json",
+            "code-health.json",
+            "static-architecture.json",
+            "architecture-history.json",
+        ):
+            self.assertIn(artifact, readme)
+            self.assertIn(artifact, accuracy)
 
 
 def _documents() -> list[Path]:

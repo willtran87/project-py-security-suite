@@ -1,11 +1,32 @@
 # Finding accuracy and architecture context
 
-Last reviewed: 2026-08-25
+Last reviewed: 2026-08-26
 
 The suite keeps severity, lifecycle, and validation independent. Severity
 describes potential impact; lifecycle describes whether a stable finding is new,
 existing, regressed, resolved, or governed; validation describes the strongest
 retained positive evidence for the current finding.
+
+## Evidence flow
+
+```mermaid
+flowchart LR
+    Candidate["Scanner or native-analyzer candidate"] --> Corroborate["Independent engine-family correlation"]
+    Corroborate --> Path["Native ordered source-to-sink path"]
+    Path --> Runtime["Digest-bound runtime observation"]
+    Runtime --> Reproduce["Sealed reproduction proof"]
+    Candidate --> Dimensions["Condition | path | reachability | attacker control"]
+    Corroborate --> Dimensions
+    Path --> Dimensions
+    Runtime --> Dimensions
+    Reproduce --> Dimensions
+    Dimensions --> Decision["Conservative tier + independent dimensions"]
+```
+
+The left-to-right chain is an evidence-strength ladder, not a mandatory route
+through every state. A finding can have runtime evidence without a scanner
+retaining an ordered path, for example; the independent dimensions preserve
+that distinction instead of overstating the compatibility tier.
 
 ## Validation tiers
 
@@ -137,6 +158,10 @@ Pylint-derived correctness families in Ruff.
 These are prioritization signals. Co-change can reflect an intentional release
 unit, and a complex function can be correct. Closure requires an owner to refactor,
 document the boundary, or retain a reviewed exception with appropriate tests.
+
+These analyzers run only for `audit`, `quality`, `repo`, `comprehensive`,
+`production`, and `release`. Framework coverage, application-contract analysis,
+finding validation, and the capability manifest are emitted for every profile.
 
 ## Capability truth
 
