@@ -42,6 +42,7 @@ def test_deep_assurance_executes_self_scan_and_mutation_testing() -> None:
 def test_fuzz_workflow_extracts_missing_coverage_without_shell_short_circuit() -> None:
     workflow = _workflow("fuzz.yml")
 
+    assert '--seed-target="$FUZZ_TARGET"' in workflow
     assert "match($0, /cov: [0-9]+/)" in workflow
     assert 'if [[ -z "$coverage"' in workflow
 

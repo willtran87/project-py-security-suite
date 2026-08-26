@@ -71,3 +71,33 @@ def test_xml_oracle_rejects_external_entities() -> None:
             b'<!DOCTYPE root [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>'
             b"<root>&xxe;</root>"
         )
+
+
+def test_xml_oracle_normalizes_unknown_encoding_rejection() -> None:
+    module = _script()
+
+    with pytest.raises(ValueError, match="unsupported encoding"):
+        module._inspect_xml(b'<?xml version="1.0" encoding="UTF-5"?><report></report>')
+
+
+def test_target_specific_corpus_seeds_reach_archive_validation(tmp_path: Path) -> None:
+    module = _script()
+    zip_corpus = tmp_path / "zip"
+    tar_corpus = tmp_path / "tar"
+
+    module._seed_target_corpus("zip-archive", zip_corpus)
+    module._seed_target_corpus("tar-archive", tar_corpus)
+
+    assert module._inspect_zip((zip_corpus / "zip-safe").read_bytes())
+    with pytest.raises(ValueError, match="escapes"):
+        module._inspect_zip((zip_corpus / "zip-traversal").read_bytes())
+    with pytest.raises(ValueError, match="links"):
+        module._inspect_zip((zip_corpus / "zip-link").read_bytes())
+    with pytest.raises(ValueError, match="compression ratio"):
+        module._inspect_zip((zip_corpus / "zip-ratio").read_bytes())
+
+    assert module._inspect_tar((tar_corpus / "tar-safe").read_bytes())
+    with pytest.raises(ValueError, match="escapes"):
+        module._inspect_tar((tar_corpus / "tar-traversal").read_bytes())
+    with pytest.raises(ValueError, match="links"):
+        module._inspect_tar((tar_corpus / "tar-link").read_bytes())

@@ -96,6 +96,8 @@ jobs:
         run: |
           mkdir -p ".fuzz-corpus/$FUZZ_ARTIFACT" .fuzz-results
           cp -n fuzz/corpus/security-parsers/* ".fuzz-corpus/$FUZZ_ARTIFACT/" 2>/dev/null || true
+          uv run --frozen python scripts/fuzz_security_parsers.py \
+            --seed-target="$FUZZ_TARGET" ".fuzz-corpus/$FUZZ_ARTIFACT"
       - name: Run coverage-guided parser fuzzing
         shell: bash
         run: |

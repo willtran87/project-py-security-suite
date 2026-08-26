@@ -156,7 +156,10 @@ def _safe_archive_path(name: str) -> str:
 
 @_instrument_fuzz_function
 def _inspect_xml(payload: bytes) -> tuple[int, int, int]:
-    root = safe_element_tree.fromstring(payload)
+    try:
+        root = safe_element_tree.fromstring(payload)
+    except LookupError as exc:
+        raise ValueError("XML declares an unsupported encoding") from exc
     nodes = 0
     attributes = 0
     text_bytes = 0
@@ -287,6 +290,46 @@ def _selected_adapters(target: str) -> tuple[tuple[str, Any], ...]:
     return selected
 
 
+def _seed_target_corpus(target: str, destination: Path) -> None:
+    """Add deterministic structured seeds for formats mutation cannot synthesize."""
+
+    destination.mkdir(parents=True, exist_ok=True)
+    if target == "zip-archive":
+        zip_cases = (
+            ("zip-safe", "reports/finding.json", b"{}", 0),
+            ("zip-traversal", "../outside.json", b"{}", 0),
+            ("zip-link", "reports/link", b"target", stat.S_IFLNK | 0o777),
+            ("zip-ratio", "reports/zeros.bin", b"\0" * 1_048_576, 0),
+        )
+        for seed_name, member_name, payload, mode in zip_cases:
+            with zipfile.ZipFile(
+                destination / seed_name,
+                "w",
+                compression=zipfile.ZIP_DEFLATED,
+            ) as archive:
+                info = zipfile.ZipInfo(member_name, date_time=(1980, 1, 1, 0, 0, 0))
+                info.compress_type = zipfile.ZIP_DEFLATED
+                if mode:
+                    info.external_attr = mode << 16
+                archive.writestr(info, payload)
+    elif target == "tar-archive":
+        tar_cases = (
+            ("tar-safe", "reports/finding.json", tarfile.REGTYPE),
+            ("tar-traversal", "../outside.json", tarfile.REGTYPE),
+            ("tar-link", "reports/link", tarfile.SYMTYPE),
+        )
+        for seed_name, member_name, member_type in tar_cases:
+            with tarfile.open(destination / seed_name, "w") as archive:
+                payload = b"{}" if member_type == tarfile.REGTYPE else b""
+                info = tarfile.TarInfo(member_name)
+                info.mtime = 0
+                info.size = len(payload)
+                info.type = member_type
+                if member_type == tarfile.SYMTYPE:
+                    info.linkname = "target"
+                archive.addfile(info, io.BytesIO(payload))
+
+
 def main() -> None:
     global _TARGET_NAME
     if "--list-targets" in sys.argv:
@@ -332,6 +375,15 @@ def main() -> None:
             for index, (name, _adapter) in enumerate(_NAMED_ADAPTERS)
         )
         print(json.dumps(targets, separators=(",", ":"), sort_keys=True))
+        return
+    seed_arguments = [
+        item for item in sys.argv[1:] if item.startswith("--seed-target=")
+    ]
+    if seed_arguments:
+        destinations = [item for item in sys.argv[1:] if not item.startswith("-")]
+        if len(seed_arguments) != 1 or len(destinations) != 1:
+            raise ValueError("corpus seeding requires one target and destination")
+        _seed_target_corpus(seed_arguments[0].partition("=")[2], Path(destinations[0]))
         return
     target_arguments = [item for item in sys.argv[1:] if item.startswith("--target=")]
     if len(target_arguments) > 1:
