@@ -281,9 +281,10 @@ class OrchestratorTests(unittest.TestCase):
             application_contracts={
                 "routes": [{"method": "POST", "path": "/tenant"}],
                 "generated_test_scenarios": [{"kind": "anonymous-deny"}],
+                "scenario_execution_plan": {"tasks_detected": 2},
                 "vulnerable_call_matches": [],
             },
-            code_health={"issues_detected": 2},
+            code_health={"issues_detected": 2, "issues_omitted": 0},
             static_architecture={
                 "cycles_detected": 1,
                 "symbol_edges_detected": 3,
@@ -304,8 +305,9 @@ class OrchestratorTests(unittest.TestCase):
             "## Contextual security and engineering analysis", artifact_summary
         )
         self.assertIn("| Generated security test scenarios | 1 |", artifact_summary)
+        self.assertIn("| Authorized companion execution tasks | 2 |", artifact_summary)
         self.assertIn("| Local symbol-call edges | 3 |", artifact_summary)
-        self.assertIn("| Decorator-defined entry points | 2 |", artifact_summary)
+        self.assertIn("| Unified static entry points | 2 |", artifact_summary)
         self.assertIn("| Unresolved dynamic imports | 1 |", artifact_summary)
         self.assertIn(
             "| Declared architecture-policy violations | 1 |", artifact_summary

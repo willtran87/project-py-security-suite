@@ -473,6 +473,7 @@ def _render_contextual_analysis_summary(
     health = health or {}
     architecture = architecture or {}
     scenarios = application.get("generated_test_scenarios", [])
+    execution_plan = application.get("scenario_execution_plan", {})
     policy_violations = architecture.get("policy_violations", [])
     return [
         "",
@@ -482,15 +483,17 @@ def _render_contextual_analysis_summary(
         "|---|---:|",
         f"| Statically recognized API routes | {len(application.get('routes', []))} |",
         f"| Generated security test scenarios | {len(scenarios) if isinstance(scenarios, list) else 0} |",
+        f"| Authorized companion execution tasks | {int(execution_plan.get('tasks_detected', 0)) if isinstance(execution_plan, dict) else 0} |",
         f"| Exact vulnerable-function calls | {len(application.get('vulnerable_call_matches', []))} |",
         f"| Code-health issues | {int(health.get('issues_detected', 0))} |",
+        f"| Code-health issue details omitted | {int(health.get('issues_omitted', 0))} |",
         f"| Architecture cycles | {int(architecture.get('cycles_detected', 0))} |",
         f"| Local symbol-call edges | {int(architecture.get('symbol_edges_detected', 0))} |",
-        f"| Decorator-defined entry points | {int(architecture.get('entrypoint_symbols_detected', 0))} |",
+        f"| Unified static entry points | {int(architecture.get('entrypoint_symbols_detected', 0))} |",
         f"| Unresolved dynamic imports | {int(architecture.get('unresolved_dynamic_imports', 0))} |",
         f"| Declared architecture-policy violations | {len(policy_violations) if isinstance(policy_violations, list) else 0} |",
         "",
-        "Generated scenario manifests are machine-actionable test plans, not execution evidence. Symbol calls and entry points are syntactic evidence, while unresolved dynamic imports expose model gaps. Architecture and code-health signals prioritize review; declared policy violations remain distinct from heuristic structural smells.",
+        "Generated scenario manifests and argv-safe companion tasks are machine-actionable plans, not execution evidence. Symbol calls and unified decorator, packaging, module-main, and main-guard entry points are syntactic evidence, while unresolved dynamic imports expose model gaps. Architecture and code-health signals prioritize review; declared native or Tach policy violations remain distinct from heuristic structural smells.",
     ]
 
 

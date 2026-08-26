@@ -3,7 +3,8 @@ from __future__ import annotations
 import ast
 import copy
 import hashlib
-from collections import defaultdict
+from collections import Counter, defaultdict
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -33,7 +34,7 @@ _SKIP = frozenset(
     }
 )
 _MAX_FILES = 50_000
-_MAX_ISSUES = 500
+_MAX_ISSUES = 2_000
 _POLICY_PATH = "security/code-health-policy.json"
 _DEFAULT_THRESHOLDS = {
     "cognitive_complexity": 15,
@@ -49,6 +50,10 @@ _DEFAULT_THRESHOLDS = {
     "swallowed_broad_exceptions": 0,
     "async_blocking_calls": 0,
     "module_mutable_globals": 0,
+    "unawaited_async_calls": 0,
+    "discarded_async_tasks": 0,
+    "swallowed_cancellations": 0,
+    "implicit_exception_chains": 0,
 }
 
 _BLOCKING_CALLS = frozenset(
@@ -94,6 +99,7 @@ def analyze_code_health(target: Path) -> tuple[list[Finding], dict[str, Any]]:
             parse_errors.append(f"{relative.as_posix()}: {type(exc).__name__}")
             continue
         files_analyzed += 1
+        async_symbols = _async_symbols(tree)
         mutable_globals = _mutable_module_globals(tree)
         if len(mutable_globals) > thresholds["module_mutable_globals"]:
             issues.append(
@@ -128,6 +134,12 @@ def analyze_code_health(target: Path) -> tuple[list[Finding], dict[str, Any]]:
                     if isinstance(node, ast.AsyncFunctionDef)
                     else []
                 )
+                async_hazards = (
+                    _async_hazards(node, async_symbols)
+                    if isinstance(node, ast.AsyncFunctionDef)
+                    else {}
+                )
+                implicit_chains = _implicit_exception_chains(node)
                 if complexity > thresholds["cognitive_complexity"]:
                     issues.append(
                         _issue(
@@ -197,6 +209,34 @@ def analyze_code_health(target: Path) -> tuple[list[Finding], dict[str, Any]]:
                             len(blocking_calls),
                             thresholds["async_blocking_calls"],
                             symbol=f"{node.name}: {', '.join(blocking_calls[:5])}",
+                        )
+                    )
+                for kind, threshold_name in (
+                    ("unawaited-async-call", "unawaited_async_calls"),
+                    ("discarded-async-task", "discarded_async_tasks"),
+                    ("swallowed-cancellation", "swallowed_cancellations"),
+                ):
+                    records = async_hazards.get(kind, [])
+                    if len(records) > thresholds[threshold_name]:
+                        issues.append(
+                            _issue(
+                                kind,
+                                relative,
+                                records[0][1],
+                                len(records),
+                                thresholds[threshold_name],
+                                symbol=f"{node.name}: {', '.join(name for name, _ in records[:5])}",
+                            )
+                        )
+                if len(implicit_chains) > thresholds["implicit_exception_chains"]:
+                    issues.append(
+                        _issue(
+                            "implicit-exception-chain",
+                            relative,
+                            implicit_chains[0],
+                            len(implicit_chains),
+                            thresholds["implicit_exception_chains"],
+                            symbol=node.name,
                         )
                     )
                 if length >= thresholds["duplicate_function_lines"]:
@@ -299,15 +339,22 @@ def analyze_code_health(target: Path) -> tuple[list[Finding], dict[str, Any]]:
                 ],
             }
         )
-    issues.sort(
-        key=lambda item: (str(item["path"]), int(item["line"]), str(item["kind"]))
-    )
     issues_detected = len(issues)
     issue_limit_exceeded = issues_detected > _MAX_ISSUES
-    issues = issues[:_MAX_ISSUES]
+    issue_counts_by_kind = dict(
+        sorted(Counter(str(item["kind"]) for item in issues).items())
+    )
+    issue_counts_by_path = [
+        {"path": path, "count": count}
+        for path, count in sorted(
+            Counter(str(item["path"]) for item in issues).items(),
+            key=lambda item: (-item[1], item[0]),
+        )[:1_000]
+    ]
+    issues = _retain_ranked_issues(issues, _MAX_ISSUES)
     findings = [_finding(item) for item in issues]
     return findings, {
-        "schema_version": "1.2",
+        "schema_version": "1.3",
         "analysis": "python-cognitive-complexity-size-coupling-and-duplication",
         "files_analyzed": files_analyzed,
         "complete": not parse_errors
@@ -315,6 +362,11 @@ def analyze_code_health(target: Path) -> tuple[list[Finding], dict[str, Any]]:
         and not issue_limit_exceeded,
         "truncated": file_limit_exceeded or issue_limit_exceeded,
         "issues_detected": issues_detected,
+        "issues_retained": len(issues),
+        "issues_omitted": max(0, issues_detected - len(issues)),
+        "issue_counts_by_kind": issue_counts_by_kind,
+        "issue_counts_by_path": issue_counts_by_path,
+        "retention_strategy": "severity-kind-diversified-overage-ranking",
         "issues": issues,
         "parse_errors_detected": len(parse_errors),
         "parse_errors_omitted": max(0, len(parse_errors) - 100),
@@ -359,6 +411,10 @@ def _load_policy(target: Path) -> tuple[dict[str, int], bool, str | None]:
                     "swallowed_broad_exceptions",
                     "async_blocking_calls",
                     "module_mutable_globals",
+                    "unawaited_async_calls",
+                    "discarded_async_tasks",
+                    "swallowed_cancellations",
+                    "implicit_exception_chains",
                 }
                 else 1
             )
@@ -574,6 +630,122 @@ def _async_blocking_calls(function: ast.AST) -> list[str]:
     return sorted(found)
 
 
+def _async_symbols(tree: ast.Module) -> set[str]:
+    """Return directly recognizable local coroutine names without type guessing."""
+
+    symbols: set[str] = set()
+    for node in tree.body:
+        if isinstance(node, ast.AsyncFunctionDef):
+            symbols.add(node.name)
+        elif isinstance(node, ast.ClassDef):
+            symbols.update(
+                child.name
+                for child in node.body
+                if isinstance(child, ast.AsyncFunctionDef)
+            )
+    return symbols
+
+
+def _async_hazards(
+    function: ast.AsyncFunctionDef, async_symbols: set[str]
+) -> dict[str, list[tuple[str, ast.AST]]]:
+    """Find high-confidence async lifecycle defects in one coroutine body."""
+
+    result: dict[str, list[tuple[str, ast.AST]]] = defaultdict(list)
+    owned_nodes = list(_owned_nodes(function))
+    owned_set = set(owned_nodes)
+    parents = {
+        child: parent
+        for parent in owned_nodes
+        for child in ast.iter_child_nodes(parent)
+        if child in owned_set
+    }
+    for node in owned_nodes:
+        if isinstance(node, ast.Call):
+            name = _call_name(node.func)
+            parent = parents.get(node)
+            if (
+                name
+                and (
+                    name in async_symbols
+                    or (
+                        name.startswith(("self.", "cls."))
+                        and name.rsplit(".", 1)[-1] in async_symbols
+                    )
+                )
+                and isinstance(parent, ast.Expr)
+            ):
+                result["unawaited-async-call"].append((name, node))
+            if (
+                name
+                and (name == "asyncio.create_task" or name.endswith(".create_task"))
+                and isinstance(parent, ast.Expr)
+            ):
+                result["discarded-async-task"].append((name, node))
+        elif isinstance(node, ast.ExceptHandler) and _is_cancellation_handler(node):
+            if not any(
+                isinstance(descendant, ast.Raise)
+                for child in node.body
+                for descendant in _owned_nodes(child)
+            ):
+                result["swallowed-cancellation"].append(
+                    ("asyncio.CancelledError", node)
+                )
+    for values in result.values():
+        values.sort(key=lambda item: int(getattr(item[1], "lineno", 1)))
+    return result
+
+
+def _is_cancellation_handler(node: ast.ExceptHandler) -> bool:
+    if node.type is None:
+        return False
+    name = _call_name(node.type) if isinstance(node.type, ast.expr) else None
+    if name and name.endswith("CancelledError"):
+        return True
+    return isinstance(node.type, ast.Tuple) and any(
+        isinstance(item, ast.expr)
+        and ((_call_name(item) or "").endswith("CancelledError"))
+        for item in node.type.elts
+    )
+
+
+def _implicit_exception_chains(function: ast.AST) -> list[ast.Raise]:
+    """Find translated exceptions that omit an explicit cause or suppression."""
+
+    result: list[ast.Raise] = []
+    for handler in (
+        node for node in _owned_nodes(function) if isinstance(node, ast.ExceptHandler)
+    ):
+        if not handler.name:
+            continue
+        for child in handler.body:
+            for node in _owned_nodes(child):
+                if (
+                    isinstance(node, ast.Raise)
+                    and node.exc is not None
+                    and node.cause is None
+                    and not (
+                        isinstance(node.exc, ast.Name) and node.exc.id == handler.name
+                    )
+                ):
+                    result.append(node)
+    return sorted(result, key=lambda node: int(node.lineno))
+
+
+def _owned_nodes(root: ast.AST) -> Iterator[ast.AST]:
+    """Walk one callable or statement without leaking into nested definitions."""
+
+    pending = [root]
+    while pending:
+        node = pending.pop()
+        yield node
+        if node is not root and isinstance(
+            node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)
+        ):
+            continue
+        pending.extend(reversed(list(ast.iter_child_nodes(node))))
+
+
 def _mutable_module_globals(tree: ast.Module) -> list[tuple[str, ast.AST]]:
     candidates: dict[str, ast.AST] = {}
     for node in tree.body:
@@ -670,6 +842,52 @@ def _is_call_target(node: ast.Attribute, parents: dict[ast.AST, ast.AST]) -> boo
     return isinstance(parent, ast.Call) and parent.func is node
 
 
+_ISSUE_SEVERITY = {
+    "async-blocking-call": 2,
+    "cognitive-complexity": 2,
+    "deep-nesting": 2,
+    "discarded-async-task": 2,
+    "duplicate-function": 2,
+    "excessive-class-responsibilities": 2,
+    "large-class": 2,
+    "implicit-exception-chain": 2,
+    "low-class-cohesion": 2,
+    "module-mutable-globals": 1,
+    "semantic-clone": 1,
+    "swallowed-broad-exception": 2,
+    "swallowed-cancellation": 3,
+    "unawaited-async-call": 2,
+}
+
+
+def _retain_ranked_issues(
+    issues: list[dict[str, Any]], maximum: int
+) -> list[dict[str, Any]]:
+    """Retain the riskiest records while preserving every detected issue kind."""
+
+    def rank(item: dict[str, Any]) -> tuple[float, float, str, int, str]:
+        threshold = max(1, int(item["threshold"]))
+        overage = (int(item["value"]) - int(item["threshold"])) / threshold
+        return (
+            -float(_ISSUE_SEVERITY.get(str(item["kind"]), 1)),
+            -round(overage, 6),
+            str(item["path"]),
+            int(item["line"]),
+            str(item["kind"]),
+        )
+
+    ordered = sorted(issues, key=rank)
+    if len(ordered) <= maximum:
+        return ordered
+    first_by_kind: dict[str, dict[str, Any]] = {}
+    for item in ordered:
+        first_by_kind.setdefault(str(item["kind"]), item)
+    retained = list(first_by_kind.values())
+    retained_ids = {id(item) for item in retained}
+    retained.extend(item for item in ordered if id(item) not in retained_ids)
+    return retained[:maximum]
+
+
 def _issue(
     kind: str,
     path: Path,
@@ -750,6 +968,26 @@ def _finding(issue: dict[str, Any]) -> Finding:
             "Module exposes mutable global state",
             Severity.LOW,
             "CODE-MUTABLE-GLOBAL-STATE",
+        ),
+        "unawaited-async-call": (
+            "Coroutine call is discarded without awaiting",
+            Severity.MEDIUM,
+            "CODE-UNAWAITED-ASYNC-CALL",
+        ),
+        "discarded-async-task": (
+            "Created async task has no retained owner",
+            Severity.MEDIUM,
+            "CODE-DISCARDED-ASYNC-TASK",
+        ),
+        "swallowed-cancellation": (
+            "Coroutine cancellation is swallowed",
+            Severity.HIGH,
+            "CODE-SWALLOWED-CANCELLATION",
+        ),
+        "implicit-exception-chain": (
+            "Exception translation relies on implicit context",
+            Severity.MEDIUM,
+            "CODE-IMPLICIT-EXCEPTION-CHAIN",
         ),
     }
     title, severity, rule_id = metadata[kind]

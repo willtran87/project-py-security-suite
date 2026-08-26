@@ -604,7 +604,7 @@ def test_application_contracts_detect_auth_drift_and_exact_vulnerable_call(
     assert replay["execution"] == {
         "actor": "authorized-principal",
         "oracle": "state-invariant",
-        "consumers": ["authorization-security", "schemathesis"],
+        "consumers": ["authorization-security"],
         "repeat": 2,
         "source_bound_evidence_required": True,
     }
@@ -1002,6 +1002,143 @@ def test_static_architecture_retains_symbol_entrypoint_and_dynamic_import_eviden
     )
     assert artifact["entrypoint_symbols"][0]["symbol"] == "sample.api.items"
     validate_governed_artifacts({"static-architecture.json": artifact})
+
+
+def test_code_health_detects_async_lifecycle_and_exception_chain_defects(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "worker.py").write_text(
+        "import asyncio\n"
+        "async def fetch(): return 1\n"
+        "async def run():\n"
+        "    fetch()\n"
+        "    client.fetch()\n"
+        "    async def nested():\n"
+        "        fetch()\n"
+        "    asyncio.create_task(fetch())\n"
+        "    try:\n"
+        "        await fetch()\n"
+        "    except asyncio.CancelledError:\n"
+        "        pass\n"
+        "    try:\n"
+        "        raise ValueError('bad')\n"
+        "    except ValueError as exc:\n"
+        "        raise RuntimeError('translated')\n",
+        encoding="utf-8",
+    )
+
+    findings, artifact = analyze_code_health(tmp_path)
+
+    kinds = set(artifact["issue_counts_by_kind"])
+    assert {
+        "discarded-async-task",
+        "implicit-exception-chain",
+        "swallowed-cancellation",
+        "unawaited-async-call",
+    }.issubset(kinds)
+    assert artifact["issue_counts_by_kind"]["unawaited-async-call"] == 2
+    assert artifact["issues_detected"] == artifact["issues_retained"]
+    assert artifact["issues_omitted"] == 0
+    assert artifact["retention_strategy"] == (
+        "severity-kind-diversified-overage-ranking"
+    )
+    assert {
+        "CODE-DISCARDED-ASYNC-TASK",
+        "CODE-IMPLICIT-EXCEPTION-CHAIN",
+        "CODE-SWALLOWED-CANCELLATION",
+        "CODE-UNAWAITED-ASYNC-CALL",
+    }.issubset({finding.classifications[0] for finding in findings})
+    validate_governed_artifacts({"code-health.json": artifact})
+
+
+def test_static_architecture_unifies_packaging_main_and_tach_policy(
+    tmp_path: Path,
+) -> None:
+    package = tmp_path / "src" / "sample"
+    package.mkdir(parents=True)
+    (package / "__init__.py").write_text("", encoding="utf-8")
+    (package / "core.py").write_text(
+        "from .cli import main\ndef run(): return main\n", encoding="utf-8"
+    )
+    (package / "cli.py").write_text(
+        "from .core import run\n"
+        "def main(): return run()\n"
+        "if __name__ == '__main__': main()\n",
+        encoding="utf-8",
+    )
+    (package / "__main__.py").write_text(
+        "from .cli import main\nmain()\n", encoding="utf-8"
+    )
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "sample"\nversion = "1"\n'
+        '[project.scripts]\nsample = "sample.cli:main"\n',
+        encoding="utf-8",
+    )
+    (tmp_path / "tach.toml").write_text(
+        'source_roots = ["src"]\nroot_module = "forbid"\n'
+        "forbid_circular_dependencies = true\n"
+        '[[modules]]\npath = "sample"\ndepends_on = []\n'
+        '[[modules]]\npath = "sample.cli"\ndepends_on = []\n',
+        encoding="utf-8",
+    )
+
+    findings, artifact = analyze_static_architecture(tmp_path)
+
+    assert artifact["policy_path"] == "tach.toml"
+    assert artifact["policy_format"] == "tach"
+    assert artifact["policy_violations_detected"] == 4
+    assert {item["kind"] for item in artifact["policy_violations"]} == {
+        "circular-dependency",
+        "undeclared-dependency",
+    }
+    assert any(
+        finding.classifications == ["ARCH-POLICY-VIOLATION"] for finding in findings
+    )
+    entrypoint_kinds = {item["kind"] for item in artifact["entrypoint_symbols"]}
+    assert {"main-guard", "module-main", "packaging-script"}.issubset(entrypoint_kinds)
+    assert any(
+        item["symbol"] == "sample.cli.main" for item in artifact["entrypoint_symbols"]
+    )
+    validate_governed_artifacts({"static-architecture.json": artifact})
+
+
+def test_application_contracts_emit_argv_safe_execution_handoff(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "openapi.json").write_text(
+        json.dumps(
+            {
+                "openapi": "3.1.0",
+                "paths": {
+                    "/items": {
+                        "post": {
+                            "security": [{"bearer": []}],
+                            "responses": {"200": {"description": "ok"}},
+                        }
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    _, artifact = analyze_application_contracts(tmp_path, {})
+
+    plan = artifact["scenario_execution_plan"]
+    assert plan["handoff_complete"] is True
+    assert plan["authorized_companion_lane_required"] is True
+    assert plan["tasks_detected"] == len(plan["tasks"])
+    assert {task["consumer"] for task in plan["tasks"]} == {"authorization-security"}
+    assert all(isinstance(task["command"], list) for task in plan["tasks"])
+    assert all(task["source_bound_evidence_required"] is True for task in plan["tasks"])
+    assert all(
+        task["actor"] in {"anonymous", "authorized-principal"} for task in plan["tasks"]
+    )
+    assert all(
+        task["oracle"] in {"allow", "deny", "state-invariant"} for task in plan["tasks"]
+    )
+    assert "PYSEC_SOURCE_REVISION" in plan["required_environment"]
+    validate_governed_artifacts({"application-contract-analysis.json": artifact})
 
 
 def _finding(tool: str) -> Finding:

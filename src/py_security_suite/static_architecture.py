@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import tomllib
 from fnmatch import fnmatchcase
 from pathlib import Path
 from typing import Any
@@ -34,10 +35,11 @@ _HUB_THRESHOLD = 20
 _INSTABILITY_DELTA = 0.5
 _BASELINE_PATH = "security/baselines/architecture-edges.json"
 _POLICY_PATH = "security/architecture-policy.json"
+_TACH_POLICY_PATH = "tach.toml"
 
 
 def analyze_static_architecture(target: Path) -> tuple[list[Finding], dict[str, Any]]:
-    policy, policy_present, policy_error = _architecture_policy(target)
+    policy, policy_present, policy_path, policy_error = _architecture_policy(target)
     thresholds = policy["thresholds"]
     files = sorted(
         path
@@ -101,6 +103,15 @@ def analyze_static_architecture(target: Path) -> tuple[list[Finding], dict[str, 
     symbol_truncated = len(symbol_edges) > _MAX_SYMBOL_EDGES
     dynamic_truncated = len(dynamic_imports) > _MAX_DYNAMIC_IMPORTS
     entrypoint_truncated = len(entrypoint_symbols) > _MAX_ENTRYPOINTS
+    declared_entrypoints, entrypoint_error = _declared_entrypoints(target, modules)
+    if entrypoint_error:
+        parse_errors.append(entrypoint_error)
+    entrypoint_symbols = _merge_entrypoints(
+        [*entrypoint_symbols[:_MAX_ENTRYPOINTS], *declared_entrypoints]
+    )
+    entrypoint_truncated = (
+        entrypoint_truncated or len(entrypoint_symbols) > _MAX_ENTRYPOINTS
+    )
     if symbol_truncated:
         parse_errors.append(
             f"symbol dependency graph exceeded {_MAX_SYMBOL_EDGES} edges"
@@ -231,7 +242,7 @@ def analyze_static_architecture(target: Path) -> tuple[list[Finding], dict[str, 
         and not entrypoint_truncated
     )
     return findings, {
-        "schema_version": "1.2",
+        "schema_version": "1.3",
         "analysis": "python-local-module-dependency-graph",
         "complete": complete,
         "files_analyzed": len(modules),
@@ -274,8 +285,9 @@ def analyze_static_architecture(target: Path) -> tuple[list[Finding], dict[str, 
         "baseline_path": _BASELINE_PATH if baseline_present else None,
         "baseline_present": baseline_present,
         "new_dependency_edges": new_edges[:1000],
-        "policy_path": _POLICY_PATH if policy_present else None,
+        "policy_path": policy_path,
         "policy_present": policy_present,
+        "policy_format": policy.get("format") if policy_present else None,
         "policy_violations_detected": len(policy_violations) + int(policy_truncated),
         "policy_violations": policy_violations,
         "parse_errors": parse_errors[:1000],
@@ -289,7 +301,8 @@ def analyze_static_architecture(target: Path) -> tuple[list[Finding], dict[str, 
         "thresholds": thresholds,
         "claim_boundary": (
             "The graph resolves statically recognizable imports among Python modules in the "
-            "repository. Literal dynamic imports and decorator-defined entry points are retained, "
+            "repository. Literal dynamic imports plus decorator, packaging-script, module-main, "
+            "and main-guard entry points are retained, "
             "but non-literal imports, plugin registration, generated modules, and runtime "
             "dependency injection may add or remove effective coupling. Symbol edges are "
             "syntactic call relationships rather than runtime dispatch proof."
@@ -304,7 +317,7 @@ def _instability(fan_in: int, fan_out: int) -> float:
 
 def _architecture_policy(
     target: Path,
-) -> tuple[dict[str, Any], bool, str | None]:
+) -> tuple[dict[str, Any], bool, str | None, str | None]:
     default: dict[str, object] = {
         "thresholds": {
             "module_fan_out": _FAN_OUT_THRESHOLD,
@@ -313,10 +326,13 @@ def _architecture_policy(
         },
         "layers": [],
         "forbidden_edges": [],
+        "declared_dependencies": {},
+        "forbid_circular_dependencies": False,
+        "format": None,
     }
     path = target / Path(_POLICY_PATH)
     if not path.is_file():
-        return default, False, None
+        return _tach_policy(target, default)
     try:
         _, payload = read_regular_file(
             path, "architecture policy", maximum_bytes=256 * 1024, boundary=target
@@ -364,12 +380,69 @@ def _architecture_policy(
                 "thresholds": thresholds,
                 "layers": layers,
                 "forbidden_edges": forbidden,
+                "declared_dependencies": {},
+                "forbid_circular_dependencies": False,
+                "format": "native-json",
             },
             True,
+            _POLICY_PATH,
             None,
         )
     except (OSError, TypeError, ValueError) as exc:
-        return default, True, f"{_POLICY_PATH}: {type(exc).__name__}"
+        return default, True, _POLICY_PATH, f"{_POLICY_PATH}: {type(exc).__name__}"
+
+
+def _tach_policy(
+    target: Path, default: dict[str, Any]
+) -> tuple[dict[str, Any], bool, str | None, str | None]:
+    path = target / _TACH_POLICY_PATH
+    if not path.is_file():
+        return default, False, None, None
+    try:
+        _, payload = read_regular_file(
+            path, "Tach architecture policy", maximum_bytes=512 * 1024, boundary=target
+        )
+        document = tomllib.loads(payload.decode("utf-8"))
+        modules = document.get("modules", [])
+        if not isinstance(modules, list) or len(modules) > 50_000:
+            raise ValueError("invalid Tach modules")
+        declared: dict[str, list[str]] = {}
+        for item in modules:
+            if (
+                not isinstance(item, dict)
+                or not isinstance(item.get("path"), str)
+                or not item["path"]
+                or not isinstance(item.get("depends_on", []), list)
+                or not all(
+                    isinstance(value, str) and value
+                    for value in item.get("depends_on", [])
+                )
+            ):
+                raise ValueError("invalid Tach module declaration")
+            if item["path"] in declared:
+                raise ValueError("duplicate Tach module declaration")
+            declared[item["path"]] = sorted(set(item.get("depends_on", [])))
+        policy = dict(default)
+        policy["declared_dependencies"] = declared
+        forbid_cycles = document.get("forbid_circular_dependencies", False)
+        if not isinstance(forbid_cycles, bool):
+            raise ValueError("invalid Tach circular dependency setting")
+        policy["forbid_circular_dependencies"] = forbid_cycles
+        policy["format"] = "tach"
+        return policy, True, _TACH_POLICY_PATH, None
+    except (
+        OSError,
+        TypeError,
+        UnicodeError,
+        ValueError,
+        tomllib.TOMLDecodeError,
+    ) as exc:
+        return (
+            default,
+            True,
+            _TACH_POLICY_PATH,
+            f"{_TACH_POLICY_PATH}: {type(exc).__name__}",
+        )
 
 
 def _validated_layers(value: object) -> list[dict[str, Any]]:
@@ -433,6 +506,42 @@ def _policy_violations(
     violations: dict[tuple[str, str, str], dict[str, str]] = {}
     layers = policy["layers"]
     for source, destination in sorted(edges):
+        declared = policy.get("declared_dependencies", {})
+        source_boundary = (
+            _tach_boundary(source, declared) if isinstance(declared, dict) else None
+        )
+        destination_boundary = (
+            _tach_boundary(destination, declared)
+            if isinstance(declared, dict)
+            else None
+        )
+        allowed = (
+            declared.get(source_boundary)
+            if isinstance(declared, dict) and source_boundary
+            else None
+        )
+        destination_allowed = bool(
+            isinstance(allowed, list)
+            and (
+                destination_boundary == source_boundary
+                or any(
+                    destination_boundary is not None
+                    and fnmatchcase(destination_boundary, dependency)
+                    for dependency in allowed
+                )
+            )
+        )
+        if isinstance(allowed, list) and not destination_allowed:
+            key = (source, destination, "undeclared-dependency")
+            violations[key] = {
+                "kind": "undeclared-dependency",
+                "source": source,
+                "destination": destination,
+                "rule": f"Tach module {source} declares only {allowed}",
+            }
+            if len(violations) > _MAX_POLICY_VIOLATIONS:
+                ordered = [violations[key] for key in sorted(violations)]
+                return ordered[:_MAX_POLICY_VIOLATIONS], True
         for rule in policy["forbidden_edges"]:
             if fnmatchcase(source, rule["source"]) and fnmatchcase(
                 destination, rule["destination"]
@@ -474,7 +583,46 @@ def _policy_violations(
                 if len(violations) > _MAX_POLICY_VIOLATIONS:
                     ordered = [violations[key] for key in sorted(violations)]
                     return ordered[:_MAX_POLICY_VIOLATIONS], True
+    declared = policy.get("declared_dependencies", {})
+    if policy.get("forbid_circular_dependencies") and isinstance(declared, dict):
+        boundary_adjacency: dict[str, set[str]] = {
+            boundary: set() for boundary in declared
+        }
+        for source, destination in edges:
+            source_boundary = _tach_boundary(source, declared)
+            destination_boundary = _tach_boundary(destination, declared)
+            if (
+                source_boundary
+                and destination_boundary
+                and source_boundary != destination_boundary
+            ):
+                boundary_adjacency[source_boundary].add(destination_boundary)
+        for component in _strong_components(boundary_adjacency):
+            if len(component) < 2:
+                continue
+            source, destination = component[:2]
+            key = (source, destination, "circular-dependency")
+            violations[key] = {
+                "kind": "circular-dependency",
+                "source": source,
+                "destination": destination,
+                "rule": "Tach forbids circular dependencies among: "
+                + ", ".join(component),
+            }
+            if len(violations) > _MAX_POLICY_VIOLATIONS:
+                ordered = [violations[key] for key in sorted(violations)]
+                return ordered[:_MAX_POLICY_VIOLATIONS], True
     return [violations[key] for key in sorted(violations)], False
+
+
+def _tach_boundary(module: str, declared: dict[str, list[str]]) -> str | None:
+    candidates = [
+        pattern
+        for pattern in declared
+        if fnmatchcase(module, pattern)
+        or ("*" not in pattern and module.startswith(f"{pattern}."))
+    ]
+    return max(candidates, key=len) if candidates else None
 
 
 def _baseline_edges(target: Path) -> tuple[set[tuple[str, str]], bool, str | None]:
@@ -672,7 +820,8 @@ def _symbol_graph(
             entrypoints.append(
                 {
                     "symbol": source,
-                    "decorators": recognized,
+                    "kind": "decorator",
+                    "evidence": recognized,
                     "path": path,
                     "line": int(function.lineno),
                 }
@@ -689,7 +838,140 @@ def _symbol_graph(
             if not destination or not _local_symbol(destination, modules):
                 continue
             edges.add((source, destination, path, int(getattr(call, "lineno", 1))))
+    for node in tree.body:
+        if not isinstance(node, ast.If) or not _is_main_guard(node.test):
+            continue
+        for call in (child for child in ast.walk(node) if isinstance(child, ast.Call)):
+            destination = _architecture_name(call.func, aliases, module=module)
+            if destination in definitions:
+                destination = definitions[destination]
+            if destination and _local_symbol(destination, modules):
+                entrypoints.append(
+                    {
+                        "symbol": destination,
+                        "kind": "main-guard",
+                        "evidence": ["if __name__ == __main__"],
+                        "path": path,
+                        "line": int(getattr(call, "lineno", node.lineno)),
+                    }
+                )
     return edges, entrypoints
+
+
+def _is_main_guard(node: ast.expr) -> bool:
+    if not isinstance(node, ast.Compare) or len(node.ops) != 1:
+        return False
+    values = [node.left, *node.comparators]
+    return any(
+        isinstance(value, ast.Name) and value.id == "__name__" for value in values
+    ) and any(
+        isinstance(value, ast.Constant) and value.value == "__main__"
+        for value in values
+    )
+
+
+def _declared_entrypoints(
+    target: Path, modules: dict[str, Path]
+) -> tuple[list[dict[str, Any]], str | None]:
+    records: list[dict[str, Any]] = []
+    for module, path in sorted(modules.items()):
+        if path.name == "__main__.py":
+            records.append(
+                {
+                    "symbol": module,
+                    "kind": "module-main",
+                    "evidence": [f"python -m {module.rpartition('.')[0] or module}"],
+                    "path": path.relative_to(target).as_posix(),
+                    "line": 1,
+                }
+            )
+    pyproject = target / "pyproject.toml"
+    if not pyproject.is_file():
+        return records, None
+    try:
+        _, payload = read_regular_file(
+            pyproject,
+            "packaging entry points",
+            maximum_bytes=2 * 1024 * 1024,
+            boundary=target,
+        )
+        document = tomllib.loads(payload.decode("utf-8"))
+        project = document.get("project", {})
+        scripts = project.get("scripts", {}) if isinstance(project, dict) else {}
+        if not isinstance(scripts, dict) or len(scripts) > 10_000:
+            raise ValueError("invalid project scripts")
+        for name, value in sorted(scripts.items()):
+            if (
+                not isinstance(name, str)
+                or not isinstance(value, str)
+                or ":" not in value
+            ):
+                raise ValueError("invalid project script")
+            module, function = value.split(":", 1)
+            function = function.split("[", 1)[0]
+            script_path = modules.get(module)
+            if not script_path or not function:
+                continue
+            records.append(
+                {
+                    "symbol": f"{module}.{function}",
+                    "kind": "packaging-script",
+                    "evidence": [name],
+                    "path": script_path.relative_to(target).as_posix(),
+                    "line": _symbol_line(script_path, function),
+                }
+            )
+        return records, None
+    except (
+        OSError,
+        TypeError,
+        UnicodeError,
+        ValueError,
+        tomllib.TOMLDecodeError,
+    ) as exc:
+        return records, f"pyproject.toml entry points: {type(exc).__name__}"
+
+
+def _symbol_line(path: Path, function: str) -> int:
+    try:
+        _, payload = read_regular_file(
+            path,
+            "entry point source",
+            maximum_bytes=4 * 1024 * 1024,
+            boundary=path.parent,
+        )
+        tree = ast.parse(payload)
+    except (OSError, SyntaxError, UnicodeError, ValueError):
+        return 1
+    target = function.rsplit(".", 1)[-1]
+    return next(
+        (
+            int(node.lineno)
+            for node in ast.walk(tree)
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.name == target
+        ),
+        1,
+    )
+
+
+def _merge_entrypoints(values: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    merged: dict[tuple[str, str, int], dict[str, Any]] = {}
+    for value in values:
+        key = (str(value["symbol"]), str(value["path"]), int(value["line"]))
+        existing = merged.get(key)
+        if existing is None:
+            merged[key] = {
+                **value,
+                "evidence": sorted(set(str(item) for item in value["evidence"])),
+            }
+            continue
+        existing["evidence"] = sorted(
+            set(existing["evidence"]) | {str(item) for item in value["evidence"]}
+        )
+        if existing["kind"] != value["kind"]:
+            existing["kind"] = "multiple"
+    return [merged[key] for key in sorted(merged)]
 
 
 def _architecture_aliases(
@@ -910,14 +1192,25 @@ def _policy_finding(
     record: dict[str, str], modules: dict[str, Path], target: Path
 ) -> Finding:
     source = record["source"]
-    path = modules[source].relative_to(target).as_posix()
+    source_path = modules.get(source)
+    if source_path is None:
+        candidates = [
+            path for module, path in modules.items() if module.startswith(f"{source}.")
+        ]
+        source_path = min(candidates, default=min(modules.values()))
+    path = source_path.relative_to(target).as_posix()
+    description = (
+        record["rule"]
+        if record["kind"] == "circular-dependency"
+        else (
+            f"{source} depends on {record['destination']}, violating "
+            f"{record['kind']}: {record['rule']}."
+        )
+    )
     return _finding(
         rule="ARCH-POLICY-VIOLATION",
         title="Declared architecture policy is violated",
-        description=(
-            f"{source} depends on {record['destination']}, violating "
-            f"{record['kind']}: {record['rule']}."
-        ),
+        description=description,
         impact="The implemented dependency direction conflicts with the repository's reviewed ownership and layering contract.",
         remediation="Remove or invert the dependency, introduce an allowed interface, or update the architecture policy through explicit review.",
         severity=Severity.HIGH,

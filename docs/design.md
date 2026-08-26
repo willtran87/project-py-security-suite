@@ -79,11 +79,11 @@ flowchart TB
     Source --> Contracts["Application contracts<br/>code/OpenAPI/auth + exact advisory calls"]
     OpenAPI["OpenAPI + approved baseline"] --> Contracts
     ContractPolicy["Declared endpoint/test obligations"] --> Contracts
-    Contracts --> Scenarios["Actionable security scenario manifests<br/>actor + oracle + consumer + subject + repeat"]
+    Contracts --> Scenarios["Actionable scenarios + argv-safe companion tasks<br/>actor + oracle + consumer + subject + repeat"]
     Source --> Health["Code health<br/>complexity + cohesion + async/exception/state risks + clones"]
     HealthPolicy["Code-health threshold policy"] --> Health
-    Source --> Architecture["Static architecture<br/>module/symbol calls + entry points + dynamic imports + policy"]
-    ArchitecturePolicy["Architecture policy + edge baseline"] --> Architecture
+    Source --> Architecture["Static architecture<br/>module/symbol calls + unified entry points + dynamic imports + policy"]
+    ArchitecturePolicy["Native/Tach architecture policy + edge baseline"] --> Architecture
     History["Bounded sealed Git history"] --> Temporal["Architecture history<br/>co-change + finding hotspots"]
     ToolEvidence["Normalized scanner evidence"] --> Correlate["Conservative finding correlation<br/>semantic anchor | flow sink | location"]
     Frameworks --> Correlate
@@ -100,9 +100,9 @@ flowchart TB
 ```
 
 Framework and contract analysis run for every profile so model and behavioral
-gaps stay visible. Generated contract scenarios remain machine-actionable
-review plans until source-bound passing evidence satisfies a declared
-obligation. Code health,
+gaps stay visible. Generated contract scenarios and their tokenized companion
+commands remain authorized-lane plans until source-bound passing evidence
+satisfies a declared obligation. Code health,
 static architecture, and architecture history run for `audit`, `quality`,
 `repo`, `comprehensive`, `production`, and `release`. Declared architecture
 violations remain distinct from heuristic topology and maintainability signals.

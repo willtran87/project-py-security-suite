@@ -47,20 +47,20 @@ flowchart TB
     OpenAPI["Retained OpenAPI + optional baseline"] --> Contracts["Contract drift + constraints"]
     Declared["Declared endpoint/test obligations"] --> Contracts
     Routes --> Contracts
-    Contracts --> Scenarios["Machine-actionable scenario manifests<br/>actor | oracle | consumer | subject | repeat"]
+    Contracts --> Scenarios["Machine-actionable scenarios + argv-safe tasks<br/>actor | oracle | consumer | subject | repeat"]
     TestEvidence["Digest-bound passing test evidence"] --> Obligations["Satisfied declared obligations"]
     Contracts --> Obligations
 
     Source --> Health["Code-health metrics"]
     HealthPolicy["code-health-policy.json"] --> Health
     Source --> Imports["Module + symbol-call graph"]
-    ArchitecturePolicy["architecture-policy.json"] --> Imports
+    ArchitecturePolicy["architecture-policy.json or tach.toml"] --> Imports
     Baseline["Approved architecture edge baseline"] --> Imports
-    Imports --> RuntimeShape["Decorator entry points + dynamic-import inventory"]
-    Imports --> PolicyFindings["Exact layer and forbidden-edge violations"]
+    Imports --> RuntimeShape["Unified entry points + dynamic-import inventory"]
+    Imports --> PolicyFindings["Exact native or Tach dependency violations"]
     Imports --> Heuristics["Cycles | fan-out | hubs | instability | new edges"]
 
-    Scenarios --> Report["1.2 contextual artifacts + summary"]
+    Scenarios --> Report["1.3 contextual artifacts + summary"]
     Obligations --> Report
     Health --> Report
     PolicyFindings --> Report
@@ -70,6 +70,9 @@ flowchart TB
 Generated scenarios are a machine-actionable test-design queue, not execution
 evidence. Each record names the actor, oracle, compatible companion consumers,
 exact OpenAPI subjects, repeat count, and source-bound evidence requirement.
+Schema 1.3 also emits argv arrays for authorized Schemathesis, Hypothesis, and
+authorization companion tasks plus the required environment-variable names.
+It never reads credentials or executes a target during static analysis.
 Declared architecture-policy violations are exact repository-contract failures;
 complexity, coupling, co-change, and graph topology remain review signals.
 
@@ -171,15 +174,21 @@ wrapper calls are followed back to recognizable API handlers. A retained chain
 proves bounded static entry-point reachability, while attacker control, runtime
 execution, and advisory exploit preconditions remain separate evidence.
 
-Schema 1.2 also generates deterministic test scenarios from retained OpenAPI
+Schema 1.3 generates deterministic test scenarios from retained OpenAPI
 security, required-input, constraint, tenant-path, and state-changing operation
 metadata. The plan covers authenticated allow, anonymous deny, cross-tenant
 deny, negative required-input, constraint-boundary, and replay cases. Every
 scenario carries an actor, expected oracle, compatible `authorization-security`,
 Schemathesis, or Hypothesis consumer, exact subjects, and repeat semantics.
 These manifests do not satisfy a declared obligation until matching source-bound
-execution evidence is retained. Relative imports and class-method calls now
-participate in bounded wrapper-to-handler chains.
+execution evidence is retained. The companion execution plan uses tokenized
+command arrays instead of shell strings, identifies all required environment
+inputs without exposing their values, and keeps the execution lane explicitly
+authorized. Each task repeats its actor, oracle, priority, repeat count, and exact
+subjects. Authorization and replay scenarios are routed only to the companion
+that can evaluate those semantics; schema/property fuzzers are not credited as
+authorization proof. Relative imports and class-method calls participate in
+bounded wrapper-to-handler chains.
 
 ## Code and architecture health
 
@@ -188,15 +197,19 @@ Broad structural profiles emit three additional artifacts:
 - `code-health.json` measures bounded Python cognitive complexity, control-flow
   nesting, function call coupling, long functions, parameter coupling, large
   classes, class responsibility and cohesion, swallowed broad exceptions,
-  blocking calls in async functions, mutable module state, exact duplicated
-  function ASTs, and lower-severity identifier/literal-normalized semantic
-  clones. A strict `security/code-health-policy.json` can calibrate every
-  threshold.
+  blocking calls in async functions, unawaited local coroutine calls, discarded
+  tasks, swallowed cancellation, implicit exception translation, mutable module state,
+  exact duplicated function ASTs, and lower-severity
+  identifier/literal-normalized semantic clones. It counts all detected issues,
+  retains severity- and kind-diversified detail up to the bounded limit, and
+  reports omitted totals instead of silently favoring source order. A strict
+  `security/code-health-policy.json` can calibrate every threshold.
 - `architecture-history.json` mines at most 500 commits from the already sealed
   Git history. It reports persistent high-ratio file co-change and the
   intersection of frequently changed files with active findings.
 - `static-architecture.json` builds a bounded local Python module and syntactic
-  symbol-call graph, inventories decorator-defined entry points, distinguishes
+  symbol-call graph, inventories decorator, packaging-script, `__main__`, and
+  main-guard entry points, distinguishes
   literal resolved dynamic imports from unresolved dynamic-import model gaps, and
   identifies strongly connected dependency cycles, excessive direct fan-out,
   high-degree hubs, fan-in/fan-out instability, stable-to-unstable dependency
@@ -205,7 +218,10 @@ Broad structural profiles emit three additional artifacts:
   `security/architecture-policy.json` additionally declares module layers,
   allowed layer directions, forbidden edges, reasons, and calibrated graph
   thresholds; exact violations are high-confidence findings rather than
-  heuristic smells.
+  heuristic smells. When that native policy is absent, a repository-root
+  `tach.toml` is ingested as the dependency contract, so undeclared Tach edges
+  and forbidden Tach boundary cycles become exact policy violations; the native
+  JSON policy takes precedence when both are present.
 
 The architecture baseline is deliberately simple and reviewable:
 

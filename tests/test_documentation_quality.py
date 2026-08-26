@@ -92,15 +92,16 @@ class DocumentationQualityTests(unittest.TestCase):
         for phrase in (
             "semantic anchor",
             "native flow sink",
-            "Machine-actionable scenario manifests",
+            "Machine-actionable scenarios + argv-safe tasks",
             "architecture-policy.json",
+            "tach.toml",
             "code-health-policy.json",
         ):
             self.assertIn(phrase, accuracy)
-        self.assertIn("Actionable security scenario manifests", design)
+        self.assertIn("Actionable scenarios + argv-safe companion tasks", design)
         self.assertIn("Conservative finding correlation", design)
-        self.assertIn("static-architecture.json 1.2", configuration)
-        self.assertIn("code-health.json 1.2", configuration)
+        self.assertIn("static-architecture.json 1.3", configuration)
+        self.assertIn("code-health.json 1.3", configuration)
 
     def test_governed_effectiveness_examples_use_production_floors(self) -> None:
         documents = (

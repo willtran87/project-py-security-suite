@@ -1,5 +1,14 @@
 # Changelog
 
+- Emit argv-safe, source-bound companion execution plans for generated contract
+  scenarios with exact actor/oracle/subject metadata and consumer capability
+  routing; detect unawaited coroutines, discarded tasks, swallowed cancellation,
+  and implicit exception translation without leaking across callable boundaries;
+  rank bounded code-health details by severity and threshold overage while
+  retaining per-kind and omitted totals; discover packaging, module-main, and
+  main-guard entry points; and enforce repository-root Tach dependency contracts
+  through the native architecture artifact when no JSON policy overrides them.
+
 - Correlate exact semantic subjects and shared native flow sinks across scanner
   presentation-line differences; generate OpenAPI-derived authorization,
   tenant-boundary, constraint, and replay test scenarios with deterministic

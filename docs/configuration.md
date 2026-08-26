@@ -133,10 +133,10 @@ flowchart LR
     Snapshot["Sealed source snapshot"] --> Health["Code-health analyzer"]
     HealthPolicy["security/code-health-policy.json"] --> Health
     Snapshot --> Graph["Static import graph"]
-    ArchitecturePolicy["security/architecture-policy.json"] --> Graph
+    ArchitecturePolicy["security/architecture-policy.json or tach.toml"] --> Graph
     EdgeBaseline["security/baselines/architecture-edges.json"] --> Graph
-    Health --> HealthArtifact["code-health.json 1.2<br/>metrics + behavioral maintainability risks"]
-    Graph --> ArchitectureArtifact["static-architecture.json 1.2<br/>module/symbol graph + dynamic gaps + policy"]
+    Health --> HealthArtifact["code-health.json 1.3<br/>metrics + behavioral maintainability risks"]
+    Graph --> ArchitectureArtifact["static-architecture.json 1.3<br/>module/symbol graph + unified entry points + policy"]
     HealthPolicy -->|"invalid"| Incomplete["Analysis incomplete"]
     ArchitecturePolicy -->|"invalid"| Incomplete
 ```
@@ -154,6 +154,10 @@ flowchart LR
     "class_lack_of_cohesion_percent": 70,
     "swallowed_broad_exceptions": 0,
     "async_blocking_calls": 0,
+    "unawaited_async_calls": 0,
+    "discarded_async_tasks": 0,
+    "swallowed_cancellations": 0,
+    "implicit_exception_chains": 0,
     "module_mutable_globals": 0
   }
 }
@@ -161,9 +165,9 @@ flowchart LR
 
 Unspecified values retain conservative defaults. Supported names also include
 `function_lines`, `parameters`, `class_lines`,
-`duplicate_function_lines`, and `semantic_clone_lines`. Zero is valid only for
-the three count-based behavioral-risk thresholds, making the first occurrence
-reportable by default.
+`duplicate_function_lines`, and `semantic_clone_lines`. Zero is valid for the
+count-based behavioral-risk thresholds, making the first occurrence reportable
+by default.
 
 `security/architecture-policy.json` makes intended dependency direction
 explicit rather than asking graph heuristics to guess the design:
@@ -203,6 +207,13 @@ dependencies are allowed; cross-layer dependencies must be named in
 `may_depend_on`. Exact forbidden-edge and layer-direction violations produce
 high-confidence findings. Fan-out, hub, and instability findings remain
 calibrated structural review signals.
+
+When the native JSON architecture policy is absent, the analyzer reads the
+repository-root `tach.toml` and treats each configured module's `depends_on`
+list as an exact dependency contract. It also promotes boundary cycles when
+`forbid_circular_dependencies` is enabled. Native JSON takes precedence when
+both formats exist. Packaging scripts, `__main__.py`, main guards, and route
+decorators are all retained as distinct entry-point evidence.
 
 If `policy.required_scanners` is empty, every selected and applicable tool is
 required. A conditional tool with no matching input is reported as

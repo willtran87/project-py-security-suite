@@ -79,6 +79,7 @@ def analyze_application_contracts(
     generated_scenarios = _generated_test_scenarios(
         current_operations, contract["endpoints"]
     )
+    execution_plan = _scenario_execution_plan(generated_scenarios, current_path)
     vulnerable_matches = _vulnerable_matches(
         contract["vulnerable_functions"], calls, routes
     )
@@ -98,7 +99,7 @@ def analyze_application_contracts(
         or vulnerable_matches
     )
     artifact = {
-        "schema_version": "1.2",
+        "schema_version": "1.3",
         "analysis": "application-contract-and-vulnerable-call-analysis",
         "complete": complete,
         "routes": routes,
@@ -118,14 +119,16 @@ def analyze_application_contracts(
         "observed_test_cases": test_cases,
         "business_logic": business_records,
         "generated_test_scenarios": generated_scenarios,
+        "scenario_execution_plan": execution_plan,
         "vulnerable_call_matches": vulnerable_matches,
         "errors": errors[:1000],
         "claim_boundary": (
             "Route reconciliation is limited to statically recognizable Python decorators. "
             "Business-logic coverage proves only that declared test identities passed in "
             "source-bound retained evidence. "
-            "Generated scenario manifests describe actors, oracles, consumers, subjects, "
-            "and repeat semantics but do not prove execution. "
+            "Generated scenario manifests and argv-safe companion tasks describe actors, "
+            "oracles, consumers, subjects, repeat semantics, and required environment names "
+            "but do not prove execution or retain credential values. "
             "Vulnerable-call matches prove an exact syntactic call to a manifest-listed symbol, "
             "not that the call executes in production or that exploit preconditions hold."
         ),
@@ -953,13 +956,13 @@ def _scenario_execution(kind: str) -> tuple[str, str, list[str], int]:
         "authenticated-allow": (
             "authorized-principal",
             "allow",
-            ["authorization-security", "schemathesis"],
+            ["authorization-security"],
             1,
         ),
         "anonymous-deny": (
             "anonymous",
             "deny",
-            ["authorization-security", "schemathesis"],
+            ["authorization-security"],
             1,
         ),
         "cross-tenant-deny": (
@@ -983,11 +986,113 @@ def _scenario_execution(kind: str) -> tuple[str, str, list[str], int]:
         "replay-safety": (
             "authorized-principal",
             "state-invariant",
-            ["authorization-security", "schemathesis"],
+            ["authorization-security"],
             2,
         ),
     }
     return execution[kind]
+
+
+def _scenario_execution_plan(
+    scenarios: list[dict[str, Any]], openapi_path: str | None
+) -> dict[str, Any]:
+    """Create argv records for an authorized companion lane without reading secrets."""
+
+    tasks: list[dict[str, Any]] = []
+    schema = openapi_path or "${PYSEC_OPENAPI_SCHEMA}"
+    for scenario in scenarios:
+        execution = scenario["execution"]
+        for consumer in execution["consumers"]:
+            required = ["PYSEC_SOURCE_REVISION"]
+            if consumer == "schemathesis":
+                required.append("PYSEC_TARGET_BASE_URL")
+                command = [
+                    "st",
+                    "run",
+                    schema,
+                    "--url",
+                    "${PYSEC_TARGET_BASE_URL}",
+                    "--include-method",
+                    str(scenario["method"]),
+                    "--include-path",
+                    str(scenario["path"]),
+                    "--report",
+                    "junit",
+                    "--report-junit-path",
+                    "${PYSEC_SCHEMATHESIS_JUNIT}",
+                ]
+                required.append("PYSEC_SCHEMATHESIS_JUNIT")
+                evidence = "schemathesis-junit.xml"
+                protocol = "schemathesis-operation-v1"
+            elif consumer == "authorization-security":
+                required.extend(
+                    [
+                        "PYSEC_AUTHORIZATION_CONTRACT",
+                        "PYSEC_ASSURANCE_CONTEXT",
+                        "PYSEC_AUTHORIZATION_OUTPUT",
+                    ]
+                )
+                command = [
+                    "python",
+                    "-m",
+                    "companion.authorization_security",
+                    "--contract",
+                    "${PYSEC_AUTHORIZATION_CONTRACT}",
+                    "--output",
+                    "${PYSEC_AUTHORIZATION_OUTPUT}",
+                    "--revision",
+                    "${PYSEC_SOURCE_REVISION}",
+                    "--context",
+                    "${PYSEC_ASSURANCE_CONTEXT}",
+                ]
+                evidence = "authorization-security.json"
+                protocol = "authorization-security-contract-v3"
+            else:
+                required.extend(
+                    ["PYSEC_HYPOTHESIS_TEST_TARGET", "PYSEC_HYPOTHESIS_JUNIT"]
+                )
+                command = [
+                    "pytest",
+                    "${PYSEC_HYPOTHESIS_TEST_TARGET}",
+                    "--junitxml=${PYSEC_HYPOTHESIS_JUNIT}",
+                ]
+                evidence = "hypothesis-junit.xml"
+                protocol = "hypothesis-junit-v1"
+            tasks.append(
+                {
+                    "task_id": f"{scenario['id']}:{consumer}",
+                    "scenario_id": scenario["id"],
+                    "kind": scenario["kind"],
+                    "priority": scenario["priority"],
+                    "actor": execution["actor"],
+                    "oracle": execution["oracle"],
+                    "repeat": execution["repeat"],
+                    "subjects": scenario["subjects"],
+                    "consumer": consumer,
+                    "protocol": protocol,
+                    "operation": f"{scenario['method']} {scenario['path']}",
+                    "command": command,
+                    "required_environment": sorted(set(required)),
+                    "expected_evidence": evidence,
+                    "source_bound_evidence_required": True,
+                }
+            )
+    required_environment = sorted(
+        {name for task in tasks for name in task["required_environment"]}
+    )
+    return {
+        "tasks_detected": len(tasks),
+        "tasks": tasks[:30_000],
+        "required_environment": required_environment,
+        "openapi_source": openapi_path,
+        "handoff_complete": bool(openapi_path) and len(tasks) <= 30_000,
+        "authorized_companion_lane_required": True,
+        "claim_boundary": (
+            "Commands contain environment-variable names only. The authorized companion lane "
+            "must supply credentials, target authorization, source revision, execution context, "
+            "and producer-validated evidence; this plan is not execution evidence."
+        ),
+    }
 
 
 def _vulnerable_matches(
