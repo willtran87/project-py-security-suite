@@ -13,10 +13,12 @@ class RuffQualityAdapter(RuffAdapter):
 
     def build_command(self, executable: str, target: Path) -> list[str]:
         command = super().build_command(executable, target)
-        command[command.index("S")] = "E9,F,B,C90,PERF,RUF,UP"
+        command[command.index("S")] = (
+            "E9,F,B,C90,DTZ,PERF,PLC,PLE,PLW,RET,RUF,SIM,TRY,UP"
+        )
         command[2:2] = [
             "--config",
-            "lint.mccabe.max-complexity=20",
+            "lint.mccabe.max-complexity=15",
             "--ignore",
             # Preserve suppressions owned by the separate security rule pass.
             "RUF100",
@@ -47,13 +49,19 @@ def _area(rule_id: str) -> str:
         return "complexity"
     if rule_id.startswith("PERF"):
         return "performance"
+    if rule_id.startswith(("RET", "SIM", "TRY")):
+        return "control-flow"
+    if rule_id.startswith("DTZ"):
+        return "time-correctness"
+    if rule_id.startswith("PL"):
+        return "code-correctness"
     if rule_id.startswith("UP"):
         return "compatibility"
     return "code-correctness"
 
 
 def _severity(rule_id: str) -> Severity:
-    if rule_id.startswith(("E9", "F", "B", "RUF")):
+    if rule_id.startswith(("E9", "F", "B", "DTZ", "PL", "RET", "RUF", "SIM", "TRY")):
         return Severity.MEDIUM
     return Severity.LOW
 
@@ -64,8 +72,13 @@ def _classification(rule_id: str) -> str:
         "F": "PYFLAKES",
         "B": "BUGBEAR",
         "C": "MCCABE",
+        "DTZ": "FLAKE8-DATETIMEZ",
         "PERF": "PERFLINT",
+        "PL": "PYLINT",
+        "RET": "FLAKE8-RETURN",
         "RUF": "RUFF",
+        "SIM": "FLAKE8-SIMPLIFY",
+        "TRY": "TRYCERATOPS",
         "UP": "PYUPGRADE",
     }
     prefix = next(

@@ -108,6 +108,7 @@ introduced binaries.
 |---|---|
 | `quick` | Bandit, detect-secrets |
 | `standard` | Bandit, Semgrep, detect-secrets, OSV-Scanner |
+| `audit` | Broad source security, quality, architecture, reachability, typing, repository-health, and policy analysis without target-executing runtime or release producers |
 | `extended` | Standard plus CycloneDX Python, Ruff security rules, and zizmor |
 | `deep` | Extended plus Pysa and CodeQL |
 | `supply-chain` | Extended plus Trivy, GuardDog, ScanCode, Gitleaks, and TruffleHog |

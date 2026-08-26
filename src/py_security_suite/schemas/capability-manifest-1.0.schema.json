@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:capability-manifest:1.0",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "analysis", "profile", "available_tool_count", "available_profile_count", "profiles", "selected_tool_count", "selected_tools", "not_selected_tools", "applicable_tool_count", "applicable_tools", "completed_tool_count", "completed_tools", "execution_gap_count", "execution_gaps", "layers", "claim_boundary"],
+  "properties": {
+    "schema_version": {"const": "1.0"}, "analysis": {"const": "generated-profile-and-execution-capability-truth"},
+    "profile": {"type": "string", "minLength": 1},
+    "available_tool_count": {"type": "integer", "minimum": 1}, "available_profile_count": {"type": "integer", "minimum": 1},
+    "profiles": {"type": "array", "minItems": 1, "items": {"type": "object", "additionalProperties": false, "required": ["name", "selected_tool_count"], "properties": {"name": {"type": "string", "minLength": 1}, "selected_tool_count": {"type": "integer", "minimum": 1}}}},
+    "selected_tool_count": {"type": "integer", "minimum": 1}, "selected_tools": {"$ref": "#/$defs/tools"}, "not_selected_tools": {"$ref": "#/$defs/tools"},
+    "applicable_tool_count": {"type": "integer", "minimum": 0}, "applicable_tools": {"$ref": "#/$defs/tools"},
+    "completed_tool_count": {"type": "integer", "minimum": 0}, "completed_tools": {"$ref": "#/$defs/tools"},
+    "execution_gap_count": {"type": "integer", "minimum": 0}, "execution_gaps": {"$ref": "#/$defs/tools"},
+    "layers": {"type": "object", "minProperties": 1, "additionalProperties": {"$ref": "#/$defs/layer"}},
+    "claim_boundary": {"type": "string", "minLength": 1, "maxLength": 1000}
+  },
+  "$defs": {
+    "tools": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 100}},
+    "layer": {"type": "object", "additionalProperties": false, "required": ["selected", "applicable", "completed", "execution_gaps"], "properties": {"selected": {"type": "boolean"}, "applicable": {"type": "boolean"}, "completed": {"$ref": "#/$defs/tools"}, "execution_gaps": {"$ref": "#/$defs/tools"}}}
+  }
+}

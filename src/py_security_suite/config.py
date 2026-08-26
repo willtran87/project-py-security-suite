@@ -297,6 +297,9 @@ PROFILE_TOOLS: dict[str, tuple[str, ...]] = {
     ),
 }
 
+# Broad static audit without requiring target-executing companion or release lanes.
+PROFILE_TOOLS["audit"] = PROFILE_TOOLS["repo"]
+
 _REPOSITORY_INSIGHT_TOOLS = (
     "conftest",
     "kics",
@@ -352,7 +355,7 @@ _RELEASE_ASSURANCE_EVIDENCE_TOOLS = (
 # Keep the original quick/standard contracts stable. Broader profiles gain the
 # new static policy/health perspectives and passive evidence channels.
 PROFILE_TOOLS["repo-health"] = _REPOSITORY_INSIGHT_TOOLS
-for _profile in ("quality", "repo", "comprehensive", "production", "release"):
+for _profile in ("audit", "quality", "repo", "comprehensive", "production", "release"):
     PROFILE_TOOLS[_profile] = tuple(
         dict.fromkeys(PROFILE_TOOLS[_profile] + _REPOSITORY_INSIGHT_TOOLS)
     )
@@ -374,7 +377,7 @@ for _profile in ("comprehensive", "release"):
     PROFILE_TOOLS[_profile] = tuple(
         dict.fromkeys(PROFILE_TOOLS[_profile] + _RELEASE_ASSURANCE_EVIDENCE_TOOLS)
     )
-for _profile in ("quality", "repo", "comprehensive", "production", "release"):
+for _profile in ("audit", "quality", "repo", "comprehensive", "production", "release"):
     PROFILE_TOOLS[_profile] = tuple(
         dict.fromkeys(PROFILE_TOOLS[_profile] + ("reachability", "graphify"))
     )

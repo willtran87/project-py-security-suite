@@ -1,5 +1,20 @@
 # Changelog
 
+- Add conservative multi-axis per-finding validation, exact proof-bound
+  reproduction and graph-bound runtime promotion, executed digest-bound
+  framework model canaries, OpenAPI/auth and business-test contract analysis,
+  exact advisory-function call matching, static dependency cycles/fan-out,
+  bounded cognitive complexity and duplicate-AST findings, Git temporal-coupling and change-risk
+  hotspots, a broad non-runtime `audit` profile, and generated profile versus
+  execution capability truth. Deepen local-import typing, complexity thresholds,
+  Radon findings, and mutation targets while preserving explicit truncation and
+  claim boundaries.
+  Require passing source-bound business-logic cases, detect weakened OpenAPI
+  inputs and authorization scopes, propagate advisory-listed calls through local
+  wrappers to API entry points, partition correlation by semantic subjects, add
+  semantic clone review, strict typing rules, and architecture instability,
+  hub, stable-dependency, and baseline-new-edge analysis.
+
 - Eliminate the residual trust-boundary shortcuts: raw hardware attestation
   replay now binds a digest-pinned native verifier in an independent registered
   failure domain; registry transparency uses witness-quorum checkpoints,

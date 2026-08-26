@@ -1,7 +1,7 @@
 schema_version = "1"
-# quick | standard | extended | deep | supply-chain | artifact | quality |
+# quick | standard | audit | extended | deep | supply-chain | artifact | quality |
 # repo | iac-deep | governance | comprehensive | production | release
-profile = "standard"
+profile = "audit"
 
 [paths]
 # `@bundle/...` references resolve beneath this root without environment expansion.

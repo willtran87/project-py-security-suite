@@ -1,6 +1,6 @@
 # Python Security Suite documentation
 
-Last reviewed: 2026-08-13
+Last reviewed: 2026-08-25
 
 This directory is the canonical documentation set. The suite is offline-first:
 tool and data acquisition happens in a connected preparation lane; scanning and
@@ -21,6 +21,7 @@ verification happen inside an enterprise-controlled isolated boundary.
 | Find control bypasses, artifact activation gaps, and cross-release attack-surface regressions | [Advanced cross-evidence analysis](advanced-analysis.md) |
 | Cross-validate dead code, islands, and import cycles | [Structural synthesis](structural-synthesis.md) |
 | Trace sensitive data into logs, telemetry, and SDKs | [Sensitive-data exposure](data-exposure.md) |
+| Distinguish candidates from corroborated, path-confirmed, and reproduced findings | [Finding accuracy and architecture context](analysis-accuracy.md) |
 | Understand source-to-artifact and cross-scanner joins | [Cross-tool evidence fusion](evidence-fusion.md) |
 | Measure scanner execution and labeled detection effectiveness | [Effectiveness](effectiveness.md) |
 | Make one fail-closed promotion decision | [Governed release readiness](release-readiness.md) |
@@ -52,7 +53,7 @@ flowchart LR
     subgraph Isolated["Externally enforced isolated boundary"]
         Transfer --> Doctor["pysec doctor"]
         Repo["Python repository"] --> Doctor
-        Doctor --> Scan["64-adapter applicability-aware scan"]
+        Doctor --> Scan["88-adapter applicability-aware portfolio"]
         Scan --> Normalize["Normalize, correlate, classify, and own"]
         Normalize --> Leverage["Typed evidence graph<br/>controls, taint, artifacts, privacy, trust"]
         Leverage --> Gate["Policy decision"]
@@ -214,6 +215,13 @@ and zero findings on the safe negative control.
 | Evidence fusion | [1.3](../src/py_security_suite/schemas/evidence-fusion.schema.json) | Semantic, graph, package-lineage, provenance, alias-aware advisory, dependency-use/reachability, threat-intelligence, fixed-version, remediation-decision, owner/test selection, exact retained focused-test execution, and test/import-path coverage alignment; [1.2](../src/py_security_suite/schemas/evidence-fusion-1.2.schema.json), [1.1](../src/py_security_suite/schemas/evidence-fusion-1.1.schema.json), and [1.0](../src/py_security_suite/schemas/evidence-fusion-1.0.schema.json) remain bundled |
 | Structural synthesis | [1.2](../src/py_security_suite/schemas/structural-synthesis-1.2.schema.json) | Dead-code dispositions, island boundaries, structural orphans, import cycles, change-risk scoring, graph-guided test selection, exact selected-test execution, and changed-line coverage alignment; 1.1 and 1.0 remain bundled |
 | Sensitive-data exposure | [1.5](../src/py_security_suite/schemas/data-exposure-1.5.schema.json) | CWE-grounded source-to-sink findings, recursive monorepo SDK discovery, local data-class propagation, trust-boundary and protection context, evidence-fusion feedback, and coverage/reachability/runtime/graph/ownership/mapped-test/executed-test/coverage-alignment/change-risk/SDK-package-lineage/advisory-remediation cross-references for confirmed findings and inventory-only review surfaces; 1.4, 1.3, 1.2, 1.1, and 1.0 remain bundled |
+| Finding validation | [1.0](../src/py_security_suite/schemas/finding-validation-1.0.schema.json) | Conservative compatibility tiers plus independent evidence dimensions and exact reproduction-proof bindings |
+| Framework model coverage | [1.0](../src/py_security_suite/schemas/framework-model-coverage-1.0.schema.json) | Detected framework imports joined to digest-bound models, executed positive/negative expected-rule canaries, and completed engines |
+| Application contract analysis | [1.0](../src/py_security_suite/schemas/application-contract-analysis-1.0.schema.json) | Code/OpenAPI drift, authorization regression, declared behavioral-test obligations, and exact advisory-function AST calls |
+| Code health | [1.0](../src/py_security_suite/schemas/code-health-1.0.schema.json) | Bounded cognitive complexity, size, coupling, and duplicate-AST evidence |
+| Static architecture | [1.0](../src/py_security_suite/schemas/static-architecture-1.0.schema.json) | Bounded local Python import graph, dependency cycles, and excessive module fan-out |
+| Architecture history | [1.0](../src/py_security_suite/schemas/architecture-history-1.0.schema.json) | Bounded Git co-change and finding-overlaid hotspot evidence without causal claims |
+| Capability manifest | [1.0](../src/py_security_suite/schemas/capability-manifest-1.0.schema.json) | Generated separation of portfolio availability, profile intent, applicability, completion, and execution gaps |
 | Inspection | [1.3](../src/py_security_suite/schemas/report-inspection-1.3.schema.json) | Verified machine-readable decision, health, action completeness, and prioritized findings |
 | Inspection verification | [1.3](../src/py_security_suite/schemas/report-inspection-verification-1.3.schema.json) | Binds the inspection digest, report checksum, action limit, and omission summary |
 | Report verification | [1.0](../src/py_security_suite/schemas/report-verification.schema.json) | Portable receipt for report integrity and semantic verification |

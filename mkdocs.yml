@@ -45,6 +45,7 @@ nav:
       - Tool selection: tool-selection.md
       - Scanner lifecycle: tool-lifecycle.md
   - Analysis:
+      - Finding accuracy: analysis-accuracy.md
       - Advanced analysis: advanced-analysis.md
       - Risk paths: risk-paths.md
       - Reachability: reachability.md

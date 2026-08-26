@@ -400,6 +400,7 @@ def render_summary(
         + "`pysec closure-plan REPORT --format markdown`."
     )
     lines.extend(["", closure_backlog])
+    lines.extend(_render_validation_summary(active_findings))
     lines.extend(_render_fusion_summary(evidence_fusion))
     lines.extend(_render_structural_summary(structural_synthesis))
     lines.extend(_render_data_exposure_summary(data_exposure))
@@ -417,6 +418,24 @@ def render_summary(
     lines.extend(_render_derived_evidence(manifest))
     lines.extend(_render_triage_workflow(manifest.outcome))
     return "\n".join(lines)
+
+
+def _render_validation_summary(findings: list[Finding]) -> list[str]:
+    counts = Counter(finding.validation_status.value for finding in findings)
+    return [
+        "",
+        "## Finding validation tiers",
+        "",
+        "| Strongest retained positive evidence | Findings |",
+        "|---|---:|",
+        f"| Reproduced | {counts.get('reproduced', 0)} |",
+        f"| Runtime observed | {counts.get('runtime-observed', 0)} |",
+        f"| Static path confirmed | {counts.get('static-path-confirmed', 0)} |",
+        f"| Cross-tool corroborated | {counts.get('corroborated', 0)} |",
+        f"| Static candidate | {counts.get('static-candidate', 0)} |",
+        "",
+        "The tier is independent of severity and lifecycle. Missing runtime evidence never establishes a false positive.",
+    ]
 
 
 def _render_fusion_summary(value: dict[str, Any] | None) -> list[str]:
@@ -3492,6 +3511,11 @@ def _render_markdown_findings(
                 f"- **Finding ID:** `{_markdown_code(finding.finding_id)}`",
                 f"- **Priority:** `{_finding_priority(finding)}`",
                 f"- **Lifecycle:** `{finding.status.value}`",
+                f"- **Validation tier:** `{finding.validation_status.value}` — "
+                + _markdown_text(
+                    "; ".join(finding.validation_reasons)
+                    or "No higher-tier positive evidence was retained."
+                ),
                 f"- **Owners:** {_finding_owners(finding)}",
                 f"- **Threat intelligence:** {_threat_intelligence_summary(finding)}",
                 f"- **Location:** `{_markdown_code(_location_text(finding))}`",

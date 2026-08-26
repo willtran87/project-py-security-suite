@@ -131,16 +131,32 @@ skip_covered = false
 [tool.mutmut]
 source_paths = ["src/"]
 only_mutate = [
+  "src/py_security_suite/application_contracts.py",
   "src/py_security_suite/artifact_validation.py",
+  "src/py_security_suite/architecture_history.py",
+  "src/py_security_suite/capability_manifest.py",
+  "src/py_security_suite/code_health.py",
   "src/py_security_suite/confidential_archive.py",
+  "src/py_security_suite/correlation.py",
+  "src/py_security_suite/finding_validation.py",
+  "src/py_security_suite/framework_coverage.py",
   "src/py_security_suite/path_safety.py",
+  "src/py_security_suite/policy.py",
+  "src/py_security_suite/risk_acceptance.py",
+  "src/py_security_suite/runtime_reachability.py",
   "src/py_security_suite/strict_json.py",
+  "src/py_security_suite/static_architecture.py",
 ]
 pytest_add_cli_args_test_selection = [
   "tests/test_strict_json.py",
   "tests/test_path_safety.py",
   "tests/test_artifact_validation.py",
   "tests/test_confidential_archive.py",
+  "tests/test_analysis_accuracy.py",
+  "tests/test_orchestrator.py",
+  "tests/test_policy.py",
+  "tests/test_risk_acceptance.py",
+  "tests/test_reachability.py",
 ]
 pytest_add_cli_args = ["-p", "no:randomly", "--disable-socket", "-q"]
 mutate_only_covered_lines = true

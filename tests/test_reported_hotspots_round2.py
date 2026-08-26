@@ -139,7 +139,7 @@ class StaticAdapterContractTests(unittest.TestCase):
         self.assertIsNone(configured.prerequisite_error())
         command = configured.build_command("mypy", self.root)
         self.assertIn("--no-site-packages", command)
-        self.assertIn("--follow-imports=skip", command)
+        self.assertIn("--follow-imports=normal", command)
         with self.assertRaisesRegex(TypeError, "JSON line"):
             configured.parse("[]", self.root)
         payload = "\n" + json.dumps(
@@ -648,6 +648,87 @@ class CorrelationTests(unittest.TestCase):
         self.assertTrue(corroboration["runtime_observed"])
         self.assertEqual(corroboration["dynamic_tools"], ["iast"])
         self.assertIn("does not by itself prove", corroboration["claim_boundary"])
+
+    def test_correlation_does_not_merge_distinct_data_flows_at_same_sink(self) -> None:
+        first = self._finding(
+            "codeql",
+            "py/sql-injection",
+            severity=Severity.HIGH,
+            confidence=Confidence.HIGH,
+            classification="CWE-89",
+        )
+        second = self._finding(
+            "semgrep",
+            "sql-injection",
+            severity=Severity.HIGH,
+            confidence=Confidence.HIGH,
+            classification="CWE-89",
+        )
+        first.evidence["sarif_code_flows"] = [
+            {
+                "steps": [
+                    {"path": "request.py", "line": 1},
+                    {"path": "app.py", "line": 7},
+                ]
+            }
+        ]
+        second.evidence["sarif_code_flows"] = [
+            {"steps": [{"path": "config.py", "line": 2}, {"path": "app.py", "line": 7}]}
+        ]
+
+        result = correlate_findings([first, second])
+
+        self.assertEqual(len(result), 2)
+
+    def test_correlation_preserves_secondary_flow_and_counts_engine_families(
+        self,
+    ) -> None:
+        first = self._finding(
+            "ruff",
+            "S001",
+            severity=Severity.MEDIUM,
+            confidence=Confidence.HIGH,
+        )
+        second = self._finding(
+            "ruff-quality",
+            "S001",
+            severity=Severity.MEDIUM,
+            confidence=Confidence.HIGH,
+        )
+        second.evidence["sarif_code_flows"] = [
+            {"steps": [{"path": "input.py", "line": 1}, {"path": "app.py", "line": 7}]}
+        ]
+
+        merged = correlate_findings([first, second])[0]
+
+        self.assertEqual(len(merged.evidence["sarif_code_flows"]), 1)
+        corroboration = merged.evidence["cross_tool_corroboration"]
+        self.assertEqual(corroboration["engine_families"], ["ruff"])
+        self.assertEqual(corroboration["independent_perspectives"], 1)
+
+    def test_correlation_separates_distinct_semantic_subjects_without_flows(
+        self,
+    ) -> None:
+        first = self._finding(
+            "semgrep",
+            "auth-check",
+            severity=Severity.HIGH,
+            confidence=Confidence.HIGH,
+            classification="CWE-862",
+        )
+        second = self._finding(
+            "codeql",
+            "auth-check",
+            severity=Severity.HIGH,
+            confidence=Confidence.HIGH,
+            classification="CWE-862",
+        )
+        first.evidence["application_contracts"] = {"operation": "GET /admin"}
+        second.evidence["application_contracts"] = {"operation": "POST /billing"}
+
+        result = correlate_findings([first, second])
+
+        self.assertEqual(len(result), 2)
 
 
 if __name__ == "__main__":

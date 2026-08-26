@@ -1,5 +1,5 @@
 {
-  "typeCheckingMode": "basic",
+  "typeCheckingMode": "strict",
   "pythonVersion": "3.11",
   "exclude": [
     "**/.artifacts",
@@ -11,5 +11,8 @@
     "**/tests"
   ],
   "reportMissingImports": "warning",
-  "reportMissingTypeStubs": "none"
+  "reportMissingTypeStubs": "information",
+  "reportUnknownArgumentType": "warning",
+  "reportUnknownMemberType": "warning",
+  "reportUnknownVariableType": "warning"
 }

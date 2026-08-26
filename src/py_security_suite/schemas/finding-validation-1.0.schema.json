@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:finding-validation:1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "analysis", "summary", "records", "claim_boundary"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "analysis": {"const": "conservative-finding-validation-tiers"},
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["findings", "by_status", "runtime_observed_or_stronger", "reproduced"],
+      "properties": {
+        "findings": {"type": "integer", "minimum": 0, "maximum": 1000000},
+        "by_status": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["static-candidate", "corroborated", "static-path-confirmed", "runtime-observed", "reproduced"],
+          "properties": {
+            "static-candidate": {"type": "integer", "minimum": 0},
+            "corroborated": {"type": "integer", "minimum": 0},
+            "static-path-confirmed": {"type": "integer", "minimum": 0},
+            "runtime-observed": {"type": "integer", "minimum": 0},
+            "reproduced": {"type": "integer", "minimum": 0}
+          }
+        },
+        "runtime_observed_or_stronger": {"type": "integer", "minimum": 0},
+        "reproduced": {"type": "integer", "minimum": 0}
+      }
+    },
+    "records": {
+      "type": "array",
+      "maxItems": 1000000,
+      "items": {"$ref": "#/$defs/record"}
+    },
+    "claim_boundary": {"type": "string", "minLength": 1, "maxLength": 1000}
+  },
+  "$defs": {
+    "strings": {"type": "array", "maxItems": 1000, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 1000}},
+    "record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["finding_id", "status", "reasons", "limitations", "tools", "paths", "runtime_tools", "reproduction_tools", "reproduction_bindings", "reproduction_bindings_rejected", "runtime_trace_locations", "dimensions"],
+      "properties": {
+        "finding_id": {"type": "string", "minLength": 1, "maxLength": 200},
+        "status": {"enum": ["static-candidate", "corroborated", "static-path-confirmed", "runtime-observed", "reproduced"]},
+        "reasons": {"$ref": "#/$defs/strings"},
+        "limitations": {"$ref": "#/$defs/strings"},
+        "tools": {"$ref": "#/$defs/strings"},
+        "paths": {"$ref": "#/$defs/strings"},
+        "runtime_tools": {"$ref": "#/$defs/strings"},
+        "reproduction_tools": {"$ref": "#/$defs/strings"},
+        "reproduction_bindings": {"type": "array", "maxItems": 100, "items": {"$ref": "#/$defs/reproductionBinding"}},
+        "reproduction_bindings_rejected": {"$ref": "#/$defs/strings"},
+        "runtime_trace_locations": {"$ref": "#/$defs/strings"},
+        "dimensions": {"$ref": "#/$defs/dimensions"}
+      }
+    },
+    "reproductionBinding": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schema_version", "source_sha256", "finding_fingerprint", "path", "line", "payload_sha256", "oracle", "impact_observed", "negative_control_passed", "environment_sha256", "deployment_sha256"],
+      "properties": {
+        "schema_version": {"const": "1.0"},
+        "source_sha256": {"$ref": "#/$defs/digest"},
+        "finding_fingerprint": {"type": "string", "minLength": 1, "maxLength": 200},
+        "path": {"type": "string", "minLength": 1, "maxLength": 1000},
+        "line": {"type": "integer", "minimum": 1},
+        "payload_sha256": {"$ref": "#/$defs/digest"},
+        "oracle": {"type": "string", "minLength": 1, "maxLength": 1000},
+        "impact_observed": {"const": true},
+        "negative_control_passed": {"const": true},
+        "environment_sha256": {"$ref": "#/$defs/digest"},
+        "deployment_sha256": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "dimensions": {
+      "type": "object", "additionalProperties": false,
+      "required": ["condition_observed", "independent_corroboration", "static_source_to_sink", "entry_point_reachability", "attacker_control", "runtime_execution", "harmful_effect", "reproduction", "production_environment_parity"],
+      "properties": {
+        "condition_observed": {"$ref": "#/$defs/dimension"},
+        "independent_corroboration": {"$ref": "#/$defs/dimension"},
+        "static_source_to_sink": {"$ref": "#/$defs/dimension"},
+        "entry_point_reachability": {"$ref": "#/$defs/dimension"},
+        "attacker_control": {"$ref": "#/$defs/dimension"},
+        "runtime_execution": {"$ref": "#/$defs/dimension"},
+        "harmful_effect": {"$ref": "#/$defs/dimension"},
+        "reproduction": {"$ref": "#/$defs/dimension"},
+        "production_environment_parity": {"$ref": "#/$defs/dimension"}
+      }
+    },
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "dimension": {"enum": ["established", "not-established", "conflicting", "not-applicable"]}
+  }
+}

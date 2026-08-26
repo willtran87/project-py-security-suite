@@ -197,3 +197,12 @@ independent enterprise authority.
 `pysec release-check --minimum-effectiveness-labels N` can require this
 evaluation, its exact SHA-256, a passing verdict, a binding to the same report
 seal, and a non-trivial minimum corpus size before promotion.
+
+For meaningful empirical calibration, use a separately maintained holdout of at
+least 200 labels with balanced positive and negative controls across every
+required scanner, representative frameworks, real historical defects, parser
+variants, custom wrappers and sanitizers, and mutation operators. The built-in
+production floor is an anti-triviality minimum, not a claim that 25 labels are
+statistically representative. Track precision, recall, false-positive rate, and
+false-negative rate per tool, rule, CWE, framework, and parser variant; do not
+replace the governed holdout with fixtures used to tune scanner rules.

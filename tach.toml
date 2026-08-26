@@ -74,7 +74,42 @@ layer = "services"
 
 [[modules]]
 path = "py_security_suite.correlation"
-depends_on = ["py_security_suite.models"]
+depends_on = ["py_security_suite.models", "py_security_suite.strict_json"]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.application_contracts"
+depends_on = ["py_security_suite.models", "py_security_suite.path_safety", "py_security_suite.strict_json"]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.architecture_history"
+depends_on = ["py_security_suite.execution", "py_security_suite.models"]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.capability_manifest"
+depends_on = ["py_security_suite.config", "py_security_suite.models"]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.code_health"
+depends_on = ["py_security_suite.models", "py_security_suite.path_safety"]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.finding_validation"
+depends_on = ["py_security_suite.models", "py_security_suite.strict_json"]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.framework_coverage"
+depends_on = ["py_security_suite.models", "py_security_suite.path_safety", "py_security_suite.strict_json"]
+layer = "services"
+
+[[modules]]
+path = "py_security_suite.static_architecture"
+depends_on = ["py_security_suite.models", "py_security_suite.path_safety"]
 layer = "services"
 
 [[modules]]
@@ -450,13 +485,19 @@ depends_on = [
     "py_security_suite.advanced_analysis",
     "py_security_suite.admission",
     "py_security_suite.adapters",
+    "py_security_suite.application_contracts",
+    "py_security_suite.architecture_history",
+    "py_security_suite.capability_manifest",
     "py_security_suite.closure_plan",
+    "py_security_suite.code_health",
     "py_security_suite.config",
     "py_security_suite.correlation",
     "py_security_suite.data_exposure",
     "py_security_suite.effectiveness",
     "py_security_suite.evidence_fusion",
     "py_security_suite.finding_delta",
+    "py_security_suite.finding_validation",
+    "py_security_suite.framework_coverage",
     "py_security_suite.graph_analysis",
     "py_security_suite.inventory",
     "py_security_suite.governance",
@@ -469,6 +510,7 @@ depends_on = [
     "py_security_suite.risk_paths",
     "py_security_suite.source_context",
     "py_security_suite.structural_synthesis",
+    "py_security_suite.static_architecture",
     "py_security_suite.trust_catalog",
 ]
 layer = "application"
