@@ -139,12 +139,16 @@ flowchart LR
     EdgeBaseline["security/baselines/architecture-edges.json"] --> Graph
     Snapshot --> Domains["Cross-domain assurance"]
     DomainPolicy["security/domain-assurance-policy.json"] --> Domains
+    Snapshot --> Industry["Industry control and benchmark assurance"]
+    IndustryPolicy["security/industry-assurance-policy.json"] --> Industry
     Health --> HealthArtifact["code-health.json 1.4<br/>ranked root-cause clusters + bounded symptoms"]
     Graph --> ArchitectureArtifact["static-architecture.json 1.4<br/>refactoring targets + semantic graph context + policy"]
     Domains --> DomainArtifact["domain-assurance.json 1.0<br/>applicability + evidence-bound obligations"]
+    Industry --> IndustryArtifacts["crosswalk + control assessment<br/>scorecard + delta + OSCAL"]
     HealthPolicy -->|"invalid"| Incomplete["Analysis incomplete"]
     ArchitecturePolicy -->|"invalid"| Incomplete
     DomainPolicy -->|"invalid"| Incomplete
+    IndustryPolicy -->|"invalid"| Incomplete
 ```
 
 Use [`examples/domain-assurance-policy.example.json`](../examples/domain-assurance-policy.example.json)
@@ -155,6 +159,14 @@ Behavioral requirements need a passing source-bound test identity;
 all named enforcement points must exist in the sealed snapshot and named
 artifacts that publish `complete` must report `true`. See
 [Cross-domain assurance](domain-assurance.md).
+
+Use
+[`examples/industry-assurance-policy.example.json`](../examples/industry-assurance-policy.example.json)
+to scope repository-owned control objectives and enable pinned benchmark
+families. Production and release scans fail closed when an enforced applicable
+control lacks complete named evidence, or an enabled benchmark lacks valid
+replay-protected evidence or misses a threshold. See
+[Industry standards and benchmarks](industry-standards-benchmarks.md).
 
 ### LLM-guided adversarial planning
 

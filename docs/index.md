@@ -26,6 +26,7 @@ verification happen inside an enterprise-controlled isolated boundary.
 | Guide an LLM through evidence-gated adversarial testing | [LLM-guided adversarial testing](llm-adversarial-testing.md) |
 | Understand source-to-artifact and cross-scanner joins | [Cross-tool evidence fusion](evidence-fusion.md) |
 | Measure scanner execution and labeled detection effectiveness | [Effectiveness](effectiveness.md) |
+| Map controls and run governed OWASP/NIST/LLM benchmark scorecards | [Industry standards and benchmarks](industry-standards-benchmarks.md) |
 | Make one fail-closed promotion decision | [Governed release readiness](release-readiness.md) |
 | Track every enhancement and its authority boundary | [Product enhancement matrix](product-enhancement-matrix.md) |
 | Review closure of the latest findings backlog | [Findings-driven closure register](findings-closure.md) |
@@ -69,6 +70,9 @@ flowchart LR
         ProposalCheck --> Sandbox["Human-approved disposable lane"]
         Sandbox --> AdversarialProof["Deterministic oracle + controls<br/>exact failed-case evidence"]
         AdversarialProof --> Correlate
+        Standards["19 standards catalogs + repository controls"] --> Industry["Control assessment + OSCAL"]
+        Benchmarks["8 pinned benchmark families"] --> Industry
+        Industry --> Gate
         Validate --> Leverage["Typed evidence graph<br/>controls, taint, artifacts, privacy, trust"]
         Leverage --> Gate["Policy decision"]
         Gate --> Seal["Checksum-sealed report"]

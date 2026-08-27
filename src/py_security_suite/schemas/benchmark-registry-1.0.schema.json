@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "urn:project-py-security-suite:schema:benchmark-registry:1.0", "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "analysis", "source_sha256", "benchmarks_registered", "benchmarks_enabled", "benchmarks", "tasks", "required_metrics", "required_strata", "claim_boundary"],
+  "properties": {
+    "schema_version": {"const": "1.0"}, "analysis": {"const": "industry-benchmark-registry"}, "source_sha256": {"type": "string", "pattern": "^([0-9a-f]{64})?$"}, "benchmarks_registered": {"type": "integer", "minimum": 0}, "benchmarks_enabled": {"type": "integer", "minimum": 0},
+    "benchmarks": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["id", "version", "kind", "source", "languages", "lane", "enabled", "corpus_sha256", "evidence_artifact", "thresholds"], "properties": {"id": {"type": "string"}, "version": {"type": "string"}, "kind": {"type": "string"}, "source": {"type": "string"}, "languages": {"type": "array", "items": {"type": "string"}}, "lane": {"enum": ["core-verified-report", "authorized-companion"]}, "enabled": {"type": "boolean"}, "corpus_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"}, "evidence_artifact": {"type": ["string", "null"]}, "thresholds": {"type": ["object", "null"], "additionalProperties": {"type": "number", "minimum": 0, "maximum": 1}}}}},
+    "tasks": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["benchmark_id", "lane", "command", "network_policy", "disposable_target_required", "source_bound"], "properties": {"benchmark_id": {"type": "string"}, "lane": {"type": "string"}, "command": {"type": "array", "items": {"type": "string"}}, "network_policy": {"const": "deny"}, "disposable_target_required": {"type": "boolean"}, "source_bound": {"type": "boolean"}}}},
+    "required_metrics": {"type": "array", "uniqueItems": true, "items": {"type": "string"}}, "required_strata": {"type": "array", "uniqueItems": true, "items": {"type": "string"}}, "claim_boundary": {"type": "string"}
+  }
+}

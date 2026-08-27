@@ -307,6 +307,7 @@ def _write_primary_report_files(
     static_architecture = (derived_artifacts or {}).get("static-architecture.json")
     domain_assurance = (derived_artifacts or {}).get("domain-assurance.json")
     llm_adversarial = (derived_artifacts or {}).get("llm-adversarial-plan.json")
+    industry_assurance = (derived_artifacts or {}).get("industry-assurance.json")
     _write_text(
         output / "summary.md",
         render_summary(
@@ -331,6 +332,9 @@ def _write_primary_report_files(
             ),
             llm_adversarial=(
                 llm_adversarial if isinstance(llm_adversarial, dict) else None
+            ),
+            industry_assurance=(
+                industry_assurance if isinstance(industry_assurance, dict) else None
             ),
         ),
     )
@@ -406,6 +410,7 @@ def render_summary(
     static_architecture: dict[str, Any] | None = None,
     domain_assurance: dict[str, Any] | None = None,
     llm_adversarial: dict[str, Any] | None = None,
+    industry_assurance: dict[str, Any] | None = None,
 ) -> str:
     active_findings = [
         finding
@@ -435,6 +440,7 @@ def render_summary(
     )
     lines.extend(_render_domain_assurance_summary(domain_assurance))
     lines.extend(_render_llm_adversarial_summary(llm_adversarial))
+    lines.extend(_render_industry_assurance_summary(industry_assurance))
     lines.extend(_render_fusion_summary(evidence_fusion))
     lines.extend(_render_structural_summary(structural_synthesis))
     lines.extend(_render_data_exposure_summary(data_exposure))
@@ -563,6 +569,37 @@ def _render_llm_adversarial_summary(value: dict[str, Any] | None) -> list[str]:
         f"| Authenticated evidence source-bound | {'yes' if evidence.get('source_bound') is True else 'no'} |",
         "",
         "The plan treats repository and model text as untrusted data. An LLM proposal is never a finding by itself; confirmation requires authenticated source-bound execution, a deterministic oracle, a negative control, and mutation validation.",
+    ]
+
+
+def _render_industry_assurance_summary(value: dict[str, Any] | None) -> list[str]:
+    if not isinstance(value, dict):
+        return []
+    interoperability = value.get("interoperability")
+    supported = (
+        sum(
+            item.get("status") == "supported"
+            for item in interoperability
+            if isinstance(item, dict)
+        )
+        if isinstance(interoperability, list)
+        else 0
+    )
+    total_formats = len(interoperability) if isinstance(interoperability, list) else 0
+    return [
+        "",
+        "## Industry standards and benchmark assurance",
+        "",
+        "| Signal | Count/state |",
+        "|---|---:|",
+        f"| Versioned standards catalogs | {int(value.get('standards_registered', 0))} |",
+        f"| Registered benchmark families | {int(value.get('benchmarks_registered', 0))} |",
+        f"| Policy-declared controls satisfied | {int(value.get('controls_satisfied', 0))}/{int(value.get('controls_assessed', 0))} |",
+        f"| Governed benchmarks executed | {int(value.get('benchmarks_executed', 0))} |",
+        f"| Interoperability formats observed/supported | {supported}/{total_formats} |",
+        f"| Assessment complete | {'yes' if value.get('complete') is True else 'no'} |",
+        "",
+        str(value.get("claim_boundary") or ""),
     ]
 
 

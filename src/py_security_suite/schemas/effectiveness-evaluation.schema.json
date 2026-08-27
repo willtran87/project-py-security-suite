@@ -54,7 +54,28 @@
         "precision": {"$ref": "#/$defs/nullableRatio"},
         "recall": {"$ref": "#/$defs/nullableRatio"},
         "specificity": {"$ref": "#/$defs/nullableRatio"},
-        "f1": {"$ref": "#/$defs/nullableRatio"}
+        "f1": {"$ref": "#/$defs/nullableRatio"},
+        "mcc": {"anyOf": [{"type": "number", "minimum": -1, "maximum": 1}, {"type": "null"}]},
+        "balanced_accuracy": {"$ref": "#/$defs/nullableRatio"},
+        "false_positive_rate": {"$ref": "#/$defs/nullableRatio"}
+      }
+    },
+    "stratum_scorecards": {
+      "type": "array",
+      "maxItems": 60000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["dimension", "value", "labels", "confusion_matrix", "precision", "recall", "false_positive_rate"],
+        "properties": {
+          "dimension": {"enum": ["cwe", "language", "parser_variant", "boundary_type", "severity", "mutation_operator"]},
+          "value": {"type": "string", "minLength": 1, "maxLength": 160},
+          "labels": {"type": "integer", "minimum": 1, "maximum": 10000},
+          "confusion_matrix": {"$ref": "#/properties/confusion_matrix"},
+          "precision": {"$ref": "#/$defs/nullableRatio"},
+          "recall": {"$ref": "#/$defs/nullableRatio"},
+          "false_positive_rate": {"$ref": "#/$defs/nullableRatio"}
+        }
       }
     },
     "feedback_policy": {"enum": ["detailed", "aggregate-only"]},

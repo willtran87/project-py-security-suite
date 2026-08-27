@@ -1,0 +1,21 @@
+{
+  "schema_version": "1.0",
+  "enforce": false,
+  "controls": [
+    {"standard": "OWASP-ASVS", "control_id": "V1", "objective": "Retain application-security verification evidence.", "applicable": true, "evidence_artifacts": ["security-requirements-coverage.json"]},
+    {"standard": "NIST-SSDF", "control_id": "RV.1", "objective": "Identify and confirm residual vulnerabilities before release.", "applicable": true, "evidence_artifacts": ["capability-manifest.json", "finding-validation.json", "effectiveness.json"]},
+    {"standard": "NIST-CSF", "control_id": "GV.OC", "objective": "Maintain an explicit cybersecurity capability and governance context.", "applicable": true, "evidence_artifacts": ["capability-manifest.json"]},
+    {"standard": "OWASP-SAMM", "control_id": "Security Testing", "objective": "Measure repeatable security-test effectiveness.", "applicable": true, "evidence_artifacts": ["effectiveness.json"]},
+    {"standard": "OpenSSF-OSPS", "control_id": "OSPS-QA", "objective": "Retain trustworthy quality and security assurance evidence.", "applicable": true, "evidence_artifacts": ["scanner-trust.json", "trust-policy-attestation.json"]},
+    {"standard": "MITRE-ATLAS", "control_id": "AML.TA", "objective": "Plan adversarial testing for applicable AI attack techniques.", "applicable": false, "evidence_artifacts": ["llm-adversarial-plan.json"]},
+    {"standard": "ISO-IEC-25010", "control_id": "Quality", "objective": "Measure maintainability, reliability, and security quality signals.", "applicable": true, "evidence_artifacts": ["code-health.json", "effectiveness.json"]},
+    {"standard": "ISO-IEC-IEEE-42010", "control_id": "Architecture", "objective": "Retain evidence for architecture structure, boundaries, and drift.", "applicable": true, "evidence_artifacts": ["static-architecture.json", "architecture-history.json"]}
+  ],
+  "benchmarks": [
+    {"id": "pysec-governed-holdout", "enabled": false, "corpus_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "evidence_artifact": "pysec-holdout-score.json", "minimum_precision": 0.9, "minimum_recall": 0.9, "minimum_f1": 0.9, "maximum_false_positive_rate": 0.1},
+    {"id": "owasp-benchmark", "enabled": false, "corpus_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "evidence_artifact": "owasp-benchmark-score.json", "minimum_precision": 0.8, "minimum_recall": 0.8, "minimum_f1": 0.8, "maximum_false_positive_rate": 0.2},
+    {"id": "nist-sard-juliet", "enabled": false, "corpus_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "evidence_artifact": "juliet-score.json", "minimum_precision": 0.8, "minimum_recall": 0.8, "minimum_f1": 0.8, "maximum_false_positive_rate": 0.2},
+    {"id": "cyberseceval-2", "enabled": false, "corpus_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "evidence_artifact": "cyberseceval-score.json", "minimum_precision": 0.8, "minimum_recall": 0.8, "minimum_f1": 0.8, "maximum_false_positive_rate": 0.2}
+  ],
+  "benchmark_baseline_path": null
+}

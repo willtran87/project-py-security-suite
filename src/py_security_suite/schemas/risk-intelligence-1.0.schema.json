@@ -3,5 +3,5 @@
   "$id": "urn:project-py-security-suite:schema:risk-intelligence:1.0",
   "type": "object", "additionalProperties": true,
   "required": ["schema_version", "configured", "enriched_findings", "snapshots"],
-  "properties": {"schema_version": {"const": "1.0"}, "configured": {"type": "boolean"}, "enriched_findings": {"type": "integer", "minimum": 0}, "snapshots": {"type": "object"}, "errors": {"type": "array", "items": {"type": "string"}}}
+  "properties": {"schema_version": {"const": "1.0"}, "configured": {"type": "boolean"}, "enriched_findings": {"type": "integer", "minimum": 0}, "vex_formats": {"type": "array", "uniqueItems": true, "items": {"enum": ["cyclonedx", "openvex", "csaf"]}}, "snapshots": {"type": "object"}, "errors": {"type": "array", "items": {"type": "string"}}}
 }

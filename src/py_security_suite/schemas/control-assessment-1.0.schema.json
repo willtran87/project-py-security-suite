@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "urn:project-py-security-suite:schema:control-assessment:1.0", "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "analysis", "complete", "policy_present", "enforced", "catalogs_registered", "controls_assessed", "applicable_controls", "controls_satisfied", "status_counts", "controls", "parse_errors", "claim_boundary"],
+  "properties": {
+    "schema_version": {"const": "1.0"}, "analysis": {"const": "evidence-backed-industry-control-assessment"}, "complete": {"type": "boolean"}, "policy_present": {"type": "boolean"}, "enforced": {"type": "boolean"},
+    "catalogs_registered": {"type": "integer", "minimum": 0}, "controls_assessed": {"type": "integer", "minimum": 0}, "applicable_controls": {"type": "integer", "minimum": 0}, "controls_satisfied": {"type": "integer", "minimum": 0},
+    "status_counts": {"type": "object", "additionalProperties": false, "required": ["satisfied", "gap", "not-applicable"], "properties": {"satisfied": {"type": "integer", "minimum": 0}, "gap": {"type": "integer", "minimum": 0}, "not-applicable": {"type": "integer", "minimum": 0}}},
+    "controls": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["standard", "control_id", "objective", "applicable", "status", "evidence_required", "evidence_present", "gaps"], "properties": {"standard": {"type": "string"}, "control_id": {"type": "string"}, "objective": {"type": "string"}, "applicable": {"type": "boolean"}, "status": {"enum": ["satisfied", "gap", "not-applicable"]}, "evidence_required": {"type": "array", "items": {"type": "string"}}, "evidence_present": {"type": "array", "items": {"type": "string"}}, "gaps": {"type": "array", "items": {"type": "string"}}}}},
+    "parse_errors": {"type": "array", "items": {"type": "string"}}, "claim_boundary": {"type": "string", "minLength": 1}
+  }
+}

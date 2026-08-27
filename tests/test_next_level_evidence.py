@@ -139,6 +139,7 @@ class RiskIntelligenceTests(unittest.TestCase):
         )
         self.assertEqual(result.errors, [])
         self.assertEqual(result.artifact["known_exploited_matches"], 1)
+        self.assertEqual(result.artifact["vex_formats"], ["cyclonedx"])
         self.assertIn("CISA-KEV", finding.classifications)
         self.assertIn("EPSS-HIGH", finding.classifications)
         self.assertIn("VEX-NOT-AFFECTED", finding.classifications)
@@ -164,6 +165,49 @@ class RiskIntelligenceTests(unittest.TestCase):
             IntelligenceConfig(epss_path=self.epss, epss_sha256=_digest(self.epss)),
         )
         self.assertIn("must be between 0 and 1", result.errors[0])
+
+    def test_openvex_and_csaf_are_normalized(self) -> None:
+        documents = {
+            "openvex": {
+                "@context": "https://openvex.dev/ns/v0.2.0",
+                "timestamp": "2026-08-01T00:00:00Z",
+                "statements": [
+                    {
+                        "vulnerability": {"name": "CVE-2026-12345"},
+                        "products": [{"@id": "pkg:pypi/example@1"}],
+                        "status": "not_affected",
+                        "justification": "vulnerable_code_not_in_execute_path",
+                    }
+                ],
+            },
+            "csaf": {
+                "document": {
+                    "category": "csaf_vex",
+                    "tracking": {"current_release_date": "2026-08-01T00:00:00Z"},
+                },
+                "vulnerabilities": [
+                    {
+                        "cve": "CVE-2026-12345",
+                        "product_status": {"known_affected": ["CSAFPID-1"]},
+                    }
+                ],
+            },
+        }
+        for expected_format, document in documents.items():
+            with self.subTest(expected_format=expected_format):
+                path = self.root / f"{expected_format}.json"
+                path.write_text(json.dumps(document), encoding="utf-8")
+                finding = _finding()
+                result = enrich_findings(
+                    [finding],
+                    IntelligenceConfig(vex_path=path, vex_sha256=_digest(path)),
+                )
+                self.assertEqual(result.errors, [])
+                self.assertEqual(result.artifact["vex_formats"], [expected_format])
+                self.assertIn(
+                    expected_format,
+                    finding.evidence["risk_intelligence"]["vex"][0]["format"],
+                )
 
 
 class FindingDeltaTests(unittest.TestCase):

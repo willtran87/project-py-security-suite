@@ -1,0 +1,5 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "urn:project-py-security-suite:schema:oscal-assessment-results:1.1.2", "type": "object", "additionalProperties": false,
+  "required": ["assessment-results"],
+  "properties": {"assessment-results": {"type": "object", "additionalProperties": false, "required": ["uuid", "metadata", "results"], "properties": {"uuid": {"type": "string", "format": "uuid"}, "metadata": {"type": "object", "required": ["title", "last-modified", "version", "oscal-version"]}, "results": {"type": "array", "items": {"type": "object", "required": ["uuid", "title", "description", "start", "reviewed-controls", "observations", "findings"]}}}}}
+}

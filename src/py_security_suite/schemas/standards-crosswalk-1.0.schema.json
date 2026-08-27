@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "urn:project-py-security-suite:schema:standards-crosswalk:1.0", "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "analysis", "catalogs_registered", "catalogs", "mappings", "claim_boundary"],
+  "properties": {
+    "schema_version": {"const": "1.0"}, "analysis": {"const": "versioned-industry-standards-crosswalk"}, "catalogs_registered": {"type": "integer", "minimum": 0},
+    "catalogs": {"type": "array", "items": {"$ref": "#/$defs/catalog"}},
+    "mappings": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["standard", "evidence_artifacts", "evidence_present", "mapping_status"], "properties": {"standard": {"type": "string"}, "evidence_artifacts": {"type": "array", "items": {"type": "string"}}, "evidence_present": {"type": "array", "items": {"type": "string"}}, "mapping_status": {"enum": ["evidence-surface-present", "not-observed"]}}}},
+    "claim_boundary": {"type": "string", "minLength": 1}
+  },
+  "$defs": {"catalog": {"type": "object", "additionalProperties": false, "required": ["id", "version", "kind", "reference"], "properties": {"id": {"type": "string"}, "version": {"type": "string"}, "kind": {"type": "string"}, "reference": {"type": "string", "format": "uri"}}}}
+}

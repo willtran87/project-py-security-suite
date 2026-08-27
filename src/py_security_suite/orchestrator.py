@@ -40,6 +40,7 @@ from .inventory import (
     sealed_source_snapshot,
     source_snapshot,
 )
+from .industry_assurance import build_industry_assurance
 from .isolation_probe import probe_isolation_boundary
 from .models import (
     Finding,
@@ -605,6 +606,35 @@ def _scan_sealed_project(
     ):
         reasons = llm_adversarial_errors or ["plan is truncated or incomplete"]
         context_errors.extend(f"LLM adversarial planning: {error}" for error in reasons)
+    industry_artifacts, industry_errors = build_industry_assurance(
+        scan_target, derived_artifacts
+    )
+    derived_artifacts.update(industry_artifacts)
+    control_assessment = industry_artifacts["control-assessment.json"]
+    benchmark_scorecard = industry_artifacts["benchmark-scorecard.json"]
+    if config.profile in {"production", "release"} and industry_errors:
+        context_errors.extend(
+            f"industry assurance: {error}" for error in industry_errors
+        )
+    if (
+        config.profile in {"production", "release"}
+        and control_assessment["enforced"] is True
+        and control_assessment["complete"] is not True
+    ):
+        context_errors.append(
+            "enforced industry control assessment contains unsatisfied controls"
+        )
+    if (
+        config.profile in {"production", "release"}
+        and benchmark_scorecard["benchmarks_enabled"]
+        and (
+            benchmark_scorecard["complete"] is not True
+            or benchmark_scorecard["passed"] is not True
+        )
+    ):
+        context_errors.append(
+            "enabled industry benchmarks lack valid passing governed evidence"
+        )
     if config.profile in {"production", "release"} and _has_local_monotonic_receipt(
         derived_artifacts
     ):

@@ -32,9 +32,13 @@ _ARTIFACT_SCHEMAS = {
     "artifact-sbom.cdx.json": "cyclonedx-artifact.schema.json",
     "assurance-claims.json": "assurance-claims-1.1.schema.json",
     "boundary-graph.json": "boundary-graph-1.0.schema.json",
+    "benchmark-delta.json": "benchmark-delta-1.0.schema.json",
+    "benchmark-registry.json": "benchmark-registry-1.0.schema.json",
+    "benchmark-scorecard.json": "benchmark-scorecard-1.0.schema.json",
     "capability-manifest.json": "capability-manifest-1.0.schema.json",
     "closure-plan.json": "closure-plan.schema.json",
     "code-health.json": "code-health-1.4.schema.json",
+    "control-assessment.json": "control-assessment-1.0.schema.json",
     "data-exposure.json": "data-exposure-1.5.schema.json",
     "dependency-surface.json": "dependency-surface-1.1.schema.json",
     "domain-assurance.json": "domain-assurance-1.0.schema.json",
@@ -47,10 +51,12 @@ _ARTIFACT_SCHEMAS = {
     "git-sizer.json": "git-sizer-artifact.schema.json",
     "hypothesis-summary.json": "test-summary-artifact.schema.json",
     "intelligence-approval.json": "intelligence-approval.schema.json",
+    "industry-assurance.json": "industry-assurance-1.0.schema.json",
     "isolation-attestation.json": "isolation-attestation.schema.json",
     "isolation-boundary.json": "isolation-boundary-1.0.schema.json",
     "isolation-probe.json": "isolation-probe-1.0.schema.json",
     "osv-manifest-receipts.json": "osv-manifest-receipts-1.0.schema.json",
+    "oscal-assessment-results.json": "oscal-assessment-results-1.1.2.schema.json",
     "finding-delta.json": "finding-delta-1.1.schema.json",
     "finding-validation.json": "finding-validation-1.0.schema.json",
     "framework-model-coverage.json": "framework-model-coverage-1.0.schema.json",
@@ -80,6 +86,7 @@ _ARTIFACT_SCHEMAS = {
     "security-requirements-coverage.json": "security-requirements-coverage-1.0.schema.json",
     "source-inventory.json": "source-inventory.schema.json",
     "static-architecture.json": "static-architecture-1.4.schema.json",
+    "standards-crosswalk.json": "standards-crosswalk-1.0.schema.json",
     "structural-synthesis.json": "structural-synthesis-1.2.schema.json",
     "trust-policy-attestation.json": "trust-policy-attestation-1.0.schema.json",
     "trust-policy.json": "trust-policy-1.0.schema.json",
@@ -89,12 +96,6 @@ _TYPED_VALIDATORS: dict[str, Callable[[object], None]] = {}
 _OPERATION_STATE_GENESIS_SHA256 = hashlib.sha256(
     b"pysec-operation-receipt-state-genesis-v1"
 ).hexdigest()
-
-
-def _digest(value: str) -> bool:
-    return len(value) == 64 and all(
-        character in "0123456789abcdef" for character in value
-    )
 
 
 def _typed_validator(
@@ -107,6 +108,81 @@ def _typed_validator(
         return function
 
     return register
+
+
+@_typed_validator("standards-crosswalk.json")
+def _validate_standards_crosswalk_accounting(value: object) -> None:
+    if not isinstance(value, dict):
+        raise TypeError("standards crosswalk artifact is invalid")
+    catalogs = value.get("catalogs")
+    mappings = value.get("mappings")
+    if not isinstance(catalogs, list) or not isinstance(mappings, list):
+        raise TypeError("standards crosswalk collections are invalid")
+    catalog_ids = [item.get("id") for item in catalogs if isinstance(item, dict)]
+    mapping_ids = [item.get("standard") for item in mappings if isinstance(item, dict)]
+    if (
+        value.get("catalogs_registered") != len(catalogs)
+        or len(catalog_ids) != len(catalogs)
+        or len(set(catalog_ids)) != len(catalog_ids)
+        or mapping_ids != catalog_ids
+    ):
+        raise ValueError("standards crosswalk accounting does not match")
+
+
+@_typed_validator("control-assessment.json")
+def _validate_control_assessment_accounting(value: object) -> None:
+    if not isinstance(value, dict) or not isinstance(value.get("controls"), list):
+        raise TypeError("control assessment artifact is invalid")
+    controls = value["controls"]
+    counts = Counter(str(item.get("status")) for item in controls)
+    applicable = sum(item.get("applicable") is True for item in controls)
+    satisfied = counts["satisfied"]
+    expected_complete = not value.get("parse_errors") and (
+        value.get("enforced") is not True or satisfied == applicable
+    )
+    if (
+        value.get("controls_assessed") != len(controls)
+        or value.get("applicable_controls") != applicable
+        or value.get("controls_satisfied") != satisfied
+        or value.get("status_counts")
+        != {
+            name: counts.get(name, 0) for name in ("satisfied", "gap", "not-applicable")
+        }
+        or value.get("complete") is not expected_complete
+    ):
+        raise ValueError("control assessment accounting does not match")
+
+
+@_typed_validator("benchmark-scorecard.json")
+def _validate_benchmark_scorecard_accounting(value: object) -> None:
+    if not isinstance(value, dict) or not isinstance(value.get("benchmarks"), list):
+        raise TypeError("benchmark scorecard artifact is invalid")
+    rows = value["benchmarks"]
+    scope = value.get("benchmark_scope")
+    expected_scope = [
+        {
+            "benchmark_id": item.get("benchmark_id"),
+            "corpus_sha256": item.get("corpus_sha256"),
+        }
+        for item in rows
+    ]
+    executed = sum(item.get("evidence_valid") is True for item in rows)
+    passed = sum(item.get("passed") is True for item in rows)
+    if (
+        value.get("benchmarks_enabled") != len(rows)
+        or value.get("benchmarks_executed") != executed
+        or value.get("benchmarks_passed") != passed
+        or value.get("complete") is not (executed == len(rows))
+        or value.get("passed") is not (bool(rows) and passed == len(rows))
+        or scope != expected_scope
+    ):
+        raise ValueError("benchmark scorecard accounting does not match")
+
+
+def _digest(value: str) -> bool:
+    return len(value) == 64 and all(
+        character in "0123456789abcdef" for character in value
+    )
 
 
 def validate_governed_artifacts(artifacts: dict[str, Any] | None) -> dict[str, str]:

@@ -1,0 +1,5 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "urn:project-py-security-suite:schema:benchmark-delta:1.0", "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "analysis", "baseline_present", "comparable", "current_metrics", "baseline_metrics", "metric_deltas", "regressions", "claim_boundary"],
+  "properties": {"schema_version": {"const": "1.0"}, "analysis": {"const": "industry-benchmark-delta"}, "baseline_present": {"type": "boolean"}, "comparable": {"type": "boolean"}, "current_metrics": {"type": "object"}, "baseline_metrics": {"type": "object"}, "metric_deltas": {"type": "object"}, "regressions": {"type": "array", "uniqueItems": true, "items": {"type": "string"}}, "claim_boundary": {"type": "string"}}
+}

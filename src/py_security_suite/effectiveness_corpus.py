@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import base64
+import math
 import os
 import ssl
 import sqlite3
@@ -136,7 +137,15 @@ def evaluate_report_corpus(
             "recall": _ratio(true_positive, true_positive + false_negative),
             "specificity": _ratio(true_negative, true_negative + false_positive),
             "f1": _f1(true_positive, false_positive, false_negative),
+            "mcc": _mcc(true_positive, true_negative, false_positive, false_negative),
+            "balanced_accuracy": _balanced_accuracy(
+                true_positive, true_negative, false_positive, false_negative
+            ),
+            "false_positive_rate": _ratio(
+                false_positive, false_positive + true_negative
+            ),
         },
+        "stratum_scorecards": _stratum_scorecards(outcomes),
         "feedback_policy": (
             "aggregate-only" if document.get("schema_version") == "2.0" else "detailed"
         ),
@@ -1100,3 +1109,90 @@ def _ratio(numerator: int, denominator: int) -> float | None:
 def _f1(true_positive: int, false_positive: int, false_negative: int) -> float | None:
     denominator = 2 * true_positive + false_positive + false_negative
     return round(2 * true_positive / denominator, 6) if denominator else None
+
+
+def _mcc(
+    true_positive: int,
+    true_negative: int,
+    false_positive: int,
+    false_negative: int,
+) -> float | None:
+    denominator = math.sqrt(
+        (true_positive + false_positive)
+        * (true_positive + false_negative)
+        * (true_negative + false_positive)
+        * (true_negative + false_negative)
+    )
+    if not denominator:
+        return None
+    return round(
+        (true_positive * true_negative - false_positive * false_negative) / denominator,
+        6,
+    )
+
+
+def _balanced_accuracy(
+    true_positive: int,
+    true_negative: int,
+    false_positive: int,
+    false_negative: int,
+) -> float | None:
+    recall = _ratio(true_positive, true_positive + false_negative)
+    specificity = _ratio(true_negative, true_negative + false_positive)
+    if recall is None or specificity is None:
+        return None
+    return round((recall + specificity) / 2, 6)
+
+
+def _stratum_scorecards(outcomes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for dimension in (
+        "cwe",
+        "language",
+        "parser_variant",
+        "boundary_type",
+        "severity",
+        "mutation_operator",
+    ):
+        values = sorted(
+            {
+                str(outcome.get("strata", {}).get(dimension) or "")
+                for outcome in outcomes
+                if isinstance(outcome.get("strata"), dict)
+                and outcome["strata"].get(dimension)
+            }
+        )
+        for value in values:
+            selected = [
+                outcome
+                for outcome in outcomes
+                if isinstance(outcome.get("strata"), dict)
+                and outcome["strata"].get(dimension) == value
+            ]
+            counts = {
+                name: sum(item["outcome"] == name for item in selected)
+                for name in (
+                    "true_positive",
+                    "true_negative",
+                    "false_positive",
+                    "false_negative",
+                )
+            }
+            true_positive = counts["true_positive"]
+            true_negative = counts["true_negative"]
+            false_positive = counts["false_positive"]
+            false_negative = counts["false_negative"]
+            rows.append(
+                {
+                    "dimension": dimension,
+                    "value": value,
+                    "labels": len(selected),
+                    "confusion_matrix": counts,
+                    "precision": _ratio(true_positive, true_positive + false_positive),
+                    "recall": _ratio(true_positive, true_positive + false_negative),
+                    "false_positive_rate": _ratio(
+                        false_positive, false_positive + true_negative
+                    ),
+                }
+            )
+    return rows
