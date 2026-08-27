@@ -19,6 +19,7 @@ from py_security_suite.industry_assurance import (
     _authorization_validated,
     _benchmark_gaps,
     _benchmark_reproducibility_gaps,
+    _benchmark_runner_contract,
     _procedure_assessment,
     _safe_relative,
     _standardized_prioritization,
@@ -67,10 +68,10 @@ class IndustryAssuranceTests(unittest.TestCase):
             )
         self.assertEqual(errors, [])
         self.assertEqual(
-            artifacts["standards-crosswalk.json"]["catalogs_registered"], 39
+            artifacts["standards-crosswalk.json"]["catalogs_registered"], 58
         )
         self.assertEqual(
-            artifacts["benchmark-registry.json"]["benchmarks_registered"], 9
+            artifacts["benchmark-registry.json"]["benchmarks_registered"], 18
         )
         supported = {
             item["format"]
@@ -88,7 +89,10 @@ class IndustryAssuranceTests(unittest.TestCase):
                 if name.startswith("oscal-")
             )
         )
-        self.assertEqual(len(validate_governed_artifacts(artifacts)), 15)
+        self.assertEqual(len(validate_governed_artifacts(artifacts)), 16)
+        profiles = artifacts["assurance-profile-registry.json"]
+        self.assertEqual(profiles["profiles_available"], 9)
+        self.assertEqual(profiles["profiles_selected"], 0)
 
     def test_procedures_cvss_ssvc_and_full_oscal_lifecycle_are_governed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -271,6 +275,78 @@ class IndustryAssuranceTests(unittest.TestCase):
         )
         self.assertEqual(len(gaps), 5)
 
+        governed = {
+            "id": "agentic-security-holdout",
+            "version": "organization-pinned",
+        }
+        governed["runner_contract"] = _benchmark_runner_contract(governed)
+        base_evidence = {
+            "report": {"checksums_sha256": "a" * 64},
+            "confusion_matrix": {
+                "true_positive": 1,
+                "true_negative": 1,
+                "false_positive": 0,
+                "false_negative": 0,
+            },
+            "corpus": {"revision": "approved"},
+            "time_authority": {"validated": True},
+            "replay_protected": True,
+        }
+        self.assertIn(
+            "qualified benchmark execution context is missing",
+            _benchmark_reproducibility_gaps(base_evidence, governed),
+        )
+        unsafe_context_gaps = _benchmark_reproducibility_gaps(
+            {
+                **base_evidence,
+                "execution_context": {
+                    "runner_identity": "",
+                    "runner_version": "",
+                    "target_sha256": "bad",
+                    "environment_sha256": "bad",
+                    "toolset_sha256": "bad",
+                    "oracle_sha256": "bad",
+                    "isolation_receipt_sha256": "bad",
+                    "isolation_validated": False,
+                    "positive_controls": 0,
+                    "negative_controls": False,
+                    "repetitions": 1,
+                },
+            },
+            governed,
+        )
+        self.assertIn(
+            "benchmark execution target_sha256 is missing or invalid",
+            unsafe_context_gaps,
+        )
+        self.assertIn(
+            "benchmark runner identity or version is missing", unsafe_context_gaps
+        )
+        self.assertIn(
+            "benchmark execution isolation is not validated", unsafe_context_gaps
+        )
+        self.assertIn("benchmark positive_controls are missing", unsafe_context_gaps)
+        self.assertIn("benchmark negative_controls are missing", unsafe_context_gaps)
+        execution_context = {
+            "runner_identity": "approved-agentic-runner",
+            "runner_version": "1.0",
+            "target_sha256": "b" * 64,
+            "environment_sha256": "c" * 64,
+            "toolset_sha256": "d" * 64,
+            "oracle_sha256": "e" * 64,
+            "isolation_receipt_sha256": "f" * 64,
+            "isolation_validated": True,
+            "positive_controls": 10,
+            "negative_controls": 10,
+            "repetitions": 5,
+        }
+        self.assertEqual(
+            _benchmark_reproducibility_gaps(
+                {**base_evidence, "execution_context": execution_context}, governed
+            ),
+            [],
+        )
+
     def test_policy_drives_controls_and_governed_benchmark_thresholds(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -351,9 +427,52 @@ class IndustryAssuranceTests(unittest.TestCase):
                 encoding="utf-8"
             )
         )
-        schema = json.loads(read_bundled_schema("industry-assurance-policy-1.1"))
+        schema = json.loads(read_bundled_schema("industry-assurance-policy-1.2"))
         Draft202012Validator.check_schema(schema)
         Draft202012Validator(schema).validate(instance)
+
+    def test_policy_profiles_expand_into_fail_closed_controls_and_procedures(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "security").mkdir()
+            policy = {
+                "schema_version": "1.2",
+                "enforce": True,
+                "profiles": [
+                    {
+                        "id": "enterprise-security",
+                        "applicable": True,
+                        "procedure_execution": "planned",
+                    },
+                    {
+                        "id": "privacy",
+                        "applicable": False,
+                        "procedure_execution": "planned",
+                    },
+                ],
+                "controls": [],
+                "procedures": [],
+                "benchmarks": [],
+                "benchmark_baseline_path": None,
+            }
+            (root / "security" / "industry-assurance-policy.json").write_text(
+                json.dumps(policy), encoding="utf-8"
+            )
+            artifacts, errors = build_industry_assurance(root, {})
+        self.assertEqual(errors, [])
+        registry = artifacts["assurance-profile-registry.json"]
+        self.assertEqual(registry["profiles_selected"], 2)
+        assessment = artifacts["control-assessment.json"]
+        self.assertEqual(assessment["controls_assessed"], 5)
+        self.assertEqual(assessment["status_counts"]["gap"], 3)
+        self.assertEqual(assessment["status_counts"]["not-applicable"], 2)
+        procedures = artifacts["procedure-assessment.json"]
+        self.assertEqual(procedures["status_counts"]["planned"], 1)
+        self.assertEqual(procedures["status_counts"]["not-applicable"], 1)
+        self.assertFalse(artifacts["industry-assurance.json"]["complete"])
+        validate_governed_artifacts(artifacts)
 
     def test_policy_validation_rejects_every_unsafe_shape(self) -> None:
         valid_control = {
@@ -391,6 +510,21 @@ class IndustryAssuranceTests(unittest.TestCase):
                 "benchmarks": [{**valid_benchmark, "minimum_recall": -1}],
             },
             {**self._policy(), "benchmark_baseline_path": "../escape.json"},
+            {
+                "schema_version": "1.2",
+                "enforce": True,
+                "profiles": [
+                    {
+                        "id": "unknown",
+                        "applicable": True,
+                        "procedure_execution": "planned",
+                    }
+                ],
+                "controls": [],
+                "procedures": [],
+                "benchmarks": [],
+                "benchmark_baseline_path": None,
+            },
         ]
         for value in invalid:
             with self.subTest(value=value), self.assertRaises(ValueError):

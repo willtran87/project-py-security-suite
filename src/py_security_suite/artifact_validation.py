@@ -35,6 +35,7 @@ _ARTIFACT_SCHEMAS = {
     "benchmark-delta.json": "benchmark-delta-1.0.schema.json",
     "benchmark-registry.json": "benchmark-registry-1.0.schema.json",
     "benchmark-scorecard.json": "benchmark-scorecard-1.0.schema.json",
+    "assurance-profile-registry.json": "assurance-profile-registry-1.0.schema.json",
     "capability-manifest.json": "capability-manifest-1.0.schema.json",
     "closure-plan.json": "closure-plan.schema.json",
     "code-health.json": "code-health-1.4.schema.json",

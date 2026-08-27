@@ -304,6 +304,153 @@ _STANDARDS: tuple[dict[str, Any], ...] = (
         "reference": "https://owasp.org/APTS/",
         "evidence": ["llm-adversarial-plan.json", "procedure-assessment.json"],
     },
+    {
+        "id": "ISO-IEC-27001",
+        "version": "2022",
+        "kind": "information-security-management-system",
+        "reference": "https://www.iso.org/standard/27001.html",
+        "evidence": ["control-assessment.json", "audit-package-verification.json"],
+    },
+    {
+        "id": "ISO-IEC-27002",
+        "version": "2022",
+        "kind": "information-security-controls",
+        "reference": "https://www.iso.org/standard/75652.html",
+        "evidence": ["control-assessment.json", "domain-assurance.json"],
+    },
+    {
+        "id": "ISO-IEC-27034-1",
+        "version": "2011",
+        "kind": "application-security-management",
+        "reference": "https://www.iso.org/standard/44378.html",
+        "evidence": [
+            "security-requirements-coverage.json",
+            "application-contract-analysis.json",
+        ],
+    },
+    {
+        "id": "ISO-IEC-27701",
+        "version": "2025",
+        "kind": "privacy-information-management-system",
+        "reference": "https://www.iso.org/standard/27701.html",
+        "evidence": ["control-assessment.json", "data-exposure.json"],
+    },
+    {
+        "id": "NIST-PRIVACY-FRAMEWORK",
+        "version": "1.0",
+        "kind": "privacy-risk-management",
+        "reference": "https://www.nist.gov/privacy-framework",
+        "evidence": ["domain-assurance.json", "data-exposure.json"],
+    },
+    {
+        "id": "ISO-IEC-29147",
+        "version": "2018",
+        "kind": "coordinated-vulnerability-disclosure",
+        "reference": "https://www.iso.org/standard/72311.html",
+        "evidence": ["finding-register.json", "closure-plan.json"],
+    },
+    {
+        "id": "ISO-IEC-30111",
+        "version": "2019",
+        "kind": "vulnerability-handling",
+        "reference": "https://www.iso.org/standard/69725.html",
+        "evidence": [
+            "finding-register.json",
+            "risk-intelligence.json",
+            "closure-plan.json",
+        ],
+    },
+    {
+        "id": "NIST-SP-800-61",
+        "version": "3",
+        "kind": "incident-response",
+        "reference": "https://csrc.nist.gov/pubs/sp/800/61/r3/final",
+        "evidence": ["control-assessment.json", "operational-trend.json"],
+    },
+    {
+        "id": "NIST-SP-800-218A",
+        "version": "2024",
+        "kind": "generative-ai-secure-development",
+        "reference": "https://csrc.nist.gov/pubs/sp/800/218/a/final",
+        "evidence": ["llm-adversarial-plan.json", "domain-assurance.json"],
+    },
+    {
+        "id": "NIST-SP-800-204D",
+        "version": "2024",
+        "kind": "cicd-supply-chain-security",
+        "reference": "https://csrc.nist.gov/pubs/sp/800/204/d/final",
+        "evidence": ["release-readiness.json", "evidence-fusion.json"],
+    },
+    {
+        "id": "SLSA",
+        "version": "1.2",
+        "kind": "software-supply-chain-integrity",
+        "reference": "https://slsa.dev/spec/v1.2/",
+        "evidence": ["security-passport.json", "release-readiness.json"],
+    },
+    {
+        "id": "ISO-IEC-18974",
+        "version": "2023",
+        "kind": "open-source-security-assurance",
+        "reference": "https://www.iso.org/standard/86450.html",
+        "evidence": ["dependency-surface.json", "risk-intelligence.json"],
+    },
+    {
+        "id": "ISO-IEC-5230",
+        "version": "2020",
+        "kind": "open-source-license-compliance",
+        "reference": "https://www.iso.org/standard/81039.html",
+        "evidence": ["reuse-compliance.json", "scancode-inventory.json"],
+    },
+    {
+        "id": "SPDX",
+        "version": "3.0 / ISO-IEC-5962:2021",
+        "kind": "software-bill-of-materials-interchange",
+        "reference": "https://spdx.dev/use/specifications/",
+        "evidence": ["reuse-compliance.json", "artifact-manifest.json"],
+    },
+    {
+        "id": "EU-CRA",
+        "version": "2024/2847",
+        "kind": "product-cybersecurity-regulation",
+        "reference": "https://eur-lex.europa.eu/eli/reg/2024/2847/oj/eng",
+        "evidence": [
+            "release-readiness.json",
+            "risk-intelligence.json",
+            "artifact-sbom.cdx.json",
+        ],
+    },
+    {
+        "id": "PCI-DSS",
+        "version": "4.0.1",
+        "kind": "payment-data-security",
+        "reference": "https://www.pcisecuritystandards.org/standards/pci-dss/",
+        "evidence": ["control-assessment.json", "data-exposure.json"],
+    },
+    {
+        "id": "PCI-SECURE-SOFTWARE",
+        "version": "2.x",
+        "kind": "payment-software-security",
+        "reference": "https://www.pcisecuritystandards.org/standards/secure-software/",
+        "evidence": [
+            "security-requirements-coverage.json",
+            "procedure-assessment.json",
+        ],
+    },
+    {
+        "id": "NIST-SP-800-171",
+        "version": "3",
+        "kind": "controlled-unclassified-information",
+        "reference": "https://csrc.nist.gov/pubs/sp/800/171/r3/final",
+        "evidence": ["control-assessment.json", "audit-package-verification.json"],
+    },
+    {
+        "id": "SOC2-TSC",
+        "version": "policy-pinned",
+        "kind": "service-organization-trust-controls",
+        "reference": "https://www.aicpa-cima.com/resources/landing/system-and-organization-controls-soc-suite-of-services",
+        "evidence": ["control-assessment.json", "audit-package-verification.json"],
+    },
 )
 
 _BENCHMARKS: tuple[dict[str, Any], ...] = (
@@ -379,7 +526,363 @@ _BENCHMARKS: tuple[dict[str, Any], ...] = (
         "languages": ["python"],
         "lane": "authorized-companion",
     },
+    {
+        "id": "python-cve-pairs",
+        "version": "organization-pinned",
+        "kind": "vulnerable-patched-pairs",
+        "source": "organization-approved Python CVE commit-pair corpus",
+        "languages": ["python"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "iac-misconfiguration-holdout",
+        "version": "organization-pinned",
+        "kind": "iac-security",
+        "source": "organization-approved IaC positive/negative corpus",
+        "languages": ["terraform", "cloudformation", "kubernetes"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "container-kubernetes-holdout",
+        "version": "organization-pinned",
+        "kind": "container-orchestration-security",
+        "source": "organization-approved container and Kubernetes corpus",
+        "languages": ["dockerfile", "kubernetes"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "secret-detection-holdout",
+        "version": "organization-pinned",
+        "kind": "secret-detection",
+        "source": "organization-approved synthetic and revoked-secret corpus",
+        "languages": ["multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "sbom-sca-holdout",
+        "version": "organization-pinned",
+        "kind": "sbom-sca-accuracy",
+        "source": "organization-approved dependency graph and advisory corpus",
+        "languages": ["multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "malicious-package-holdout",
+        "version": "organization-pinned",
+        "kind": "malicious-package-detection",
+        "source": "organization-approved inert malicious-package corpus",
+        "languages": ["python"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "fuzzing-crash-holdout",
+        "version": "organization-pinned",
+        "kind": "fuzzing-effectiveness",
+        "source": "organization-approved seeded-defect and crash corpus",
+        "languages": ["multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "agentic-security-holdout",
+        "version": "organization-pinned",
+        "kind": "agentic-ai-security",
+        "source": "organization-approved tool-use and prompt-injection corpus",
+        "languages": ["multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "architecture-quality-holdout",
+        "version": "organization-pinned",
+        "kind": "architecture-quality",
+        "source": "organization-approved architecture-smell corpus",
+        "languages": ["multi"],
+        "lane": "authorized-companion",
+    },
 )
+
+
+_ASSURANCE_PROFILES: dict[str, dict[str, Any]] = {
+    "enterprise-security": {
+        "standards": ["ISO-IEC-27001", "ISO-IEC-27002", "ISO-IEC-27034-1"],
+        "controls": [
+            (
+                "ISO-IEC-27001",
+                "ISMS-RISK",
+                "Retain scoped information-security risk and control evidence.",
+                ["control-proof.json", "audit-package-verification.json"],
+            ),
+            (
+                "ISO-IEC-27002",
+                "ORG-CONTROLS",
+                "Assess organizational and technical security controls against retained evidence.",
+                ["domain-assurance.json", "control-proof.json"],
+            ),
+            (
+                "ISO-IEC-27034-1",
+                "APPLICATION-SECURITY",
+                "Integrate application-security requirements and verification into the lifecycle.",
+                [
+                    "security-requirements-coverage.json",
+                    "application-contract-analysis.json",
+                ],
+            ),
+        ],
+        "procedures": [
+            (
+                "ISO-IEC-27001",
+                "INTERNAL-REVIEW",
+                "Review the scoped ISMS evidence package and unresolved control gaps.",
+                "examine",
+                False,
+                ["audit-package-verification.json", "control-assessment.json"],
+            ),
+        ],
+    },
+    "privacy": {
+        "standards": ["ISO-IEC-27701", "NIST-PRIVACY-FRAMEWORK"],
+        "controls": [
+            (
+                "ISO-IEC-27701",
+                "PIMS",
+                "Retain privacy-management and accountable data-processing evidence.",
+                ["data-exposure.json", "domain-assurance.json"],
+            ),
+            (
+                "NIST-PRIVACY-FRAMEWORK",
+                "PRIVACY-RISK",
+                "Identify and treat privacy risks across discovered data flows.",
+                ["data-exposure.json", "risk-paths.json"],
+            ),
+        ],
+        "procedures": [
+            (
+                "ISO-IEC-27701",
+                "PROCESSING-REVIEW",
+                "Review data inventory, purposes, boundaries, retention, and protection evidence.",
+                "manual",
+                False,
+                ["data-exposure.json", "domain-assurance.json"],
+            ),
+        ],
+    },
+    "psirt-incident": {
+        "standards": ["ISO-IEC-29147", "ISO-IEC-30111", "NIST-SP-800-61"],
+        "controls": [
+            (
+                "ISO-IEC-29147",
+                "DISCLOSURE",
+                "Maintain coordinated vulnerability intake and disclosure evidence.",
+                ["finding-register.json", "closure-plan.json"],
+            ),
+            (
+                "ISO-IEC-30111",
+                "HANDLING",
+                "Triage, prioritize, remediate, and communicate retained vulnerability records.",
+                [
+                    "risk-intelligence.json",
+                    "finding-register.json",
+                    "closure-plan.json",
+                ],
+            ),
+            (
+                "NIST-SP-800-61",
+                "INCIDENT-READINESS",
+                "Retain incident preparation, detection, response, recovery, and improvement evidence.",
+                ["operational-trend.json", "domain-assurance.json"],
+            ),
+        ],
+        "procedures": [
+            (
+                "ISO-IEC-30111",
+                "REMEDIATION-DRILL",
+                "Exercise vulnerability triage through closure with ownership and elapsed-time evidence.",
+                "test",
+                True,
+                ["finding-register.json", "closure-plan.json"],
+            ),
+            (
+                "NIST-SP-800-61",
+                "INCIDENT-EXERCISE",
+                "Execute an authorized incident-response exercise and retain observations.",
+                "test",
+                True,
+                ["operational-trend.json"],
+            ),
+        ],
+    },
+    "software-supply-chain": {
+        "standards": [
+            "NIST-SP-800-204D",
+            "SLSA",
+            "ISO-IEC-18974",
+            "ISO-IEC-5230",
+            "SPDX",
+        ],
+        "controls": [
+            (
+                "NIST-SP-800-204D",
+                "CICD-INTEGRITY",
+                "Bind CI/CD security evidence to the exact source and release subjects.",
+                ["release-readiness.json", "evidence-fusion.json"],
+            ),
+            (
+                "SLSA",
+                "BUILD-SOURCE",
+                "Verify source and build provenance at the organization-selected SLSA levels.",
+                ["security-passport.json", "release-readiness.json"],
+            ),
+            (
+                "ISO-IEC-18974",
+                "OSS-SECURITY",
+                "Operate an evidence-backed open-source security assurance process.",
+                ["dependency-surface.json", "risk-intelligence.json"],
+            ),
+            (
+                "ISO-IEC-5230",
+                "OSS-LICENSE",
+                "Operate an evidence-backed open-source license compliance process.",
+                ["reuse-compliance.json", "scancode-inventory.json"],
+            ),
+            (
+                "SPDX",
+                "SBOM-INTERCHANGE",
+                "Retain machine-readable component, license, and artifact identity evidence.",
+                ["artifact-manifest.json", "reuse-compliance.json"],
+            ),
+        ],
+        "procedures": [
+            (
+                "SLSA",
+                "PROVENANCE-VERIFY",
+                "Verify provenance authenticity, subject identity, builder policy, and source revision.",
+                "test",
+                False,
+                ["security-passport.json", "release-readiness.json"],
+            ),
+        ],
+    },
+    "ai-development": {
+        "standards": ["NIST-SP-800-218A", "NIST-AI-RMF", "OWASP-AITG", "MITRE-ATLAS"],
+        "controls": [
+            (
+                "NIST-SP-800-218A",
+                "AI-SSDF",
+                "Apply AI-specific secure-development practices to models, data, and dependent systems.",
+                ["llm-adversarial-plan.json", "domain-assurance.json"],
+            ),
+        ],
+        "procedures": [
+            (
+                "OWASP-AITG",
+                "AI-ADVERSARIAL",
+                "Execute the approved adversarial campaign with deterministic oracles and negative controls.",
+                "dynamic",
+                True,
+                ["llm-adversarial-plan.json"],
+            ),
+        ],
+    },
+    "eu-cra": {
+        "standards": ["EU-CRA", "ISO-IEC-29147", "ISO-IEC-30111"],
+        "controls": [
+            (
+                "EU-CRA",
+                "ESSENTIAL-REQUIREMENTS",
+                "Retain product risk, secure-default, component, update, and support evidence.",
+                [
+                    "release-readiness.json",
+                    "artifact-sbom.cdx.json",
+                    "risk-intelligence.json",
+                ],
+            ),
+            (
+                "EU-CRA",
+                "VULNERABILITY-HANDLING",
+                "Retain vulnerability handling, disclosure, remediation, and support-period evidence.",
+                ["finding-register.json", "closure-plan.json"],
+            ),
+        ],
+        "procedures": [
+            (
+                "EU-CRA",
+                "CONFORMITY-REVIEW",
+                "Review technical documentation and applicable conformity evidence before release.",
+                "manual",
+                False,
+                ["audit-package-verification.json", "release-readiness.json"],
+            ),
+        ],
+    },
+    "payment-software": {
+        "standards": ["PCI-DSS", "PCI-SECURE-SOFTWARE"],
+        "controls": [
+            (
+                "PCI-DSS",
+                "REQ-6",
+                "Retain secure-development and change-control evidence for payment-impacting software.",
+                ["security-requirements-coverage.json", "release-readiness.json"],
+            ),
+            (
+                "PCI-SECURE-SOFTWARE",
+                "SOFTWARE-SECURITY",
+                "Retain payment-software design, implementation, and testing evidence.",
+                ["application-contract-analysis.json", "data-exposure.json"],
+            ),
+        ],
+        "procedures": [
+            (
+                "PCI-DSS",
+                "PENETRATION-TEST",
+                "Execute the authorized applicable penetration-test scope and retain results.",
+                "dynamic",
+                True,
+                ["llm-adversarial-plan.json"],
+            ),
+        ],
+    },
+    "federal-cui": {
+        "standards": ["NIST-SP-800-171", "NIST-SP-800-53A"],
+        "controls": [
+            (
+                "NIST-SP-800-171",
+                "CUI-REQUIREMENTS",
+                "Assess applicable CUI protection requirements with organization-approved evidence.",
+                ["control-proof.json", "audit-package-verification.json"],
+            ),
+        ],
+        "procedures": [
+            (
+                "NIST-SP-800-53A",
+                "CUI-ASSESSMENT",
+                "Execute applicable examination, interview, and test procedures for the CUI boundary.",
+                "test",
+                True,
+                ["procedure-assessment.json"],
+            ),
+        ],
+    },
+    "service-organization": {
+        "standards": ["SOC2-TSC", "NIST-CSF"],
+        "controls": [
+            (
+                "SOC2-TSC",
+                "TRUST-SERVICES",
+                "Retain scoped security, availability, confidentiality, processing-integrity, and privacy control evidence.",
+                ["control-proof.json", "audit-package-verification.json"],
+            ),
+        ],
+        "procedures": [
+            (
+                "SOC2-TSC",
+                "OPERATING-EFFECTIVENESS",
+                "Review control design and time-bounded operating-effectiveness evidence.",
+                "examine",
+                False,
+                ["operational-trend.json", "audit-package-verification.json"],
+            ),
+        ],
+    },
+}
 
 _INTEROPERABILITY = (
     ("SARIF", "2.1.0", ("results.sarif",)),
@@ -403,6 +906,7 @@ def build_industry_assurance(
     target = target.resolve()
     policy, errors = _load_policy(target)
     source_sha256 = _source_sha256(artifacts)
+    profiles = _profile_registry(policy)
     procedures = _procedure_assessment(policy, artifacts, errors)
     prioritization = _standardized_prioritization(findings or [])
     observed_artifacts = {
@@ -438,6 +942,8 @@ def build_industry_assurance(
         "policy_path": _POLICY_PATH if policy["present"] else None,
         "standards_registered": len(crosswalk["catalogs"]),
         "benchmarks_registered": len(registry["benchmarks"]),
+        "assurance_profiles_available": profiles["profiles_available"],
+        "assurance_profiles_selected": profiles["profiles_selected"],
         "controls_assessed": assessment["controls_assessed"],
         "controls_satisfied": assessment["controls_satisfied"],
         "procedures_assessed": procedures["procedures_assessed"],
@@ -447,6 +953,7 @@ def build_industry_assurance(
         "interoperability": _interoperability(generated_artifacts),
         "artifact_contracts": [
             "standards-crosswalk.json",
+            "assurance-profile-registry.json",
             "control-assessment.json",
             "procedure-assessment.json",
             "standardized-prioritization.json",
@@ -470,6 +977,7 @@ def build_industry_assurance(
     return {
         "industry-assurance.json": industry,
         "standards-crosswalk.json": crosswalk,
+        "assurance-profile-registry.json": profiles,
         "control-assessment.json": assessment,
         "procedure-assessment.json": procedures,
         "standardized-prioritization.json": prioritization,
@@ -480,10 +988,44 @@ def build_industry_assurance(
     }, errors
 
 
+def _profile_registry(policy: dict[str, Any]) -> dict[str, Any]:
+    selections = {str(item["id"]): item for item in policy.get("profiles", [])}
+    profiles = []
+    for identifier, profile in _ASSURANCE_PROFILES.items():
+        selection = selections.get(identifier)
+        profiles.append(
+            {
+                "id": identifier,
+                "standards": list(profile["standards"]),
+                "controls": len(profile["controls"]),
+                "procedures": len(profile["procedures"]),
+                "selected": selection is not None,
+                "applicable": (
+                    selection["applicable"] if selection is not None else None
+                ),
+                "procedure_execution": (
+                    selection["procedure_execution"] if selection is not None else None
+                ),
+            }
+        )
+    return {
+        "schema_version": "1.0",
+        "analysis": "industry-assurance-profile-registry",
+        "profiles_available": len(profiles),
+        "profiles_selected": len(selections),
+        "profiles": profiles,
+        "claim_boundary": (
+            "Selecting a profile expands evidence-backed controls and procedures; "
+            "it does not establish certification, legal applicability, or assessor approval."
+        ),
+    }
+
+
 def _load_policy(target: Path) -> tuple[dict[str, Any], list[str]]:
     default = {
         "present": False,
         "enforce": False,
+        "profiles": [],
         "controls": [],
         "procedures": [],
         "benchmarks": [],
@@ -501,7 +1043,7 @@ def _load_policy(target: Path) -> tuple[dict[str, Any], list[str]]:
         )
         value = strict_loads(payload)
         _validate_policy(value)
-        return {"present": True, **value}, []
+        return {"present": True, **_expand_policy_profiles(value)}, []
     except (OSError, TypeError, ValueError) as exc:
         return {**default, "present": True}, [f"{_POLICY_PATH}: {type(exc).__name__}"]
 
@@ -515,28 +1057,55 @@ def _validate_policy(value: object) -> None:
         "benchmark_baseline_path",
     }
     version_1_1 = {*version_1_0, "procedures"}
+    version_1_2 = {*version_1_1, "profiles"}
     if not isinstance(value, dict):
         raise ValueError("invalid industry assurance policy")
     version = value.get("schema_version")
-    expected = version_1_0 if version == "1.0" else version_1_1
+    expected = (
+        version_1_0
+        if version == "1.0"
+        else version_1_1
+        if version == "1.1"
+        else version_1_2
+    )
     if (
-        version not in {"1.0", "1.1"}
+        version not in {"1.0", "1.1", "1.2"}
         or set(value) != expected
         or not isinstance(value.get("enforce"), bool)
     ):
         raise ValueError("invalid industry assurance policy")
     controls = value.get("controls")
     procedures = value.get("procedures", [])
+    profiles = value.get("profiles", [])
     benchmarks = value.get("benchmarks")
     if (
         not isinstance(controls, list)
         or len(controls) > 10_000
         or not isinstance(procedures, list)
         or len(procedures) > 20_000
+        or not isinstance(profiles, list)
+        or len(profiles) > len(_ASSURANCE_PROFILES)
         or not isinstance(benchmarks, list)
         or len(benchmarks) > 100
     ):
         raise ValueError("industry assurance policy collections are invalid")
+    seen_profiles: set[str] = set()
+    for profile in profiles:
+        if not isinstance(profile, dict) or set(profile) != {
+            "id",
+            "applicable",
+            "procedure_execution",
+        }:
+            raise ValueError("industry assurance profile fields are invalid")
+        identifier = str(profile.get("id") or "")
+        if (
+            identifier not in _ASSURANCE_PROFILES
+            or identifier in seen_profiles
+            or not isinstance(profile.get("applicable"), bool)
+            or profile.get("procedure_execution") not in {"planned", "executed"}
+        ):
+            raise ValueError("industry assurance profile is invalid")
+        seen_profiles.add(identifier)
     known_standards = {item["id"] for item in _STANDARDS}
     known_benchmarks = {item["id"] for item in _BENCHMARKS}
     identities: set[tuple[str, str]] = set()
@@ -636,6 +1205,67 @@ def _validate_policy(value: object) -> None:
     baseline = value.get("benchmark_baseline_path")
     if baseline is not None and not _safe_relative(baseline):
         raise ValueError("benchmark baseline path is unsafe")
+
+
+def _expand_policy_profiles(value: dict[str, Any]) -> dict[str, Any]:
+    expanded = {
+        **value,
+        "profiles": list(value.get("profiles", [])),
+        "controls": [dict(item) for item in value["controls"]],
+        "procedures": [dict(item) for item in value.get("procedures", [])],
+    }
+    control_identities = {
+        (str(item["standard"]), str(item["control_id"]))
+        for item in expanded["controls"]
+    }
+    procedure_identities = {
+        (str(item["standard"]), str(item["procedure_id"]))
+        for item in expanded["procedures"]
+    }
+    for selection in expanded["profiles"]:
+        profile = _ASSURANCE_PROFILES[str(selection["id"])]
+        applicable = selection["applicable"] is True
+        for standard, control_id, objective, evidence in profile["controls"]:
+            identity = (standard, control_id)
+            if identity in control_identities:
+                raise ValueError("profile control duplicates an explicit control")
+            expanded["controls"].append(
+                {
+                    "standard": standard,
+                    "control_id": control_id,
+                    "objective": objective,
+                    "applicable": applicable,
+                    "evidence_artifacts": list(evidence),
+                }
+            )
+            control_identities.add(identity)
+        for (
+            standard,
+            procedure_id,
+            objective,
+            test_type,
+            authorization_required,
+            evidence,
+        ) in profile["procedures"]:
+            identity = (standard, procedure_id)
+            if identity in procedure_identities:
+                raise ValueError("profile procedure duplicates an explicit procedure")
+            expanded["procedures"].append(
+                {
+                    "standard": standard,
+                    "procedure_id": procedure_id,
+                    "objective": objective,
+                    "applicable": applicable,
+                    "execution": selection["procedure_execution"],
+                    "test_type": test_type,
+                    "authorization_required": authorization_required,
+                    "evidence_artifacts": list(evidence),
+                }
+            )
+            procedure_identities.add(identity)
+    if len(expanded["controls"]) > 10_000 or len(expanded["procedures"]) > 20_000:
+        raise ValueError("expanded industry assurance policy is too large")
+    return expanded
 
 
 def _crosswalk(artifacts: dict[str, Any]) -> dict[str, Any]:
@@ -1050,7 +1680,7 @@ def _benchmark_scorecard(
             except (OSError, TypeError, ValueError):
                 value = None
         valid = _benchmark_evidence(value, benchmark)
-        reproducibility_gaps = _benchmark_reproducibility_gaps(value)
+        reproducibility_gaps = _benchmark_reproducibility_gaps(value, benchmark)
         reproducibility_complete = not reproducibility_gaps
         metrics = value.get("metrics", {}) if valid and isinstance(value, dict) else {}
         thresholds = benchmark["thresholds"] or {}
@@ -1124,19 +1754,30 @@ def _benchmark_evidence(value: object, benchmark: dict[str, Any]) -> bool:
 
 def _benchmark_runner_contract(benchmark: dict[str, Any]) -> dict[str, Any]:
     identifier = str(benchmark["id"])
-    stochastic = identifier in {"cyberseceval-4", "mlcommons-ailuminate"}
+    stochastic = identifier in {
+        "cyberseceval-4",
+        "mlcommons-ailuminate",
+        "agentic-security-holdout",
+    }
     return {
         "adapter": identifier,
         "expected_results": (
-            "official-corpus-labels"
-            if identifier != "python-real-world-holdout"
-            else "organization-approved-labels"
+            "organization-approved-labels"
+            if benchmark["version"] == "organization-pinned"
+            else "official-corpus-labels"
         ),
         "minimum_repetitions": 5 if stochastic else 1,
         "required_execution_evidence": [
             "verified-report-checksum",
             "confusion-matrix",
             "corpus-revision",
+            "runner-identity",
+            "target-or-fixture-digest",
+            "tool-and-query-versions",
+            "environment-fingerprint",
+            "oracle-manifest",
+            "negative-controls",
+            "isolation-receipt",
             "trusted-time",
             "replay-protection",
         ],
@@ -1150,7 +1791,9 @@ def _benchmark_runner_contract(benchmark: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _benchmark_reproducibility_gaps(value: object) -> list[str]:
+def _benchmark_reproducibility_gaps(
+    value: object, benchmark: dict[str, Any] | None = None
+) -> list[str]:
     if not isinstance(value, dict):
         return []
     report = value.get("report")
@@ -1181,6 +1824,47 @@ def _benchmark_reproducibility_gaps(value: object) -> list[str]:
         gaps.append("trusted evaluation time is not validated")
     if value.get("replay_protected") is not True:
         gaps.append("evaluation replay protection is missing")
+    contract = benchmark.get("runner_contract") if isinstance(benchmark, dict) else None
+    if (
+        isinstance(benchmark, dict)
+        and benchmark.get("version") == "organization-pinned"
+    ):
+        execution = value.get("execution_context")
+        if not isinstance(execution, dict):
+            gaps.append("qualified benchmark execution context is missing")
+        else:
+            for name in (
+                "target_sha256",
+                "environment_sha256",
+                "toolset_sha256",
+                "oracle_sha256",
+                "isolation_receipt_sha256",
+            ):
+                if not _digest(str(execution.get(name) or "")):
+                    gaps.append(f"benchmark execution {name} is missing or invalid")
+            if not _text(execution.get("runner_identity"), 300) or not _text(
+                execution.get("runner_version"), 100
+            ):
+                gaps.append("benchmark runner identity or version is missing")
+            if execution.get("isolation_validated") is not True:
+                gaps.append("benchmark execution isolation is not validated")
+            for name in ("positive_controls", "negative_controls"):
+                count = execution.get(name)
+                if isinstance(count, bool) or not isinstance(count, int) or count < 1:
+                    gaps.append(f"benchmark {name} are missing")
+    if isinstance(contract, dict):
+        repetitions = value.get("execution_context", {}).get("repetitions")
+        minimum = contract.get("minimum_repetitions")
+        if (
+            isinstance(minimum, int)
+            and minimum > 1
+            and (
+                isinstance(repetitions, bool)
+                or not isinstance(repetitions, int)
+                or repetitions < minimum
+            )
+        ):
+            gaps.append(f"benchmark repetitions are below required minimum {minimum}")
     return gaps
 
 

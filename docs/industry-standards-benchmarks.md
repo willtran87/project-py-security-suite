@@ -15,7 +15,7 @@ proof that an application is vulnerability-free.
 
 ## Coverage
 
-`standards-crosswalk.json` registers 39 version-explicit references:
+`standards-crosswalk.json` registers 58 version-explicit references:
 
 - verification and test methods: OWASP ASVS 5.0, MASVS 2.1, TCASVS 5.0, WSTG
   4.2, MASTG 2.0, SCVS 1.0, and AITG 1.0;
@@ -29,7 +29,12 @@ proof that an application is vulnerability-free.
 - AI risk and management: OWASP LLM Top 10, NIST AI RMF, NIST AI 600-1,
   ISO/IEC 42001, ISO/IEC 23894, and the emerging OWASP APTS reference; and
 - quality and architecture: ISO/IEC 25010, ISO/IEC 5055, ISO/IEC 25023,
-  ISO/IEC/IEEE 42010, and CISQ quality measures.
+  ISO/IEC/IEEE 42010, and CISQ quality measures;
+- enterprise, privacy, and product response: ISO/IEC 27001, 27002, 27034-1,
+  27701, 29147, and 30111; NIST Privacy Framework 1.0 and SP 800-61r3; and
+- supply-chain and conditional regulatory profiles: NIST SP 800-204D and
+  SP 800-218A, SLSA 1.2, ISO/IEC 18974 and 5230, SPDX 3.0/ISO 5962, EU CRA,
+  PCI DSS 4.0.1, PCI Secure Software 2.x, NIST SP 800-171r3, and SOC 2 TSC.
 
 `mapping_status=evidence-surface-present` means only that a related artifact
 exists. Taxonomy versions marked `policy-pinned` must be selected and approved
@@ -38,10 +43,30 @@ by the organization rather than silently floating to a network release.
 ## Controls and assessment procedures
 
 Copy [the example policy](../examples/industry-assurance-policy.example.json) to
-`security/industry-assurance-policy.json`. Policy schema 1.1 supports both
-`controls` and `procedures`; legacy 1.0 control-only policies remain readable.
+`security/industry-assurance-policy.json`. Policy schema 1.2 supports selectable
+assurance packs plus custom `controls` and `procedures`; legacy 1.0 and 1.1
+policies remain readable.
 The strict parser accepts only known standard identifiers, unique identities,
 bounded text and collections, and safe report-local JSON artifact names.
+
+`assurance-profile-registry.json` exposes nine built-in packs:
+
+| Pack | Coverage |
+|---|---|
+| `enterprise-security` | ISO/IEC 27001, 27002, and 27034-1 |
+| `privacy` | ISO/IEC 27701 and NIST Privacy Framework |
+| `psirt-incident` | ISO/IEC 29147/30111 and NIST SP 800-61r3 |
+| `software-supply-chain` | NIST SP 800-204D, SLSA, OpenChain, and SPDX |
+| `ai-development` | NIST SP 800-218A, AI RMF, AITG, and ATLAS |
+| `eu-cra` | Product security, component, support, and vulnerability handling |
+| `payment-software` | PCI DSS and PCI Secure Software |
+| `federal-cui` | NIST SP 800-171 and assessment procedures |
+| `service-organization` | SOC 2 TSC and NIST CSF evidence surfaces |
+
+Applicability must be explicit. A selected pack expands into evidence-backed
+controls and procedures; an applicable planned procedure remains incomplete.
+Copyrighted standards content is not redistributed: organizations can add their
+licensed requirement-level catalogs through the existing custom policy surface.
 
 An applicable control is `satisfied` only when every named artifact exists and
 does not declare itself incomplete. An applicable procedure additionally needs:
@@ -92,7 +117,7 @@ complete decision tree or outcome.
 
 ## Benchmark registry
 
-`benchmark-registry.json` includes nine families:
+`benchmark-registry.json` includes 18 families:
 
 | Family | Purpose | Execution lane |
 |---|---|---|
@@ -105,6 +130,15 @@ complete decision tree or outcome.
 | CyberSecEval 4 | LLM cybersecurity behavior | Disposable companion |
 | MLCommons AILuminate | AI safety and security behavior | Disposable companion |
 | Organization holdout | Pinned real-world Python cases | Disposable companion |
+| Python CVE pairs | Vulnerable and patched real-world revisions | Disposable companion |
+| IaC holdout | Terraform, CloudFormation, and Kubernetes misconfigurations | Disposable companion |
+| Container/Kubernetes holdout | Image and orchestration hardening cases | Disposable companion |
+| Secret-detection holdout | Synthetic/revoked positives and clean negatives | Disposable companion |
+| SBOM/SCA holdout | Component graph and advisory accuracy | Disposable companion |
+| Malicious-package holdout | Inert malicious-package behavior | Disposable companion |
+| Fuzzing crash holdout | Seeded defects, crashes, and deduplication | Disposable companion |
+| Agentic-security holdout | Tool abuse, prompt injection, and exfiltration | Disposable companion |
+| Architecture-quality holdout | Labeled dependency and architecture smells | Disposable companion |
 
 External vulnerable applications are never executed by the core scanner. Each
 enabled family gets a runner contract naming its adapter, expected labels,
@@ -114,8 +148,10 @@ separately authorized lane executes it.
 
 ```mermaid
 flowchart TB
-    Catalog["39 pinned standards and taxonomies"] --> Crosswalk["standards-crosswalk.json"]
-    Policy["Policy 1.1: controls + procedures"] --> Control["control-assessment.json"]
+    Catalog["58 pinned standards and taxonomies"] --> Crosswalk["standards-crosswalk.json"]
+    Packs["9 assurance packs"] --> ProfileRegistry["assurance-profile-registry.json"]
+    Policy["Policy 1.2: packs + controls + procedures"] --> Control["control-assessment.json"]
+    ProfileRegistry --> Control
     Policy --> Procedure["procedure-assessment.json"]
     Evidence["Complete governed artifacts"] --> Control
     Evidence --> Procedure
@@ -139,7 +175,31 @@ flowchart TB
 A benchmark score is eligible to pass only with the pinned corpus digest,
 organization-approved authority, corpus revision, replay protection, validated
 time, complete confusion matrix, and verified report checksum. Stochastic LLM
-families require at least five repetitions in their runner contract.
+families require at least five repetitions. Organization-pinned corpora also
+require a validated isolation receipt; exact runner, target, environment,
+toolset, and oracle digests; and both positive and negative controls. Missing
+execution context fails the score rather than being treated as a weak pass.
+
+## Capability readiness scores
+
+These scores measure framework readiness, not organizational conformance or
+certification. A deployment earns the corresponding assurance only after its
+applicable pack, evidence, procedures, authority, and benchmark thresholds pass.
+
+| Area | Readiness | Basis |
+|---|---:|---|
+| Application security standards | 9/10 | Versioned catalogs, requirement policy, procedures, and retained evidence |
+| SAST/DAST methodology | 9/10 | Static, dynamic, API, mobile, and authorized adversarial lanes |
+| Software supply chain | 9/10 | SLSA/OpenChain/SPDX profile plus provenance, SBOM, signing, and release evidence |
+| Benchmark methodology | 9/10 | Confusion matrices, strata, confidence intervals, replay protection, and deltas |
+| Benchmark execution governance | 8/10 | 18 task contracts with identity, oracle, isolation, target, and environment requirements |
+| Enterprise governance | 8/10 | ISO ISMS/application-security pack with OSCAL lifecycle output |
+| Vulnerability and PSIRT lifecycle | 8/10 | Disclosure, handling, remediation, and incident-exercise controls |
+| Privacy engineering | 8/10 | ISO 27701/NIST Privacy pack joined to data exposure and risk paths |
+| Conditional regulatory readiness | 8/10 | CRA, PCI, CUI, and service-organization packs with explicit applicability |
+| AI security | 9/10 | AI SSDF, AI RMF, AITG, ATLAS, stochastic, and agentic benchmark coverage |
+| Architecture and code quality | 9/10 | Policy enforcement, history, labeled holdout, and structural evidence |
+| Interoperability and audit evidence | 9/10 | SARIF, SBOM/VEX, SCAP, OSCAL, signed evidence, and schemas |
 
 The scorecard reports precision, recall, specificity, F1, Matthews correlation
 coefficient, balanced accuracy, false-positive rate, and Youden's J. Native

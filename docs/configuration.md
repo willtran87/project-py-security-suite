@@ -144,7 +144,7 @@ flowchart LR
     Health --> HealthArtifact["code-health.json 1.4<br/>ranked root-cause clusters + bounded symptoms"]
     Graph --> ArchitectureArtifact["static-architecture.json 1.4<br/>refactoring targets + semantic graph context + policy"]
     Domains --> DomainArtifact["domain-assurance.json 1.0<br/>applicability + evidence-bound obligations"]
-    Industry --> IndustryArtifacts["crosswalk + controls + procedures + CVSS/SSVC<br/>scorecard + delta + OSCAL 1.2.2 lifecycle"]
+    Industry --> IndustryArtifacts["58-reference crosswalk + 9 assurance packs<br/>controls + procedures + 18-family scorecard + OSCAL"]
     HealthPolicy -->|"invalid"| Incomplete["Analysis incomplete"]
     ArchitecturePolicy -->|"invalid"| Incomplete
     DomainPolicy -->|"invalid"| Incomplete
@@ -162,10 +162,12 @@ artifacts that publish `complete` must report `true`. See
 
 Use
 [`examples/industry-assurance-policy.example.json`](../examples/industry-assurance-policy.example.json)
-to scope repository-owned control objectives and enable pinned benchmark
-families. Production and release scans fail closed when an enforced applicable
-control lacks complete named evidence, or an enabled benchmark lacks valid
-replay-protected evidence or misses a threshold. See
+to select enterprise, privacy, PSIRT, supply-chain, AI, and conditional
+regulatory assurance packs; add repository-owned control objectives; and enable
+pinned benchmark families. Production and release scans fail closed when an
+enforced applicable control or procedure lacks complete named evidence, or an
+enabled benchmark lacks qualified replay-protected execution evidence or misses
+a threshold. See
 [Industry standards and benchmarks](industry-standards-benchmarks.md).
 
 ### LLM-guided adversarial planning

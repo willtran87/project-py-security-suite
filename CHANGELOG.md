@@ -1,5 +1,15 @@
 # Changelog
 
+- Raise every previously lower-scoring industry-readiness area to at least 8/10
+  with 58 versioned references, nine selectable enterprise/privacy/PSIRT/
+  supply-chain/AI/regulatory assurance packs, policy schema 1.2, and an
+  independently schema-validated profile registry. Expand the benchmark catalog
+  from nine to 18 families with Python CVE-pair, IaC, container/Kubernetes,
+  secret, SBOM/SCA, malicious-package, fuzzing, agentic-security, and
+  architecture-quality holdouts; organization corpora now fail closed without
+  runner, target, environment, toolset, oracle, control, repetition, and
+  isolation evidence.
+
 - Expand evidence-backed industry assurance to 39 versioned standards and
   taxonomy references, repository-owned controls and authorized assessment
   procedures, source-retained CVSS v4 and SSVC prioritization, seven OSCAL

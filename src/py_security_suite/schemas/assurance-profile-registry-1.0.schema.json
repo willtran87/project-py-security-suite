@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:assurance-profile-registry:1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "analysis", "profiles_available", "profiles_selected", "profiles", "claim_boundary"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "analysis": {"const": "industry-assurance-profile-registry"},
+    "profiles_available": {"type": "integer", "minimum": 0},
+    "profiles_selected": {"type": "integer", "minimum": 0},
+    "profiles": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "standards", "controls", "procedures", "selected", "applicable", "procedure_execution"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "standards": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+          "controls": {"type": "integer", "minimum": 0},
+          "procedures": {"type": "integer", "minimum": 0},
+          "selected": {"type": "boolean"},
+          "applicable": {"type": ["boolean", "null"]},
+          "procedure_execution": {"type": ["string", "null"], "enum": ["planned", "executed", null]}
+        }
+      }
+    },
+    "claim_boundary": {"type": "string", "minLength": 1}
+  }
+}

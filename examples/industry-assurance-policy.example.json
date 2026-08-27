@@ -1,6 +1,17 @@
 {
-  "schema_version": "1.1",
+  "schema_version": "1.2",
   "enforce": false,
+  "profiles": [
+    {"id": "enterprise-security", "applicable": true, "procedure_execution": "planned"},
+    {"id": "privacy", "applicable": false, "procedure_execution": "planned"},
+    {"id": "psirt-incident", "applicable": true, "procedure_execution": "planned"},
+    {"id": "software-supply-chain", "applicable": true, "procedure_execution": "planned"},
+    {"id": "ai-development", "applicable": false, "procedure_execution": "planned"},
+    {"id": "eu-cra", "applicable": false, "procedure_execution": "planned"},
+    {"id": "payment-software", "applicable": false, "procedure_execution": "planned"},
+    {"id": "federal-cui", "applicable": false, "procedure_execution": "planned"},
+    {"id": "service-organization", "applicable": false, "procedure_execution": "planned"}
+  ],
   "controls": [
     {"standard": "OWASP-ASVS", "control_id": "V1", "objective": "Retain application-security verification evidence.", "applicable": true, "evidence_artifacts": ["security-requirements-coverage.json"]},
     {"standard": "NIST-SSDF", "control_id": "RV.1", "objective": "Identify and confirm residual vulnerabilities before release.", "applicable": true, "evidence_artifacts": ["capability-manifest.json", "finding-validation.json", "effectiveness.json"]},
@@ -24,7 +35,16 @@
     {"id": "owasp-benchmark", "enabled": false, "corpus_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "evidence_artifact": "owasp-benchmark-score.json", "minimum_precision": 0.8, "minimum_recall": 0.8, "minimum_f1": 0.8, "maximum_false_positive_rate": 0.2},
     {"id": "nist-sard-juliet", "enabled": false, "corpus_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "evidence_artifact": "juliet-score.json", "minimum_precision": 0.8, "minimum_recall": 0.8, "minimum_f1": 0.8, "maximum_false_positive_rate": 0.2},
     {"id": "cyberseceval-4", "enabled": false, "corpus_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "evidence_artifact": "cyberseceval-score.json", "minimum_precision": 0.8, "minimum_recall": 0.8, "minimum_f1": 0.8, "maximum_false_positive_rate": 0.2},
-    {"id": "mlcommons-ailuminate", "enabled": false, "corpus_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "evidence_artifact": "ailuminate-score.json", "minimum_precision": 0.8, "minimum_recall": 0.8, "minimum_f1": 0.8, "maximum_false_positive_rate": 0.2}
+    {"id": "mlcommons-ailuminate", "enabled": false, "corpus_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "evidence_artifact": "ailuminate-score.json", "minimum_precision": 0.8, "minimum_recall": 0.8, "minimum_f1": 0.8, "maximum_false_positive_rate": 0.2},
+    {"id": "python-cve-pairs", "enabled": false, "corpus_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "evidence_artifact": "python-cve-pairs-score.json", "minimum_precision": 0.8, "minimum_recall": 0.8, "minimum_f1": 0.8, "maximum_false_positive_rate": 0.2},
+    {"id": "iac-misconfiguration-holdout", "enabled": false, "corpus_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "evidence_artifact": "iac-holdout-score.json", "minimum_precision": 0.8, "minimum_recall": 0.8, "minimum_f1": 0.8, "maximum_false_positive_rate": 0.2},
+    {"id": "container-kubernetes-holdout", "enabled": false, "corpus_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "evidence_artifact": "container-kubernetes-score.json", "minimum_precision": 0.8, "minimum_recall": 0.8, "minimum_f1": 0.8, "maximum_false_positive_rate": 0.2},
+    {"id": "secret-detection-holdout", "enabled": false, "corpus_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "evidence_artifact": "secret-detection-score.json", "minimum_precision": 0.8, "minimum_recall": 0.8, "minimum_f1": 0.8, "maximum_false_positive_rate": 0.2},
+    {"id": "sbom-sca-holdout", "enabled": false, "corpus_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "evidence_artifact": "sbom-sca-score.json", "minimum_precision": 0.8, "minimum_recall": 0.8, "minimum_f1": 0.8, "maximum_false_positive_rate": 0.2},
+    {"id": "malicious-package-holdout", "enabled": false, "corpus_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "evidence_artifact": "malicious-package-score.json", "minimum_precision": 0.8, "minimum_recall": 0.8, "minimum_f1": 0.8, "maximum_false_positive_rate": 0.2},
+    {"id": "fuzzing-crash-holdout", "enabled": false, "corpus_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "evidence_artifact": "fuzzing-crash-score.json", "minimum_precision": 0.8, "minimum_recall": 0.8, "minimum_f1": 0.8, "maximum_false_positive_rate": 0.2},
+    {"id": "agentic-security-holdout", "enabled": false, "corpus_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "evidence_artifact": "agentic-security-score.json", "minimum_precision": 0.8, "minimum_recall": 0.8, "minimum_f1": 0.8, "maximum_false_positive_rate": 0.2},
+    {"id": "architecture-quality-holdout", "enabled": false, "corpus_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "evidence_artifact": "architecture-quality-score.json", "minimum_precision": 0.8, "minimum_recall": 0.8, "minimum_f1": 0.8, "maximum_false_positive_rate": 0.2}
   ],
   "benchmark_baseline_path": null
 }
