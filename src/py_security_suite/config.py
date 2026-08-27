@@ -329,6 +329,7 @@ _TRUSTED_LANE_EVIDENCE_TOOLS = (
     "database-security",
     "ruleset-regression",
     "ai-security",
+    "llm-adversarial",
     "iast",
     "falco",
     "kubescape",
@@ -1093,6 +1094,12 @@ def _default_mapping() -> dict[str, Any]:
                 "executable": "pysec-evidence",
                 "timeout_seconds": 60,
                 "artifacts_path": "ai-security.json",
+            },
+            "llm-adversarial": {
+                "enabled": True,
+                "executable": "pysec-evidence",
+                "timeout_seconds": 60,
+                "artifacts_path": "llm-adversarial.json",
             },
             "iast": {
                 "enabled": True,

@@ -305,6 +305,8 @@ def _write_primary_report_files(
     )
     code_health = (derived_artifacts or {}).get("code-health.json")
     static_architecture = (derived_artifacts or {}).get("static-architecture.json")
+    domain_assurance = (derived_artifacts or {}).get("domain-assurance.json")
+    llm_adversarial = (derived_artifacts or {}).get("llm-adversarial-plan.json")
     _write_text(
         output / "summary.md",
         render_summary(
@@ -323,6 +325,12 @@ def _write_primary_report_files(
             code_health=code_health if isinstance(code_health, dict) else None,
             static_architecture=(
                 static_architecture if isinstance(static_architecture, dict) else None
+            ),
+            domain_assurance=(
+                domain_assurance if isinstance(domain_assurance, dict) else None
+            ),
+            llm_adversarial=(
+                llm_adversarial if isinstance(llm_adversarial, dict) else None
             ),
         ),
     )
@@ -396,6 +404,8 @@ def render_summary(
     application_contracts: dict[str, Any] | None = None,
     code_health: dict[str, Any] | None = None,
     static_architecture: dict[str, Any] | None = None,
+    domain_assurance: dict[str, Any] | None = None,
+    llm_adversarial: dict[str, Any] | None = None,
 ) -> str:
     active_findings = [
         finding
@@ -423,6 +433,8 @@ def render_summary(
             application_contracts, code_health, static_architecture
         )
     )
+    lines.extend(_render_domain_assurance_summary(domain_assurance))
+    lines.extend(_render_llm_adversarial_summary(llm_adversarial))
     lines.extend(_render_fusion_summary(evidence_fusion))
     lines.extend(_render_structural_summary(structural_synthesis))
     lines.extend(_render_data_exposure_summary(data_exposure))
@@ -494,6 +506,63 @@ def _render_contextual_analysis_summary(
         f"| Declared architecture-policy violations | {len(policy_violations) if isinstance(policy_violations, list) else 0} |",
         "",
         "Generated scenario manifests and argv-safe companion tasks are machine-actionable plans, not execution evidence. Symbol calls and unified decorator, packaging, module-main, and main-guard entry points are syntactic evidence, while unresolved dynamic imports expose model gaps. Architecture and code-health signals prioritize review; declared native or Tach policy violations remain distinct from heuristic structural smells.",
+    ]
+
+
+def _render_domain_assurance_summary(value: dict[str, Any] | None) -> list[str]:
+    if not isinstance(value, dict) or not isinstance(value.get("domains"), list):
+        return []
+    rows = [
+        "",
+        "## Cross-domain assurance coverage",
+        "",
+        f"**Coverage:** {int(value.get('covered_domains', 0))}/{int(value.get('applicable_domains', 0))} applicable domains ({int(value.get('coverage_score', 0))}%).",
+        "",
+        "| Domain | Applicability | Status | Requirements |",
+        "|---|---|---|---:|",
+    ]
+    for domain in value["domains"]:
+        if not isinstance(domain, dict):
+            continue
+        rows.append(
+            f"| {_markdown_table(str(domain.get('name', 'unknown')))} | "
+            f"{_markdown_table(str(domain.get('applicability', 'unknown')))} | "
+            f"{_markdown_table(str(domain.get('status', 'unknown')))} | "
+            f"{int(domain.get('requirements_satisfied', 0))}/"
+            f"{int(domain.get('requirements_detected', 0))} |"
+        )
+    rows.extend(
+        [
+            "",
+            "Surface detection establishes applicability only. A covered requirement has source-bound enforcement points, complete named artifacts, and passing source-bound test identities where behavior must be observed; it does not prove absence of defects.",
+        ]
+    )
+    return rows
+
+
+def _render_llm_adversarial_summary(value: dict[str, Any] | None) -> list[str]:
+    if not isinstance(value, dict):
+        return []
+    counts = value.get("campaign_status_counts")
+    evidence = value.get("evidence")
+    if not isinstance(counts, dict) or not isinstance(evidence, dict):
+        return []
+    return [
+        "",
+        "## LLM-guided adversarial testing",
+        "",
+        "| Signal | Count/state |",
+        "|---|---:|",
+        f"| Prioritized campaigns | {int(value.get('campaigns_retained', 0))} |",
+        f"| Context references | {int(value.get('context_entries_retained', 0))} |",
+        f"| Authorized companion tasks | {int(value.get('execution_plan', {}).get('tasks_detected', 0))} |",
+        f"| Campaigns not run | {int(counts.get('not-run', 0))} |",
+        f"| Inconclusive campaigns | {int(counts.get('inconclusive', 0))} |",
+        f"| Exercised without a confirmed defect | {int(counts.get('exercised-no-confirmed-defect', 0))} |",
+        f"| Objectively confirmed defects | {int(counts.get('confirmed-defect', 0))} |",
+        f"| Authenticated evidence source-bound | {'yes' if evidence.get('source_bound') is True else 'no'} |",
+        "",
+        "The plan treats repository and model text as untrusted data. An LLM proposal is never a finding by itself; confirmation requires authenticated source-bound execution, a deterministic oracle, a negative control, and mutation validation.",
     ]
 
 

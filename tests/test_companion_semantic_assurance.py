@@ -37,7 +37,13 @@ def _case(control: str, *, observed: str = "pass") -> dict[str, object]:
 
 @pytest.mark.parametrize(
     "kind",
-    ["surface-inventory", "event-security", "database-security", "ai-security"],
+    [
+        "surface-inventory",
+        "event-security",
+        "database-security",
+        "ai-security",
+        "llm-adversarial",
+    ],
 )
 def test_semantic_lanes_require_complete_control_coverage(kind: str) -> None:
     cases = [_case(control) for control in sorted(REQUIRED_CONTROLS[kind])]

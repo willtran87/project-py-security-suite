@@ -51,6 +51,17 @@ REQUIRED_CONTROLS = {
         "output-handling",
         "data-exfiltration",
     },
+    "llm-adversarial": {
+        "schema-constrained-proposal",
+        "prompt-injection-resistance",
+        "disposable-worktree",
+        "network-deny",
+        "command-allowlist",
+        "deterministic-oracle",
+        "negative-control",
+        "mutation-validation",
+        "source-bound-evidence",
+    },
     "ruleset-regression": {
         "true-positive",
         "true-negative",

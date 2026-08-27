@@ -1,6 +1,6 @@
 # Offline companion assurance lanes
 
-Last reviewed: 2026-08-07
+Last reviewed: 2026-08-27
 
 The scanner process never imports or executes target application code. Tools
 that run tests, symbolic execution, fuzzers, a local service, build steps, or
@@ -345,6 +345,10 @@ The hardened contracts close the remaining authority and behavior gaps:
 - AI v2 requires a signed calibrated judge, paired seeded scenarios across
   independent runs, multi-turn memory/tool isolation, drift baselines, and
   family-wise confidence control;
+- LLM adversarial evidence requires schema-constrained proposals, repository
+  prompt-injection resistance, a disposable network-denied worktree, command
+  allowlisting, deterministic non-LLM oracles, negative controls, mutation
+  validation, source binding, and a verified per-campaign control proof;
 - ruleset v2 requires a signed holdout distinct from training, per-rule
   confusion matrices, strata, mutation operators, detectable-effect power, and
   multiplicity correction; and

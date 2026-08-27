@@ -30,6 +30,7 @@ _MAX_DYNAMIC_IMPORTS = 10_000
 _MAX_ENTRYPOINTS = 50_000
 _MAX_FINDINGS = 500
 _MAX_POLICY_VIOLATIONS = 1000
+_MAX_REFACTORING_TARGETS = 1_000
 _FAN_OUT_THRESHOLD = 12
 _HUB_THRESHOLD = 20
 _INSTABILITY_DELTA = 0.5
@@ -38,7 +39,9 @@ _POLICY_PATH = "security/architecture-policy.json"
 _TACH_POLICY_PATH = "tach.toml"
 
 
-def analyze_static_architecture(target: Path) -> tuple[list[Finding], dict[str, Any]]:
+def analyze_static_architecture(
+    target: Path, reachability_artifact: object | None = None
+) -> tuple[list[Finding], dict[str, Any]]:
     policy, policy_present, policy_path, policy_error = _architecture_policy(target)
     thresholds = policy["thresholds"]
     files = sorted(
@@ -211,6 +214,17 @@ def analyze_static_architecture(target: Path) -> tuple[list[Finding], dict[str, 
         parse_errors.append(
             f"architecture policy violations exceeded {_MAX_POLICY_VIOLATIONS} records"
         )
+    refactoring_targets_detected, refactoring_targets = _refactoring_targets(
+        cycle_records=cycle_records,
+        fan_out=fan_out,
+        hubs=hubs,
+        unstable_edges=unstable_edges,
+        new_edges=new_edges,
+        baseline_present=baseline_present,
+        policy_violations=policy_violations,
+        thresholds=thresholds,
+    )
+    semantic_graph = _semantic_graph_summary(reachability_artifact)
     findings = [_cycle_finding(item, modules, target) for item in cycle_records]
     findings.extend(
         _fan_out_finding(item, modules, target, thresholds["module_fan_out"])
@@ -242,7 +256,7 @@ def analyze_static_architecture(target: Path) -> tuple[list[Finding], dict[str, 
         and not entrypoint_truncated
     )
     return findings, {
-        "schema_version": "1.3",
+        "schema_version": "1.4",
         "analysis": "python-local-module-dependency-graph",
         "complete": complete,
         "files_analyzed": len(modules),
@@ -290,6 +304,13 @@ def analyze_static_architecture(target: Path) -> tuple[list[Finding], dict[str, 
         "policy_format": policy.get("format") if policy_present else None,
         "policy_violations_detected": len(policy_violations) + int(policy_truncated),
         "policy_violations": policy_violations,
+        "refactoring_targets_detected": refactoring_targets_detected,
+        "refactoring_targets_retained": len(refactoring_targets),
+        "refactoring_targets_omitted": max(
+            0, refactoring_targets_detected - len(refactoring_targets)
+        ),
+        "refactoring_targets": refactoring_targets,
+        "semantic_graph": semantic_graph,
         "parse_errors": parse_errors[:1000],
         "truncated": file_truncated
         or len(edges) >= _MAX_EDGES
@@ -303,10 +324,260 @@ def analyze_static_architecture(target: Path) -> tuple[list[Finding], dict[str, 
             "The graph resolves statically recognizable imports among Python modules in the "
             "repository. Literal dynamic imports plus decorator, packaging-script, module-main, "
             "and main-guard entry points are retained, "
-            "but non-literal imports, plugin registration, generated modules, and runtime "
-            "dependency injection may add or remove effective coupling. Symbol edges are "
-            "syntactic call relationships rather than runtime dispatch proof."
+            "but non-literal imports, generated modules, and runtime dependency injection "
+            "may add or remove effective coupling. Symbol edges are syntactic call "
+            "relationships rather than runtime dispatch proof. When supplied, semantic_graph "
+            "summarizes the separately governed reachability graph; its confidence and "
+            "precision controls are preserved rather than promoted to runtime proof."
         ),
+    }
+
+
+def _semantic_graph_summary(value: object | None) -> dict[str, Any]:
+    unavailable: dict[str, Any] = {
+        "available": False,
+        "schema_version": None,
+        "confidence": None,
+        "complete": False,
+        "nodes": 0,
+        "edges": 0,
+        "entry_points": 0,
+        "islands": 0,
+        "precision_features": [],
+        "type_aware": False,
+        "framework_aware": False,
+        "dynamic_features_detected": 0,
+        "errors_detected": 0,
+    }
+    if not isinstance(value, dict) or value.get("schema_version") not in {"1.1", "1.2"}:
+        return unavailable
+    analysis = value.get("analysis")
+    summary = value.get("summary")
+    nodes = value.get("nodes")
+    edges = value.get("edges")
+    entry_points = value.get("entry_points")
+    islands = value.get("islands")
+    precision = value.get("precision_features")
+    dynamic = value.get("dynamic_features")
+    errors = value.get("errors")
+    if (
+        not isinstance(nodes, list)
+        or not isinstance(edges, list)
+        or not isinstance(entry_points, list)
+        or not isinstance(islands, list)
+        or not isinstance(precision, list)
+        or not isinstance(dynamic, list)
+        or not isinstance(errors, list)
+        or not isinstance(analysis, dict)
+        or not isinstance(summary, dict)
+    ):
+        return unavailable
+    confidence = analysis.get("confidence")
+    if confidence not in {"low", "medium", "high"}:
+        confidence = "low"
+    precision_features = sorted(
+        {item[:200] for item in precision[:100_000] if isinstance(item, str) and item}
+    )[:100]
+    return {
+        "available": True,
+        "schema_version": str(value["schema_version"]),
+        "confidence": confidence,
+        "complete": bool(analysis.get("complete")) and not errors,
+        "nodes": min(len(nodes), 750_000),
+        "edges": min(len(edges), 2_000_000),
+        "entry_points": min(len(entry_points), 10_000),
+        "islands": min(len(islands), 250_000),
+        "precision_features": precision_features,
+        "type_aware": "typed-receiver-resolution" in precision_features,
+        "framework_aware": any(
+            feature
+            in {
+                "framework-configuration-resolution",
+                "framework-registration-resolution",
+            }
+            for feature in precision_features
+        ),
+        "dynamic_features_detected": min(len(dynamic), 100_000),
+        "errors_detected": min(len(errors), 100_000),
+    }
+
+
+def _refactoring_targets(
+    *,
+    cycle_records: list[dict[str, Any]],
+    fan_out: list[dict[str, Any]],
+    hubs: list[dict[str, Any]],
+    unstable_edges: list[dict[str, Any]],
+    new_edges: list[str],
+    baseline_present: bool,
+    policy_violations: list[dict[str, Any]],
+    thresholds: dict[str, Any],
+) -> tuple[int, list[dict[str, Any]]]:
+    """Rank architectural change targets while preserving exact evidence classes."""
+
+    targets: list[dict[str, Any]] = []
+    policy_cycle_pairs = {
+        (str(item["source"]), str(item["destination"]))
+        for item in policy_violations
+        if item["kind"] == "circular-dependency"
+    }
+    for record in cycle_records:
+        modules = [str(item) for item in record["modules"]]
+        governed = any(
+            source in modules and destination in modules
+            for source, destination in policy_cycle_pairs
+        )
+        score = min(100, (92 if governed else 78) + min(8, len(modules) - 2))
+        targets.append(
+            _refactoring_target(
+                kind="dependency-cycle",
+                subject=" <-> ".join(modules[:4]),
+                modules=modules,
+                evidence=[str(item) for item in record["edges"][:100]],
+                score=score,
+                exact=governed,
+                reason=(
+                    "The cycle violates the declared architecture policy."
+                    if governed
+                    else "The static module graph contains a strongly connected component."
+                ),
+                remediation="Extract the smallest stable contract that reverses or removes one dependency edge, then enforce the new direction in policy.",
+            )
+        )
+    violations_by_source: dict[str, list[dict[str, Any]]] = {}
+    for violation in policy_violations:
+        if violation["kind"] == "circular-dependency":
+            continue
+        violations_by_source.setdefault(str(violation["source"]), []).append(violation)
+    for source, violations in violations_by_source.items():
+        modules = sorted({source, *(str(item["destination"]) for item in violations)})
+        targets.append(
+            _refactoring_target(
+                kind="policy-boundary",
+                subject=source,
+                modules=modules,
+                evidence=[
+                    f"{item['kind']}: {item['source']} -> {item['destination']} ({item['rule']})"
+                    for item in violations[:100]
+                ],
+                score=min(100, 88 + len(violations)),
+                exact=True,
+                reason="One source module violates one or more declared dependency contracts.",
+                remediation="Route the dependency through an allowed port or move ownership to the declared layer; update policy only after design review.",
+            )
+        )
+    fanout_threshold = int(thresholds["module_fan_out"])
+    for item in fan_out:
+        count = int(item["count"])
+        targets.append(
+            _refactoring_target(
+                kind="fan-out",
+                subject=str(item["module"]),
+                modules=[str(item["module"]), *map(str, item["dependencies"][:99])],
+                evidence=[f"fan_out={count}", f"threshold={fanout_threshold}"],
+                score=min(84, 55 + round(25 * count / max(1, fanout_threshold))),
+                exact=False,
+                reason="The module coordinates more direct dependencies than the governed review threshold.",
+                remediation="Split orchestration by capability and depend on narrower ports rather than concrete subsystems.",
+            )
+        )
+    hub_threshold = int(thresholds["hub_total_degree"])
+    for item in hubs:
+        degree = int(item["fan_in"]) + int(item["fan_out"])
+        targets.append(
+            _refactoring_target(
+                kind="hub",
+                subject=str(item["module"]),
+                modules=[str(item["module"])],
+                evidence=[
+                    f"fan_in={item['fan_in']}",
+                    f"fan_out={item['fan_out']}",
+                    f"degree_threshold={hub_threshold}",
+                ],
+                score=min(82, 52 + round(25 * degree / max(1, hub_threshold))),
+                exact=False,
+                reason="The module is a high-degree change and failure propagation hub.",
+                remediation="Separate stable shared contracts from volatile coordination and reduce consumers of the concrete module.",
+            )
+        )
+    unstable_by_source: dict[str, list[dict[str, Any]]] = {}
+    for edge in unstable_edges:
+        unstable_by_source.setdefault(str(edge["source"]), []).append(edge)
+    for source, instability_records in unstable_by_source.items():
+        targets.append(
+            _refactoring_target(
+                kind="instability-direction",
+                subject=source,
+                modules=sorted(
+                    {
+                        source,
+                        *(str(item["destination"]) for item in instability_records),
+                    }
+                ),
+                evidence=[
+                    f"{item['source']} -> {item['destination']}: {item['source_instability']} -> {item['destination_instability']}"
+                    for item in instability_records[:100]
+                ],
+                score=min(72, 48 + len(instability_records) * 3),
+                exact=False,
+                reason="Stable code depends on comparatively volatile modules.",
+                remediation="Invert the dependency around a stable interface owned by the consuming boundary.",
+            )
+        )
+    if baseline_present:
+        new_by_source: dict[str, list[str]] = {}
+        for dependency_edge in new_edges:
+            source, _, _ = dependency_edge.partition(" -> ")
+            new_by_source.setdefault(source, []).append(dependency_edge)
+        for source, regression_edges in new_by_source.items():
+            regression_modules = {source}
+            for dependency_edge in regression_edges:
+                _, _, destination = dependency_edge.partition(" -> ")
+                regression_modules.add(destination)
+            targets.append(
+                _refactoring_target(
+                    kind="dependency-regression",
+                    subject=source,
+                    modules=sorted(regression_modules),
+                    evidence=regression_edges[:100],
+                    score=min(90, 72 + len(regression_edges) * 2),
+                    exact=True,
+                    reason="New dependency edges are absent from the approved baseline.",
+                    remediation="Remove or explicitly review each new edge before regenerating the signed-off baseline.",
+                )
+            )
+    targets.sort(
+        key=lambda item: (
+            -int(item["priority_score"]),
+            not bool(item["exact_contract_failure"]),
+            str(item["kind"]),
+            str(item["subject"]),
+        )
+    )
+    return len(targets), targets[:_MAX_REFACTORING_TARGETS]
+
+
+def _refactoring_target(
+    *,
+    kind: str,
+    subject: str,
+    modules: list[str],
+    evidence: list[str],
+    score: int,
+    exact: bool,
+    reason: str,
+    remediation: str,
+) -> dict[str, Any]:
+    return {
+        "kind": kind,
+        "subject": subject[:1000],
+        "modules": sorted(set(modules))[:100],
+        "evidence": evidence[:100],
+        "priority": "p0" if score >= 85 else "p1" if score >= 60 else "p2",
+        "priority_score": score,
+        "exact_contract_failure": exact,
+        "reason": reason,
+        "remediation": remediation,
     }
 
 

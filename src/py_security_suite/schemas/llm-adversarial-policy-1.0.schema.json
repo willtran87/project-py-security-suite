@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:llm-adversarial-policy:1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "enabled", "owner", "allowed_tools", "maximum_campaigns", "maximum_iterations", "maximum_context_files", "maximum_context_bytes", "network_policy", "write_scope", "allow_runtime_testing", "require_human_approval_before_execution", "require_negative_control", "require_mutation_validation", "allowed_test_roots"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "enabled": {"type": "boolean"},
+    "owner": {"type": "string", "minLength": 1, "maxLength": 200},
+    "allowed_tools": {"type": "array", "minItems": 1, "maxItems": 12, "uniqueItems": true, "items": {"enum": ["atheris", "authorization-security", "codeql", "crosshair", "hypothesis", "mutmut", "playwright", "pysa", "restler", "schemathesis", "semgrep"]}},
+    "maximum_campaigns": {"type": "integer", "minimum": 1, "maximum": 1000},
+    "maximum_iterations": {"type": "integer", "minimum": 1, "maximum": 10},
+    "maximum_context_files": {"type": "integer", "minimum": 1, "maximum": 500},
+    "maximum_context_bytes": {"type": "integer", "minimum": 1024, "maximum": 67108864},
+    "network_policy": {"const": "deny"},
+    "write_scope": {"const": "generated-tests-only"},
+    "allow_runtime_testing": {"const": false},
+    "require_human_approval_before_execution": {"const": true},
+    "require_negative_control": {"const": true},
+    "require_mutation_validation": {"const": true},
+    "allowed_test_roots": {"const": ["generated-tests"]}
+  }
+}

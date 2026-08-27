@@ -108,8 +108,10 @@ class DocumentationQualityTests(unittest.TestCase):
         ):
             self.assertIn(phrase, design)
         self.assertIn("Conservative finding correlation", design)
-        self.assertIn("static-architecture.json 1.3", configuration)
-        self.assertIn("code-health.json 1.3", configuration)
+        self.assertIn("static-architecture.json 1.4", configuration)
+        self.assertIn("code-health.json 1.4", configuration)
+        self.assertIn("typed/framework semantic graph", configuration)
+        self.assertIn("root-cause review queue", design)
 
     def test_governed_effectiveness_examples_use_production_floors(self) -> None:
         documents = (

@@ -7,7 +7,7 @@ creates a GitHub-friendly report artifact.
 
 | Area | Capability |
 |---|---|
-| Portfolio | 88 governed adapters across source security, secrets, dependencies, architecture, quality, delivery, artifacts, and assurance evidence; every scan emits generated selected/applicable/completed capability truth |
+| Portfolio | 89 governed adapters across source security, secrets, dependencies, architecture, quality, delivery, artifacts, and assurance evidence; every scan emits generated selected/applicable/completed capability truth |
 | Decisions | Explicit `PASS`, `WARN`, `FAIL`, and `INCOMPLETE` outcomes |
 | Reports | Markdown, self-contained HTML, SARIF 2.1.0, SonarQube external issues, normalized JSON, an owned closure backlog, and SHA-256 manifests |
 | Risk context | Digest-pinned CISA KEV, FIRST EPSS, CycloneDX VEX, alias-aware advisory decisions, scanner-attributed fix candidates, finding lifecycle, CODEOWNERS, and governed acceptances |
@@ -15,7 +15,9 @@ creates a GitHub-friendly report artifact.
 | Reachability | Offline three-state executable/load-only/disconnected graph with explained dispatch paths, ranked islands, and optional coverage corroboration |
 | Graph context | Graphify code-only topology joined to findings for blast radius, structural hotspots, and cross-tool neighborhoods |
 | Advanced analysis | Typed evidence graph with control dominance and bypass detection, scanner-confirmed SARIF taint paths, artifact activation parity, threat-control-test traceability, security mutation leverage, telemetry privacy topology, dependency trust routes, and digest-bound attack-surface regression comparison |
-| Accuracy controls | Multi-axis finding validation with proof-bound reproduction, executed framework model canaries, OpenAPI/auth behavior drift, argv-safe authorized scenario handoffs, exact advisory-function calls, async/exception lifecycle defects, ranked structural issue retention, native/Tach architecture contracts, unified entry-point discovery, bounded Git temporal coupling, and generated profile execution truth |
+| Accuracy controls | Multi-axis finding validation with proof-bound reproduction, executed framework model canaries, OpenAPI/auth behavior drift, argv-safe authorized scenario handoffs, exact advisory-function calls, async/exception lifecycle defects, root-cause review clustering, semantic reachability context, ranked architecture refactoring targets that distinguish exact contracts from heuristics, native/Tach architecture enforcement, unified entry-point discovery, bounded Git temporal coupling, and generated profile execution truth |
+| Domain assurance | Conservative applicability plus source-, artifact-, and passing-test-bound requirements across 33 first-class and opt-in domains, adding privileged control planes, distributed correctness, secure human interaction, ML supply chains, secret lifecycles, observability integrity, developer environments, hostile content, trust and safety, confidential computing, regulated transactions, and physical security |
+| LLM adversarial guidance | Provider-neutral, digest-bound campaigns derived from findings, API abuse, domain gaps, architecture targets, and code-health root causes; proposals are confined to generated tests and require deterministic oracles, negative controls, mutation validation, human approval, and authenticated source-bound evidence |
 | Risk routes | Bounded multi-entry exposure matrices from every retained declared interface to findings, sensitive sinks, and exact dependency-advisory importers. End-to-end sensitive-data route records join scanner-confirmed or inventory-only sink evidence to data classes, trust boundaries, protections, entry/runtime breadth, validation, scanner assurance, lifecycle, ownership, and applicable bounded citations. A separate secret-provenance ledger joins redacted credential candidates to source/graph/artifact membership, current-tree or history origin, verification, scanner trust, lifecycle, and owners. Exact-file and bounded Graphify-route intersections then highlight production secret candidates co-located with logging, telemetry, URL, or network sinks while explicitly remaining non-taint review evidence. Their validation handoff names candidate tests and joins retained execution, coverage, source binding, assurance, shared-test quality, findings, and ownership without claiming that a synthetic canary assertion already exists. When that same retained sensitive route also has an exact SDK-advisory intersection, a bounded compound ledger coordinates credential, boundary-protection, and dependency-remediation review without claiming disclosure or vulnerable-function execution. Routes also retain fail-closed source/artifact package lifecycle checks, comparable-baseline finding/change attribution, ordered CODEOWNERS handoffs, shared validation campaigns, shared-test quality, and explicit model gaps. Graph/source/artifact applicability fusion separates genuine Python route gaps from artifact, generated-evidence, test, and non-Python controls without dropping findings; exact structural-island joins then distinguish missing entry models, runtime conflicts, test-only scope, and dormant-capability retirement review without declaring code dead. |
 | Evidence fusion | Source-to-artifact package lineage, semantic finding links, changed-line/test/graph context, exact selected-test execution, full-chain RFC 3161 run context and signature timestamps, threshold/external DSSE signatures, signed atomic replay receipts, downgrade-resistant assurance profiles, composed SLSA/Sigstore/VSA/dependency verification, and feedback into owned exposure and SDK-package verification plans |
 | Structural synthesis | Cross-validated dead code, island boundaries, structural orphans, import-cycle hotspots, change-risk scoring, graph-guided test targets, exact execution status, and test/changed-line coverage alignment |
@@ -56,6 +58,8 @@ Markdown is the canonical documentation format:
 - [Sensitive-data exposure analysis](docs/data-exposure.md)
 - [Detection effectiveness and operational coverage](docs/effectiveness.md)
 - [Finding accuracy, framework models, and architecture history](docs/analysis-accuracy.md)
+- [Cross-domain assurance](docs/domain-assurance.md)
+- [LLM-guided adversarial testing](docs/llm-adversarial-testing.md)
 - [Governed release readiness](docs/release-readiness.md)
 - [Compatibility and coverage matrix](docs/compatibility-matrix.md)
 - [Tool-selection and portfolio governance](docs/tool-selection.md)
@@ -77,11 +81,17 @@ flowchart LR
         Doctor --> Plan["Offline provisioning plan"]
         Plan --> Scan["Run applicable adapters"]
         Scan --> ToolEvidence["Scanner findings + native evidence"]
-        Policies["Repository analysis policies<br/>health thresholds | native architecture | Tach fallback"] --> Context
-        Scan --> Context["Context analyzers 1.3<br/>frameworks | scenario tasks | ranked health | architecture"]
+        Policies["Repository analysis policies<br/>health | architecture | cross-domain obligations"] --> Context
+        Scan --> Context["Context analyzers<br/>frameworks | scenarios | root causes | architecture | domain coverage"]
         Context --> Handoff["Authorized companion handoff<br/>argv + actor + oracle + subjects"]
         ToolEvidence --> Findings["Normalize and correlate<br/>semantic subject | flow sink | location"]
         Context --> Findings
+        Findings --> AdversarialPlan["LLM adversarial plan<br/>digest-bound objectives + oracles"]
+        AdversarialPlan --> ModelProposal["External model proposal<br/>schema-bound, untrusted output"]
+        ModelProposal --> ProposalCheck["Confined validation<br/>execution_authorized = false"]
+        ProposalCheck --> ApprovedLane["Human-approved disposable lane<br/>network denied + generated tests only"]
+        ApprovedLane --> AdversarialProof["Deterministic proof<br/>negative control + mutation + failed case"]
+        AdversarialProof --> Findings
         Findings --> Validate["Multi-axis validation<br/>candidate to reproduced"]
         Validate --> Policy["PASS | WARN | FAIL | INCOMPLETE"]
         Policy --> Reports["Seal reports and evidence"]
@@ -744,9 +754,10 @@ python-security-report/
 |-- finding-validation.json          # independent proof dimensions plus conservative compatibility tier
 |-- framework-model-coverage.json    # detected frameworks, model identities, canaries, and engine completion
 |-- application-contract-analysis.json # scenario manifests/tasks, drift, wrapper reachability, vulnerable calls
+|-- llm-adversarial-plan.json        # source-bound campaigns and safe companion handoffs
 |-- capability-manifest.json         # portfolio, profile intent, applicability, completion, and execution gaps
-|-- code-health.json                 # ranked complexity, async/exception lifecycle, state, cohesion, and clone risks
-|-- static-architecture.json         # module/symbol graph, unified entry points, dynamic imports, native/Tach policy
+|-- code-health.json                 # ranked root-cause clusters plus bounded complexity and behavioral symptoms
+|-- static-architecture.json         # ranked refactoring targets, semantic graph context, module/symbol graph, and policy
 |-- architecture-history.json        # structural profiles: bounded co-change and finding-overlaid hotspots
 |-- coverage-summary.json           # validated pre-generated test coverage
 |-- junit-summary.json              # bounded output-free test case/file/result ledger
@@ -886,7 +897,7 @@ contact those targets.
 
 ## Current boundaries
 
-This is an alpha foundation. All 88 offline/static, evidence-ingestion, and
+This is an alpha foundation. All 89 offline/static, evidence-ingestion, and
 artifact adapters are
 implemented, but enterprise
 rollout still requires pinned approved assets, framework-specific Pysa models,

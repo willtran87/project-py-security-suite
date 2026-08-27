@@ -19,6 +19,7 @@ from py_security_suite.adapters.assurance_evidence import (
     IastAdapter,
     InTotoAdapter,
     KubescapeAdapter,
+    LlmAdversarialAdapter,
     MobSfAdapter,
     NativeSanitizersAdapter,
     NucleiAdapter,
@@ -585,6 +586,11 @@ class PortfolioAdapterTests(unittest.TestCase):
             ),
             (OciImageAdapter, "supply-chain", "container-image-security"),
             (YaraAdapter, "security", "malware-scanning"),
+            (
+                LlmAdversarialAdapter,
+                "security",
+                "llm-guided-adversarial-code-testing",
+            ),
         ]
         for adapter_type, domain, area in adapters:
             adapter = adapter_type(ToolConfig(), 4096)

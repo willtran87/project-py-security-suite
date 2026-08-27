@@ -1,6 +1,6 @@
 # Finding accuracy and architecture context
 
-Last reviewed: 2026-08-26
+Last reviewed: 2026-08-27
 
 The suite keeps severity, lifecycle, and validation independent. Severity
 describes potential impact; lifecycle describes whether a stable finding is new,
@@ -241,7 +241,11 @@ Broad structural profiles emit three additional artifacts:
   exact duplicated function ASTs, and lower-severity
   identifier/literal-normalized semantic clones. It counts all detected issues,
   retains severity- and kind-diversified detail up to the bounded limit, and
-  reports omitted totals instead of silently favoring source order. A strict
+  reports omitted totals instead of silently favoring source order. Correlated
+  symptoms are also consolidated by file, symbol, and defect family into a
+  bounded root-cause review queue. Each cluster retains its constituent issue
+  kinds, source span, priority score, and family-specific remediation; a cluster
+  remains a refactoring hypothesis rather than proof of incorrect behavior. A strict
   `security/code-health-policy.json` can calibrate every threshold.
 - `architecture-history.json` mines at most 500 commits from the already sealed
   Git history. It reports persistent high-ratio file co-change and the
@@ -260,7 +264,13 @@ Broad structural profiles emit three additional artifacts:
   heuristic smells. When that native policy is absent, a repository-root
   `tach.toml` is ingested as the dependency contract, so undeclared Tach edges
   and forbidden Tach boundary cycles become exact policy violations; the native
-  JSON policy takes precedence when both are present.
+  JSON policy takes precedence when both are present. The artifact ranks cycles,
+  policy-boundary failures, baseline regressions, fan-out, hubs, and instability
+  direction as refactoring targets. Every target states whether it is an exact
+  contract failure or a heuristic topology signal. When `reachability.json` is
+  available, a bounded semantic-graph summary preserves its confidence,
+  completion, typed-receiver and framework-resolution controls, and graph counts;
+  this companion evidence is not promoted to runtime dispatch proof.
 
 The architecture baseline is deliberately simple and reviewable:
 

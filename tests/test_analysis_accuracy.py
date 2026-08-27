@@ -331,6 +331,33 @@ def test_code_health_detects_deep_control_flow(tmp_path: Path) -> None:
     validate_governed_artifacts({"code-health.json": artifact})
 
 
+def test_code_health_consolidates_correlated_symptoms_into_root_causes(
+    tmp_path: Path,
+) -> None:
+    nested = "\n".join(f"    {'    ' * index}if value > {index}:" for index in range(7))
+    body = nested + "\n" + "    " * 8 + "return value\n"
+    body += "\n".join("    value += 1" for _ in range(101)) + "\n"
+    (tmp_path / "service.py").write_text(
+        "def coordinate(value):\n" + body, encoding="utf-8"
+    )
+
+    _, artifact = analyze_code_health(tmp_path)
+
+    cluster = next(
+        item
+        for item in artifact["root_cause_clusters"]
+        if item["family"] == "function-complexity"
+    )
+    assert artifact["schema_version"] == "1.4"
+    assert cluster["symbol"] == "coordinate"
+    assert cluster["issue_count"] >= 3
+    assert {"cognitive-complexity", "deep-nesting", "long-function"}.issubset(
+        cluster["issue_kinds"]
+    )
+    assert cluster["priority"] in {"p0", "p1"}
+    validate_governed_artifacts({"code-health.json": artifact})
+
+
 def test_code_health_covers_size_coupling_and_clone_boundaries(
     tmp_path: Path,
 ) -> None:
@@ -736,6 +763,57 @@ def test_static_architecture_detects_local_dependency_cycle(tmp_path: Path) -> N
     assert artifact["cycles_detected"] == 1
     assert artifact["cycles"][0]["modules"] == ["sample.left", "sample.right"]
     assert findings[0].classifications == ["ARCH-DEPENDENCY-CYCLE"]
+    validate_governed_artifacts({"static-architecture.json": artifact})
+
+
+def test_static_architecture_ranks_refactoring_targets_and_preserves_semantics(
+    tmp_path: Path,
+) -> None:
+    package = tmp_path / "src" / "sample"
+    package.mkdir(parents=True)
+    (package / "__init__.py").write_text("", encoding="utf-8")
+    (package / "left.py").write_text("from . import right\n", encoding="utf-8")
+    (package / "right.py").write_text("from . import left\n", encoding="utf-8")
+    reachability = {
+        "schema_version": "1.2",
+        "analysis": {"confidence": "high", "complete": True},
+        "summary": {"entry_points": 1},
+        "entry_points": [{}],
+        "islands": [{}, {}],
+        "nodes": [{}, {}, {}],
+        "edges": [{}, {}],
+        "dynamic_features": ["polymorphic-dispatch"],
+        "precision_features": [
+            "framework-registration-resolution",
+            "typed-receiver-resolution",
+        ],
+        "warnings": [],
+        "errors": [],
+    }
+
+    _, artifact = analyze_static_architecture(tmp_path, reachability)
+
+    assert artifact["schema_version"] == "1.4"
+    assert artifact["refactoring_targets"][0]["kind"] == "dependency-cycle"
+    assert artifact["refactoring_targets"][0]["exact_contract_failure"] is False
+    assert artifact["semantic_graph"] == {
+        "available": True,
+        "schema_version": "1.2",
+        "confidence": "high",
+        "complete": True,
+        "nodes": 3,
+        "edges": 2,
+        "entry_points": 1,
+        "islands": 2,
+        "precision_features": [
+            "framework-registration-resolution",
+            "typed-receiver-resolution",
+        ],
+        "type_aware": True,
+        "framework_aware": True,
+        "dynamic_features_detected": 1,
+        "errors_detected": 0,
+    }
     validate_governed_artifacts({"static-architecture.json": artifact})
 
 

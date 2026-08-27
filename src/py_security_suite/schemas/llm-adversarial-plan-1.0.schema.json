@@ -1,0 +1,143 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:llm-adversarial-plan:1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "analysis", "complete", "truncated", "source_sha256", "policy_path", "policy_present", "planning_enabled", "execution_ready", "campaigns_detected", "campaigns_retained", "campaigns_omitted", "context_entries_retained", "context_bytes", "context", "campaigns", "campaign_status_counts", "execution_plan", "evidence", "parse_errors", "claim_boundary"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "analysis": {"const": "provider-neutral-llm-adversarial-test-planning"},
+    "complete": {"type": "boolean"},
+    "truncated": {"type": "boolean"},
+    "source_sha256": {"$ref": "#/$defs/digest"},
+    "policy_path": {"enum": ["security/llm-adversarial-policy.json", null]},
+    "policy_present": {"type": "boolean"},
+    "planning_enabled": {"type": "boolean"},
+    "execution_ready": {"type": "boolean"},
+    "campaigns_detected": {"type": "integer", "minimum": 0, "maximum": 30000},
+    "campaigns_retained": {"type": "integer", "minimum": 0, "maximum": 1000},
+    "campaigns_omitted": {"type": "integer", "minimum": 0, "maximum": 30000},
+    "context_entries_retained": {"type": "integer", "minimum": 0, "maximum": 500},
+    "context_bytes": {"type": "integer", "minimum": 0, "maximum": 67108864},
+    "context": {"type": "array", "maxItems": 500, "items": {"$ref": "#/$defs/context"}},
+    "campaigns": {"type": "array", "maxItems": 1000, "items": {"$ref": "#/$defs/campaign"}},
+    "campaign_status_counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["not-run", "inconclusive", "exercised-no-confirmed-defect", "confirmed-defect"],
+      "properties": {
+        "not-run": {"type": "integer", "minimum": 0, "maximum": 1000},
+        "inconclusive": {"type": "integer", "minimum": 0, "maximum": 1000},
+        "exercised-no-confirmed-defect": {"type": "integer", "minimum": 0, "maximum": 1000},
+        "confirmed-defect": {"type": "integer", "minimum": 0, "maximum": 1000}
+      }
+    },
+    "execution_plan": {"$ref": "#/$defs/executionPlan"},
+    "evidence": {"$ref": "#/$defs/evidence"},
+    "parse_errors": {"type": "array", "maxItems": 100, "items": {"type": "string", "minLength": 1, "maxLength": 2000}},
+    "claim_boundary": {"type": "string", "minLength": 1, "maxLength": 2000}
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "identifier": {"type": "string", "pattern": "^llm-[a-z-]+-[0-9a-f]{20}$", "maxLength": 100},
+    "strings": {"type": "array", "maxItems": 100, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 1000}},
+    "tool": {"enum": ["atheris", "authorization-security", "codeql", "crosshair", "hypothesis", "mutmut", "playwright", "pysa", "restler", "schemathesis", "semgrep"]},
+    "context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "path", "start_line", "end_line", "symbol", "rationale", "source_artifacts", "size_bytes", "sha256", "content_trust", "content_included"],
+      "properties": {
+        "id": {"$ref": "#/$defs/identifier"},
+        "kind": {"enum": ["finding", "application-contract", "domain-gap", "architecture-target", "quality-cluster"]},
+        "path": {"type": "string", "minLength": 1, "maxLength": 1000},
+        "start_line": {"type": ["integer", "null"], "minimum": 1},
+        "end_line": {"type": ["integer", "null"], "minimum": 1},
+        "symbol": {"type": ["string", "null"], "minLength": 1, "maxLength": 500},
+        "rationale": {"type": "string", "maxLength": 1000},
+        "source_artifacts": {"$ref": "#/$defs/strings"},
+        "size_bytes": {"type": "integer", "minimum": 0, "maximum": 67108864},
+        "sha256": {"oneOf": [{"$ref": "#/$defs/digest"}, {"type": "null"}]},
+        "content_trust": {"const": "untrusted-repository-data"},
+        "content_included": {"const": false}
+      }
+    },
+    "oracle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "expected", "deterministic", "llm_judge_sufficient"],
+      "properties": {
+        "kind": {"type": "string", "minLength": 1, "maxLength": 100},
+        "expected": {"type": "string", "minLength": 1, "maxLength": 1000},
+        "deterministic": {"const": true},
+        "llm_judge_sufficient": {"const": false}
+      }
+    },
+    "campaign": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "attack_class", "priority", "objective", "hypothesis", "context_ids", "allowed_tools", "oracle", "negative_control_required", "mutation_validation_required", "maximum_iterations", "generated_test_root", "evidence_status"],
+      "properties": {
+        "id": {"$ref": "#/$defs/identifier"},
+        "attack_class": {"enum": ["finding-reproduction", "api-abuse", "domain-invariant", "architecture-challenge", "quality-invariant"]},
+        "priority": {"enum": ["P0", "P1", "P2", "P3"]},
+        "objective": {"type": "string", "minLength": 1, "maxLength": 1000},
+        "hypothesis": {"type": "string", "minLength": 1, "maxLength": 2000},
+        "context_ids": {"type": "array", "minItems": 1, "maxItems": 100, "uniqueItems": true, "items": {"$ref": "#/$defs/identifier"}},
+        "allowed_tools": {"type": "array", "minItems": 1, "maxItems": 11, "uniqueItems": true, "items": {"$ref": "#/$defs/tool"}},
+        "oracle": {"$ref": "#/$defs/oracle"},
+        "negative_control_required": {"const": true},
+        "mutation_validation_required": {"const": true},
+        "maximum_iterations": {"type": "integer", "minimum": 1, "maximum": 10},
+        "generated_test_root": {"const": "generated-tests"},
+        "evidence_status": {"enum": ["not-run", "inconclusive", "exercised-no-confirmed-defect", "confirmed-defect"]}
+      }
+    },
+    "task": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["task_id", "campaign_id", "consumer", "protocol", "command", "required_environment", "allowed_tools", "maximum_iterations", "network_policy", "write_scope", "expected_evidence", "source_bound_evidence_required"],
+      "properties": {
+        "task_id": {"type": "string", "minLength": 1, "maxLength": 200},
+        "campaign_id": {"$ref": "#/$defs/identifier"},
+        "consumer": {"const": "llm-adversarial"},
+        "protocol": {"const": "llm-adversarial-proposal-v1"},
+        "command": {"type": "array", "minItems": 1, "maxItems": 30, "items": {"type": "string", "minLength": 1, "maxLength": 1000}},
+        "required_environment": {"type": "array", "minItems": 1, "maxItems": 20, "uniqueItems": true, "items": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]{0,99}$"}},
+        "allowed_tools": {"type": "array", "minItems": 1, "maxItems": 11, "uniqueItems": true, "items": {"$ref": "#/$defs/tool"}},
+        "maximum_iterations": {"type": "integer", "minimum": 1, "maximum": 10},
+        "network_policy": {"const": "deny"},
+        "write_scope": {"const": "generated-tests-only"},
+        "expected_evidence": {"const": "llm-adversarial.json"},
+        "source_bound_evidence_required": {"const": true}
+      }
+    },
+    "executionPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tasks_detected", "tasks", "required_environment", "authorized_companion_lane_required", "human_approval_required", "network_policy", "write_scope", "destructive_testing_allowed", "claim_boundary"],
+      "properties": {
+        "tasks_detected": {"type": "integer", "minimum": 0, "maximum": 1000},
+        "tasks": {"type": "array", "maxItems": 1000, "items": {"$ref": "#/$defs/task"}},
+        "required_environment": {"type": "array", "maxItems": 20, "uniqueItems": true, "items": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]{0,99}$"}},
+        "authorized_companion_lane_required": {"const": true},
+        "human_approval_required": {"const": true},
+        "network_policy": {"const": "deny"},
+        "write_scope": {"const": "generated-tests-only"},
+        "destructive_testing_allowed": {"const": false},
+        "claim_boundary": {"type": "string", "minLength": 1, "maxLength": 2000}
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["present", "source_bound", "execution_complete", "campaigns_exercised", "confirmed_defects"],
+      "properties": {
+        "present": {"type": "boolean"},
+        "source_bound": {"type": "boolean"},
+        "execution_complete": {"type": "boolean"},
+        "campaigns_exercised": {"type": "integer", "minimum": 0, "maximum": 1000},
+        "confirmed_defects": {"type": "integer", "minimum": 0, "maximum": 1000}
+      }
+    }
+  }
+}

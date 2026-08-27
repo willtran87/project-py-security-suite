@@ -35,6 +35,7 @@ _SKIP = frozenset(
 )
 _MAX_FILES = 50_000
 _MAX_ISSUES = 2_000
+_MAX_ROOT_CAUSE_CLUSTERS = 1_000
 _POLICY_PATH = "security/code-health-policy.json"
 _DEFAULT_THRESHOLDS = {
     "cognitive_complexity": 15,
@@ -67,6 +68,36 @@ _BLOCKING_CALLS = frozenset(
         "urllib.request.urlopen",
     }
 )
+
+_ISSUE_FAMILIES = {
+    "cognitive-complexity": "function-complexity",
+    "long-function": "function-complexity",
+    "deep-nesting": "function-complexity",
+    "parameter-coupling": "coupling",
+    "excessive-call-coupling": "coupling",
+    "large-class": "class-design",
+    "excessive-class-responsibilities": "class-design",
+    "low-class-cohesion": "class-design",
+    "swallowed-broad-exception": "exception-flow",
+    "implicit-exception-chain": "exception-flow",
+    "async-blocking-call": "async-lifecycle",
+    "unawaited-async-call": "async-lifecycle",
+    "discarded-async-task": "async-lifecycle",
+    "swallowed-cancellation": "async-lifecycle",
+    "module-mutable-globals": "mutable-state",
+    "duplicate-function": "duplication",
+    "semantic-clone": "duplication",
+}
+
+_FAMILY_REMEDIATION = {
+    "function-complexity": "Extract named decisions and isolate side effects behind focused functions with branch and mutation tests.",
+    "coupling": "Introduce a narrow contract or parameter object and split orchestration from domain behavior.",
+    "class-design": "Split responsibilities around cohesive state ownership and explicit interfaces.",
+    "exception-flow": "Preserve exception causality and handle only errors the current boundary can recover from.",
+    "async-lifecycle": "Make coroutine ownership, cancellation propagation, and blocking-work isolation explicit.",
+    "mutable-state": "Move mutable module state behind an injected owner with a bounded lifecycle.",
+    "duplication": "Consolidate the shared behavior behind one tested implementation without erasing intentional domain differences.",
+}
 
 
 def analyze_code_health(target: Path) -> tuple[list[Finding], dict[str, Any]]:
@@ -351,10 +382,11 @@ def analyze_code_health(target: Path) -> tuple[list[Finding], dict[str, Any]]:
             key=lambda item: (-item[1], item[0]),
         )[:1_000]
     ]
+    root_cause_clusters_detected, root_cause_clusters = _root_cause_clusters(issues)
     issues = _retain_ranked_issues(issues, _MAX_ISSUES)
     findings = [_finding(item) for item in issues]
     return findings, {
-        "schema_version": "1.3",
+        "schema_version": "1.4",
         "analysis": "python-cognitive-complexity-size-coupling-and-duplication",
         "files_analyzed": files_analyzed,
         "complete": not parse_errors
@@ -368,6 +400,12 @@ def analyze_code_health(target: Path) -> tuple[list[Finding], dict[str, Any]]:
         "issue_counts_by_path": issue_counts_by_path,
         "retention_strategy": "severity-kind-diversified-overage-ranking",
         "issues": issues,
+        "root_cause_clusters_detected": root_cause_clusters_detected,
+        "root_cause_clusters_retained": len(root_cause_clusters),
+        "root_cause_clusters_omitted": max(
+            0, root_cause_clusters_detected - len(root_cause_clusters)
+        ),
+        "root_cause_clusters": root_cause_clusters,
         "parse_errors_detected": len(parse_errors),
         "parse_errors_omitted": max(0, len(parse_errors) - 100),
         "parse_errors": parse_errors[:100],
@@ -383,6 +421,62 @@ def analyze_code_health(target: Path) -> tuple[list[Finding], dict[str, Any]]:
             ),
         ],
     }
+
+
+def _root_cause_clusters(
+    issues: list[dict[str, Any]],
+) -> tuple[int, list[dict[str, Any]]]:
+    """Consolidate correlated symptoms without claiming a proven root cause."""
+
+    grouped: dict[tuple[str, str, str], list[dict[str, Any]]] = defaultdict(list)
+    for issue in issues:
+        kind = str(issue["kind"])
+        family = _ISSUE_FAMILIES[kind]
+        symbol = str(issue["symbol"]).partition(":")[0].strip()[:500]
+        grouped[(str(issue["path"]), symbol, family)].append(issue)
+
+    clusters: list[dict[str, Any]] = []
+    for (path, symbol, family), members in grouped.items():
+        kinds = sorted({str(item["kind"]) for item in members})
+        maximum_severity = max(
+            _ISSUE_SEVERITY.get(str(item["kind"]), 1) for item in members
+        )
+        maximum_overage = max(
+            (int(item["value"]) - int(item["threshold"]))
+            / max(1, int(item["threshold"]))
+            for item in members
+        )
+        score = min(
+            100,
+            maximum_severity * 25
+            + min(20, len(members) * 5)
+            + min(20, len(kinds) * 5)
+            + min(10, round(maximum_overage * 5)),
+        )
+        clusters.append(
+            {
+                "family": family,
+                "path": path,
+                "symbol": symbol,
+                "first_line": min(int(item["line"]) for item in members),
+                "last_line": max(int(item["end_line"]) for item in members),
+                "issue_count": len(members),
+                "issue_kinds": kinds,
+                "priority": "p0" if score >= 85 else "p1" if score >= 60 else "p2",
+                "priority_score": score,
+                "remediation": _FAMILY_REMEDIATION[family],
+            }
+        )
+    clusters.sort(
+        key=lambda item: (
+            -int(item["priority_score"]),
+            -int(item["issue_count"]),
+            str(item["path"]),
+            int(item["first_line"]),
+            str(item["family"]),
+        )
+    )
+    return len(clusters), clusters[:_MAX_ROOT_CAUSE_CLUSTERS]
 
 
 def _load_policy(target: Path) -> tuple[dict[str, int], bool, str | None]:

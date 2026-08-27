@@ -1,0 +1,468 @@
+{
+  "schema_version": "1.0",
+  "enforce_inferred_domains": true,
+  "domains": [
+    {
+      "name": "business-logic",
+      "applicable": true,
+      "owner": "payments-platform",
+      "requirements": [{
+        "id": "checkout-value-conservation",
+        "kind": "value-conservation",
+        "objective": "The captured amount never exceeds the authorized order total.",
+        "subjects": ["checkout", "payment"],
+        "evidence_artifacts": ["application-contract-analysis.json"],
+        "test_ids": ["tests/test_checkout.py::test_captured_total_is_conserved"],
+        "enforcement_points": ["src/payments/checkout.py#capture"]
+      }]
+    },
+    {
+      "name": "privacy-lifecycle",
+      "applicable": true,
+      "owner": "privacy-engineering",
+      "requirements": [{
+        "id": "subject-deletion",
+        "kind": "deletion",
+        "objective": "A verified deletion request removes the subject from primary and derived stores within policy.",
+        "subjects": ["customer-profile"],
+        "evidence_artifacts": ["data-exposure.json"],
+        "test_ids": ["tests/test_privacy.py::test_subject_deletion_propagates"],
+        "enforcement_points": ["src/privacy/deletion.py#delete_subject"]
+      }]
+    },
+    {
+      "name": "resilience",
+      "applicable": true,
+      "owner": "site-reliability",
+      "requirements": [{
+        "id": "request-amplification-budget",
+        "kind": "amplification",
+        "objective": "One external request cannot create unbounded downstream work.",
+        "subjects": ["public-api"],
+        "evidence_artifacts": ["restler-summary.json"],
+        "test_ids": ["tests/test_resilience.py::test_request_amplification_is_bounded"],
+        "enforcement_points": ["src/api/limits.py#request_budget"]
+      }]
+    },
+    {
+      "name": "detection-engineering",
+      "applicable": true,
+      "owner": "security-operations",
+      "requirements": [{
+        "id": "privilege-escalation-canary",
+        "kind": "canary-replay",
+        "objective": "The governed runtime rule alerts on the approved privilege-escalation canary.",
+        "subjects": ["production-runtime"],
+        "evidence_artifacts": ["falco-summary.json", "ruleset-regression-summary.json"],
+        "test_ids": ["tests/test_detections.py::test_privilege_escalation_canary"],
+        "enforcement_points": ["detections/runtime/privilege-escalation.yaml"]
+      }]
+    },
+    {
+      "name": "cryptographic-agility",
+      "applicable": true,
+      "owner": "cryptography-governance",
+      "requirements": [{
+        "id": "approved-protocol-policy",
+        "kind": "protocol-policy",
+        "objective": "Every externally reachable endpoint uses an approved protocol and cipher policy.",
+        "subjects": ["public-endpoints"],
+        "evidence_artifacts": ["tls-scan-summary.json"],
+        "test_ids": [],
+        "enforcement_points": ["security/crypto/protocol-policy.json"]
+      }]
+    },
+    {
+      "name": "notebook-security",
+      "applicable": true,
+      "owner": "data-science-platform",
+      "requirements": [{
+        "id": "maintained-notebook-code",
+        "kind": "notebook-code",
+        "objective": "Maintained notebook code receives the same security and correctness checks as Python modules.",
+        "subjects": ["research-notebooks"],
+        "evidence_artifacts": ["boundary-graph.json", "polyglot-summary.json"],
+        "test_ids": ["tests/test_notebooks.py::test_maintained_notebooks_are_clean"],
+        "enforcement_points": ["notebooks/model-review.ipynb"]
+      }]
+    },
+    {
+      "name": "messaging-security",
+      "applicable": true,
+      "owner": "event-platform",
+      "requirements": [{
+        "id": "poison-message-isolation",
+        "kind": "poison-message",
+        "objective": "Malformed messages cannot halt the consumer or bypass dead-letter isolation.",
+        "subjects": ["orders-topic"],
+        "evidence_artifacts": ["event-security-summary.json"],
+        "test_ids": ["tests/test_events.py::test_poison_message_is_isolated"],
+        "enforcement_points": ["src/events/order_consumer.py#consume"]
+      }]
+    },
+    {
+      "name": "desktop-client-security",
+      "applicable": true,
+      "owner": "desktop-platform",
+      "requirements": [{
+        "id": "signed-update-integrity",
+        "kind": "update-integrity",
+        "objective": "The client rejects updates not signed by an active approved key.",
+        "subjects": ["desktop-updater"],
+        "evidence_artifacts": ["polyglot-summary.json"],
+        "test_ids": ["tests/test_desktop_update.py::test_unsigned_update_is_rejected"],
+        "enforcement_points": ["desktop/updater.ts#verifyUpdate"]
+      }]
+    },
+    {
+      "name": "firmware-iot-security",
+      "applicable": true,
+      "owner": "device-security",
+      "requirements": [{
+        "id": "firmware-rollback-protection",
+        "kind": "firmware-update",
+        "objective": "A device rejects unsigned, cross-device, and rollback firmware images.",
+        "subjects": ["device-firmware"],
+        "evidence_artifacts": ["native-sanitizers-summary.json"],
+        "test_ids": ["tests/test_firmware.py::test_invalid_update_is_rejected"],
+        "enforcement_points": ["firmware/update.c#verify_image"]
+      }]
+    },
+    {
+      "name": "web3-security",
+      "applicable": true,
+      "owner": "smart-contract-security",
+      "requirements": [{
+        "id": "vault-conservation-invariant",
+        "kind": "contract-invariant",
+        "objective": "Vault liabilities never exceed governed assets across all transaction orderings.",
+        "subjects": ["vault-contract"],
+        "evidence_artifacts": ["polyglot-summary.json"],
+        "test_ids": ["test/VaultInvariant.t.sol::invariant_assets_cover_liabilities"],
+        "enforcement_points": ["contracts/Vault.sol#totalAssets"]
+      }]
+    },
+    {
+      "name": "graphql-security",
+      "applicable": true,
+      "owner": "api-security",
+      "requirements": [{
+        "id": "resolver-tenant-authorization",
+        "kind": "resolver-authorization",
+        "objective": "Every tenant-scoped resolver denies cross-tenant object access and field expansion.",
+        "subjects": ["graphql-api"],
+        "evidence_artifacts": ["schemathesis-summary.json", "authorization-security-summary.json"],
+        "test_ids": ["tests/test_graphql_auth.py::test_cross_tenant_resolver_denied"],
+        "enforcement_points": ["src/graphql/resolvers.py#resolve_customer"]
+      }]
+    },
+    {
+      "name": "identity-assurance",
+      "applicable": true,
+      "owner": "identity-platform",
+      "requirements": [{
+        "id": "federated-session-revocation",
+        "kind": "session-lifecycle",
+        "objective": "Logout, account disablement, and federation revocation terminate every affected session within policy.",
+        "subjects": ["customer-session", "oidc-federation"],
+        "evidence_artifacts": ["browser-security-summary.json", "authorization-security-summary.json"],
+        "test_ids": ["tests/test_identity.py::test_revocation_terminates_all_sessions"],
+        "enforcement_points": ["src/identity/sessions.py#revoke_sessions"]
+      }]
+    },
+    {
+      "name": "tenant-isolation",
+      "applicable": true,
+      "owner": "platform-security",
+      "requirements": [{
+        "id": "cross-store-tenant-isolation",
+        "kind": "tenant-data-isolation",
+        "objective": "Authenticated tenant context isolates database, cache, object, queue, search, and vector records.",
+        "subjects": ["tenant-data-plane"],
+        "evidence_artifacts": ["authorization-security-summary.json", "database-security-summary.json"],
+        "test_ids": ["tests/test_tenants.py::test_cross_store_access_is_denied"],
+        "enforcement_points": ["src/tenancy/context.py#require_tenant"]
+      }]
+    },
+    {
+      "name": "abuse-resistance",
+      "applicable": true,
+      "owner": "fraud-and-abuse",
+      "requirements": [{
+        "id": "credential-automation-budget",
+        "kind": "credential-abuse",
+        "objective": "Credential stuffing and distributed account enumeration remain within the approved detection and response budget.",
+        "subjects": ["login", "account-recovery"],
+        "evidence_artifacts": ["browser-security-summary.json", "ruleset-regression-summary.json"],
+        "test_ids": ["tests/test_abuse.py::test_distributed_credential_attack_is_contained"],
+        "enforcement_points": ["src/abuse/login_controls.py#evaluate_attempt"]
+      }]
+    },
+    {
+      "name": "workload-identity",
+      "applicable": true,
+      "owner": "cloud-platform",
+      "requirements": [{
+        "id": "service-identity-rotation",
+        "kind": "workload-credential-rotation",
+        "objective": "Each workload receives only its attested short-lived identity and rotates it without accepting an expired trust bundle.",
+        "subjects": ["service-mesh", "workload-identity"],
+        "evidence_artifacts": ["tls-scan-summary.json", "cloud-attack-path-summary.json"],
+        "test_ids": ["tests/test_workload_identity.py::test_identity_rotation_and_expiry"],
+        "enforcement_points": ["deploy/identity/workload-policy.yaml"]
+      }]
+    },
+    {
+      "name": "integration-security",
+      "applicable": true,
+      "owner": "integration-platform",
+      "requirements": [{
+        "id": "webhook-authenticity-and-replay",
+        "kind": "webhook-replay",
+        "objective": "Inbound webhooks require the expected provider identity, signature, timestamp, nonce, schema, and replay window.",
+        "subjects": ["payment-provider-webhook"],
+        "evidence_artifacts": ["protocol-security-summary.json", "application-contract-analysis.json"],
+        "test_ids": ["tests/test_webhooks.py::test_replayed_or_forged_webhook_is_denied"],
+        "enforcement_points": ["src/integrations/webhooks.py#verify_request"]
+      }]
+    },
+    {
+      "name": "incident-response-recovery",
+      "applicable": true,
+      "owner": "security-operations",
+      "requirements": [{
+        "id": "containment-recovery-exercise",
+        "kind": "recovery-exercise",
+        "objective": "The exercised playbook preserves evidence, contains the affected identity, restores service, and revalidates controls within objectives.",
+        "subjects": ["production-service"],
+        "evidence_artifacts": ["falco-summary.json", "ruleset-regression-summary.json"],
+        "test_ids": ["tests/test_incident_recovery.py::test_containment_and_recovery_exercise"],
+        "enforcement_points": ["security/playbooks/service-compromise.yaml"]
+      }]
+    },
+    {
+      "name": "data-integrity-lineage",
+      "applicable": true,
+      "owner": "data-platform",
+      "requirements": [{
+        "id": "ledger-to-warehouse-reconciliation",
+        "kind": "reconciliation",
+        "objective": "Every governed transformation preserves source identity and reconciles operational totals with analytical outputs.",
+        "subjects": ["transaction-ledger", "analytics-warehouse"],
+        "evidence_artifacts": ["database-security-summary.json", "event-security-summary.json"],
+        "test_ids": ["tests/test_lineage.py::test_ledger_warehouse_reconciliation"],
+        "enforcement_points": ["src/pipelines/ledger.py#transform"]
+      }]
+    },
+    {
+      "name": "serverless-edge-security",
+      "applicable": true,
+      "owner": "edge-platform",
+      "requirements": [{
+        "id": "trusted-trigger-and-concurrency",
+        "kind": "trigger-authorization",
+        "objective": "The function accepts only authorized event sources and enforces retry, concurrency, cost, identity, and tenant-cache boundaries.",
+        "subjects": ["order-function", "edge-cache"],
+        "evidence_artifacts": ["checkov-iac.json", "event-security-summary.json"],
+        "test_ids": ["tests/test_serverless.py::test_untrusted_trigger_is_denied"],
+        "enforcement_points": ["functions/orders/handler.py#handle"]
+      }]
+    },
+    {
+      "name": "external-asset-communication",
+      "applicable": true,
+      "owner": "internet-services",
+      "requirements": [{
+        "id": "domain-and-email-authentication",
+        "kind": "email-authentication",
+        "objective": "Every sending domain has owned DNS, aligned SPF/DKIM, enforced DMARC, and certificate-to-domain inventory.",
+        "subjects": ["customer-email-domains"],
+        "evidence_artifacts": ["tls-scan-summary.json", "prowler-summary.json"],
+        "test_ids": ["tests/test_external_assets.py::test_domain_email_controls"],
+        "enforcement_points": ["deploy/dns/customer-email.tf"]
+      }]
+    },
+    {
+      "name": "ot-ics-safety",
+      "applicable": true,
+      "owner": "industrial-security",
+      "requirements": [{
+        "id": "unsafe-command-interlock",
+        "kind": "safety-interlock",
+        "objective": "Unauthorized, stale, out-of-sequence, or unsafe process commands reach a fail-safe state without bypassing the independent interlock.",
+        "subjects": ["process-controller", "safety-interlock"],
+        "evidence_artifacts": ["protocol-security-summary.json", "native-sanitizers-summary.json"],
+        "test_ids": ["tests/test_ics_safety.py::test_unsafe_command_reaches_fail_safe_state"],
+        "enforcement_points": ["controls/safety/interlock.st#SAFE_STOP"]
+      }]
+    },
+    {
+      "name": "privileged-control-plane",
+      "applicable": true,
+      "owner": "privileged-access-management",
+      "requirements": [{
+        "id": "support-impersonation-control",
+        "kind": "support-impersonation",
+        "objective": "Support impersonation requires scoped approval, user-visible attribution, expiry, and an immutable audit record.",
+        "subjects": ["support-console", "customer-session"],
+        "evidence_artifacts": ["authorization-security-summary.json", "runtime-trace-correlation.json"],
+        "test_ids": ["tests/test_admin.py::test_impersonation_is_scoped_and_attributed"],
+        "enforcement_points": ["src/admin/impersonation.py#start_session"]
+      }]
+    },
+    {
+      "name": "distributed-temporal-correctness",
+      "applicable": true,
+      "owner": "distributed-systems",
+      "requirements": [{
+        "id": "partition-safe-leadership",
+        "kind": "partition-recovery",
+        "objective": "Partitions, lease expiry, and clock skew cannot create two authoritative leaders or lose committed work.",
+        "subjects": ["coordination-cluster"],
+        "evidence_artifacts": ["event-security-summary.json", "hypothesis-summary.json"],
+        "test_ids": ["tests/test_consensus.py::test_partition_preserves_safety"],
+        "enforcement_points": ["src/coordination/leader.py#elect"]
+      }]
+    },
+    {
+      "name": "secure-human-interaction",
+      "applicable": true,
+      "owner": "product-security-design",
+      "requirements": [{
+        "id": "high-risk-action-confirmation",
+        "kind": "security-confirmation",
+        "objective": "High-risk actions show the specific subject and consequence and require a phishing-resistant confirmation.",
+        "subjects": ["account-transfer"],
+        "evidence_artifacts": ["browser-security-summary.json", "authorization-security-summary.json"],
+        "test_ids": ["tests/test_confirmation.py::test_high_risk_action_requires_bound_confirmation"],
+        "enforcement_points": ["src/ui/security_confirmation.py#confirm"]
+      }]
+    },
+    {
+      "name": "ml-model-data-supply-chain",
+      "applicable": true,
+      "owner": "ml-platform-security",
+      "requirements": [{
+        "id": "approved-model-provenance",
+        "kind": "model-provenance",
+        "objective": "Only digest-bound models from an approved training run, dataset, evaluation, and registry identity can deploy.",
+        "subjects": ["fraud-model"],
+        "evidence_artifacts": ["ai-security-summary.json", "artifact-manifest.json", "in-toto-summary.json"],
+        "test_ids": [],
+        "enforcement_points": ["security/ml/model-policy.json"]
+      }]
+    },
+    {
+      "name": "credential-secret-lifecycle",
+      "applicable": true,
+      "owner": "identity-and-secrets",
+      "requirements": [{
+        "id": "credential-emergency-rotation",
+        "kind": "emergency-rotation",
+        "objective": "A leaked credential can be revoked and replaced across every consumer within the emergency objective.",
+        "subjects": ["production-credentials"],
+        "evidence_artifacts": ["secret-verification-summary.json", "cloud-attack-path-summary.json"],
+        "test_ids": ["tests/test_secrets.py::test_emergency_rotation_revokes_old_identity"],
+        "enforcement_points": ["src/platform/secrets.py#rotate"]
+      }]
+    },
+    {
+      "name": "observability-integrity",
+      "applicable": true,
+      "owner": "observability-platform",
+      "requirements": [{
+        "id": "authenticated-audit-pipeline",
+        "kind": "telemetry-authenticity",
+        "objective": "Audit events remain attributable, ordered, integrity-protected, and delivered when a source or collector is hostile.",
+        "subjects": ["audit-pipeline"],
+        "evidence_artifacts": ["falco-summary.json", "runtime-trace-correlation.json"],
+        "test_ids": ["tests/test_telemetry.py::test_forged_or_dropped_audit_event_is_detected"],
+        "enforcement_points": ["src/telemetry/audit.py#emit"]
+      }]
+    },
+    {
+      "name": "developer-environment-security",
+      "applicable": true,
+      "owner": "developer-platform",
+      "requirements": [{
+        "id": "governed-development-extensions",
+        "kind": "ide-extension",
+        "objective": "Developer extensions and build plugins are allow-listed, version-locked, integrity-verified, and denied production credentials.",
+        "subjects": ["developer-workstations", "build-plugins"],
+        "evidence_artifacts": ["sbom.cdx.json", "trust-policy-attestation.json"],
+        "test_ids": ["tests/test_developer_environment.py::test_extensions_are_governed"],
+        "enforcement_points": [".vscode/extensions.json"]
+      }]
+    },
+    {
+      "name": "parser-content-security",
+      "applicable": true,
+      "owner": "content-processing",
+      "requirements": [{
+        "id": "hostile-archive-bounds",
+        "kind": "archive-expansion",
+        "objective": "Nested, ambiguous, encrypted, and highly compressed archives cannot escape boundaries or exhaust resource budgets.",
+        "subjects": ["document-upload"],
+        "evidence_artifacts": ["native-sanitizers-summary.json", "hypothesis-summary.json", "resource-limits.json"],
+        "test_ids": ["tests/test_uploads.py::test_archive_expansion_is_bounded"],
+        "enforcement_points": ["src/uploads/archive.py#extract"]
+      }]
+    },
+    {
+      "name": "trust-safety",
+      "applicable": true,
+      "owner": "trust-and-safety",
+      "requirements": [{
+        "id": "moderation-evasion-redress",
+        "kind": "moderation-evasion",
+        "objective": "Governed abuse variants are detected consistently and affected users can report, appeal, and receive traceable redress.",
+        "subjects": ["user-generated-content"],
+        "evidence_artifacts": ["ai-security-summary.json", "ruleset-regression-summary.json"],
+        "test_ids": ["tests/test_moderation.py::test_evasion_and_appeal_workflow"],
+        "enforcement_points": ["src/moderation/policy.py#evaluate"]
+      }]
+    },
+    {
+      "name": "confidential-computing-side-channels",
+      "applicable": true,
+      "owner": "confidential-computing",
+      "requirements": [{
+        "id": "attested-key-release",
+        "kind": "key-release",
+        "objective": "Secrets release only to an approved measured workload with fresh attestation and rollback protection.",
+        "subjects": ["secure-enclave"],
+        "evidence_artifacts": ["cloud-attack-path-summary.json", "artifact-manifest.json"],
+        "test_ids": ["tests/test_enclave.py::test_stale_or_unknown_measurement_denied"],
+        "enforcement_points": ["src/enclave/attestation.py#release_key"]
+      }]
+    },
+    {
+      "name": "regulated-transaction-integrity",
+      "applicable": true,
+      "owner": "financial-crime-and-controls",
+      "requirements": [{
+        "id": "dual-controlled-transaction",
+        "kind": "maker-checker",
+        "objective": "A regulated high-value transaction requires independent approval, screening, non-repudiation, and ledger reconciliation.",
+        "subjects": ["regulated-payment"],
+        "evidence_artifacts": ["authorization-security-summary.json", "database-security-summary.json"],
+        "test_ids": ["tests/test_regulated_payments.py::test_maker_cannot_self_approve"],
+        "enforcement_points": ["src/payments/approval.py#approve"]
+      }]
+    },
+    {
+      "name": "physical-environmental-security",
+      "applicable": true,
+      "owner": "physical-security",
+      "requirements": [{
+        "id": "hardware-custody-and-tamper",
+        "kind": "hardware-tamper",
+        "objective": "Governed hardware has attributable custody and enters a safe alerting state after tamper or environmental threshold violations.",
+        "subjects": ["edge-appliance"],
+        "evidence_artifacts": ["protocol-security-summary.json", "runtime-trace-correlation.json"],
+        "test_ids": ["tests/test_physical_security.py::test_tamper_event_is_attributed_and_alerted"],
+        "enforcement_points": ["controls/facility/tamper.yaml"]
+      }]
+    }
+  ]
+}

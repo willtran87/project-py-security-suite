@@ -58,6 +58,7 @@ _ASSURANCE_KINDS = frozenset(
         "iast",
         "in-toto",
         "kubescape",
+        "llm-adversarial",
         "mobsf",
         "mutmut",
         "native-sanitizers",
@@ -2309,6 +2310,17 @@ def _assurance_kind_requirements(kind: str, execution: dict[str, Any]) -> None:
             "output-handling",
             "data-exfiltration",
         },
+        "llm-adversarial": {
+            "schema-constrained-proposal",
+            "prompt-injection-resistance",
+            "disposable-worktree",
+            "network-deny",
+            "command-allowlist",
+            "deterministic-oracle",
+            "negative-control",
+            "mutation-validation",
+            "source-bound-evidence",
+        },
         "browser-security": {
             "security-headers",
             "csp-quality",
@@ -2384,6 +2396,7 @@ def _assurance_kind_requirements(kind: str, execution: dict[str, Any]) -> None:
         "authorization-security",
         "cloud-attack-path",
         "protocol-security",
+        "llm-adversarial",
     }:
         verify_control_proof(execution.get("control_proof"), required_features)
     if kind == "polyglot" and not execution.get("language_matrix"):

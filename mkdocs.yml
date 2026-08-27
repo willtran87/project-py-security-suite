@@ -46,6 +46,8 @@ nav:
       - Scanner lifecycle: tool-lifecycle.md
   - Analysis:
       - Finding accuracy: analysis-accuracy.md
+      - Cross-domain assurance: domain-assurance.md
+      - LLM-guided adversarial testing: llm-adversarial-testing.md
       - Advanced analysis: advanced-analysis.md
       - Risk paths: risk-paths.md
       - Reachability: reachability.md

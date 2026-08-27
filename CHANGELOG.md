@@ -1,5 +1,39 @@
 # Changelog
 
+- Expand cross-domain assurance from 21 to 33 governed domains with privileged
+  control-plane, distributed temporal correctness, secure human interaction,
+  ML model/data supply-chain, credential lifecycle, observability integrity,
+  developer environment, parser/content, trust-and-safety, confidential
+  computing, regulated transaction, and physical/environmental requirements;
+  retain conservative applicability and source-bound behavioral evidence.
+- Expand cross-domain assurance from 11 to 21 first-class domains with identity
+  assurance, tenant isolation, abuse resistance, workload identity,
+  third-party integration security, incident response and recovery, data
+  integrity and lineage, serverless/edge security, external asset and
+  communication security, and OT/ICS safety. Add bounded source/configuration
+  signals, 60 domain-specific requirement kinds, relevant governed-evidence
+  mappings and standards citations, a complete policy example, and refreshed
+  schemas, reports, guidance, and diagrams without treating applicability as a
+  vulnerability or generic evidence as behavioral proof.
+
+- Add governed cross-domain assurance across business logic, privacy lifecycle,
+  resilience, detection engineering, cryptographic agility, notebooks,
+  messaging, desktop clients, firmware/IoT, Web3, and GraphQL. Reconcile strict
+  repository obligations with regular-file enforcement points, complete named
+  artifacts, and passing source-bound test identities; emit normalized policy
+  gaps, a semantically validated `domain-assurance.json` 1.0 scorecard, report
+  summary, exportable policy schema, full-domain example, and updated diagrams.
+
+- Consolidate code-health symptoms into ranked file/symbol/family root-cause
+  review clusters with explicit evidence, omission accounting, and remediation;
+  rank architecture cycles, contract failures, baseline regressions, fan-out,
+  hubs, and instability as refactoring targets while distinguishing exact
+  repository-contract failures from heuristic topology. Carry governed
+  reachability confidence, completeness, graph size, typed-receiver precision,
+  and framework-resolution context into static architecture without claiming
+  runtime proof; publish the governed code-health and static-architecture 1.4
+  schemas and refresh the solution diagrams.
+
 - Refresh the solution, contextual-analysis, and validation diagrams for schema
   1.3; document capability-aware scenario routing, authorized execution boundaries,
   ranked code-health retention, unified entry points, deterministic native/Tach
@@ -1086,3 +1120,11 @@ for published releases.
 
 - Maintained-file discovery prunes generated and tool-owned directories before
   traversal, materially reducing comprehensive preflight and scan duration.
+- Add provider-neutral LLM-guided adversarial planning across confirmed and
+  candidate findings, API abuse scenarios, domain gaps, architecture targets,
+  and code-health root causes. Plans omit source contents, bind context by
+  digest, constrain tools/writes/network/iterations, require human approval,
+  deterministic oracles, negative controls, mutation validation, and ingest
+  only authenticated source-bound companion evidence with control proofs. The
+  proposal validator never authorizes execution, and confirmed defects require
+  an exact binding to the failed control-ledger case.

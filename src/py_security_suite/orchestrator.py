@@ -22,6 +22,8 @@ from .code_health import analyze_code_health
 from .correlation import correlate_findings
 from .data_exposure import apply_data_exposure_fusion, build_data_exposure_synthesis
 from .dependency_surface import dependency_surface_artifact
+from .domain_assurance import analyze_domain_assurance
+from .llm_adversarial import build_llm_adversarial_plan
 from .finding_delta import apply_finding_delta
 from .finding_validation import apply_finding_validation
 from .framework_coverage import framework_model_coverage
@@ -391,7 +393,9 @@ def _scan_sealed_project(
             findings.extend(code_health_findings)
             derived_artifacts["code-health.json"] = code_health_artifact
             static_architecture_findings, static_architecture_artifact = (
-                analyze_static_architecture(scan_target)
+                analyze_static_architecture(
+                    scan_target, derived_artifacts.get("reachability.json")
+                )
             )
             findings.extend(static_architecture_findings)
             derived_artifacts["static-architecture.json"] = static_architecture_artifact
@@ -400,6 +404,11 @@ def _scan_sealed_project(
             )
             findings.extend(architecture_findings)
             derived_artifacts["architecture-history.json"] = architecture_artifact
+        domain_findings, domain_artifact = analyze_domain_assurance(
+            scan_target, derived_artifacts
+        )
+        findings.extend(domain_findings)
+        derived_artifacts["domain-assurance.json"] = domain_artifact
         sanitize_secret_findings(findings)
         findings = correlate_findings(findings)
         intelligence = enrich_findings(findings, config.intelligence)
@@ -520,7 +529,9 @@ def _scan_sealed_project(
         and "static-architecture.json" not in derived_artifacts
     ):
         static_architecture_findings, static_architecture_artifact = (
-            analyze_static_architecture(scan_target)
+            analyze_static_architecture(
+                scan_target, derived_artifacts.get("reachability.json")
+            )
         )
         findings.extend(static_architecture_findings)
         derived_artifacts["static-architecture.json"] = static_architecture_artifact
@@ -533,6 +544,28 @@ def _scan_sealed_project(
         )
         findings.extend(architecture_findings)
         derived_artifacts["architecture-history.json"] = architecture_artifact
+    if "domain-assurance.json" not in derived_artifacts:
+        domain_findings, domain_artifact = analyze_domain_assurance(
+            scan_target, derived_artifacts
+        )
+        findings.extend(domain_findings)
+        derived_artifacts["domain-assurance.json"] = domain_artifact
+    domain_assurance = derived_artifacts["domain-assurance.json"]
+    if (
+        config.profile in {"production", "release"}
+        and isinstance(domain_assurance, dict)
+        and domain_assurance.get("policy_present") is True
+        and (
+            domain_assurance.get("complete") is not True
+            or (
+                domain_assurance.get("enforce_inferred_domains") is True
+                and domain_assurance.get("coverage_complete") is not True
+            )
+        )
+    ):
+        context_errors.append(
+            "declared cross-domain assurance policy is incomplete or has uncovered applicable domains"
+        )
     if "effectiveness.json" not in derived_artifacts:
         _annotate_tool_authority(tool_runs, diagnostics, config)
         derived_artifacts["effectiveness.json"] = effectiveness_artifact(
@@ -561,6 +594,17 @@ def _scan_sealed_project(
         context_errors.append(
             "applicable mapped ASVS, MASVS, or TCASVS controls lack retained evidence"
         )
+    llm_adversarial_plan, llm_adversarial_errors = build_llm_adversarial_plan(
+        scan_target, findings, derived_artifacts
+    )
+    derived_artifacts["llm-adversarial-plan.json"] = llm_adversarial_plan
+    if (
+        config.profile in {"production", "release"}
+        and llm_adversarial_plan["policy_present"] is True
+        and llm_adversarial_plan["complete"] is not True
+    ):
+        reasons = llm_adversarial_errors or ["plan is truncated or incomplete"]
+        context_errors.extend(f"LLM adversarial planning: {error}" for error in reasons)
     if config.profile in {"production", "release"} and _has_local_monotonic_receipt(
         derived_artifacts
     ):

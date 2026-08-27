@@ -1,6 +1,6 @@
 # Python Security Suite configuration
 
-Last reviewed: 2026-08-26
+Last reviewed: 2026-08-27
 
 ## Loading and protection
 
@@ -125,21 +125,55 @@ introduced binaries.
 
 ## Repository engineering-analysis policies
 
-Structural profiles read two optional strict JSON policies from the sealed
-source snapshot. Invalid files make the corresponding analysis incomplete.
+Structural profiles read two optional strict engineering policies, and every
+profile reads an optional cross-domain assurance policy, from the sealed source
+snapshot. Invalid files make the corresponding analysis incomplete.
 
 ```mermaid
 flowchart LR
     Snapshot["Sealed source snapshot"] --> Health["Code-health analyzer"]
     HealthPolicy["security/code-health-policy.json"] --> Health
     Snapshot --> Graph["Static import graph"]
+    Reachability["reachability.json<br/>typed/framework semantic graph"] --> Graph
     ArchitecturePolicy["security/architecture-policy.json or tach.toml"] --> Graph
     EdgeBaseline["security/baselines/architecture-edges.json"] --> Graph
-    Health --> HealthArtifact["code-health.json 1.3<br/>metrics + behavioral maintainability risks"]
-    Graph --> ArchitectureArtifact["static-architecture.json 1.3<br/>module/symbol graph + unified entry points + policy"]
+    Snapshot --> Domains["Cross-domain assurance"]
+    DomainPolicy["security/domain-assurance-policy.json"] --> Domains
+    Health --> HealthArtifact["code-health.json 1.4<br/>ranked root-cause clusters + bounded symptoms"]
+    Graph --> ArchitectureArtifact["static-architecture.json 1.4<br/>refactoring targets + semantic graph context + policy"]
+    Domains --> DomainArtifact["domain-assurance.json 1.0<br/>applicability + evidence-bound obligations"]
     HealthPolicy -->|"invalid"| Incomplete["Analysis incomplete"]
     ArchitecturePolicy -->|"invalid"| Incomplete
+    DomainPolicy -->|"invalid"| Incomplete
 ```
+
+Use [`examples/domain-assurance-policy.example.json`](../examples/domain-assurance-policy.example.json)
+to declare owners and requirements across all 33 governed domains, including
+identity, tenant isolation, abuse resistance, workload identity, integrations,
+incident recovery, data integrity, serverless/edge, external assets, and OT/ICS.
+Behavioral requirements need a passing source-bound test identity;
+all named enforcement points must exist in the sealed snapshot and named
+artifacts that publish `complete` must report `true`. See
+[Cross-domain assurance](domain-assurance.md).
+
+### LLM-guided adversarial planning
+
+Every scan produces a plan-only `llm-adversarial-plan.json` from retained
+findings, application scenarios, assurance gaps, architecture targets, and
+code-health root causes. Copy
+[`examples/llm-adversarial-policy.example.json`](../examples/llm-adversarial-policy.example.json)
+to `security/llm-adversarial-policy.json` to make the companion handoff ready.
+The v1 policy is intentionally strict: network denial, generated-test-only
+writes, no runtime or destructive testing, bounded campaigns/context/iterations,
+human approval, negative controls, and mutation validation are mandatory. See
+[LLM-guided adversarial testing](llm-adversarial-testing.md).
+
+The validator independently rechecks plan authority, source/workspace
+separation, context digests, the fixed `generated-tests` write root, compatible
+tool executables, and deterministic controls. Its result always carries
+`execution_authorized: false`; an external sandbox controller owns execution.
+Returned findings count only when authenticated evidence binds the same source,
+campaign, and exact failed ledger case.
 
 `security/code-health-policy.json` calibrates bounded review thresholds:
 
@@ -206,7 +240,9 @@ Module patterns use deterministic case-sensitive glob matching. Same-layer
 dependencies are allowed; cross-layer dependencies must be named in
 `may_depend_on`. Exact forbidden-edge and layer-direction violations produce
 high-confidence findings. Fan-out, hub, and instability findings remain
-calibrated structural review signals.
+calibrated structural review signals. The ranked refactoring queue preserves
+that distinction through `exact_contract_failure`; it does not equate a high
+degree score with a policy breach.
 
 When the native JSON architecture policy is absent, the analyzer reads the
 repository-root `tach.toml` and treats each configured module's `depends_on`
@@ -214,6 +250,10 @@ list as an exact dependency contract. It also promotes boundary cycles when
 `forbid_circular_dependencies` is enabled. Native JSON takes precedence when
 both formats exist. Packaging scripts, `__main__.py`, main guards, and route
 decorators are all retained as distinct entry-point evidence.
+If a governed reachability artifact is present in the same scan, the architecture
+artifact also records its confidence, completeness, graph size, and applied
+precision controls. Typed-receiver or framework-resolution flags describe the
+semantic model used; they are not claims that the target executed.
 
 If `policy.required_scanners` is empty, every selected and applicable tool is
 required. A conditional tool with no matching input is reported as

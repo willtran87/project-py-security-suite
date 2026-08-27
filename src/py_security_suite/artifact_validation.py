@@ -5,6 +5,7 @@ import hashlib
 import base64
 import os
 import sqlite3
+from collections import Counter
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Any
@@ -33,9 +34,10 @@ _ARTIFACT_SCHEMAS = {
     "boundary-graph.json": "boundary-graph-1.0.schema.json",
     "capability-manifest.json": "capability-manifest-1.0.schema.json",
     "closure-plan.json": "closure-plan.schema.json",
-    "code-health.json": "code-health-1.3.schema.json",
+    "code-health.json": "code-health-1.4.schema.json",
     "data-exposure.json": "data-exposure-1.5.schema.json",
     "dependency-surface.json": "dependency-surface-1.1.schema.json",
+    "domain-assurance.json": "domain-assurance-1.0.schema.json",
     "deptry-dependencies.json": "deptry-artifact.schema.json",
     "diff-coverage.json": "diff-coverage-artifact.schema.json",
     "effectiveness.json": "effectiveness-1.1.schema.json",
@@ -56,6 +58,7 @@ _ARTIFACT_SCHEMAS = {
     "coverage-summary.json": "coverage-artifact.schema.json",
     "junit-summary.json": "test-summary-artifact.schema.json",
     "kics-iac.json": "kics-artifact.schema.json",
+    "llm-adversarial-plan.json": "llm-adversarial-plan-1.0.schema.json",
     "pipdeptree-summary.json": "pipdeptree-artifact.schema.json",
     "pylint-summary.json": "pylint-artifact.schema.json",
     "radon-complexity.json": "radon-artifact.schema.json",
@@ -76,7 +79,7 @@ _ARTIFACT_SCHEMAS = {
     "semantic-language-coverage.json": "semantic-language-coverage-1.0.schema.json",
     "security-requirements-coverage.json": "security-requirements-coverage-1.0.schema.json",
     "source-inventory.json": "source-inventory.schema.json",
-    "static-architecture.json": "static-architecture-1.3.schema.json",
+    "static-architecture.json": "static-architecture-1.4.schema.json",
     "structural-synthesis.json": "structural-synthesis-1.2.schema.json",
     "trust-policy-attestation.json": "trust-policy-attestation-1.0.schema.json",
     "trust-policy.json": "trust-policy-1.0.schema.json",
@@ -148,6 +151,116 @@ def validate_governed_artifacts(artifacts: dict[str, Any] | None) -> dict[str, s
     receipts = _validate_operation_receipt_graph(artifacts or {})
     _consume_operation_receipts(receipts, artifacts or {})
     return validated
+
+
+@_typed_validator("domain-assurance.json")
+def _validate_domain_assurance_accounting(value: object) -> None:
+    if not isinstance(value, dict) or not isinstance(value.get("domains"), list):
+        raise TypeError("domain assurance artifact is invalid")
+    domains = value["domains"]
+    names = [item.get("name") for item in domains]
+    counts = Counter(str(item.get("status")) for item in domains)
+    applicable = [item for item in domains if item.get("applicable") is True]
+    covered = [item for item in applicable if item.get("status") == "covered"]
+    score = round(100 * len(covered) / len(applicable)) if applicable else 100
+    if (
+        len(names) != len(set(names))
+        or value.get("domains_detected") != len(domains)
+        or value.get("applicable_domains") != len(applicable)
+        or value.get("covered_domains") != len(covered)
+        or value.get("status_counts") != dict(sorted(counts.items()))
+        or value.get("coverage_score") != score
+        or value.get("coverage_complete")
+        is not all(
+            item.get("status") in {"covered", "not-applicable"} for item in domains
+        )
+        or value.get("complete")
+        is not (not value.get("parse_errors") and value.get("truncated") is not True)
+        or (value.get("policy_path") is not None)
+        is not (value.get("policy_present") is True)
+    ):
+        raise ValueError("domain assurance summary accounting does not match")
+    for domain in domains:
+        requirements = domain.get("requirements")
+        gaps = domain.get("gaps")
+        if not isinstance(requirements, list) or not isinstance(gaps, list):
+            raise TypeError("domain assurance domain accounting is invalid")
+        expected_status = (
+            "not-applicable"
+            if domain.get("applicable") is not True
+            else "unmodeled"
+            if domain.get("policy_present") is not True
+            else "partial"
+            if gaps
+            else "covered"
+        )
+        satisfied = sum(item.get("status") == "satisfied" for item in requirements)
+        if (
+            domain.get("status") != expected_status
+            or domain.get("requirements_detected") != len(requirements)
+            or domain.get("requirements_satisfied") != satisfied
+            or any(
+                item.get("status") != ("satisfied" if not item.get("gaps") else "gap")
+                for item in requirements
+            )
+        ):
+            raise ValueError("domain assurance detail accounting does not match")
+
+
+@_typed_validator("llm-adversarial-plan.json")
+def _validate_llm_adversarial_accounting(value: object) -> None:
+    if not isinstance(value, dict):
+        raise TypeError("LLM adversarial plan must be an object")
+    context = value.get("context")
+    campaigns = value.get("campaigns")
+    execution = value.get("execution_plan")
+    counts = value.get("campaign_status_counts")
+    evidence = value.get("evidence")
+    if (
+        not isinstance(context, list)
+        or not isinstance(campaigns, list)
+        or not isinstance(execution, dict)
+        or not isinstance(execution.get("tasks"), list)
+        or not isinstance(counts, dict)
+        or not isinstance(evidence, dict)
+    ):
+        raise TypeError("LLM adversarial plan accounting fields are invalid")
+    context_ids = [item.get("id") for item in context]
+    campaign_ids = [item.get("id") for item in campaigns]
+    tasks = execution["tasks"]
+    status_counter = Counter(str(item.get("evidence_status")) for item in campaigns)
+    expected_counts = {
+        status: status_counter.get(status, 0)
+        for status in (
+            "not-run",
+            "inconclusive",
+            "exercised-no-confirmed-defect",
+            "confirmed-defect",
+        )
+    }
+    references = {
+        reference
+        for campaign in campaigns
+        for reference in campaign.get("context_ids", [])
+    }
+    task_campaigns = [task.get("campaign_id") for task in tasks]
+    if (
+        len(context_ids) != len(set(context_ids))
+        or len(campaign_ids) != len(set(campaign_ids))
+        or not references.issubset(set(context_ids))
+        or value.get("campaigns_retained") != len(campaigns)
+        or value.get("campaigns_omitted")
+        != value.get("campaigns_detected", 0) - len(campaigns)
+        or value.get("context_entries_retained") != len(context)
+        or value.get("context_bytes")
+        != sum(int(item.get("size_bytes", 0)) for item in context)
+        or counts != expected_counts
+        or execution.get("tasks_detected") != len(tasks)
+        or len(task_campaigns) != len(set(task_campaigns))
+        or (tasks and set(task_campaigns) != set(campaign_ids))
+        or evidence.get("confirmed_defects") != expected_counts["confirmed-defect"]
+    ):
+        raise ValueError("LLM adversarial plan accounting does not match")
 
 
 @_typed_validator("runtime-trace-correlation.json")

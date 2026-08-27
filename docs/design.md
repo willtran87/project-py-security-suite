@@ -1,7 +1,7 @@
 # Python Security Suite design
 
 Status: alpha foundation  
-Last reviewed: 2026-08-26
+Last reviewed: 2026-08-27
 
 ## Purpose
 
@@ -42,9 +42,9 @@ flowchart LR
         Install["install-native-tools.ps1<br/>hash verification + pip --no-index"]
         Project["Python project<br/>read-only by policy"]
         Suite["Python Security Suite"]
-        Scanners["88 governed adapters<br/>security | quality | testing | policy | architecture | supply chain | artifact | governance"]
-        Analyzers["Native contextual analyzers<br/>framework | contract | validation | health | architecture"]
-        Reports["Markdown | HTML | SARIF | SonarQube | JSON<br/>SBOM + validation + architecture + Security Passport"]
+        Scanners["89 governed adapters<br/>security | quality | testing | policy | architecture | supply chain | artifact | governance"]
+        Analyzers["Native contextual analyzers<br/>framework | contract | validation | health | architecture | domain assurance"]
+        Reports["Markdown | HTML | SARIF | SonarQube | JSON<br/>SBOM + validation + architecture + domain coverage + Security Passport"]
         Contracts["Version-explicit JSON Schemas<br/>installed package resources"]
         Install --> Suite
         Project --> Suite
@@ -85,12 +85,31 @@ flowchart TB
     CapabilityRoute --> PropertyTasks["Property tasks<br/>Schemathesis | Hypothesis"]
     Source --> Health["Code health<br/>complexity + async/exception/state risks + clones"]
     HealthPolicy["Code-health threshold policy"] --> Health
-    Health --> RankedHealth["Ranked bounded detail<br/>per-kind/path totals + omissions"]
+    Health --> RankedHealth["Ranked bounded detail + root-cause review queue<br/>family + symbol + symptoms + priority"]
     Source --> Architecture["Static architecture<br/>module/symbol calls + unified entry points + dynamic imports + policy"]
+    Reachability["Semantic reachability<br/>typed receivers + framework dispatch"] --> Architecture
     NativePolicy["Native architecture policy"] --> PolicySelect{"Native present?"}
     TachPolicy["Tach fallback policy"] --> PolicySelect
     PolicySelect --> Architecture
     EdgeBaseline["Approved edge baseline"] --> Architecture
+    Source --> Domains["Cross-domain applicability<br/>33 governed assurance areas"]
+    Correlate --> Findings["Normalized findings"]
+    Findings --> LLMPlan["LLM adversarial plan<br/>digest context + objective oracle"]
+    Domains --> LLMPlan
+    Contracts --> LLMPlan
+    RankedHealth --> LLMPlan
+    Architecture --> LLMPlan
+    LLMPlan --> Model["External LLM planner<br/>repository text remains untrusted data"]
+    Model --> Proposal["Schema-bound proposal<br/>plan + source + model + prompt digests"]
+    Proposal --> ProposalCheck["Confined validator<br/>execution_authorized = false"]
+    ProposalCheck --> Approval{"Human execution approval"}
+    Approval --> Sandbox["Disposable network-denied lane<br/>read-only source + generated-tests writes"]
+    Sandbox --> AdversarialTools["Deterministic tools + application-owned oracle"]
+    AdversarialTools --> Proof["Authenticated source-bound proof<br/>negative control + mutation + failed case"]
+    Proof --> Findings
+    DomainPolicy["Domain obligations<br/>owner + subjects + requirements"] --> Domains
+    ToolEvidence --> Domains
+    Domains --> DomainStatus["Source/artifact/test-bound<br/>coverage + policy gaps"]
     History["Bounded sealed Git history"] --> Temporal["Architecture history<br/>co-change + finding hotspots"]
     ToolEvidence["Normalized scanner evidence"] --> Correlate["Conservative finding correlation<br/>semantic anchor | flow sink | location"]
     Frameworks --> Correlate
@@ -98,8 +117,11 @@ flowchart TB
     AuthTasks --> Reports["Contextual artifact summaries"]
     PropertyTasks --> Reports
     RankedHealth --> Correlate
-    Architecture --> Correlate
+    Architecture --> Refactor["Ranked refactoring targets<br/>exact contracts kept distinct from heuristics"]
+    Refactor --> Correlate
     Temporal --> Correlate
+    DomainStatus --> Correlate
+    DomainStatus --> Reports
     Correlate --> Validation["Finding validation<br/>independent proof dimensions"]
     AuthTasks --> AuthorizedLane["Separate authorized execution lane"]
     PropertyTasks --> AuthorizedLane
@@ -110,8 +132,8 @@ flowchart TB
     Manifest --> Policy
 ```
 
-Framework and contract analysis run for every profile so model and behavioral
-gaps stay visible. Generated contract scenarios and their tokenized companion
+Framework, contract, and cross-domain assurance analysis run for every profile
+so model, behavioral, and specialized-domain gaps stay visible. Generated contract scenarios and their tokenized companion
 commands remain authorized-lane plans until source-bound passing evidence
 satisfies a declared obligation. Code health,
 static architecture, and architecture history run for `audit`, `quality`,
@@ -120,6 +142,13 @@ violations remain distinct from heuristic topology and maintainability signals.
 Validation does not convert structural inference into exploitability: attacker
 control, path confirmation, runtime execution, harmful effect, reproduction,
 and production parity remain independent dimensions.
+
+The adversarial branch has two separate authority decisions. The proposal
+validator establishes only schema, digest, path, tool, and oracle constraints;
+it always returns `execution_authorized: false`. An externally administered
+human-approved sandbox performs any test execution. A campaign becomes a
+confirmed defect only when authenticated evidence binds the source revision,
+campaign, and exact failed ledger case.
 
 ### Evidence-plane-aware route synthesis
 
@@ -1101,7 +1130,7 @@ See [configuration.md](configuration.md) for the complete supported schema.
 
 The native Windows self-scan process verifies:
 
-- the `comprehensive` profile selects all 88 adapters;
+- the `comprehensive` profile selects all 89 adapters;
 - the latest readiness assessment identifies 37 applicable controls and 26
   conditional or content-not-applicable controls, with no unavailable scanner;
 - Pylint, Radon, Ruff formatting, coverage, and JUnit adapters executed through

@@ -1,0 +1,32 @@
+{
+  "schema_version": "1.0",
+  "plan_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+  "source_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+  "campaign_id": "llm-campaign-33333333333333333333",
+  "model_sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+  "provider_sha256": "5555555555555555555555555555555555555555555555555555555555555555",
+  "prompt_template_sha256": "6666666666666666666666666666666666666666666666666666666666666666",
+  "hypothesis": "A valid principal may cross the tenant boundary by substituting an object identifier.",
+  "proposed_tests": [{
+    "id": "cross-tenant-object-substitution",
+    "path": "generated-tests/test_cross_tenant.py",
+    "framework": "pytest-hypothesis",
+    "tool": "hypothesis",
+    "command": ["pytest", "generated-tests/test_cross_tenant.py", "-q"],
+    "objective": "Exercise object identifiers owned by a different tenant and require denial without disclosing object state.",
+    "oracle": {
+      "kind": "cross-tenant-deny",
+      "expected": "Every foreign-tenant identifier is denied and produces no state change.",
+      "deterministic": true,
+      "llm_judge_sufficient": false
+    },
+    "negative_control": {
+      "present": true,
+      "description": "The same principal can access an equivalent object owned by its own tenant."
+    },
+    "mutation_validation": {
+      "present": true,
+      "description": "Removing the tenant predicate causes the generated test to fail."
+    }
+  }]
+}
