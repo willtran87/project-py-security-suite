@@ -337,6 +337,8 @@ class EvidenceAndArtifactAdapterTests(unittest.TestCase):
             adapter.parse('{"bomFormat":"CycloneDX","specVersion":"1.7"}', self.root),
             [],
         )
+        with self.assertRaisesRegex(ValueError, "CycloneDX 1.7"):
+            adapter.parse('{"bomFormat":"CycloneDX","specVersion":"1.6"}', self.root)
 
         dist = self.root / "dist"
         dist.mkdir()

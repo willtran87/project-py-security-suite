@@ -348,6 +348,11 @@ class CycloneDxGuardTests(unittest.TestCase):
             ),
             [],
         )
+        with self.assertRaisesRegex(ValueError, "CycloneDX 1.7"):
+            adapter.parse(
+                '{"bomFormat":"CycloneDX","specVersion":"1.6","components":[]}',
+                self.root,
+            )
         self.assertEqual(
             adapter.derived_artifacts('{"bomFormat":"CycloneDX"}', self.root)[
                 "sbom.cdx.json"

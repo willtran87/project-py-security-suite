@@ -224,6 +224,12 @@ class RiskIntelligenceTests(unittest.TestCase):
     def test_vex_parsers_reject_malformed_documents(self) -> None:
         malformed = [
             [],
+            {"specVersion": "1.7", "vulnerabilities": []},
+            {
+                "bomFormat": "CycloneDX",
+                "specVersion": "1.6",
+                "vulnerabilities": [],
+            },
             {"statements": ["invalid"]},
             {"statements": [{"vulnerability": "CVE-2026-12345", "status": "unknown"}]},
             {"document": {"category": "csaf_vex"}},

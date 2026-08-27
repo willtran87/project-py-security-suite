@@ -16,8 +16,13 @@ from py_security_suite.artifact_validation import (
     validate_governed_artifacts,
 )
 from py_security_suite.industry_assurance import (
+    _authorization_validated,
     _benchmark_gaps,
+    _benchmark_reproducibility_gaps,
+    _procedure_assessment,
     _safe_relative,
+    _standardized_prioritization,
+    _validated_cvss,
     _validate_policy,
     build_industry_assurance,
 )
@@ -151,6 +156,120 @@ class IndustryAssuranceTests(unittest.TestCase):
             artifacts["industry-assurance.json"]["oscal_models_emitted"], 7
         )
         validate_governed_artifacts(artifacts)
+
+    def test_procedure_and_prioritization_failure_paths_remain_explicit(self) -> None:
+        def procedure(
+            identifier: str,
+            *,
+            execution: str = "executed",
+            applicable: bool = True,
+            authorization_required: bool = False,
+            evidence: list[str] | None = None,
+        ) -> dict[str, object]:
+            return {
+                "standard": "OWASP-WSTG",
+                "procedure_id": identifier,
+                "objective": "Exercise a governed procedure branch.",
+                "applicable": applicable,
+                "execution": execution,
+                "test_type": "dynamic",
+                "authorization_required": authorization_required,
+                "evidence_artifacts": ["missing.json"]
+                if evidence is None
+                else evidence,
+            }
+
+        policy = {
+            "present": True,
+            "enforce": True,
+            "procedures": [
+                procedure("planned", execution="planned"),
+                procedure("missing"),
+                procedure("empty", evidence=[]),
+                procedure(
+                    "authorization-gap",
+                    authorization_required=True,
+                    evidence=["complete.json"],
+                ),
+                procedure(
+                    "nested-authorization",
+                    authorization_required=True,
+                    evidence=["nested-authorization.json"],
+                ),
+                procedure("not-applicable", applicable=False),
+            ],
+        }
+        artifacts = {
+            "complete.json": {"complete": True},
+            "nested-authorization.json": {
+                "complete": True,
+                "evidence": {"execution_complete": True},
+                "execution": {"authorization_validated": True},
+            },
+        }
+        assessment = _procedure_assessment(policy, artifacts, [])
+        self.assertEqual(
+            [item["status"] for item in assessment["procedures"]],
+            [
+                "planned",
+                "evidence-gap",
+                "evidence-gap",
+                "authorization-gap",
+                "satisfied",
+                "not-applicable",
+            ],
+        )
+        self.assertFalse(assessment["complete"])
+        self.assertFalse(_authorization_validated(None))
+        self.assertTrue(_authorization_validated({"authorized": True}))
+        self.assertEqual(
+            _validated_cvss({"vector": "CVSS:3.1/AV:N", "score": 11})["status"],
+            "invalid-source-evidence",
+        )
+
+        prioritized = _standardized_prioritization(
+            [
+                SimpleNamespace(
+                    finding_id="PYSEC-ACTIVE",
+                    severity="high",
+                    classifications=[],
+                    evidence={
+                        "risk_intelligence": {"known_exploited": ["CVE"]},
+                        "ssvc": {
+                            "automatable": "yes",
+                            "mission_prevalence": "essential",
+                            "outcome": "immediate",
+                        },
+                    },
+                ),
+                SimpleNamespace(
+                    finding_id="PYSEC-POC",
+                    severity="medium",
+                    classifications=[],
+                    evidence={
+                        "validation": {"status": "reproduced"},
+                        "ssvc": {
+                            "automatable": "no",
+                            "technical_impact": "partial",
+                            "mission_prevalence": "support",
+                            "outcome": "scheduled",
+                        },
+                    },
+                ),
+            ]
+        )
+        self.assertEqual(prioritized["ssvc_decided"], 2)
+
+        gaps = _benchmark_reproducibility_gaps(
+            {
+                "report": {},
+                "confusion_matrix": {"true_positive": True},
+                "corpus": {},
+                "time_authority": {"validated": False},
+                "replay_protected": False,
+            }
+        )
+        self.assertEqual(len(gaps), 5)
 
     def test_policy_drives_controls_and_governed_benchmark_thresholds(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
