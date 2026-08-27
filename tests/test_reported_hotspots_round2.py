@@ -328,12 +328,15 @@ class EvidenceAndArtifactAdapterTests(unittest.TestCase):
         self.assertEqual(
             adapter.environment().extra["SYFT_CHECK_FOR_APP_UPDATE"], "false"
         )
-        self.assertIn("cyclonedx-json", adapter.build_command("syft", self.root))
+        self.assertIn("cyclonedx-json@1.7", adapter.build_command("syft", self.root))
         with self.assertRaisesRegex(TypeError, "must be an object"):
             _document("[]")
         with self.assertRaisesRegex(ValueError, "not a CycloneDX"):
             adapter.parse("{}", self.root)
-        self.assertEqual(adapter.parse('{"bomFormat":"CycloneDX"}', self.root), [])
+        self.assertEqual(
+            adapter.parse('{"bomFormat":"CycloneDX","specVersion":"1.7"}', self.root),
+            [],
+        )
 
         dist = self.root / "dist"
         dist.mkdir()

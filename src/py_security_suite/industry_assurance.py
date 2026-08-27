@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from .path_safety import read_regular_file
+from .prioritization import finding_priority
 from .strict_json import loads as strict_loads
 
 
@@ -38,6 +39,37 @@ _STANDARDS: tuple[dict[str, Any], ...] = (
         "evidence": ["security-requirements-coverage.json"],
     },
     {
+        "id": "OWASP-WSTG",
+        "version": "4.2",
+        "kind": "web-testing-methodology",
+        "reference": "https://wstg.owasp.org/v4.2/",
+        "evidence": ["procedure-assessment.json", "application-contract-analysis.json"],
+    },
+    {
+        "id": "OWASP-MASTG",
+        "version": "2.0.0",
+        "kind": "mobile-testing-methodology",
+        "reference": "https://mas.owasp.org/MASTG/",
+        "evidence": [
+            "procedure-assessment.json",
+            "security-requirements-coverage.json",
+        ],
+    },
+    {
+        "id": "OWASP-SCVS",
+        "version": "1.0",
+        "kind": "component-verification",
+        "reference": "https://owasp.org/www-project-software-component-verification-standard/",
+        "evidence": ["dependency-surface.json", "artifact-sbom.cdx.json"],
+    },
+    {
+        "id": "OWASP-AITG",
+        "version": "1.0",
+        "kind": "ai-testing-methodology",
+        "reference": "https://owasp.org/www-project-ai-testing-guide/",
+        "evidence": ["procedure-assessment.json", "llm-adversarial-plan.json"],
+    },
+    {
         "id": "NIST-SSDF",
         "version": "1.1",
         "kind": "lifecycle",
@@ -56,6 +88,34 @@ _STANDARDS: tuple[dict[str, Any], ...] = (
         "evidence": ["capability-manifest.json", "domain-assurance.json"],
     },
     {
+        "id": "NIST-SP-800-53",
+        "version": "5.2.0",
+        "kind": "security-privacy-controls",
+        "reference": "https://csrc.nist.gov/pubs/sp/800/53/r5/upd1/final",
+        "evidence": ["control-assessment.json", "oscal-system-security-plan.json"],
+    },
+    {
+        "id": "NIST-SP-800-53A",
+        "version": "5.2.0",
+        "kind": "control-assessment-procedures",
+        "reference": "https://csrc.nist.gov/pubs/sp/800/53/a/r5/final",
+        "evidence": ["procedure-assessment.json", "oscal-assessment-plan.json"],
+    },
+    {
+        "id": "NIST-SP-800-115",
+        "version": "2008",
+        "kind": "technical-testing-methodology",
+        "reference": "https://csrc.nist.gov/pubs/sp/800/115/final",
+        "evidence": ["procedure-assessment.json", "llm-adversarial-plan.json"],
+    },
+    {
+        "id": "NIST-SP-800-161",
+        "version": "1-update-1",
+        "kind": "supply-chain-risk-management",
+        "reference": "https://csrc.nist.gov/pubs/sp/800/161/r1/upd1/final",
+        "evidence": ["dependency-surface.json", "scanner-trust.json"],
+    },
+    {
         "id": "OWASP-SAMM",
         "version": "2.1.0",
         "kind": "maturity",
@@ -72,6 +132,27 @@ _STANDARDS: tuple[dict[str, Any], ...] = (
             "scanner-trust.json",
             "trust-policy-attestation.json",
         ],
+    },
+    {
+        "id": "CIS-CONTROLS",
+        "version": "8.1",
+        "kind": "prioritized-security-controls",
+        "reference": "https://www.cisecurity.org/controls/v8-1",
+        "evidence": ["control-assessment.json", "domain-assurance.json"],
+    },
+    {
+        "id": "CIS-BENCHMARKS",
+        "version": "policy-pinned",
+        "kind": "secure-configuration-baselines",
+        "reference": "https://www.cisecurity.org/cis-benchmarks",
+        "evidence": ["procedure-assessment.json", "checkov-iac.json", "kics-iac.json"],
+    },
+    {
+        "id": "NIST-SCAP",
+        "version": "1.4",
+        "kind": "configuration-automation-interchange",
+        "reference": "https://csrc.nist.gov/pubs/sp/800/126/r4/final",
+        "evidence": ["procedure-assessment.json", "capability-manifest.json"],
     },
     {
         "id": "CWE-TOP-25",
@@ -119,6 +200,27 @@ _STANDARDS: tuple[dict[str, Any], ...] = (
         "evidence": ["llm-adversarial-plan.json"],
     },
     {
+        "id": "MITRE-D3FEND",
+        "version": "policy-pinned",
+        "kind": "defensive-technique-taxonomy",
+        "reference": "https://d3fend.mitre.org/",
+        "evidence": ["risk-paths.json", "advanced-analysis.json"],
+    },
+    {
+        "id": "FIRST-CVSS",
+        "version": "4.0",
+        "kind": "vulnerability-severity",
+        "reference": "https://www.first.org/cvss/v4.0/",
+        "evidence": ["standardized-prioritization.json"],
+    },
+    {
+        "id": "CISA-SSVC",
+        "version": "policy-pinned",
+        "kind": "vulnerability-response-decision",
+        "reference": "https://www.cisa.gov/stakeholder-specific-vulnerability-categorization-ssvc",
+        "evidence": ["standardized-prioritization.json"],
+    },
+    {
         "id": "OWASP-LLM-TOP-10",
         "version": "2025",
         "kind": "ai-risk-taxonomy",
@@ -140,10 +242,38 @@ _STANDARDS: tuple[dict[str, Any], ...] = (
         "evidence": ["llm-adversarial-plan.json"],
     },
     {
+        "id": "ISO-IEC-42001",
+        "version": "2023",
+        "kind": "ai-management-system",
+        "reference": "https://www.iso.org/standard/42001",
+        "evidence": ["control-assessment.json", "llm-adversarial-plan.json"],
+    },
+    {
+        "id": "ISO-IEC-23894",
+        "version": "2023",
+        "kind": "ai-risk-management",
+        "reference": "https://www.iso.org/standard/77304.html",
+        "evidence": ["domain-assurance.json", "llm-adversarial-plan.json"],
+    },
+    {
         "id": "ISO-IEC-25010",
         "version": "2023",
         "kind": "product-quality",
         "reference": "https://www.iso.org/standard/78176.html",
+        "evidence": ["code-health.json", "effectiveness.json"],
+    },
+    {
+        "id": "ISO-IEC-5055",
+        "version": "2021",
+        "kind": "automated-source-quality-measures",
+        "reference": "https://www.iso.org/standard/80623.html",
+        "evidence": ["code-health.json", "static-architecture.json"],
+    },
+    {
+        "id": "ISO-IEC-25023",
+        "version": "2016",
+        "kind": "product-quality-measures",
+        "reference": "https://www.iso.org/standard/35747.html",
         "evidence": ["code-health.json", "effectiveness.json"],
     },
     {
@@ -159,6 +289,20 @@ _STANDARDS: tuple[dict[str, Any], ...] = (
         "kind": "quality-measures",
         "reference": "https://www.omg.org/spec/ASCQM/",
         "evidence": ["code-health.json", "static-architecture.json"],
+    },
+    {
+        "id": "CSA-CCM",
+        "version": "4.1",
+        "kind": "cloud-controls",
+        "reference": "https://cloudsecurityalliance.org/research/cloud-controls-matrix",
+        "evidence": ["control-assessment.json", "domain-assurance.json"],
+    },
+    {
+        "id": "OWASP-APTS",
+        "version": "0.1.0",
+        "kind": "emerging-autonomous-testing-governance",
+        "reference": "https://owasp.org/APTS/",
+        "evidence": ["llm-adversarial-plan.json", "procedure-assessment.json"],
     },
 )
 
@@ -212,10 +356,18 @@ _BENCHMARKS: tuple[dict[str, Any], ...] = (
         "lane": "authorized-companion",
     },
     {
-        "id": "cyberseceval-2",
-        "version": "2",
+        "id": "cyberseceval-4",
+        "version": "4",
         "kind": "llm-security",
         "source": "https://github.com/meta-llama/PurpleLlama/tree/main/CybersecurityBenchmarks",
+        "languages": ["multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "mlcommons-ailuminate",
+        "version": "policy-pinned",
+        "kind": "ai-safety-security",
+        "source": "https://mlcommons.org/ailuminate/",
         "languages": ["multi"],
         "lane": "authorized-companion",
     },
@@ -231,34 +383,53 @@ _BENCHMARKS: tuple[dict[str, Any], ...] = (
 
 _INTEROPERABILITY = (
     ("SARIF", "2.1.0", ("results.sarif",)),
-    ("CycloneDX", "1.6", ("sbom.cdx.json", "artifact-sbom.cdx.json")),
+    ("CycloneDX", "1.7", ("sbom.cdx.json", "artifact-sbom.cdx.json")),
     ("SPDX", "2.x/3.x", ("reuse-compliance.json",)),
-    ("CycloneDX-VEX", "1.6", ("risk-intelligence.json",)),
+    ("CycloneDX-VEX", "1.7", ("risk-intelligence.json",)),
     ("OpenVEX", "0.2", ("risk-intelligence.json",)),
     ("CSAF-VEX", "2.0", ("risk-intelligence.json",)),
-    ("OSCAL", "1.1.2", ("oscal-assessment-results.json",)),
+    ("SCAP", "1.4", ("scap-results.xml", "scap-results.json")),
+    ("OSCAL", "1.2.2", ("oscal-assessment-results.json",)),
 )
 
 
 def build_industry_assurance(
-    target: Path, artifacts: dict[str, Any]
+    target: Path,
+    artifacts: dict[str, Any],
+    findings: list[Any] | None = None,
 ) -> tuple[dict[str, dict[str, Any]], list[str]]:
-    """Build bounded benchmark, standards, and OSCAL assurance artifacts."""
+    """Build bounded benchmark, procedure, standards, and OSCAL artifacts."""
 
     target = target.resolve()
     policy, errors = _load_policy(target)
     source_sha256 = _source_sha256(artifacts)
-    crosswalk = _crosswalk(artifacts)
-    assessment = _assessment(policy, artifacts, crosswalk, errors)
+    procedures = _procedure_assessment(policy, artifacts, errors)
+    prioritization = _standardized_prioritization(findings or [])
+    observed_artifacts = {
+        **artifacts,
+        "procedure-assessment.json": procedures,
+        "standardized-prioritization.json": prioritization,
+    }
+    initial_crosswalk = _crosswalk(observed_artifacts)
+    assessment = _assessment(policy, observed_artifacts, initial_crosswalk, errors)
     registry = _benchmark_registry(policy, source_sha256)
-    scorecard = _benchmark_scorecard(target, artifacts, registry, source_sha256)
+    scorecard = _benchmark_scorecard(
+        target, observed_artifacts, registry, source_sha256
+    )
     delta = _benchmark_delta(target, policy, scorecard, errors)
-    oscal = _oscal(assessment, source_sha256)
+    oscal = _oscal_documents(assessment, procedures, source_sha256)
+    generated_artifacts = {
+        **observed_artifacts,
+        "control-assessment.json": assessment,
+        **oscal,
+    }
+    crosswalk = _crosswalk(generated_artifacts)
     industry = {
         "schema_version": "1.0",
         "analysis": "industry-standards-and-benchmark-assurance",
         "complete": not errors
         and assessment["complete"] is True
+        and procedures["complete"] is True
         and (
             scorecard["benchmarks_enabled"] == 0
             or (scorecard["complete"] is True and scorecard["passed"] is True)
@@ -269,15 +440,26 @@ def build_industry_assurance(
         "benchmarks_registered": len(registry["benchmarks"]),
         "controls_assessed": assessment["controls_assessed"],
         "controls_satisfied": assessment["controls_satisfied"],
+        "procedures_assessed": procedures["procedures_assessed"],
+        "procedures_satisfied": procedures["procedures_satisfied"],
         "benchmarks_executed": scorecard["benchmarks_executed"],
-        "interoperability": _interoperability(artifacts),
+        "oscal_models_emitted": len(oscal),
+        "interoperability": _interoperability(generated_artifacts),
         "artifact_contracts": [
             "standards-crosswalk.json",
             "control-assessment.json",
+            "procedure-assessment.json",
+            "standardized-prioritization.json",
             "benchmark-registry.json",
             "benchmark-scorecard.json",
             "benchmark-delta.json",
+            "oscal-catalog.json",
+            "oscal-profile.json",
+            "oscal-component-definition.json",
+            "oscal-system-security-plan.json",
+            "oscal-assessment-plan.json",
             "oscal-assessment-results.json",
+            "oscal-poam.json",
         ],
         "parse_errors": errors[:100],
         "claim_boundary": (
@@ -289,10 +471,12 @@ def build_industry_assurance(
         "industry-assurance.json": industry,
         "standards-crosswalk.json": crosswalk,
         "control-assessment.json": assessment,
+        "procedure-assessment.json": procedures,
+        "standardized-prioritization.json": prioritization,
         "benchmark-registry.json": registry,
         "benchmark-scorecard.json": scorecard,
         "benchmark-delta.json": delta,
-        "oscal-assessment-results.json": oscal,
+        **oscal,
     }, errors
 
 
@@ -301,6 +485,7 @@ def _load_policy(target: Path) -> tuple[dict[str, Any], list[str]]:
         "present": False,
         "enforce": False,
         "controls": [],
+        "procedures": [],
         "benchmarks": [],
         "benchmark_baseline_path": None,
     }
@@ -322,25 +507,32 @@ def _load_policy(target: Path) -> tuple[dict[str, Any], list[str]]:
 
 
 def _validate_policy(value: object) -> None:
-    required = {
+    version_1_0 = {
         "schema_version",
         "enforce",
         "controls",
         "benchmarks",
         "benchmark_baseline_path",
     }
+    version_1_1 = {*version_1_0, "procedures"}
+    if not isinstance(value, dict):
+        raise ValueError("invalid industry assurance policy")
+    version = value.get("schema_version")
+    expected = version_1_0 if version == "1.0" else version_1_1
     if (
-        not isinstance(value, dict)
-        or set(value) != required
-        or value.get("schema_version") != "1.0"
+        version not in {"1.0", "1.1"}
+        or set(value) != expected
         or not isinstance(value.get("enforce"), bool)
     ):
         raise ValueError("invalid industry assurance policy")
     controls = value.get("controls")
+    procedures = value.get("procedures", [])
     benchmarks = value.get("benchmarks")
     if (
         not isinstance(controls, list)
         or len(controls) > 10_000
+        or not isinstance(procedures, list)
+        or len(procedures) > 20_000
         or not isinstance(benchmarks, list)
         or len(benchmarks) > 100
     ):
@@ -371,6 +563,44 @@ def _validate_policy(value: object) -> None:
         ):
             raise ValueError("industry assurance control is invalid")
         identities.add(identity)
+    procedure_identities: set[tuple[str, str]] = set()
+    for procedure in procedures:
+        required_procedure_fields = {
+            "standard",
+            "procedure_id",
+            "objective",
+            "applicable",
+            "execution",
+            "test_type",
+            "authorization_required",
+            "evidence_artifacts",
+        }
+        if (
+            not isinstance(procedure, dict)
+            or set(procedure) != required_procedure_fields
+        ):
+            raise ValueError("industry assurance procedure fields are invalid")
+        identity = (
+            str(procedure.get("standard")),
+            str(procedure.get("procedure_id")),
+        )
+        evidence = procedure.get("evidence_artifacts")
+        if (
+            identity[0] not in known_standards
+            or identity in procedure_identities
+            or not _text(identity[1], 160)
+            or not _text(procedure.get("objective"), 1000)
+            or not isinstance(procedure.get("applicable"), bool)
+            or procedure.get("execution") not in {"planned", "executed"}
+            or procedure.get("test_type")
+            not in {"examine", "interview", "test", "static", "dynamic", "manual"}
+            or not isinstance(procedure.get("authorization_required"), bool)
+            or not isinstance(evidence, list)
+            or len(evidence) > 100
+            or not all(_artifact_name(item) for item in evidence)
+        ):
+            raise ValueError("industry assurance procedure is invalid")
+        procedure_identities.add(identity)
     seen: set[str] = set()
     for benchmark in benchmarks:
         if not isinstance(benchmark, dict) or set(benchmark) != {
@@ -490,6 +720,223 @@ def _assessment(
     }
 
 
+def _procedure_assessment(
+    policy: dict[str, Any], artifacts: dict[str, Any], errors: list[str]
+) -> dict[str, Any]:
+    procedures = []
+    for value in policy.get("procedures", []):
+        evidence = list(value["evidence_artifacts"])
+        present = [name for name in evidence if _complete_artifact(artifacts.get(name))]
+        missing = [name for name in evidence if name not in present]
+        applicable = value["applicable"] is True
+        executed = value["execution"] == "executed"
+        authorization = (
+            "not-required"
+            if value["authorization_required"] is False
+            else "validated"
+            if any(_authorization_validated(artifacts.get(name)) for name in present)
+            else "required-not-proven"
+        )
+        status = "not-applicable"
+        gaps: list[str] = []
+        if applicable and not executed:
+            status = "planned"
+            gaps.append("procedure is applicable but has not been executed")
+        elif applicable and (missing or not evidence):
+            status = "evidence-gap"
+            gaps.extend(f"missing or incomplete artifact: {name}" for name in missing)
+            if not evidence:
+                gaps.append("procedure has no declared evidence artifact")
+        elif applicable and authorization == "required-not-proven":
+            status = "authorization-gap"
+            gaps.append(
+                "authorized execution is required but not proven by retained evidence"
+            )
+        elif applicable:
+            status = "satisfied"
+        procedures.append(
+            {
+                "standard": value["standard"],
+                "procedure_id": value["procedure_id"],
+                "objective": value["objective"],
+                "applicable": applicable,
+                "execution": value["execution"],
+                "test_type": value["test_type"],
+                "authorization_required": value["authorization_required"],
+                "authorization_status": authorization,
+                "status": status,
+                "evidence_required": evidence,
+                "evidence_present": present,
+                "gaps": gaps,
+            }
+        )
+    counts = Counter(item["status"] for item in procedures)
+    applicable_count = sum(item["applicable"] for item in procedures)
+    satisfied = counts["satisfied"]
+    complete = not errors and (not policy["enforce"] or satisfied == applicable_count)
+    return {
+        "schema_version": "1.0",
+        "analysis": "versioned-security-test-procedure-assessment",
+        "complete": complete,
+        "policy_present": policy["present"],
+        "enforced": policy["enforce"],
+        "procedures_assessed": len(procedures),
+        "applicable_procedures": applicable_count,
+        "procedures_satisfied": satisfied,
+        "status_counts": {
+            name: counts.get(name, 0)
+            for name in (
+                "satisfied",
+                "planned",
+                "evidence-gap",
+                "authorization-gap",
+                "not-applicable",
+            )
+        },
+        "procedures": procedures,
+        "parse_errors": errors[:100],
+        "claim_boundary": (
+            "A procedure is satisfied only when it was declared executed, every named "
+            "artifact is complete, and required authorization is explicitly proven."
+        ),
+    }
+
+
+def _authorization_validated(value: object) -> bool:
+    if not isinstance(value, dict):
+        return False
+    if value.get("authorization_validated") is True or value.get("authorized") is True:
+        return True
+    evidence = value.get("evidence")
+    execution = value.get("execution")
+    return bool(
+        isinstance(evidence, dict)
+        and evidence.get("execution_complete") is True
+        and isinstance(execution, dict)
+        and execution.get("authorization_validated") is True
+    )
+
+
+def _standardized_prioritization(findings: list[Any]) -> dict[str, Any]:
+    rows: list[dict[str, Any]] = []
+    for finding in findings[:1_000_000]:
+        evidence = getattr(finding, "evidence", {})
+        evidence = evidence if isinstance(evidence, dict) else {}
+        classifications = getattr(finding, "classifications", [])
+        classifications = classifications if isinstance(classifications, list) else []
+        severity = str(getattr(finding, "severity", "unknown"))
+        intelligence = evidence.get("risk_intelligence")
+        intelligence = intelligence if isinstance(intelligence, dict) else {}
+        validation = evidence.get("validation")
+        validation = validation if isinstance(validation, dict) else {}
+        cvss = _validated_cvss(evidence.get("cvss"))
+        ssvc = _ssvc_decision(severity, intelligence, validation, evidence.get("ssvc"))
+        rows.append(
+            {
+                "finding_id": str(getattr(finding, "finding_id", "")),
+                "native_severity": severity,
+                "operational_priority": finding_priority(
+                    severity=severity,
+                    classifications=classifications,
+                    evidence=evidence,
+                ),
+                "cvss": cvss,
+                "ssvc": ssvc,
+            }
+        )
+    rows.sort(key=lambda item: item["finding_id"])
+    return {
+        "schema_version": "1.0",
+        "analysis": "cvss-4-and-ssvc-compatible-prioritization",
+        "findings": len(rows),
+        "cvss_scored": sum(item["cvss"]["status"] == "scored" for item in rows),
+        "ssvc_decided": sum(item["ssvc"]["status"] == "decided" for item in rows),
+        "records": rows,
+        "claim_boundary": (
+            "CVSS vectors are retained only when supplied as complete source evidence. "
+            "SSVC outcomes remain undecided unless every decision factor is explicit; "
+            "native severity is never converted into a fabricated CVSS vector."
+        ),
+    }
+
+
+def _validated_cvss(value: object) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return {
+            "version": "4.0",
+            "status": "not-scored",
+            "vector": None,
+            "score": None,
+            "reason": "complete CVSS v4 source evidence was not supplied",
+        }
+    vector = str(value.get("vector") or "")
+    score = value.get("score")
+    if (
+        vector.startswith("CVSS:4.0/")
+        and isinstance(score, (int, float))
+        and not isinstance(score, bool)
+        and math.isfinite(float(score))
+        and 0 <= float(score) <= 10
+    ):
+        return {
+            "version": "4.0",
+            "status": "scored",
+            "vector": vector[:500],
+            "score": round(float(score), 1),
+            "reason": "retained source-provided CVSS v4 vector and score",
+        }
+    return {
+        "version": "4.0",
+        "status": "invalid-source-evidence",
+        "vector": None,
+        "score": None,
+        "reason": "CVSS evidence did not contain a valid v4 vector and bounded score",
+    }
+
+
+def _ssvc_decision(
+    severity: str,
+    intelligence: dict[str, Any],
+    validation: dict[str, Any],
+    supplied: object,
+) -> dict[str, Any]:
+    supplied_factors = supplied if isinstance(supplied, dict) else {}
+    factors = {
+        "exploitation": supplied_factors.get("exploitation"),
+        "automatable": supplied_factors.get("automatable"),
+        "technical_impact": supplied_factors.get("technical_impact"),
+        "mission_prevalence": supplied_factors.get("mission_prevalence"),
+    }
+    if factors["exploitation"] is None:
+        if intelligence.get("known_exploited"):
+            factors["exploitation"] = "active"
+        elif validation.get("status") == "reproduced":
+            factors["exploitation"] = "poc"
+    if factors["technical_impact"] is None and severity in {"critical", "high"}:
+        factors["technical_impact"] = "total"
+    allowed = {
+        "exploitation": {"none", "poc", "active"},
+        "automatable": {"no", "yes"},
+        "technical_impact": {"partial", "total"},
+        "mission_prevalence": {"minimal", "support", "essential"},
+    }
+    complete = all(factors[name] in allowed[name] for name in factors)
+    outcome = supplied_factors.get("outcome") if complete else None
+    if outcome not in {"defer", "scheduled", "out-of-cycle", "immediate"}:
+        outcome = None
+    return {
+        "model": "CISA-SSVC",
+        "status": "decided" if complete and outcome else "insufficient-context",
+        "factors": factors,
+        "outcome": outcome,
+        "reason": (
+            "all decision factors and the source outcome were retained"
+            if complete and outcome
+            else "one or more SSVC decision factors or the source outcome are missing"
+        ),
+    }
+
+
 def _benchmark_registry(policy: dict[str, Any], source_sha256: str) -> dict[str, Any]:
     declarations = {item["id"]: item for item in policy["benchmarks"]}
     benchmarks = []
@@ -499,6 +946,7 @@ def _benchmark_registry(policy: dict[str, Any], source_sha256: str) -> dict[str,
         enabled = bool(declaration and declaration["enabled"])
         entry = {
             **registered,
+            "runner_contract": _benchmark_runner_contract(registered),
             "enabled": enabled,
             "corpus_sha256": declaration["corpus_sha256"] if declaration else None,
             "evidence_artifact": declaration["evidence_artifact"]
@@ -543,6 +991,7 @@ def _benchmark_registry(policy: dict[str, Any], source_sha256: str) -> dict[str,
                     "disposable_target_required": registered["lane"]
                     == "authorized-companion",
                     "source_bound": bool(source_sha256),
+                    "runner_contract": _benchmark_runner_contract(registered),
                 }
             )
     return {
@@ -561,6 +1010,7 @@ def _benchmark_registry(policy: dict[str, Any], source_sha256: str) -> dict[str,
             "mcc",
             "balanced_accuracy",
             "false_positive_rate",
+            "youden_j",
         ],
         "required_strata": [
             "cwe",
@@ -600,9 +1050,15 @@ def _benchmark_scorecard(
             except (OSError, TypeError, ValueError):
                 value = None
         valid = _benchmark_evidence(value, benchmark)
+        reproducibility_gaps = _benchmark_reproducibility_gaps(value)
+        reproducibility_complete = not reproducibility_gaps
         metrics = value.get("metrics", {}) if valid and isinstance(value, dict) else {}
         thresholds = benchmark["thresholds"] or {}
-        passed = bool(valid and _meets_thresholds(metrics, thresholds))
+        passed = bool(
+            valid
+            and reproducibility_complete
+            and _meets_thresholds(metrics, thresholds)
+        )
         rows.append(
             {
                 "benchmark_id": benchmark["id"],
@@ -611,13 +1067,19 @@ def _benchmark_scorecard(
                 "evidence_source": evidence_source,
                 "evidence_present": isinstance(value, dict),
                 "evidence_valid": valid,
+                "reproducibility_complete": reproducibility_complete,
                 "passed": passed,
                 "metrics": {
                     name: metrics.get(name) for name in registry["required_metrics"]
                 },
-                "gaps": []
-                if passed
-                else _benchmark_gaps(value, valid, metrics, thresholds),
+                "gaps": (
+                    []
+                    if passed
+                    else [
+                        *_benchmark_gaps(value, valid, metrics, thresholds),
+                        *reproducibility_gaps,
+                    ]
+                ),
             }
         )
     executed = sum(item["evidence_valid"] for item in rows)
@@ -658,6 +1120,68 @@ def _benchmark_evidence(value: object, benchmark: dict[str, Any]) -> bool:
         and isinstance(corpus.get("authority"), dict)
         and corpus["authority"].get("organization_approved") is True
     )
+
+
+def _benchmark_runner_contract(benchmark: dict[str, Any]) -> dict[str, Any]:
+    identifier = str(benchmark["id"])
+    stochastic = identifier in {"cyberseceval-4", "mlcommons-ailuminate"}
+    return {
+        "adapter": identifier,
+        "expected_results": (
+            "official-corpus-labels"
+            if identifier != "python-real-world-holdout"
+            else "organization-approved-labels"
+        ),
+        "minimum_repetitions": 5 if stochastic else 1,
+        "required_execution_evidence": [
+            "verified-report-checksum",
+            "confusion-matrix",
+            "corpus-revision",
+            "trusted-time",
+            "replay-protection",
+        ],
+        "score_semantics": [
+            "precision",
+            "recall",
+            "false-positive-rate",
+            "youden-j",
+            "wilson-95-percent-confidence-interval",
+        ],
+    }
+
+
+def _benchmark_reproducibility_gaps(value: object) -> list[str]:
+    if not isinstance(value, dict):
+        return []
+    report = value.get("report")
+    matrix = value.get("confusion_matrix")
+    corpus = value.get("corpus")
+    time_authority = value.get("time_authority")
+    gaps = []
+    if not isinstance(report, dict) or not _digest(
+        str(report.get("checksums_sha256") or "")
+    ):
+        gaps.append("verified report checksum is missing")
+    if not isinstance(matrix, dict) or any(
+        not isinstance(matrix.get(name), int) or isinstance(matrix.get(name), bool)
+        for name in (
+            "true_positive",
+            "true_negative",
+            "false_positive",
+            "false_negative",
+        )
+    ):
+        gaps.append("complete confusion matrix is missing")
+    if not isinstance(corpus, dict) or not _text(corpus.get("revision"), 200):
+        gaps.append("corpus revision is missing")
+    if (
+        not isinstance(time_authority, dict)
+        or time_authority.get("validated") is not True
+    ):
+        gaps.append("trusted evaluation time is not validated")
+    if value.get("replay_protected") is not True:
+        gaps.append("evaluation replay protection is missing")
+    return gaps
 
 
 def _meets_thresholds(metrics: dict[str, Any], thresholds: dict[str, Any]) -> bool:
@@ -714,6 +1238,7 @@ def _aggregate_metrics(rows: list[dict[str, Any]]) -> dict[str, float | None]:
         "mcc",
         "balanced_accuracy",
         "false_positive_rate",
+        "youden_j",
     ):
         values = [
             float(row["metrics"][name])
@@ -780,35 +1305,262 @@ def _benchmark_delta(
     }
 
 
-def _oscal(assessment: dict[str, Any], source_sha256: str) -> dict[str, Any]:
+def _oscal_documents(
+    assessment: dict[str, Any], procedures: dict[str, Any], source_sha256: str
+) -> dict[str, dict[str, Any]]:
     identity = uuid.uuid5(
         uuid.NAMESPACE_URL, f"pysec:{source_sha256 or 'unknown'}:industry-assessment"
     )
     now = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+    metadata = {
+        "title": "Python Security Suite industry assurance package",
+        "last-modified": now,
+        "version": "1.0",
+        "oscal-version": "1.2.2",
+    }
+    controls = [
+        {
+            "standard": item["standard"],
+            "control_id": item["control_id"],
+            "objective": item["objective"],
+            "status": item["status"],
+            "evidence_present": item["evidence_present"],
+            "gaps": item["gaps"],
+        }
+        for item in assessment["controls"]
+    ]
+    controls.extend(
+        {
+            "standard": item["standard"],
+            "control_id": item["procedure_id"],
+            "objective": item["objective"],
+            "status": item["status"],
+            "evidence_present": item["evidence_present"],
+            "gaps": item["gaps"],
+        }
+        for item in procedures["procedures"]
+    )
+    if not controls:
+        controls.append(
+            {
+                "standard": "PYSEC",
+                "control_id": "assurance-package",
+                "objective": (
+                    "Describe the suite assurance component and its repository-scoped "
+                    "assessment boundary without asserting an external control outcome."
+                ),
+                "status": "satisfied",
+                "evidence_present": [],
+                "gaps": [],
+            }
+        )
+    oscal_ids = {
+        (item["standard"], item["control_id"]): _oscal_control_id(
+            item["standard"], item["control_id"]
+        )
+        for item in controls
+    }
+    catalog = {
+        "catalog": {
+            "uuid": str(uuid.uuid5(identity, "catalog")),
+            "metadata": {**metadata, "title": "Repository assurance control catalog"},
+            "groups": [
+                {
+                    "id": "pysec-assurance",
+                    "title": "Repository-scoped assurance objectives",
+                    "controls": [
+                        {
+                            "id": oscal_ids[(item["standard"], item["control_id"])],
+                            "title": f"{item['standard']} {item['control_id']}",
+                            "props": [
+                                {
+                                    "name": "source-standard",
+                                    "value": item["standard"],
+                                },
+                                {
+                                    "name": "source-control-id",
+                                    "value": item["control_id"],
+                                },
+                            ],
+                            "parts": [
+                                {
+                                    "id": oscal_ids[
+                                        (item["standard"], item["control_id"])
+                                    ]
+                                    + "-statement",
+                                    "name": "statement",
+                                    "prose": item["objective"],
+                                }
+                            ],
+                        }
+                        for item in controls
+                    ],
+                }
+            ],
+        }
+    }
+    profile = {
+        "profile": {
+            "uuid": str(uuid.uuid5(identity, "profile")),
+            "metadata": {**metadata, "title": "Repository assurance profile"},
+            "imports": [{"href": "oscal-catalog.json", "include-all": {}}],
+            "merge": {"as-is": True},
+        }
+    }
+    implemented = []
+    for item in controls:
+        implementation = {
+            "uuid": str(
+                uuid.uuid5(
+                    identity, f"implemented:{item['standard']}:{item['control_id']}"
+                )
+            ),
+            "control-id": oscal_ids[(item["standard"], item["control_id"])],
+            "description": item["objective"],
+            "props": [{"name": "assessment-status", "value": item["status"]}],
+        }
+        if item["evidence_present"]:
+            implementation["links"] = [
+                {"href": name, "rel": "evidence"} for name in item["evidence_present"]
+            ]
+        implemented.append(implementation)
+    component = {
+        "component-definition": {
+            "uuid": str(uuid.uuid5(identity, "component-definition")),
+            "metadata": {**metadata, "title": "Suite component definition"},
+            "components": [
+                {
+                    "uuid": str(uuid.uuid5(identity, "component")),
+                    "type": "software",
+                    "title": "Python Security Suite",
+                    "description": "Repository-scoped security and quality assurance evidence producer.",
+                    "control-implementations": [
+                        {
+                            "uuid": str(uuid.uuid5(identity, "control-implementation")),
+                            "source": "oscal-profile.json",
+                            "description": "Evidence-backed implementation statements.",
+                            "implemented-requirements": implemented,
+                        }
+                    ],
+                }
+            ],
+        }
+    }
+    ssp_implemented = [
+        {name: value for name, value in item.items() if name != "description"}
+        for item in implemented
+    ]
+    system_id = source_sha256 or str(identity)
+    ssp = {
+        "system-security-plan": {
+            "uuid": str(uuid.uuid5(identity, "ssp")),
+            "metadata": {**metadata, "title": "Repository system security plan"},
+            "import-profile": {"href": "oscal-profile.json"},
+            "system-characteristics": {
+                "system-ids": [
+                    {
+                        "identifier-type": "urn:project-py-security-suite:source-sha256",
+                        "id": system_id,
+                    }
+                ],
+                "system-name": "Scanned repository",
+                "description": "The digest-bound repository and retained assurance evidence.",
+                "security-sensitivity-level": "moderate",
+                "system-information": {
+                    "information-types": [
+                        {
+                            "uuid": str(uuid.uuid5(identity, "information-type")),
+                            "title": "Repository assurance evidence",
+                            "description": (
+                                "Source, scanner, benchmark, and governance evidence "
+                                "bound to the assessed repository digest."
+                            ),
+                        }
+                    ]
+                },
+                "security-impact-level": {
+                    "security-objective-confidentiality": "moderate",
+                    "security-objective-integrity": "moderate",
+                    "security-objective-availability": "moderate",
+                },
+                "status": {"state": "operational"},
+                "authorization-boundary": {
+                    "description": "Limited to the source digest and named evidence artifacts."
+                },
+            },
+            "system-implementation": {
+                "components": [
+                    {
+                        "uuid": str(uuid.uuid5(identity, "system-component")),
+                        "type": "software",
+                        "title": "Python Security Suite",
+                        "description": "Assurance evidence producer.",
+                        "status": {"state": "operational"},
+                    }
+                ],
+            },
+            "control-implementation": {
+                "description": "Repository-owned implementations and evidence mappings.",
+                "implemented-requirements": ssp_implemented,
+            },
+        }
+    }
+    reviewed_controls = {
+        "control-selections": [
+            {
+                "description": "Policy-declared controls and procedures",
+                "include-controls": [
+                    {"control-id": oscal_ids[(item["standard"], item["control_id"])]}
+                    for item in controls
+                ],
+            }
+        ]
+    }
+    assessment_plan = {
+        "assessment-plan": {
+            "uuid": str(uuid.uuid5(identity, "assessment-plan")),
+            "metadata": {**metadata, "title": "Repository assurance assessment plan"},
+            "import-ssp": {"href": "oscal-system-security-plan.json"},
+            "reviewed-controls": reviewed_controls,
+            "assessment-subjects": [
+                {
+                    "type": "component",
+                    "include-subjects": [
+                        {
+                            "subject-uuid": str(
+                                uuid.uuid5(identity, "system-component")
+                            ),
+                            "type": "component",
+                        }
+                    ],
+                }
+            ],
+        }
+    }
     findings = []
     observations = []
-    for index, control in enumerate(assessment["controls"]):
+    for index, control in enumerate(controls):
         observation_uuid = str(
             uuid.uuid5(
                 identity,
                 f"observation:{index}:{control['standard']}:{control['control_id']}",
             )
         )
-        observations.append(
-            {
-                "uuid": observation_uuid,
-                "title": control["objective"],
-                "description": "; ".join(control["evidence_present"])
-                or "No retained evidence",
-                "methods": ["EXAMINE"],
-                "collected": now,
-                "relevant-evidence": [
-                    {"description": name, "href": name}
-                    for name in control["evidence_present"]
-                ],
-            }
-        )
-        if control["status"] == "gap":
+        observation = {
+            "uuid": observation_uuid,
+            "title": control["objective"],
+            "description": "; ".join(control["evidence_present"])
+            or "No retained evidence",
+            "methods": ["EXAMINE"],
+            "collected": now,
+        }
+        if control["evidence_present"]:
+            observation["relevant-evidence"] = [
+                {"description": name, "href": name}
+                for name in control["evidence_present"]
+            ]
+        observations.append(observation)
+        if control["status"] not in {"satisfied", "not-applicable"}:
             findings.append(
                 {
                     "uuid": str(uuid.uuid5(identity, f"finding:{index}")),
@@ -816,46 +1568,102 @@ def _oscal(assessment: dict[str, Any], source_sha256: str) -> dict[str, Any]:
                     "description": "; ".join(control["gaps"]),
                     "target": {
                         "type": "objective-id",
-                        "target-id": control["control_id"],
+                        "target-id": oscal_ids[
+                            (control["standard"], control["control_id"])
+                        ],
                         "status": {"state": "not-satisfied"},
                     },
                     "related-observations": [{"observation-uuid": observation_uuid}],
                 }
             )
-    return {
+    result_record = {
+        "uuid": str(uuid.uuid5(identity, "result")),
+        "title": "Evidence-backed industry standards assessment",
+        "description": assessment["claim_boundary"],
+        "start": now,
+        "reviewed-controls": reviewed_controls,
+        "observations": observations,
+    }
+    if findings:
+        result_record["findings"] = findings
+    results = {
         "assessment-results": {
             "uuid": str(identity),
             "metadata": {
-                "title": "Python Security Suite industry control assessment",
-                "last-modified": now,
-                "version": "1.0",
-                "oscal-version": "1.1.2",
+                **metadata,
+                "title": "Repository assurance assessment results",
             },
-            "results": [
+            "import-ap": {"href": "oscal-assessment-plan.json"},
+            "results": [result_record],
+        }
+    }
+    poam_items = [
+        {
+            "uuid": str(
+                uuid.uuid5(identity, f"poam:{item['standard']}:{item['control_id']}")
+            ),
+            "title": f"Resolve {item['standard']} {item['control_id']} assurance gap",
+            "description": "; ".join(item["gaps"]),
+            "related-observations": [
                 {
-                    "uuid": str(uuid.uuid5(identity, "result")),
-                    "title": "Evidence-backed industry standards assessment",
-                    "description": assessment["claim_boundary"],
-                    "start": now,
-                    "reviewed-controls": {
-                        "control-selections": [
-                            {
-                                "description": "Policy-declared controls",
-                                "include-controls": [
-                                    {
-                                        "control-id": f"{item['standard']}:{item['control_id']}"
-                                    }
-                                    for item in assessment["controls"]
-                                ],
-                            }
-                        ]
-                    },
-                    "observations": observations,
-                    "findings": findings,
+                    "observation-uuid": str(
+                        uuid.uuid5(
+                            identity,
+                            f"observation:{index}:{item['standard']}:{item['control_id']}",
+                        )
+                    )
                 }
             ],
         }
+        for index, item in enumerate(controls)
+        if item["status"] not in {"satisfied", "not-applicable"}
+    ]
+    if not poam_items:
+        poam_items.append(
+            {
+                "uuid": str(uuid.uuid5(identity, "poam:continuous-reassessment")),
+                "title": "Maintain repository assurance evidence",
+                "description": (
+                    "Reassess the digest-bound repository when its source, policy, "
+                    "scanner portfolio, or governed benchmark corpus changes."
+                ),
+                "props": [
+                    {
+                        "name": "item-kind",
+                        "value": "continuous-reassessment",
+                    }
+                ],
+            }
+        )
+    poam: dict[str, Any] = {
+        "plan-of-action-and-milestones": {
+            "uuid": str(uuid.uuid5(identity, "poam")),
+            "metadata": {**metadata, "title": "Repository assurance POA&M"},
+            "import-ssp": {"href": "oscal-system-security-plan.json"},
+            "system-id": {
+                "identifier-type": "urn:project-py-security-suite:source-sha256",
+                "id": system_id,
+            },
+        }
     }
+    poam["plan-of-action-and-milestones"]["poam-items"] = poam_items
+    return {
+        "oscal-catalog.json": catalog,
+        "oscal-profile.json": profile,
+        "oscal-component-definition.json": component,
+        "oscal-system-security-plan.json": ssp,
+        "oscal-assessment-plan.json": assessment_plan,
+        "oscal-assessment-results.json": results,
+        "oscal-poam.json": poam,
+    }
+
+
+def _oscal_control_id(standard: str, control_id: str) -> str:
+    raw = f"{standard}-{control_id}".casefold()
+    normalized = "".join(character if character.isalnum() else "-" for character in raw)
+    normalized = "-".join(part for part in normalized.split("-") if part)
+    digest = uuid.uuid5(uuid.NAMESPACE_URL, f"{standard}:{control_id}").hex[:10]
+    return f"{normalized[:100]}-{digest}"
 
 
 def _interoperability(artifacts: dict[str, Any]) -> list[dict[str, Any]]:
@@ -867,17 +1675,53 @@ def _interoperability(artifacts: dict[str, Any]) -> list[dict[str, Any]]:
         and isinstance(intelligence.get("vex_formats"), list)
         else set()
     )
+    vex_versions = (
+        intelligence.get("vex_versions", {})
+        if isinstance(intelligence, dict)
+        and isinstance(intelligence.get("vex_versions"), dict)
+        else {}
+    )
     for name, version, evidence in _INTEROPERABILITY:
         present = any(item in artifacts for item in evidence)
+        observed_versions: list[str] = []
+        if name == "CycloneDX":
+            observed_versions = sorted(
+                {
+                    str(value.get("specVersion"))
+                    for artifact_name in evidence
+                    if isinstance((value := artifacts.get(artifact_name)), dict)
+                    and value.get("specVersion")
+                }
+            )
+            present = version in observed_versions
         if name in {"CycloneDX-VEX", "OpenVEX", "CSAF-VEX"}:
-            present = name.casefold().replace("-vex", "") in vex_formats
+            format_name = name.casefold().replace("-vex", "")
+            versions = vex_versions.get(format_name, [])
+            observed_versions = (
+                sorted(str(item) for item in versions)
+                if isinstance(versions, list)
+                else []
+            )
+            present = format_name in vex_formats and version in observed_versions
         if name == "OSCAL":
-            present = True
+            document = artifacts.get("oscal-assessment-results.json")
+            root = (
+                document.get("assessment-results")
+                if isinstance(document, dict)
+                else None
+            )
+            metadata = root.get("metadata") if isinstance(root, dict) else None
+            observed = (
+                metadata.get("oscal-version") if isinstance(metadata, dict) else None
+            )
+            observed_versions = [str(observed)] if observed else []
+            present = version in observed_versions
         rows.append(
             {
                 "format": name,
                 "version": version,
                 "status": "supported" if present else "not-observed",
+                "observed_versions": observed_versions,
                 "evidence_artifacts": list(evidence),
             }
         )

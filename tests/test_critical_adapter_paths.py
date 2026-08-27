@@ -342,7 +342,11 @@ class CycloneDxGuardTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "two-stage export"):
             adapter.build_command("cyclonedx-py", self.root)
         self.assertEqual(
-            adapter.parse('{"bomFormat":"CycloneDX","components":[]}', self.root), []
+            adapter.parse(
+                '{"bomFormat":"CycloneDX","specVersion":"1.7","components":[]}',
+                self.root,
+            ),
+            [],
         )
         self.assertEqual(
             adapter.derived_artifacts('{"bomFormat":"CycloneDX"}', self.root)[
@@ -353,7 +357,10 @@ class CycloneDxGuardTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "not a CycloneDX"):
             adapter.parse("{}", self.root)
         with self.assertRaisesRegex(TypeError, "components must be a list"):
-            adapter.parse('{"bomFormat":"CycloneDX","components":{}}', self.root)
+            adapter.parse(
+                '{"bomFormat":"CycloneDX","specVersion":"1.7","components":{}}',
+                self.root,
+            )
 
     def test_uv_preparation_hashes_and_pins_the_auxiliary(self) -> None:
         adapter = self._adapter()

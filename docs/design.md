@@ -45,9 +45,10 @@ flowchart LR
         Scanners["89 governed adapters<br/>security | quality | testing | policy | architecture | supply chain | artifact | governance"]
         Analyzers["Native contextual analyzers<br/>framework | contract | validation | health | architecture | domain assurance"]
         Reports["Markdown | HTML | SARIF | SonarQube | JSON<br/>SBOM + validation + architecture + domain coverage + Security Passport"]
-        Standards["19 versioned standards catalogs<br/>repository control policy"]
-        Benchmarks["8 pinned benchmark families<br/>scorecard + regression delta"]
-        OSCAL["OSCAL 1.1.2 assessment results"]
+        Standards["39 versioned standards references<br/>controls + assessment procedures"]
+        Benchmarks["9 pinned benchmark families<br/>reproducibility + confidence + delta"]
+        Priority["CVSS v4 + SSVC<br/>source evidence only"]
+        OSCAL["OSCAL 1.2.2 lifecycle<br/>7 official-schema-valid models"]
         Contracts["Version-explicit JSON Schemas<br/>installed package resources"]
         Install --> Suite
         Project --> Suite
@@ -57,6 +58,7 @@ flowchart LR
         Analyzers --> Suite
         Standards --> Suite
         Benchmarks --> Suite
+        Suite --> Priority
         Suite --> OSCAL
         Suite --> Reports
         Suite --> Contracts

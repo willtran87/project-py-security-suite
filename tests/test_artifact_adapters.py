@@ -52,7 +52,7 @@ class ArtifactAdapterTests(unittest.TestCase):
 
     def test_syft_retains_artifact_sbom(self) -> None:
         payload = json.dumps(
-            {"bomFormat": "CycloneDX", "specVersion": "1.6", "components": []}
+            {"bomFormat": "CycloneDX", "specVersion": "1.7", "components": []}
         )
         adapter = SyftAdapter(ToolConfig(artifacts_path=Path("dist")), 4096)
         self.assertEqual(adapter.parse(payload, self.target), [])
@@ -63,7 +63,7 @@ class ArtifactAdapterTests(unittest.TestCase):
             "CycloneDX",
         )
         command = adapter.build_command("syft", self.target)
-        self.assertIn("cyclonedx-json", command)
+        self.assertIn("cyclonedx-json@1.7", command)
 
     def test_artifact_manifest_binds_distribution_digest(self) -> None:
         manifest = artifact_manifest(

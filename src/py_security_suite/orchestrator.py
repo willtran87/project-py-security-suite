@@ -607,7 +607,7 @@ def _scan_sealed_project(
         reasons = llm_adversarial_errors or ["plan is truncated or incomplete"]
         context_errors.extend(f"LLM adversarial planning: {error}" for error in reasons)
     industry_artifacts, industry_errors = build_industry_assurance(
-        scan_target, derived_artifacts
+        scan_target, derived_artifacts, findings
     )
     derived_artifacts.update(industry_artifacts)
     control_assessment = industry_artifacts["control-assessment.json"]

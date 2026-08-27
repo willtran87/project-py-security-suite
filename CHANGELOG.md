@@ -1,14 +1,12 @@
 # Changelog
 
-- Add evidence-backed industry assurance: 19 versioned standards and taxonomy
-  catalogs, repository-owned enforceable control objectives, OSCAL 1.1.2
-  assessment-results export, eight governed benchmark families, pinned-corpus
-  execution tasks, replay-protected threshold scorecards, MCC/balanced-accuracy/
-  false-positive-rate and per-stratum measurements, comparable regression
-  deltas, and CycloneDX/OpenVEX/CSAF VEX normalization. Register strict schemas,
-  semantic accounting checks, report summaries, policy examples, tests, and
-  updated architecture diagrams while preserving explicit non-certification
-  claim boundaries.
+- Expand evidence-backed industry assurance to 39 versioned standards and
+  taxonomy references, repository-owned controls and authorized assessment
+  procedures, source-retained CVSS v4 and SSVC prioritization, seven OSCAL
+  1.2.2 lifecycle models, nine pinned benchmark families, reproducibility
+  contracts, Wilson confidence intervals, Youden's J, and comparable benchmark
+  deltas. Enforce CycloneDX 1.7 generation and parsing, preserve VEX source
+  scores, and retain explicit non-certification and authorization boundaries.
 
 - Expand cross-domain assurance from 21 to 33 governed domains with privileged
   control-plane, distributed temporal correctness, secure human interaction,

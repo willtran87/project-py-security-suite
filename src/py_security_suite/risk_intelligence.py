@@ -40,6 +40,7 @@ def enrich_findings(
                 "configured": False,
                 "enriched_findings": 0,
                 "vex_formats": [],
+                "vex_versions": {},
                 "snapshots": {},
             }
         )
@@ -115,6 +116,16 @@ def enrich_findings(
             epss_matches += 1
         if matched_vex:
             evidence["vex"] = matched_vex
+            cvss_candidates = [
+                item["cvss"]
+                for item in matched_vex
+                if isinstance(item.get("cvss"), dict)
+            ]
+            if cvss_candidates:
+                source_cvss = max(
+                    cvss_candidates, key=lambda item: float(item.get("score", 0.0))
+                )
+                finding.evidence = {**finding.evidence, "cvss": source_cvss}
             for item in matched_vex:
                 _append_unique(
                     finding.classifications,
@@ -138,6 +149,16 @@ def enrich_findings(
             "epss_matches": epss_matches,
             "vex_matches": vex_matches,
             "vex_formats": sorted({str(item.get("format")) for item in vex.values()}),
+            "vex_versions": {
+                name: sorted(
+                    {
+                        str(item["format_version"])
+                        for item in vex.values()
+                        if item.get("format") == name and item.get("format_version")
+                    }
+                )
+                for name in sorted({str(item.get("format")) for item in vex.values()})
+            },
             "thresholds": {
                 "epss_high_probability": config.epss_high_probability,
                 "epss_high_percentile": config.epss_high_percentile,
@@ -264,6 +285,10 @@ def _load_vex(data: bytes, suffix: str) -> tuple[dict[str, dict[str, Any]], str]
 def _load_cyclonedx_vex(
     document: dict[str, Any],
 ) -> tuple[dict[str, dict[str, Any]], str]:
+    if document.get("bomFormat") != "CycloneDX":
+        raise ValueError('CycloneDX VEX requires bomFormat="CycloneDX"')
+    if document.get("specVersion") != "1.7":
+        raise ValueError("CycloneDX VEX must use specVersion 1.7")
     if not isinstance(document.get("vulnerabilities"), list):
         raise TypeError("CycloneDX VEX requires a vulnerabilities list")
     values = document["vulnerabilities"]
@@ -291,14 +316,19 @@ def _load_cyclonedx_vex(
         responses = analysis.get("response", [])
         if not isinstance(responses, list):
             responses = []
-        records[cve] = {
+        record: dict[str, Any] = {
             "cve": cve,
             "format": "cyclonedx",
+            "format_version": "1.7",
             "state": state,
             "justification": _bounded(analysis.get("justification"), 100),
             "detail": _bounded(analysis.get("detail"), 500),
             "response": [_bounded(item, 100) for item in responses[:20]],
         }
+        cvss = _cyclonedx_cvss_v4(value.get("ratings"))
+        if cvss is not None:
+            record["cvss"] = cvss
+        records[cve] = record
     metadata = document.get("metadata", {})
     source_date = (
         _bounded(metadata.get("timestamp"), 50) if isinstance(metadata, dict) else ""
@@ -306,7 +336,38 @@ def _load_cyclonedx_vex(
     return records, source_date
 
 
+def _cyclonedx_cvss_v4(value: object) -> dict[str, Any] | None:
+    if not isinstance(value, list):
+        return None
+    candidates: list[dict[str, Any]] = []
+    for rating in value[:100]:
+        if not isinstance(rating, dict):
+            continue
+        vector = str(rating.get("vector") or "")
+        score = rating.get("score")
+        if (
+            str(rating.get("method") or "").casefold() == "cvssv4"
+            and vector.startswith("CVSS:4.0/")
+            and isinstance(score, (int, float))
+            and not isinstance(score, bool)
+            and 0 <= float(score) <= 10
+        ):
+            candidates.append(
+                {
+                    "version": "4.0",
+                    "vector": vector[:500],
+                    "score": round(float(score), 1),
+                    "source": "cyclonedx-vex-rating",
+                }
+            )
+    return (
+        max(candidates, key=lambda item: float(item["score"])) if candidates else None
+    )
+
+
 def _load_openvex(document: dict[str, Any]) -> tuple[dict[str, dict[str, Any]], str]:
+    if document.get("@context") != "https://openvex.dev/ns/v0.2.0":
+        raise ValueError("OpenVEX document must use the v0.2.0 context")
     statements = document["statements"]
     if len(statements) > _MAX_RECORDS:
         raise ValueError("OpenVEX snapshot contains too many statements")
@@ -334,6 +395,7 @@ def _load_openvex(document: dict[str, Any]) -> tuple[dict[str, dict[str, Any]], 
         records[cve] = {
             "cve": cve,
             "format": "openvex",
+            "format_version": "0.2",
             "state": state_map[status],
             "justification": _bounded(statement.get("justification"), 100),
             "detail": _bounded(statement.get("status_notes"), 500),
@@ -346,6 +408,9 @@ def _load_openvex(document: dict[str, Any]) -> tuple[dict[str, dict[str, Any]], 
 
 
 def _load_csaf_vex(document: dict[str, Any]) -> tuple[dict[str, dict[str, Any]], str]:
+    metadata = document.get("document")
+    if not isinstance(metadata, dict) or metadata.get("csaf_version") != "2.0":
+        raise ValueError("CSAF VEX document must use csaf_version 2.0")
     vulnerabilities = document.get("vulnerabilities")
     if not isinstance(vulnerabilities, list):
         raise TypeError("CSAF VEX requires a vulnerabilities list")
@@ -385,12 +450,12 @@ def _load_csaf_vex(document: dict[str, Any]) -> tuple[dict[str, dict[str, Any]],
         records[cve] = {
             "cve": cve,
             "format": "csaf",
+            "format_version": "2.0",
             "state": state,
             "justification": status_name,
             "detail": detail[:500],
             "response": [_bounded(item, 100) for item in products[:20]],
         }
-    metadata = document.get("document")
     tracking = metadata.get("tracking") if isinstance(metadata, dict) else None
     source_date = (
         _bounded(tracking.get("current_release_date"), 50)

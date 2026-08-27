@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:procedure-assessment:1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "analysis", "complete", "policy_present", "enforced", "procedures_assessed", "applicable_procedures", "procedures_satisfied", "status_counts", "procedures", "parse_errors", "claim_boundary"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "analysis": {"const": "versioned-security-test-procedure-assessment"},
+    "complete": {"type": "boolean"},
+    "policy_present": {"type": "boolean"},
+    "enforced": {"type": "boolean"},
+    "procedures_assessed": {"type": "integer", "minimum": 0},
+    "applicable_procedures": {"type": "integer", "minimum": 0},
+    "procedures_satisfied": {"type": "integer", "minimum": 0},
+    "status_counts": {"type": "object", "additionalProperties": false, "required": ["satisfied", "planned", "evidence-gap", "authorization-gap", "not-applicable"], "properties": {"satisfied": {"type": "integer", "minimum": 0}, "planned": {"type": "integer", "minimum": 0}, "evidence-gap": {"type": "integer", "minimum": 0}, "authorization-gap": {"type": "integer", "minimum": 0}, "not-applicable": {"type": "integer", "minimum": 0}}},
+    "procedures": {"type": "array", "maxItems": 20000, "items": {"type": "object", "additionalProperties": false, "required": ["standard", "procedure_id", "objective", "applicable", "execution", "test_type", "authorization_required", "authorization_status", "status", "evidence_required", "evidence_present", "gaps"], "properties": {"standard": {"type": "string"}, "procedure_id": {"type": "string"}, "objective": {"type": "string"}, "applicable": {"type": "boolean"}, "execution": {"enum": ["planned", "executed"]}, "test_type": {"enum": ["examine", "interview", "test", "static", "dynamic", "manual"]}, "authorization_required": {"type": "boolean"}, "authorization_status": {"enum": ["not-required", "validated", "required-not-proven"]}, "status": {"enum": ["satisfied", "planned", "evidence-gap", "authorization-gap", "not-applicable"]}, "evidence_required": {"type": "array", "items": {"type": "string"}}, "evidence_present": {"type": "array", "items": {"type": "string"}}, "gaps": {"type": "array", "items": {"type": "string"}}}}},
+    "parse_errors": {"type": "array", "items": {"type": "string"}},
+    "claim_boundary": {"type": "string", "minLength": 1}
+  }
+}

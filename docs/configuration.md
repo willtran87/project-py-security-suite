@@ -144,7 +144,7 @@ flowchart LR
     Health --> HealthArtifact["code-health.json 1.4<br/>ranked root-cause clusters + bounded symptoms"]
     Graph --> ArchitectureArtifact["static-architecture.json 1.4<br/>refactoring targets + semantic graph context + policy"]
     Domains --> DomainArtifact["domain-assurance.json 1.0<br/>applicability + evidence-bound obligations"]
-    Industry --> IndustryArtifacts["crosswalk + control assessment<br/>scorecard + delta + OSCAL"]
+    Industry --> IndustryArtifacts["crosswalk + controls + procedures + CVSS/SSVC<br/>scorecard + delta + OSCAL 1.2.2 lifecycle"]
     HealthPolicy -->|"invalid"| Incomplete["Analysis incomplete"]
     ArchitecturePolicy -->|"invalid"| Incomplete
     DomainPolicy -->|"invalid"| Incomplete

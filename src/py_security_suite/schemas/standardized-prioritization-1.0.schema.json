@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:standardized-prioritization:1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "analysis", "findings", "cvss_scored", "ssvc_decided", "records", "claim_boundary"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "analysis": {"const": "cvss-4-and-ssvc-compatible-prioritization"},
+    "findings": {"type": "integer", "minimum": 0},
+    "cvss_scored": {"type": "integer", "minimum": 0},
+    "ssvc_decided": {"type": "integer", "minimum": 0},
+    "records": {"type": "array", "maxItems": 1000000, "items": {"type": "object", "additionalProperties": false, "required": ["finding_id", "native_severity", "operational_priority", "cvss", "ssvc"], "properties": {"finding_id": {"type": "string"}, "native_severity": {"type": "string"}, "operational_priority": {"enum": ["P0", "P1", "P2", "P3", "P4"]}, "cvss": {"type": "object", "additionalProperties": false, "required": ["version", "status", "vector", "score", "reason"], "properties": {"version": {"const": "4.0"}, "status": {"enum": ["scored", "not-scored", "invalid-source-evidence"]}, "vector": {"type": ["string", "null"]}, "score": {"type": ["number", "null"], "minimum": 0, "maximum": 10}, "reason": {"type": "string"}}}, "ssvc": {"type": "object", "additionalProperties": false, "required": ["model", "status", "factors", "outcome", "reason"], "properties": {"model": {"const": "CISA-SSVC"}, "status": {"enum": ["decided", "insufficient-context"]}, "factors": {"type": "object", "additionalProperties": false, "required": ["exploitation", "automatable", "technical_impact", "mission_prevalence"], "properties": {"exploitation": {"type": ["string", "null"]}, "automatable": {"type": ["string", "null"]}, "technical_impact": {"type": ["string", "null"]}, "mission_prevalence": {"type": ["string", "null"]}}}, "outcome": {"type": ["string", "null"]}, "reason": {"type": "string"}}}}}},
+    "claim_boundary": {"type": "string", "minLength": 1}
+  }
+}

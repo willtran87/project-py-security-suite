@@ -4,12 +4,14 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 from jsonschema import Draft202012Validator
 
 from py_security_suite.artifact_validation import (
     _validate_benchmark_scorecard_accounting,
     _validate_control_assessment_accounting,
+    _validate_procedure_assessment_accounting,
     _validate_standards_crosswalk_accounting,
     validate_governed_artifacts,
 )
@@ -44,17 +46,26 @@ class IndustryAssuranceTests(unittest.TestCase):
                 {
                     "source-inventory.json": {"source_sha256": "a" * 64},
                     "risk-intelligence.json": {
-                        "vex_formats": ["cyclonedx", "openvex", "csaf"]
+                        "vex_formats": ["cyclonedx", "openvex", "csaf"],
+                        "vex_versions": {
+                            "cyclonedx": ["1.7"],
+                            "openvex": ["0.2"],
+                            "csaf": ["2.0"],
+                        },
                     },
-                    "sbom.cdx.json": {},
+                    "sbom.cdx.json": {
+                        "bomFormat": "CycloneDX",
+                        "specVersion": "1.7",
+                        "components": [],
+                    },
                 },
             )
         self.assertEqual(errors, [])
         self.assertEqual(
-            artifacts["standards-crosswalk.json"]["catalogs_registered"], 19
+            artifacts["standards-crosswalk.json"]["catalogs_registered"], 39
         )
         self.assertEqual(
-            artifacts["benchmark-registry.json"]["benchmarks_registered"], 8
+            artifacts["benchmark-registry.json"]["benchmarks_registered"], 9
         )
         supported = {
             item["format"]
@@ -65,7 +76,81 @@ class IndustryAssuranceTests(unittest.TestCase):
             {"CycloneDX", "CycloneDX-VEX", "OpenVEX", "CSAF-VEX", "OSCAL"} <= supported
         )
         self.assertIn("assessment-results", artifacts["oscal-assessment-results.json"])
-        self.assertEqual(len(validate_governed_artifacts(artifacts)), 7)
+        self.assertTrue(
+            all(
+                next(iter(document.values()))["metadata"]["oscal-version"] == "1.2.2"
+                for name, document in artifacts.items()
+                if name.startswith("oscal-")
+            )
+        )
+        self.assertEqual(len(validate_governed_artifacts(artifacts)), 15)
+
+    def test_procedures_cvss_ssvc_and_full_oscal_lifecycle_are_governed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "security").mkdir()
+            policy = {
+                "schema_version": "1.1",
+                "enforce": True,
+                "controls": [],
+                "procedures": [
+                    {
+                        "standard": "OWASP-WSTG",
+                        "procedure_id": "WSTG-ATHZ-03",
+                        "objective": "Test privilege boundaries.",
+                        "applicable": True,
+                        "execution": "executed",
+                        "test_type": "dynamic",
+                        "authorization_required": True,
+                        "evidence_artifacts": ["authorized-test.json"],
+                    }
+                ],
+                "benchmarks": [],
+                "benchmark_baseline_path": None,
+            }
+            (root / "security" / "industry-assurance-policy.json").write_text(
+                json.dumps(policy), encoding="utf-8"
+            )
+            finding = SimpleNamespace(
+                finding_id="PYSEC-1",
+                severity="high",
+                classifications=["CWE-862"],
+                evidence={
+                    "cvss": {
+                        "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N",
+                        "score": 9.3,
+                    },
+                    "ssvc": {
+                        "exploitation": "active",
+                        "automatable": "yes",
+                        "technical_impact": "total",
+                        "mission_prevalence": "essential",
+                        "outcome": "immediate",
+                    },
+                },
+            )
+            artifacts, errors = build_industry_assurance(
+                root,
+                {
+                    "source-inventory.json": {"source_sha256": "a" * 64},
+                    "authorized-test.json": {
+                        "complete": True,
+                        "authorization_validated": True,
+                    },
+                },
+                [finding],
+            )
+        self.assertEqual(errors, [])
+        procedure = artifacts["procedure-assessment.json"]
+        self.assertTrue(procedure["complete"])
+        self.assertEqual(procedure["procedures"][0]["status"], "satisfied")
+        prioritization = artifacts["standardized-prioritization.json"]
+        self.assertEqual(prioritization["cvss_scored"], 1)
+        self.assertEqual(prioritization["ssvc_decided"], 1)
+        self.assertEqual(
+            artifacts["industry-assurance.json"]["oscal_models_emitted"], 7
+        )
+        validate_governed_artifacts(artifacts)
 
     def test_policy_drives_controls_and_governed_benchmark_thresholds(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -105,7 +190,16 @@ class IndustryAssuranceTests(unittest.TestCase):
                 "replay_protected": True,
                 "corpus": {
                     "sha256": "b" * 64,
+                    "revision": "approved-1",
                     "authority": {"organization_approved": True},
+                },
+                "report": {"checksums_sha256": "c" * 64},
+                "time_authority": {"validated": True},
+                "confusion_matrix": {
+                    "true_positive": 90,
+                    "true_negative": 95,
+                    "false_positive": 5,
+                    "false_negative": 10,
                 },
                 "metrics": {
                     "precision": 0.9,
@@ -115,6 +209,7 @@ class IndustryAssuranceTests(unittest.TestCase):
                     "mcc": 0.85,
                     "balanced_accuracy": 0.925,
                     "false_positive_rate": 0.05,
+                    "youden_j": 0.85,
                 },
             }
             artifacts, errors = build_industry_assurance(
@@ -137,7 +232,7 @@ class IndustryAssuranceTests(unittest.TestCase):
                 encoding="utf-8"
             )
         )
-        schema = json.loads(read_bundled_schema("industry-assurance-policy-1.0"))
+        schema = json.loads(read_bundled_schema("industry-assurance-policy-1.1"))
         Draft202012Validator.check_schema(schema)
         Draft202012Validator(schema).validate(instance)
 
@@ -230,7 +325,16 @@ class IndustryAssuranceTests(unittest.TestCase):
                 "replay_protected": True,
                 "corpus": {
                     "sha256": "b" * 64,
+                    "revision": "approved-1",
                     "authority": {"organization_approved": True},
+                },
+                "report": {"checksums_sha256": "c" * 64},
+                "time_authority": {"validated": True},
+                "confusion_matrix": {
+                    "true_positive": 90,
+                    "true_negative": 90,
+                    "false_positive": 10,
+                    "false_negative": 10,
                 },
                 "metrics": {
                     "precision": 0.9,
@@ -240,6 +344,7 @@ class IndustryAssuranceTests(unittest.TestCase):
                     "mcc": 0.8,
                     "balanced_accuracy": 0.9,
                     "false_positive_rate": 0.1,
+                    "youden_j": 0.8,
                 },
             }
             (root / "score.json").write_text(json.dumps(evidence), encoding="utf-8")
@@ -348,6 +453,27 @@ class IndustryAssuranceTests(unittest.TestCase):
                     "status_counts": {
                         "satisfied": 0,
                         "gap": 0,
+                        "not-applicable": 0,
+                    },
+                    "parse_errors": [],
+                    "enforced": False,
+                    "complete": True,
+                }
+            )
+        with self.assertRaises(TypeError):
+            _validate_procedure_assessment_accounting(None)
+        with self.assertRaises(ValueError):
+            _validate_procedure_assessment_accounting(
+                {
+                    "procedures": [],
+                    "procedures_assessed": 1,
+                    "applicable_procedures": 0,
+                    "procedures_satisfied": 0,
+                    "status_counts": {
+                        "satisfied": 0,
+                        "planned": 0,
+                        "evidence-gap": 0,
+                        "authorization-gap": 0,
                         "not-applicable": 0,
                     },
                     "parse_errors": [],

@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:oscal-model-profile:1.2.2",
+  "type": "object",
+  "minProperties": 1,
+  "maxProperties": 1,
+  "propertyNames": {"enum": ["catalog", "profile", "component-definition", "system-security-plan", "assessment-plan", "assessment-results", "plan-of-action-and-milestones"]},
+  "additionalProperties": {"$ref": "#/$defs/model"},
+  "$defs": {
+    "metadata": {"type": "object", "required": ["title", "last-modified", "version", "oscal-version"], "properties": {"title": {"type": "string", "minLength": 1}, "last-modified": {"type": "string", "format": "date-time"}, "version": {"type": "string", "minLength": 1}, "oscal-version": {"const": "1.2.2"}}},
+    "model": {"type": "object", "required": ["uuid", "metadata"], "properties": {"uuid": {"type": "string", "format": "uuid"}, "metadata": {"$ref": "#/$defs/metadata"}}}
+  }
+}

@@ -390,7 +390,7 @@ class SpecializedAdapterRuntimeTests(unittest.TestCase):
             return RawExecution(
                 command=command,
                 exit_code=0,
-                stdout='{"bomFormat":"CycloneDX","components":[]}',
+                stdout='{"bomFormat":"CycloneDX","specVersion":"1.7","components":[]}',
                 stderr="",
                 duration_seconds=0.01,
             )

@@ -113,6 +113,13 @@ class RiskIntelligenceTests(unittest.TestCase):
                     "vulnerabilities": [
                         {
                             "id": "CVE-2026-12345",
+                            "ratings": [
+                                {
+                                    "method": "CVSSv4",
+                                    "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N",
+                                    "score": 9.3,
+                                }
+                            ],
                             "analysis": {
                                 "state": "not_affected",
                                 "justification": "code_not_reachable",
@@ -146,6 +153,8 @@ class RiskIntelligenceTests(unittest.TestCase):
         self.assertIn("VEX-NOT-AFFECTED", finding.classifications)
         self.assertEqual(finding.status, FindingStatus.NEW)
         self.assertIn("risk_intelligence", finding.evidence)
+        self.assertEqual(finding.evidence["cvss"]["score"], 9.3)
+        self.assertEqual(finding.evidence["cvss"]["version"], "4.0")
         self.assertEqual(len(finding.citations), 3)
 
     def test_snapshot_digest_mismatch_fails_closed(self) -> None:
@@ -184,6 +193,7 @@ class RiskIntelligenceTests(unittest.TestCase):
             "csaf": {
                 "document": {
                     "category": "csaf_vex",
+                    "csaf_version": "2.0",
                     "tracking": {"current_release_date": "2026-08-01T00:00:00Z"},
                 },
                 "vulnerabilities": [
@@ -205,6 +215,7 @@ class RiskIntelligenceTests(unittest.TestCase):
                 )
                 self.assertEqual(result.errors, [])
                 self.assertEqual(result.artifact["vex_formats"], [expected_format])
+                self.assertTrue(result.artifact["vex_versions"][expected_format])
                 self.assertIn(
                     expected_format,
                     finding.evidence["risk_intelligence"]["vex"][0]["format"],
@@ -243,10 +254,11 @@ class RiskIntelligenceTests(unittest.TestCase):
                         "vulnerability": "CVE-2026-12345",
                         "status": "affected",
                     }
-                ]
+                ],
+                "@context": "https://openvex.dev/ns/v0.2.0",
             },
             {
-                "document": {"category": "csaf_vex"},
+                "document": {"category": "csaf_vex", "csaf_version": "2.0"},
                 "vulnerabilities": [
                     {
                         "cve": "CVE-2026-12345",

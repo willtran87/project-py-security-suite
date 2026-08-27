@@ -39,6 +39,7 @@ _ARTIFACT_SCHEMAS = {
     "closure-plan.json": "closure-plan.schema.json",
     "code-health.json": "code-health-1.4.schema.json",
     "control-assessment.json": "control-assessment-1.0.schema.json",
+    "procedure-assessment.json": "procedure-assessment-1.0.schema.json",
     "data-exposure.json": "data-exposure-1.5.schema.json",
     "dependency-surface.json": "dependency-surface-1.1.schema.json",
     "domain-assurance.json": "domain-assurance-1.0.schema.json",
@@ -56,7 +57,13 @@ _ARTIFACT_SCHEMAS = {
     "isolation-boundary.json": "isolation-boundary-1.0.schema.json",
     "isolation-probe.json": "isolation-probe-1.0.schema.json",
     "osv-manifest-receipts.json": "osv-manifest-receipts-1.0.schema.json",
-    "oscal-assessment-results.json": "oscal-assessment-results-1.1.2.schema.json",
+    "oscal-assessment-plan.json": "oscal-model-1.2.2.schema.json",
+    "oscal-assessment-results.json": "oscal-model-1.2.2.schema.json",
+    "oscal-catalog.json": "oscal-model-1.2.2.schema.json",
+    "oscal-component-definition.json": "oscal-model-1.2.2.schema.json",
+    "oscal-poam.json": "oscal-model-1.2.2.schema.json",
+    "oscal-profile.json": "oscal-model-1.2.2.schema.json",
+    "oscal-system-security-plan.json": "oscal-model-1.2.2.schema.json",
     "finding-delta.json": "finding-delta-1.1.schema.json",
     "finding-validation.json": "finding-validation-1.0.schema.json",
     "framework-model-coverage.json": "framework-model-coverage-1.0.schema.json",
@@ -87,6 +94,7 @@ _ARTIFACT_SCHEMAS = {
     "source-inventory.json": "source-inventory.schema.json",
     "static-architecture.json": "static-architecture-1.4.schema.json",
     "standards-crosswalk.json": "standards-crosswalk-1.0.schema.json",
+    "standardized-prioritization.json": "standardized-prioritization-1.0.schema.json",
     "structural-synthesis.json": "structural-synthesis-1.2.schema.json",
     "trust-policy-attestation.json": "trust-policy-attestation-1.0.schema.json",
     "trust-policy.json": "trust-policy-1.0.schema.json",
@@ -151,6 +159,34 @@ def _validate_control_assessment_accounting(value: object) -> None:
         or value.get("complete") is not expected_complete
     ):
         raise ValueError("control assessment accounting does not match")
+
+
+@_typed_validator("procedure-assessment.json")
+def _validate_procedure_assessment_accounting(value: object) -> None:
+    if not isinstance(value, dict) or not isinstance(value.get("procedures"), list):
+        raise TypeError("procedure assessment artifact is invalid")
+    procedures = value["procedures"]
+    counts = Counter(str(item.get("status")) for item in procedures)
+    applicable = sum(item.get("applicable") is True for item in procedures)
+    satisfied = counts["satisfied"]
+    names = (
+        "satisfied",
+        "planned",
+        "evidence-gap",
+        "authorization-gap",
+        "not-applicable",
+    )
+    expected_complete = not value.get("parse_errors") and (
+        value.get("enforced") is not True or satisfied == applicable
+    )
+    if (
+        value.get("procedures_assessed") != len(procedures)
+        or value.get("applicable_procedures") != applicable
+        or value.get("procedures_satisfied") != satisfied
+        or value.get("status_counts") != {name: counts.get(name, 0) for name in names}
+        or value.get("complete") is not expected_complete
+    ):
+        raise ValueError("procedure assessment accounting does not match")
 
 
 @_typed_validator("benchmark-scorecard.json")

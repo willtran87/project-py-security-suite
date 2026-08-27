@@ -111,6 +111,8 @@ def evaluate_report_corpus(
     false_positive = counts["false_positive"]
     false_negative = counts["false_negative"]
     true_negative = counts["true_negative"]
+    recall = _ratio(true_positive, true_positive + false_negative)
+    specificity = _ratio(true_negative, true_negative + false_positive)
     return {
         "schema_version": str(document["schema_version"]),
         "verdict": "pass" if not false_positive and not false_negative else "fail",
@@ -134,14 +136,31 @@ def evaluate_report_corpus(
         "confusion_matrix": counts,
         "metrics": {
             "precision": _ratio(true_positive, true_positive + false_positive),
-            "recall": _ratio(true_positive, true_positive + false_negative),
-            "specificity": _ratio(true_negative, true_negative + false_positive),
+            "recall": recall,
+            "specificity": specificity,
             "f1": _f1(true_positive, false_positive, false_negative),
             "mcc": _mcc(true_positive, true_negative, false_positive, false_negative),
             "balanced_accuracy": _balanced_accuracy(
                 true_positive, true_negative, false_positive, false_negative
             ),
             "false_positive_rate": _ratio(
+                false_positive, false_positive + true_negative
+            ),
+            "youden_j": (
+                round(recall + specificity - 1, 6)
+                if recall is not None and specificity is not None
+                else None
+            ),
+        },
+        "confidence_intervals_95": {
+            "precision": _wilson_interval(
+                true_positive, true_positive + false_positive
+            ),
+            "recall": _wilson_interval(true_positive, true_positive + false_negative),
+            "specificity": _wilson_interval(
+                true_negative, true_negative + false_positive
+            ),
+            "false_positive_rate": _wilson_interval(
                 false_positive, false_positive + true_negative
             ),
         },
@@ -1142,6 +1161,24 @@ def _balanced_accuracy(
     if recall is None or specificity is None:
         return None
     return round((recall + specificity) / 2, 6)
+
+
+def _wilson_interval(successes: int, total: int) -> dict[str, float] | None:
+    if total <= 0:
+        return None
+    z = 1.959963984540054
+    proportion = successes / total
+    denominator = 1 + z * z / total
+    center = (proportion + z * z / (2 * total)) / denominator
+    margin = (
+        z
+        * math.sqrt(proportion * (1 - proportion) / total + z * z / (4 * total * total))
+        / denominator
+    )
+    return {
+        "lower": round(max(0.0, center - margin), 6),
+        "upper": round(min(1.0, center + margin), 6),
+    }
 
 
 def _stratum_scorecards(outcomes: list[dict[str, Any]]) -> list[dict[str, Any]]:

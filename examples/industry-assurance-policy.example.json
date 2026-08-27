@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "enforce": false,
   "controls": [
     {"standard": "OWASP-ASVS", "control_id": "V1", "objective": "Retain application-security verification evidence.", "applicable": true, "evidence_artifacts": ["security-requirements-coverage.json"]},
@@ -11,11 +11,20 @@
     {"standard": "ISO-IEC-25010", "control_id": "Quality", "objective": "Measure maintainability, reliability, and security quality signals.", "applicable": true, "evidence_artifacts": ["code-health.json", "effectiveness.json"]},
     {"standard": "ISO-IEC-IEEE-42010", "control_id": "Architecture", "objective": "Retain evidence for architecture structure, boundaries, and drift.", "applicable": true, "evidence_artifacts": ["static-architecture.json", "architecture-history.json"]}
   ],
+  "procedures": [
+    {"standard": "OWASP-WSTG", "procedure_id": "WSTG-INFO-06", "objective": "Identify and retain application entry points before active testing.", "applicable": true, "execution": "executed", "test_type": "examine", "authorization_required": false, "evidence_artifacts": ["runtime-surface-binding.json", "application-contract-analysis.json"]},
+    {"standard": "OWASP-WSTG", "procedure_id": "WSTG-ATHZ-03", "objective": "Test for privilege escalation across discovered authorization boundaries.", "applicable": true, "execution": "planned", "test_type": "dynamic", "authorization_required": true, "evidence_artifacts": ["llm-adversarial-plan.json"]},
+    {"standard": "OWASP-MASTG", "procedure_id": "MASTG-TEST-POLICY-PINNED", "objective": "Execute the policy-pinned mobile test set when mobile surfaces are applicable.", "applicable": false, "execution": "planned", "test_type": "dynamic", "authorization_required": true, "evidence_artifacts": ["security-requirements-coverage.json"]},
+    {"standard": "NIST-SP-800-53A", "procedure_id": "CA-08", "objective": "Retain examination and test evidence for the scoped penetration-test procedure.", "applicable": true, "execution": "planned", "test_type": "test", "authorization_required": true, "evidence_artifacts": ["llm-adversarial-plan.json"]},
+    {"standard": "CIS-BENCHMARKS", "procedure_id": "POLICY-PINNED-BASELINE", "objective": "Assess applicable infrastructure against an approved CIS Benchmark release.", "applicable": false, "execution": "planned", "test_type": "test", "authorization_required": false, "evidence_artifacts": ["checkov-iac.json", "kics-iac.json"]},
+    {"standard": "OWASP-AITG", "procedure_id": "AITG-POLICY-PINNED", "objective": "Execute the policy-pinned AI trustworthiness and adversarial test set.", "applicable": false, "execution": "planned", "test_type": "dynamic", "authorization_required": true, "evidence_artifacts": ["llm-adversarial-plan.json"]}
+  ],
   "benchmarks": [
     {"id": "pysec-governed-holdout", "enabled": false, "corpus_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "evidence_artifact": "pysec-holdout-score.json", "minimum_precision": 0.9, "minimum_recall": 0.9, "minimum_f1": 0.9, "maximum_false_positive_rate": 0.1},
     {"id": "owasp-benchmark", "enabled": false, "corpus_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "evidence_artifact": "owasp-benchmark-score.json", "minimum_precision": 0.8, "minimum_recall": 0.8, "minimum_f1": 0.8, "maximum_false_positive_rate": 0.2},
     {"id": "nist-sard-juliet", "enabled": false, "corpus_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "evidence_artifact": "juliet-score.json", "minimum_precision": 0.8, "minimum_recall": 0.8, "minimum_f1": 0.8, "maximum_false_positive_rate": 0.2},
-    {"id": "cyberseceval-2", "enabled": false, "corpus_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "evidence_artifact": "cyberseceval-score.json", "minimum_precision": 0.8, "minimum_recall": 0.8, "minimum_f1": 0.8, "maximum_false_positive_rate": 0.2}
+    {"id": "cyberseceval-4", "enabled": false, "corpus_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "evidence_artifact": "cyberseceval-score.json", "minimum_precision": 0.8, "minimum_recall": 0.8, "minimum_f1": 0.8, "maximum_false_positive_rate": 0.2},
+    {"id": "mlcommons-ailuminate", "enabled": false, "corpus_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "evidence_artifact": "ailuminate-score.json", "minimum_precision": 0.8, "minimum_recall": 0.8, "minimum_f1": 0.8, "maximum_false_positive_rate": 0.2}
   ],
   "benchmark_baseline_path": null
 }

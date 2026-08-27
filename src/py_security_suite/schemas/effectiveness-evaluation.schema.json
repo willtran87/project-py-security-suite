@@ -4,7 +4,7 @@
   "title": "Scanner effectiveness evaluation",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "verdict", "report", "corpus", "time_authority", "replay_protected", "replay_receipt", "confusion_matrix", "metrics", "feedback_policy", "failures", "label_outcomes"],
+  "required": ["schema_version", "verdict", "report", "corpus", "time_authority", "replay_protected", "replay_receipt", "confusion_matrix", "metrics", "confidence_intervals_95", "feedback_policy", "failures", "label_outcomes"],
   "properties": {
     "schema_version": {"enum": ["1.0", "2.0"]},
     "verdict": {"enum": ["pass", "fail"]},
@@ -57,7 +57,19 @@
         "f1": {"$ref": "#/$defs/nullableRatio"},
         "mcc": {"anyOf": [{"type": "number", "minimum": -1, "maximum": 1}, {"type": "null"}]},
         "balanced_accuracy": {"$ref": "#/$defs/nullableRatio"},
-        "false_positive_rate": {"$ref": "#/$defs/nullableRatio"}
+        "false_positive_rate": {"$ref": "#/$defs/nullableRatio"},
+        "youden_j": {"anyOf": [{"type": "number", "minimum": -1, "maximum": 1}, {"type": "null"}]}
+      }
+    },
+    "confidence_intervals_95": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["precision", "recall", "specificity", "false_positive_rate"],
+      "properties": {
+        "precision": {"$ref": "#/$defs/nullableInterval"},
+        "recall": {"$ref": "#/$defs/nullableInterval"},
+        "specificity": {"$ref": "#/$defs/nullableInterval"},
+        "false_positive_rate": {"$ref": "#/$defs/nullableInterval"}
       }
     },
     "stratum_scorecards": {
@@ -91,6 +103,12 @@
     }
   },
   "$defs": {
+    "nullableInterval": {
+      "oneOf": [
+        {"type": "null"},
+        {"type": "object", "additionalProperties": false, "required": ["lower", "upper"], "properties": {"lower": {"type": "number", "minimum": 0, "maximum": 1}, "upper": {"type": "number", "minimum": 0, "maximum": 1}}}
+      ]
+    },
     "nullableRatio": {
       "anyOf": [
         {"type": "number", "minimum": 0, "maximum": 1},
