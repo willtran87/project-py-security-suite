@@ -43,6 +43,7 @@ from py_security_suite.passport import (
     verify_report,
 )
 from py_security_suite.risk_intelligence import enrich_findings
+from py_security_suite.risk_intelligence import _load_vex
 from tests.report_fixtures import write_embedded_statement
 
 
@@ -208,6 +209,58 @@ class RiskIntelligenceTests(unittest.TestCase):
                     expected_format,
                     finding.evidence["risk_intelligence"]["vex"][0]["format"],
                 )
+
+    def test_vex_parsers_reject_malformed_documents(self) -> None:
+        malformed = [
+            [],
+            {"statements": ["invalid"]},
+            {"statements": [{"vulnerability": "CVE-2026-12345", "status": "unknown"}]},
+            {"document": {"category": "csaf_vex"}},
+            {
+                "document": {"category": "csaf_vex"},
+                "vulnerabilities": ["invalid"],
+            },
+            {
+                "document": {"category": "csaf_vex"},
+                "vulnerabilities": [{"cve": "invalid", "product_status": {}}],
+            },
+            {
+                "document": {"category": "csaf_vex"},
+                "vulnerabilities": [{"cve": "CVE-2026-12345", "product_status": {}}],
+            },
+        ]
+        for document in malformed:
+            with (
+                self.subTest(document=document),
+                self.assertRaises((TypeError, ValueError)),
+            ):
+                _load_vex(json.dumps(document).encode(), ".json")
+
+        for document in (
+            {
+                "statements": [
+                    {
+                        "vulnerability": "CVE-2026-12345",
+                        "status": "affected",
+                    }
+                ]
+            },
+            {
+                "document": {"category": "csaf_vex"},
+                "vulnerabilities": [
+                    {
+                        "cve": "CVE-2026-12345",
+                        "product_status": {"fixed": ["product"]},
+                    }
+                ],
+            },
+        ):
+            with (
+                self.subTest(limit_document=document),
+                patch("py_security_suite.risk_intelligence._MAX_RECORDS", 0),
+                self.assertRaises(ValueError),
+            ):
+                _load_vex(json.dumps(document).encode(), ".json")
 
 
 class FindingDeltaTests(unittest.TestCase):

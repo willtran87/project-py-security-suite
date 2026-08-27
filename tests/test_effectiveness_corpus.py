@@ -21,7 +21,9 @@ from jsonschema import (  # pylint: disable=import-error
 )
 
 from py_security_suite.effectiveness_corpus import (
+    _balanced_accuracy,
     _consume_remote_effectiveness_replay,
+    _mcc,
     _validate_fixture_paths,
     _verify_consistency,
     _verify_inclusion,
@@ -32,6 +34,10 @@ from py_security_suite.strict_json import canonical_bytes
 
 
 class EffectivenessCorpusTests(unittest.TestCase):
+    def test_confusion_metrics_are_undefined_without_both_classes(self) -> None:
+        self.assertIsNone(_mcc(1, 0, 0, 0))
+        self.assertIsNone(_balanced_accuracy(1, 0, 0, 0))
+
     def setUp(self) -> None:
         temporary = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with
         self.addCleanup(temporary.cleanup)
