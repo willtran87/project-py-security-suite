@@ -1,5 +1,69 @@
 # Changelog
 
+- Add an executable industry benchmark adapter runtime with explicit operator
+  authorization, digest-pinned executables and corpora, shell-free staged
+  commands, minimized environments, timeouts, bounded captures, process-tree
+  cleanup, normalized case-level scoring, attestation digests, and atomic
+  receipts. Add restricted-HTTPS standards publisher monitoring with public-IP
+  and host allowlisting, redirect validation, immutable quarantine snapshots,
+  human-only promotion, change reports, and optional Ed25519 signing. Expand
+  assurance to 283 standards and 97 benchmark families with NIST SP 800-18r2,
+  SP 800-92, SP 800-188, ISO/IEC 27014, 27032, 27033, 27040, 27555, 27559,
+  W3C ACT Rules 1.1, CFReDS/CFTT, DroidBench, Ghera, SecBench.js, Chaos
+  Mesh/Litmus, Sonobuoy, and platform-specific CIS/SCAP. External conformity
+  evidence now requires active, validity-bounded, revocation-checked,
+  signature-validated assessor credentials tied to an immutable registry
+  snapshot.
+
+- Extend industry assurance to 268 versioned references, 80 selectable packs,
+  and 89 governed benchmark families. Add the final CISA-led 2026 v2.1 SBOM
+  minimum elements while excluding the 2025 public-comment draft from normative claims,
+  enhanced CUI requirements and assessment, developer verification minimums,
+  cryptographic key lifecycle and agility, continuous monitoring, ICT
+  continuity, digital forensics, and accessibility assurance. Standards
+  promotion now fails closed without digest-bound signed source snapshots,
+  publisher change reports, observation provenance, and named human approval;
+  supersession metadata keeps historical editions visible without presenting
+  them as current. Authorized benchmark runners now require digest-pinned OCI
+  images, runner SBOM and provenance, resource limits, enforced network policy,
+  egress transcripts, and target cleanup/destruction receipts.
+  Add cloud-native API/service-mesh,
+  SCITT transparency, consumer dependency, agentic AI testing, vulnerability
+  operations, API/telemetry interoperability, regional resilience, automotive
+  update, energy protocol, product testing, consent receipt, and ATAM coverage.
+  Add protocol-specific benchmark scoring,
+  governed DevSecOps and test maturity, AI quality and conformity, independent
+  cloud assurance, CACAO/OpenC2/OCSF interoperability, federal vulnerability
+  disclosure, UK PSTI/ETSI EN 18031 applicability, MITRE ATT&CK Evaluations,
+  licensed normative evidence, external cohort comparison, and standards
+  publication watchlists. Add governed lifecycle traceability,
+  scenario-based architecture evaluation, bounded process-capability assessment,
+  point-in-time EPSS/KEV calibration, comprehensive CWE mapping, formal-analysis
+  competitions, signing/verifier conformance, remote attestation, AI lifecycle
+  and data quality, supplier relationships, OT patching, continuing
+  airworthiness, maritime cyber resilience, and financial-messaging assurance.
+  Add independent evaluator and laboratory
+  qualification, complete OT system/operations, healthcare, airborne software,
+  federal STIG, formal software-quality evaluation, incident management,
+  privacy-impact assessment, supply-chain identity, and threat-model quality
+  assurance. Add Vul4J, BugsInPy, AgentDojo, OSS-Fuzz/ClusterFuzzLite, DISA
+  STIG/SCAP, IEC 62443 system-conformance, and expert-labeled threat-model
+  benchmark contracts. Qualified conformance results now fail closed without
+  method-validation, evaluator-competency, impartiality-review, and measurement-
+  traceability digests. The earlier expansion also added systems engineering, risk
+  measurement, security-data interoperability, product certification, threat
+  intelligence, secure coding, formal testing, safety/security, specialized
+  target validation, AI robustness/impact, privacy-by-design, and zero-trust
+  implementation to the existing identity/protocol, cloud/container/
+  zero-trust, cryptography/PQC, operational-resilience, EU digital regulation,
+  IoT, OT, automotive, medical-device, and federal-cloud/defense profiles. Add
+  cryptographic, identity, WebAuthn, attack-emulation, repository-posture,
+  polyglot CVE, artifact-conformance, scale/determinism, recovery, and protocol-
+  evasion benchmark contracts. Authorized companion evidence now fails closed
+  without dataset-license, label-authority, contamination, split, isolation,
+  runner, target, toolset, oracle, environment, and control evidence;
+  organization corpora require at least two independent reviewers.
+
 - Raise every previously lower-scoring industry-readiness area to at least 8/10
   with 58 versioned references, nine selectable enterprise/privacy/PSIRT/
   supply-chain/AI/regulatory assurance packs, policy schema 1.2, and an

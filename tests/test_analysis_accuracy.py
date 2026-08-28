@@ -11,7 +11,7 @@ from py_security_suite.application_contracts import analyze_application_contract
 from py_security_suite.artifact_validation import validate_governed_artifacts
 from py_security_suite.architecture_history import architecture_history
 from py_security_suite.capability_manifest import capability_manifest
-from py_security_suite.code_health import analyze_code_health
+from py_security_suite.code_health import analyze_code_health, _retain_ranked_issues
 from py_security_suite.finding_validation import apply_finding_validation
 from py_security_suite.framework_coverage import framework_model_coverage
 from py_security_suite.models import (
@@ -1127,6 +1127,71 @@ def test_code_health_detects_async_lifecycle_and_exception_chain_defects(
         "CODE-UNAWAITED-ASYNC-CALL",
     }.issubset({finding.classifications[0] for finding in findings})
     validate_governed_artifacts({"code-health.json": artifact})
+
+
+def test_code_health_rejects_invalid_policy_and_retains_each_issue_kind(
+    tmp_path: Path,
+) -> None:
+    security = tmp_path / "security"
+    security.mkdir()
+    policy = security / "code-health-policy.json"
+    policy.write_text('{"unexpected":true}', encoding="utf-8")
+
+    _, malformed = analyze_code_health(tmp_path)
+
+    assert malformed["complete"] is False
+    assert malformed["parse_errors"] == ["security/code-health-policy.json: ValueError"]
+
+    policy.write_text(
+        json.dumps(
+            {
+                "schema_version": "1.0",
+                "thresholds": {"function_lines": True},
+            }
+        ),
+        encoding="utf-8",
+    )
+    _, invalid_threshold = analyze_code_health(tmp_path)
+    assert invalid_threshold["parse_errors"] == [
+        "security/code-health-policy.json: ValueError"
+    ]
+
+    issues = [
+        {
+            "kind": "long-function",
+            "value": 120,
+            "threshold": 100,
+            "path": "a.py",
+            "line": 1,
+        },
+        {
+            "kind": "long-function",
+            "value": 150,
+            "threshold": 100,
+            "path": "b.py",
+            "line": 2,
+        },
+        {
+            "kind": "large-class",
+            "value": 900,
+            "threshold": 800,
+            "path": "c.py",
+            "line": 3,
+        },
+        {
+            "kind": "semantic-clone",
+            "value": 30,
+            "threshold": 20,
+            "path": "d.py",
+            "line": 4,
+        },
+    ]
+    retained = _retain_ranked_issues(issues, 3)
+    assert {item["kind"] for item in retained} == {
+        "large-class",
+        "long-function",
+        "semantic-clone",
+    }
 
 
 def test_static_architecture_unifies_packaging_main_and_tach_policy(

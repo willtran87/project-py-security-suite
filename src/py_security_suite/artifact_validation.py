@@ -28,6 +28,7 @@ _ARTIFACT_SCHEMAS = {
     "advanced-analysis.json": "advanced-analysis.schema.json",
     "application-contract-analysis.json": "application-contract-analysis-1.3.schema.json",
     "architecture-history.json": "architecture-history-1.0.schema.json",
+    "architecture-evaluation.json": "architecture-evaluation-1.0.schema.json",
     "artifact-manifest.json": "artifact-manifest.schema.json",
     "artifact-sbom.cdx.json": "cyclonedx-artifact.schema.json",
     "assurance-claims.json": "assurance-claims-1.1.schema.json",
@@ -47,6 +48,7 @@ _ARTIFACT_SCHEMAS = {
     "deptry-dependencies.json": "deptry-artifact.schema.json",
     "diff-coverage.json": "diff-coverage-artifact.schema.json",
     "effectiveness.json": "effectiveness-1.1.schema.json",
+    "external-conformity-assessment.json": "external-conformity-assessment-1.0.schema.json",
     "evidence-fusion.json": "evidence-fusion.schema.json",
     "graph-analysis.json": "graph-analysis.schema.json",
     "graphify.json": "graphify-evidence.schema.json",
@@ -73,6 +75,8 @@ _ARTIFACT_SCHEMAS = {
     "junit-summary.json": "test-summary-artifact.schema.json",
     "kics-iac.json": "kics-artifact.schema.json",
     "llm-adversarial-plan.json": "llm-adversarial-plan-1.0.schema.json",
+    "lifecycle-traceability.json": "lifecycle-traceability-1.0.schema.json",
+    "maturity-model-assessment.json": "maturity-model-assessment-1.0.schema.json",
     "pipdeptree-summary.json": "pipdeptree-artifact.schema.json",
     "pylint-summary.json": "pylint-artifact.schema.json",
     "radon-complexity.json": "radon-artifact.schema.json",
@@ -84,6 +88,8 @@ _ARTIFACT_SCHEMAS = {
     "scanner-trust.json": "scanner-trust-1.0.schema.json",
     "schemathesis-summary.json": "test-summary-artifact.schema.json",
     "portfolio-health.json": "portfolio-health-1.1.schema.json",
+    "prioritization-calibration.json": "prioritization-calibration-1.0.schema.json",
+    "process-capability-assessment.json": "process-capability-assessment-1.0.schema.json",
     "report-security.json": "report-security-1.0.schema.json",
     "resource-limits.json": "resource-limits-1.0.schema.json",
     "risk-paths.json": "risk-paths.schema.json",
@@ -92,6 +98,7 @@ _ARTIFACT_SCHEMAS = {
     "runtime-trace-correlation.json": "runtime-trace-correlation-1.0.schema.json",
     "semantic-language-coverage.json": "semantic-language-coverage-1.0.schema.json",
     "security-requirements-coverage.json": "security-requirements-coverage-1.0.schema.json",
+    "security-automation-interoperability.json": "security-automation-interoperability-1.0.schema.json",
     "source-inventory.json": "source-inventory.schema.json",
     "static-architecture.json": "static-architecture-1.4.schema.json",
     "standards-crosswalk.json": "standards-crosswalk-1.0.schema.json",
@@ -129,13 +136,109 @@ def _validate_standards_crosswalk_accounting(value: object) -> None:
         raise TypeError("standards crosswalk collections are invalid")
     catalog_ids = [item.get("id") for item in catalogs if isinstance(item, dict)]
     mapping_ids = [item.get("standard") for item in mappings if isinstance(item, dict)]
+    watchlist = value.get("watchlist")
+    if not isinstance(watchlist, list):
+        raise TypeError("standards watchlist is invalid")
+    watchlist_ids = [item.get("id") for item in watchlist if isinstance(item, dict)]
+    lifecycle = value.get("lifecycle_governance")
+    if not isinstance(lifecycle, dict):
+        raise TypeError("standards lifecycle governance is invalid")
+    lifecycle_records = lifecycle.get("records")
+    if not isinstance(lifecycle_records, list):
+        raise TypeError("standards lifecycle records are invalid")
+    lifecycle_ids = [
+        item.get("id") for item in lifecycle_records if isinstance(item, dict)
+    ]
+    lifecycle_complete = sum(
+        item.get("complete") is True
+        for item in lifecycle_records
+        if isinstance(item, dict)
+    )
+    input_gaps = lifecycle.get("input_gaps")
+    if not isinstance(input_gaps, list):
+        raise TypeError("standards lifecycle input gaps are invalid")
+    expected_lifecycle_complete = (
+        len(lifecycle_records) == len(catalogs)
+        and lifecycle_complete == len(lifecycle_records)
+        and not input_gaps
+    )
     if (
         value.get("catalogs_registered") != len(catalogs)
         or len(catalog_ids) != len(catalogs)
         or len(set(catalog_ids)) != len(catalog_ids)
         or mapping_ids != catalog_ids
+        or len(watchlist_ids) != len(watchlist)
+        or len(set(watchlist_ids)) != len(watchlist_ids)
+        or not set(watchlist_ids).isdisjoint(catalog_ids)
+        or lifecycle_ids != catalog_ids
+        or lifecycle.get("catalogs_assessed") != len(lifecycle_records)
+        or lifecycle.get("catalogs_complete") != lifecycle_complete
+        or lifecycle.get("complete") is not expected_lifecycle_complete
     ):
         raise ValueError("standards crosswalk accounting does not match")
+
+
+def _validate_extended_assessment(
+    value: object,
+    *,
+    collection: str,
+    required: str,
+    assessed: str,
+    completed: str,
+) -> None:
+    if not isinstance(value, dict):
+        raise TypeError("extended assurance artifact is invalid")
+    rows = value.get(collection)
+    required_ids = value.get(required)
+    if not isinstance(rows, list) or not isinstance(required_ids, list):
+        raise TypeError("extended assurance collections are invalid")
+    row_ids = [item.get("id") for item in rows if isinstance(item, dict)]
+    complete_count = sum(
+        item.get("complete") is True for item in rows if isinstance(item, dict)
+    )
+    expected_complete = len(rows) == len(required_ids) and complete_count == len(rows)
+    if (
+        len(row_ids) != len(rows)
+        or row_ids != required_ids
+        or len(set(row_ids)) != len(row_ids)
+        or value.get(assessed) != len(rows)
+        or value.get(completed) != complete_count
+        or value.get("complete") is not expected_complete
+    ):
+        raise ValueError("extended assurance accounting does not match")
+
+
+@_typed_validator("maturity-model-assessment.json")
+def _validate_maturity_model_assessment(value: object) -> None:
+    _validate_extended_assessment(
+        value,
+        collection="models",
+        required="required_models",
+        assessed="models_assessed",
+        completed="models_complete",
+    )
+
+
+@_typed_validator("security-automation-interoperability.json")
+def _validate_security_automation_interoperability(value: object) -> None:
+    _validate_extended_assessment(
+        value,
+        collection="protocols",
+        required="protocols_required",
+        assessed="protocols_assessed",
+        completed="protocols_complete",
+    )
+
+
+@_typed_validator("external-conformity-assessment.json")
+def _validate_external_conformity_assessment(value: object) -> None:
+    _validate_extended_assessment(
+        value,
+        collection="assessments",
+        required="schemes_required",
+        assessed="schemes_assessed",
+        completed="schemes_complete",
+    )
 
 
 @_typed_validator("control-assessment.json")
@@ -199,6 +302,7 @@ def _validate_benchmark_scorecard_accounting(value: object) -> None:
     expected_scope = [
         {
             "benchmark_id": item.get("benchmark_id"),
+            "benchmark_protocol": item.get("benchmark_protocol"),
             "corpus_sha256": item.get("corpus_sha256"),
         }
         for item in rows

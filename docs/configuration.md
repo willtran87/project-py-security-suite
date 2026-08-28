@@ -144,7 +144,7 @@ flowchart LR
     Health --> HealthArtifact["code-health.json 1.4<br/>ranked root-cause clusters + bounded symptoms"]
     Graph --> ArchitectureArtifact["static-architecture.json 1.4<br/>refactoring targets + semantic graph context + policy"]
     Domains --> DomainArtifact["domain-assurance.json 1.0<br/>applicability + evidence-bound obligations"]
-    Industry --> IndustryArtifacts["58-reference crosswalk + 9 assurance packs<br/>controls + procedures + 18-family scorecard + OSCAL"]
+    Industry --> IndustryArtifacts["292-reference crosswalk + semantic publisher monitor + lifecycle ledger + 80 assurance packs<br/>7 foundational assessments + controls + procedures<br/>99-family verified executable/protocol scorecard + OSCAL"]
     HealthPolicy -->|"invalid"| Incomplete["Analysis incomplete"]
     ArchitecturePolicy -->|"invalid"| Incomplete
     DomainPolicy -->|"invalid"| Incomplete
@@ -162,13 +162,21 @@ artifacts that publish `complete` must report `true`. See
 
 Use
 [`examples/industry-assurance-policy.example.json`](../examples/industry-assurance-policy.example.json)
-to select enterprise, privacy, PSIRT, supply-chain, AI, and conditional
-regulatory assurance packs; add repository-owned control objectives; and enable
-pinned benchmark families. Production and release scans fail closed when an
+to select enterprise, identity, cloud/zero-trust, cryptography/PQC, resilience,
+privacy, PSIRT, supply-chain, AI, EU, IoT/OT, automotive, medical, federal, and
+other conditional assurance packs; add repository-owned control objectives; and
+enable pinned benchmark families. Production and release scans fail closed when an
 enforced applicable control or procedure lacks complete named evidence, or an
 enabled benchmark lacks qualified replay-protected execution evidence or misses
 a threshold. See
 [Industry standards and benchmarks](industry-standards-benchmarks.md).
+
+An optional benchmark declaration `adapter_manifest` selects executable adapter
+mode. The path must remain relative and traversal-free. The generated task names
+`benchmark-run` but deliberately omits `--authorize-execution`; a human or
+separately authorized orchestration boundary must supply it. Publisher currency
+is monitored independently with `standards-monitor`, an allowlisted HTTPS source
+manifest, quarantine output, and optional Ed25519 report signing.
 
 ### LLM-guided adversarial planning
 

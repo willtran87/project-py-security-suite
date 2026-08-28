@@ -18,7 +18,7 @@ creates a GitHub-friendly report artifact.
 | Accuracy controls | Multi-axis finding validation with proof-bound reproduction, executed framework model canaries, OpenAPI/auth behavior drift, argv-safe authorized scenario handoffs, exact advisory-function calls, async/exception lifecycle defects, root-cause review clustering, semantic reachability context, ranked architecture refactoring targets that distinguish exact contracts from heuristics, native/Tach architecture enforcement, unified entry-point discovery, bounded Git temporal coupling, and generated profile execution truth |
 | Domain assurance | Conservative applicability plus source-, artifact-, and passing-test-bound requirements across 33 first-class and opt-in domains, adding privileged control planes, distributed correctness, secure human interaction, ML supply chains, secret lifecycles, observability integrity, developer environments, hostile content, trust and safety, confidential computing, regulated transactions, and physical security |
 | LLM adversarial guidance | Provider-neutral, digest-bound campaigns derived from findings, API abuse, domain gaps, architecture targets, and code-health root causes; proposals are confined to generated tests and require deterministic oracles, negative controls, mutation validation, human approval, and authenticated source-bound evidence |
-| Industry assurance | Versioned crosswalks for 58 verification, lifecycle, ISMS, privacy, PSIRT, supply-chain, regulatory, AI, quality, and architecture references; nine selectable evidence-backed assurance packs; source-retained CVSS v4 and SSVC prioritization; an official-schema-valid OSCAL 1.2.2 seven-model lifecycle package; 18 governed benchmark families with qualified execution contexts, confidence intervals, and regression deltas; CycloneDX 1.7/OpenVEX/CSAF/SCAP interoperability |
+| Industry assurance | Versioned crosswalks for 292 application, lifecycle, architecture, process, maturity, evaluator, identity, network/storage, cloud/API/service-mesh, cryptography/PQC, resilience/continuity/monitoring, ISMS, privacy/de-identification/deletion, PSIRT/forensics/patching, supply-chain/SBOM/transparency, regulatory, AI/agentic testing, accessibility, IoT/OT/energy, sector, testing, secure-coding, weakness, threat-modeling, and quality-evaluation references; quarantined publisher monitoring with format-aware semantic diffs, signed source snapshots, and human-promotion governance; 80 selectable evidence-backed assurance packs; seven governed foundational assessments; source-retained CVSS v4 and SSVC prioritization; OSCAL 1.2.2 lifecycle output; 99 governed benchmark families, including CFReDS/CFTT, ACT Rules, DroidBench, Ghera, SecBench.js, Chaos Mesh/Litmus, Sonobuoy, CIS/SCAP, C2SP Wycheproof, and TIBER-EU; cryptographically verified subject-bound adapter attestations, protocol-specific scoring, and native hardened OCI execution |
 | Risk routes | Bounded multi-entry exposure matrices from every retained declared interface to findings, sensitive sinks, and exact dependency-advisory importers. End-to-end sensitive-data route records join scanner-confirmed or inventory-only sink evidence to data classes, trust boundaries, protections, entry/runtime breadth, validation, scanner assurance, lifecycle, ownership, and applicable bounded citations. A separate secret-provenance ledger joins redacted credential candidates to source/graph/artifact membership, current-tree or history origin, verification, scanner trust, lifecycle, and owners. Exact-file and bounded Graphify-route intersections then highlight production secret candidates co-located with logging, telemetry, URL, or network sinks while explicitly remaining non-taint review evidence. Their validation handoff names candidate tests and joins retained execution, coverage, source binding, assurance, shared-test quality, findings, and ownership without claiming that a synthetic canary assertion already exists. When that same retained sensitive route also has an exact SDK-advisory intersection, a bounded compound ledger coordinates credential, boundary-protection, and dependency-remediation review without claiming disclosure or vulnerable-function execution. Routes also retain fail-closed source/artifact package lifecycle checks, comparable-baseline finding/change attribution, ordered CODEOWNERS handoffs, shared validation campaigns, shared-test quality, and explicit model gaps. Graph/source/artifact applicability fusion separates genuine Python route gaps from artifact, generated-evidence, test, and non-Python controls without dropping findings; exact structural-island joins then distinguish missing entry models, runtime conflicts, test-only scope, and dormant-capability retirement review without declaring code dead. |
 | Evidence fusion | Source-to-artifact package lineage, semantic finding links, changed-line/test/graph context, exact selected-test execution, full-chain RFC 3161 run context and signature timestamps, threshold/external DSSE signatures, signed atomic replay receipts, downgrade-resistant assurance profiles, composed SLSA/Sigstore/VSA/dependency verification, and feedback into owned exposure and SDK-package verification plans |
 | Structural synthesis | Cross-validated dead code, island boundaries, structural orphans, import-cycle hotspots, change-risk scoring, graph-guided test targets, exact execution status, and test/changed-line coverage alignment |
@@ -342,8 +342,27 @@ pysec benchmark REPORT --corpus CORPUS.json \
   --output effectiveness-evaluation.json
 ```
 
+For an upstream benchmark adapter, use the digest-pinned staged runtime. The
+authorization flag is intentionally mandatory and is never inserted by a
+generated registry task:
+
+```text
+pysec benchmark-run ADAPTER.json --workspace DISPOSABLE_WORKSPACE \
+  --authorize-execution --output benchmark-execution.json
+
+pysec standards-monitor STANDARDS-SOURCES.json \
+  --output standards-snapshots --authorize-network \
+  --signing-key STANDARDS-MONITOR-ED25519.pem
+pysec standards-monitor-verify standards-snapshots/standards-monitor-report.json \
+  --report-sha256 APPROVED_SHA256 --public-key STANDARDS-MONITOR-PUBLIC.pem
+```
+
+`standards-monitor` quarantines changed publisher payloads for semantic and
+licensed-text review; it never promotes a new normative edition automatically.
+
 The strict contracts are exported offline with `pysec schema effectiveness-1.1`,
-`effectiveness-corpus-1.0`, and `effectiveness-evaluation-1.0`. The corpus
+`effectiveness-corpus-1.0`, `effectiveness-evaluation-1.0`,
+`benchmark-adapter-manifest-1.0`, and `standards-source-manifest-1.0`. The corpus
 contract accepts legacy schema 1.0 for non-governed benchmarking and governed
 schema 2.0 for production/release; production/release reject unsigned legacy
 evaluations.

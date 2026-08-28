@@ -793,6 +793,39 @@ class CorrelationTests(unittest.TestCase):
 
         self.assertEqual(len(correlate_findings([first, second])), 1)
 
+    def test_correlation_preserves_reproduction_proof_and_ignores_bad_flows(
+        self,
+    ) -> None:
+        first = self._finding(
+            "semgrep",
+            "sql",
+            severity=Severity.HIGH,
+            confidence=Confidence.HIGH,
+            classification="CWE-89",
+        )
+        second = self._finding(
+            "codeql",
+            "sql",
+            severity=Severity.HIGH,
+            confidence=Confidence.HIGH,
+            classification="CWE-89",
+        )
+        first.evidence["reproduction_binding"] = {
+            "artifact": "authorized-reproduction.json",
+            "verified": True,
+        }
+        first.evidence["sarif_code_flows"] = [{}, {"steps": [{}]}]
+
+        merged = correlate_findings([first, second])[0]
+
+        self.assertEqual(
+            merged.evidence["reproduction_bindings"],
+            [{"artifact": "authorized-reproduction.json", "verified": True}],
+        )
+        self.assertEqual(
+            merged.evidence["cross_tool_corroboration"]["flow_signatures"], []
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

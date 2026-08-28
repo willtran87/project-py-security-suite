@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:benchmark-adapter-manifest:1.0",
+  "title": "Benchmark adapter execution manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "benchmark_id", "benchmark_version", "adapter_version", "protocol", "corpus", "stages", "normalized_result", "thresholds", "isolation", "attestations"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "benchmark_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"},
+    "benchmark_version": {"type": "string", "minLength": 1, "maxLength": 128},
+    "adapter_version": {"type": "string", "minLength": 1, "maxLength": 128},
+    "protocol": {"enum": ["classification", "temporal-calibration", "verification-competition", "test-generation", "fuzzing-statistical", "stochastic-adversarial", "assessor-agreement", "conformance", "detection-evaluation"]},
+    "corpus": {"type": "object", "additionalProperties": false, "required": ["path", "sha256", "license_sha256", "label_authority_sha256", "organization_approved"], "properties": {"path": {"type": "string", "minLength": 1}, "sha256": {"$ref": "#/$defs/sha256"}, "license_sha256": {"$ref": "#/$defs/sha256"}, "label_authority_sha256": {"$ref": "#/$defs/sha256"}, "organization_approved": {"const": true}}},
+    "stages": {"type": "array", "minItems": 1, "maxItems": 12, "contains": {"type": "object", "properties": {"name": {"const": "run"}}, "required": ["name"]}, "items": {"type": "object", "additionalProperties": false, "required": ["name", "executable", "executable_sha256", "arguments", "environment", "timeout_seconds", "expected_exit_codes"], "properties": {"name": {"enum": ["prepare", "build", "run", "normalize", "verify", "cleanup"]}, "executable": {"type": "string", "minLength": 1}, "executable_sha256": {"$ref": "#/$defs/sha256"}, "arguments": {"type": "array", "maxItems": 256, "items": {"type": "string", "maxLength": 8192}}, "environment": {"type": "object", "maxProperties": 64, "propertyNames": {"pattern": "^[A-Z][A-Z0-9_]{0,63}$"}, "additionalProperties": {"type": "string", "maxLength": 8192}}, "timeout_seconds": {"type": "integer", "minimum": 1, "maximum": 86400}, "expected_exit_codes": {"type": "array", "minItems": 1, "maxItems": 16, "uniqueItems": true, "items": {"type": "integer", "minimum": 0, "maximum": 255}}}},
+    "normalized_result": {"type": "object", "additionalProperties": false, "required": ["path", "sha256"], "properties": {"path": {"type": "string", "minLength": 1}, "sha256": {"anyOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]}}},
+    "thresholds": {"type": "object", "minProperties": 1, "maxProperties": 4, "propertyNames": {"pattern": "^(minimum|maximum)_[a-z][a-z0-9_]{0,63}$"}, "additionalProperties": {"type": "number", "minimum": 0}},
+    "isolation": {"type": "object", "additionalProperties": false, "required": ["mode", "network_policy", "disposable_target", "external_receipt_sha256", "oci"], "properties": {"mode": {"enum": ["process", "external-sandbox", "oci"]}, "network_policy": {"enum": ["deny", "authorized-target-only", "inherited"]}, "disposable_target": {"type": "boolean"}, "external_receipt_sha256": {"anyOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]}, "oci": {"anyOf": [{"type": "null"}, {"$ref": "#/$defs/oci"}]}}},
+    "attestations": {"type": "object", "additionalProperties": false, "required": ["trusted_time", "replay_protection", "contamination_manifest", "runner_sbom", "runner_provenance", "environment"], "properties": {"trusted_time": {"$ref": "#/$defs/attestation"}, "replay_protection": {"$ref": "#/$defs/attestation"}, "contamination_manifest": {"$ref": "#/$defs/attestation"}, "runner_sbom": {"$ref": "#/$defs/attestation"}, "runner_provenance": {"$ref": "#/$defs/attestation"}, "environment": {"$ref": "#/$defs/attestation"}}}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "attestation": {"type": "object", "additionalProperties": false, "required": ["path", "sha256", "media_type", "public_key_path", "public_key_sha256", "signature_path"], "properties": {"path": {"type": "string", "minLength": 1}, "sha256": {"$ref": "#/$defs/sha256"}, "media_type": {"const": "application/vnd.pysec.attestation+json;version=1.0"}, "public_key_path": {"type": "string", "minLength": 1}, "public_key_sha256": {"$ref": "#/$defs/sha256"}, "signature_path": {"type": "string", "minLength": 1}}},
+    "oci": {"type": "object", "additionalProperties": false, "required": ["runtime", "runtime_sha256", "image", "memory_bytes", "cpu_count", "pids_limit", "seccomp_profile", "apparmor_profile"], "properties": {"runtime": {"type": "string", "minLength": 1}, "runtime_sha256": {"$ref": "#/$defs/sha256"}, "image": {"type": "string", "pattern": "@sha256:[0-9a-f]{64}$"}, "memory_bytes": {"type": "integer", "minimum": 67108864}, "cpu_count": {"type": "number", "minimum": 0.1, "maximum": 256}, "pids_limit": {"type": "integer", "minimum": 16, "maximum": 65536}, "seccomp_profile": {"type": ["string", "null"]}, "apparmor_profile": {"type": ["string", "null"]}}}
+  }
+}

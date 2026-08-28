@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:lifecycle-traceability:1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "analysis", "complete", "source_sha256", "stages_assessed", "stages_complete", "stages", "requirements_traceability", "gaps", "claim_boundary"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "analysis": {"const": "software-and-system-life-cycle-traceability"},
+    "complete": {"type": "boolean"},
+    "source_sha256": {"type": "string", "pattern": "^([0-9a-f]{64})?$"},
+    "stages_assessed": {"const": 7},
+    "stages_complete": {"type": "integer", "minimum": 0, "maximum": 7},
+    "stages": {"type": "array", "minItems": 7, "maxItems": 7, "items": {"$ref": "#/$defs/stage"}},
+    "requirements_traceability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["applicable_requirements", "evidenced_requirements", "bidirectional_trace_complete"],
+      "properties": {
+        "applicable_requirements": {"type": "integer", "minimum": 0},
+        "evidenced_requirements": {"type": "integer", "minimum": 0},
+        "bidirectional_trace_complete": {"type": "boolean"}
+      }
+    },
+    "gaps": {"$ref": "#/$defs/strings"},
+    "claim_boundary": {"type": "string", "minLength": 1, "maxLength": 2000}
+  },
+  "$defs": {
+    "strings": {"type": "array", "maxItems": 100, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 1000}},
+    "stage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "evidence_required", "evidence_present", "complete", "gaps"],
+      "properties": {
+        "id": {"enum": ["requirements", "architecture", "implementation", "verification", "release", "operation", "retirement"]},
+        "evidence_required": {"$ref": "#/$defs/strings"},
+        "evidence_present": {"$ref": "#/$defs/strings"},
+        "complete": {"type": "boolean"},
+        "gaps": {"$ref": "#/$defs/strings"}
+      }
+    }
+  }
+}

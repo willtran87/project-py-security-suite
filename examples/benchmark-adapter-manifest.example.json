@@ -1,0 +1,47 @@
+{
+  "schema_version": "1.0",
+  "benchmark_id": "droidbench",
+  "benchmark_version": "organization-pinned-commit",
+  "adapter_version": "1.0.0",
+  "protocol": "classification",
+  "corpus": {
+    "path": "corpora/droidbench.tar.zst",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "license_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "label_authority_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "organization_approved": true
+  },
+  "stages": [
+    {
+      "name": "run",
+      "executable": "C:/absolute/path/to/digest-pinned-adapter.exe",
+      "executable_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "arguments": ["--corpus", "corpora/droidbench.tar.zst", "--output", "normalized-result.json"],
+      "environment": {},
+      "timeout_seconds": 3600,
+      "expected_exit_codes": [0]
+    }
+  ],
+  "normalized_result": {"path": "normalized-result.json", "sha256": null},
+  "thresholds": {
+    "minimum_precision": 0.8,
+    "minimum_recall": 0.8,
+    "minimum_f1": 0.8,
+    "maximum_false_positive_rate": 0.2
+  },
+  "isolation": {
+    "mode": "external-sandbox",
+    "network_policy": "deny",
+    "disposable_target": true,
+    "external_receipt_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "oci": null
+  },
+  "attestations": {
+    "trusted_time": {"path": "evidence/trusted-time.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "media_type": "application/vnd.pysec.attestation+json;version=1.0", "public_key_path": "evidence/authority.pub.pem", "public_key_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "signature_path": "evidence/trusted-time.sig"},
+    "replay_protection": {"path": "evidence/replay.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "media_type": "application/vnd.pysec.attestation+json;version=1.0", "public_key_path": "evidence/authority.pub.pem", "public_key_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "signature_path": "evidence/replay.sig"},
+    "contamination_manifest": {"path": "evidence/contamination.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "media_type": "application/vnd.pysec.attestation+json;version=1.0", "public_key_path": "evidence/authority.pub.pem", "public_key_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "signature_path": "evidence/contamination.sig"},
+    "runner_sbom": {"path": "evidence/runner-sbom.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "media_type": "application/vnd.pysec.attestation+json;version=1.0", "public_key_path": "evidence/authority.pub.pem", "public_key_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "signature_path": "evidence/runner-sbom.sig"},
+    "runner_provenance": {"path": "evidence/runner-provenance.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "media_type": "application/vnd.pysec.attestation+json;version=1.0", "public_key_path": "evidence/authority.pub.pem", "public_key_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "signature_path": "evidence/runner-provenance.sig"},
+    "environment": {"path": "evidence/environment.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "media_type": "application/vnd.pysec.attestation+json;version=1.0", "public_key_path": "evidence/authority.pub.pem", "public_key_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "signature_path": "evidence/environment.sig"}
+  }
+}

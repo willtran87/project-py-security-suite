@@ -16,10 +16,16 @@ from py_security_suite.artifact_validation import (
     validate_governed_artifacts,
 )
 from py_security_suite.industry_assurance import (
+    _ASSURANCE_PROFILES,
+    _BENCHMARKS,
+    _STANDARDS,
     _authorization_validated,
     _benchmark_gaps,
+    _benchmark_protocol,
     _benchmark_reproducibility_gaps,
     _benchmark_runner_contract,
+    _protocol_metrics_valid,
+    _process_capability_assessment,
     _procedure_assessment,
     _safe_relative,
     _standardized_prioritization,
@@ -68,10 +74,10 @@ class IndustryAssuranceTests(unittest.TestCase):
             )
         self.assertEqual(errors, [])
         self.assertEqual(
-            artifacts["standards-crosswalk.json"]["catalogs_registered"], 58
+            artifacts["standards-crosswalk.json"]["catalogs_registered"], 292
         )
         self.assertEqual(
-            artifacts["benchmark-registry.json"]["benchmarks_registered"], 18
+            artifacts["benchmark-registry.json"]["benchmarks_registered"], 99
         )
         supported = {
             item["format"]
@@ -89,10 +95,382 @@ class IndustryAssuranceTests(unittest.TestCase):
                 if name.startswith("oscal-")
             )
         )
-        self.assertEqual(len(validate_governed_artifacts(artifacts)), 16)
+        self.assertEqual(len(validate_governed_artifacts(artifacts)), 23)
         profiles = artifacts["assurance-profile-registry.json"]
-        self.assertEqual(profiles["profiles_available"], 9)
+        self.assertEqual(profiles["profiles_available"], 80)
         self.assertEqual(profiles["profiles_selected"], 0)
+        lifecycle = artifacts["standards-crosswalk.json"]["lifecycle_governance"]
+        self.assertEqual(lifecycle["catalogs_assessed"], 292)
+        self.assertEqual(lifecycle["catalogs_complete"], 0)
+        self.assertFalse(lifecycle["complete"])
+        self.assertTrue(lifecycle["signed_source_snapshot_required"])
+        self.assertTrue(lifecycle["promotion_requires_human_approval"])
+        self.assertTrue(
+            {
+                "NIST-SP-800-228",
+                "NIST-SP-800-204C",
+                "NIST-SP-800-233",
+                "IETF-RFC-9943",
+                "OWASP-AGENTIC-TOP-10",
+                "ISO-IEC-TS-42119-2",
+                "IETF-RFC-9116",
+                "OPENSSF-S2C2F",
+                "OPENTELEMETRY-SEMCONV",
+                "NCSC-CAF",
+                "ASD-ESSENTIAL-EIGHT",
+                "ISO-24089",
+                "IEC-62351",
+                "SEI-ATAM",
+                "CISA-SBOM-MINIMUM-ELEMENTS",
+                "NIST-SP-800-172",
+                "NIST-SP-800-172A",
+                "NIST-SP-800-53B",
+                "NISTIR-8397",
+                "NIST-SP-800-227",
+                "NIST-CSWP-39",
+                "NIST-SP-800-137A",
+                "ISO-IEC-27031",
+                "ISO-IEC-27037",
+                "W3C-WCAG",
+                "NIST-SP-800-18",
+                "NIST-SP-800-92",
+                "ISO-IEC-27014",
+                "ISO-IEC-27032",
+                "ISO-IEC-27033-1",
+                "ISO-IEC-27040",
+                "NIST-SP-800-188",
+                "ISO-IEC-27555",
+                "ISO-IEC-27559",
+                "W3C-ACT-RULES-FORMAT",
+                "NIST-SP-800-232",
+                "NIST-SP-800-231",
+                "ISO-IEC-27400",
+                "ISO-IEC-27402",
+                "ISO-IEC-27403",
+                "ISO-IEC-27404",
+                "TIBER-EU",
+                "ISO-IEC-27050-1",
+                "ISO-IEC-27050-3",
+            }
+            <= {item["id"] for item in _STANDARDS}
+        )
+        self.assertTrue(
+            {
+                "cloud-native-api-assurance",
+                "supply-chain-transparency-consumer",
+                "ai-agentic-testing",
+                "runtime-contract-interoperability",
+                "uk-cyber-resilience",
+                "australian-essential-eight",
+                "automotive-software-update",
+                "energy-product-security",
+                "modern-sbom-assurance",
+                "enhanced-cui-assurance",
+                "developer-verification-minimums",
+                "cryptographic-key-agility",
+                "continuous-security-monitoring",
+                "ict-continuity-readiness",
+                "digital-forensics-readiness",
+                "accessibility-quality",
+            }
+            <= set(_ASSURANCE_PROFILES)
+        )
+        self.assertTrue(
+            {
+                "scitt-transparency-conformance",
+                "cloud-native-api-service-mesh-conformance",
+                "api-contract-spec-conformance",
+                "opentelemetry-semantic-conformance",
+                "ai-agentic-testing-conformance",
+                "multicloud-kubernetes-attack-paths",
+                "cisa-sbom-minimum-elements-conformance",
+                "enhanced-cui-oscal-conformance",
+                "nist-developer-verification-conformance",
+                "crypto-lifecycle-agility-conformance",
+                "iscm-program-assessment",
+                "ict-continuity-recovery-exercise",
+                "digital-forensics-chain-of-custody",
+                "wcag-accessibility-conformance",
+                "nist-cfreds-cftt",
+                "w3c-act-rules-conformance",
+                "droidbench",
+                "ghera-android-security",
+                "secbench-js",
+                "cloud-native-chaos-resilience",
+                "kubernetes-sonobuoy-conformance",
+                "cis-cat-scap-platform-conformance",
+                "c2sp-wycheproof",
+                "tiber-eu-threat-led-red-team",
+            }
+            <= {item["id"] for item in _BENCHMARKS}
+        )
+
+    def test_extended_interoperability_requires_complete_protocol_evidence(
+        self,
+    ) -> None:
+        digest = "a" * 64
+        profiles = (
+            "security-data-interoperability",
+            "security-automation-interoperability",
+            "supply-chain-transparency-consumer",
+            "runtime-contract-interoperability",
+        )
+        protocol_versions = {
+            "OASIS-STIX": "2.1",
+            "OASIS-TAXII": "2.1",
+            "OASIS-CACAO": "2.0",
+            "OASIS-OPENC2": "1.0",
+            "OCSF": "policy-pinned",
+            "IETF-RFC-9943": "RFC-9943",
+            "IETF-RFC-9942": "RFC-9942",
+            "OPENAPI-SPECIFICATION": "3.1.1-policy-pinned",
+            "ASYNCAPI-SPECIFICATION": "3.0.0-policy-pinned",
+            "GRAPHQL-SPECIFICATION": "september-2025",
+            "JSON-SCHEMA": "2020-12",
+            "OPENTELEMETRY-SEMCONV": "1.44.0-policy-pinned",
+        }
+        protocols = [
+            {
+                "id": identifier,
+                "version": version,
+                "schema_sha256": digest,
+                "fixtures_sha256": digest,
+                "report_sha256": digest,
+                "positive_cases": 10,
+                "negative_cases": 10,
+                "round_trip_validated": True,
+                "semantic_equivalence_validated": True,
+                "replay_protected": True,
+                "authority": {"organization_approved": True},
+            }
+            for identifier, version in protocol_versions.items()
+        ]
+        policy = {
+            "schema_version": "1.2",
+            "enforce": False,
+            "profiles": [
+                {"id": identifier, "applicable": True, "procedure_execution": "planned"}
+                for identifier in profiles
+            ],
+            "controls": [],
+            "procedures": [],
+            "benchmarks": [],
+            "benchmark_baseline_path": None,
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "security").mkdir()
+            (root / "security" / "industry-assurance-policy.json").write_text(
+                json.dumps(policy), encoding="utf-8"
+            )
+            artifacts, errors = build_industry_assurance(
+                root, {"security-automation-evidence.json": {"protocols": protocols}}
+            )
+        self.assertEqual(errors, [])
+        conformance = artifacts["security-automation-interoperability.json"]
+        self.assertTrue(conformance["complete"])
+        self.assertEqual(conformance["protocols_complete"], 12)
+        interoperability = {
+            item["format"]: item
+            for item in artifacts["industry-assurance.json"]["interoperability"]
+        }
+        for format_name in (
+            "STIX",
+            "TAXII",
+            "CACAO",
+            "OpenC2",
+            "OCSF",
+            "SCITT",
+            "COSE-Receipts",
+            "OpenAPI",
+            "AsyncAPI",
+            "GraphQL",
+            "JSON-Schema",
+            "OpenTelemetry-SemConv",
+        ):
+            self.assertEqual(interoperability[format_name]["status"], "supported")
+        protocols[0]["semantic_equivalence_validated"] = False
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "security").mkdir()
+            (root / "security" / "industry-assurance-policy.json").write_text(
+                json.dumps(policy), encoding="utf-8"
+            )
+            incomplete, errors = build_industry_assurance(
+                root, {"security-automation-evidence.json": {"protocols": protocols}}
+            )
+        self.assertEqual(errors, [])
+        stix = next(
+            item
+            for item in incomplete["industry-assurance.json"]["interoperability"]
+            if item["format"] == "STIX"
+        )
+        self.assertEqual(stix["status"], "not-observed")
+
+    def test_standards_lifecycle_requires_signed_snapshots_and_human_approval(
+        self,
+    ) -> None:
+        digest = "a" * 64
+        records = [
+            {
+                "id": standard["id"],
+                "edition_status": standard.get("lifecycle", {}).get(
+                    "edition_status", "policy-pinned"
+                ),
+                "published": standard.get("lifecycle", {}).get(
+                    "published", "policy-pinned"
+                ),
+                "observed_at": "2026-08-28T12:00:00Z",
+                "source_sha256": digest,
+                "source_reference": standard["reference"],
+                "signature_sha256": digest,
+                "signature_validated": True,
+                "signer_identity": "publisher-signing-identity",
+                "publisher_identity_validated": True,
+                "change_report_sha256": digest,
+                "human_approved": True,
+                "approved_by": "standards-governance-board",
+                "approved_at": "2026-08-28T13:00:00Z",
+            }
+            for standard in _STANDARDS
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            artifacts, errors = build_industry_assurance(
+                Path(directory),
+                {"standards-lifecycle-evidence.json": {"records": records}},
+            )
+        self.assertEqual(errors, [])
+        lifecycle = artifacts["standards-crosswalk.json"]["lifecycle_governance"]
+        self.assertTrue(lifecycle["complete"])
+        self.assertEqual(lifecycle["catalogs_complete"], len(_STANDARDS))
+        validate_governed_artifacts(artifacts)
+        with tempfile.TemporaryDirectory() as directory:
+            duplicate, errors = build_industry_assurance(
+                Path(directory),
+                {
+                    "standards-lifecycle-evidence.json": {
+                        "records": [*records, dict(records[0])]
+                    }
+                },
+            )
+        self.assertEqual(errors, [])
+        duplicate_lifecycle = duplicate["standards-crosswalk.json"][
+            "lifecycle_governance"
+        ]
+        self.assertFalse(duplicate_lifecycle["complete"])
+        self.assertEqual(
+            duplicate_lifecycle["input_gaps"],
+            [f"duplicate lifecycle record: {records[0]['id']}"],
+        )
+
+    def test_foundational_assurance_is_governed_and_fails_closed(self) -> None:
+        calibration = {
+            "samples": 250,
+            "corpus_sha256": "1" * 64,
+            "outcomes_sha256": "2" * 64,
+            "snapshots": {"epss_sha256": "3" * 64, "kev_sha256": "4" * 64},
+            "point_in_time": True,
+            "future_data_excluded": True,
+            "replay_protected": True,
+            "authority": {"organization_approved": True},
+            "metrics": {
+                "brier_score": 0.08,
+                "expected_calibration_error": 0.05,
+                "recall_at_budget": 0.86,
+                "effort": 0.3,
+                "kev_time_to_prioritize_hours": 2.5,
+            },
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            artifacts, errors = build_industry_assurance(
+                Path(directory),
+                {
+                    "source-inventory.json": {
+                        "complete": True,
+                        "source_sha256": "a" * 64,
+                    },
+                    "prioritization-calibration-evidence.json": calibration,
+                },
+            )
+            invalid_artifacts, invalid_errors = build_industry_assurance(
+                Path(directory),
+                {
+                    "source-inventory.json": {"source_sha256": "a" * 64},
+                    "prioritization-calibration-evidence.json": {
+                        "samples": True,
+                        "snapshots": [],
+                        "metrics": {"kev_time_to_prioritize_hours": -1},
+                        "authority": {},
+                    },
+                },
+            )
+        self.assertEqual(errors, [])
+        self.assertEqual(invalid_errors, [])
+        industry = artifacts["industry-assurance.json"]
+        self.assertEqual(
+            set(industry["foundational_assurance"]),
+            {
+                "lifecycle-traceability.json",
+                "architecture-evaluation.json",
+                "process-capability-assessment.json",
+                "prioritization-calibration.json",
+                "maturity-model-assessment.json",
+                "security-automation-interoperability.json",
+                "external-conformity-assessment.json",
+            },
+        )
+        self.assertTrue(artifacts["prioritization-calibration.json"]["complete"])
+        self.assertFalse(artifacts["lifecycle-traceability.json"]["complete"])
+        self.assertFalse(artifacts["architecture-evaluation.json"]["complete"])
+        self.assertFalse(artifacts["process-capability-assessment.json"]["complete"])
+        self.assertIn(
+            "bidirectional requirements evidence is incomplete",
+            artifacts["lifecycle-traceability.json"]["gaps"],
+        )
+        invalid_calibration = invalid_artifacts["prioritization-calibration.json"]
+        self.assertFalse(invalid_calibration["complete"])
+        self.assertEqual(invalid_calibration["samples"], 0)
+        self.assertTrue(
+            {
+                "corpus_sha256 is missing or invalid",
+                "snapshot epss_sha256 is missing or invalid",
+                "point-in-time evaluation is not proven",
+                "future-data exclusion is not proven",
+                "replay protection is missing",
+                "organization-approved outcome authority is missing",
+                "fewer than 100 temporal observations were evaluated",
+                "metric brier_score is missing or invalid",
+                "metric kev_time_to_prioritize_hours is missing or invalid",
+            }
+            <= set(invalid_calibration["gaps"])
+        )
+        capability = _process_capability_assessment(
+            {
+                name: {"complete": True}
+                for name in (
+                    "security-requirements-coverage.json",
+                    "lifecycle-traceability.json",
+                    "code-health.json",
+                    "static-architecture.json",
+                    "test-evidence.json",
+                    "effectiveness.json",
+                    "release-readiness.json",
+                    "security-passport.json",
+                    "risk-intelligence.json",
+                    "closure-plan.json",
+                    "operational-trend.json",
+                    "procedure-assessment.json",
+                    "capability-manifest.json",
+                )
+            }
+        )
+        self.assertEqual(capability["dimensions"][0]["capability_level"], 2)
+        self.assertIn(
+            "independent audit-package verification is missing",
+            capability["dimensions"][0]["gaps"],
+        )
+        validate_governed_artifacts(artifacts)
+        validate_governed_artifacts(invalid_artifacts)
 
     def test_procedures_cvss_ssvc_and_full_oscal_lifecycle_are_governed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -278,10 +656,22 @@ class IndustryAssuranceTests(unittest.TestCase):
         governed = {
             "id": "agentic-security-holdout",
             "version": "organization-pinned",
+            "lane": "authorized-companion",
         }
         governed["runner_contract"] = _benchmark_runner_contract(governed)
         base_evidence = {
             "report": {"checksums_sha256": "a" * 64},
+            "protocol_metrics": {
+                "repetitions": 5,
+                "attack_success_rate": 0.1,
+                "utility_retention": 0.9,
+                "variance": 0.02,
+            },
+            "acceptance": {
+                "criteria_sha256": "9" * 64,
+                "met": True,
+                "authority": {"organization_approved": True},
+            },
             "confusion_matrix": {
                 "true_positive": 1,
                 "true_negative": 1,
@@ -307,9 +697,14 @@ class IndustryAssuranceTests(unittest.TestCase):
                     "toolset_sha256": "bad",
                     "oracle_sha256": "bad",
                     "isolation_receipt_sha256": "bad",
+                    "dataset_license_sha256": "bad",
+                    "label_authority_sha256": "bad",
+                    "contamination_manifest_sha256": "bad",
                     "isolation_validated": False,
                     "positive_controls": 0,
                     "negative_controls": False,
+                    "split_strategy": "random",
+                    "independent_reviewers": 1,
                     "repetitions": 1,
                 },
             },
@@ -325,8 +720,30 @@ class IndustryAssuranceTests(unittest.TestCase):
         self.assertIn(
             "benchmark execution isolation is not validated", unsafe_context_gaps
         )
+        self.assertIn(
+            "benchmark execution runner_oci_image_sha256 is missing or invalid",
+            unsafe_context_gaps,
+        )
+        self.assertIn(
+            "benchmark network isolation is not validated", unsafe_context_gaps
+        )
+        self.assertIn(
+            "benchmark target cleanup and destruction is not proven",
+            unsafe_context_gaps,
+        )
+        self.assertIn(
+            "benchmark runner provenance verification is not proven",
+            unsafe_context_gaps,
+        )
         self.assertIn("benchmark positive_controls are missing", unsafe_context_gaps)
         self.assertIn("benchmark negative_controls are missing", unsafe_context_gaps)
+        self.assertIn(
+            "benchmark split strategy is missing or invalid", unsafe_context_gaps
+        )
+        self.assertIn(
+            "benchmark requires at least two independent reviewers",
+            unsafe_context_gaps,
+        )
         execution_context = {
             "runner_identity": "approved-agentic-runner",
             "runner_version": "1.0",
@@ -335,9 +752,31 @@ class IndustryAssuranceTests(unittest.TestCase):
             "toolset_sha256": "d" * 64,
             "oracle_sha256": "e" * 64,
             "isolation_receipt_sha256": "f" * 64,
+            "runner_oci_image_sha256": "4" * 64,
+            "runner_sbom_sha256": "5" * 64,
+            "runner_provenance_sha256": "6" * 64,
+            "resource_limits_sha256": "7" * 64,
+            "network_policy_sha256": "8" * 64,
+            "egress_transcript_sha256": "9" * 64,
+            "cleanup_receipt_sha256": "a" * 64,
+            "dataset_license_sha256": "1" * 64,
+            "label_authority_sha256": "2" * 64,
+            "contamination_manifest_sha256": "3" * 64,
             "isolation_validated": True,
+            "network_isolation_validated": True,
+            "target_destroyed": True,
+            "runner_image_pinned": True,
+            "runner_sbom_matches_image": True,
+            "runner_provenance_verified": True,
+            "provenance_subject_matches_image": True,
+            "resource_limits_enforced": True,
+            "network_policy_enforced": True,
+            "egress_transcript_complete": True,
+            "cleanup_validated": True,
             "positive_controls": 10,
             "negative_controls": 10,
+            "split_strategy": "time-split",
+            "independent_reviewers": 2,
             "repetitions": 5,
         }
         self.assertEqual(
@@ -346,6 +785,208 @@ class IndustryAssuranceTests(unittest.TestCase):
             ),
             [],
         )
+        hardened_contract = governed["runner_contract"]["required_execution_evidence"]
+        self.assertTrue(
+            {
+                "runner-oci-image-digest",
+                "runner-sbom-digest",
+                "runner-provenance-digest",
+                "runner-image-sbom-provenance-subject-binding",
+                "resource-limit-receipt",
+                "resource-limit-enforcement",
+                "network-policy-digest",
+                "egress-transcript-digest",
+                "target-cleanup-destruction-receipt",
+            }
+            <= set(hardened_contract)
+        )
+        official = {
+            "id": "nist-acvp-cryptography",
+            "version": "policy-pinned",
+            "lane": "authorized-companion",
+        }
+        official["runner_contract"] = _benchmark_runner_contract(official)
+        self.assertIn(
+            "qualified benchmark execution context is missing",
+            _benchmark_reproducibility_gaps(base_evidence, official),
+        )
+        scale = {
+            "id": "scanner-scale-determinism",
+            "version": "organization-pinned",
+            "lane": "authorized-companion",
+        }
+        scale["runner_contract"] = _benchmark_runner_contract(scale)
+        scale_gaps = _benchmark_reproducibility_gaps(
+            {**base_evidence, "execution_context": execution_context}, scale
+        )
+        self.assertIn("benchmark wall_time_ms measurement is missing", scale_gaps)
+        self.assertIn("benchmark peak_memory_bytes measurement is missing", scale_gaps)
+        self.assertIn(
+            "benchmark requires at least three deterministic runs", scale_gaps
+        )
+        scale_context = {
+            **execution_context,
+            "wall_time_ms": 1,
+            "peak_memory_bytes": 1,
+            "deterministic_runs": 3,
+        }
+        self.assertEqual(
+            _benchmark_reproducibility_gaps(
+                {**base_evidence, "execution_context": scale_context}, scale
+            ),
+            [],
+        )
+        qualified = {
+            "id": "disa-stig-scap-conformance",
+            "version": "policy-pinned-quarterly-release",
+            "lane": "authorized-companion",
+        }
+        qualified["runner_contract"] = _benchmark_runner_contract(qualified)
+        self.assertEqual(
+            qualified["runner_contract"]["required_execution_evidence"][-4:],
+            [
+                "method-validation-digest",
+                "evaluator-competency-digest",
+                "impartiality-review-digest",
+                "measurement-traceability-digest",
+            ],
+        )
+        qualification_gaps = _benchmark_reproducibility_gaps(
+            {**base_evidence, "execution_context": execution_context}, qualified
+        )
+        self.assertEqual(
+            [gap for gap in qualification_gaps if "laboratory qualification" in gap],
+            [
+                "laboratory qualification method_validation_sha256 is missing or invalid",
+                "laboratory qualification evaluator_competency_sha256 is missing or invalid",
+                "laboratory qualification impartiality_review_sha256 is missing or invalid",
+                "laboratory qualification measurement_traceability_sha256 is missing or invalid",
+            ],
+        )
+        qualified_context = {
+            **execution_context,
+            "method_validation_sha256": "4" * 64,
+            "evaluator_competency_sha256": "5" * 64,
+            "impartiality_review_sha256": "6" * 64,
+            "measurement_traceability_sha256": "7" * 64,
+        }
+        conformance_evidence = {
+            **base_evidence,
+            "protocol_metrics": {
+                "passed_cases": 10,
+                "failed_cases": 0,
+                "negative_cases": 5,
+                "conformance_rate": 1.0,
+            },
+        }
+        self.assertEqual(
+            _benchmark_reproducibility_gaps(
+                {**conformance_evidence, "execution_context": qualified_context},
+                qualified,
+            ),
+            [],
+        )
+        self.assertEqual(
+            _benchmark_runner_contract(
+                {
+                    "id": "agentdojo",
+                    "version": "policy-pinned",
+                    "lane": "authorized-companion",
+                }
+            )["minimum_repetitions"],
+            5,
+        )
+        self.assertEqual(
+            _benchmark_runner_contract(
+                {
+                    "id": "oss-fuzz-clusterfuzzlite",
+                    "version": "policy-pinned",
+                    "lane": "authorized-companion",
+                }
+            )["minimum_repetitions"],
+            3,
+        )
+
+        temporal = {
+            "id": "epss-kev-temporal-backtest",
+            "version": "policy-pinned",
+            "lane": "authorized-companion",
+        }
+        temporal["runner_contract"] = _benchmark_runner_contract(temporal)
+        self.assertIn(
+            "point-in-time-snapshot-digests",
+            temporal["runner_contract"]["required_execution_evidence"],
+        )
+        temporal_context = {
+            **execution_context,
+            "epss_snapshot_sha256": "4" * 64,
+            "kev_snapshot_sha256": "5" * 64,
+            "outcome_authority_sha256": "6" * 64,
+            "point_in_time": True,
+            "future_data_excluded": True,
+            "brier_score": 0.1,
+            "expected_calibration_error": 0.05,
+            "recall_at_budget": 0.85,
+            "effort": 0.25,
+        }
+        self.assertEqual(
+            _benchmark_reproducibility_gaps(
+                {
+                    **base_evidence,
+                    "protocol_metrics": {
+                        "brier_score": 0.1,
+                        "expected_calibration_error": 0.05,
+                        "recall_at_budget": 0.85,
+                        "effort": 0.25,
+                        "observations": 100,
+                    },
+                    "execution_context": temporal_context,
+                },
+                temporal,
+            ),
+            [],
+        )
+
+        contract_expectations = {
+            "sv-comp": "competition-task-definition-digest",
+            "test-comp": "validated-witness-or-test-suite-digest",
+            "sigstore-client-conformance": "trust-root-digest",
+            "slsa-verifier-conformance": "negative-verification-cases",
+            "architecture-evaluation-scenarios": "inter-rater-agreement",
+            "process-capability-assessor-agreement": "blinded-assessor-labels",
+            "cwe-mapping-conformance": "cwe-release-digest",
+        }
+        for identifier, expected in contract_expectations.items():
+            with self.subTest(identifier=identifier):
+                contract = _benchmark_runner_contract(
+                    {
+                        "id": identifier,
+                        "version": "policy-pinned",
+                        "lane": "authorized-companion",
+                    }
+                )
+                self.assertIn(expected, contract["required_execution_evidence"])
+
+        gap_expectations = {
+            "epss-kev-temporal-backtest": "temporal benchmark point-in-time execution is not proven",
+            "sv-comp": "competition benchmark task_definition_sha256 is missing or invalid",
+            "sigstore-client-conformance": "signing conformance negative cases are missing",
+            "architecture-evaluation-scenarios": "independent assessor agreement is missing or below 0.8",
+            "cwe-mapping-conformance": "CWE mapping cwe_release_sha256 is missing or invalid",
+        }
+        for identifier, expected_gap in gap_expectations.items():
+            with self.subTest(identifier=identifier, expected_gap=expected_gap):
+                benchmark = {
+                    "id": identifier,
+                    "version": "policy-pinned",
+                    "lane": "authorized-companion",
+                }
+                benchmark["runner_contract"] = _benchmark_runner_contract(benchmark)
+                observed_gaps = _benchmark_reproducibility_gaps(
+                    {**base_evidence, "execution_context": execution_context},
+                    benchmark,
+                )
+                self.assertIn(expected_gap, observed_gaps)
 
     def test_policy_drives_controls_and_governed_benchmark_thresholds(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -430,6 +1071,14 @@ class IndustryAssuranceTests(unittest.TestCase):
         schema = json.loads(read_bundled_schema("industry-assurance-policy-1.2"))
         Draft202012Validator.check_schema(schema)
         Draft202012Validator(schema).validate(instance)
+        self.assertEqual(
+            {profile["id"] for profile in instance["profiles"]},
+            set(_ASSURANCE_PROFILES),
+        )
+        self.assertEqual(
+            {benchmark["id"] for benchmark in instance["benchmarks"]},
+            {benchmark["id"] for benchmark in _BENCHMARKS},
+        )
 
     def test_policy_profiles_expand_into_fail_closed_controls_and_procedures(
         self,
@@ -472,6 +1121,98 @@ class IndustryAssuranceTests(unittest.TestCase):
         self.assertEqual(procedures["status_counts"]["planned"], 1)
         self.assertEqual(procedures["status_counts"]["not-applicable"], 1)
         self.assertFalse(artifacts["industry-assurance.json"]["complete"])
+        validate_governed_artifacts(artifacts)
+
+    def test_new_industry_profiles_expand_with_explicit_applicability(self) -> None:
+        profile_ids = [
+            "identity-protocol-security",
+            "cloud-container-zero-trust",
+            "cryptography-pqc",
+            "operational-resilience",
+            "eu-digital-regulation",
+            "iot-consumer",
+            "ot-industrial",
+            "automotive",
+            "medical-device",
+            "federal-cloud-defense",
+            "systems-risk-measurement",
+            "security-data-interoperability",
+            "product-certification",
+            "detection-threat-intelligence",
+            "secure-coding",
+            "software-testing-vv",
+            "safety-security",
+            "specialized-target-validation",
+            "ai-robustness-impact",
+            "privacy-by-design",
+            "zero-trust-implementation",
+            "independent-evaluator-assurance",
+            "ot-system-operations",
+            "healthcare-security",
+            "airborne-software-assurance",
+            "federal-configuration-hardening",
+            "software-quality-evaluation",
+            "incident-management",
+            "privacy-impact-assessment",
+            "supply-chain-identity",
+            "threat-model-quality",
+            "software-lifecycle-traceability",
+            "architecture-evaluation-process",
+            "software-process-capability",
+            "comprehensive-weakness-mapping",
+            "exploit-prioritization-validation",
+            "ai-lifecycle-data-evaluation",
+            "supplier-relationship-assurance",
+            "software-signing-conformance",
+            "remote-attestation-assurance",
+            "ot-patch-management",
+            "continuing-airworthiness-security",
+            "maritime-cyber-resilience",
+            "financial-messaging-security",
+            "devsecops-maturity",
+            "test-maturity",
+            "ai-conformity-quality",
+            "security-automation-interoperability",
+            "cloud-independent-assurance",
+            "federal-vulnerability-disclosure",
+            "consumer-product-regulation",
+            "detection-product-evaluation",
+            "external-maturity-comparison",
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "security").mkdir()
+            policy = {
+                "schema_version": "1.2",
+                "enforce": True,
+                "profiles": [
+                    {
+                        "id": identifier,
+                        "applicable": False,
+                        "procedure_execution": "planned",
+                    }
+                    for identifier in profile_ids
+                ],
+                "controls": [],
+                "procedures": [],
+                "benchmarks": [],
+                "benchmark_baseline_path": None,
+            }
+            (root / "security" / "industry-assurance-policy.json").write_text(
+                json.dumps(policy), encoding="utf-8"
+            )
+            artifacts, errors = build_industry_assurance(root, {})
+        self.assertEqual(errors, [])
+        registry = artifacts["assurance-profile-registry.json"]
+        self.assertEqual(registry["profiles_selected"], len(profile_ids))
+        selected = {item["id"] for item in registry["profiles"] if item["selected"]}
+        self.assertEqual(selected, set(profile_ids))
+        controls = artifacts["control-assessment.json"]
+        self.assertTrue(controls["controls"])
+        self.assertEqual(
+            controls["status_counts"]["not-applicable"],
+            controls["controls_assessed"],
+        )
         validate_governed_artifacts(artifacts)
 
     def test_policy_validation_rejects_every_unsafe_shape(self) -> None:
@@ -685,6 +1426,201 @@ class IndustryAssuranceTests(unittest.TestCase):
             ],
         )
 
+    def test_benchmark_protocols_use_method_appropriate_metrics(self) -> None:
+        examples = {
+            "temporal-calibration": {
+                "brier_score": 0.1,
+                "expected_calibration_error": 0.1,
+                "recall_at_budget": 0.8,
+                "effort": 0.2,
+                "observations": 100,
+            },
+            "verification-competition": {
+                "correct": 8,
+                "incorrect": 0,
+                "unknown": 2,
+                "score": 8.0,
+            },
+            "test-generation": {
+                "coverage": 0.8,
+                "faults_detected": 3,
+                "valid_tests": 10,
+                "score": 7.0,
+            },
+            "fuzzing-statistical": {
+                "trials": 20,
+                "median_edges": 1000,
+                "effect_size": 0.4,
+                "p_value": 0.03,
+            },
+            "stochastic-adversarial": {
+                "repetitions": 5,
+                "attack_success_rate": 0.1,
+                "utility_retention": 0.9,
+                "variance": 0.02,
+            },
+            "assessor-agreement": {
+                "reviewers": 2,
+                "cases": 10,
+                "inter_rater_agreement": 0.85,
+            },
+            "conformance": {
+                "passed_cases": 9,
+                "failed_cases": 0,
+                "negative_cases": 3,
+                "conformance_rate": 1.0,
+            },
+            "detection-evaluation": {
+                "techniques": 10,
+                "detections": 8,
+                "analytic_coverage": 0.8,
+                "false_positive_rate": 0.05,
+                "latency_ms": 250,
+            },
+        }
+        identifiers = {
+            "epss-kev-temporal-backtest": "temporal-calibration",
+            "sv-comp": "verification-competition",
+            "test-comp": "test-generation",
+            "google-fuzzbench": "fuzzing-statistical",
+            "agentdojo": "stochastic-adversarial",
+            "ai-agentic-testing-conformance": "stochastic-adversarial",
+            "owasp-dsomm-maturity": "assessor-agreement",
+            "regional-cyber-maturity-assessment": "assessor-agreement",
+            "cacao-openc2-ocsf-interoperability": "conformance",
+            "scitt-transparency-conformance": "conformance",
+            "cloud-native-api-service-mesh-conformance": "conformance",
+            "api-contract-spec-conformance": "conformance",
+            "opentelemetry-semantic-conformance": "conformance",
+            "automotive-software-update-conformance": "conformance",
+            "energy-product-security-conformance": "conformance",
+            "mitre-attack-evaluations": "detection-evaluation",
+            "owasp-benchmark": "classification",
+        }
+        for identifier, protocol in identifiers.items():
+            with self.subTest(identifier=identifier):
+                self.assertEqual(_benchmark_protocol(identifier), protocol)
+                contract = _benchmark_runner_contract(
+                    {"id": identifier, "version": "pinned"}
+                )
+                self.assertEqual(contract["protocol"], protocol)
+                if protocol != "classification":
+                    self.assertTrue(
+                        _protocol_metrics_valid(protocol, examples[protocol])
+                    )
+                    self.assertFalse(_protocol_metrics_valid(protocol, {}))
+                    self.assertNotIn(
+                        "confusion-matrix", contract["required_execution_evidence"]
+                    )
+                    self.assertIn(
+                        "acceptance-criteria-digest",
+                        contract["required_execution_evidence"],
+                    )
+
+    def test_extended_assurance_requires_governed_external_evidence(self) -> None:
+        digest = "a" * 64
+
+        def assessment(identifier: str) -> dict[str, object]:
+            return {
+                "id": identifier,
+                "version": "pinned",
+                "scope_sha256": digest,
+                "evidence_sha256": digest,
+                "method_sha256": digest,
+                "report_sha256": digest,
+                "assessor": {
+                    "identity": "qualified assessor",
+                    "independent": True,
+                    "competency_sha256": digest,
+                },
+                "authority": {"organization_approved": True},
+                "replay_protected": True,
+            }
+
+        profiles = [
+            "devsecops-maturity",
+            "security-automation-interoperability",
+            "cloud-independent-assurance",
+        ]
+        policy = {
+            "schema_version": "1.2",
+            "enforce": False,
+            "profiles": [
+                {"id": identifier, "applicable": True, "procedure_execution": "planned"}
+                for identifier in profiles
+            ],
+            "controls": [],
+            "procedures": [],
+            "benchmarks": [],
+            "benchmark_baseline_path": None,
+        }
+        maturity = []
+        for identifier in ("OWASP-DSOVS", "OWASP-DSOMM"):
+            maturity.append(
+                {
+                    **assessment(identifier),
+                    "independent_reviewers": 2,
+                    "domains": ["governance", "verification"],
+                }
+            )
+        protocols = []
+        for identifier in ("OASIS-CACAO", "OASIS-OPENC2", "OCSF"):
+            protocols.append(
+                {
+                    "id": identifier,
+                    "version": "pinned",
+                    "schema_sha256": digest,
+                    "fixtures_sha256": digest,
+                    "report_sha256": digest,
+                    "positive_cases": 5,
+                    "negative_cases": 5,
+                    "round_trip_validated": True,
+                    "semantic_equivalence_validated": True,
+                    "replay_protected": True,
+                    "authority": {"organization_approved": True},
+                }
+            )
+        conformity = {
+            **assessment("CSA-STAR"),
+            "valid_at_assessment": "2026-08-27",
+            "applicability_basis": "Cloud services in the assessment scope.",
+            "assessor_credential": {
+                "issuer": "Accreditation authority",
+                "scheme": "ISO-IEC-17020",
+                "credential_id_sha256": digest,
+                "registry_snapshot_sha256": digest,
+                "registry_signature_sha256": digest,
+                "status": "active",
+                "valid_from": "2026-01-01T00:00:00Z",
+                "valid_until": "2027-01-01T00:00:00Z",
+                "checked_at": "2026-08-27T00:00:00Z",
+                "revocation_checked": True,
+                "signature_validated": True,
+            },
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "security").mkdir()
+            (root / "security" / "industry-assurance-policy.json").write_text(
+                json.dumps(policy), encoding="utf-8"
+            )
+            artifacts, errors = build_industry_assurance(
+                root,
+                {
+                    "maturity-model-evidence.json": {"models": maturity},
+                    "security-automation-evidence.json": {"protocols": protocols},
+                    "external-conformity-evidence.json": {"assessments": [conformity]},
+                },
+            )
+        self.assertEqual(errors, [])
+        for name in (
+            "maturity-model-assessment.json",
+            "security-automation-interoperability.json",
+            "external-conformity-assessment.json",
+        ):
+            self.assertTrue(artifacts[name]["complete"], name)
+        validate_governed_artifacts(artifacts)
+
     def test_semantic_validators_reject_tampered_accounting(self) -> None:
         with self.assertRaises(TypeError):
             _validate_standards_crosswalk_accounting(None)
@@ -692,7 +1628,20 @@ class IndustryAssuranceTests(unittest.TestCase):
             _validate_standards_crosswalk_accounting({"catalogs": None, "mappings": []})
         with self.assertRaises(ValueError):
             _validate_standards_crosswalk_accounting(
-                {"catalogs_registered": 2, "catalogs": [], "mappings": []}
+                {
+                    "catalogs_registered": 2,
+                    "catalogs": [],
+                    "mappings": [],
+                    "watchlist": [],
+                    "lifecycle_governance": {
+                        "records": [],
+                        "catalogs_assessed": 0,
+                        "catalogs_complete": 0,
+                        "input_records": 0,
+                        "input_gaps": [],
+                        "complete": True,
+                    },
+                }
             )
         with self.assertRaises(TypeError):
             _validate_control_assessment_accounting(None)

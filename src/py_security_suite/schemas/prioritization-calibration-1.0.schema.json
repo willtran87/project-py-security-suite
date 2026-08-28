@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:prioritization-calibration:1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "analysis", "complete", "samples", "point_in_time", "future_data_excluded", "replay_protected", "corpus_sha256", "outcomes_sha256", "snapshots", "metrics", "gaps", "claim_boundary"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "analysis": {"const": "point-in-time-vulnerability-prioritization-calibration"},
+    "complete": {"type": "boolean"},
+    "samples": {"type": "integer", "minimum": 0},
+    "point_in_time": {"type": "boolean"},
+    "future_data_excluded": {"type": "boolean"},
+    "replay_protected": {"type": "boolean"},
+    "corpus_sha256": {"type": "string", "pattern": "^([0-9a-f]{64})?$"},
+    "outcomes_sha256": {"type": "string", "pattern": "^([0-9a-f]{64})?$"},
+    "snapshots": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["epss_sha256", "kev_sha256"],
+      "properties": {
+        "epss_sha256": {"type": "string", "pattern": "^([0-9a-f]{64})?$"},
+        "kev_sha256": {"type": "string", "pattern": "^([0-9a-f]{64})?$"}
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["brier_score", "expected_calibration_error", "recall_at_budget", "effort", "kev_time_to_prioritize_hours"],
+      "properties": {
+        "brier_score": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "expected_calibration_error": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "recall_at_budget": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "effort": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "kev_time_to_prioritize_hours": {"type": ["number", "null"], "minimum": 0}
+      }
+    },
+    "gaps": {"type": "array", "maxItems": 100, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 1000}},
+    "claim_boundary": {"type": "string", "minLength": 1, "maxLength": 2000}
+  }
+}

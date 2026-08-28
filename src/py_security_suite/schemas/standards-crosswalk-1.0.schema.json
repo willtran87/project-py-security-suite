@@ -1,11 +1,89 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "urn:project-py-security-suite:schema:standards-crosswalk:1.0", "type": "object", "additionalProperties": false,
-  "required": ["schema_version", "analysis", "catalogs_registered", "catalogs", "mappings", "claim_boundary"],
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:standards-crosswalk:1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "analysis", "catalogs_registered", "catalogs", "mappings", "watchlist", "lifecycle_governance", "claim_boundary"],
   "properties": {
-    "schema_version": {"const": "1.0"}, "analysis": {"const": "versioned-industry-standards-crosswalk"}, "catalogs_registered": {"type": "integer", "minimum": 0},
+    "schema_version": {"const": "1.0"},
+    "analysis": {"const": "versioned-industry-standards-crosswalk"},
+    "catalogs_registered": {"type": "integer", "minimum": 0},
     "catalogs": {"type": "array", "items": {"$ref": "#/$defs/catalog"}},
-    "mappings": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["standard", "evidence_artifacts", "evidence_present", "mapping_status"], "properties": {"standard": {"type": "string"}, "evidence_artifacts": {"type": "array", "items": {"type": "string"}}, "evidence_present": {"type": "array", "items": {"type": "string"}}, "mapping_status": {"enum": ["evidence-surface-present", "not-observed"]}}}},
+    "mappings": {"type": "array", "items": {"$ref": "#/$defs/mapping"}},
+    "watchlist": {"type": "array", "items": {"$ref": "#/$defs/watch"}},
+    "lifecycle_governance": {"$ref": "#/$defs/governance"},
     "claim_boundary": {"type": "string", "minLength": 1}
   },
-  "$defs": {"catalog": {"type": "object", "additionalProperties": false, "required": ["id", "version", "kind", "reference"], "properties": {"id": {"type": "string"}, "version": {"type": "string"}, "kind": {"type": "string"}, "reference": {"type": "string", "format": "uri"}}}}
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^([0-9a-f]{64})?$"},
+    "stringArray": {"type": "array", "maxItems": 100, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "catalogLifecycle": {
+      "type": "object", "additionalProperties": false,
+      "required": ["edition_status", "published", "observed_at"],
+      "properties": {
+        "edition_status": {"enum": ["final", "historical", "final-under-review"]},
+        "published": {"type": "string", "minLength": 4, "maxLength": 10},
+        "observed_at": {"type": "string", "format": "date"},
+        "supersedes": {"$ref": "#/$defs/stringArray"},
+        "superseded_by": {"$ref": "#/$defs/stringArray"}
+      }
+    },
+    "catalog": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "version", "kind", "reference"],
+      "properties": {
+        "id": {"type": "string"}, "version": {"type": "string"}, "kind": {"type": "string"},
+        "reference": {"type": "string", "format": "uri"},
+        "lifecycle": {"$ref": "#/$defs/catalogLifecycle"}
+      }
+    },
+    "mapping": {
+      "type": "object", "additionalProperties": false,
+      "required": ["standard", "evidence_artifacts", "evidence_present", "mapping_status"],
+      "properties": {
+        "standard": {"type": "string"},
+        "evidence_artifacts": {"type": "array", "items": {"type": "string"}},
+        "evidence_present": {"type": "array", "items": {"type": "string"}},
+        "mapping_status": {"enum": ["evidence-surface-present", "not-observed"]}
+      }
+    },
+    "watch": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "status", "stage", "reference", "reason"],
+      "properties": {
+        "id": {"type": "string"}, "status": {"type": "string"}, "stage": {"type": "string"},
+        "reference": {"type": "string", "format": "uri"}, "reason": {"type": "string", "minLength": 1}
+      }
+    },
+    "lifecycleRecord": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "edition_status", "published", "catalog_observed_at", "evidence_observed_at", "source_sha256", "source_reference", "signature_sha256", "signature_validated", "signer_identity", "publisher_identity_validated", "change_report_sha256", "human_approved", "approved_by", "approved_at", "supersedes", "superseded_by", "complete", "gaps"],
+      "properties": {
+        "id": {"type": "string"}, "edition_status": {"type": "string"}, "published": {"type": "string"},
+        "catalog_observed_at": {"type": "string"}, "evidence_observed_at": {"type": "string"},
+        "source_sha256": {"$ref": "#/$defs/digest"}, "source_reference": {"type": "string"},
+        "signature_sha256": {"$ref": "#/$defs/digest"}, "signature_validated": {"type": "boolean"},
+        "signer_identity": {"type": "string"}, "publisher_identity_validated": {"type": "boolean"},
+        "change_report_sha256": {"$ref": "#/$defs/digest"}, "human_approved": {"type": "boolean"},
+        "approved_by": {"type": "string"}, "approved_at": {"type": "string"},
+        "supersedes": {"$ref": "#/$defs/stringArray"}, "superseded_by": {"$ref": "#/$defs/stringArray"},
+        "complete": {"type": "boolean"}, "gaps": {"type": "array", "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "governance": {
+      "type": "object", "additionalProperties": false,
+      "required": ["evidence_artifact", "catalogs_assessed", "catalogs_complete", "input_records", "input_gaps", "complete", "promotion_requires_human_approval", "signed_source_snapshot_required", "source_digest_required", "publisher_change_report_required", "records", "claim_boundary"],
+      "properties": {
+        "evidence_artifact": {"const": "standards-lifecycle-evidence.json"},
+        "catalogs_assessed": {"type": "integer", "minimum": 0}, "catalogs_complete": {"type": "integer", "minimum": 0},
+        "input_records": {"type": "integer", "minimum": 0},
+        "input_gaps": {"type": "array", "maxItems": 2000, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "complete": {"type": "boolean"}, "promotion_requires_human_approval": {"const": true},
+        "signed_source_snapshot_required": {"const": true}, "source_digest_required": {"const": true},
+        "publisher_change_report_required": {"const": true},
+        "records": {"type": "array", "maxItems": 1000, "items": {"$ref": "#/$defs/lifecycleRecord"}},
+        "claim_boundary": {"type": "string", "minLength": 1}
+      }
+    }
+  }
 }

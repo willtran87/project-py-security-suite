@@ -477,12 +477,22 @@ class PortfolioAdapterTests(unittest.TestCase):
             (root / ".clusterfuzzlite").mkdir()
             self.assertIsNone(fuzz.not_applicable_reason(root))
 
+            adversarial = LlmAdversarialAdapter(ToolConfig(), 4096)
+            self.assertIn(
+                "no LLM adversarial policy",
+                adversarial.not_applicable_reason(root) or "",
+            )
+            (root / "security").mkdir()
+            (root / "security" / "llm-adversarial-policy.json").write_text(
+                "{}", encoding="utf-8"
+            )
+            self.assertIsNone(adversarial.not_applicable_reason(root))
+
             self.assertIsNone(
                 AuthorizationSecurityAdapter(ToolConfig(), 4096).not_applicable_reason(
                     root
                 )
             )
-            (root / "security").mkdir()
             (root / "security" / "authorization-contract.json").write_text(
                 "{}", encoding="utf-8"
             )

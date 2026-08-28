@@ -38,6 +38,7 @@ from .evidence_pack import create_evidence_pack, verify_evidence_pack
 from .finding_register import build_finding_register
 from .github_annotations import build_github_annotations, render_github_commands
 from .effectiveness_corpus import evaluate_report_corpus
+from .benchmark_execution import execute_benchmark_manifest
 from .execution import sanitize_terminal_text
 from .native_bundle import (
     render_native_bundle_verification,
@@ -99,6 +100,10 @@ from .reproducibility import (
     compare_builds,
     normalize_sdist,
     render_reproducibility_markdown,
+)
+from .standards_monitor import (
+    monitor_standard_sources,
+    verify_standards_monitor_report,
 )
 
 
@@ -666,6 +671,44 @@ def build_parser() -> argparse.ArgumentParser:
     )
     benchmark.add_argument("--overwrite", action="store_true")
 
+    benchmark_run = subparsers.add_parser(
+        "benchmark-run",
+        help="execute a digest-pinned benchmark adapter and score normalized cases",
+    )
+    benchmark_run.add_argument("manifest", type=Path, metavar="ADAPTER_MANIFEST")
+    benchmark_run.add_argument("--workspace", type=Path, required=True)
+    benchmark_run.add_argument(
+        "--authorize-execution",
+        action="store_true",
+        help="confirm authorization to execute every manifest stage",
+    )
+    benchmark_run.add_argument("--output", type=Path, required=True, metavar="FILE")
+    benchmark_run.add_argument("--overwrite", action="store_true")
+
+    standards_monitor = subparsers.add_parser(
+        "standards-monitor",
+        help="quarantine publisher snapshots and report standards lifecycle changes",
+    )
+    standards_monitor.add_argument("manifest", type=Path, metavar="SOURCE_MANIFEST")
+    standards_monitor.add_argument(
+        "--output", type=Path, required=True, metavar="DIRECTORY"
+    )
+    standards_monitor.add_argument(
+        "--authorize-network",
+        action="store_true",
+        help="confirm authorization for restricted HTTPS publisher retrieval",
+    )
+    standards_monitor.add_argument("--signing-key", type=Path)
+    standards_monitor.add_argument("--overwrite", action="store_true")
+
+    standards_verify = subparsers.add_parser(
+        "standards-monitor-verify",
+        help="verify a signed standards publisher lifecycle report",
+    )
+    standards_verify.add_argument("report", type=Path)
+    standards_verify.add_argument("--report-sha256", required=True)
+    standards_verify.add_argument("--public-key", type=Path, required=True)
+
     release_check = subparsers.add_parser(
         "release-check",
         help="aggregate verified report, trust, isolation, effectiveness, and passport evidence",
@@ -1113,6 +1156,9 @@ def _dispatch_command(args: argparse.Namespace) -> int:
         "generate-hooks": _generate_hooks_command,
         "config-check": _config_check_command,
         "benchmark": _benchmark_command,
+        "benchmark-run": _benchmark_run_command,
+        "standards-monitor": _standards_monitor_command,
+        "standards-monitor-verify": _standards_monitor_verify_command,
         "release-check": _release_check_command,
         "evidence-draft": _evidence_draft_command,
         "promotion-plan": _promotion_plan_command,
@@ -1803,6 +1849,48 @@ def _benchmark_command(args: argparse.Namespace) -> int:
             f"FN {matrix['false_negative']}, TN {matrix['true_negative']}"
         )
     return 0 if result["verdict"] == "pass" else 1
+
+
+def _benchmark_run_command(args: argparse.Namespace) -> int:
+    from .industry_assurance import _BENCHMARKS
+
+    receipt = execute_benchmark_manifest(
+        args.manifest,
+        args.workspace,
+        authorized=args.authorize_execution,
+        known_benchmark_ids={item["id"] for item in _BENCHMARKS},
+    )
+    rendered = json.dumps(receipt, indent=2, sort_keys=True)
+    _write_atomic_output(
+        output=args.output,
+        content=rendered,
+        overwrite=args.overwrite,
+        label="benchmark execution receipt",
+    )
+    print(rendered)
+    return 0 if receipt["decision"] == "pass" else 2
+
+
+def _standards_monitor_command(args: argparse.Namespace) -> int:
+    report = monitor_standard_sources(
+        args.manifest,
+        args.output,
+        network_authorized=args.authorize_network,
+        overwrite=args.overwrite,
+        signing_key_path=args.signing_key,
+    )
+    print(json.dumps(report, indent=2, sort_keys=True))
+    return 0 if report["decision"] == "current" else 2
+
+
+def _standards_monitor_verify_command(args: argparse.Namespace) -> int:
+    receipt = verify_standards_monitor_report(
+        args.report,
+        args.public_key,
+        report_sha256=args.report_sha256,
+    )
+    print(json.dumps(receipt, indent=2, sort_keys=True))
+    return 0
 
 
 def _release_check_command(args: argparse.Namespace) -> int:

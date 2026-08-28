@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:standards-monitor-verification:1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "analysis", "report_path", "report_sha256", "key_id", "signature_valid", "internal_digest_valid", "decision"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "analysis": {"const": "standards-monitor-signature-verification"},
+    "report_path": {"type": "string"},
+    "report_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "key_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "signature_valid": {"const": true},
+    "internal_digest_valid": {"const": true},
+    "decision": {"const": "verified"}
+  }
+}
