@@ -144,7 +144,7 @@ flowchart LR
     Health --> HealthArtifact["code-health.json 1.4<br/>ranked root-cause clusters + bounded symptoms"]
     Graph --> ArchitectureArtifact["static-architecture.json 1.4<br/>refactoring targets + semantic graph context + policy"]
     Domains --> DomainArtifact["domain-assurance.json 1.0<br/>applicability + evidence-bound obligations"]
-    Industry --> IndustryArtifacts["292-reference crosswalk + semantic publisher monitor + lifecycle ledger + 80 assurance packs<br/>7 foundational assessments + controls + procedures<br/>99-family verified executable/protocol scorecard + OSCAL"]
+    Industry --> IndustryArtifacts["358-reference crosswalk + semantic publisher monitor + lifecycle ledger + 104 assurance packs<br/>8 foundational assessments + controls + procedures<br/>124-family / 35-adapter / 11-protocol verified executable scorecard + OSCAL"]
     HealthPolicy -->|"invalid"| Incomplete["Analysis incomplete"]
     ArchitecturePolicy -->|"invalid"| Incomplete
     DomainPolicy -->|"invalid"| Incomplete

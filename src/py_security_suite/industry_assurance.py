@@ -5,7 +5,7 @@ import uuid
 from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from .path_safety import read_regular_file
 from .prioritization import finding_priority
@@ -835,11 +835,39 @@ _STANDARDS += (
         "evidence": ["framework-coverage.json", "finding-validation.json"],
     },
     {
-        "id": "ISO-IEC-IEEE-29119",
-        "version": "policy-pinned-series",
-        "kind": "software-testing-processes",
-        "reference": "https://committee.iso.org/sites/jtc1sc7/home/projects/flagship-standards/isoiecieee-29119-series.html",
+        "id": "ISO-IEC-IEEE-29119-1",
+        "version": "2022",
+        "kind": "software-testing-concepts-and-vocabulary",
+        "reference": "https://www.iso.org/standard/81291.html",
         "evidence": ["test-evidence.json", "security-requirements-coverage.json"],
+    },
+    {
+        "id": "ISO-IEC-IEEE-29119-2",
+        "version": "2021",
+        "kind": "software-testing-processes",
+        "reference": "https://www.iso.org/standard/79428.html",
+        "evidence": ["test-evidence.json", "procedure-assessment.json"],
+    },
+    {
+        "id": "ISO-IEC-IEEE-29119-3",
+        "version": "2021",
+        "kind": "software-test-documentation",
+        "reference": "https://www.iso.org/standard/79429.html",
+        "evidence": ["test-evidence.json", "audit-package-verification.json"],
+    },
+    {
+        "id": "ISO-IEC-IEEE-29119-4",
+        "version": "2021",
+        "kind": "software-test-techniques",
+        "reference": "https://www.iso.org/standard/79430.html",
+        "evidence": ["test-evidence.json", "benchmark-scorecard.json"],
+    },
+    {
+        "id": "ISO-IEC-IEEE-29119-5",
+        "version": "2024",
+        "kind": "keyword-driven-testing",
+        "reference": "https://www.iso.org/standard/87233.html",
+        "evidence": ["test-evidence.json", "benchmark-scorecard.json"],
     },
     {
         "id": "ISO-IEC-20246",
@@ -2328,7 +2356,11 @@ _STANDARDS += (
         "kind": "ascon-lightweight-cryptography",
         "reference": "https://csrc.nist.gov/pubs/sp/800/232/final",
         "evidence": ["cryptographic-assurance.json", "benchmark-scorecard.json"],
-        "lifecycle": {"edition_status": "final", "published": "2025-08", "observed_at": "2026-08-28"},
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2025-08",
+            "observed_at": "2026-08-28",
+        },
     },
     {
         "id": "NIST-SP-800-231",
@@ -2336,7 +2368,11 @@ _STANDARDS += (
         "kind": "bugs-framework-software-weakness-analysis",
         "reference": "https://csrc.nist.gov/pubs/sp/800/231/final",
         "evidence": ["finding-validation.json", "benchmark-scorecard.json"],
-        "lifecycle": {"edition_status": "final", "published": "2025-11", "observed_at": "2026-08-28"},
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2025-11",
+            "observed_at": "2026-08-28",
+        },
     },
     {
         "id": "ISO-IEC-27400",
@@ -2344,7 +2380,11 @@ _STANDARDS += (
         "kind": "iot-security-and-privacy-guidelines",
         "reference": "https://www.iso.org/standard/44373.html",
         "evidence": ["control-proof.json", "domain-assurance.json"],
-        "lifecycle": {"edition_status": "final", "published": "2022-06", "observed_at": "2026-08-28"},
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2022-06",
+            "observed_at": "2026-08-28",
+        },
     },
     {
         "id": "ISO-IEC-27402",
@@ -2352,31 +2392,50 @@ _STANDARDS += (
         "kind": "iot-device-security-baseline",
         "reference": "https://www.iso.org/standard/80136.html",
         "evidence": ["control-proof.json", "benchmark-scorecard.json"],
-        "lifecycle": {"edition_status": "final", "published": "2023", "observed_at": "2026-08-28"},
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2023",
+            "observed_at": "2026-08-28",
+        },
     },
     {
         "id": "ISO-IEC-27403",
         "version": "2024",
-        "kind": "iot-security-evaluation-framework",
-        "reference": "https://www.iso.org/standard/80137.html",
-        "evidence": ["external-conformity-assessment.json", "benchmark-scorecard.json"],
-        "lifecycle": {"edition_status": "final", "published": "2024", "observed_at": "2026-08-28"},
+        "kind": "iot-domotics-security-and-privacy-guidelines",
+        "reference": "https://www.iso.org/standard/78702.html",
+        "evidence": ["control-assessment.json", "domain-assurance.json"],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2024-06",
+            "observed_at": "2026-08-28",
+        },
     },
     {
         "id": "ISO-IEC-27404",
         "version": "2025",
-        "kind": "iot-security-and-privacy-risk-management",
+        "kind": "consumer-iot-cybersecurity-labelling-framework",
         "reference": "https://www.iso.org/standard/80138.html",
-        "evidence": ["risk-path-analysis.json", "control-proof.json"],
-        "lifecycle": {"edition_status": "final", "published": "2025", "observed_at": "2026-08-28"},
+        "evidence": ["external-conformity-assessment.json", "benchmark-scorecard.json"],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2025-10",
+            "observed_at": "2026-08-28",
+        },
     },
     {
         "id": "TIBER-EU",
         "version": "2025",
         "kind": "threat-intelligence-based-ethical-red-teaming",
         "reference": "https://www.ecb.europa.eu/paym/cyber-resilience/tiber-eu/html/index.en.html",
-        "evidence": ["adversarial-campaign.json", "external-conformity-assessment.json"],
-        "lifecycle": {"edition_status": "final", "published": "2025", "observed_at": "2026-08-28"},
+        "evidence": [
+            "adversarial-campaign.json",
+            "external-conformity-assessment.json",
+        ],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2025",
+            "observed_at": "2026-08-28",
+        },
     },
     {
         "id": "ISO-IEC-27050-1",
@@ -2384,7 +2443,11 @@ _STANDARDS += (
         "kind": "electronic-discovery-concepts-and-principles",
         "reference": "https://www.iso.org/standard/78647.html",
         "evidence": ["digital-evidence-analysis.json", "chain-of-custody.json"],
-        "lifecycle": {"edition_status": "final", "published": "2019", "observed_at": "2026-08-28"},
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2019",
+            "observed_at": "2026-08-28",
+        },
     },
     {
         "id": "ISO-IEC-27050-3",
@@ -2392,7 +2455,786 @@ _STANDARDS += (
         "kind": "electronic-discovery-code-of-practice",
         "reference": "https://www.iso.org/standard/78648.html",
         "evidence": ["digital-evidence-analysis.json", "chain-of-custody.json"],
-        "lifecycle": {"edition_status": "final", "published": "2020", "observed_at": "2026-08-28"},
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2020",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "ISO-19011",
+        "version": "2026",
+        "kind": "management-system-audit-program-and-methodology",
+        "reference": "https://www.iso.org/standard/88984.html",
+        "evidence": ["control-assessment.json", "audit-package-verification.json"],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2026-05",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "ISO-IEC-27007",
+        "version": "2020",
+        "kind": "isms-audit-guidance",
+        "reference": "https://www.iso.org/standard/77802.html",
+        "evidence": ["control-assessment.json", "audit-package-verification.json"],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2020-01",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "ISO-IEC-TS-27008",
+        "version": "2019",
+        "kind": "information-security-control-assessment-guidance",
+        "reference": "https://www.iso.org/standard/67397.html",
+        "evidence": ["control-assessment.json", "procedure-assessment.json"],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2019-01",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "ISO-IEC-27006-1",
+        "version": "2024",
+        "kind": "isms-certification-body-requirements",
+        "reference": "https://www.iso.org/standard/82908.html",
+        "evidence": [
+            "external-conformity-assessment.json",
+            "audit-package-verification.json",
+        ],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2024-03",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "ISO-IEC-17021-1",
+        "version": "2015-confirmed-2021",
+        "kind": "management-system-certification-body-requirements",
+        "reference": "https://www.iso.org/standard/61651.html",
+        "evidence": [
+            "external-conformity-assessment.json",
+            "audit-package-verification.json",
+        ],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2015-06",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "ISO-IEC-17029",
+        "version": "2019-confirmed-2025",
+        "kind": "validation-and-verification-body-requirements",
+        "reference": "https://www.iso.org/standard/29352.html",
+        "evidence": [
+            "external-conformity-assessment.json",
+            "procedure-assessment.json",
+        ],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2019-10",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "ISO-IEC-19896-1",
+        "version": "2025",
+        "kind": "security-conformance-personnel-concepts-and-requirements",
+        "reference": "https://www.iso.org/standard/84987.html",
+        "evidence": ["external-conformity-assessment.json", "benchmark-scorecard.json"],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2025-11",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "ISO-IEC-19896-2",
+        "version": "2026",
+        "kind": "cryptographic-module-tester-and-validator-competence",
+        "reference": "https://www.iso.org/standard/84988.html",
+        "evidence": ["external-conformity-assessment.json", "benchmark-scorecard.json"],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2026-01",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "ISO-IEC-19896-3",
+        "version": "2025",
+        "kind": "common-criteria-evaluator-and-reviewer-competence",
+        "reference": "https://www.iso.org/standard/84989.html",
+        "evidence": ["external-conformity-assessment.json", "benchmark-scorecard.json"],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2025-11",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "ISO-IEC-27034-2",
+        "version": "2015-confirmed-2021",
+        "kind": "application-security-organization-normative-framework",
+        "reference": "https://www.iso.org/standard/55582.html",
+        "evidence": ["security-requirements-coverage.json", "control-assessment.json"],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2015-08",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "ISO-IEC-27034-3",
+        "version": "2018-confirmed-2023",
+        "kind": "application-security-management-process",
+        "reference": "https://www.iso.org/standard/55583.html",
+        "evidence": [
+            "security-requirements-coverage.json",
+            "application-contract-analysis.json",
+        ],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2018-05",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "ISO-IEC-27034-5",
+        "version": "2017-confirmed-2023",
+        "kind": "application-security-control-protocols-and-data-structure",
+        "reference": "https://www.iso.org/standard/55585.html",
+        "evidence": ["application-contract-analysis.json", "control-assessment.json"],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2017-10",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "ISO-IEC-TS-27034-5-1",
+        "version": "2018",
+        "kind": "application-security-control-xml-schemas",
+        "reference": "https://www.iso.org/standard/67741.html",
+        "evidence": ["application-contract-analysis.json", "benchmark-scorecard.json"],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2018-04",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "ISO-IEC-27034-6",
+        "version": "2016-confirmed-2022",
+        "kind": "application-security-case-studies",
+        "reference": "https://www.iso.org/standard/60804.html",
+        "evidence": [
+            "security-requirements-coverage.json",
+            "application-contract-analysis.json",
+        ],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2016-10",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "ISO-IEC-27034-7",
+        "version": "2018-confirmed-2023",
+        "kind": "application-security-assurance-prediction",
+        "reference": "https://www.iso.org/standard/66229.html",
+        "evidence": ["security-requirements-coverage.json", "benchmark-scorecard.json"],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2018-05",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "NIST-SP-800-204A",
+        "version": "2020-final",
+        "kind": "secure-service-mesh-architecture",
+        "reference": "https://csrc.nist.gov/pubs/sp/800/204/a/final",
+        "evidence": ["static-architecture.json", "runtime-surface-binding.json"],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2020-05",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "NIST-SP-800-192",
+        "version": "2017-final",
+        "kind": "access-control-policy-and-model-verification",
+        "reference": "https://csrc.nist.gov/pubs/sp/800/192/final",
+        "evidence": ["security-requirements-coverage.json", "benchmark-scorecard.json"],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2017-06",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "NIST-SP-800-193",
+        "version": "2018-final",
+        "kind": "platform-firmware-resiliency",
+        "reference": "https://csrc.nist.gov/pubs/sp/800/193/final",
+        "evidence": ["domain-assurance.json", "security-passport.json"],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2018-05",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "TCG-TPM-2.0",
+        "version": "library-v185-2026",
+        "kind": "trusted-platform-module-library",
+        "reference": "https://trustedcomputinggroup.org/resource/tpm-library-specification/",
+        "evidence": [
+            "domain-assurance.json",
+            "security-passport.json",
+            "benchmark-scorecard.json",
+        ],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2026-03",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "NIST-SP-800-226",
+        "version": "2025-final",
+        "kind": "differential-privacy-guarantee-evaluation",
+        "reference": "https://csrc.nist.gov/pubs/sp/800/226/final",
+        "evidence": ["data-exposure.json", "benchmark-scorecard.json"],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2025-03",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "ISO-IEC-25012",
+        "version": "2008-confirmed-2025",
+        "kind": "data-quality-model",
+        "reference": "https://www.iso.org/standard/35736.html",
+        "evidence": ["code-health.json", "effectiveness.json"],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2008-12",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "ISO-IEC-25020",
+        "version": "2019",
+        "kind": "quality-measurement-framework",
+        "reference": "https://www.iso.org/standard/72117.html",
+        "evidence": ["code-health.json", "benchmark-scorecard.json"],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2019-07",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "ISO-IEC-25024",
+        "version": "2015-confirmed-2021",
+        "kind": "data-quality-measurement",
+        "reference": "https://www.iso.org/standard/35749.html",
+        "evidence": [
+            "code-health.json",
+            "effectiveness.json",
+            "benchmark-scorecard.json",
+        ],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2015-12",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "ISO-IEC-25030",
+        "version": "2019",
+        "kind": "quality-requirements-framework",
+        "reference": "https://www.iso.org/standard/72116.html",
+        "evidence": ["security-requirements-coverage.json", "code-health.json"],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2019-07",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "ISO-27799",
+        "version": "2025",
+        "kind": "health-information-security-controls",
+        "reference": "https://www.iso.org/standard/84647.html",
+        "evidence": ["domain-assurance.json", "control-assessment.json"],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2025-12",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "ISO-IEC-27019",
+        "version": "2024",
+        "kind": "energy-utility-information-security-controls",
+        "reference": "https://www.iso.org/standard/85056.html",
+        "evidence": ["domain-assurance.json", "control-assessment.json"],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2024-10",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "ISO-IEC-27050-2",
+        "version": "2018",
+        "kind": "electronic-discovery-governance-and-management",
+        "reference": "https://www.iso.org/standard/66230.html",
+        "evidence": ["digital-evidence-analysis.json", "chain-of-custody.json"],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2018-11",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "ISO-IEC-27050-4",
+        "version": "2021",
+        "kind": "electronic-discovery-technical-readiness",
+        "reference": "https://www.iso.org/standard/74034.html",
+        "evidence": ["digital-evidence-analysis.json", "chain-of-custody.json"],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2021-04",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "ISO-IEC-25019",
+        "version": "2023",
+        "kind": "quality-in-use-model",
+        "reference": "https://www.iso.org/standard/78177.html",
+        "evidence": ["code-health.json", "effectiveness.json"],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2023-11",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "ISO-IEC-TS-25052-1",
+        "version": "2022-confirmed-2026",
+        "kind": "cloud-service-quality-model",
+        "reference": "https://www.iso.org/standard/81467.html",
+        "evidence": ["code-health.json", "domain-assurance.json"],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2022-11",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "ISO-IEC-TS-25052-2",
+        "version": "2024",
+        "kind": "cloud-service-quality-measurement",
+        "reference": "https://www.iso.org/standard/86722.html",
+        "evidence": ["effectiveness.json", "benchmark-scorecard.json"],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2024-10",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "ISO-31000",
+        "version": "2018-confirmed-2023",
+        "kind": "enterprise-risk-management-guidelines",
+        "reference": "https://www.iso.org/standard/65694.html",
+        "evidence": ["risk-paths.json", "control-assessment.json"],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2018-02",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "IEC-31010",
+        "version": "2019",
+        "kind": "risk-assessment-techniques",
+        "reference": "https://webstore.iec.ch/en/publication/59809",
+        "evidence": ["risk-paths.json", "procedure-assessment.json"],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2019-06",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "CISA-SECURE-BY-DESIGN",
+        "version": "2023-policy-current",
+        "kind": "voluntary-secure-by-design-principles",
+        "reference": "https://www.cisa.gov/securebydesign",
+        "evidence": ["control-proof.json", "security-requirements-coverage.json"],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2023-04",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "CISA-PRODUCT-SECURITY-BAD-PRACTICES",
+        "version": "2025-01",
+        "kind": "voluntary-product-security-negative-guidance",
+        "reference": "https://www.cisa.gov/news-events/alerts/2025/01/17/cisa-and-fbi-release-updated-guidance-product-security-bad-practices",
+        "evidence": ["finding-validation.json", "benchmark-scorecard.json"],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2025-01",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "TCG-DICE-ATTESTATION-ARCHITECTURE",
+        "version": "1.2-errata-2026-01",
+        "kind": "device-identity-and-attestation-architecture",
+        "reference": "https://trustedcomputinggroup.org/resource/dice-attestation-architecture/",
+        "evidence": ["security-passport.json", "benchmark-scorecard.json"],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2025-04",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "ISO-IEC-27011",
+        "version": "2024",
+        "kind": "telecommunications-information-security-controls",
+        "reference": "https://www.iso.org/standard/80584.html",
+        "evidence": ["domain-assurance.json", "control-assessment.json"],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2024",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "NIST-SP-800-181-R1",
+        "version": "2020-final",
+        "kind": "cybersecurity-workforce-framework",
+        "reference": "https://csrc.nist.gov/pubs/sp/800/181/r1/final",
+        "evidence": ["external-conformity-assessment.json", "control-assessment.json"],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2020-11",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "NIST-NICE-FRAMEWORK-COMPONENTS",
+        "version": "2.2.0-2025-04",
+        "kind": "cybersecurity-workforce-task-knowledge-skill-components",
+        "reference": "https://www.nist.gov/itl/applied-cybersecurity/nice/nice-framework-resource-center/nice-framework-current-versions",
+        "evidence": ["external-conformity-assessment.json", "benchmark-scorecard.json"],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2025-04",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "AMTSO-TESTING-PROTOCOL",
+        "version": "1.3-2019-11",
+        "kind": "antimalware-testing-protocol",
+        "reference": "https://www.amtso.org/standards/",
+        "evidence": ["test-evidence.json", "external-conformity-assessment.json"],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2019-11",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "CREST-PENETRATION-TESTING-GUIDE",
+        "version": "2022",
+        "kind": "penetration-testing-engagement-guidance",
+        "reference": "https://www.crest-approved.org/wp-content/uploads/2023/04/A-Guide-to-Penetration-Testing-2022.pdf",
+        "evidence": [
+            "adversarial-campaign.json",
+            "external-conformity-assessment.json",
+        ],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2022",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "PTES",
+        "version": "policy-pinned-current",
+        "kind": "penetration-testing-execution-methodology",
+        "reference": "https://www.pentest-standard.org/index.php/Main_Page",
+        "evidence": ["adversarial-campaign.json", "procedure-assessment.json"],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2014",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "DORA-SOFTWARE-DELIVERY-PERFORMANCE",
+        "version": "five-metrics-2026-policy-current",
+        "kind": "research-backed-software-delivery-outcome-benchmark",
+        "reference": "https://dora.dev/guides/dora-metrics/",
+        "evidence": ["operational-trend.json", "benchmark-scorecard.json"],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2026",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "IETF-RFC-8446",
+        "version": "2018",
+        "kind": "tls-1.3-protocol",
+        "reference": "https://www.rfc-editor.org/rfc/rfc8446",
+        "evidence": ["domain-assurance.json", "benchmark-scorecard.json"],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2018-08",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "IETF-RFC-8996",
+        "version": "2021",
+        "kind": "tls-1.3-operational-profile",
+        "reference": "https://www.rfc-editor.org/rfc/rfc8996",
+        "evidence": ["domain-assurance.json", "control-assessment.json"],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2021-03",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "REPRODUCIBLE-BUILDS-TEST-PROTOCOL",
+        "version": "policy-pinned-current",
+        "kind": "controlled-build-environment-variation-guidance",
+        "reference": "https://reproducible-builds.org/docs/plans/",
+        "evidence": ["release-readiness.json", "benchmark-scorecard.json"],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2026-08",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "ISO-IEC-IEEE-15026-2",
+        "version": "2022",
+        "kind": "systems-and-software-assurance-case-structure",
+        "reference": "https://www.iso.org/standard/80625.html",
+        "evidence": ["assurance-case-assessment.json", "benchmark-scorecard.json"],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2022-11",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "ISO-IEC-IEEE-15026-4",
+        "version": "2021",
+        "kind": "systems-and-software-lifecycle-assurance",
+        "reference": "https://www.iso.org/standard/74396.html",
+        "evidence": ["assurance-case-assessment.json", "lifecycle-traceability.json"],
+        "lifecycle": {
+            "edition_status": "final-under-review",
+            "published": "2021-10",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "OMG-SACM",
+        "version": "2.3",
+        "kind": "machine-readable-structured-assurance-case-metamodel",
+        "reference": "https://www.omg.org/spec/SACM/2.3",
+        "evidence": ["assurance-case-assessment.json"],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2023-10",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "IEEE-1012",
+        "version": "2024",
+        "kind": "integrity-level-system-software-and-hardware-verification-validation",
+        "reference": "https://standards.ieee.org/ieee/1012/12536/",
+        "evidence": ["lifecycle-traceability.json", "benchmark-scorecard.json"],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2024-12",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "ISO-IEC-19790",
+        "version": "2025",
+        "kind": "cryptographic-module-security-requirements",
+        "reference": "https://www.iso.org/standard/82423.html",
+        "evidence": ["external-conformity-assessment.json", "benchmark-scorecard.json"],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2025-02",
+            "observed_at": "2026-08-28",
+            "supersedes": ["ISO-IEC-19790-2012"],
+        },
+    },
+    {
+        "id": "ISO-IEC-24759",
+        "version": "2025",
+        "kind": "cryptographic-module-test-methods-and-vendor-evidence",
+        "reference": "https://www.iso.org/standard/82424.html",
+        "evidence": ["external-conformity-assessment.json", "benchmark-scorecard.json"],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2025-02",
+            "observed_at": "2026-08-28",
+            "supersedes": ["ISO-IEC-24759-2017"],
+        },
+    },
+    {
+        "id": "ISO-IEC-17825",
+        "version": "2024",
+        "kind": "non-invasive-cryptographic-attack-mitigation-testing",
+        "reference": "https://www.iso.org/standard/82422.html",
+        "evidence": ["external-conformity-assessment.json", "benchmark-scorecard.json"],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2024-12",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "ISO-IEC-20085-1",
+        "version": "2019",
+        "kind": "cryptographic-module-side-channel-test-tools",
+        "reference": "https://www.iso.org/standard/70081.html",
+        "evidence": ["external-conformity-assessment.json", "benchmark-scorecard.json"],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2019-09",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "ISO-IEC-20085-2",
+        "version": "2020",
+        "kind": "cryptographic-module-side-channel-test-calibration",
+        "reference": "https://www.iso.org/standard/70082.html",
+        "evidence": ["external-conformity-assessment.json", "benchmark-scorecard.json"],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2020-03",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "ISO-IEC-19795-1",
+        "version": "2021",
+        "kind": "biometric-performance-testing-principles-and-framework",
+        "reference": "https://www.iso.org/standard/73515.html",
+        "evidence": ["benchmark-scorecard.json", "external-conformity-assessment.json"],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2021-08",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "ISO-IEC-30107-3",
+        "version": "2023",
+        "kind": "biometric-presentation-attack-detection-testing-reporting",
+        "reference": "https://www.iso.org/standard/79520.html",
+        "evidence": ["benchmark-scorecard.json", "external-conformity-assessment.json"],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2023-11",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "ISO-IEC-30107-4",
+        "version": "2024",
+        "kind": "mobile-device-biometric-presentation-attack-detection-profile",
+        "reference": "https://www.iso.org/standard/82584.html",
+        "evidence": ["benchmark-scorecard.json", "external-conformity-assessment.json"],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2024-11",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "ISO-IEC-20000-1",
+        "version": "2018-amendment-1-2024",
+        "kind": "service-management-system-requirements",
+        "reference": "https://www.iso.org/standard/70636.html",
+        "evidence": ["operational-trend.json", "benchmark-scorecard.json"],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2018+A1:24",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "ISO-IEC-27013",
+        "version": "2021-amendment-1-2024",
+        "kind": "integrated-information-security-and-service-management-guidance",
+        "reference": "https://www.iso.org/standard/78752.html",
+        "evidence": ["control-assessment.json", "operational-trend.json"],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2021+A1:24",
+            "observed_at": "2026-08-28",
+        },
+    },
+    {
+        "id": "ISO-IEC-17043",
+        "version": "2023",
+        "kind": "proficiency-testing-provider-competence-and-impartiality",
+        "reference": "https://www.iso.org/standard/80864.html",
+        "evidence": ["external-conformity-assessment.json", "benchmark-scorecard.json"],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2023-05",
+            "observed_at": "2026-08-28",
+        },
+    },
+)
+
+_STANDARDS += (
+    {
+        "id": "NIST-CMVP",
+        "version": "fips-140-3-scheme-policy-pinned-current",
+        "kind": "cryptographic-module-validation-program-scheme",
+        "reference": "https://csrc.nist.gov/Projects/cryptographic-module-validation-program",
+        "evidence": ["external-conformity-assessment.json", "benchmark-scorecard.json"],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2026-07",
+            "observed_at": "2026-08-28",
+        },
     },
 )
 
@@ -2466,6 +3308,83 @@ _STANDARDS_WATCHLIST: tuple[dict[str, str], ...] = (
         "stage": "working-group-draft-policy-observed",
         "reference": "https://www.w3.org/WAI/test-evaluate/conformance/wcag-em/",
         "reason": "Use the final WCAG-EM 1.0 methodology until WCAG-EM 2.0 reaches W3C Recommendation status.",
+    },
+    {
+        "id": "ISO-IEC-27007-NEXT-EDITION",
+        "status": "under-development",
+        "stage": "draft-international-standard-policy-observed",
+        "reference": "https://www.iso.org/standard/77802.html",
+        "reason": "Retain ISO/IEC 27007:2020 until its replacement is published, source-pinned, and approved for promotion.",
+    },
+    {
+        "id": "ISO-IEC-TS-27008-NEXT-EDITION",
+        "status": "under-development",
+        "stage": "committee-draft-policy-observed",
+        "reference": "https://www.iso.org/standard/67397.html",
+        "reason": "Retain ISO/IEC TS 27008:2019 until its replacement completes publication and governed promotion.",
+    },
+    {
+        "id": "ISO-IEC-17021-1-NEXT-EDITION",
+        "status": "under-review",
+        "stage": "systematic-review-policy-observed",
+        "reference": "https://www.iso.org/standard/61651.html",
+        "reason": "Keep the confirmed 2015 edition as the baseline while the review and any replacement remain incomplete.",
+    },
+    {
+        "id": "ISO-IEC-27034-NEXT-SERIES",
+        "status": "under-review",
+        "stage": "preliminary-review-policy-observed",
+        "reference": "https://committee.iso.org/files/live/sites/jtc1sc27/files/resources/jtc1%20sc27%20SD11-%202025%20January.pdf",
+        "reason": "Pin the published application-security parts independently; do not infer a replacement series or deleted Part 4.",
+    },
+    {
+        "id": "ISO-IEC-27050-REVIEW",
+        "status": "under-review",
+        "stage": "systematic-review-policy-observed",
+        "reference": "https://www.iso.org/standard/66230.html",
+        "reason": "Retain published Parts 2 and 4 while their reviews are open and promote replacements only after final publication.",
+    },
+    {
+        "id": "ISO-31000-NEXT-EDITION",
+        "status": "under-development",
+        "stage": "committee-draft-policy-observed",
+        "reference": "https://www.iso.org/standard/88574.html",
+        "reason": "Retain ISO 31000:2018 as the approved risk-management baseline until the replacement is final, licensed, and governed through promotion.",
+    },
+    {
+        "id": "TCG-DICE-ATTESTATION-ARCHITECTURE-1.3",
+        "status": "public-review",
+        "stage": "release-candidate-policy-observed",
+        "reference": "https://trustedcomputinggroup.org/specifications-public-review/",
+        "reason": "Retain DICE Attestation Architecture 1.2 plus published errata until 1.3 leaves public review and is approved for promotion.",
+    },
+    {
+        "id": "OWASP-ISVS-1.0",
+        "status": "release-status-ambiguous",
+        "stage": "release-candidate-and-release-labels-conflict",
+        "reference": "https://owasp.org/IoT-Security-Verification-Standard-ISVS/",
+        "reason": "Do not claim ISVS conformance until OWASP exposes an unambiguous stable version and immutable release artifact; retain ISO 27400-series and ETSI baselines meanwhile.",
+    },
+    {
+        "id": "ISO-IEC-IEEE-29119-14",
+        "status": "under-development",
+        "stage": "draft-policy-observed",
+        "reference": "https://committee.iso.org/sites/jtc1sc7/home/projects/flagship-standards/isoiecieee-29119-series.html",
+        "reason": "Keep data-migration testing guidance outside normative claims until ISO publishes a final edition and its requirements are pinned.",
+    },
+    {
+        "id": "ISO-IEC-IEEE-15026-4-NEXT-EDITION",
+        "status": "under-development",
+        "stage": "draft-revision-policy-observed",
+        "reference": "https://www.iso.org/standard/88477.html",
+        "reason": "Retain ISO/IEC/IEEE 15026-4:2021 as the normative lifecycle-assurance baseline until its replacement is final and approved.",
+    },
+    {
+        "id": "IEEE-P1012",
+        "status": "under-development",
+        "stage": "active-revision-project-policy-observed",
+        "reference": "https://standards.ieee.org/ieee/1012/12536/",
+        "reason": "Retain IEEE 1012-2024 as the normative V&V baseline while the approved revision project remains incomplete.",
     },
 )
 
@@ -3292,6 +4211,209 @@ _BENCHMARKS += (
         "languages": ["financial", "operations", "detection", "multi"],
         "lane": "authorized-companion",
     },
+    {
+        "id": "nist-dioptra-ai-evaluation",
+        "version": "1.1.0-policy-pinned",
+        "kind": "reproducible-adversarial-ai-evaluation",
+        "source": "https://pages.nist.gov/dioptra/",
+        "languages": ["ai", "ml", "python", "multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "firmware-resilience-measured-boot",
+        "version": "nist-800-193-tpm2-policy-pinned",
+        "kind": "platform-firmware-protect-detect-recover-and-attestation",
+        "source": "NIST SP 800-193, TCG TPM 2.0, and an approved signed firmware corpus",
+        "languages": ["firmware", "tpm", "binary", "multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "access-control-policy-model-conformance",
+        "version": "nist-800-192-policy-pinned",
+        "kind": "access-control-policy-model-verification-and-mutation",
+        "source": "NIST SP 800-192 with approved policy models, decision oracles, and mutation operators",
+        "languages": ["policy", "authorization", "model", "multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "differential-privacy-implementation-evaluation",
+        "version": "nist-800-226-policy-pinned",
+        "kind": "differential-privacy-guarantee-hazard-and-utility-evaluation",
+        "source": "NIST SP 800-226 with approved neighboring datasets, mechanisms, privacy budgets, and utility oracles",
+        "languages": ["privacy", "statistics", "python", "r"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "security-evaluator-calibration",
+        "version": "iso-19896-policy-pinned",
+        "kind": "security-assessor-and-evaluator-competence-calibration",
+        "source": "ISO/IEC 19896 role-specific qualification criteria with blinded golden cases",
+        "languages": ["assessment", "cryptography", "common-criteria", "multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "square-quality-measurement",
+        "version": "iso-25012-25020-25024-25030-policy-pinned",
+        "kind": "software-and-data-quality-measurement-conformance",
+        "source": "ISO/IEC 25012, 25020, 25024, and 25030 with approved measures and reference datasets",
+        "languages": ["quality", "data", "measurement", "multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "iso-29119-test-process-conformance",
+        "version": "parts-2-4-2021-part-5-2024-policy-pinned",
+        "kind": "test-process-documentation-technique-and-keyword-conformance",
+        "source": "Licensed ISO/IEC/IEEE 29119 Parts 2 through 5 requirements with approved positive, negative, boundary, traceability, and omission cases",
+        "languages": ["testing", "process", "documentation", "multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "square-quality-in-use-cloud",
+        "version": "iso-25019-25052-policy-pinned",
+        "kind": "quality-in-use-and-cloud-service-measurement-conformance",
+        "source": "Licensed ISO/IEC 25019 and ISO/IEC TS 25052 quality models, measures, workloads, user contexts, and decision rules",
+        "languages": ["quality", "cloud", "measurement", "multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "risk-technique-calibration",
+        "version": "iso-31000-iec-31010-policy-pinned",
+        "kind": "risk-technique-selection-and-assessor-calibration",
+        "source": "Licensed ISO 31000 and IEC 31010 criteria with blinded risk scenarios, technique-selection oracles, uncertainty, and adjudication",
+        "languages": ["risk", "assessment", "governance", "multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "tls-protocol-conformance",
+        "version": "bogo-tlsfuzzer-organization-pinned",
+        "kind": "tls-state-machine-alert-interoperability-and-negative-conformance",
+        "source": "Immutable BoringSSL BoGo and tlsfuzzer revisions with supported-case manifest, shim identity, protocol matrix, and expected alerts",
+        "languages": ["tls", "cryptography", "protocol", "multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "reproducible-build-variation",
+        "version": "organization-pinned-environment-matrix",
+        "kind": "controlled-build-environment-variation-and-artifact-equivalence",
+        "source": "Reproducible Builds environment-variation plan with digest-pinned toolchains, source, build instructions, variation matrix, artifacts, and diff classification",
+        "languages": ["build", "supply-chain", "provenance", "multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "cisa-secure-by-design-negative-assurance",
+        "version": "cisa-2025-policy-pinned",
+        "kind": "secure-default-product-property-and-bad-practice-negative-testing",
+        "source": "CISA Secure by Design and Product Security Bad Practices mapped to approved product properties and misuse or insecure-default cases",
+        "languages": ["product", "security", "identity", "multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "amtso-malware-protection-evaluation",
+        "version": "amtso-1.3-policy-pinned",
+        "kind": "transparent-safe-antimalware-control-evaluation",
+        "source": "AMTSO Testing Protocol Standard with approved harmless EICAR checks, inert organization fixtures, clean negatives, test plan, vendor communication record, and restoration evidence",
+        "languages": ["malware", "endpoint", "email", "multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "dice-attestation-conformance",
+        "version": "tcg-dice-1.2-errata-policy-pinned",
+        "kind": "device-identity-layering-evidence-and-verifier-conformance",
+        "source": "TCG DICE Attestation Architecture 1.2 plus published errata with approved certificate, evidence, endorsement, freshness, mutation, and verifier-decision cases",
+        "languages": ["dice", "attestation", "firmware", "multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "telecom-security-controls-conformance",
+        "version": "iso-27011-2024-policy-pinned",
+        "kind": "telecommunications-control-applicability-and-evidence-conformance",
+        "source": "Licensed ISO/IEC 27011:2024 criteria with approved telecom scope, control, shared-responsibility, service, network, and evidence cases",
+        "languages": ["telecommunications", "network", "controls", "multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "nice-workforce-coverage",
+        "version": "nice-components-2.2.0",
+        "kind": "cybersecurity-workforce-task-knowledge-skill-coverage",
+        "source": "NICE Framework Components 2.2.0 with organization role mappings, evidence-backed task coverage, qualification scope, separation of duties, and gap or drift cases",
+        "languages": ["workforce", "competence", "governance", "multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "penetration-test-engagement-quality",
+        "version": "crest-2022-ptes-policy-pinned",
+        "kind": "penetration-test-scope-execution-evidence-remediation-and-retest-quality",
+        "source": "CREST and PTES engagement criteria with approved rules of engagement, authorization, methodology, evidence, safety, remediation, retest, and reporting cases",
+        "languages": ["penetration-testing", "adversarial", "governance", "multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "dora-delivery-outcomes",
+        "version": "five-metrics-2026-policy-pinned",
+        "kind": "software-delivery-throughput-instability-recovery-and-rework-outcomes",
+        "source": "DORA five-metric definitions with immutable deployment and incident records, service boundaries, time windows, exclusions, data-quality checks, and uncertainty",
+        "languages": ["delivery", "operations", "reliability", "multi"],
+        "lane": "authorized-companion",
+    },
+)
+
+_BENCHMARKS += (
+    {
+        "id": "structured-assurance-case-conformance",
+        "version": "iso-15026-2-sacm-2.3-policy-pinned",
+        "kind": "claim-argument-evidence-structure-semantics-and-mutation-conformance",
+        "source": "ISO/IEC/IEEE 15026-2:2022 and OMG SACM 2.3 with approved assurance-case fixtures, schemas, semantic rules, and mutation operators",
+        "languages": ["assurance-case", "sacm", "xml", "json", "multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "integrity-vv-conformance",
+        "version": "ieee-1012-2024-policy-pinned",
+        "kind": "integrity-level-verification-validation-independence-and-evidence-conformance",
+        "source": "IEEE 1012-2024 with approved system, software, hardware, interface, reuse, COTS, independence, and integrity-level cases",
+        "languages": ["systems", "software", "hardware", "verification", "multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "cmvp-fips-140-3-validation",
+        "version": "cmvp-current-scheme-policy-pinned",
+        "kind": "fips-140-3-cmvp-module-evidence-and-validation-status-conformance",
+        "source": "Current NIST CMVP management manual, implementation guidance, SP 800-140 series, certificate status, and scheme-referenced ISO editions",
+        "languages": ["cryptography", "module", "cmvp", "multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "iso-19790-24759-module-conformance",
+        "version": "iso-19790-2025-24759-2025-policy-pinned",
+        "kind": "international-cryptographic-module-requirement-and-test-method-conformance",
+        "source": "Licensed ISO/IEC 19790:2025 and ISO/IEC 24759:2025 requirements, vendor evidence, test methods, and approved positive, negative, fault, and boundary cases",
+        "languages": ["cryptography", "module", "laboratory", "multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "biometric-performance-pad",
+        "version": "iso-19795-1-30107-3-30107-4-policy-pinned",
+        "kind": "biometric-comparison-presentation-attack-and-demographic-performance-evaluation",
+        "source": "ISO/IEC 19795-1, ISO/IEC 30107-3, applicable ISO/IEC 30107-4 mobile profile, and approved sequestered bona-fide, impostor, and attack-instrument corpora",
+        "languages": ["biometrics", "identity", "statistics", "multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "service-management-security-integration",
+        "version": "iso-20000-1-2018-amd1-2024-27013-2021-amd1-2024",
+        "kind": "integrated-service-and-information-security-management-conformance",
+        "source": "Licensed ISO/IEC 20000-1 and ISO/IEC 27013 criteria with approved service, change, release, configuration, supplier, incident, capacity, continuity, and improvement cases",
+        "languages": ["service-management", "security", "operations", "multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "interlaboratory-proficiency-testing",
+        "version": "iso-17043-2023-policy-pinned",
+        "kind": "blinded-interlaboratory-proficiency-agreement-bias-and-drift-evaluation",
+        "source": "ISO/IEC 17043:2023 with approved blinded items, assigned values, participant scopes, statistical design, homogeneity and stability evidence, and adjudication rules",
+        "languages": ["laboratory", "proficiency", "assessment", "multi"],
+        "lane": "authorized-companion",
+    },
 )
 
 
@@ -3744,7 +4866,14 @@ _ASSURANCE_PROFILES.update(
             ],
         },
         "eu-digital-regulation": {
-            "standards": ["EU-GDPR", "EU-NIS2", "EU-DORA", "EU-AI-ACT", "EU-CRA", "TIBER-EU"],
+            "standards": [
+                "EU-GDPR",
+                "EU-NIS2",
+                "EU-DORA",
+                "EU-AI-ACT",
+                "EU-CRA",
+                "TIBER-EU",
+            ],
             "controls": [
                 (
                     "EU-GDPR",
@@ -3867,7 +4996,12 @@ _ASSURANCE_PROFILES.update(
             ],
         },
         "medical-device": {
-            "standards": ["IEC-62304", "IEC-81001-5-1", "FDA-MEDICAL-CYBERSECURITY"],
+            "standards": [
+                "IEC-62304",
+                "IEC-81001-5-1",
+                "FDA-MEDICAL-CYBERSECURITY",
+                "ISO-27799",
+            ],
             "controls": [
                 (
                     "IEC-62304",
@@ -4126,16 +5260,32 @@ _ASSURANCE_PROFILES.update(
         },
         "software-testing-vv": {
             "standards": [
-                "ISO-IEC-IEEE-29119",
+                "ISO-IEC-IEEE-29119-1",
+                "ISO-IEC-IEEE-29119-2",
+                "ISO-IEC-IEEE-29119-3",
+                "ISO-IEC-IEEE-29119-4",
+                "ISO-IEC-IEEE-29119-5",
                 "ISO-IEC-20246",
                 "NIST-SP-800-55-1",
             ],
             "controls": [
                 (
-                    "ISO-IEC-IEEE-29119",
+                    "ISO-IEC-IEEE-29119-2",
                     "TEST-PROCESS",
                     "Retain test basis, strategy, design, environment, data, execution, incidents, completion, and traceability evidence.",
                     ["test-evidence.json", "security-requirements-coverage.json"],
+                ),
+                (
+                    "ISO-IEC-IEEE-29119-3",
+                    "TEST-DOCUMENTATION",
+                    "Retain controlled test plans, designs, cases, procedures, data requirements, environment requirements, logs, incident reports, status, and completion reports with bidirectional traceability.",
+                    ["test-evidence.json", "audit-package-verification.json"],
+                ),
+                (
+                    "ISO-IEC-IEEE-29119-4",
+                    "TEST-TECHNIQUE-SELECTION",
+                    "Select specification-, structure-, and experience-based techniques from risk, coverage, independence, lifecycle, and oracle needs; record limitations and omitted techniques.",
+                    ["test-evidence.json", "procedure-assessment.json"],
                 ),
                 (
                     "ISO-IEC-20246",
@@ -4146,12 +5296,16 @@ _ASSURANCE_PROFILES.update(
             ],
             "procedures": [
                 (
-                    "ISO-IEC-IEEE-29119",
-                    "REAL-DEFECT-VALIDATION",
-                    "Execute reproducible real-defect, repair, mutation, and negative-control tasks with environment and oracle pinning.",
+                    "ISO-IEC-IEEE-29119-4",
+                    "TEST-PROCESS-CONFORMANCE",
+                    "Execute risk-derived positive, negative, boundary, state-transition, decision, combinatorial, experience-based, traceability-break, and omitted-document cases with environment and oracle pinning.",
                     "test",
                     True,
-                    ["benchmark-scorecard.json", "benchmark-delta.json"],
+                    [
+                        "test-evidence.json",
+                        "benchmark-scorecard.json",
+                        "benchmark-delta.json",
+                    ],
                 ),
             ],
         },
@@ -4414,7 +5568,12 @@ _ASSURANCE_PROFILES.update(
             ],
         },
         "healthcare-security": {
-            "standards": ["HIPAA-SECURITY-RULE", "NIST-SP-800-66", "HITRUST-CSF"],
+            "standards": [
+                "HIPAA-SECURITY-RULE",
+                "NIST-SP-800-66",
+                "HITRUST-CSF",
+                "ISO-27799",
+            ],
             "controls": [
                 (
                     "HIPAA-SECURITY-RULE",
@@ -5362,6 +6521,7 @@ _ASSURANCE_PROFILES.update(
             "standards": [
                 "NIST-SP-800-228",
                 "NIST-SP-800-204",
+                "NIST-SP-800-204A",
                 "NIST-SP-800-204B",
                 "NIST-SP-800-204C",
                 "NIST-SP-800-233",
@@ -5642,7 +6802,13 @@ _ASSURANCE_PROFILES.update(
             ],
         },
         "energy-product-security": {
-            "standards": ["IEC-62351", "UL-2900", "NERC-CIP", "NISTIR-7628"],
+            "standards": [
+                "IEC-62351",
+                "UL-2900",
+                "NERC-CIP",
+                "NISTIR-7628",
+                "ISO-IEC-27019",
+            ],
             "controls": [
                 (
                     "IEC-62351",
@@ -5878,7 +7044,9 @@ _ASSURANCE_PROFILES.update(
                 "ISO-IEC-27042",
                 "ISO-IEC-27043",
                 "ISO-IEC-27050-1",
+                "ISO-IEC-27050-2",
                 "ISO-IEC-27050-3",
+                "ISO-IEC-27050-4",
                 "NIST-SP-800-86",
             ],
             "controls": [
@@ -5935,6 +7103,675 @@ _ASSURANCE_PROFILES.update(
                         "external-conformity-assessment.json",
                         "benchmark-scorecard.json",
                     ],
+                )
+            ],
+        },
+    }
+)
+
+_ASSURANCE_PROFILES.update(
+    {
+        "audit-assessment-integrity": {
+            "standards": [
+                "ISO-19011",
+                "ISO-IEC-27007",
+                "ISO-IEC-TS-27008",
+                "ISO-IEC-27006-1",
+                "ISO-IEC-17021-1",
+                "ISO-IEC-17029",
+            ],
+            "controls": [
+                (
+                    "ISO-19011",
+                    "AUDIT-PROGRAM-INTEGRITY",
+                    "Govern audit objectives, scope, criteria, risk, methods, sampling, competence, independence, evidence, findings, reporting, follow-up, and program improvement.",
+                    ["control-assessment.json", "audit-package-verification.json"],
+                ),
+                (
+                    "ISO-IEC-TS-27008",
+                    "CONTROL-ASSESSMENT-TRACEABILITY",
+                    "Trace every assessed control to authoritative criteria, scoped objects, methods, samples, observations, uncertainty, findings, and retained evidence.",
+                    ["control-assessment.json", "procedure-assessment.json"],
+                ),
+            ],
+            "procedures": [
+                (
+                    "ISO-IEC-27007",
+                    "BLINDED-AUDIT-REPERFORMANCE",
+                    "Reperform a stratified evidence sample with an independent qualified team, compare findings and severity, adjudicate disagreement, and retain conflict-of-interest and supervision records.",
+                    "manual",
+                    False,
+                    [
+                        "external-conformity-assessment.json",
+                        "audit-package-verification.json",
+                        "benchmark-scorecard.json",
+                    ],
+                )
+            ],
+        },
+        "security-evaluator-competence": {
+            "standards": [
+                "ISO-IEC-19896-1",
+                "ISO-IEC-19896-2",
+                "ISO-IEC-19896-3",
+                "ISO-IEC-17025",
+                "ISO-IEC-17065",
+            ],
+            "controls": [
+                (
+                    "ISO-IEC-19896-1",
+                    "ROLE-COMPETENCE-AND-IMPARTIALITY",
+                    "Bind evaluator roles to education, experience, technical knowledge, supervised performance, authorization, continuing competence, impartiality, and current scope.",
+                    [
+                        "external-conformity-assessment.json",
+                        "audit-package-verification.json",
+                    ],
+                ),
+                (
+                    "ISO-IEC-19896-2",
+                    "CRYPTO-EVALUATOR-QUALIFICATION",
+                    "Verify role-specific competence for cryptographic module testing and validation without generalizing qualification beyond the approved scheme and technology scope.",
+                    ["external-conformity-assessment.json", "benchmark-scorecard.json"],
+                ),
+            ],
+            "procedures": [
+                (
+                    "ISO-IEC-19896-3",
+                    "BLINDED-EVALUATOR-CALIBRATION",
+                    "Run blinded positive, negative, ambiguous, and boundary cases against protected golden decisions; measure inter-rater agreement, bias, drift, adjudication, and retraining outcomes.",
+                    "manual",
+                    False,
+                    ["external-conformity-assessment.json", "benchmark-scorecard.json"],
+                )
+            ],
+        },
+        "application-security-governance": {
+            "standards": [
+                "ISO-IEC-27034-1",
+                "ISO-IEC-27034-2",
+                "ISO-IEC-27034-3",
+                "ISO-IEC-27034-5",
+                "ISO-IEC-TS-27034-5-1",
+                "ISO-IEC-27034-6",
+                "ISO-IEC-27034-7",
+                "OWASP-ASVS",
+            ],
+            "controls": [
+                (
+                    "ISO-IEC-27034-2",
+                    "ORGANIZATION-NORMATIVE-FRAMEWORK",
+                    "Maintain an approved organization normative framework that tailors application-security controls to business, technology, threat, legal, and assurance contexts with accountable exceptions.",
+                    ["security-requirements-coverage.json", "control-assessment.json"],
+                ),
+                (
+                    "ISO-IEC-27034-5",
+                    "ASC-DATA-AND-PROTOCOL-INTEGRITY",
+                    "Preserve application-security-control identity, attributes, lifecycle roles, evidence links, version semantics, and lossless exchange across supported representations.",
+                    ["application-contract-analysis.json", "control-assessment.json"],
+                ),
+            ],
+            "procedures": [
+                (
+                    "ISO-IEC-27034-7",
+                    "ASSURANCE-PREDICTION-VALIDATION",
+                    "Backtest predicted application assurance against independently observed verification outcomes, disclose uncertainty and unsupported contexts, and prevent prediction from replacing direct evidence.",
+                    "test",
+                    False,
+                    [
+                        "effectiveness.json",
+                        "benchmark-scorecard.json",
+                        "security-requirements-coverage.json",
+                    ],
+                )
+            ],
+        },
+        "firmware-hardware-trust": {
+            "standards": ["NIST-SP-800-193", "TCG-TPM-2.0", "FIPS-140-3"],
+            "controls": [
+                (
+                    "NIST-SP-800-193",
+                    "PLATFORM-PROTECT-DETECT-RECOVER",
+                    "Trace authenticated updates, write protection, rollback prevention, integrity measurement, corruption detection, recovery roots, known-good images, recovery policy, and failure reporting.",
+                    ["domain-assurance.json", "security-passport.json"],
+                ),
+                (
+                    "TCG-TPM-2.0",
+                    "MEASURED-BOOT-ATTESTATION",
+                    "Bind PCR policy, event-log replay, endorsement and attestation identities, nonce freshness, quote verification, algorithm policy, key protection, reset semantics, and verifier decisions.",
+                    ["domain-assurance.json", "benchmark-scorecard.json"],
+                ),
+            ],
+            "procedures": [
+                (
+                    "NIST-SP-800-193",
+                    "FIRMWARE-RESILIENCE-FAULT-INJECTION",
+                    "In an authorized recoverable laboratory, challenge valid, malformed, unsigned, replayed, downgraded, interrupted, corrupted, and rollback firmware paths and independently replay measured-boot evidence.",
+                    "dynamic",
+                    True,
+                    [
+                        "benchmark-scorecard.json",
+                        "procedure-assessment.json",
+                        "security-passport.json",
+                    ],
+                )
+            ],
+        },
+        "differential-privacy-engineering": {
+            "standards": ["NIST-SP-800-226", "ISO-IEC-29100", "ISO-IEC-27701"],
+            "controls": [
+                (
+                    "NIST-SP-800-226",
+                    "DP-GUARANTEE-AND-HAZARD-MODEL",
+                    "Specify neighboring datasets, threat model, mechanism, privacy definition, epsilon and delta, composition, accounting, implementation hazards, utility objectives, and claim limits.",
+                    ["data-exposure.json", "security-requirements-coverage.json"],
+                )
+            ],
+            "procedures": [
+                (
+                    "NIST-SP-800-226",
+                    "DP-IMPLEMENTATION-REPRODUCTION",
+                    "Reproduce privacy accounting and utility results over approved neighboring datasets, seeds, repetitions, boundary budgets, composition, floating-point, side-channel, and misuse cases.",
+                    "test",
+                    True,
+                    [
+                        "benchmark-scorecard.json",
+                        "data-exposure.json",
+                        "effectiveness.json",
+                    ],
+                )
+            ],
+        },
+        "data-quality-engineering": {
+            "standards": [
+                "ISO-IEC-25010",
+                "ISO-IEC-25012",
+                "ISO-IEC-25020",
+                "ISO-IEC-25024",
+                "ISO-IEC-25030",
+            ],
+            "controls": [
+                (
+                    "ISO-IEC-25030",
+                    "MEASURABLE-QUALITY-REQUIREMENTS",
+                    "Define stakeholder-grounded software and data quality requirements with measures, scales, target values, decision rules, context, ownership, traceability, and acceptance thresholds.",
+                    ["security-requirements-coverage.json", "code-health.json"],
+                ),
+                (
+                    "ISO-IEC-25012",
+                    "DATA-QUALITY-MODEL",
+                    "Assess intrinsic and system-dependent data quality characteristics across provenance, lifecycle, transformations, consumers, defects, and fitness-for-use decisions.",
+                    ["code-health.json", "effectiveness.json"],
+                ),
+            ],
+            "procedures": [
+                (
+                    "ISO-IEC-25024",
+                    "QUALITY-MEASUREMENT-CONFORMANCE",
+                    "Recompute approved measures over versioned reference datasets, verify formula, scale, unit, missing-data handling, aggregation, uncertainty, thresholds, and repeatability against golden outcomes.",
+                    "test",
+                    False,
+                    [
+                        "benchmark-scorecard.json",
+                        "code-health.json",
+                        "effectiveness.json",
+                    ],
+                )
+            ],
+        },
+    }
+)
+
+_ASSURANCE_PROFILES.update(
+    {
+        "quality-in-use-cloud": {
+            "standards": [
+                "ISO-IEC-25010",
+                "ISO-IEC-25019",
+                "ISO-IEC-TS-25052-1",
+                "ISO-IEC-TS-25052-2",
+            ],
+            "controls": [
+                (
+                    "ISO-IEC-25019",
+                    "QUALITY-IN-USE-CONTEXT",
+                    "Define users, goals, tasks, environments, risks, measures, target values, uncertainty, and acceptance rules for each claimed quality-in-use context.",
+                    ["security-requirements-coverage.json", "effectiveness.json"],
+                ),
+                (
+                    "ISO-IEC-TS-25052-1",
+                    "CLOUD-SERVICE-QUALITY-MODEL",
+                    "Map cloud-service quality characteristics to service boundaries, shared responsibilities, consumers, workloads, dependencies, service levels, and measurable requirements.",
+                    ["domain-assurance.json", "code-health.json"],
+                ),
+            ],
+            "procedures": [
+                (
+                    "ISO-IEC-TS-25052-2",
+                    "CLOUD-QUALITY-MEASUREMENT",
+                    "Execute representative and adverse workload, tenancy, dependency, degradation, recovery, and user-context cases; recompute approved measures and retain uncertainty, exclusions, and decision outcomes.",
+                    "test",
+                    True,
+                    ["benchmark-scorecard.json", "effectiveness.json"],
+                )
+            ],
+        },
+        "enterprise-risk-techniques": {
+            "standards": ["ISO-31000", "IEC-31010", "NIST-SP-800-37"],
+            "controls": [
+                (
+                    "ISO-31000",
+                    "RISK-FRAMEWORK-AND-CRITERIA",
+                    "Bind risk objectives, scope, context, criteria, owners, communication, consultation, assessment, treatment, monitoring, review, recording, and improvement to organizational decisions.",
+                    ["risk-paths.json", "control-assessment.json"],
+                ),
+                (
+                    "IEC-31010",
+                    "RISK-TECHNIQUE-SELECTION",
+                    "Select complementary assessment techniques from decision purpose, lifecycle phase, data quality, complexity, uncertainty, human factors, resources, limitations, and validation needs.",
+                    ["risk-paths.json", "procedure-assessment.json"],
+                ),
+            ],
+            "procedures": [
+                (
+                    "IEC-31010",
+                    "BLINDED-RISK-TECHNIQUE-CALIBRATION",
+                    "Run blinded scenarios through multiple applicable techniques, compare assumptions, coverage, uncertainty, sensitivity, ranking stability, assessor agreement, and adjudicated decisions against protected reference cases.",
+                    "manual",
+                    False,
+                    ["benchmark-scorecard.json", "risk-paths.json"],
+                )
+            ],
+        },
+        "secure-by-design-product": {
+            "standards": [
+                "CISA-SECURE-BY-DESIGN",
+                "CISA-PRODUCT-SECURITY-BAD-PRACTICES",
+                "NIST-SSDF",
+            ],
+            "controls": [
+                (
+                    "CISA-SECURE-BY-DESIGN",
+                    "SECURE-DEFAULT-PRODUCT-PROPERTIES",
+                    "Make security ownership explicit and provide secure defaults, MFA, SSO, logging, safe recovery, vulnerability transparency, supported upgrade paths, and no avoidable security tax for essential protections.",
+                    ["control-proof.json", "security-requirements-coverage.json"],
+                ),
+                (
+                    "CISA-PRODUCT-SECURITY-BAD-PRACTICES",
+                    "PROHIBITED-PRODUCT-PRACTICES",
+                    "Prohibit default credentials, known exploited unpatched components, avoidable memory-unsafe exposure in critical products, silent security-feature absence, and unsupported insecure deployment defaults unless a governed exception is evidenced.",
+                    ["finding-validation.json", "risk-acceptance.json"],
+                ),
+            ],
+            "procedures": [
+                (
+                    "CISA-PRODUCT-SECURITY-BAD-PRACTICES",
+                    "INSECURE-DEFAULT-NEGATIVE-CHALLENGE",
+                    "Install and exercise a clean product image with omitted configuration, first-use, weak identity, logging failure, upgrade, recovery, exposed-service, and known-exploited-component cases; fail closed on undocumented or insecure behavior.",
+                    "dynamic",
+                    True,
+                    ["benchmark-scorecard.json", "test-evidence.json"],
+                )
+            ],
+        },
+        "tls-protocol-assurance": {
+            "standards": ["IETF-RFC-8446", "IETF-RFC-8996", "IETF-RFC-9325"],
+            "controls": [
+                (
+                    "IETF-RFC-8446",
+                    "TLS-STATE-MACHINE-AND-KEY-SCHEDULE",
+                    "Bind supported protocol versions, roles, extensions, cipher suites, key schedule, certificate validation, resumption, early data, alerts, downgrade behavior, and unsupported features to implementation evidence.",
+                    ["domain-assurance.json", "security-requirements-coverage.json"],
+                )
+            ],
+            "procedures": [
+                (
+                    "IETF-RFC-8446",
+                    "TLS-NEGATIVE-CONFORMANCE",
+                    "Execute pinned BoGo and tlsfuzzer positive, malformed-handshake, state-transition, certificate, extension, alert, replay, downgrade, fragmentation, resumption, early-data, and interoperability cases with a declared supported-case matrix.",
+                    "dynamic",
+                    True,
+                    ["benchmark-scorecard.json", "test-evidence.json"],
+                )
+            ],
+        },
+        "reproducible-build-assurance": {
+            "standards": ["REPRODUCIBLE-BUILDS-TEST-PROTOCOL", "SLSA"],
+            "controls": [
+                (
+                    "REPRODUCIBLE-BUILDS-TEST-PROTOCOL",
+                    "BUILD-VARIATION-MATRIX",
+                    "Pin source, dependencies, build instructions, toolchains, and expected artifacts; vary time, path, user, locale, timezone, filesystem ordering, parallelism, and builder image through an approved matrix.",
+                    ["release-readiness.json", "artifact-validation.json"],
+                )
+            ],
+            "procedures": [
+                (
+                    "REPRODUCIBLE-BUILDS-TEST-PROTOCOL",
+                    "INDEPENDENT-REBUILD-EQUIVALENCE",
+                    "Perform isolated independent rebuilds for every required variation, compare artifact digests, classify byte-level differences, verify provenance subjects, and fail unexplained or policy-prohibited nondeterminism.",
+                    "test",
+                    True,
+                    ["benchmark-scorecard.json", "release-readiness.json"],
+                )
+            ],
+        },
+        "malware-protection-validation": {
+            "standards": ["AMTSO-TESTING-PROTOCOL"],
+            "controls": [
+                (
+                    "AMTSO-TESTING-PROTOCOL",
+                    "TRANSPARENT-ANTIMALWARE-TEST-PLAN",
+                    "Predeclare scope, participants, product configuration, samples, prevalence, timing, metrics, disputes, exclusions, safety, restoration, reporting, and statistical limitations under an approved test plan.",
+                    ["test-evidence.json", "external-conformity-assessment.json"],
+                )
+            ],
+            "procedures": [
+                (
+                    "AMTSO-TESTING-PROTOCOL",
+                    "SAFE-MALWARE-CONTROL-EVALUATION",
+                    "Verify installation with the harmless EICAR test file, then evaluate approved inert or isolated malicious and clean cases across protection, visibility, false positives, latency, remediation, restoration, tamper resistance, and configuration states.",
+                    "dynamic",
+                    True,
+                    ["benchmark-scorecard.json", "test-evidence.json"],
+                )
+            ],
+        },
+        "confidential-computing-attestation": {
+            "standards": [
+                "TCG-DICE-ATTESTATION-ARCHITECTURE",
+                "TCG-TPM-2.0",
+                "IETF-RFC-9334",
+                "IETF-RFC-9711",
+            ],
+            "controls": [
+                (
+                    "TCG-DICE-ATTESTATION-ARCHITECTURE",
+                    "LAYERED-DEVICE-IDENTITY",
+                    "Trace unique device secrets, compound device identity, layer measurements, aliases, certificates, evidence, endorsements, lifecycle transitions, ownership changes, privacy, and verifier policy without exporting protected secrets.",
+                    ["security-passport.json", "domain-assurance.json"],
+                )
+            ],
+            "procedures": [
+                (
+                    "TCG-DICE-ATTESTATION-ARCHITECTURE",
+                    "DICE-EVIDENCE-AND-VERIFIER-CONFORMANCE",
+                    "Exercise valid boot chains plus mutated measurements, reordered layers, stale evidence, substituted endorsements, revoked identities, rollback, reset, recovery, ownership transfer, and unsupported-profile cases against explicit verifier decisions.",
+                    "dynamic",
+                    True,
+                    ["benchmark-scorecard.json", "security-passport.json"],
+                )
+            ],
+        },
+        "telecommunications-security": {
+            "standards": ["ISO-IEC-27011", "ISO-IEC-27001", "ISO-IEC-27002"],
+            "controls": [
+                (
+                    "ISO-IEC-27011",
+                    "TELECOM-CONTROL-APPLICABILITY",
+                    "Tailor information-security controls to telecom services, signaling, management, customer data, interconnection, roaming, infrastructure, suppliers, shared responsibility, availability, lawful obligations, and recovery boundaries.",
+                    ["domain-assurance.json", "control-assessment.json"],
+                )
+            ],
+            "procedures": [
+                (
+                    "ISO-IEC-27011",
+                    "TELECOM-CONTROL-EVIDENCE-CHALLENGE",
+                    "Challenge representative network, service, management, identity, interconnection, supplier, outage, incident, and recovery cases; retain scoped evidence and explicit non-applicability decisions.",
+                    "test",
+                    True,
+                    ["benchmark-scorecard.json", "procedure-assessment.json"],
+                )
+            ],
+        },
+        "cyber-workforce-assurance": {
+            "standards": ["NIST-SP-800-181-R1", "NIST-NICE-FRAMEWORK-COMPONENTS"],
+            "controls": [
+                (
+                    "NIST-SP-800-181-R1",
+                    "ROLE-TASK-COMPETENCE-MAPPING",
+                    "Map cybersecurity responsibilities to current NICE tasks, knowledge, and skills with named accountable roles, scope, independence, qualification evidence, supervision, succession, and continuing development.",
+                    ["external-conformity-assessment.json", "control-assessment.json"],
+                )
+            ],
+            "procedures": [
+                (
+                    "NIST-NICE-FRAMEWORK-COMPONENTS",
+                    "WORKFORCE-COVERAGE-AND-DRIFT",
+                    "Evaluate critical task coverage, single-person dependencies, incompatible duties, stale component mappings, evidence-backed proficiency, scenario performance, handoff quality, and remediation against the pinned NICE release.",
+                    "manual",
+                    False,
+                    ["benchmark-scorecard.json", "external-conformity-assessment.json"],
+                )
+            ],
+        },
+        "penetration-testing-governance": {
+            "standards": ["CREST-PENETRATION-TESTING-GUIDE", "PTES", "NIST-SP-800-115"],
+            "controls": [
+                (
+                    "CREST-PENETRATION-TESTING-GUIDE",
+                    "AUTHORIZED-ENGAGEMENT-GOVERNANCE",
+                    "Govern objectives, scope, exclusions, rules of engagement, authorization, competence, communications, evidence handling, safety, privacy, escalation, kill switches, reporting, remediation, retest, and closure.",
+                    [
+                        "adversarial-campaign.json",
+                        "external-conformity-assessment.json",
+                    ],
+                )
+            ],
+            "procedures": [
+                (
+                    "PTES",
+                    "ENGAGEMENT-QUALITY-REPERFORMANCE",
+                    "Independently sample pre-engagement, intelligence, threat modeling, vulnerability analysis, exploitation, post-exploitation, cleanup, evidence, severity, remediation, and retest records against the approved scope and methodology.",
+                    "manual",
+                    True,
+                    ["benchmark-scorecard.json", "adversarial-campaign.json"],
+                )
+            ],
+        },
+        "software-delivery-outcomes": {
+            "standards": ["DORA-SOFTWARE-DELIVERY-PERFORMANCE"],
+            "controls": [
+                (
+                    "DORA-SOFTWARE-DELIVERY-PERFORMANCE",
+                    "DELIVERY-METRIC-DATA-CONTRACT",
+                    "Define service and deployment boundaries, successful and failed deployments, recovery, rework, lead-time anchors, observation windows, exclusions, source systems, ownership, missing data, uncertainty, and anti-gaming controls.",
+                    ["operational-trend.json", "control-assessment.json"],
+                )
+            ],
+            "procedures": [
+                (
+                    "DORA-SOFTWARE-DELIVERY-PERFORMANCE",
+                    "FIVE-METRIC-OUTCOME-RECOMPUTATION",
+                    "Independently recompute change lead time, deployment frequency, failed deployment recovery time, change fail rate, and deployment rework rate from immutable delivery and incident events; reject mixed scopes and unsupported causal claims.",
+                    "test",
+                    False,
+                    ["benchmark-scorecard.json", "operational-trend.json"],
+                )
+            ],
+        },
+    }
+)
+
+_ASSURANCE_PROFILES.update(
+    {
+        "structured-assurance-case": {
+            "standards": [
+                "ISO-IEC-IEEE-15026-2",
+                "ISO-IEC-IEEE-15026-4",
+                "OMG-SACM",
+            ],
+            "controls": [
+                (
+                    "ISO-IEC-IEEE-15026-2",
+                    "CLAIM-ARGUMENT-EVIDENCE-INTEGRITY",
+                    "Maintain a scoped assurance case whose claims, context, assumptions, strategies, defeaters, evidence, confidence, applicability, and decision status are uniquely identified and traceable without dangling or circular support.",
+                    ["assurance-case-assessment.json"],
+                ),
+                (
+                    "OMG-SACM",
+                    "MACHINE-READABLE-ASSURANCE-EXCHANGE",
+                    "Validate the SACM 2.3 representation against pinned machine-readable syntax and semantic rules while preserving claim, artifact, citation, argument, and package identities across round trips.",
+                    ["assurance-case-assessment.json"],
+                ),
+            ],
+            "procedures": [
+                (
+                    "ISO-IEC-IEEE-15026-2",
+                    "ASSURANCE-CASE-MUTATION-CHALLENGE",
+                    "Inject missing and stale evidence, dangling relationships, cycles, contradictions, scope mismatches, unsupported top-level claims, and unresolved defeaters; require deterministic rejection and independent adjudication.",
+                    "test",
+                    False,
+                    ["assurance-case-assessment.json", "benchmark-scorecard.json"],
+                )
+            ],
+        },
+        "integrity-level-vv": {
+            "standards": ["IEEE-1012", "ISO-IEC-IEEE-12207", "ISO-IEC-IEEE-15288"],
+            "controls": [
+                (
+                    "IEEE-1012",
+                    "INTEGRITY-LEVEL-VV-RIGOR",
+                    "Assign system, software, and hardware integrity levels from consequence and risk, then bind required V&V tasks, independence, methods, coverage, anomaly disposition, reuse, COTS, interfaces, and evidence to each assigned level.",
+                    ["lifecycle-traceability.json", "control-assessment.json"],
+                )
+            ],
+            "procedures": [
+                (
+                    "IEEE-1012",
+                    "INDEPENDENT-VV-REPERFORMANCE",
+                    "Independently reperform a risk-stratified sample of requirements, architecture, interfaces, implementation, integration, installation, operation, reuse, and COTS V&V tasks and challenge under-classified integrity levels and omitted evidence.",
+                    "test",
+                    False,
+                    ["benchmark-scorecard.json", "lifecycle-traceability.json"],
+                )
+            ],
+        },
+        "cmvp-cryptographic-module": {
+            "standards": ["FIPS-140-3", "NIST-CMVP"],
+            "controls": [
+                (
+                    "NIST-CMVP",
+                    "SCHEME-PINNED-MODULE-VALIDATION",
+                    "Pin the applicable CMVP management manual, implementation guidance, SP 800-140 publications, scheme-referenced ISO editions, algorithm prerequisites, module boundary, security policy, certificate status, historical transitions, and tested configurations at assessment time.",
+                    ["external-conformity-assessment.json", "control-assessment.json"],
+                )
+            ],
+            "procedures": [
+                (
+                    "FIPS-140-3",
+                    "CMVP-EVIDENCE-AND-STATUS-REPERFORMANCE",
+                    "Reperform approved positive, negative, error-state, self-test, role, service, key-management, physical or non-invasive, operational-environment, and lifecycle cases; verify current certificate and algorithm status without importing requirements from a newer ISO edition.",
+                    "test",
+                    True,
+                    ["benchmark-scorecard.json", "external-conformity-assessment.json"],
+                )
+            ],
+        },
+        "international-cryptographic-module": {
+            "standards": [
+                "ISO-IEC-19790",
+                "ISO-IEC-24759",
+                "ISO-IEC-17825",
+                "ISO-IEC-20085-1",
+                "ISO-IEC-20085-2",
+            ],
+            "controls": [
+                (
+                    "ISO-IEC-19790",
+                    "MODULE-SECURITY-LEVEL-AND-BOUNDARY",
+                    "Declare the cryptographic module boundary, claimed security level by requirement area, approved operational environments, roles, services, interfaces, sensitive parameters, self-tests, lifecycle states, physical protections, and non-invasive mitigation claims.",
+                    ["external-conformity-assessment.json", "control-assessment.json"],
+                ),
+                (
+                    "ISO-IEC-24759",
+                    "LABORATORY-TEST-AND-VENDOR-EVIDENCE",
+                    "Trace each applicable test assertion to vendor evidence, method, fixture, calibrated equipment, expected result, observation, uncertainty, deviation, verdict, assessor identity, and approved module configuration.",
+                    ["external-conformity-assessment.json", "benchmark-scorecard.json"],
+                ),
+            ],
+            "procedures": [
+                (
+                    "ISO-IEC-24759",
+                    "MODULE-CONFORMANCE-REPERFORMANCE",
+                    "Execute licensed test methods against representative and adverse module states, including malformed inputs, power-up and conditional self-tests, error transitions, key zeroization, role separation, fault response, and claimed non-invasive mitigations under calibrated laboratory controls.",
+                    "dynamic",
+                    True,
+                    ["benchmark-scorecard.json", "external-conformity-assessment.json"],
+                )
+            ],
+        },
+        "biometric-identity-assurance": {
+            "standards": ["ISO-IEC-19795-1", "ISO-IEC-30107-3", "ISO-IEC-30107-4"],
+            "controls": [
+                (
+                    "ISO-IEC-19795-1",
+                    "BIOMETRIC-PERFORMANCE-DESIGN",
+                    "Predeclare population, demographic strata, sensors, environment, enrollment and comparison procedures, thresholds, sample-size rationale, exclusions, failure-to-acquire and failure-to-enroll handling, FMR, FNMR, uncertainty, and claim limits.",
+                    ["external-conformity-assessment.json", "control-assessment.json"],
+                ),
+                (
+                    "ISO-IEC-30107-3",
+                    "PRESENTATION-ATTACK-EVALUATION",
+                    "Define attack potential, presentation attack instruments, species, fabrication, operators, attempts, sensors, IAPAR decision rules, safety, sequestering, and reporting without disclosing reusable bypass material.",
+                    ["external-conformity-assessment.json", "benchmark-scorecard.json"],
+                ),
+            ],
+            "procedures": [
+                (
+                    "ISO-IEC-30107-3",
+                    "SEQUESTERED-BIOMETRIC-PAD-EVALUATION",
+                    "Evaluate locked thresholds on sequestered bona-fide, zero-effort impostor, and presentation-attack trials; report Wilson confidence bounds overall and by demographic and attack-instrument strata and reject unsupported subgroup claims.",
+                    "dynamic",
+                    True,
+                    ["benchmark-scorecard.json", "external-conformity-assessment.json"],
+                )
+            ],
+        },
+        "integrated-service-security-management": {
+            "standards": ["ISO-IEC-20000-1", "ISO-IEC-27013", "ISO-IEC-27001"],
+            "controls": [
+                (
+                    "ISO-IEC-20000-1",
+                    "SERVICE-LIFECYCLE-EVIDENCE",
+                    "Bind service requirements, catalog and ownership, assets and configuration, changes, releases, deployments, capacity, availability, continuity, suppliers, incidents, problems, requests, knowledge, measurement, internal audit, corrective action, and continual improvement to retained operational evidence.",
+                    ["operational-trend.json", "control-assessment.json"],
+                ),
+                (
+                    "ISO-IEC-27013",
+                    "INTEGRATED-SMS-ISMS-GOVERNANCE",
+                    "Maintain one scoped and non-duplicative governance model for service and information-security management, including shared objectives, risk, roles, competence, documented information, audits, management review, corrective action, and evidence lineage.",
+                    ["control-assessment.json", "audit-package-verification.json"],
+                ),
+            ],
+            "procedures": [
+                (
+                    "ISO-IEC-20000-1",
+                    "SERVICE-SECURITY-TRACE-AND-FAULT-CHALLENGE",
+                    "Trace representative changes and incidents from request through approval, configuration, deployment, observation, recovery, problem resolution, supplier action, evidence retention, and improvement; inject stale configuration, failed rollback, broken ownership, and unlinked security incidents.",
+                    "test",
+                    True,
+                    ["benchmark-scorecard.json", "operational-trend.json"],
+                )
+            ],
+        },
+        "interlaboratory-proficiency": {
+            "standards": ["ISO-IEC-17043", "ISO-IEC-17025"],
+            "controls": [
+                (
+                    "ISO-IEC-17043",
+                    "PROFICIENCY-SCHEME-DESIGN",
+                    "Govern objectives, participant scope, impartiality, confidentiality, item preparation, homogeneity, stability, assigned values, uncertainty, statistical design, collusion prevention, reporting, appeals, corrective action, and retention for blinded proficiency exercises.",
+                    ["external-conformity-assessment.json", "control-assessment.json"],
+                )
+            ],
+            "procedures": [
+                (
+                    "ISO-IEC-17043",
+                    "BLINDED-INTERLABORATORY-ROUND-ROBIN",
+                    "Distribute equivalent blinded positive, negative, ambiguous, and boundary items across independent engines, operators, laboratories, and environments; measure agreement, chance-corrected agreement, reference accuracy, bias, drift, outliers, adjudication, and corrective action.",
+                    "test",
+                    False,
+                    ["benchmark-scorecard.json", "external-conformity-assessment.json"],
                 )
             ],
         },
@@ -6524,6 +8361,16 @@ def _external_conformity_assessment(
         "continuous-security-monitoring": ("NIST-SP-800-137A", "NISTIR-8212"),
         "digital-forensics-readiness": ("ISO-IEC-27037", "ISO-IEC-27041"),
         "accessibility-quality": ("W3C-WCAG", "ETSI-EN-301-549", "US-SECTION-508"),
+        "audit-assessment-integrity": (
+            "ISO-IEC-27006-1",
+            "ISO-IEC-17021-1",
+            "ISO-IEC-17029",
+        ),
+        "security-evaluator-competence": (
+            "ISO-IEC-19896-1",
+            "ISO-IEC-19896-2",
+            "ISO-IEC-19896-3",
+        ),
     }.items():
         if profile in selected:
             required.extend(schemes)
@@ -6579,9 +8426,7 @@ def _external_conformity_assessment(
         row["assessor_credential"] = {
             "issuer": str(credential.get("issuer") or ""),
             "scheme": str(credential.get("scheme") or ""),
-            "credential_id_sha256": str(
-                credential.get("credential_id_sha256") or ""
-            ),
+            "credential_id_sha256": str(credential.get("credential_id_sha256") or ""),
             "registry_snapshot_sha256": str(
                 credential.get("registry_snapshot_sha256") or ""
             ),
@@ -6613,6 +8458,314 @@ def _external_conformity_assessment(
     }
 
 
+def _assurance_case_assessment(artifacts: dict[str, Any]) -> dict[str, Any]:
+    raw = artifacts.get("structured-assurance-case.json")
+    gaps: list[str] = []
+    claims: list[Any] = []
+    evidence: list[Any] = []
+    relationships: list[Any] = []
+    model: dict[str, Any] = {}
+    review: dict[str, Any] = {}
+    scope_sha256 = ""
+    case_id = ""
+    if not isinstance(raw, dict):
+        gaps.append("structured-assurance-case.json is missing")
+    else:
+        case_id = str(raw.get("case_id") or "")
+        scope_sha256 = str(raw.get("scope_sha256") or "")
+        supplied_model = raw.get("model")
+        supplied_claims = raw.get("claims")
+        supplied_evidence = raw.get("evidence")
+        supplied_relationships = raw.get("relationships")
+        supplied_review = raw.get("review")
+        model = supplied_model if isinstance(supplied_model, dict) else {}
+        claims = supplied_claims if isinstance(supplied_claims, list) else []
+        evidence = supplied_evidence if isinstance(supplied_evidence, list) else []
+        relationships = (
+            supplied_relationships if isinstance(supplied_relationships, list) else []
+        )
+        review = supplied_review if isinstance(supplied_review, dict) else {}
+        if (
+            set(raw)
+            != {
+                "schema_version",
+                "case_id",
+                "scope_sha256",
+                "model",
+                "claims",
+                "evidence",
+                "relationships",
+                "review",
+            }
+            or raw.get("schema_version") != "1.0"
+        ):
+            gaps.append("assurance case envelope does not match schema version 1.0")
+    if not _text(case_id, 200):
+        gaps.append("assurance case identifier is missing or invalid")
+    if not _digest(scope_sha256):
+        gaps.append("assurance case scope digest is missing or invalid")
+    expected_model = {
+        "format",
+        "version",
+        "schema_sha256",
+        "model_sha256",
+        "schema_validated",
+        "semantic_validated",
+        "round_trip_validated",
+    }
+    if (
+        set(model) != expected_model
+        or model.get("format") != "OMG-SACM"
+        or model.get("version") != "2.3"
+        or not _digest(str(model.get("schema_sha256") or ""))
+        or not _digest(str(model.get("model_sha256") or ""))
+        or any(
+            model.get(name) is not True
+            for name in (
+                "schema_validated",
+                "semantic_validated",
+                "round_trip_validated",
+            )
+        )
+    ):
+        gaps.append(
+            "SACM 2.3 syntax, semantics, digest, or round-trip evidence is incomplete"
+        )
+    claim_ids: set[str] = set()
+    top_level: set[str] = set()
+    defeaters: set[str] = set()
+    claim_status: dict[str, str] = {}
+    minimum_confidence = review.get("minimum_confidence")
+    valid_minimum = (
+        isinstance(minimum_confidence, (int, float))
+        and not isinstance(minimum_confidence, bool)
+        and 0 <= float(minimum_confidence) <= 1
+    )
+    minimum_confidence_value = (
+        float(cast(int | float, minimum_confidence)) if valid_minimum else 0.0
+    )
+    for index, claim in enumerate(claims[:20_000]):
+        if not isinstance(claim, dict) or set(claim) != {
+            "id",
+            "type",
+            "statement",
+            "status",
+            "confidence",
+            "applicable",
+            "top_level",
+        }:
+            gaps.append(f"claim {index} does not match the governed claim contract")
+            continue
+        identifier = str(claim.get("id") or "")
+        claim_type = claim.get("type")
+        status = claim.get("status")
+        confidence = claim.get("confidence")
+        confidence_is_number = isinstance(confidence, (int, float)) and not isinstance(
+            confidence, bool
+        )
+        confidence_value = (
+            float(cast(int | float, confidence)) if confidence_is_number else -1.0
+        )
+        if (
+            not _text(identifier, 200)
+            or identifier in claim_ids
+            or claim_type
+            not in {"claim", "assumption", "context", "justification", "defeater"}
+            or status
+            not in {"supported", "unsupported", "defeated", "resolved", "accepted-risk"}
+            or not _text(claim.get("statement"), 4000)
+            or not 0 <= confidence_value <= 1
+            or not isinstance(claim.get("applicable"), bool)
+            or not isinstance(claim.get("top_level"), bool)
+        ):
+            gaps.append(
+                f"claim {index} identity, type, status, confidence, or text is invalid"
+            )
+            continue
+        claim_ids.add(identifier)
+        claim_status[identifier] = str(status)
+        if claim["top_level"] is True and claim["applicable"] is True:
+            top_level.add(identifier)
+            if status not in {"supported", "accepted-risk"}:
+                gaps.append(f"top-level claim is unresolved: {identifier}")
+            if valid_minimum and confidence_value < minimum_confidence_value:
+                gaps.append(f"top-level claim confidence is below policy: {identifier}")
+        if claim_type == "defeater" and claim["applicable"] is True:
+            defeaters.add(identifier)
+            if status not in {"resolved", "accepted-risk"}:
+                gaps.append(f"defeater is unresolved: {identifier}")
+    if len(claims) > 20_000:
+        gaps.append("assurance case exceeds the maximum claim count")
+    if not top_level:
+        gaps.append("assurance case has no applicable top-level claim")
+    evidence_ids: set[str] = set()
+    now = datetime.now(UTC)
+    for index, item in enumerate(evidence[:100_000]):
+        if not isinstance(item, dict) or set(item) != {
+            "id",
+            "artifact",
+            "sha256",
+            "subject_sha256",
+            "collected_at",
+            "valid_until",
+            "verified",
+        }:
+            gaps.append(
+                f"evidence {index} does not match the governed evidence contract"
+            )
+            continue
+        identifier = str(item.get("id") or "")
+        valid_until = item.get("valid_until")
+        if (
+            not _text(identifier, 200)
+            or identifier in evidence_ids
+            or identifier in claim_ids
+            or not _artifact_name(item.get("artifact"))
+            or not _digest(str(item.get("sha256") or ""))
+            or not _digest(str(item.get("subject_sha256") or ""))
+            or not _iso_timestamp(item.get("collected_at"))
+            or (valid_until is not None and not _iso_timestamp(valid_until))
+            or not isinstance(item.get("verified"), bool)
+        ):
+            gaps.append(
+                f"evidence {index} identity, digest, time, or verification is invalid"
+            )
+            continue
+        evidence_ids.add(identifier)
+        if item["subject_sha256"] != scope_sha256:
+            gaps.append(
+                f"evidence subject is outside assurance-case scope: {identifier}"
+            )
+        if item["verified"] is not True:
+            gaps.append(f"evidence is not independently verified: {identifier}")
+        if valid_until is not None:
+            try:
+                expires = datetime.fromisoformat(
+                    str(valid_until).replace("Z", "+00:00")
+                )
+                if expires <= now:
+                    gaps.append(f"evidence is stale: {identifier}")
+            except ValueError:
+                pass
+    if len(evidence) > 100_000:
+        gaps.append("assurance case exceeds the maximum evidence count")
+    known_nodes = claim_ids | evidence_ids
+    incoming_support: set[str] = set()
+    used_evidence: set[str] = set()
+    support_graph: dict[str, set[str]] = {identifier: set() for identifier in claim_ids}
+    relation_pairs: dict[tuple[str, str], set[str]] = {}
+    seen_relationships: set[tuple[str, str, str]] = set()
+    for index, relation in enumerate(relationships[:200_000]):
+        if not isinstance(relation, dict) or set(relation) != {
+            "source",
+            "target",
+            "type",
+            "rationale",
+        }:
+            gaps.append(
+                f"relationship {index} does not match the governed relationship contract"
+            )
+            continue
+        source = str(relation.get("source") or "")
+        target = str(relation.get("target") or "")
+        relation_type = str(relation.get("type") or "")
+        identity = (source, target, relation_type)
+        if (
+            source not in known_nodes
+            or target not in claim_ids
+            or source == target
+            or relation_type
+            not in {"supports", "challenges", "rebuts", "contextualizes", "assumes"}
+            or identity in seen_relationships
+            or not _text(relation.get("rationale"), 2000)
+        ):
+            gaps.append(
+                f"relationship {index} is dangling, duplicated, self-referential, or invalid"
+            )
+            continue
+        seen_relationships.add(identity)
+        relation_pairs.setdefault((source, target), set()).add(relation_type)
+        if source in evidence_ids:
+            used_evidence.add(source)
+        if relation_type == "supports":
+            incoming_support.add(target)
+            if source in claim_ids:
+                support_graph[source].add(target)
+    if len(relationships) > 200_000:
+        gaps.append("assurance case exceeds the maximum relationship count")
+    for (source, target), types in relation_pairs.items():
+        if "supports" in types and types & {"challenges", "rebuts"}:
+            gaps.append(f"contradictory relationship semantics: {source} -> {target}")
+    for identifier in sorted(top_level):
+        if (
+            claim_status.get(identifier) == "supported"
+            and identifier not in incoming_support
+        ):
+            gaps.append(
+                f"supported top-level claim has no incoming support: {identifier}"
+            )
+    for identifier in sorted(evidence_ids - used_evidence):
+        gaps.append(
+            f"orphaned evidence is not cited by the assurance case: {identifier}"
+        )
+    indegree = {identifier: 0 for identifier in claim_ids}
+    for targets in support_graph.values():
+        for target in targets:
+            indegree[target] += 1
+    ready = sorted(identifier for identifier, degree in indegree.items() if degree == 0)
+    processed = 0
+    cursor = 0
+    while cursor < len(ready):
+        identifier = ready[cursor]
+        cursor += 1
+        processed += 1
+        for target in sorted(support_graph.get(identifier, ())):
+            indegree[target] -= 1
+            if indegree[target] == 0:
+                ready.append(target)
+    if processed != len(claim_ids):
+        gaps.append("claim support graph contains a cycle")
+    if (
+        set(review)
+        != {
+            "reviewed_at",
+            "independent_reviewers",
+            "minimum_confidence",
+            "approved",
+            "approval_sha256",
+        }
+        or not _iso_timestamp(review.get("reviewed_at"))
+        or not _count(review.get("independent_reviewers"), 2)
+        or not valid_minimum
+        or review.get("approved") is not True
+        or not _digest(str(review.get("approval_sha256") or ""))
+    ):
+        gaps.append(
+            "independent review, confidence policy, or approval evidence is incomplete"
+        )
+    unique_gaps = list(dict.fromkeys(gaps))[:200]
+    return {
+        "schema_version": "1.0",
+        "analysis": "structured-assurance-case-conformance",
+        "applicable": isinstance(raw, dict),
+        "case_id": case_id,
+        "scope_sha256": scope_sha256,
+        "model_format": str(model.get("format") or ""),
+        "model_version": str(model.get("version") or ""),
+        "claims_assessed": min(len(claims), 20_000),
+        "top_level_claims": len(top_level),
+        "defeaters_assessed": len(defeaters),
+        "evidence_assessed": min(len(evidence), 100_000),
+        "relationships_assessed": min(len(relationships), 200_000),
+        "independent_reviewers": review.get("independent_reviewers")
+        if _count(review.get("independent_reviewers"))
+        else 0,
+        "complete": not unique_gaps,
+        "gaps": unique_gaps,
+        "claim_boundary": "This assessment validates the supplied assurance-case structure, graph semantics, subject binding, freshness, and review evidence; it does not independently prove that the underlying system claims are true.",
+    }
+
+
 def _foundational_assurance_artifacts(
     artifacts: dict[str, Any], source_sha256: str, policy: dict[str, Any]
 ) -> dict[str, dict[str, Any]]:
@@ -6628,6 +8781,7 @@ def _foundational_assurance_artifacts(
     maturity = _maturity_model_assessment(artifacts, policy)
     automation = _security_automation_interoperability(artifacts, policy)
     conformity = _external_conformity_assessment(artifacts, policy)
+    assurance_case = _assurance_case_assessment(artifacts)
     return {
         "lifecycle-traceability.json": lifecycle,
         "architecture-evaluation.json": architecture,
@@ -6636,6 +8790,7 @@ def _foundational_assurance_artifacts(
         "maturity-model-assessment.json": maturity,
         "security-automation-interoperability.json": automation,
         "external-conformity-assessment.json": conformity,
+        "assurance-case-assessment.json": assurance_case,
     }
 
 
@@ -6723,6 +8878,7 @@ def build_industry_assurance(
             "maturity-model-assessment.json",
             "security-automation-interoperability.json",
             "external-conformity-assessment.json",
+            "assurance-case-assessment.json",
             "oscal-catalog.json",
             "oscal-profile.json",
             "oscal-component-definition.json",
@@ -6850,7 +9006,7 @@ def _validate_policy(value: object) -> None:
         or not isinstance(profiles, list)
         or len(profiles) > len(_ASSURANCE_PROFILES)
         or not isinstance(benchmarks, list)
-        or len(benchmarks) > 100
+        or len(benchmarks) > len(_BENCHMARKS)
     ):
         raise ValueError("industry assurance policy collections are invalid")
     seen_profiles: set[str] = set()
@@ -7523,7 +9679,9 @@ def _benchmark_registry(policy: dict[str, Any], source_sha256: str) -> dict[str,
                     "benchmark_id": registered["id"],
                     "lane": registered["lane"],
                     "command": command,
-                    "execution_mode": "adapter" if adapter_manifest else "report-scoring",
+                    "execution_mode": "adapter"
+                    if adapter_manifest
+                    else "report-scoring",
                     "requires_operator_authorization": bool(adapter_manifest),
                     "authorization_flag": "--authorize-execution"
                     if adapter_manifest
@@ -7584,6 +9742,7 @@ def _benchmark_protocol(identifier: str) -> str:
             "nist-aria-inspect-evaluation",
             "ai-conformity-quality",
             "ai-agentic-testing-conformance",
+            "nist-dioptra-ai-evaluation",
         },
         "assessor-agreement": {
             "architecture-evaluation-scenarios",
@@ -7594,12 +9753,17 @@ def _benchmark_protocol(identifier: str) -> str:
             "bsimm-cmmi-cohort",
             "regional-cyber-maturity-assessment",
             "iscm-program-assessment",
+            "security-evaluator-calibration",
+            "risk-technique-calibration",
         },
+        "biometric-performance": {"biometric-performance-pad"},
+        "proficiency-testing": {"interlaboratory-proficiency-testing"},
         "detection-evaluation": {
             "atomic-red-team",
             "mitre-caldera",
             "mitre-attack-evaluations",
             "tiber-eu-threat-led-red-team",
+            "amtso-malware-protection-evaluation",
         },
         "conformance": {
             "sigstore-client-conformance",
@@ -7633,9 +9797,28 @@ def _benchmark_protocol(identifier: str) -> str:
             "w3c-act-rules-conformance",
             "cloud-native-chaos-resilience",
             "kubernetes-sonobuoy-conformance",
+            "firmware-resilience-measured-boot",
+            "access-control-policy-model-conformance",
+            "differential-privacy-implementation-evaluation",
+            "square-quality-measurement",
             "cis-cat-scap-platform-conformance",
             "c2sp-wycheproof",
             "nist-cfreds-cftt",
+            "iso-29119-test-process-conformance",
+            "square-quality-in-use-cloud",
+            "tls-protocol-conformance",
+            "reproducible-build-variation",
+            "cisa-secure-by-design-negative-assurance",
+            "dice-attestation-conformance",
+            "telecom-security-controls-conformance",
+            "nice-workforce-coverage",
+            "penetration-test-engagement-quality",
+            "dora-delivery-outcomes",
+            "structured-assurance-case-conformance",
+            "integrity-vv-conformance",
+            "cmvp-fips-140-3-validation",
+            "iso-19790-24759-module-conformance",
+            "service-management-security-integration",
         },
     }
     for protocol, identifiers in protocols.items():
@@ -7700,6 +9883,44 @@ def _protocol_metrics_valid(protocol: str, metrics: object) -> bool:
             and _count(metrics.get("cases"), 1)
             and _ratio(metrics.get("inter_rater_agreement"))
             and float(metrics["inter_rater_agreement"]) >= 0.8
+        )
+    if protocol == "biometric-performance":
+        return (
+            _count(metrics.get("genuine_attempts"), 1)
+            and _count(metrics.get("impostor_attempts"), 1)
+            and _count(metrics.get("attack_attempts"), 1)
+            and _count(metrics.get("demographic_groups"), 1)
+            and metrics.get("threshold_locked") is True
+            and all(
+                _ratio(metrics.get(name))
+                for name in (
+                    "false_match_rate",
+                    "false_non_match_rate",
+                    "iapar",
+                    "fmr_wilson_upper_95",
+                    "fnmr_wilson_upper_95",
+                    "iapar_wilson_upper_95",
+                    "worst_group_fmr_wilson_upper_95",
+                    "worst_group_fnmr_wilson_upper_95",
+                )
+            )
+        )
+    if protocol == "proficiency-testing":
+        agreement = metrics.get("chance_corrected_agreement")
+        agreement_value = (
+            float(agreement)
+            if isinstance(agreement, (int, float)) and not isinstance(agreement, bool)
+            else -2.0
+        )
+        return (
+            _count(metrics.get("participants"), 2)
+            and _count(metrics.get("cases"), 1)
+            and _count(metrics.get("rounds"), 1)
+            and metrics.get("blinded") is True
+            and _ratio(metrics.get("agreement"))
+            and _ratio(metrics.get("reference_accuracy"))
+            and _finite_number(agreement)
+            and -1 <= agreement_value <= 1
         )
     if protocol == "conformance":
         return (
@@ -7861,19 +10082,8 @@ def _benchmark_evidence(value: object, benchmark: dict[str, Any]) -> bool:
     )
 
 
-def _benchmark_runner_contract(benchmark: dict[str, Any]) -> dict[str, Any]:
-    identifier = str(benchmark["id"])
-    protocol = _benchmark_protocol(identifier)
-    stochastic = identifier in {
-        "cyberseceval-4",
-        "mlcommons-ailuminate",
-        "agentic-security-holdout",
-        "agentdojo",
-        "nist-aria-inspect-evaluation",
-        "ai-agentic-testing-conformance",
-    }
-    continuous_fuzzing = identifier == "oss-fuzz-clusterfuzzlite"
-    laboratory_qualified = identifier in {
+_LABORATORY_QUALIFIED_BENCHMARKS = frozenset(
+    {
         "disa-stig-scap-conformance",
         "iec-62443-system-conformance",
         "process-capability-assessor-agreement",
@@ -7891,7 +10101,39 @@ def _benchmark_runner_contract(benchmark: dict[str, Any]) -> dict[str, Any]:
         "nist-cfreds-cftt",
         "w3c-act-rules-conformance",
         "cis-cat-scap-platform-conformance",
+        "iso-29119-test-process-conformance",
+        "square-quality-in-use-cloud",
+        "risk-technique-calibration",
+        "tls-protocol-conformance",
+        "reproducible-build-variation",
+        "cisa-secure-by-design-negative-assurance",
+        "amtso-malware-protection-evaluation",
+        "dice-attestation-conformance",
+        "telecom-security-controls-conformance",
+        "nice-workforce-coverage",
+        "penetration-test-engagement-quality",
+        "dora-delivery-outcomes",
+        "cmvp-fips-140-3-validation",
+        "iso-19790-24759-module-conformance",
+        "biometric-performance-pad",
+        "interlaboratory-proficiency-testing",
     }
+)
+
+
+def _benchmark_runner_contract(benchmark: dict[str, Any]) -> dict[str, Any]:
+    identifier = str(benchmark["id"])
+    protocol = _benchmark_protocol(identifier)
+    stochastic = identifier in {
+        "cyberseceval-4",
+        "mlcommons-ailuminate",
+        "agentic-security-holdout",
+        "agentdojo",
+        "nist-aria-inspect-evaluation",
+        "ai-agentic-testing-conformance",
+    }
+    continuous_fuzzing = identifier == "oss-fuzz-clusterfuzzlite"
+    laboratory_qualified = identifier in _LABORATORY_QUALIFIED_BENCHMARKS
     required_execution_evidence = [
         "verified-report-checksum",
         "corpus-revision",
@@ -8045,6 +10287,76 @@ def _benchmark_runner_contract(benchmark: dict[str, Any]) -> dict[str, Any]:
     if identifier == "cwe-mapping-conformance":
         required_execution_evidence.extend(
             ["cwe-release-digest", "mapping-abstraction-policy-digest"]
+        )
+    if identifier == "structured-assurance-case-conformance":
+        required_execution_evidence.extend(
+            [
+                "sacm-metamodel-and-schema-digest",
+                "claim-argument-evidence-graph-digest",
+                "defeater-and-confidence-policy-digest",
+                "graph-mutation-and-semantic-validation-results",
+                "independent-assurance-case-review",
+            ]
+        )
+    if identifier == "integrity-vv-conformance":
+        required_execution_evidence.extend(
+            [
+                "ieee-1012-requirement-set-digest",
+                "integrity-level-classification-record",
+                "vv-independence-and-competence-record",
+                "system-software-hardware-interface-trace",
+                "reuse-cots-and-anomaly-disposition-evidence",
+            ]
+        )
+    if identifier == "cmvp-fips-140-3-validation":
+        required_execution_evidence.extend(
+            [
+                "cmvp-scheme-publication-snapshot-digest",
+                "cmvp-referenced-edition-map",
+                "module-security-policy-and-boundary-digest",
+                "algorithm-and-module-certificate-status-snapshot",
+                "implementation-guidance-and-test-decision-trace",
+            ]
+        )
+    if identifier == "iso-19790-24759-module-conformance":
+        required_execution_evidence.extend(
+            [
+                "licensed-19790-24759-requirement-set-digest",
+                "module-level-boundary-and-configuration-digest",
+                "vendor-evidence-and-test-assertion-trace",
+                "calibration-uncertainty-and-deviation-record",
+                "fault-and-non-invasive-test-authorization",
+            ]
+        )
+    if identifier == "biometric-performance-pad":
+        required_execution_evidence.extend(
+            [
+                "consent-privacy-and-retention-governance",
+                "sample-size-and-demographic-analysis-plan",
+                "locked-threshold-and-sensor-configuration-digest",
+                "presentation-attack-instrument-manifest",
+                "stratified-confidence-interval-report",
+            ]
+        )
+    if identifier == "service-management-security-integration":
+        required_execution_evidence.extend(
+            [
+                "licensed-20000-1-27013-requirement-map-digest",
+                "service-configuration-and-ownership-baseline",
+                "change-release-deployment-trace",
+                "incident-problem-supplier-continuity-trace",
+                "fault-recovery-and-corrective-action-results",
+            ]
+        )
+    if identifier == "interlaboratory-proficiency-testing":
+        required_execution_evidence.extend(
+            [
+                "proficiency-scheme-plan-digest",
+                "homogeneity-stability-and-assigned-value-evidence",
+                "participant-scope-blinding-and-confidentiality-record",
+                "agreement-bias-drift-and-outlier-analysis",
+                "appeal-adjudication-and-corrective-action-ledger",
+            ]
         )
     return {
         "adapter": identifier,
@@ -8216,19 +10528,10 @@ def _benchmark_reproducibility_gaps(
                     or deterministic_runs < 3
                 ):
                     gaps.append("benchmark requires at least three deterministic runs")
-            if isinstance(benchmark, dict) and benchmark.get("id") in {
-                "disa-stig-scap-conformance",
-                "iec-62443-system-conformance",
-                "process-capability-assessor-agreement",
-                "architecture-evaluation-scenarios",
-                "iec-62443-patch-management-exercise",
-                "do355-continuing-airworthiness-exercise",
-                "iacs-maritime-cyber-conformance",
-                "swift-cscf-independent-assessment",
-                "enhanced-cui-oscal-conformance",
-                "ict-continuity-recovery-exercise",
-                "digital-forensics-chain-of-custody",
-            }:
+            if (
+                isinstance(benchmark, dict)
+                and benchmark.get("id") in _LABORATORY_QUALIFIED_BENCHMARKS
+            ):
                 for name in (
                     "method_validation_sha256",
                     "evaluator_competency_sha256",
@@ -8315,6 +10618,78 @@ def _benchmark_reproducibility_gaps(
                 ):
                     if not _digest(str(execution.get(name) or "")):
                         gaps.append(f"CWE mapping {name} is missing or invalid")
+            specialized_digests = {
+                "structured-assurance-case-conformance": (
+                    "sacm_schema_sha256",
+                    "assurance_graph_sha256",
+                    "defeater_policy_sha256",
+                    "mutation_report_sha256",
+                    "independent_review_sha256",
+                ),
+                "integrity-vv-conformance": (
+                    "ieee_1012_requirements_sha256",
+                    "integrity_classification_sha256",
+                    "vv_independence_sha256",
+                    "interface_trace_sha256",
+                    "anomaly_disposition_sha256",
+                ),
+                "cmvp-fips-140-3-validation": (
+                    "cmvp_scheme_snapshot_sha256",
+                    "referenced_edition_map_sha256",
+                    "module_security_policy_sha256",
+                    "certificate_status_snapshot_sha256",
+                    "test_decision_trace_sha256",
+                ),
+                "iso-19790-24759-module-conformance": (
+                    "licensed_requirements_sha256",
+                    "module_claims_sha256",
+                    "test_assertion_trace_sha256",
+                    "calibration_uncertainty_sha256",
+                    "fault_test_authorization_sha256",
+                ),
+                "biometric-performance-pad": (
+                    "privacy_governance_sha256",
+                    "analysis_plan_sha256",
+                    "locked_threshold_sha256",
+                    "attack_instrument_manifest_sha256",
+                    "stratified_report_sha256",
+                ),
+                "service-management-security-integration": (
+                    "licensed_requirement_map_sha256",
+                    "service_baseline_sha256",
+                    "change_trace_sha256",
+                    "incident_continuity_trace_sha256",
+                    "corrective_action_sha256",
+                ),
+                "interlaboratory-proficiency-testing": (
+                    "proficiency_plan_sha256",
+                    "assigned_value_evidence_sha256",
+                    "participant_blinding_sha256",
+                    "statistical_analysis_sha256",
+                    "corrective_action_ledger_sha256",
+                ),
+            }
+            for name in specialized_digests.get(str(identifier), ()):
+                if not _digest(str(execution.get(name) or "")):
+                    gaps.append(f"{identifier} execution {name} is missing or invalid")
+            if identifier == "biometric-performance-pad":
+                if execution.get("threshold_locked_before_test") is not True:
+                    gaps.append(
+                        "biometric decision threshold was not locked before test"
+                    )
+                if execution.get("consent_and_privacy_validated") is not True:
+                    gaps.append(
+                        "biometric consent and privacy governance is not validated"
+                    )
+                if execution.get("operator_blinded") is not True:
+                    gaps.append("biometric evaluation operator is not blinded")
+            if identifier == "interlaboratory-proficiency-testing":
+                if execution.get("assigned_values_sequestered") is not True:
+                    gaps.append("proficiency assigned values were not sequestered")
+                if execution.get("participants_blinded") is not True:
+                    gaps.append("proficiency participants were not blinded")
+                if execution.get("collusion_controls_validated") is not True:
+                    gaps.append("proficiency collusion controls are not validated")
     if isinstance(contract, dict):
         repetitions = value.get("execution_context", {}).get("repetitions")
         minimum = contract.get("minimum_repetitions")

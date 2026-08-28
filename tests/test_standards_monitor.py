@@ -57,7 +57,9 @@ def test_quarantines_changed_source_and_requires_review(tmp_path: Path) -> None:
     assert snapshot.read_bytes() == observed
     assert report["promotion_policy"]["automatic_promotion"] is False
     assert report["sources"][0]["semantic_diff"]["status"] == "review-required"
-    assert report["sources"][0]["semantic_diff"]["normative_terms_changed"] == ["SHOULD"]
+    assert report["sources"][0]["semantic_diff"]["normative_terms_changed"] == [
+        "SHOULD"
+    ]
     assert report["review_artifact"]["approval_status"] == "pending"
 
 
@@ -65,9 +67,7 @@ def test_records_current_snapshot_and_signs_report(tmp_path: Path) -> None:
     observed = b"publisher edition 1"
     (tmp_path / "baseline.txt").write_bytes(observed)
     manifest = tmp_path / "sources.json"
-    manifest.write_text(
-        json.dumps(_manifest(observed)), encoding="utf-8"
-    )
+    manifest.write_text(json.dumps(_manifest(observed)), encoding="utf-8")
     private_key = Ed25519PrivateKey.generate()
     key_path = tmp_path / "monitor-key.pem"
     key_path.write_bytes(

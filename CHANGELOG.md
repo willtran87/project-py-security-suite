@@ -1,5 +1,31 @@
 # Changelog
 
+- Expand governed industry assurance to 358 version-explicit standards and
+  guidance references, 104 selectable assurance packs, 124 benchmark families,
+  and 35 maintained adapter contracts. Add ISO 15026/OMG SACM structured
+  assurance cases, IEEE 1012 integrity V&V, separate CMVP and international
+  cryptographic-module profiles, ISO biometric performance/PAD, integrated
+  service/security management, and ISO 17043 proficiency testing with eleven
+  executable scoring protocols. Replace the generic ISO/IEC/IEEE 29119
+  series entry with current Parts 1-5; add SQuaRE quality-in-use/cloud,
+  ISO 31000/IEC 31010 risk techniques, CISA Secure by Design, TLS 1.3,
+  reproducible builds, AMTSO, DICE, telecom, NICE workforce, CREST/PTES, and
+  DORA delivery-outcome coverage. Add pinned, provenance-bound adapters for
+  test-process conformance, cloud quality, risk calibration, loopback TLS,
+  environment-varied rebuilds, secure defaults, harmless/inert malware-control
+  evaluation, attestation, telecom, workforce, penetration-test engagement
+  quality, and five-metric delivery outcomes. Keep draft ISO 31000, DICE 1.3,
+  ISO/IEC/IEEE 29119-14, and release-ambiguous OWASP ISVS on the non-normative
+  watchlist. Correct ISO/IEC 27403 and 27404 identities and add
+  lifecycle/watchlist governance for audit and certification bodies,
+  ISO/IEC 19896 evaluator competence, the complete published ISO/IEC 27034
+  application-security series, NIST service-mesh/access-control/firmware and
+  differential-privacy guidance, TPM 2.0, SQuaRE quality measurement, health,
+  energy, and e-discovery. Add protocol-specific NIST Dioptra, firmware/TPM,
+  authorization-policy, differential-privacy, blinded evaluator-calibration,
+  and SQuaRE benchmark adapters with immutable corpora, licenses, labels,
+  golden controls, provenance, replay ledgers, and hardened execution.
+
 - Add an executable industry benchmark adapter runtime with explicit operator
   authorization, digest-pinned executables and corpora, shell-free staged
   commands, minimized environments, timeouts, bounded captures, process-tree

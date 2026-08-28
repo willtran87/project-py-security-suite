@@ -76,7 +76,9 @@ def monitor_standard_sources(
     try:
         manifest = strict_loads(payload)
     except (TypeError, ValueError) as exc:
-        raise StandardsMonitorError("standards source manifest is invalid JSON") from exc
+        raise StandardsMonitorError(
+            "standards source manifest is invalid JSON"
+        ) from exc
     _validate_manifest(manifest)
     output = resolve_unlinked_path(output_directory, "standards snapshot output")
     if output.exists():
@@ -121,7 +123,9 @@ def monitor_standard_sources(
                     "bytes": len(content),
                     "status": status,
                     "snapshot": snapshot.relative_to(output).as_posix(),
-                    "promotion": "not-required" if status == "unchanged" else "human-review-required",
+                    "promotion": "not-required"
+                    if status == "unchanged"
+                    else "human-review-required",
                     "semantic_diff": semantic_diff,
                     "impact": source["impact"],
                 }
@@ -158,11 +162,7 @@ def monitor_standard_sources(
         "sources_changed": changed,
         "sources_unavailable": unavailable,
         "decision": (
-            "incomplete"
-            if unavailable
-            else "review-required"
-            if changed
-            else "current"
+            "incomplete" if unavailable else "review-required" if changed else "current"
         ),
         "promotion_policy": {
             "automatic_promotion": False,
@@ -213,12 +213,17 @@ def verify_standards_monitor_report(
     if not isinstance(document, dict) or document.get("schema_version") != "1.0":
         raise StandardsMonitorError("standards monitor report contract is invalid")
     signature = document.get("signature")
-    if not isinstance(signature, dict) or set(signature) != {
-        "algorithm",
-        "key_id",
-        "signature",
-        "signed_payload_sha256",
-    } or signature.get("algorithm") != "Ed25519":
+    if (
+        not isinstance(signature, dict)
+        or set(signature)
+        != {
+            "algorithm",
+            "key_id",
+            "signature",
+            "signed_payload_sha256",
+        }
+        or signature.get("algorithm") != "Ed25519"
+    ):
         raise StandardsMonitorError("standards monitor signature is missing or invalid")
     unsigned = dict(document)
     unsigned.pop("signature")
@@ -246,7 +251,9 @@ def verify_standards_monitor_report(
     )
     key_id = hashlib.sha256(raw_public).hexdigest()
     if key_id != signature.get("key_id"):
-        raise StandardsMonitorError("standards monitor signing key identity does not match")
+        raise StandardsMonitorError(
+            "standards monitor signing key identity does not match"
+        )
     try:
         encoded_signature = signature.get("signature")
         if not isinstance(encoded_signature, str):
@@ -304,7 +311,11 @@ def _validate_manifest(value: object) -> None:
         }:
             raise StandardsMonitorError("publisher source contract is invalid")
         identifier = source["id"]
-        if not isinstance(identifier, str) or not _IDENTIFIER.fullmatch(identifier) or identifier in seen:
+        if (
+            not isinstance(identifier, str)
+            or not _IDENTIFIER.fullmatch(identifier)
+            or identifier in seen
+        ):
             raise StandardsMonitorError("publisher source id is invalid or duplicated")
         seen.add(identifier)
         for field in ("baseline_version", "publisher"):
@@ -316,25 +327,42 @@ def _validate_manifest(value: object) -> None:
         ):
             raise StandardsMonitorError("publisher baseline digest is invalid")
         maximum = source["maximum_bytes"]
-        if not isinstance(maximum, int) or isinstance(maximum, bool) or not 1 <= maximum <= _MAX_SOURCE_BYTES:
+        if (
+            not isinstance(maximum, int)
+            or isinstance(maximum, bool)
+            or not 1 <= maximum <= _MAX_SOURCE_BYTES
+        ):
             raise StandardsMonitorError("publisher source maximum_bytes is invalid")
         if not isinstance(source["baseline_path"], str) or not source["baseline_path"]:
             raise StandardsMonitorError("publisher baseline_path is invalid")
         if source["media_type"] not in {
-            "text/plain", "text/html", "application/json", "application/xml",
-            "text/xml", "application/pdf",
+            "text/plain",
+            "text/html",
+            "application/json",
+            "application/xml",
+            "text/xml",
+            "application/pdf",
         }:
             raise StandardsMonitorError("publisher media_type is unsupported")
         impact = source["impact"]
         if not isinstance(impact, dict) or set(impact) != {
-            "profiles", "controls", "benchmarks"
+            "profiles",
+            "controls",
+            "benchmarks",
         }:
             raise StandardsMonitorError("publisher source impact contract is invalid")
         for items in impact.values():
-            if not isinstance(items, list) or len(items) > 256 or not all(
-                isinstance(item, str) and 1 <= len(item) <= 128 for item in items
-            ) or len(items) != len(set(items)):
-                raise StandardsMonitorError("publisher source impact values are invalid")
+            if (
+                not isinstance(items, list)
+                or len(items) > 256
+                or not all(
+                    isinstance(item, str) and 1 <= len(item) <= 128 for item in items
+                )
+                or len(items) != len(set(items))
+            ):
+                raise StandardsMonitorError(
+                    "publisher source impact values are invalid"
+                )
 
 
 def _validate_url(value: object, allowed_hosts: set[str]) -> str:
@@ -369,7 +397,9 @@ def _reject_non_public_host(host: str) -> None:
     try:
         addresses = socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM)
     except socket.gaierror as exc:
-        raise StandardsMonitorError(f"publisher host cannot be resolved: {host}") from exc
+        raise StandardsMonitorError(
+            f"publisher host cannot be resolved: {host}"
+        ) from exc
     if not addresses:
         raise StandardsMonitorError(f"publisher host has no addresses: {host}")
     for address in addresses:
@@ -400,7 +430,9 @@ class _RestrictedRedirectHandler(HTTPRedirectHandler):
         return super().redirect_request(req, fp, code, msg, headers, target)
 
 
-def _fetch_https(url: str, maximum_bytes: int, allowed_hosts: set[str]) -> tuple[bytes, str, str]:
+def _fetch_https(
+    url: str, maximum_bytes: int, allowed_hosts: set[str]
+) -> tuple[bytes, str, str]:
     normalized_hosts = {item.lower().rstrip(".") for item in allowed_hosts}
     host = _validate_url(url, normalized_hosts)
     _reject_non_public_host(host)
@@ -422,7 +454,9 @@ def _fetch_https(url: str, maximum_bytes: int, allowed_hosts: set[str]) -> tuple
         _reject_non_public_host(final_host)
         declared = response.headers.get("Content-Length")
         if declared is not None and int(declared) > maximum_bytes:
-            raise StandardsMonitorError("publisher response exceeds declared size limit")
+            raise StandardsMonitorError(
+                "publisher response exceeds declared size limit"
+            )
         payload = response.read(maximum_bytes + 1)
         if len(payload) > maximum_bytes:
             raise StandardsMonitorError("publisher response exceeds size limit")
@@ -476,10 +510,9 @@ def _semantic_diff_for_source(
     modified = sorted(
         key for key in set(before) & set(after) if before[key] != after[key]
     )
-    changed_text = (
-        [after[key] for key in [*added, *modified]]
-        + [before[key] for key in [*removed, *modified]]
-    )
+    changed_text = [after[key] for key in [*added, *modified]] + [
+        before[key] for key in [*removed, *modified]
+    ]
     normative = sorted(
         {
             word
@@ -516,7 +549,11 @@ def _semantic_diff_for_source(
         "lifecycle_terms_changed": lifecycle_terms,
         "semantic_similarity": round(similarity, 12),
         "change_class": (
-            "lifecycle" if lifecycle_terms else "normative" if normative else "editorial-or-informative"
+            "lifecycle"
+            if lifecycle_terms
+            else "normative"
+            if normative
+            else "editorial-or-informative"
         ),
     }
 
@@ -526,7 +563,9 @@ def _extract_semantic_sections(payload: bytes, media_type: str) -> dict[str, str
         try:
             value = strict_loads(payload)
         except (TypeError, ValueError) as exc:
-            raise StandardsMonitorError("publisher JSON cannot be parsed semantically") from exc
+            raise StandardsMonitorError(
+                "publisher JSON cannot be parsed semantically"
+            ) from exc
         sections: dict[str, str] = {}
         _flatten_json(value, "$", sections)
         return sections
@@ -534,10 +573,16 @@ def _extract_semantic_sections(payload: bytes, media_type: str) -> dict[str, str
         try:
             root = ElementTree.fromstring(payload)
         except (TypeError, ValueError, ElementTree.ParseError) as exc:
-            raise StandardsMonitorError("publisher XML cannot be parsed semantically") from exc
+            raise StandardsMonitorError(
+                "publisher XML cannot be parsed semantically"
+            ) from exc
         sections = {}
         for index, element in enumerate(root.iter()):
-            identifier = element.attrib.get("id") or element.attrib.get("name") or f"{element.tag}[{index}]"
+            identifier = (
+                element.attrib.get("id")
+                or element.attrib.get("name")
+                or f"{element.tag}[{index}]"
+            )
             text_value = _normalize_text(" ".join(element.itertext()))
             if text_value:
                 sections[str(identifier)] = text_value
@@ -548,7 +593,9 @@ def _extract_semantic_sections(payload: bytes, media_type: str) -> dict[str, str
             parser.feed(payload.decode("utf-8", errors="strict"))
             parser.close()
         except (UnicodeError, ValueError) as exc:
-            raise StandardsMonitorError("publisher HTML cannot be parsed semantically") from exc
+            raise StandardsMonitorError(
+                "publisher HTML cannot be parsed semantically"
+            ) from exc
         return parser.sections()
     if media_type == "application/pdf":
         try:
@@ -558,7 +605,9 @@ def _extract_semantic_sections(payload: bytes, media_type: str) -> dict[str, str
                 for index, page in enumerate(reader.pages)
             }
         except Exception as exc:  # pypdf exposes multiple parser-specific exceptions
-            raise StandardsMonitorError("publisher PDF cannot be parsed semantically") from exc
+            raise StandardsMonitorError(
+                "publisher PDF cannot be parsed semantically"
+            ) from exc
     try:
         text_value = payload.decode("utf-8", errors="strict")
     except UnicodeError as exc:
@@ -609,7 +658,9 @@ class _SectionHTMLParser(HTMLParser):
             heading = _normalize_text(" ".join(self._heading_chunks))
             if heading:
                 self._counter += 1
-                self._current = self._heading or f"heading-{self._counter}-{heading[:48]}"
+                self._current = (
+                    self._heading or f"heading-{self._counter}-{heading[:48]}"
+                )
                 self._chunks.setdefault(self._current, []).extend(self._heading_chunks)
             self._heading = None
             self._heading_chunks = []
@@ -628,7 +679,10 @@ class _SectionHTMLParser(HTMLParser):
 
 
 def _write_json_atomic(path: Path, value: dict[str, Any], overwrite: bool) -> None:
-    payload = json.dumps(value, indent=2, sort_keys=True, ensure_ascii=False).encode("utf-8") + b"\n"
+    payload = (
+        json.dumps(value, indent=2, sort_keys=True, ensure_ascii=False).encode("utf-8")
+        + b"\n"
+    )
     _write_bytes_atomic(path, payload, overwrite=overwrite)
 
 
@@ -662,7 +716,9 @@ def _sign_report(report: dict[str, Any], key_path: Path) -> dict[str, str]:
     try:
         key = serialization.load_pem_private_key(payload, password=None)
     except (TypeError, ValueError) as exc:
-        raise StandardsMonitorError("signing key is not an unencrypted PEM key") from exc
+        raise StandardsMonitorError(
+            "signing key is not an unencrypted PEM key"
+        ) from exc
     if not isinstance(key, Ed25519PrivateKey):
         raise StandardsMonitorError("standards monitor requires an Ed25519 signing key")
     signed = canonical_bytes(report)

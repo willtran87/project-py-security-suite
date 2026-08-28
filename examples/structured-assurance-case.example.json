@@ -1,0 +1,60 @@
+{
+  "schema_version": "1.0",
+  "case_id": "release-security-assurance",
+  "scope_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "model": {
+    "format": "OMG-SACM",
+    "version": "2.3",
+    "schema_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "model_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "schema_validated": true,
+    "semantic_validated": true,
+    "round_trip_validated": true
+  },
+  "claims": [
+    {
+      "id": "claim-release-security",
+      "type": "claim",
+      "statement": "The evaluated release satisfies the security objectives defined for the digest-bound scope.",
+      "status": "supported",
+      "confidence": 0.95,
+      "applicable": true,
+      "top_level": true
+    },
+    {
+      "id": "defeater-runtime-drift",
+      "type": "defeater",
+      "statement": "Runtime drift could invalidate evidence collected from the evaluated release.",
+      "status": "resolved",
+      "confidence": 0.9,
+      "applicable": true,
+      "top_level": false
+    }
+  ],
+  "evidence": [
+    {
+      "id": "evidence-release-readiness",
+      "artifact": "release-readiness.json",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "subject_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "collected_at": "2026-08-28T12:00:00Z",
+      "valid_until": null,
+      "verified": true
+    }
+  ],
+  "relationships": [
+    {
+      "source": "evidence-release-readiness",
+      "target": "claim-release-security",
+      "type": "supports",
+      "rationale": "The source-bound release evidence supports the scoped release-security claim."
+    }
+  ],
+  "review": {
+    "reviewed_at": "2026-08-28T13:00:00Z",
+    "independent_reviewers": 2,
+    "minimum_confidence": 0.8,
+    "approved": true,
+    "approval_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  }
+}

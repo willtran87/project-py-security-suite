@@ -1,7 +1,7 @@
 # Python Security Suite design
 
 Status: alpha foundation  
-Last reviewed: 2026-08-27
+Last reviewed: 2026-08-28
 
 ## Purpose
 
@@ -45,8 +45,9 @@ flowchart LR
         Scanners["89 governed adapters<br/>security | quality | testing | policy | architecture | supply chain | artifact | governance"]
         Analyzers["Native contextual analyzers<br/>framework | contract | validation | health | architecture | domain assurance"]
         Reports["Markdown | HTML | SARIF | SonarQube | JSON<br/>SBOM + validation + architecture + domain coverage + Security Passport"]
-        Standards["292 versioned standards references<br/>80 selectable assurance packs<br/>publisher quarantine + semantic diff + signed promotion ledger"]
-        Benchmarks["99 governed benchmark families<br/>verified evidence + native OCI + 9 executable protocols<br/>qualification + repetition + evidence + delta"]
+        Standards["358 versioned standards references<br/>104 selectable assurance packs<br/>publisher quarantine + semantic diff + signed promotion ledger"]
+        Benchmarks["124 governed benchmark families + 35 maintained adapters<br/>verified evidence + native OCI/lab + 11 executable protocols<br/>qualification + repetition + evidence + delta"]
+        AssuranceCase["ISO 15026 + SACM 2.3 assurance case<br/>claims + evidence + defeaters + confidence + review"]
         Priority["CVSS v4 + SSVC<br/>source evidence only"]
         OSCAL["OSCAL 1.2.2 lifecycle<br/>7 official-schema-valid models"]
         Contracts["Version-explicit JSON Schemas<br/>installed package resources"]
@@ -58,6 +59,7 @@ flowchart LR
         Analyzers --> Suite
         Standards --> Suite
         Benchmarks --> Suite
+        AssuranceCase --> Suite
         Suite --> Priority
         Suite --> OSCAL
         Suite --> Reports

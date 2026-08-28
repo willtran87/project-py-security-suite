@@ -76,16 +76,20 @@ def _write_attestations(workspace: Path, manifest: dict[str, object]) -> None:
     )
     (workspace / "attestation.pub.pem").write_bytes(public)
     subject = _benchmark_subject_sha256(
-        manifest, manifest["corpus"]["sha256"]  # type: ignore[index]
+        manifest,
+        manifest["corpus"]["sha256"],  # type: ignore[index]
     )
     claims = {
         "trusted_time": {
-            "rfc3161_verified": True, "monotonic_state_verified": True,
+            "rfc3161_verified": True,
+            "monotonic_state_verified": True,
             "trusted_time_receipt_sha256": "a" * 64,
         },
         "replay_protection": {
-            "ledger_consumed": True, "nonce_unique": True,
-            "ledger_receipt_sha256": "b" * 64, "nonce_sha256": "c" * 64,
+            "ledger_consumed": True,
+            "nonce_unique": True,
+            "ledger_receipt_sha256": "b" * 64,
+            "nonce_sha256": "c" * 64,
         },
         "contamination_manifest": {"checked": True, "contaminated": False},
         "runner_sbom": {"validated": True, "format": "CycloneDX-1.6"},
@@ -106,8 +110,13 @@ def _write_attestations(workspace: Path, manifest: dict[str, object]) -> None:
     references = {}
     for name, kind in kinds.items():
         payload = json.dumps(
-            {"schema_version": "1.0", "kind": kind, "subject_sha256": subject,
-             "valid": True, "claims": claims[name]},
+            {
+                "schema_version": "1.0",
+                "kind": kind,
+                "subject_sha256": subject,
+                "valid": True,
+                "claims": claims[name],
+            },
             sort_keys=True,
         ).encode()
         artifact = workspace / f"{name}.json"
@@ -115,7 +124,8 @@ def _write_attestations(workspace: Path, manifest: dict[str, object]) -> None:
         artifact.write_bytes(payload)
         signature.write_bytes(base64.b64encode(key.sign(payload)))
         references[name] = {
-            "path": artifact.name, "sha256": hashlib.sha256(payload).hexdigest(),
+            "path": artifact.name,
+            "sha256": hashlib.sha256(payload).hexdigest(),
             "media_type": "application/vnd.pysec.attestation+json;version=1.0",
             "public_key_path": "attestation.pub.pem",
             "public_key_sha256": hashlib.sha256(public).hexdigest(),
@@ -131,8 +141,18 @@ def test_executes_digest_pinned_adapter_and_scores_cases(tmp_path: Path) -> None
         "benchmark_id": "droidbench",
         "protocol": "classification",
         "cases": [
-            {"id": "tp", "expected_positive": True, "observed_positive": True, "strata": {"cwe": "CWE-200"}},
-            {"id": "tn", "expected_positive": False, "observed_positive": False, "strata": {"cwe": "CWE-200"}},
+            {
+                "id": "tp",
+                "expected_positive": True,
+                "observed_positive": True,
+                "strata": {"cwe": "CWE-200"},
+            },
+            {
+                "id": "tn",
+                "expected_positive": False,
+                "observed_positive": False,
+                "strata": {"cwe": "CWE-200"},
+            },
         ],
     }
     (tmp_path / "adapter.py").write_text(
@@ -202,20 +222,52 @@ def test_rejects_signed_attestation_for_a_different_subject(tmp_path: Path) -> N
 
 def test_scores_protocol_specific_conformance_and_stochastic_results() -> None:
     conformance = _score_normalized_result(
-        {"schema_version": "1.0", "benchmark_id": "w3c-act-rules-conformance",
-         "protocol": "conformance", "cases": [
-             {"id": "rule-1", "expected_outcome": "pass", "observed_outcome": "pass", "strata": {}},
-             {"id": "rule-2", "expected_outcome": "not-applicable", "observed_outcome": "not-applicable", "strata": {}},
-         ]},
-        benchmark_id="w3c-act-rules-conformance", protocol="conformance",
+        {
+            "schema_version": "1.0",
+            "benchmark_id": "w3c-act-rules-conformance",
+            "protocol": "conformance",
+            "cases": [
+                {
+                    "id": "rule-1",
+                    "expected_outcome": "pass",
+                    "observed_outcome": "pass",
+                    "strata": {},
+                },
+                {
+                    "id": "rule-2",
+                    "expected_outcome": "not-applicable",
+                    "observed_outcome": "not-applicable",
+                    "strata": {},
+                },
+            ],
+        },
+        benchmark_id="w3c-act-rules-conformance",
+        protocol="conformance",
     )
     stochastic = _score_normalized_result(
-        {"schema_version": "1.0", "benchmark_id": "agentdojo",
-         "protocol": "stochastic-adversarial", "cases": [
-             {"id": "trial-1", "attacked": True, "compromised": False, "utility": 0.9, "strata": {}},
-             {"id": "trial-2", "attacked": True, "compromised": True, "utility": 0.7, "strata": {}},
-         ]},
-        benchmark_id="agentdojo", protocol="stochastic-adversarial",
+        {
+            "schema_version": "1.0",
+            "benchmark_id": "agentdojo",
+            "protocol": "stochastic-adversarial",
+            "cases": [
+                {
+                    "id": "trial-1",
+                    "attacked": True,
+                    "compromised": False,
+                    "utility": 0.9,
+                    "strata": {},
+                },
+                {
+                    "id": "trial-2",
+                    "attacked": True,
+                    "compromised": True,
+                    "utility": 0.7,
+                    "strata": {},
+                },
+            ],
+        },
+        benchmark_id="agentdojo",
+        protocol="stochastic-adversarial",
     )
     assert conformance["outcome_accuracy"] == 1.0
     assert conformance["conformance_rate"] == 1.0
@@ -223,19 +275,130 @@ def test_scores_protocol_specific_conformance_and_stochastic_results() -> None:
     assert stochastic["attack_success_rate_wilson_upper_95"] > 0.5
 
 
+def test_scores_biometric_and_proficiency_results_with_stratified_contracts() -> None:
+    biometric = _score_normalized_result(
+        {
+            "schema_version": "1.0",
+            "benchmark_id": "biometric-performance-pad",
+            "protocol": "biometric-performance",
+            "cases": [
+                {
+                    "id": "genuine-a",
+                    "trial_type": "genuine",
+                    "accepted": True,
+                    "strata": {"demographic": "group-a"},
+                },
+                {
+                    "id": "impostor-a",
+                    "trial_type": "impostor",
+                    "accepted": False,
+                    "strata": {"demographic": "group-a"},
+                },
+                {
+                    "id": "genuine-b",
+                    "trial_type": "genuine",
+                    "accepted": False,
+                    "strata": {"demographic": "group-b"},
+                },
+                {
+                    "id": "impostor-b",
+                    "trial_type": "impostor",
+                    "accepted": False,
+                    "strata": {"demographic": "group-b"},
+                },
+                {
+                    "id": "attack-print",
+                    "trial_type": "presentation-attack",
+                    "accepted": False,
+                    "strata": {"attack_instrument": "print"},
+                },
+            ],
+        },
+        benchmark_id="biometric-performance-pad",
+        protocol="biometric-performance",
+    )
+    assert biometric["false_match_rate"] == 0.0
+    assert biometric["false_non_match_rate"] == 0.5
+    assert biometric["iapar"] == 0.0
+    assert biometric["demographic_groups"] == 2
+    assert (
+        biometric["worst_group_fnmr_wilson_upper_95"]
+        >= biometric["fnmr_wilson_upper_95"]
+    )
+
+    proficiency = _score_normalized_result(
+        {
+            "schema_version": "1.0",
+            "benchmark_id": "interlaboratory-proficiency-testing",
+            "protocol": "proficiency-testing",
+            "cases": [
+                {
+                    "id": "item-1",
+                    "assigned_value": "pass",
+                    "participant_results": ["pass", "pass", "pass"],
+                    "round": 1,
+                    "strata": {"case_type": "positive"},
+                },
+                {
+                    "id": "item-2",
+                    "assigned_value": "fail",
+                    "participant_results": ["fail", "fail", "pass"],
+                    "round": 2,
+                    "strata": {"case_type": "negative"},
+                },
+            ],
+        },
+        benchmark_id="interlaboratory-proficiency-testing",
+        protocol="proficiency-testing",
+    )
+    assert proficiency["participants"] == 3
+    assert proficiency["rounds"] == 2
+    assert proficiency["reference_accuracy"] == pytest.approx(5 / 6)
+    assert -1 <= proficiency["chance_corrected_agreement"] <= 1
+
+    with pytest.raises(ValueError, match="attack_instrument"):
+        _score_normalized_result(
+            {
+                "schema_version": "1.0",
+                "benchmark_id": "biometric-performance-pad",
+                "protocol": "biometric-performance",
+                "cases": [
+                    {
+                        "id": "attack-missing-strata",
+                        "trial_type": "presentation-attack",
+                        "accepted": False,
+                        "strata": {},
+                    }
+                ],
+            },
+            benchmark_id="biometric-performance-pad",
+            protocol="biometric-performance",
+        )
+
+
 def test_builds_hardened_digest_only_oci_command(tmp_path: Path) -> None:
     (tmp_path / "corpus.bin").write_bytes(b"pinned corpus")
     executable = Path(sys.executable).resolve()
     stage = _manifest(tmp_path)["stages"][0]  # type: ignore[index]
     isolation = {
-        "mode": "oci", "network_policy": "deny", "disposable_target": True,
+        "mode": "oci",
+        "network_policy": "deny",
+        "disposable_target": True,
         "external_receipt_sha256": None,
-        "oci": {"runtime": str(executable), "runtime_sha256": _sha256(executable),
-                "image": "registry.example/adapter@sha256:" + "d" * 64,
-                "memory_bytes": 536870912, "cpu_count": 2, "pids_limit": 128,
-                "seccomp_profile": None, "apparmor_profile": "pysec-benchmark"},
+        "oci": {
+            "runtime": str(executable),
+            "runtime_sha256": _sha256(executable),
+            "image": "registry.example/adapter@sha256:" + "d" * 64,
+            "memory_bytes": 536870912,
+            "cpu_count": 2,
+            "pids_limit": 128,
+            "seccomp_profile": None,
+            "apparmor_profile": "pysec-benchmark",
+        },
     }
-    argv, runtime_digest = _stage_argv(executable, stage, isolation, tmp_path, tmp_path / "corpus.bin")
+    argv, runtime_digest = _stage_argv(
+        executable, stage, isolation, tmp_path, tmp_path / "corpus.bin"
+    )
     assert runtime_digest == _sha256(executable)
     assert "--read-only" in argv
     assert "--cap-drop=ALL" in argv

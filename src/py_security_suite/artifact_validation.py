@@ -32,6 +32,7 @@ _ARTIFACT_SCHEMAS = {
     "artifact-manifest.json": "artifact-manifest.schema.json",
     "artifact-sbom.cdx.json": "cyclonedx-artifact.schema.json",
     "assurance-claims.json": "assurance-claims-1.1.schema.json",
+    "assurance-case-assessment.json": "assurance-case-assessment-1.0.schema.json",
     "boundary-graph.json": "boundary-graph-1.0.schema.json",
     "benchmark-delta.json": "benchmark-delta-1.0.schema.json",
     "benchmark-registry.json": "benchmark-registry-1.0.schema.json",
@@ -239,6 +240,20 @@ def _validate_external_conformity_assessment(value: object) -> None:
         assessed="schemes_assessed",
         completed="schemes_complete",
     )
+
+
+@_typed_validator("assurance-case-assessment.json")
+def _validate_assurance_case_assessment(value: object) -> None:
+    if not isinstance(value, dict) or not isinstance(value.get("gaps"), list):
+        raise TypeError("assurance case assessment artifact is invalid")
+    expected_complete = not value["gaps"]
+    if (
+        value.get("complete") is not expected_complete
+        or value.get("top_level_claims", 0) > value.get("claims_assessed", 0)
+        or value.get("defeaters_assessed", 0) > value.get("claims_assessed", 0)
+        or (value.get("applicable") is False and expected_complete)
+    ):
+        raise ValueError("assurance case assessment accounting does not match")
 
 
 @_typed_validator("control-assessment.json")

@@ -34,6 +34,8 @@ _PROTOCOLS = {
     "fuzzing-statistical",
     "stochastic-adversarial",
     "assessor-agreement",
+    "biometric-performance",
+    "proficiency-testing",
     "conformance",
     "detection-evaluation",
 }
@@ -77,7 +79,9 @@ def execute_benchmark_manifest(
     try:
         manifest = strict_loads(payload)
     except (ValueError, TypeError) as exc:
-        raise BenchmarkExecutionError("benchmark adapter manifest is invalid JSON") from exc
+        raise BenchmarkExecutionError(
+            "benchmark adapter manifest is invalid JSON"
+        ) from exc
     _validate_manifest(manifest, known_benchmark_ids=known_benchmark_ids)
 
     work = resolve_unlinked_path(workspace, "benchmark workspace")
@@ -192,7 +196,9 @@ def execute_benchmark_manifest(
         "thresholds": manifest["thresholds"],
         "benchmark_subject_sha256": subject_sha256,
         "attestations": verified_attestations,
-        "replay_protected": verified_attestations["replay_protection"]["replay_protected"],
+        "replay_protected": verified_attestations["replay_protection"][
+            "replay_protected"
+        ],
         "stages": stages,
         "isolation": manifest["isolation"],
         "decision": decision,
@@ -209,9 +215,7 @@ def execute_benchmark_manifest(
     return receipt
 
 
-def _validate_manifest(
-    value: object, *, known_benchmark_ids: set[str] | None
-) -> None:
+def _validate_manifest(value: object, *, known_benchmark_ids: set[str] | None) -> None:
     if not isinstance(value, dict):
         raise BenchmarkExecutionError("benchmark adapter manifest must be an object")
     required = {
@@ -297,7 +301,9 @@ def _validate_manifest(
     if isolation["mode"] == "oci":
         _validate_oci(isolation["oci"])
         if isolation["network_policy"] != "deny":
-            raise BenchmarkExecutionError("OCI mode currently requires denied networking")
+            raise BenchmarkExecutionError(
+                "OCI mode currently requires denied networking"
+            )
     elif isolation["oci"] is not None:
         raise BenchmarkExecutionError("OCI configuration is only valid in OCI mode")
     if not isinstance(isolation["disposable_target"], bool):
@@ -343,9 +349,13 @@ def _validate_stage(value: object) -> None:
     ):
         raise BenchmarkExecutionError("stage executable digest is invalid")
     arguments = value["arguments"]
-    if not isinstance(arguments, list) or len(arguments) > 256 or not all(
-        isinstance(item, str) and len(item) <= 8192 and "\x00" not in item
-        for item in arguments
+    if (
+        not isinstance(arguments, list)
+        or len(arguments) > 256
+        or not all(
+            isinstance(item, str) and len(item) <= 8192 and "\x00" not in item
+            for item in arguments
+        )
     ):
         raise BenchmarkExecutionError("stage arguments are invalid")
     environment = value["environment"]
@@ -357,12 +367,20 @@ def _validate_stage(value: object) -> None:
         if not isinstance(item, str) or len(item) > 8192 or "\x00" in item:
             raise BenchmarkExecutionError("stage environment value is invalid")
     timeout = value["timeout_seconds"]
-    if not isinstance(timeout, int) or isinstance(timeout, bool) or not 1 <= timeout <= 86400:
+    if (
+        not isinstance(timeout, int)
+        or isinstance(timeout, bool)
+        or not 1 <= timeout <= 86400
+    ):
         raise BenchmarkExecutionError("stage timeout is invalid")
     exit_codes = value["expected_exit_codes"]
-    if not isinstance(exit_codes, list) or not 1 <= len(exit_codes) <= 16 or not all(
-        isinstance(item, int) and not isinstance(item, bool) and 0 <= item <= 255
-        for item in exit_codes
+    if (
+        not isinstance(exit_codes, list)
+        or not 1 <= len(exit_codes) <= 16
+        or not all(
+            isinstance(item, int) and not isinstance(item, bool) and 0 <= item <= 255
+            for item in exit_codes
+        )
     ):
         raise BenchmarkExecutionError("stage expected exit codes are invalid")
 
@@ -380,8 +398,12 @@ def _validate_result(value: object) -> None:
 
 def _validate_attestation_reference(value: object) -> None:
     required = {
-        "path", "sha256", "media_type", "public_key_path",
-        "public_key_sha256", "signature_path",
+        "path",
+        "sha256",
+        "media_type",
+        "public_key_path",
+        "public_key_sha256",
+        "signature_path",
     }
     if not isinstance(value, dict) or set(value) != required:
         raise BenchmarkExecutionError("attestation reference contract is invalid")
@@ -397,12 +419,21 @@ def _validate_attestation_reference(value: object) -> None:
 
 def _validate_oci(value: object) -> None:
     expected = {
-        "runtime", "runtime_sha256", "image", "memory_bytes", "cpu_count",
-        "pids_limit", "seccomp_profile", "apparmor_profile",
+        "runtime",
+        "runtime_sha256",
+        "image",
+        "memory_bytes",
+        "cpu_count",
+        "pids_limit",
+        "seccomp_profile",
+        "apparmor_profile",
     }
     if not isinstance(value, dict) or set(value) != expected:
         raise BenchmarkExecutionError("OCI isolation contract is invalid")
-    if not isinstance(value["runtime"], str) or not Path(value["runtime"]).is_absolute():
+    if (
+        not isinstance(value["runtime"], str)
+        or not Path(value["runtime"]).is_absolute()
+    ):
         raise BenchmarkExecutionError("OCI runtime must be an absolute path")
     if not isinstance(value["runtime_sha256"], str) or not _DIGEST.fullmatch(
         value["runtime_sha256"]
@@ -418,17 +449,28 @@ def _validate_oci(value: object) -> None:
         ("pids_limit", 16, 65536),
     ):
         item = value[field]
-        if not isinstance(item, int) or isinstance(item, bool) or not minimum <= item <= maximum:
+        if (
+            not isinstance(item, int)
+            or isinstance(item, bool)
+            or not minimum <= item <= maximum
+        ):
             raise BenchmarkExecutionError(f"OCI {field} is invalid")
     cpu_count = value["cpu_count"]
-    if not isinstance(cpu_count, (int, float)) or isinstance(cpu_count, bool) or not 0.1 <= float(cpu_count) <= 256:
+    if (
+        not isinstance(cpu_count, (int, float))
+        or isinstance(cpu_count, bool)
+        or not 0.1 <= float(cpu_count) <= 256
+    ):
         raise BenchmarkExecutionError("OCI cpu_count is invalid")
     profile = value["seccomp_profile"]
-    if profile is not None and (not isinstance(profile, str) or not Path(profile).is_absolute()):
+    if profile is not None and (
+        not isinstance(profile, str) or not Path(profile).is_absolute()
+    ):
         raise BenchmarkExecutionError("OCI seccomp profile must be an absolute path")
     apparmor = value["apparmor_profile"]
     if apparmor is not None and (
-        not isinstance(apparmor, str) or not re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", apparmor)
+        not isinstance(apparmor, str)
+        or not re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", apparmor)
     ):
         raise BenchmarkExecutionError("OCI AppArmor profile is invalid")
 
@@ -513,7 +555,11 @@ def _validate_attestation_document(
     value: object, kind: str, subject_sha256: str
 ) -> None:
     if not isinstance(value, dict) or set(value) != {
-        "schema_version", "kind", "subject_sha256", "valid", "claims"
+        "schema_version",
+        "kind",
+        "subject_sha256",
+        "valid",
+        "claims",
     }:
         raise BenchmarkExecutionError(f"{kind} attestation contract is invalid")
     if (
@@ -539,11 +585,15 @@ def _validate_attestation_document(
     if any(claims.get(name) != expected for name, expected in required[kind].items()):
         raise BenchmarkExecutionError(f"{kind} required claims are not verified")
     if kind == "runner-sbom" and claims.get("format") not in {
-        "CycloneDX-1.6", "SPDX-2.3", "SPDX-3.0"
+        "CycloneDX-1.6",
+        "SPDX-2.3",
+        "SPDX-3.0",
     }:
         raise BenchmarkExecutionError("runner SBOM format is unsupported")
     for field in (
-        "trusted_time_receipt_sha256", "ledger_receipt_sha256", "nonce_sha256"
+        "trusted_time_receipt_sha256",
+        "ledger_receipt_sha256",
+        "nonce_sha256",
     ):
         if field in claims and (
             not isinstance(claims[field], str) or not _DIGEST.fullmatch(claims[field])
@@ -569,11 +619,15 @@ def _attestation_outcome(kind: str, claims: dict[str, Any]) -> dict[str, Any]:
 def _validate_thresholds(value: object, protocol: str) -> None:
     expected_by_protocol = {
         "classification": {
-            "minimum_precision", "minimum_recall", "minimum_f1",
+            "minimum_precision",
+            "minimum_recall",
+            "minimum_f1",
             "maximum_false_positive_rate",
         },
         "detection-evaluation": {
-            "minimum_precision", "minimum_recall", "minimum_f1",
+            "minimum_precision",
+            "minimum_recall",
+            "minimum_f1",
             "maximum_false_positive_rate",
         },
         "verification-competition": {"minimum_accuracy"},
@@ -581,13 +635,28 @@ def _validate_thresholds(value: object, protocol: str) -> None:
         "conformance": {"minimum_outcome_accuracy", "minimum_conformance_rate"},
         "temporal-calibration": {"maximum_brier_score"},
         "stochastic-adversarial": {
-            "maximum_attack_success_rate", "minimum_mean_utility",
+            "maximum_attack_success_rate",
+            "minimum_mean_utility",
         },
         "assessor-agreement": {
-            "minimum_agreement", "minimum_chance_corrected_agreement",
+            "minimum_agreement",
+            "minimum_chance_corrected_agreement",
+        },
+        "biometric-performance": {
+            "maximum_fmr_wilson_upper_95",
+            "maximum_fnmr_wilson_upper_95",
+            "maximum_iapar_wilson_upper_95",
+            "maximum_worst_group_fmr_wilson_upper_95",
+            "maximum_worst_group_fnmr_wilson_upper_95",
+        },
+        "proficiency-testing": {
+            "minimum_agreement",
+            "minimum_chance_corrected_agreement",
+            "minimum_reference_accuracy",
         },
         "fuzzing-statistical": {
-            "minimum_executions", "minimum_coverage_gain",
+            "minimum_executions",
+            "minimum_coverage_gain",
         },
     }
     expected = expected_by_protocol[protocol]
@@ -636,9 +705,7 @@ def _execute_stage(
     )
     started = time.monotonic()
     with tempfile.TemporaryFile() as stdout, tempfile.TemporaryFile() as stderr:
-        creationflags = (
-            subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
-        )
+        creationflags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
         argv, executed_sha256 = _stage_argv(
             executable, stage, isolation, workspace, corpus
         )
@@ -697,10 +764,17 @@ def _stage_argv(
     if runtime_sha256 != oci["runtime_sha256"]:
         raise BenchmarkExecutionError("OCI runtime digest does not match manifest")
     command = [
-        str(runtime), "run", "--rm", "--read-only", "--cap-drop=ALL",
-        "--security-opt=no-new-privileges", "--network=none",
-        f"--pids-limit={oci['pids_limit']}", f"--memory={oci['memory_bytes']}",
-        f"--cpus={oci['cpu_count']}", "--user=65532:65532",
+        str(runtime),
+        "run",
+        "--rm",
+        "--read-only",
+        "--cap-drop=ALL",
+        "--security-opt=no-new-privileges",
+        "--network=none",
+        f"--pids-limit={oci['pids_limit']}",
+        f"--memory={oci['memory_bytes']}",
+        f"--cpus={oci['cpu_count']}",
+        "--user=65532:65532",
         "--tmpfs=/tmp:rw,noexec,nosuid,nodev,size=64m",
         f"--volume={workspace}:/workspace:rw",
         f"--volume={corpus}:/corpus/input:ro",
@@ -712,9 +786,7 @@ def _stage_argv(
         command.append(f"--security-opt=seccomp={profile}")
     if oci["apparmor_profile"] is not None:
         command.append(f"--security-opt=apparmor={oci['apparmor_profile']}")
-    command.extend(
-        [oci["image"], "/pysec/stage-executable", *stage["arguments"]]
-    )
+    command.extend([oci["image"], "/pysec/stage-executable", *stage["arguments"]])
     return command, runtime_sha256
 
 
@@ -727,7 +799,9 @@ def _bounded_capture(handle: Any) -> tuple[str, bool]:
     size = handle.tell()
     handle.seek(0)
     payload = handle.read(_MAX_CAPTURE_BYTES + 1)
-    return payload[:_MAX_CAPTURE_BYTES].decode("utf-8", errors="replace"), size > _MAX_CAPTURE_BYTES
+    return payload[:_MAX_CAPTURE_BYTES].decode(
+        "utf-8", errors="replace"
+    ), size > _MAX_CAPTURE_BYTES
 
 
 def _terminate_process_tree(pid: int) -> None:
@@ -759,7 +833,9 @@ def _resolve_workspace_file(workspace: Path, path: Path, label: str) -> Path:
     try:
         resolved.relative_to(workspace)
     except ValueError as exc:
-        raise BenchmarkExecutionError(f"{label} must remain inside the workspace") from exc
+        raise BenchmarkExecutionError(
+            f"{label} must remain inside the workspace"
+        ) from exc
     return resolved
 
 
@@ -802,6 +878,10 @@ def _score_normalized_result(
         return _score_stochastic(cases)
     if protocol == "assessor-agreement":
         return _score_assessor_agreement(cases)
+    if protocol == "biometric-performance":
+        return _score_biometric_performance(cases)
+    if protocol == "proficiency-testing":
+        return _score_proficiency_testing(cases)
     if protocol == "fuzzing-statistical":
         return _score_fuzzing(cases)
     raise ValueError("normalized result protocol is unsupported")
@@ -818,12 +898,16 @@ def _validate_case_identity(case: object, seen: set[str]) -> dict[str, Any]:
 
 
 def _validate_strata(value: object) -> None:
-    if not isinstance(value, dict) or len(value) > 32 or any(
-        not isinstance(key, str)
-        or not isinstance(item, str)
-        or len(key) > 128
-        or len(item) > 512
-        for key, item in value.items()
+    if (
+        not isinstance(value, dict)
+        or len(value) > 32
+        or any(
+            not isinstance(key, str)
+            or not isinstance(item, str)
+            or len(key) > 128
+            or len(item) > 512
+            for key, item in value.items()
+        )
     ):
         raise ValueError("case strata are invalid")
 
@@ -880,7 +964,9 @@ def _score_outcome_accuracy(cases: list[Any]) -> dict[str, Any]:
         if set(case) != {"id", "expected", "observed", "strata"}:
             raise ValueError("outcome case contract is invalid")
         _validate_strata(case["strata"])
-        if not isinstance(case["expected"], str) or not isinstance(case["observed"], str):
+        if not isinstance(case["expected"], str) or not isinstance(
+            case["observed"], str
+        ):
             raise ValueError("outcome labels must be strings")
         correct += case["expected"] == case["observed"]
     return {"case_count": len(cases), "accuracy": _ratio(correct, len(cases))}
@@ -895,7 +981,10 @@ def _score_conformance(cases: list[Any]) -> dict[str, Any]:
         if set(case) != {"id", "expected_outcome", "observed_outcome", "strata"}:
             raise ValueError("conformance case contract is invalid")
         _validate_strata(case["strata"])
-        if case["expected_outcome"] not in outcomes or case["observed_outcome"] not in outcomes:
+        if (
+            case["expected_outcome"] not in outcomes
+            or case["observed_outcome"] not in outcomes
+        ):
             raise ValueError("conformance outcome is invalid")
         correct += case["expected_outcome"] == case["observed_outcome"]
         if case["expected_outcome"] != "not-applicable":
@@ -919,7 +1008,12 @@ def _score_temporal_calibration(cases: list[Any]) -> dict[str, Any]:
         _validate_strata(case["strata"])
         probability = case["predicted_probability"]
         observed = case["observed"]
-        if not isinstance(probability, (int, float)) or isinstance(probability, bool) or not 0 <= float(probability) <= 1 or not isinstance(observed, bool):
+        if (
+            not isinstance(probability, (int, float))
+            or isinstance(probability, bool)
+            or not 0 <= float(probability) <= 1
+            or not isinstance(observed, bool)
+        ):
             raise ValueError("calibration observation is invalid")
         squared_error += (float(probability) - float(observed)) ** 2
     return {"case_count": len(cases), "brier_score": _ratio(squared_error, len(cases))}
@@ -934,10 +1028,16 @@ def _score_stochastic(cases: list[Any]) -> dict[str, Any]:
         if set(case) != {"id", "attacked", "compromised", "utility", "strata"}:
             raise ValueError("stochastic trial contract is invalid")
         _validate_strata(case["strata"])
-        if not isinstance(case["attacked"], bool) or not isinstance(case["compromised"], bool):
+        if not isinstance(case["attacked"], bool) or not isinstance(
+            case["compromised"], bool
+        ):
             raise ValueError("stochastic trial labels must be boolean")
         score = case["utility"]
-        if not isinstance(score, (int, float)) or isinstance(score, bool) or not 0 <= float(score) <= 1:
+        if (
+            not isinstance(score, (int, float))
+            or isinstance(score, bool)
+            or not 0 <= float(score) <= 1
+        ):
             raise ValueError("stochastic utility is invalid")
         attacked += case["attacked"]
         compromised += case["attacked"] and case["compromised"]
@@ -945,8 +1045,10 @@ def _score_stochastic(cases: list[Any]) -> dict[str, Any]:
     rate = _ratio(compromised, attacked)
     upper = _wilson_upper(compromised, attacked)
     return {
-        "case_count": len(cases), "attacked_trials": attacked,
-        "attack_success_rate": rate, "attack_success_rate_wilson_upper_95": upper,
+        "case_count": len(cases),
+        "attacked_trials": attacked,
+        "attack_success_rate": rate,
+        "attack_success_rate_wilson_upper_95": upper,
         "mean_utility": _ratio(utility, len(cases)),
     }
 
@@ -964,8 +1066,12 @@ def _score_assessor_agreement(cases: list[Any]) -> dict[str, Any]:
             raise ValueError("assessor case contract is invalid")
         _validate_strata(case["strata"])
         ratings = case["ratings"]
-        if not isinstance(ratings, list) or not 2 <= len(ratings) <= 32 or not all(
-            isinstance(item, str) and 1 <= len(item) <= 128 for item in ratings
+        if (
+            not isinstance(ratings, list)
+            or not 2 <= len(ratings) <= 32
+            or not all(
+                isinstance(item, str) and 1 <= len(item) <= 128 for item in ratings
+            )
         ):
             raise ValueError("assessor ratings are invalid")
         if expected_rater_count is None:
@@ -991,8 +1097,163 @@ def _score_assessor_agreement(cases: list[Any]) -> dict[str, Any]:
     chance = sum((count / total_ratings) ** 2 for count in category_counts.values())
     kappa = _ratio(observed - chance, 1 - chance)
     return {
-        "case_count": len(cases), "agreement": _ratio(pair_agreements, pairs),
+        "case_count": len(cases),
+        "agreement": _ratio(pair_agreements, pairs),
         "chance_corrected_agreement": kappa,
+    }
+
+
+def _score_biometric_performance(cases: list[Any]) -> dict[str, Any]:
+    seen: set[str] = set()
+    genuine = false_non_matches = impostor = false_matches = 0
+    attacks = accepted_attacks = 0
+    demographic_counts: dict[str, dict[str, int]] = {}
+    attack_instruments: set[str] = set()
+    for raw in cases:
+        case = _validate_case_identity(raw, seen)
+        if set(case) != {"id", "trial_type", "accepted", "strata"}:
+            raise ValueError("biometric trial contract is invalid")
+        _validate_strata(case["strata"])
+        trial_type = case["trial_type"]
+        accepted = case["accepted"]
+        if trial_type not in {
+            "genuine",
+            "impostor",
+            "presentation-attack",
+        } or not isinstance(accepted, bool):
+            raise ValueError("biometric trial outcome is invalid")
+        strata = case["strata"]
+        if trial_type == "presentation-attack":
+            instrument = strata.get("attack_instrument")
+            if not isinstance(instrument, str) or not instrument:
+                raise ValueError(
+                    "presentation-attack trial requires attack_instrument strata"
+                )
+            attacks += 1
+            accepted_attacks += accepted
+            attack_instruments.add(instrument)
+            continue
+        demographic = strata.get("demographic")
+        if not isinstance(demographic, str) or not demographic:
+            raise ValueError("comparison trial requires demographic strata")
+        group = demographic_counts.setdefault(
+            demographic,
+            {"genuine": 0, "false_non_matches": 0, "impostor": 0, "false_matches": 0},
+        )
+        if trial_type == "genuine":
+            genuine += 1
+            false_non_matches += not accepted
+            group["genuine"] += 1
+            group["false_non_matches"] += not accepted
+        else:
+            impostor += 1
+            false_matches += accepted
+            group["impostor"] += 1
+            group["false_matches"] += accepted
+    if not genuine or not impostor or not attacks:
+        raise ValueError(
+            "biometric evaluation requires genuine, impostor, and presentation-attack trials"
+        )
+    if any(
+        not group["genuine"] or not group["impostor"]
+        for group in demographic_counts.values()
+    ):
+        raise ValueError("each demographic group requires genuine and impostor trials")
+    worst_group_fmr = max(
+        _wilson_upper(group["false_matches"], group["impostor"])
+        for group in demographic_counts.values()
+    )
+    worst_group_fnmr = max(
+        _wilson_upper(group["false_non_matches"], group["genuine"])
+        for group in demographic_counts.values()
+    )
+    return {
+        "case_count": len(cases),
+        "genuine_attempts": genuine,
+        "impostor_attempts": impostor,
+        "attack_attempts": attacks,
+        "demographic_groups": len(demographic_counts),
+        "attack_instrument_groups": len(attack_instruments),
+        "false_match_rate": _ratio(false_matches, impostor),
+        "false_non_match_rate": _ratio(false_non_matches, genuine),
+        "iapar": _ratio(accepted_attacks, attacks),
+        "fmr_wilson_upper_95": _wilson_upper(false_matches, impostor),
+        "fnmr_wilson_upper_95": _wilson_upper(false_non_matches, genuine),
+        "iapar_wilson_upper_95": _wilson_upper(accepted_attacks, attacks),
+        "worst_group_fmr_wilson_upper_95": worst_group_fmr,
+        "worst_group_fnmr_wilson_upper_95": worst_group_fnmr,
+    }
+
+
+def _score_proficiency_testing(cases: list[Any]) -> dict[str, Any]:
+    seen: set[str] = set()
+    pair_agreements = pairs = reference_matches = total_results = 0
+    category_counts: dict[str, int] = {}
+    per_case_agreement: list[float] = []
+    expected_participants: int | None = None
+    rounds: set[int] = set()
+    for raw in cases:
+        case = _validate_case_identity(raw, seen)
+        if set(case) != {
+            "id",
+            "assigned_value",
+            "participant_results",
+            "round",
+            "strata",
+        }:
+            raise ValueError("proficiency-testing case contract is invalid")
+        _validate_strata(case["strata"])
+        assigned = case["assigned_value"]
+        results = case["participant_results"]
+        round_number = case["round"]
+        if (
+            not isinstance(assigned, str)
+            or not 1 <= len(assigned) <= 128
+            or not isinstance(results, list)
+            or not 2 <= len(results) <= 128
+            or not all(
+                isinstance(item, str) and 1 <= len(item) <= 128 for item in results
+            )
+            or not isinstance(round_number, int)
+            or isinstance(round_number, bool)
+            or round_number < 1
+        ):
+            raise ValueError(
+                "proficiency-testing assigned value or results are invalid"
+            )
+        if expected_participants is None:
+            expected_participants = len(results)
+        elif len(results) != expected_participants:
+            raise ValueError(
+                "proficiency-testing cases require a consistent participant count"
+            )
+        rounds.add(round_number)
+        counts: dict[str, int] = {}
+        for result in results:
+            counts[result] = counts.get(result, 0) + 1
+            category_counts[result] = category_counts.get(result, 0) + 1
+            reference_matches += result == assigned
+            total_results += 1
+        per_case_agreement.append(
+            _ratio(
+                sum(count * (count - 1) for count in counts.values()),
+                len(results) * (len(results) - 1),
+            )
+        )
+        for left in range(len(results)):
+            for right in range(left + 1, len(results)):
+                pairs += 1
+                pair_agreements += results[left] == results[right]
+    observed = _ratio(sum(per_case_agreement), len(per_case_agreement))
+    chance = sum((count / total_results) ** 2 for count in category_counts.values())
+    kappa = _ratio(observed - chance, 1 - chance)
+    return {
+        "case_count": len(cases),
+        "participants": expected_participants or 0,
+        "rounds": len(rounds),
+        "agreement": _ratio(pair_agreements, pairs),
+        "chance_corrected_agreement": kappa,
+        "reference_accuracy": _ratio(reference_matches, total_results),
     }
 
 
@@ -1002,20 +1263,40 @@ def _score_fuzzing(cases: list[Any]) -> dict[str, Any]:
     coverage_gain = 0.0
     for raw in cases:
         case = _validate_case_identity(raw, seen)
-        if set(case) != {"id", "executions", "unique_crashes", "coverage_before", "coverage_after", "strata"}:
+        if set(case) != {
+            "id",
+            "executions",
+            "unique_crashes",
+            "coverage_before",
+            "coverage_after",
+            "strata",
+        }:
             raise ValueError("fuzzing campaign contract is invalid")
         _validate_strata(case["strata"])
         for field in ("executions", "unique_crashes"):
-            if not isinstance(case[field], int) or isinstance(case[field], bool) or case[field] < 0:
+            if (
+                not isinstance(case[field], int)
+                or isinstance(case[field], bool)
+                or case[field] < 0
+            ):
                 raise ValueError("fuzzing counts are invalid")
         before, after = case["coverage_before"], case["coverage_after"]
-        if any(not isinstance(item, (int, float)) or isinstance(item, bool) or not 0 <= float(item) <= 1 for item in (before, after)) or after < before:
+        if (
+            any(
+                not isinstance(item, (int, float))
+                or isinstance(item, bool)
+                or not 0 <= float(item) <= 1
+                for item in (before, after)
+            )
+            or after < before
+        ):
             raise ValueError("fuzzing coverage is invalid")
         executions += case["executions"]
         unique_crashes += case["unique_crashes"]
         coverage_gain += float(after) - float(before)
     return {
-        "case_count": len(cases), "executions": executions,
+        "case_count": len(cases),
+        "executions": executions,
         "unique_crashes": unique_crashes,
         "coverage_gain": _ratio(coverage_gain, len(cases)),
     }

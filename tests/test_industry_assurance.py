@@ -19,6 +19,7 @@ from py_security_suite.industry_assurance import (
     _ASSURANCE_PROFILES,
     _BENCHMARKS,
     _STANDARDS,
+    _STANDARDS_WATCHLIST,
     _authorization_validated,
     _benchmark_gaps,
     _benchmark_protocol,
@@ -74,10 +75,10 @@ class IndustryAssuranceTests(unittest.TestCase):
             )
         self.assertEqual(errors, [])
         self.assertEqual(
-            artifacts["standards-crosswalk.json"]["catalogs_registered"], 292
+            artifacts["standards-crosswalk.json"]["catalogs_registered"], 358
         )
         self.assertEqual(
-            artifacts["benchmark-registry.json"]["benchmarks_registered"], 99
+            artifacts["benchmark-registry.json"]["benchmarks_registered"], 124
         )
         supported = {
             item["format"]
@@ -95,12 +96,12 @@ class IndustryAssuranceTests(unittest.TestCase):
                 if name.startswith("oscal-")
             )
         )
-        self.assertEqual(len(validate_governed_artifacts(artifacts)), 23)
+        self.assertEqual(len(validate_governed_artifacts(artifacts)), 24)
         profiles = artifacts["assurance-profile-registry.json"]
-        self.assertEqual(profiles["profiles_available"], 80)
+        self.assertEqual(profiles["profiles_available"], 104)
         self.assertEqual(profiles["profiles_selected"], 0)
         lifecycle = artifacts["standards-crosswalk.json"]["lifecycle_governance"]
-        self.assertEqual(lifecycle["catalogs_assessed"], 292)
+        self.assertEqual(lifecycle["catalogs_assessed"], 358)
         self.assertEqual(lifecycle["catalogs_complete"], 0)
         self.assertFalse(lifecycle["complete"])
         self.assertTrue(lifecycle["signed_source_snapshot_required"])
@@ -151,6 +152,73 @@ class IndustryAssuranceTests(unittest.TestCase):
                 "TIBER-EU",
                 "ISO-IEC-27050-1",
                 "ISO-IEC-27050-3",
+                "ISO-19011",
+                "ISO-IEC-27007",
+                "ISO-IEC-TS-27008",
+                "ISO-IEC-27006-1",
+                "ISO-IEC-17021-1",
+                "ISO-IEC-17029",
+                "ISO-IEC-19896-1",
+                "ISO-IEC-19896-2",
+                "ISO-IEC-19896-3",
+                "ISO-IEC-27034-2",
+                "ISO-IEC-27034-3",
+                "ISO-IEC-27034-5",
+                "ISO-IEC-TS-27034-5-1",
+                "ISO-IEC-27034-6",
+                "ISO-IEC-27034-7",
+                "NIST-SP-800-204A",
+                "NIST-SP-800-192",
+                "NIST-SP-800-193",
+                "TCG-TPM-2.0",
+                "NIST-SP-800-226",
+                "ISO-IEC-25012",
+                "ISO-IEC-25020",
+                "ISO-IEC-25024",
+                "ISO-IEC-25030",
+                "ISO-27799",
+                "ISO-IEC-27019",
+                "ISO-IEC-27050-2",
+                "ISO-IEC-27050-4",
+                "ISO-IEC-IEEE-29119-1",
+                "ISO-IEC-IEEE-29119-2",
+                "ISO-IEC-IEEE-29119-3",
+                "ISO-IEC-IEEE-29119-4",
+                "ISO-IEC-IEEE-29119-5",
+                "ISO-IEC-25019",
+                "ISO-IEC-TS-25052-1",
+                "ISO-IEC-TS-25052-2",
+                "ISO-31000",
+                "IEC-31010",
+                "CISA-SECURE-BY-DESIGN",
+                "CISA-PRODUCT-SECURITY-BAD-PRACTICES",
+                "TCG-DICE-ATTESTATION-ARCHITECTURE",
+                "ISO-IEC-27011",
+                "NIST-SP-800-181-R1",
+                "NIST-NICE-FRAMEWORK-COMPONENTS",
+                "AMTSO-TESTING-PROTOCOL",
+                "CREST-PENETRATION-TESTING-GUIDE",
+                "PTES",
+                "DORA-SOFTWARE-DELIVERY-PERFORMANCE",
+                "IETF-RFC-8446",
+                "IETF-RFC-8996",
+                "REPRODUCIBLE-BUILDS-TEST-PROTOCOL",
+                "ISO-IEC-IEEE-15026-2",
+                "ISO-IEC-IEEE-15026-4",
+                "OMG-SACM",
+                "IEEE-1012",
+                "NIST-CMVP",
+                "ISO-IEC-19790",
+                "ISO-IEC-24759",
+                "ISO-IEC-17825",
+                "ISO-IEC-20085-1",
+                "ISO-IEC-20085-2",
+                "ISO-IEC-19795-1",
+                "ISO-IEC-30107-3",
+                "ISO-IEC-30107-4",
+                "ISO-IEC-20000-1",
+                "ISO-IEC-27013",
+                "ISO-IEC-17043",
             }
             <= {item["id"] for item in _STANDARDS}
         )
@@ -172,6 +240,30 @@ class IndustryAssuranceTests(unittest.TestCase):
                 "ict-continuity-readiness",
                 "digital-forensics-readiness",
                 "accessibility-quality",
+                "audit-assessment-integrity",
+                "security-evaluator-competence",
+                "application-security-governance",
+                "firmware-hardware-trust",
+                "differential-privacy-engineering",
+                "data-quality-engineering",
+                "quality-in-use-cloud",
+                "enterprise-risk-techniques",
+                "secure-by-design-product",
+                "tls-protocol-assurance",
+                "reproducible-build-assurance",
+                "malware-protection-validation",
+                "confidential-computing-attestation",
+                "telecommunications-security",
+                "cyber-workforce-assurance",
+                "penetration-testing-governance",
+                "software-delivery-outcomes",
+                "structured-assurance-case",
+                "integrity-level-vv",
+                "cmvp-cryptographic-module",
+                "international-cryptographic-module",
+                "biometric-identity-assurance",
+                "integrated-service-security-management",
+                "interlaboratory-proficiency",
             }
             <= set(_ASSURANCE_PROFILES)
         )
@@ -201,8 +293,67 @@ class IndustryAssuranceTests(unittest.TestCase):
                 "cis-cat-scap-platform-conformance",
                 "c2sp-wycheproof",
                 "tiber-eu-threat-led-red-team",
+                "nist-dioptra-ai-evaluation",
+                "firmware-resilience-measured-boot",
+                "access-control-policy-model-conformance",
+                "differential-privacy-implementation-evaluation",
+                "security-evaluator-calibration",
+                "square-quality-measurement",
+                "iso-29119-test-process-conformance",
+                "square-quality-in-use-cloud",
+                "risk-technique-calibration",
+                "tls-protocol-conformance",
+                "reproducible-build-variation",
+                "cisa-secure-by-design-negative-assurance",
+                "amtso-malware-protection-evaluation",
+                "dice-attestation-conformance",
+                "telecom-security-controls-conformance",
+                "nice-workforce-coverage",
+                "penetration-test-engagement-quality",
+                "dora-delivery-outcomes",
+                "structured-assurance-case-conformance",
+                "integrity-vv-conformance",
+                "cmvp-fips-140-3-validation",
+                "iso-19790-24759-module-conformance",
+                "biometric-performance-pad",
+                "service-management-security-integration",
+                "interlaboratory-proficiency-testing",
             }
             <= {item["id"] for item in _BENCHMARKS}
+        )
+        standards = {item["id"]: item for item in _STANDARDS}
+        self.assertEqual(
+            standards["ISO-IEC-27403"]["reference"],
+            "https://www.iso.org/standard/78702.html",
+        )
+        self.assertEqual(
+            standards["ISO-IEC-27404"]["kind"],
+            "consumer-iot-cybersecurity-labelling-framework",
+        )
+        self.assertTrue(
+            {
+                "ISO-IEC-27007-NEXT-EDITION",
+                "ISO-IEC-TS-27008-NEXT-EDITION",
+                "ISO-IEC-17021-1-NEXT-EDITION",
+                "ISO-IEC-27034-NEXT-SERIES",
+                "ISO-IEC-27050-REVIEW",
+                "ISO-31000-NEXT-EDITION",
+                "TCG-DICE-ATTESTATION-ARCHITECTURE-1.3",
+                "OWASP-ISVS-1.0",
+                "ISO-IEC-IEEE-29119-14",
+                "ISO-IEC-IEEE-15026-4-NEXT-EDITION",
+                "IEEE-P1012",
+            }
+            <= {item["id"] for item in _STANDARDS_WATCHLIST}
+        )
+        self.assertNotIn("ISO-IEC-IEEE-29119", {item["id"] for item in _STANDARDS})
+        standards = {item["id"]: item for item in _STANDARDS}
+        self.assertEqual(standards["ISO-IEC-IEEE-29119-2"]["version"], "2021")
+        self.assertEqual(standards["ISO-IEC-IEEE-29119-5"]["version"], "2024")
+        self.assertIn("voluntary", standards["CISA-SECURE-BY-DESIGN"]["kind"])
+        self.assertIn(
+            "research-backed",
+            standards["DORA-SOFTWARE-DELIVERY-PERFORMANCE"]["kind"],
         )
 
     def test_extended_interoperability_requires_complete_protocol_evidence(
@@ -417,6 +568,7 @@ class IndustryAssuranceTests(unittest.TestCase):
                 "maturity-model-assessment.json",
                 "security-automation-interoperability.json",
                 "external-conformity-assessment.json",
+                "assurance-case-assessment.json",
             },
         )
         self.assertTrue(artifacts["prioritization-calibration.json"]["complete"])
@@ -1426,6 +1578,112 @@ class IndustryAssuranceTests(unittest.TestCase):
             ],
         )
 
+    def test_structured_assurance_case_rejects_semantic_gaps(self) -> None:
+        digest = "a" * 64
+        assurance_case = {
+            "schema_version": "1.0",
+            "case_id": "release-assurance",
+            "scope_sha256": digest,
+            "model": {
+                "format": "OMG-SACM",
+                "version": "2.3",
+                "schema_sha256": "b" * 64,
+                "model_sha256": "c" * 64,
+                "schema_validated": True,
+                "semantic_validated": True,
+                "round_trip_validated": True,
+            },
+            "claims": [
+                {
+                    "id": "claim-release",
+                    "type": "claim",
+                    "statement": "The evaluated release satisfies its scoped security objectives.",
+                    "status": "supported",
+                    "confidence": 0.95,
+                    "applicable": True,
+                    "top_level": True,
+                },
+                {
+                    "id": "defeater-dynamic-loading",
+                    "type": "defeater",
+                    "statement": "Runtime dynamic loading can invalidate static evidence.",
+                    "status": "resolved",
+                    "confidence": 0.9,
+                    "applicable": True,
+                    "top_level": False,
+                },
+            ],
+            "evidence": [
+                {
+                    "id": "evidence-release",
+                    "artifact": "release-readiness.json",
+                    "sha256": "d" * 64,
+                    "subject_sha256": digest,
+                    "collected_at": "2026-08-28T12:00:00Z",
+                    "valid_until": "2030-08-28T12:00:00Z",
+                    "verified": True,
+                }
+            ],
+            "relationships": [
+                {
+                    "source": "evidence-release",
+                    "target": "claim-release",
+                    "type": "supports",
+                    "rationale": "The source-bound release evidence directly supports the release claim.",
+                }
+            ],
+            "review": {
+                "reviewed_at": "2026-08-28T13:00:00Z",
+                "independent_reviewers": 2,
+                "minimum_confidence": 0.8,
+                "approved": True,
+                "approval_sha256": "e" * 64,
+            },
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            artifacts, errors = build_industry_assurance(
+                Path(directory), {"structured-assurance-case.json": assurance_case}
+            )
+        self.assertEqual(errors, [])
+        assessment = artifacts["assurance-case-assessment.json"]
+        self.assertTrue(assessment["complete"])
+        self.assertEqual(assessment["top_level_claims"], 1)
+        validate_governed_artifacts(artifacts)
+
+        assurance_case["relationships"].append(
+            {
+                "source": "claim-release",
+                "target": "defeater-dynamic-loading",
+                "type": "supports",
+                "rationale": "First edge in an invalid support cycle.",
+            }
+        )
+        assurance_case["relationships"].append(
+            {
+                "source": "defeater-dynamic-loading",
+                "target": "claim-release",
+                "type": "supports",
+                "rationale": "Second edge in an invalid support cycle.",
+            }
+        )
+        assurance_case["evidence"][0]["subject_sha256"] = "f" * 64
+        with tempfile.TemporaryDirectory() as directory:
+            invalid, errors = build_industry_assurance(
+                Path(directory), {"structured-assurance-case.json": assurance_case}
+            )
+        self.assertEqual(errors, [])
+        invalid_assessment = invalid["assurance-case-assessment.json"]
+        self.assertFalse(invalid_assessment["complete"])
+        self.assertTrue(
+            any(
+                "outside assurance-case scope" in gap
+                for gap in invalid_assessment["gaps"]
+            )
+        )
+        self.assertIn(
+            "claim support graph contains a cycle", invalid_assessment["gaps"]
+        )
+
     def test_benchmark_protocols_use_method_appropriate_metrics(self) -> None:
         examples = {
             "temporal-calibration": {
@@ -1464,6 +1722,30 @@ class IndustryAssuranceTests(unittest.TestCase):
                 "cases": 10,
                 "inter_rater_agreement": 0.85,
             },
+            "biometric-performance": {
+                "genuine_attempts": 1000,
+                "impostor_attempts": 1000,
+                "attack_attempts": 500,
+                "demographic_groups": 4,
+                "threshold_locked": True,
+                "false_match_rate": 0.001,
+                "false_non_match_rate": 0.02,
+                "iapar": 0.03,
+                "fmr_wilson_upper_95": 0.006,
+                "fnmr_wilson_upper_95": 0.03,
+                "iapar_wilson_upper_95": 0.05,
+                "worst_group_fmr_wilson_upper_95": 0.01,
+                "worst_group_fnmr_wilson_upper_95": 0.05,
+            },
+            "proficiency-testing": {
+                "participants": 4,
+                "cases": 20,
+                "rounds": 2,
+                "blinded": True,
+                "agreement": 0.9,
+                "chance_corrected_agreement": 0.85,
+                "reference_accuracy": 0.95,
+            },
             "conformance": {
                 "passed_cases": 9,
                 "failed_cases": 0,
@@ -1485,8 +1767,13 @@ class IndustryAssuranceTests(unittest.TestCase):
             "google-fuzzbench": "fuzzing-statistical",
             "agentdojo": "stochastic-adversarial",
             "ai-agentic-testing-conformance": "stochastic-adversarial",
+            "nist-dioptra-ai-evaluation": "stochastic-adversarial",
             "owasp-dsomm-maturity": "assessor-agreement",
             "regional-cyber-maturity-assessment": "assessor-agreement",
+            "security-evaluator-calibration": "assessor-agreement",
+            "risk-technique-calibration": "assessor-agreement",
+            "biometric-performance-pad": "biometric-performance",
+            "interlaboratory-proficiency-testing": "proficiency-testing",
             "cacao-openc2-ocsf-interoperability": "conformance",
             "scitt-transparency-conformance": "conformance",
             "cloud-native-api-service-mesh-conformance": "conformance",
@@ -1494,6 +1781,26 @@ class IndustryAssuranceTests(unittest.TestCase):
             "opentelemetry-semantic-conformance": "conformance",
             "automotive-software-update-conformance": "conformance",
             "energy-product-security-conformance": "conformance",
+            "firmware-resilience-measured-boot": "conformance",
+            "access-control-policy-model-conformance": "conformance",
+            "differential-privacy-implementation-evaluation": "conformance",
+            "square-quality-measurement": "conformance",
+            "iso-29119-test-process-conformance": "conformance",
+            "square-quality-in-use-cloud": "conformance",
+            "tls-protocol-conformance": "conformance",
+            "reproducible-build-variation": "conformance",
+            "cisa-secure-by-design-negative-assurance": "conformance",
+            "amtso-malware-protection-evaluation": "detection-evaluation",
+            "dice-attestation-conformance": "conformance",
+            "telecom-security-controls-conformance": "conformance",
+            "nice-workforce-coverage": "conformance",
+            "penetration-test-engagement-quality": "conformance",
+            "dora-delivery-outcomes": "conformance",
+            "structured-assurance-case-conformance": "conformance",
+            "integrity-vv-conformance": "conformance",
+            "cmvp-fips-140-3-validation": "conformance",
+            "iso-19790-24759-module-conformance": "conformance",
+            "service-management-security-integration": "conformance",
             "mitre-attack-evaluations": "detection-evaluation",
             "owasp-benchmark": "classification",
         }

@@ -70,8 +70,8 @@ flowchart LR
         ProposalCheck --> Sandbox["Human-approved disposable lane"]
         Sandbox --> AdversarialProof["Deterministic oracle + controls<br/>exact failed-case evidence"]
         AdversarialProof --> Correlate
-        Standards["292 standards references + 80 assurance packs"] --> Industry["Quarantined publisher monitor + semantic lifecycle diffs<br/>architecture + process + prioritization + verified assessors<br/>99 benchmarks + OSCAL 1.2.2"]
-        Benchmarks["99 protocol-specific benchmark families<br/>verified attestations + native OCI isolation"] --> Industry
+        Standards["358 standards references + 104 assurance packs"] --> Industry["Quarantined publisher monitor + semantic lifecycle diffs<br/>assurance cases + integrity V&V + crypto + biometrics + service management<br/>124 benchmarks + OSCAL 1.2.2"]
+        Benchmarks["124 benchmark families + 35 maintained adapters + 11 protocols<br/>verified attestations + native OCI/laboratory isolation"] --> Industry
         Industry --> Gate
         Validate --> Leverage["Typed evidence graph<br/>controls, taint, artifacts, privacy, trust"]
         Leverage --> Gate["Policy decision"]
