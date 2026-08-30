@@ -47,9 +47,10 @@ Job Object resource controls remain a separate availability mechanism.
   supported non-Python source language, selects no-build or autobuild extraction
   as required, and uploads separately categorized SARIF;
 - pull-request, main-branch, and daily parser fuzzing exercise a discovered
-  93-target matrix covering binary ZIP/TAR structure, defused XML, strict JSON,
-  SARIF, and every evidence adapter with cross-invocation state checks;
-  evolved corpora are retained for 180 days; and
+  matrix covering binary ZIP/TAR structure, defused XML, strict JSON, SARIF,
+  and every evidence adapter with cross-invocation state checks; pull requests
+  use eight complete adapter shards while main and daily runs retain individual
+  adapter campaigns; evolved corpora are retained for 180 days; and
 - weekly deep assurance builds and self-scans the scanner container and
   mutation-tests security-critical archive, path, artifact, and JSON code.
 

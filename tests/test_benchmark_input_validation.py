@@ -84,6 +84,19 @@ def test_rejects_zip_special_entries(tmp_path: Path) -> None:
         validate_benchmark_input(archive)
 
 
+def test_rejects_unsupported_zip_versions(tmp_path: Path) -> None:
+    archive = tmp_path / "unsupported.zip"
+    with zipfile.ZipFile(archive, "w") as output:
+        output.writestr("report.json", "{}")
+    payload = bytearray(archive.read_bytes())
+    central_directory = payload.index(b"PK\x01\x02")
+    payload[central_directory + 6] = 235
+    archive.write_bytes(payload)
+
+    with pytest.raises(BenchmarkInputError, match="ZIP input is invalid"):
+        validate_benchmark_input(archive)
+
+
 def test_detects_archive_mutation_while_held_handle_is_being_inspected(
     tmp_path: Path,
 ) -> None:

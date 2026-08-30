@@ -378,12 +378,14 @@ computing base. Their exact versions and transitive dependencies are recorded
 in `uv.lock`; acquire the locked wheels in the connected preparation lane.
 The pinned `Continuous parser fuzzing` workflow runs Atheris 3 against strict
 JSON, SARIF, and every registered scanner adapter parser on pull requests,
-pushes, and a daily schedule. Adapter campaigns run for at least 180 seconds and
-must reach a coverage floor of 12. The oracle checks determinism, bounded result
-types, stable canonical strict-JSON serialization, identities, text, and
-repository-confined locations. An aggregate `Fuzz required gate` fails if target
-discovery or any campaign is skipped or unsuccessful. The workflow retains both
-the seed corpus and the evolved coverage corpus under
+main-branch pushes, and a daily schedule. Pull requests distribute every adapter
+across eight deterministic 600-second shards for bounded feedback; main and
+scheduled runs retain exhaustive per-adapter 240-second campaigns. Every
+campaign must reach a coverage floor of 12. The oracle checks determinism,
+bounded result types, stable canonical strict-JSON serialization, identities,
+text, and repository-confined locations. An aggregate `Fuzz required gate`
+fails if target discovery or any campaign is skipped or unsuccessful. The
+workflow retains both the seed corpus and the evolved coverage corpus under
 `fuzz/corpus/security-parsers`.
 
 Package wheels, native archives, rules, databases, trusted roots, and Java

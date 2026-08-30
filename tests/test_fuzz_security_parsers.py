@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import io
+import json
 import stat
 import tarfile
 import zipfile
@@ -114,3 +115,30 @@ def test_target_specific_corpus_seeds_reach_archive_validation(tmp_path: Path) -
         module._inspect_tar((tar_corpus / "tar-traversal").read_bytes())
     with pytest.raises(ValueError, match="links"):
         module._inspect_tar((tar_corpus / "tar-link").read_bytes())
+
+
+def test_pull_request_matrix_shards_every_adapter(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    module = _script()
+    monkeypatch.setattr(
+        module.sys,
+        "argv",
+        ["fuzz_security_parsers.py", "--list-targets", "--shard-adapters"],
+    )
+
+    module.main()
+
+    targets = json.loads(capsys.readouterr().out)
+    adapter_targets = [
+        target for target in targets if target["target"].startswith("adapter-")
+    ]
+    assert [target["target"] for target in adapter_targets] == [
+        f"adapter-{index}" for index in range(module._ADAPTER_SHARDS)
+    ]
+    selected = {
+        name
+        for target in adapter_targets
+        for name, _adapter in module._selected_adapters(target["target"])
+    }
+    assert selected == {name for name, _adapter in module._NAMED_ADAPTERS}

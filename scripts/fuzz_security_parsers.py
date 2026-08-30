@@ -492,6 +492,7 @@ def _seed_target_corpus(target: str, destination: Path) -> None:
 def main() -> None:
     global _TARGET_NAME
     if "--list-targets" in sys.argv:
+        shard_adapters = "--shard-adapters" in sys.argv
         targets = [
             {
                 "target": "strict-json",
@@ -554,15 +555,29 @@ def main() -> None:
                 "coverage_floor": 12,
             },
         ]
-        targets.extend(
-            {
-                "target": f"adapter:{name}",
-                "artifact": f"adapter-{index:03d}-{re.sub(r'[^a-z0-9-]', '-', name.casefold())}",
-                "seconds": 240,
-                "coverage_floor": 12,
-            }
-            for index, (name, _adapter) in enumerate(_NAMED_ADAPTERS)
-        )
+        if shard_adapters:
+            targets.extend(
+                {
+                    "target": f"adapter-{index}",
+                    "artifact": f"adapter-shard-{index}",
+                    "seconds": 600,
+                    "coverage_floor": 12,
+                }
+                for index in range(_ADAPTER_SHARDS)
+            )
+        else:
+            targets.extend(
+                {
+                    "target": f"adapter:{name}",
+                    "artifact": (
+                        f"adapter-{index:03d}-"
+                        f"{re.sub(r'[^a-z0-9-]', '-', name.casefold())}"
+                    ),
+                    "seconds": 240,
+                    "coverage_floor": 12,
+                }
+                for index, (name, _adapter) in enumerate(_NAMED_ADAPTERS)
+            )
         print(json.dumps(targets, separators=(",", ":"), sort_keys=True))
         return
     seed_arguments = [

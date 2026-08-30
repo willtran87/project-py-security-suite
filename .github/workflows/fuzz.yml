@@ -38,7 +38,13 @@ jobs:
       - name: Build the adapter-complete target matrix
         id: targets
         shell: bash
-        run: echo "targets=$(uv run --frozen python scripts/fuzz_security_parsers.py --list-targets)" >> "$GITHUB_OUTPUT"
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            targets="$(uv run --frozen python scripts/fuzz_security_parsers.py --list-targets --shard-adapters)"
+          else
+            targets="$(uv run --frozen python scripts/fuzz_security_parsers.py --list-targets)"
+          fi
+          echo "targets=$targets" >> "$GITHUB_OUTPUT"
 
   parser-fuzz:
     name: Fuzz ${{ matrix.target }}

@@ -89,7 +89,7 @@ def _validate_zip(handle: BinaryIO, size: int) -> dict[str, Any]:
             compressed = sum(
                 item.compress_size for item in entries if not item.is_dir()
             )
-    except (OSError, zipfile.BadZipFile) as exc:
+    except (NotImplementedError, OSError, zipfile.BadZipFile) as exc:
         raise BenchmarkInputError("benchmark ZIP input is invalid") from exc
     _validate_archive_bounds(len(entries), expanded, compressed)
     return {
