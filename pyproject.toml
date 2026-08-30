@@ -47,7 +47,7 @@ dependencies = [
   "tree-sitter-rust>=0.24,<0.25",
   "tree-sitter-swift>=0.7,<0.8",
   "tree-sitter-typescript>=0.23,<0.24",
-  "wasmtime>=47,<48",
+  "wasmtime>=47,<49",
 ]
 
 [project.urls]
