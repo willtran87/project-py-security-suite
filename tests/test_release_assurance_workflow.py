@@ -31,6 +31,16 @@ def test_release_comparison_uses_distinct_canonical_linux_builders() -> None:
     assert "runner: ubuntu-24.04" in workflow
     assert "runner: ubuntu-22.04" in workflow
     assert "uv run pysec compare-builds" in workflow
+    assert "python -I scripts/verify_release_independent.py" in workflow
     assert (
         '--signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release-assurance.yml"'
     ) in workflow
+
+
+def test_release_verification_is_retained_with_the_release_artifacts() -> None:
+    workflow = _WORKFLOW.read_text(encoding="utf-8")
+
+    assert ".artifacts/independent-release-verification.json" in workflow
+    assert workflow.index("verify_release_independent.py") < workflow.index(
+        "Install and exercise the exact wheel offline"
+    )

@@ -1,6 +1,6 @@
 # Python Security Suite operations
 
-Last reviewed: 2026-08-10
+Last reviewed: 2026-08-26
 
 ## Operating model
 
@@ -774,9 +774,10 @@ pysec qualify-bundle . --config .pysec-tools\pysec.native.toml `
   --effectiveness-evaluation effectiveness-evaluation.json `
   --effectiveness-report .artifacts\detection-validation `
   --effectiveness-sha256 APPROVED_SHA256 `
-  --minimum-effectiveness-labels 25 `
-  --minimum-effectiveness-tools 2 `
+  --minimum-effectiveness-labels 500 `
+  --minimum-effectiveness-tools 3 `
   --required-effectiveness-tool bandit `
+  --required-effectiveness-tool codeql `
   --required-effectiveness-tool semgrep `
   --format markdown `
   --output .artifacts\bundle-qualification.md
@@ -1154,6 +1155,27 @@ successful manual event, one unexpired artifact, and the artifact archive digest
 before it extracts anything. Repository administrators should disable
 environment bypass, prohibit self-review, require an independent reviewer, and
 restrict deployment branches to `main`.
+
+The comparison job also invokes `scripts/verify_release_independent.py` under
+Python isolated mode. That standard-library-only verifier imports no suite code:
+it independently checks the exact wheel/sdist set, every wheel `RECORD` digest
+and size, archive path/link safety, one canonical sdist root, normalized
+ownership and commit timestamps, and byte equality. Configure the
+`independent-release-verification` environment and a
+`self-hosted,linux,x64,pysec-independent-builder` runner to add a third-provider
+wheel rebuild. Protected variables supply SHA-256 identities for the runner's
+`uv`, `gh`, and Python executables.
+
+After independent approval, dispatch `publish-pypi.yml` with both successful
+workflow run IDs, the exact source SHA, and approved wheel and sdist SHA-256
+values. Publishing re-downloads the third-provider wheel, verifies its separate
+workflow identity and attestation, and requires its hash to match the canonical
+wheel.
+The fixed `pypi-production` environment should prohibit bypass and self-review,
+restrict deployment to protected `main`, and be registered as the package's
+PyPI Trusted Publisher. The workflow performs a public-index
+download/install/CLI round trip after publishing; this is the first point at
+which the lifecycle may truthfully move to `published`.
 
 Before release promotion, sign every distribution into a separate provenance
 directory:

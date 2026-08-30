@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:benchmark-leakage-analysis:1.2",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "algorithm", "canonicalization", "canonicalizer_sha256", "training_records", "holdout_records", "overlap_count", "semantic_overlap_count", "similarity_algorithm", "similarity_threshold", "near_duplicate_count"],
+  "properties": {
+    "schema_version": {"const": "1.2"},
+    "algorithm": {"const": "parser-derived-sha256-set-intersection"},
+    "canonicalization": {"const": "parser-derived-structural-lexical-control-v4"},
+    "canonicalizer_sha256": {"$ref": "#/$defs/sha256"},
+    "training_records": {"$ref": "#/$defs/records"},
+    "holdout_records": {"$ref": "#/$defs/records"},
+    "overlap_count": {"const": 0}, "semantic_overlap_count": {"const": 0},
+    "similarity_algorithm": {"const": "multi-signal-shingle-jaccard-v2"},
+    "similarity_threshold": {"const": 0.8}, "near_duplicate_count": {"const": 0}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "record": {"type": "object", "additionalProperties": false, "required": ["path", "language", "subject_sha256", "semantic_sha256"], "properties": {"path": {"type": "string", "minLength": 1, "maxLength": 4096}, "language": {"enum": ["python", "c", "csharp", "cpp", "go", "java", "javascript", "kotlin", "php", "ruby", "rust", "swift", "typescript", "tsx"]}, "subject_sha256": {"$ref": "#/$defs/sha256"}, "semantic_sha256": {"$ref": "#/$defs/sha256"}}},
+    "records": {"type": "array", "minItems": 1, "maxItems": 10000, "items": {"$ref": "#/$defs/record"}}
+  }
+}

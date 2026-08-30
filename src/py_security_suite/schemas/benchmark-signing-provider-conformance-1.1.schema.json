@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:benchmark-signing-provider-conformance:1.1",
+  "title": "Portable benchmark signing provider conformance receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "provider_id", "key_version", "algorithm", "backend",
+    "credential_mode", "public_key_sha256", "challenge_sha256",
+    "statement_sha256", "signature_sha256", "executable_sha256",
+    "deterministic_signature", "verified", "observed_at", "profile_sha256",
+    "time_context_sha256", "public_key_base64", "challenge_base64",
+    "signature_base64"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.1"},
+    "provider_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"},
+    "key_version": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"},
+    "algorithm": {"const": "Ed25519"},
+    "backend": {"enum": ["pkcs11", "generic-hsm", "hashicorp-vault-transit", "aws-kms", "azure-key-vault", "gcp-cloud-kms"]},
+    "credential_mode": {"enum": ["workload-identity", "secure-agent", "hardware-session"]},
+    "public_key_sha256": {"$ref": "#/$defs/sha256"},
+    "challenge_sha256": {"$ref": "#/$defs/sha256"},
+    "statement_sha256": {"$ref": "#/$defs/sha256"},
+    "signature_sha256": {"$ref": "#/$defs/sha256"},
+    "executable_sha256": {"$ref": "#/$defs/sha256"},
+    "deterministic_signature": {"const": true},
+    "verified": {"const": true},
+    "observed_at": {"type": "string", "format": "date-time"},
+    "profile_sha256": {"$ref": "#/$defs/sha256"},
+    "time_context_sha256": {"type": "string", "pattern": "^$|^[0-9a-f]{64}$"},
+    "public_key_base64": {"type": "string", "minLength": 44, "maxLength": 44},
+    "challenge_base64": {"type": "string", "minLength": 44, "maxLength": 5464},
+    "signature_base64": {"type": "string", "minLength": 88, "maxLength": 88}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
+}

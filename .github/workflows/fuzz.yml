@@ -38,14 +38,20 @@ jobs:
       - name: Build the adapter-complete target matrix
         id: targets
         shell: bash
-        run: echo "targets=$(uv run --frozen python scripts/fuzz_security_parsers.py --list-targets)" >> "$GITHUB_OUTPUT"
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            targets="$(uv run --frozen python scripts/fuzz_security_parsers.py --list-targets --shard-adapters)"
+          else
+            targets="$(uv run --frozen python scripts/fuzz_security_parsers.py --list-targets)"
+          fi
+          echo "targets=$targets" >> "$GITHUB_OUTPUT"
 
   parser-fuzz:
     name: Fuzz ${{ matrix.target }}
     needs: discover-targets
     strategy:
       fail-fast: false
-      max-parallel: 12
+      max-parallel: 18
       matrix:
         include: ${{ fromJSON(needs.discover-targets.outputs.targets) }}
     runs-on: ubuntu-latest
@@ -96,6 +102,8 @@ jobs:
         run: |
           mkdir -p ".fuzz-corpus/$FUZZ_ARTIFACT" .fuzz-results
           cp -n fuzz/corpus/security-parsers/* ".fuzz-corpus/$FUZZ_ARTIFACT/" 2>/dev/null || true
+          uv run --frozen python scripts/fuzz_security_parsers.py \
+            --seed-target="$FUZZ_TARGET" ".fuzz-corpus/$FUZZ_ARTIFACT"
       - name: Run coverage-guided parser fuzzing
         shell: bash
         run: |
@@ -110,7 +118,7 @@ jobs:
             -entropic=1 \
             -use_value_profile=1 \
             ".fuzz-corpus/$FUZZ_ARTIFACT" 2>&1 | tee ".fuzz-results/$FUZZ_ARTIFACT.log"
-          coverage="$(grep -oE 'cov: [0-9]+' ".fuzz-results/$FUZZ_ARTIFACT.log" | awk '{if ($2 > max) max=$2} END {print max}')"
+          coverage="$(awk 'match($0, /cov: [0-9]+/) { value=substr($0, RSTART + 5, RLENGTH - 5); if (value > max) max=value } END { if (max > 0) print max }' ".fuzz-results/$FUZZ_ARTIFACT.log")"
           if [[ -z "$coverage" || "$coverage" -lt "$FUZZ_COVERAGE_FLOOR" ]]; then
             echo "::error::Fuzz coverage $coverage is below floor $FUZZ_COVERAGE_FLOOR for $FUZZ_TARGET"
             exit 1
@@ -143,7 +151,7 @@ jobs:
           name: parser-fuzz-corpus-${{ matrix.artifact }}
           path: .fuzz-corpus/${{ matrix.artifact }}
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 180
 
   required-gate:
     name: Fuzz required gate

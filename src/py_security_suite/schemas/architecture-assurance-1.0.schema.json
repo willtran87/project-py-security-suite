@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:architecture-assurance:1.0",
+  "title": "Architecture assurance evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "module_boundaries", "dependency_edges", "cyclic_components", "concentration"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "module_boundaries": {"type": "integer", "minimum": 1},
+    "dependency_edges": {"type": "integer", "minimum": 0},
+    "cyclic_components": {
+      "type": "array",
+      "items": {
+        "type": "array", "minItems": 2, "uniqueItems": true,
+        "items": {"type": "string", "pattern": "^py_security_suite(\\.[a-z_][a-z0-9_]*)+$"}
+      }
+    },
+    "concentration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["files", "functions"],
+      "properties": {
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["path", "observed_lines", "maximum_lines"],
+            "properties": {
+              "path": {"type": "string", "minLength": 1},
+              "observed_lines": {"type": "integer", "minimum": 1},
+              "maximum_lines": {"type": "integer", "minimum": 1}
+            }
+          }
+        },
+        "functions": {
+          "type": "array",
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["path", "function", "observed_lines", "maximum_lines", "observed_decisions", "maximum_decisions"],
+            "properties": {
+              "path": {"type": "string", "minLength": 1},
+              "function": {"type": "string", "minLength": 1},
+              "observed_lines": {"type": "integer", "minimum": 1},
+              "maximum_lines": {"type": ["integer", "null"], "minimum": 1},
+              "observed_decisions": {"type": "integer", "minimum": 0},
+              "maximum_decisions": {"type": ["integer", "null"], "minimum": 0}
+            }
+          }
+        }
+      }
+    }
+  }
+}

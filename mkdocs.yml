@@ -45,6 +45,9 @@ nav:
       - Tool selection: tool-selection.md
       - Scanner lifecycle: tool-lifecycle.md
   - Analysis:
+      - Finding accuracy: analysis-accuracy.md
+      - Cross-domain assurance: domain-assurance.md
+      - LLM-guided adversarial testing: llm-adversarial-testing.md
       - Advanced analysis: advanced-analysis.md
       - Risk paths: risk-paths.md
       - Reachability: reachability.md
@@ -53,12 +56,15 @@ nav:
       - Structural synthesis: structural-synthesis.md
       - Data exposure: data-exposure.md
       - Detection effectiveness: effectiveness.md
+      - Industry standards and benchmarks: industry-standards-benchmarks.md
   - Operations:
       - Operations guide: operations.md
       - Configuration: configuration.md
       - Production security: production-security.md
+      - Benchmark trust operations: benchmark-operations.md
       - Companion assurance: companion-assurance.md
   - Governance:
+      - API compatibility: api-compatibility.md
       - Release readiness: release-readiness.md
       - Security Passport: security-passport.md
       - Product enhancement matrix: product-enhancement-matrix.md

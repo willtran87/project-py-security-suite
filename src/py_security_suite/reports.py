@@ -300,6 +300,14 @@ def _write_primary_report_files(
     data_exposure = (derived_artifacts or {}).get("data-exposure.json")
     risk_paths = (derived_artifacts or {}).get("risk-paths.json")
     advanced = (derived_artifacts or {}).get("advanced-analysis.json")
+    application_contracts = (derived_artifacts or {}).get(
+        "application-contract-analysis.json"
+    )
+    code_health = (derived_artifacts or {}).get("code-health.json")
+    static_architecture = (derived_artifacts or {}).get("static-architecture.json")
+    domain_assurance = (derived_artifacts or {}).get("domain-assurance.json")
+    llm_adversarial = (derived_artifacts or {}).get("llm-adversarial-plan.json")
+    industry_assurance = (derived_artifacts or {}).get("industry-assurance.json")
     _write_text(
         output / "summary.md",
         render_summary(
@@ -310,6 +318,24 @@ def _write_primary_report_files(
             data_exposure=data_exposure if isinstance(data_exposure, dict) else None,
             risk_paths=risk_paths if isinstance(risk_paths, dict) else None,
             advanced_analysis=advanced if isinstance(advanced, dict) else None,
+            application_contracts=(
+                application_contracts
+                if isinstance(application_contracts, dict)
+                else None
+            ),
+            code_health=code_health if isinstance(code_health, dict) else None,
+            static_architecture=(
+                static_architecture if isinstance(static_architecture, dict) else None
+            ),
+            domain_assurance=(
+                domain_assurance if isinstance(domain_assurance, dict) else None
+            ),
+            llm_adversarial=(
+                llm_adversarial if isinstance(llm_adversarial, dict) else None
+            ),
+            industry_assurance=(
+                industry_assurance if isinstance(industry_assurance, dict) else None
+            ),
         ),
     )
     _write_text(
@@ -379,6 +405,12 @@ def render_summary(
     data_exposure: dict[str, Any] | None = None,
     risk_paths: dict[str, Any] | None = None,
     advanced_analysis: dict[str, Any] | None = None,
+    application_contracts: dict[str, Any] | None = None,
+    code_health: dict[str, Any] | None = None,
+    static_architecture: dict[str, Any] | None = None,
+    domain_assurance: dict[str, Any] | None = None,
+    llm_adversarial: dict[str, Any] | None = None,
+    industry_assurance: dict[str, Any] | None = None,
 ) -> str:
     active_findings = [
         finding
@@ -400,6 +432,15 @@ def render_summary(
         + "`pysec closure-plan REPORT --format markdown`."
     )
     lines.extend(["", closure_backlog])
+    lines.extend(_render_validation_summary(active_findings))
+    lines.extend(
+        _render_contextual_analysis_summary(
+            application_contracts, code_health, static_architecture
+        )
+    )
+    lines.extend(_render_domain_assurance_summary(domain_assurance))
+    lines.extend(_render_llm_adversarial_summary(llm_adversarial))
+    lines.extend(_render_industry_assurance_summary(industry_assurance))
     lines.extend(_render_fusion_summary(evidence_fusion))
     lines.extend(_render_structural_summary(structural_synthesis))
     lines.extend(_render_data_exposure_summary(data_exposure))
@@ -417,6 +458,151 @@ def render_summary(
     lines.extend(_render_derived_evidence(manifest))
     lines.extend(_render_triage_workflow(manifest.outcome))
     return "\n".join(lines)
+
+
+def _render_validation_summary(findings: list[Finding]) -> list[str]:
+    counts = Counter(finding.validation_status.value for finding in findings)
+    return [
+        "",
+        "## Finding validation tiers",
+        "",
+        "| Strongest retained positive evidence | Findings |",
+        "|---|---:|",
+        f"| Reproduced | {counts.get('reproduced', 0)} |",
+        f"| Runtime observed | {counts.get('runtime-observed', 0)} |",
+        f"| Static path confirmed | {counts.get('static-path-confirmed', 0)} |",
+        f"| Cross-tool corroborated | {counts.get('corroborated', 0)} |",
+        f"| Static candidate | {counts.get('static-candidate', 0)} |",
+        "",
+        "The tier is independent of severity and lifecycle. Missing runtime evidence never establishes a false positive.",
+    ]
+
+
+def _render_contextual_analysis_summary(
+    application: dict[str, Any] | None,
+    health: dict[str, Any] | None,
+    architecture: dict[str, Any] | None,
+) -> list[str]:
+    if not any(
+        isinstance(value, dict) for value in (application, health, architecture)
+    ):
+        return []
+    application = application or {}
+    health = health or {}
+    architecture = architecture or {}
+    scenarios = application.get("generated_test_scenarios", [])
+    execution_plan = application.get("scenario_execution_plan", {})
+    policy_violations = architecture.get("policy_violations", [])
+    return [
+        "",
+        "## Contextual security and engineering analysis",
+        "",
+        "| Signal | Count |",
+        "|---|---:|",
+        f"| Statically recognized API routes | {len(application.get('routes', []))} |",
+        f"| Generated security test scenarios | {len(scenarios) if isinstance(scenarios, list) else 0} |",
+        f"| Authorized companion execution tasks | {int(execution_plan.get('tasks_detected', 0)) if isinstance(execution_plan, dict) else 0} |",
+        f"| Exact vulnerable-function calls | {len(application.get('vulnerable_call_matches', []))} |",
+        f"| Code-health issues | {int(health.get('issues_detected', 0))} |",
+        f"| Code-health issue details omitted | {int(health.get('issues_omitted', 0))} |",
+        f"| Architecture cycles | {int(architecture.get('cycles_detected', 0))} |",
+        f"| Local symbol-call edges | {int(architecture.get('symbol_edges_detected', 0))} |",
+        f"| Unified static entry points | {int(architecture.get('entrypoint_symbols_detected', 0))} |",
+        f"| Unresolved dynamic imports | {int(architecture.get('unresolved_dynamic_imports', 0))} |",
+        f"| Declared architecture-policy violations | {len(policy_violations) if isinstance(policy_violations, list) else 0} |",
+        "",
+        "Generated scenario manifests and argv-safe companion tasks are machine-actionable plans, not execution evidence. Symbol calls and unified decorator, packaging, module-main, and main-guard entry points are syntactic evidence, while unresolved dynamic imports expose model gaps. Architecture and code-health signals prioritize review; declared native or Tach policy violations remain distinct from heuristic structural smells.",
+    ]
+
+
+def _render_domain_assurance_summary(value: dict[str, Any] | None) -> list[str]:
+    if not isinstance(value, dict) or not isinstance(value.get("domains"), list):
+        return []
+    rows = [
+        "",
+        "## Cross-domain assurance coverage",
+        "",
+        f"**Coverage:** {int(value.get('covered_domains', 0))}/{int(value.get('applicable_domains', 0))} applicable domains ({int(value.get('coverage_score', 0))}%).",
+        "",
+        "| Domain | Applicability | Status | Requirements |",
+        "|---|---|---|---:|",
+    ]
+    for domain in value["domains"]:
+        if not isinstance(domain, dict):
+            continue
+        rows.append(
+            f"| {_markdown_table(str(domain.get('name', 'unknown')))} | "
+            f"{_markdown_table(str(domain.get('applicability', 'unknown')))} | "
+            f"{_markdown_table(str(domain.get('status', 'unknown')))} | "
+            f"{int(domain.get('requirements_satisfied', 0))}/"
+            f"{int(domain.get('requirements_detected', 0))} |"
+        )
+    rows.extend(
+        [
+            "",
+            "Surface detection establishes applicability only. A covered requirement has source-bound enforcement points, complete named artifacts, and passing source-bound test identities where behavior must be observed; it does not prove absence of defects.",
+        ]
+    )
+    return rows
+
+
+def _render_llm_adversarial_summary(value: dict[str, Any] | None) -> list[str]:
+    if not isinstance(value, dict):
+        return []
+    counts = value.get("campaign_status_counts")
+    evidence = value.get("evidence")
+    if not isinstance(counts, dict) or not isinstance(evidence, dict):
+        return []
+    return [
+        "",
+        "## LLM-guided adversarial testing",
+        "",
+        "| Signal | Count/state |",
+        "|---|---:|",
+        f"| Prioritized campaigns | {int(value.get('campaigns_retained', 0))} |",
+        f"| Context references | {int(value.get('context_entries_retained', 0))} |",
+        f"| Authorized companion tasks | {int(value.get('execution_plan', {}).get('tasks_detected', 0))} |",
+        f"| Campaigns not run | {int(counts.get('not-run', 0))} |",
+        f"| Inconclusive campaigns | {int(counts.get('inconclusive', 0))} |",
+        f"| Exercised without a confirmed defect | {int(counts.get('exercised-no-confirmed-defect', 0))} |",
+        f"| Objectively confirmed defects | {int(counts.get('confirmed-defect', 0))} |",
+        f"| Authenticated evidence source-bound | {'yes' if evidence.get('source_bound') is True else 'no'} |",
+        "",
+        "The plan treats repository and model text as untrusted data. An LLM proposal is never a finding by itself; confirmation requires authenticated source-bound execution, a deterministic oracle, a negative control, and mutation validation.",
+    ]
+
+
+def _render_industry_assurance_summary(value: dict[str, Any] | None) -> list[str]:
+    if not isinstance(value, dict):
+        return []
+    interoperability = value.get("interoperability")
+    supported = (
+        sum(
+            item.get("status") == "supported"
+            for item in interoperability
+            if isinstance(item, dict)
+        )
+        if isinstance(interoperability, list)
+        else 0
+    )
+    total_formats = len(interoperability) if isinstance(interoperability, list) else 0
+    return [
+        "",
+        "## Industry standards and benchmark assurance",
+        "",
+        "| Signal | Count/state |",
+        "|---|---:|",
+        f"| Versioned standards catalogs | {int(value.get('standards_registered', 0))} |",
+        f"| Assurance packs selected | {int(value.get('assurance_profiles_selected', 0))}/{int(value.get('assurance_profiles_available', 0))} |",
+        f"| Registered benchmark families | {int(value.get('benchmarks_registered', 0))} |",
+        f"| Policy-declared controls satisfied | {int(value.get('controls_satisfied', 0))}/{int(value.get('controls_assessed', 0))} |",
+        f"| Policy-declared procedures satisfied | {int(value.get('procedures_satisfied', 0))}/{int(value.get('procedures_assessed', 0))} |",
+        f"| Governed benchmarks executed | {int(value.get('benchmarks_executed', 0))} |",
+        f"| Interoperability formats observed/supported | {supported}/{total_formats} |",
+        f"| Assessment complete | {'yes' if value.get('complete') is True else 'no'} |",
+        "",
+        str(value.get("claim_boundary") or ""),
+    ]
 
 
 def _render_fusion_summary(value: dict[str, Any] | None) -> list[str]:
@@ -3492,6 +3678,11 @@ def _render_markdown_findings(
                 f"- **Finding ID:** `{_markdown_code(finding.finding_id)}`",
                 f"- **Priority:** `{_finding_priority(finding)}`",
                 f"- **Lifecycle:** `{finding.status.value}`",
+                f"- **Validation tier:** `{finding.validation_status.value}` — "
+                + _markdown_text(
+                    "; ".join(finding.validation_reasons)
+                    or "No higher-tier positive evidence was retained."
+                ),
                 f"- **Owners:** {_finding_owners(finding)}",
                 f"- **Threat intelligence:** {_threat_intelligence_summary(finding)}",
                 f"- **Location:** `{_markdown_code(_location_text(finding))}`",
@@ -7086,7 +7277,10 @@ def _harden_windows_acl(output: Path) -> None:
     system_root = Path(os.environ.get("SYSTEMROOT") or "C:/Windows").resolve()
     whoami = system_root / "System32" / "whoami.exe"
     icacls = system_root / "System32" / "icacls.exe"
-    if not whoami.is_file() or not icacls.is_file():
+    powershell = (
+        system_root / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
+    )
+    if not whoami.is_file() or not icacls.is_file() or not powershell.is_file():
         raise OSError("Windows ACL utilities are unavailable")
     sid = _current_windows_sid(whoami)
 
@@ -7108,6 +7302,31 @@ def _harden_windows_acl(output: Path) -> None:
         timeout=30,
         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
+    # Some managed Windows volumes materialize explicit service or
+    # administrator ACEs instead of inherited ACEs. Removing inheritance does
+    # not remove those entries, so close the DACL over the current principal
+    # explicitly before publishing the report.
+    retained_sids = {
+        rule_sid for rule_sid, _, _ in _windows_acl_rules(output, powershell)
+    }
+    for unexpected_sid in sorted(retained_sids - {sid}):
+        subprocess.run(  # noqa: S603  # nosec B603
+            [
+                str(icacls),
+                str(output),
+                "/remove",
+                f"*{unexpected_sid}",
+                "/T",
+                "/C",
+                "/Q",
+            ],
+            check=True,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            timeout=30,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
 
 
 def _current_windows_sid(whoami: Path) -> str:
@@ -7139,7 +7358,10 @@ def _verify_report_permissions(output: Path) -> None:
     system_root = Path(os.environ.get("SYSTEMROOT") or "C:/Windows").resolve()
     icacls = system_root / "System32" / "icacls.exe"
     whoami = system_root / "System32" / "whoami.exe"
-    if not icacls.is_file() or not whoami.is_file():
+    powershell = (
+        system_root / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
+    )
+    if not icacls.is_file() or not whoami.is_file() or not powershell.is_file():
         raise OSError("Windows ACL verification utility is unavailable")
     subprocess.run(  # noqa: S603  # nosec B603
         [str(icacls), str(output), "/verify", "/T", "/C", "/Q"],
@@ -7151,22 +7373,83 @@ def _verify_report_permissions(output: Path) -> None:
         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
     sid = _current_windows_sid(whoami)
-    with tempfile.TemporaryDirectory(prefix="pysec-acl-verification-") as directory:
-        acl = Path(directory) / "report.acl"
-        subprocess.run(  # noqa: S603  # nosec B603
-            [str(icacls), str(output), "/save", str(acl), "/T", "/C", "/Q"],
-            check=True,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-            timeout=30,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-        )
-        raw = acl.read_bytes()
-    rendered = raw.decode("utf-16", errors="ignore")
-    observed_sids = set(re.findall(r"S-1-(?:\d+-)+\d+", rendered))
-    if observed_sids != {sid}:
+    rules = _windows_acl_rules(output, powershell)
+    full_control = 0x1F01FF
+    if not rules or any(
+        rule_sid != sid
+        or access_type != "Allow"
+        or rights & full_control != full_control
+        for rule_sid, access_type, rights in rules
+    ):
         raise PermissionError("report Windows ACL postcondition failed")
+
+
+def _windows_acl_rules(output: Path, powershell: Path) -> list[tuple[str, str, int]]:
+    """Read every effective report DACL rule with names translated to SIDs."""
+    script = """
+$ErrorActionPreference = 'Stop'
+Import-Module (
+  Join-Path $env:SystemRoot 'System32/WindowsPowerShell/v1.0/Modules/Microsoft.PowerShell.Security/Microsoft.PowerShell.Security.psd1'
+)
+$paths = @((Get-Item -LiteralPath $env:PYSEC_ACL_PATH -Force))
+$paths += @(Get-ChildItem -LiteralPath $env:PYSEC_ACL_PATH -Force -Recurse)
+$rules = @(
+  foreach ($path in $paths) {
+    foreach ($rule in (Get-Acl -LiteralPath $path.FullName).Access) {
+      [PSCustomObject]@{
+        sid = $rule.IdentityReference.Translate(
+          [System.Security.Principal.SecurityIdentifier]
+        ).Value
+        type = $rule.AccessControlType.ToString()
+        rights = [Int64]$rule.FileSystemRights
+      }
+    }
+  }
+)
+ConvertTo-Json -InputObject $rules -Compress
+"""
+    environment = os.environ.copy()
+    environment["PYSEC_ACL_PATH"] = str(output)
+    completed = subprocess.run(  # noqa: S603  # nosec B603
+        [
+            str(powershell),
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            script,
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=environment,
+        timeout=30,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+    if completed.returncode != 0:
+        diagnostic = completed.stderr.strip().replace("\r", " ").replace("\n", " ")
+        raise OSError("Windows ACL inspection failed: " + diagnostic[:512])
+    payload = json.loads(completed.stdout)
+    if not isinstance(payload, list):
+        raise OSError("Windows ACL inspection returned an invalid contract")
+    rules: list[tuple[str, str, int]] = []
+    for entry in payload:
+        if not isinstance(entry, dict):
+            raise OSError("Windows ACL inspection returned an invalid rule")
+        rule_sid = entry.get("sid")
+        access_type = entry.get("type")
+        rights = entry.get("rights")
+        if (
+            not isinstance(rule_sid, str)
+            or re.fullmatch(r"S-1-(?:\d+-)+\d+", rule_sid) is None
+            or access_type not in {"Allow", "Deny"}
+            or not isinstance(rights, int)
+        ):
+            raise OSError("Windows ACL inspection returned an invalid rule")
+        rules.append((rule_sid, access_type, rights))
+    return rules
 
 
 def _write_checksums(output: Path) -> None:

@@ -1,0 +1,530 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:project-py-security-suite:schema:domain-assurance:1.0",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+        "schema_version",
+        "analysis",
+        "complete",
+        "coverage_complete",
+        "coverage_score",
+        "policy_path",
+        "policy_present",
+        "enforce_inferred_domains",
+        "files_analyzed",
+        "domains_detected",
+        "applicable_domains",
+        "covered_domains",
+        "status_counts",
+        "domains",
+        "parse_errors",
+        "truncated",
+        "claim_boundary"
+    ],
+    "properties": {
+        "schema_version": {
+            "const": "1.0"
+        },
+        "analysis": {
+            "const": "cross-domain-applicability-policy-and-evidence-coverage"
+        },
+        "complete": {
+            "type": "boolean"
+        },
+        "coverage_complete": {
+            "type": "boolean"
+        },
+        "coverage_score": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+        },
+        "policy_path": {
+            "enum": [
+                "security/domain-assurance-policy.json",
+                null
+            ]
+        },
+        "policy_present": {
+            "type": "boolean"
+        },
+        "enforce_inferred_domains": {
+            "type": "boolean"
+        },
+        "files_analyzed": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 50000
+        },
+        "domains_detected": {
+            "const": 33
+        },
+        "applicable_domains": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 33
+        },
+        "covered_domains": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 33
+        },
+        "status_counts": {
+            "type": "object",
+            "propertyNames": {
+                "$ref": "#/$defs/status"
+            },
+            "additionalProperties": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 33
+            }
+        },
+        "domains": {
+            "type": "array",
+            "minItems": 33,
+            "maxItems": 33,
+            "items": {
+                "$ref": "#/$defs/domain"
+            }
+        },
+        "parse_errors": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+            }
+        },
+        "truncated": {
+            "type": "boolean"
+        },
+        "claim_boundary": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+        }
+    },
+    "$defs": {
+        "domainName": {
+            "enum": [
+                "business-logic",
+                "privacy-lifecycle",
+                "resilience",
+                "detection-engineering",
+                "cryptographic-agility",
+                "notebook-security",
+                "messaging-security",
+                "desktop-client-security",
+                "firmware-iot-security",
+                "web3-security",
+                "graphql-security",
+                "identity-assurance",
+                "tenant-isolation",
+                "abuse-resistance",
+                "workload-identity",
+                "integration-security",
+                "incident-response-recovery",
+                "data-integrity-lineage",
+                "serverless-edge-security",
+                "external-asset-communication",
+                "ot-ics-safety",
+                "privileged-control-plane",
+                "distributed-temporal-correctness",
+                "secure-human-interaction",
+                "ml-model-data-supply-chain",
+                "credential-secret-lifecycle",
+                "observability-integrity",
+                "developer-environment-security",
+                "parser-content-security",
+                "trust-safety",
+                "confidential-computing-side-channels",
+                "regulated-transaction-integrity",
+                "physical-environmental-security"
+            ]
+        },
+        "status": {
+            "enum": [
+                "not-applicable",
+                "unmodeled",
+                "partial",
+                "covered"
+            ]
+        },
+        "requirementKind": {
+            "enum": [
+                "state-transition",
+                "value-conservation",
+                "quota",
+                "idempotency",
+                "concurrency",
+                "eligibility",
+                "collection-purpose",
+                "consent",
+                "minimization",
+                "retention",
+                "residency",
+                "deletion",
+                "export",
+                "processor-boundary",
+                "latency-budget",
+                "error-budget",
+                "resource-budget",
+                "recovery",
+                "amplification",
+                "backpressure",
+                "log-source",
+                "alert-rule",
+                "canary-replay",
+                "false-positive-budget",
+                "incident-routing",
+                "algorithm-inventory",
+                "key-lifecycle",
+                "certificate-lifecycle",
+                "protocol-policy",
+                "migration-plan",
+                "notebook-code",
+                "notebook-output",
+                "notebook-dependency",
+                "notebook-provenance",
+                "message-authorization",
+                "delivery-semantics",
+                "schema-evolution",
+                "poison-message",
+                "dead-letter",
+                "local-ipc",
+                "update-integrity",
+                "credential-storage",
+                "protocol-handler",
+                "secure-boot",
+                "firmware-update",
+                "device-identity",
+                "hardware-boundary",
+                "contract-invariant",
+                "upgradeability",
+                "oracle-dependency",
+                "transaction-ordering",
+                "resolver-authorization",
+                "query-cost",
+                "batching-limit",
+                "field-exposure",
+                "identity-proofing",
+                "authenticator-lifecycle",
+                "account-recovery",
+                "federation-assertion",
+                "session-lifecycle",
+                "step-up-authentication",
+                "tenant-context",
+                "tenant-data-isolation",
+                "tenant-cache-isolation",
+                "tenant-key-isolation",
+                "tenant-lifecycle",
+                "tenant-audit",
+                "credential-abuse",
+                "automation-resistance",
+                "inventory-fairness",
+                "fraud-control",
+                "cost-amplification",
+                "promotion-integrity",
+                "workload-attestation",
+                "workload-credential-rotation",
+                "service-authorization",
+                "trust-domain",
+                "service-egress",
+                "workload-federation",
+                "webhook-authenticity",
+                "webhook-replay",
+                "oauth-scope",
+                "provider-egress",
+                "provider-schema",
+                "provider-failure",
+                "evidence-preservation",
+                "containment",
+                "recovery-exercise",
+                "forensic-logging",
+                "playbook-routing",
+                "post-incident-validation",
+                "record-integrity",
+                "lineage",
+                "reconciliation",
+                "audit-immutability",
+                "transformation-invariant",
+                "unauthorized-mutation",
+                "trigger-authorization",
+                "function-identity",
+                "event-source-trust",
+                "concurrency-budget",
+                "edge-cache-isolation",
+                "secret-bootstrap",
+                "domain-ownership",
+                "dnssec",
+                "dangling-record",
+                "email-authentication",
+                "certificate-domain-binding",
+                "link-workflow",
+                "command-authorization",
+                "fail-safe-state",
+                "safety-interlock",
+                "protocol-segmentation",
+                "engineering-workstation",
+                "physical-process-invariant",
+                "admin-authorization",
+                "support-impersonation",
+                "break-glass",
+                "privileged-session",
+                "dual-control",
+                "control-plane-audit",
+                "leader-election",
+                "quorum",
+                "lease-expiry",
+                "clock-skew",
+                "partition-recovery",
+                "duplicate-reordering",
+                "security-confirmation",
+                "consent-comprehension",
+                "recovery-redress",
+                "phishing-resistance",
+                "accessible-security",
+                "high-risk-friction",
+                "model-provenance",
+                "dataset-provenance",
+                "model-deserialization",
+                "model-registry",
+                "training-integrity",
+                "model-deployment",
+                "secret-inventory",
+                "secret-rotation",
+                "secret-revocation",
+                "token-scope",
+                "dormant-credential",
+                "emergency-rotation",
+                "telemetry-authenticity",
+                "log-integrity",
+                "collector-isolation",
+                "time-synchronization",
+                "sensitive-telemetry",
+                "alert-delivery",
+                "ide-extension",
+                "build-plugin",
+                "dev-container",
+                "local-hook",
+                "package-execution",
+                "workstation-secret",
+                "input-polyglot",
+                "archive-expansion",
+                "parser-differential",
+                "active-content",
+                "document-macro",
+                "media-metadata",
+                "content-abuse",
+                "moderation-evasion",
+                "coordinated-behavior",
+                "reporting-redress",
+                "age-assurance",
+                "recommender-safety",
+                "enclave-attestation",
+                "side-channel",
+                "memory-confidentiality",
+                "debug-interface",
+                "key-release",
+                "rollback-protection",
+                "transaction-authorization",
+                "sanctions-screening",
+                "ledger-reconciliation",
+                "non-repudiation",
+                "maker-checker",
+                "regulatory-retention",
+                "facility-access",
+                "environmental-monitoring",
+                "hardware-tamper",
+                "media-disposal",
+                "asset-custody",
+                "disaster-site"
+            ]
+        },
+        "strings": {
+            "type": "array",
+            "maxItems": 100,
+            "uniqueItems": true,
+            "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1000
+            }
+        },
+        "artifacts": {
+            "type": "array",
+            "maxItems": 50,
+            "uniqueItems": true,
+            "items": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9._-]{0,199}\\.json$"
+            }
+        },
+        "requirement": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "id",
+                "kind",
+                "objective",
+                "subjects",
+                "evidence_artifacts",
+                "test_ids",
+                "enforcement_points",
+                "missing_evidence_artifacts",
+                "incomplete_evidence_artifacts",
+                "missing_test_ids",
+                "missing_enforcement_points",
+                "status",
+                "gaps"
+            ],
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                },
+                "kind": {
+                    "$ref": "#/$defs/requirementKind"
+                },
+                "objective": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1000
+                },
+                "subjects": {
+                    "$ref": "#/$defs/strings"
+                },
+                "evidence_artifacts": {
+                    "$ref": "#/$defs/artifacts"
+                },
+                "test_ids": {
+                    "$ref": "#/$defs/strings"
+                },
+                "enforcement_points": {
+                    "$ref": "#/$defs/strings"
+                },
+                "missing_evidence_artifacts": {
+                    "$ref": "#/$defs/artifacts"
+                },
+                "incomplete_evidence_artifacts": {
+                    "$ref": "#/$defs/artifacts"
+                },
+                "missing_test_ids": {
+                    "$ref": "#/$defs/strings"
+                },
+                "missing_enforcement_points": {
+                    "$ref": "#/$defs/strings"
+                },
+                "status": {
+                    "enum": [
+                        "satisfied",
+                        "gap"
+                    ]
+                },
+                "gaps": {
+                    "type": "array",
+                    "maxItems": 10,
+                    "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                    }
+                }
+            }
+        },
+        "domain": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "name",
+                "applicable",
+                "applicability",
+                "signals",
+                "policy_present",
+                "owner",
+                "requirements_detected",
+                "requirements_satisfied",
+                "requirements",
+                "available_default_evidence",
+                "missing_default_evidence",
+                "status",
+                "gaps",
+                "recommendation"
+            ],
+            "properties": {
+                "name": {
+                    "$ref": "#/$defs/domainName"
+                },
+                "applicable": {
+                    "type": "boolean"
+                },
+                "applicability": {
+                    "enum": [
+                        "declared-and-inferred",
+                        "declared",
+                        "inferred",
+                        "not-applicable"
+                    ]
+                },
+                "signals": {
+                    "$ref": "#/$defs/strings"
+                },
+                "policy_present": {
+                    "type": "boolean"
+                },
+                "owner": {
+                    "type": [
+                        "string",
+                        "null"
+                    ],
+                    "minLength": 1,
+                    "maxLength": 200
+                },
+                "requirements_detected": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 2000
+                },
+                "requirements_satisfied": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 2000
+                },
+                "requirements": {
+                    "type": "array",
+                    "maxItems": 2000,
+                    "items": {
+                        "$ref": "#/$defs/requirement"
+                    }
+                },
+                "available_default_evidence": {
+                    "$ref": "#/$defs/artifacts"
+                },
+                "missing_default_evidence": {
+                    "$ref": "#/$defs/artifacts"
+                },
+                "status": {
+                    "$ref": "#/$defs/status"
+                },
+                "gaps": {
+                    "type": "array",
+                    "maxItems": 100,
+                    "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                    }
+                },
+                "recommendation": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000
+                }
+            }
+        }
+    }
+}

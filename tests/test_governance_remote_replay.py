@@ -11,6 +11,30 @@ from py_security_suite.governance import consume_governance_replay
 
 
 class RemoteGovernanceReplayTests(unittest.TestCase):
+    def test_local_replay_is_atomic_and_rejects_duplicate_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = Path(directory) / "replay.sqlite3"
+            document = {"generation": 3, "nonce": "governance-nonce-0003"}
+            first = consume_governance_replay(
+                document, "e" * 64, ledger, "organization-policy"
+            )
+            self.assertEqual(first["replay_backend"], "local-sqlite")
+            self.assertEqual(len(first["replay_token_sha256"]), 64)
+            with self.assertRaisesRegex(ValueError, "replay was detected"):
+                consume_governance_replay(
+                    document, "e" * 64, ledger, "organization-policy"
+                )
+
+    def test_local_replay_rejects_missing_and_unsafe_ledgers(self) -> None:
+        document = {"generation": 3, "nonce": "governance-nonce-0003"}
+        with self.assertRaisesRegex(ValueError, "requires a replay ledger"):
+            consume_governance_replay(document, "e" * 64, None, "policy")
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = Path(directory) / "directory-ledger"
+            ledger.mkdir()
+            with self.assertRaisesRegex(ValueError, "not a regular file"):
+                consume_governance_replay(document, "e" * 64, ledger, "policy")
+
     def test_remote_receipt_supplies_monotonic_replay_and_trusted_time(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

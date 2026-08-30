@@ -39,6 +39,8 @@ def enrich_findings(
                 "schema_version": "1.0",
                 "configured": False,
                 "enriched_findings": 0,
+                "vex_formats": [],
+                "vex_versions": {},
                 "snapshots": {},
             }
         )
@@ -114,17 +116,24 @@ def enrich_findings(
             epss_matches += 1
         if matched_vex:
             evidence["vex"] = matched_vex
+            cvss_candidates = [
+                item["cvss"]
+                for item in matched_vex
+                if isinstance(item.get("cvss"), dict)
+            ]
+            if cvss_candidates:
+                source_cvss = max(
+                    cvss_candidates, key=lambda item: float(item.get("score", 0.0))
+                )
+                finding.evidence = {**finding.evidence, "cvss": source_cvss}
             for item in matched_vex:
                 _append_unique(
                     finding.classifications,
                     f"VEX-{str(item['state']).upper().replace('_', '-')}",
                 )
-            _append_citation(
-                finding,
-                "CYCLONEDX-VEX",
-                "CycloneDX Vulnerability Exploitability Exchange",
-                "https://cyclonedx.org/capabilities/vex/",
-            )
+            for vex_format in sorted({str(item.get("format")) for item in matched_vex}):
+                identifier, title, uri = _vex_citation(vex_format)
+                _append_citation(finding, identifier, title, uri)
             vex_matches += 1
         if len(evidence) > 1:
             finding.evidence = {**finding.evidence, "risk_intelligence": evidence}
@@ -139,6 +148,17 @@ def enrich_findings(
             "known_exploited_matches": kev_matches,
             "epss_matches": epss_matches,
             "vex_matches": vex_matches,
+            "vex_formats": sorted({str(item.get("format")) for item in vex.values()}),
+            "vex_versions": {
+                name: sorted(
+                    {
+                        str(item["format_version"])
+                        for item in vex.values()
+                        if item.get("format") == name and item.get("format_version")
+                    }
+                )
+                for name in sorted({str(item.get("format")) for item in vex.values()})
+            },
             "thresholds": {
                 "epss_high_probability": config.epss_high_probability,
                 "epss_high_percentile": config.epss_high_percentile,
@@ -249,9 +269,27 @@ def _load_epss(data: bytes, suffix: str) -> tuple[dict[str, dict[str, Any]], str
 def _load_vex(data: bytes, suffix: str) -> tuple[dict[str, dict[str, Any]], str]:
     del suffix
     document = strict_json_loads(data.decode("utf-8"))
-    if not isinstance(document, dict) or not isinstance(
-        document.get("vulnerabilities"), list
+    if not isinstance(document, dict):
+        raise TypeError("VEX document must be an object")
+    if isinstance(document.get("statements"), list):
+        return _load_openvex(document)
+    document_metadata = document.get("document")
+    if (
+        isinstance(document_metadata, dict)
+        and document_metadata.get("category") == "csaf_vex"
     ):
+        return _load_csaf_vex(document)
+    return _load_cyclonedx_vex(document)
+
+
+def _load_cyclonedx_vex(
+    document: dict[str, Any],
+) -> tuple[dict[str, dict[str, Any]], str]:
+    if document.get("bomFormat") != "CycloneDX":
+        raise ValueError('CycloneDX VEX requires bomFormat="CycloneDX"')
+    if document.get("specVersion") != "1.7":
+        raise ValueError("CycloneDX VEX must use specVersion 1.7")
+    if not isinstance(document.get("vulnerabilities"), list):
         raise TypeError("CycloneDX VEX requires a vulnerabilities list")
     values = document["vulnerabilities"]
     if len(values) > _MAX_RECORDS:
@@ -278,18 +316,175 @@ def _load_vex(data: bytes, suffix: str) -> tuple[dict[str, dict[str, Any]], str]
         responses = analysis.get("response", [])
         if not isinstance(responses, list):
             responses = []
-        records[cve] = {
+        record: dict[str, Any] = {
             "cve": cve,
+            "format": "cyclonedx",
+            "format_version": "1.7",
             "state": state,
             "justification": _bounded(analysis.get("justification"), 100),
             "detail": _bounded(analysis.get("detail"), 500),
             "response": [_bounded(item, 100) for item in responses[:20]],
         }
+        cvss = _cyclonedx_cvss_v4(value.get("ratings"))
+        if cvss is not None:
+            record["cvss"] = cvss
+        records[cve] = record
     metadata = document.get("metadata", {})
     source_date = (
         _bounded(metadata.get("timestamp"), 50) if isinstance(metadata, dict) else ""
     )
     return records, source_date
+
+
+def _cyclonedx_cvss_v4(value: object) -> dict[str, Any] | None:
+    if not isinstance(value, list):
+        return None
+    candidates: list[dict[str, Any]] = []
+    for rating in value[:100]:
+        if not isinstance(rating, dict):
+            continue
+        vector = str(rating.get("vector") or "")
+        score = rating.get("score")
+        if (
+            str(rating.get("method") or "").casefold() == "cvssv4"
+            and vector.startswith("CVSS:4.0/")
+            and isinstance(score, (int, float))
+            and not isinstance(score, bool)
+            and 0 <= float(score) <= 10
+        ):
+            candidates.append(
+                {
+                    "version": "4.0",
+                    "vector": vector[:500],
+                    "score": round(float(score), 1),
+                    "source": "cyclonedx-vex-rating",
+                }
+            )
+    return (
+        max(candidates, key=lambda item: float(item["score"])) if candidates else None
+    )
+
+
+def _load_openvex(document: dict[str, Any]) -> tuple[dict[str, dict[str, Any]], str]:
+    if document.get("@context") != "https://openvex.dev/ns/v0.2.0":
+        raise ValueError("OpenVEX document must use the v0.2.0 context")
+    statements = document["statements"]
+    if len(statements) > _MAX_RECORDS:
+        raise ValueError("OpenVEX snapshot contains too many statements")
+    state_map = {
+        "not_affected": "not_affected",
+        "affected": "exploitable",
+        "fixed": "resolved",
+        "under_investigation": "in_triage",
+    }
+    records: dict[str, dict[str, Any]] = {}
+    for statement in statements:
+        if not isinstance(statement, dict):
+            raise TypeError("OpenVEX statements must be objects")
+        vulnerability = statement.get("vulnerability")
+        vulnerability_id = (
+            vulnerability.get("name")
+            if isinstance(vulnerability, dict)
+            else vulnerability
+        )
+        cve = _cve(vulnerability_id)
+        status = str(statement.get("status") or "").casefold()
+        if not cve or status not in state_map:
+            raise ValueError("OpenVEX statement requires a CVE and supported status")
+        products = statement.get("products")
+        records[cve] = {
+            "cve": cve,
+            "format": "openvex",
+            "format_version": "0.2",
+            "state": state_map[status],
+            "justification": _bounded(statement.get("justification"), 100),
+            "detail": _bounded(statement.get("status_notes"), 500),
+            "response": [
+                _bounded(item.get("@id") if isinstance(item, dict) else item, 100)
+                for item in (products[:20] if isinstance(products, list) else [])
+            ],
+        }
+    return records, _bounded(document.get("timestamp"), 50)
+
+
+def _load_csaf_vex(document: dict[str, Any]) -> tuple[dict[str, dict[str, Any]], str]:
+    metadata = document.get("document")
+    if not isinstance(metadata, dict) or metadata.get("csaf_version") != "2.0":
+        raise ValueError("CSAF VEX document must use csaf_version 2.0")
+    vulnerabilities = document.get("vulnerabilities")
+    if not isinstance(vulnerabilities, list):
+        raise TypeError("CSAF VEX requires a vulnerabilities list")
+    if len(vulnerabilities) > _MAX_RECORDS:
+        raise ValueError("CSAF VEX snapshot contains too many records")
+    status_precedence = (
+        ("known_affected", "exploitable"),
+        ("fixed", "resolved"),
+        ("known_not_affected", "not_affected"),
+        ("under_investigation", "in_triage"),
+    )
+    records: dict[str, dict[str, Any]] = {}
+    for vulnerability in vulnerabilities:
+        if not isinstance(vulnerability, dict):
+            raise TypeError("CSAF VEX vulnerabilities must be objects")
+        cve = _cve(vulnerability.get("cve"))
+        product_status = vulnerability.get("product_status")
+        if not cve or not isinstance(product_status, dict):
+            raise ValueError("CSAF VEX record requires a CVE and product_status")
+        selected = next(
+            (
+                (name, state, values)
+                for name, state in status_precedence
+                if isinstance((values := product_status.get(name)), list) and values
+            ),
+            None,
+        )
+        if selected is None:
+            raise ValueError("CSAF VEX record has no supported product status")
+        status_name, state, products = selected
+        notes = vulnerability.get("notes")
+        detail = " ".join(
+            _bounded(item.get("text"), 250)
+            for item in (notes[:2] if isinstance(notes, list) else [])
+            if isinstance(item, dict)
+        )
+        records[cve] = {
+            "cve": cve,
+            "format": "csaf",
+            "format_version": "2.0",
+            "state": state,
+            "justification": status_name,
+            "detail": detail[:500],
+            "response": [_bounded(item, 100) for item in products[:20]],
+        }
+    tracking = metadata.get("tracking") if isinstance(metadata, dict) else None
+    source_date = (
+        _bounded(tracking.get("current_release_date"), 50)
+        if isinstance(tracking, dict)
+        else ""
+    )
+    return records, source_date
+
+
+def _vex_citation(vex_format: str) -> tuple[str, str, str]:
+    return {
+        "openvex": (
+            "OPENVEX",
+            "OpenVEX Vulnerability Exploitability eXchange",
+            "https://openvex.dev/",
+        ),
+        "csaf": (
+            "CSAF-VEX",
+            "Common Security Advisory Framework VEX",
+            "https://docs.oasis-open.org/csaf/csaf/v2.0/csaf-v2.0.html",
+        ),
+    }.get(
+        vex_format,
+        (
+            "CYCLONEDX-VEX",
+            "CycloneDX Vulnerability Exploitability Exchange",
+            "https://cyclonedx.org/capabilities/vex/",
+        ),
+    )
 
 
 def _finding_cves(finding: Finding) -> set[str]:

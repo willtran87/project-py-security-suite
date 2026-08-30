@@ -275,7 +275,57 @@ class OrchestratorTests(unittest.TestCase):
                 "owners": ["@release", "@security"],
             },
         )
-        artifact_summary = render_summary(manifest, [artifact_finding])
+        artifact_summary = render_summary(
+            manifest,
+            [artifact_finding],
+            application_contracts={
+                "routes": [{"method": "POST", "path": "/tenant"}],
+                "generated_test_scenarios": [{"kind": "anonymous-deny"}],
+                "scenario_execution_plan": {"tasks_detected": 2},
+                "vulnerable_call_matches": [],
+            },
+            code_health={"issues_detected": 2, "issues_omitted": 0},
+            static_architecture={
+                "cycles_detected": 1,
+                "symbol_edges_detected": 3,
+                "entrypoint_symbols_detected": 2,
+                "unresolved_dynamic_imports": 1,
+                "policy_violations": [{"kind": "forbidden-edge"}],
+            },
+            domain_assurance={
+                "covered_domains": 1,
+                "applicable_domains": 2,
+                "coverage_score": 50,
+                "domains": [
+                    {
+                        "name": "business-logic",
+                        "applicability": "declared",
+                        "status": "covered",
+                        "requirements_satisfied": 2,
+                        "requirements_detected": 2,
+                    },
+                    {
+                        "name": "privacy-lifecycle",
+                        "applicability": "inferred",
+                        "status": "unmodeled",
+                        "requirements_satisfied": 0,
+                        "requirements_detected": 0,
+                    },
+                ],
+            },
+            llm_adversarial={
+                "campaigns_retained": 4,
+                "context_entries_retained": 3,
+                "execution_plan": {"tasks_detected": 4},
+                "campaign_status_counts": {
+                    "not-run": 2,
+                    "inconclusive": 0,
+                    "exercised-no-confirmed-defect": 1,
+                    "confirmed-defect": 1,
+                },
+                "evidence": {"source_bound": True},
+            },
+        )
         artifact_html = render_html(manifest, [artifact_finding])
         artifact_action_plan = render_action_plan(manifest, [artifact_finding])
         self.assertIn(
@@ -284,6 +334,21 @@ class OrchestratorTests(unittest.TestCase):
         )
         self.assertIn(f"sha256:{'c' * 64}", artifact_summary)
         self.assertIn("size: 1234 bytes", artifact_summary)
+        self.assertIn(
+            "## Contextual security and engineering analysis", artifact_summary
+        )
+        self.assertIn("| Generated security test scenarios | 1 |", artifact_summary)
+        self.assertIn("| Authorized companion execution tasks | 2 |", artifact_summary)
+        self.assertIn("| Local symbol-call edges | 3 |", artifact_summary)
+        self.assertIn("| Unified static entry points | 2 |", artifact_summary)
+        self.assertIn("| Unresolved dynamic imports | 1 |", artifact_summary)
+        self.assertIn(
+            "| Declared architecture-policy violations | 1 |", artifact_summary
+        )
+        self.assertIn("## Cross-domain assurance coverage", artifact_summary)
+        self.assertIn("**Coverage:** 1/2 applicable domains (50%).", artifact_summary)
+        self.assertIn("## LLM-guided adversarial testing", artifact_summary)
+        self.assertIn("| Objectively confirmed defects | 1 |", artifact_summary)
         self.assertIn("Artifact identity evidence", artifact_html)
         self.assertIn("aria-label='Artifact identity'", artifact_html)
         self.assertIn("### Release artifact bindings", artifact_action_plan)

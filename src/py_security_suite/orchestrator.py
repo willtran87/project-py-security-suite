@@ -12,15 +12,21 @@ from pathlib import Path
 from datetime import timedelta
 from typing import Any
 
-from . import __version__
+from .version import __version__
 from .adapters import ADAPTER_TYPES
 from .adapters.base import AdapterResult, ScannerAdapter
+from .application_contracts import analyze_application_contracts
 from .config import SuiteConfig
 from .closure_plan import closure_plan_artifact
+from .code_health import analyze_code_health
 from .correlation import correlate_findings
 from .data_exposure import apply_data_exposure_fusion, build_data_exposure_synthesis
 from .dependency_surface import dependency_surface_artifact
+from .domain_assurance import analyze_domain_assurance
+from .llm_adversarial import build_llm_adversarial_plan
 from .finding_delta import apply_finding_delta
+from .finding_validation import apply_finding_validation
+from .framework_coverage import framework_model_coverage
 from .governance import (
     validate_intelligence_approval,
     validate_isolation_evidence,
@@ -34,6 +40,8 @@ from .inventory import (
     sealed_source_snapshot,
     source_snapshot,
 )
+from .industry_assurance import build_industry_assurance
+from .industry_receipt_trust import load_industry_receipt_trust
 from .isolation_probe import probe_isolation_boundary
 from .models import (
     Finding,
@@ -48,7 +56,9 @@ from .models import (
 from .policy import evaluate_policy
 from .admission import admission_decisions
 from .advanced_analysis import build_advanced_analysis
+from .architecture_history import architecture_history
 from .boundary_graph import build_boundary_graph
+from .capability_manifest import capability_manifest
 from .portfolio_health import portfolio_health_artifact
 from .path_safety import resolve_regular_directory, resolve_unlinked_path
 from .reports import write_reports
@@ -60,9 +70,15 @@ from .source_context import attach_source_context, sanitize_secret_findings
 from .semantic_coverage import semantic_language_coverage_artifact
 from .requirements_coverage import security_requirements_coverage_artifact
 from .structural_synthesis import build_structural_synthesis
+from .static_architecture import analyze_static_architecture
 from .trust_catalog import apply_trust_catalog
 from .trust_policy import activated_trust_environment, snapshot_trust_policy
 from .trust_attestation import validate_trust_policy_attestation
+
+
+_STRUCTURAL_QUALITY_PROFILES = frozenset(
+    {"audit", "quality", "repo", "comprehensive", "production", "release"}
+)
 
 
 def scan_project(
@@ -334,6 +350,67 @@ def _scan_sealed_project(
             context_errors.append(
                 "authenticated Python runtime traces could not be mapped back to exact reachability nodes"
             )
+        framework_findings, framework_coverage = framework_model_coverage(
+            scan_target, tool_runs, findings
+        )
+        qualified_canary_ids = set(framework_coverage["qualified_canary_finding_ids"])
+        findings[:] = [
+            finding
+            for finding in findings
+            if finding.finding_id not in qualified_canary_ids
+        ]
+        findings.extend(framework_findings)
+        derived_artifacts["framework-model-coverage.json"] = framework_coverage
+        if (
+            config.profile in {"production", "release"}
+            and not framework_coverage["complete"]
+            and (
+                framework_coverage["frameworks_detected"]
+                or framework_coverage["parse_errors"]
+            )
+        ):
+            context_errors.append(
+                "detected Python frameworks lack digest-bound semantic models, positive/negative canaries, or a completed model engine"
+            )
+        contract_findings, contract_artifact = analyze_application_contracts(
+            scan_target, derived_artifacts
+        )
+        findings.extend(contract_findings)
+        derived_artifacts["application-contract-analysis.json"] = contract_artifact
+        if (
+            config.profile in {"production", "release"}
+            and not contract_artifact["complete"]
+            and (
+                contract_artifact["contract_present"]
+                or contract_artifact["openapi"]["current_path"]
+            )
+        ):
+            context_errors.append(
+                "application contracts contain API drift, missing authorization test evidence, vulnerable-function calls, or analysis errors"
+            )
+        if config.profile in _STRUCTURAL_QUALITY_PROFILES:
+            code_health_findings, code_health_artifact = analyze_code_health(
+                scan_target
+            )
+            findings.extend(code_health_findings)
+            derived_artifacts["code-health.json"] = code_health_artifact
+            static_architecture_findings, static_architecture_artifact = (
+                analyze_static_architecture(
+                    scan_target, derived_artifacts.get("reachability.json")
+                )
+            )
+            findings.extend(static_architecture_findings)
+            derived_artifacts["static-architecture.json"] = static_architecture_artifact
+            architecture_findings, architecture_artifact = architecture_history(
+                scan_target, findings
+            )
+            findings.extend(architecture_findings)
+            derived_artifacts["architecture-history.json"] = architecture_artifact
+        domain_findings, domain_artifact = analyze_domain_assurance(
+            scan_target, derived_artifacts
+        )
+        findings.extend(domain_findings)
+        derived_artifacts["domain-assurance.json"] = domain_artifact
         sanitize_secret_findings(findings)
         findings = correlate_findings(findings)
         intelligence = enrich_findings(findings, config.intelligence)
@@ -385,6 +462,9 @@ def _scan_sealed_project(
         derived_artifacts["advanced-analysis.json"] = build_advanced_analysis(
             scan_target, findings, derived_artifacts
         )
+        derived_artifacts["finding-validation.json"] = apply_finding_validation(
+            findings, derived_artifacts
+        )
         context_errors.extend(
             (
                 "evidence fusion contradiction for "
@@ -417,10 +497,85 @@ def _scan_sealed_project(
             "the complete Python scanner runtime closure was not stable"
         )
 
+    derived_artifacts["capability-manifest.json"] = capability_manifest(
+        config.profile, tool_runs
+    )
+
+    if "framework-model-coverage.json" not in derived_artifacts:
+        framework_findings, framework_coverage = framework_model_coverage(
+            scan_target, tool_runs, findings
+        )
+        qualified_canary_ids = set(framework_coverage["qualified_canary_finding_ids"])
+        findings[:] = [
+            finding
+            for finding in findings
+            if finding.finding_id not in qualified_canary_ids
+        ]
+        findings.extend(framework_findings)
+        derived_artifacts["framework-model-coverage.json"] = framework_coverage
+    if "application-contract-analysis.json" not in derived_artifacts:
+        contract_findings, contract_artifact = analyze_application_contracts(
+            scan_target, derived_artifacts
+        )
+        findings.extend(contract_findings)
+        derived_artifacts["application-contract-analysis.json"] = contract_artifact
+    if (
+        config.profile in _STRUCTURAL_QUALITY_PROFILES
+        and "code-health.json" not in derived_artifacts
+    ):
+        code_health_findings, code_health_artifact = analyze_code_health(scan_target)
+        findings.extend(code_health_findings)
+        derived_artifacts["code-health.json"] = code_health_artifact
+    if (
+        config.profile in _STRUCTURAL_QUALITY_PROFILES
+        and "static-architecture.json" not in derived_artifacts
+    ):
+        static_architecture_findings, static_architecture_artifact = (
+            analyze_static_architecture(
+                scan_target, derived_artifacts.get("reachability.json")
+            )
+        )
+        findings.extend(static_architecture_findings)
+        derived_artifacts["static-architecture.json"] = static_architecture_artifact
+    if (
+        config.profile in _STRUCTURAL_QUALITY_PROFILES
+        and "architecture-history.json" not in derived_artifacts
+    ):
+        architecture_findings, architecture_artifact = architecture_history(
+            scan_target, findings
+        )
+        findings.extend(architecture_findings)
+        derived_artifacts["architecture-history.json"] = architecture_artifact
+    if "domain-assurance.json" not in derived_artifacts:
+        domain_findings, domain_artifact = analyze_domain_assurance(
+            scan_target, derived_artifacts
+        )
+        findings.extend(domain_findings)
+        derived_artifacts["domain-assurance.json"] = domain_artifact
+    domain_assurance = derived_artifacts["domain-assurance.json"]
+    if (
+        config.profile in {"production", "release"}
+        and isinstance(domain_assurance, dict)
+        and domain_assurance.get("policy_present") is True
+        and (
+            domain_assurance.get("complete") is not True
+            or (
+                domain_assurance.get("enforce_inferred_domains") is True
+                and domain_assurance.get("coverage_complete") is not True
+            )
+        )
+    ):
+        context_errors.append(
+            "declared cross-domain assurance policy is incomplete or has uncovered applicable domains"
+        )
     if "effectiveness.json" not in derived_artifacts:
         _annotate_tool_authority(tool_runs, diagnostics, config)
         derived_artifacts["effectiveness.json"] = effectiveness_artifact(
             findings, tool_runs
+        )
+    if "finding-validation.json" not in derived_artifacts:
+        derived_artifacts["finding-validation.json"] = apply_finding_validation(
+            findings, derived_artifacts
         )
     if "runtime-surface-binding.json" not in derived_artifacts:
         derived_artifacts["runtime-surface-binding.json"] = (
@@ -440,6 +595,53 @@ def _scan_sealed_project(
     ):
         context_errors.append(
             "applicable mapped ASVS, MASVS, or TCASVS controls lack retained evidence"
+        )
+    llm_adversarial_plan, llm_adversarial_errors = build_llm_adversarial_plan(
+        scan_target, findings, derived_artifacts
+    )
+    derived_artifacts["llm-adversarial-plan.json"] = llm_adversarial_plan
+    if (
+        config.profile in {"production", "release"}
+        and llm_adversarial_plan["policy_present"] is True
+        and llm_adversarial_plan["complete"] is not True
+    ):
+        reasons = llm_adversarial_errors or ["plan is truncated or incomplete"]
+        context_errors.extend(f"LLM adversarial planning: {error}" for error in reasons)
+    receipt_trust_policy, receipt_trust_errors = load_industry_receipt_trust(
+        scan_target
+    )
+    industry_artifacts, industry_errors = build_industry_assurance(
+        scan_target,
+        derived_artifacts,
+        findings,
+        receipt_trust_policy=receipt_trust_policy,
+    )
+    industry_errors = [*receipt_trust_errors, *industry_errors]
+    derived_artifacts.update(industry_artifacts)
+    control_assessment = industry_artifacts["control-assessment.json"]
+    benchmark_scorecard = industry_artifacts["benchmark-scorecard.json"]
+    if config.profile in {"production", "release"} and industry_errors:
+        context_errors.extend(
+            f"industry assurance: {error}" for error in industry_errors
+        )
+    if (
+        config.profile in {"production", "release"}
+        and control_assessment["enforced"] is True
+        and control_assessment["complete"] is not True
+    ):
+        context_errors.append(
+            "enforced industry control assessment contains unsatisfied controls"
+        )
+    if (
+        config.profile in {"production", "release"}
+        and benchmark_scorecard["benchmarks_enabled"]
+        and (
+            benchmark_scorecard["complete"] is not True
+            or benchmark_scorecard["passed"] is not True
+        )
+    ):
+        context_errors.append(
+            "enabled industry benchmarks lack valid passing governed evidence"
         )
     if config.profile in {"production", "release"} and _has_local_monotonic_receipt(
         derived_artifacts

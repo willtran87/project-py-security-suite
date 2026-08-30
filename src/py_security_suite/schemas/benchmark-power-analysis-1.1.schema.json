@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:benchmark-power-analysis:1.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "method", "alpha", "null_rate", "alternative_rate", "sample_size", "achieved_power", "protocol", "hypothesis_count", "adjusted_alpha", "design_effect"],
+  "properties": {
+    "schema_version": {"const": "1.1"},
+    "method": {"const": "two-proportion-score-bonferroni"},
+    "alpha": {"const": 0.05},
+    "null_rate": {"$ref": "#/$defs/probability"},
+    "alternative_rate": {"$ref": "#/$defs/probability"},
+    "sample_size": {"type": "integer", "minimum": 2, "maximum": 10000000},
+    "achieved_power": {"$ref": "#/$defs/probability"},
+    "protocol": {"type": "string", "minLength": 1, "maxLength": 128},
+    "hypothesis_count": {"type": "integer", "minimum": 1, "maximum": 128},
+    "adjusted_alpha": {"type": "number", "exclusiveMinimum": 0, "maximum": 0.05},
+    "design_effect": {"type": "number", "minimum": 1, "maximum": 100}
+  },
+  "$defs": {"probability": {"type": "number", "minimum": 0, "maximum": 1}}
+}

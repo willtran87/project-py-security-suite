@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0",
+  "enabled": true,
+  "owner": "product-security",
+  "allowed_tools": [
+    "authorization-security",
+    "crosshair",
+    "hypothesis",
+    "mutmut",
+    "playwright",
+    "schemathesis",
+    "semgrep"
+  ],
+  "maximum_campaigns": 100,
+  "maximum_iterations": 3,
+  "maximum_context_files": 100,
+  "maximum_context_bytes": 8388608,
+  "network_policy": "deny",
+  "write_scope": "generated-tests-only",
+  "allow_runtime_testing": false,
+  "require_human_approval_before_execution": true,
+  "require_negative_control": true,
+  "require_mutation_validation": true,
+  "allowed_test_roots": ["generated-tests"]
+}

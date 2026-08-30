@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.0",
+  "backend": "pkcs11",
+  "credential_mode": "hardware-session",
+  "provider_id": "production-hsm",
+  "key_version": "receipt-key-2026-08",
+  "executable": "/opt/pysec/bin/receipt-signing-bridge",
+  "executable_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "arguments": ["sign", "--key-label", "pysec-benchmark-receipts"],
+  "public_key_base64": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+  "timeout_seconds": 15.0
+}

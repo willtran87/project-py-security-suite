@@ -1,6 +1,6 @@
 # Python Security Suite configuration
 
-Last reviewed: 2026-08-08
+Last reviewed: 2026-08-30
 
 ## Loading and protection
 
@@ -108,6 +108,7 @@ introduced binaries.
 |---|---|
 | `quick` | Bandit, detect-secrets |
 | `standard` | Bandit, Semgrep, detect-secrets, OSV-Scanner |
+| `audit` | Broad source security, quality, architecture, reachability, typing, repository-health, and policy analysis without target-executing runtime or release producers |
 | `extended` | Standard plus CycloneDX Python, Ruff security rules, and zizmor |
 | `deep` | Extended plus Pysa and CodeQL |
 | `supply-chain` | Extended plus Trivy, GuardDog, ScanCode, Gitleaks, and TruffleHog |
@@ -121,6 +122,340 @@ introduced binaries.
 | `comprehensive` | Every implemented offline/static, companion-evidence, or artifact adapter |
 | `production` | Strict source-security set plus fail-closed applicable runtime evidence, including actionlint, Hadolint, DevSkim, Flawfinder, TruffleHog, and `run-codeql` |
 | `release` | Comprehensive plus production completeness rules and a required built distribution |
+
+## Repository engineering-analysis policies
+
+Structural profiles read two optional strict engineering policies, and every
+profile reads an optional cross-domain assurance policy, from the sealed source
+snapshot. Invalid files make the corresponding analysis incomplete.
+
+```mermaid
+flowchart LR
+    Snapshot["Sealed source snapshot"] --> Health["Code-health analyzer"]
+    HealthPolicy["security/code-health-policy.json"] --> Health
+    Snapshot --> Graph["Static import graph"]
+    Reachability["reachability.json<br/>typed/framework semantic graph"] --> Graph
+    ArchitecturePolicy["security/architecture-policy.json or tach.toml"] --> Graph
+    EdgeBaseline["security/baselines/architecture-edges.json"] --> Graph
+    Snapshot --> Domains["Cross-domain assurance"]
+    DomainPolicy["security/domain-assurance-policy.json"] --> Domains
+    Snapshot --> Industry["Industry assurance orchestration"]
+    IndustryPolicy["security/industry-assurance-policy.json"] --> Industry
+    Health --> HealthArtifact["code-health.json 1.4<br/>ranked root-cause clusters + bounded symptoms"]
+    Graph --> ArchitectureArtifact["static-architecture.json 1.4<br/>refactoring targets + semantic graph context + policy"]
+    Domains --> DomainArtifact["domain-assurance.json 1.0<br/>applicability + evidence-bound obligations"]
+    Industry --> Stable["Stable governed baselines<br/>MCP/A2A | CSP2/SRI1 | TLP/IEP/VERIS | SESIP/EN 17927"]
+    Industry --> Sector["Conditional sector packs<br/>DORA | FFIEC | BSI C5 | FCC Cyber Trust Mark"]
+    Industry --> Watch["Non-normative quarantine<br/>draft CSP3/SRI2/Trusted Types/TR-03183 + retired CAT"]
+    Stable --> IndustryArtifacts["481-reference crosswalk + lifecycle ledger + 147 assurance packs<br/>9 foundational assessments + controls + procedures<br/>182-family / 100-adapter / 11-protocol verified scorecard + OSCAL"]
+    Sector --> IndustryArtifacts
+    Watch --> IndustryArtifacts
+    HealthPolicy -->|"invalid"| Incomplete["Analysis incomplete"]
+    ArchitecturePolicy -->|"invalid"| Incomplete
+    DomainPolicy -->|"invalid"| Incomplete
+    IndustryPolicy -->|"invalid"| Incomplete
+```
+
+Use [`examples/domain-assurance-policy.example.json`](../examples/domain-assurance-policy.example.json)
+to declare owners and requirements across all 33 governed domains, including
+identity, tenant isolation, abuse resistance, workload identity, integrations,
+incident recovery, data integrity, serverless/edge, external assets, and OT/ICS.
+Behavioral requirements need a passing source-bound test identity;
+all named enforcement points must exist in the sealed snapshot and named
+artifacts that publish `complete` must report `true`. See
+[Cross-domain assurance](domain-assurance.md).
+
+Use
+[`examples/industry-assurance-policy.example.json`](../examples/industry-assurance-policy.example.json)
+to select enterprise, identity, cloud/zero-trust, cryptography/PQC, resilience,
+privacy, PSIRT, supply-chain, AI, EU, IoT/OT, automotive, medical, federal, and
+other conditional assurance packs. The example includes A2A protocol security,
+SESIP IoT platform evaluation, FIRST TLP/IEP and VERIS information handling,
+CSP2/SRI1 web defense, DORA Level 2 resilience, current FFIEC technology
+handbooks, BSI C5 cloud assurance, and FCC Cyber Trust Mark readiness. Add
+repository-owned control objectives and enable only the pinned benchmark
+families that apply. Production and release scans fail closed when an
+enforced applicable control or procedure lacks complete named evidence, or an
+enabled benchmark lacks qualified replay-protected execution evidence or misses
+a threshold. See
+[Industry standards and benchmarks](industry-standards-benchmarks.md).
+
+Provide
+[`examples/threat-model-evidence.example.json`](../examples/threat-model-evidence.example.json)
+as `threat-model-evidence.json` in the evidence set to enable semantic threat-model
+assessment. The model is bound to the scanned source and architecture digests;
+unknown fields, dangling references, open threats, expired assumptions or risk
+acceptance, unverified mitigations, missing passing negative tests, unassessed
+change triggers, and fewer than two independent approvers fail closed.
+Provide
+[`examples/lifecycle-traceability-evidence.example.json`](../examples/lifecycle-traceability-evidence.example.json)
+as `lifecycle-traceability-evidence.json` to make life-cycle assurance semantic.
+Every applicable node must be source-bound and trace upstream and downstream;
+each applicable requirement must reach all seven stages; links must move forward
+through the life cycle; and at least one independently verified change-impact
+sample plus two-person approval is required.
+
+An optional benchmark declaration `adapter_manifest` selects executable adapter
+mode. The path must remain relative and traversal-free. The generated task names
+`benchmark-run` but deliberately omits `--authorize-execution`; a human or
+separately authorized orchestration boundary must supply it. Publisher currency
+is monitored independently with `standards-monitor`, an allowlisted HTTPS source
+manifest, quarantine output, and optional Ed25519 report signing.
+
+Policy schema 1.3 replaces the classification-only threshold fields with one
+exact `thresholds` object selected by the benchmark's registered protocol. This
+prevents a conformance, biometric, fuzzing, temporal, or assessor benchmark from
+being governed by meaningless precision/recall limits. Versions 1.0 through 1.2
+remain accepted without changing their frozen behavior.
+
+For signed schema 1.1/1.2 execution receipts, policy 1.3 accepts no repository-owned
+signer allowlist. Configure `PYSEC_INDUSTRY_RECEIPT_AUTHORITY_POLICY`,
+`PYSEC_INDUSTRY_RECEIPT_AUTHORITY_POLICY_SHA256`,
+`PYSEC_INDUSTRY_RECEIPT_AUTHORITY_POLICY_SIGNATURE`,
+`PYSEC_INDUSTRY_RECEIPT_AUTHORITY_TRUST_ROOT`, and
+`PYSEC_INDUSTRY_RECEIPT_AUTHORITY_TRUST_ROOT_SHA256` as one atomic deployment
+configuration. All files must resolve outside the scanned workspace. The root-signed
+policy's active `execution-receipt` entries bind raw Ed25519 key identity,
+organization, version, validity window, and revocation time. A partial configuration,
+bare key allowlist, repository-authored authority, or self-signed receipt is rejected.
+
+Use `benchmark-prepare` to compile a preparation request against the maintained
+adapter and benchmark registries. It pins all declared input and executable
+digests, records bounded structural validation for JSON/ZIP/TAR inputs, and emits
+schema 1.2. `benchmark-run` then rechecks those bindings and input structure,
+while `benchmark-runtime-probe` produces the normalized capability digest that an
+OCI preparation request must pin. Probing executes the approved runtime's
+version/help surface and therefore also requires `--authorize-execution`.
+uses the maintained execution registry by default, and verifies four-signer,
+two-organization authority separation across acceptance, conformance, runtime,
+time, replay, environment, supply-chain, isolation, and cleanup evidence. It
+cross-binds the signed claims to the exact subject and uses conservative Wilson
+bounds, power, confidence-width, repetition, leakage, duplicate, and holdout
+requirements for admission. Schema 1.1 also requires
+`--authority-trust-policy`, its independently approved digest and detached
+signature, a digest-pinned `--authority-trust-root`, an advanced
+`--trusted-time-context`, a deployment-owned `--replay-ledger` plus signed
+`--replay-checkpoint-state`, and a digest-pinned `--receipt-signing-key`. Initial
+enrollment additionally requires `--initialize-replay-checkpoint`; normal runs
+verify and atomically advance the signed state. These inputs
+must resolve outside the benchmark workspace. Policies are valid for at most 31
+days, admit exact role/organization/raw-Ed25519-key/revocation bindings, and
+count only active entries toward quorum. The SQLite ledger serializes nonce
+consumption and maintains a verified SHA-256 checkpoint chain. Schema 1.2 also
+holds an OS-backed cross-process lease over the complete intent/ledger/checkpoint
+transition and reconciles only an exact signed advance after a crash. The
+deployment-retained checkpoint exposes deletion or rollback. Store these inputs
+under platform ACLs and inject their approved digests from protected deployment
+configuration, not repository content. Trust-policy schema 1.1 additionally gives
+every key an explicit version, activation time, retirement time, and revocation
+time; receipt verification evaluates that lifecycle at the protected
+`completed_at` value.
+
+The enhanced runner verifies strict kind-specific attestation schema 1.1 or 1.2 at
+execution time, replays the raw advanced RFC 3161 proof, verifies a DSSE-wrapped
+in-toto/SLSA provenance statement against a separately admitted builder key and
+organization, binds the canonical complete resolved-dependency set and count, and
+semantically replays digest-bound CycloneDX/SPDX SBOM, power,
+holdout leakage, duplicate-case, contamination, environment, multi-fixture
+conformance with a digest-pinned semantic oracle, runtime, and independent cleanup
+evidence. Archive metadata is
+parsed through the same held, identity-checked file handle and the production
+validator is a fuzz target. It signs the canonical execution receipt and rehashes manifest,
+deployment trust inputs, attestations, evidence, corpus, adapter inputs, and
+executables after all stages. Enhanced OCI runs disable image pulls, mount the
+workspace read-only, pin custom seccomp content, actively verify the runtime
+version and required containment options, and grant write access only to
+an initially empty byte/file-count-bounded `.pysec-output` directory. Use
+`assurance-catalog-export` to review or diff all compiled standards, profiles,
+benchmarks, adapters, and execution contracts. `standards-manifest-build` turns
+a verified local baseline inventory into a complete monitor manifest and fails
+when any selected baseline is absent, oversized, outside its directory, or
+digest-mismatched.
+
+The CLI's PEM signer is the compatibility provider. Programmatic orchestration
+may supply the `ReceiptSigningProvider` protocol for PKCS#11, HSM, or KMS-backed
+Ed25519 operations. Provider identity and key version are included in the
+protected signature input, and the public key must still be active under the
+deployment authority policy; provider metadata alone never establishes hardware
+protection. The external-provider bridge bounds stdout and stderr while the
+process runs, applies a hard timeout, verifies executable identity before and
+after invocation, and locally verifies every Ed25519 result.
+The CLI exposes it through the `--receipt-signing-provider-executable`,
+`--receipt-signing-provider-executable-sha256`, repeatable
+`--receipt-signing-provider-argument`, `--receipt-signing-provider-public-key`,
+`--receipt-signing-provider-public-key-sha256`,
+`--receipt-signing-provider-id`, and
+`--receipt-signing-provider-key-version` options. Local PEM and external
+providers are mutually exclusive.
+For repeatable production deployments, prefer the strict, digest-pinned
+[`benchmark-signing-provider-profile-1.0`](../src/py_security_suite/schemas/benchmark-signing-provider-profile-1.0.schema.json)
+contract through `--receipt-signing-provider-profile` and
+`--receipt-signing-provider-profile-sha256`. It records the PKCS#11, generic HSM,
+Vault Transit, AWS KMS, Azure Key Vault, or Google Cloud KMS bridge backend and
+requires workload identity, a secure agent, or a hardware session. See the
+[benchmark trust operations runbook](benchmark-operations.md) for enrollment,
+rotation, alerting, and recovery drills.
+
+Before admitting or rotating a provider, actively exercise the real bridge:
+
+```text
+pysec benchmark-provider-check \
+  --profile /etc/pysec/aws-kms-provider.json \
+  --profile-sha256 APPROVED_PROFILE_SHA256 \
+  --output provider-conformance.json
+```
+
+The command generates a fresh challenge, proves Ed25519 determinism, locally
+verifies the signatures, confirms stable provider/key identity, and emits a
+portable 1.1 receipt. Its final domain-separated signature covers the provider,
+key, backend, credential mode, executable/profile digests, timestamp, and
+trusted-time identity as well as the challenge. The protected weekly provider
+workflow runs this contract against PKCS#11, Vault Transit, AWS KMS, Azure Key
+Vault, and GCP Cloud KMS deployments. Supply the receipt and its independently
+approved SHA-256 to `release-check`; require each expected provider ID and set a
+bounded maximum age so a historical enrollment cannot authorize a new release.
+
+Pass `--security-event-log /var/log/pysec/benchmark-events.jsonl` to persist
+success and early-failure control events outside the workspace. Records are
+cross-process locked, assigned a durable global sequence, SHA-256 chained, and
+fsynced before execution continues. Periodically call
+`sign_security_event_log_head` with a deployment HSM/KMS provider, a verified
+trusted-time observation/receipt, and the prior anchor digest. Admit the signer
+under the `security-event-anchor` deployment role and retain the returned anchor
+in an independent append-only or transparency store; a local chain alone cannot
+prove that the complete file was not replaced. Anchors cover an exact record
+prefix and remain verifiable after valid appends; mutation, removal, stale time,
+untrusted key lifecycle, or broken genesis/rotation continuity fails verification.
+Ship or rotate this
+deployment-owned log under normal SIEM and retention policy.
+Use `pysec benchmark-security-log-verify LOG.jsonl` before relying on an exported
+log; it replays every record and link and returns the verified head and file
+digests for independent retention.
+
+New preparations emit schema 1.2. It preserves frozen 1.1 behavior while adding
+strict ledger-head equality, a signed write-ahead replay intent with exact-one
+recovery, complete SLSA v1 build-definition/material/interval validation, and
+bounded security events in the signed receipt. Power replay selects an exact
+equal-tail two-sided binomial or standardized-mean model from the benchmark protocol, binds
+the complete preregistered analysis-plan document, and applies Bonferroni
+family-wise multiplicity and design-effect adjustments. Leakage, duplicate, and
+contamination replay reopens
+each bounded corpus artifact, verifies its byte digest, parses it with an
+material-digest-pinned Python/tree-sitter parser, derives structural, normalized
+lexical/operator, and control-flow signals, and applies bounded exact Jaccard
+similarity to multi-signal shingles to catch near-duplicates.
+`ExternalEd25519SigningProvider`
+executes an absolute digest-pinned vendor bridge without a shell or inherited
+credentials and locally verifies every returned signature.
+
+The raw contracts are directly exportable as
+`benchmark-power-analysis-1.2`, `benchmark-leakage-analysis-1.2`,
+`benchmark-duplicate-analysis-1.2`, `benchmark-contamination-analysis-1.2`,
+`benchmark-semantic-records-1.2`, `benchmark-authority-trust-policy-1.1`,
+`benchmark-environment-capture-1.0`, `benchmark-replay-intent-1.0`,
+`benchmark-replay-checkpoint-1.0`, and
+`benchmark-security-event-record-1.1`,
+`benchmark-security-event-anchor-1.0`, and
+`benchmark-security-event-anchor-1.1`.
+
+### LLM-guided adversarial planning
+
+Every scan produces a plan-only `llm-adversarial-plan.json` from retained
+findings, application scenarios, assurance gaps, architecture targets, and
+code-health root causes. Copy
+[`examples/llm-adversarial-policy.example.json`](../examples/llm-adversarial-policy.example.json)
+to `security/llm-adversarial-policy.json` to make the companion handoff ready.
+The v1 policy is intentionally strict: network denial, generated-test-only
+writes, no runtime or destructive testing, bounded campaigns/context/iterations,
+human approval, negative controls, and mutation validation are mandatory. See
+[LLM-guided adversarial testing](llm-adversarial-testing.md).
+
+The validator independently rechecks plan authority, source/workspace
+separation, context digests, the fixed `generated-tests` write root, compatible
+tool executables, and deterministic controls. Its result always carries
+`execution_authorized: false`; an external sandbox controller owns execution.
+Returned findings count only when authenticated evidence binds the same source,
+campaign, and exact failed ledger case.
+
+`security/code-health-policy.json` calibrates bounded review thresholds:
+
+```json
+{
+  "schema_version": "1.0",
+  "thresholds": {
+    "cognitive_complexity": 12,
+    "nesting_depth": 4,
+    "function_call_targets": 16,
+    "class_methods": 24,
+    "class_lack_of_cohesion_percent": 70,
+    "swallowed_broad_exceptions": 0,
+    "async_blocking_calls": 0,
+    "unawaited_async_calls": 0,
+    "discarded_async_tasks": 0,
+    "swallowed_cancellations": 0,
+    "implicit_exception_chains": 0,
+    "module_mutable_globals": 0
+  }
+}
+```
+
+Unspecified values retain conservative defaults. Supported names also include
+`function_lines`, `parameters`, `class_lines`,
+`duplicate_function_lines`, and `semantic_clone_lines`. Zero is valid for the
+count-based behavioral-risk thresholds, making the first occurrence reportable
+by default.
+
+`security/architecture-policy.json` makes intended dependency direction
+explicit rather than asking graph heuristics to guess the design:
+
+```json
+{
+  "schema_version": "1.0",
+  "layers": [
+    {
+      "name": "application",
+      "modules": ["service.application", "service.application.*"],
+      "may_depend_on": ["domain"]
+    },
+    {
+      "name": "domain",
+      "modules": ["service.domain", "service.domain.*"],
+      "may_depend_on": []
+    }
+  ],
+  "forbidden_edges": [
+    {
+      "source": "service.domain*",
+      "destination": "service.infrastructure*",
+      "reason": "Domain code must not own infrastructure adapters"
+    }
+  ],
+  "thresholds": {
+    "module_fan_out": 10,
+    "hub_total_degree": 18,
+    "instability_delta": 0.4
+  }
+}
+```
+
+Module patterns use deterministic case-sensitive glob matching. Same-layer
+dependencies are allowed; cross-layer dependencies must be named in
+`may_depend_on`. Exact forbidden-edge and layer-direction violations produce
+high-confidence findings. Fan-out, hub, and instability findings remain
+calibrated structural review signals. The ranked refactoring queue preserves
+that distinction through `exact_contract_failure`; it does not equate a high
+degree score with a policy breach.
+
+When the native JSON architecture policy is absent, the analyzer reads the
+repository-root `tach.toml` and treats each configured module's `depends_on`
+list as an exact dependency contract. It also promotes boundary cycles when
+`forbid_circular_dependencies` is enabled. Native JSON takes precedence when
+both formats exist. Packaging scripts, `__main__.py`, main guards, and route
+decorators are all retained as distinct entry-point evidence.
+If a governed reachability artifact is present in the same scan, the architecture
+artifact also records its confidence, completeness, graph size, and applied
+precision controls. Typed-receiver or framework-resolution flags describe the
+semantic model used; they are not claims that the target executed.
 
 If `policy.required_scanners` is empty, every selected and applicable tool is
 required. A conditional tool with no matching input is reported as

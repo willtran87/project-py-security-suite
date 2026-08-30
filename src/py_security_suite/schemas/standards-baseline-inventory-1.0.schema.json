@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:standards-baseline-inventory:1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "baselines"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "baselines": {"type": "array", "maxItems": 512, "items": {"type": "object", "additionalProperties": false, "required": ["id", "publisher", "baseline_path", "baseline_sha256", "media_type", "maximum_bytes"], "properties": {"id": {"type": "string", "pattern": "^[A-Z0-9][A-Z0-9._-]{0,127}$"}, "publisher": {"type": "string", "minLength": 1, "maxLength": 256}, "baseline_path": {"type": "string", "minLength": 1}, "baseline_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "media_type": {"enum": ["text/plain", "text/html", "application/json", "application/xml", "text/xml", "application/pdf"]}, "maximum_bytes": {"type": "integer", "minimum": 1, "maximum": 16777216}}}}
+  }
+}

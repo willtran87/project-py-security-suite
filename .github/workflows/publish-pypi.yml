@@ -1,0 +1,165 @@
+name: Protected PyPI trusted publishing
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_run_id:
+        description: Successful release-assurance workflow run ID
+        required: true
+        type: string
+      independent_run_id:
+        description: Successful independent-provider verification workflow run ID
+        required: true
+        type: string
+      expected_head_sha:
+        description: Exact attested release commit
+        required: true
+        type: string
+      wheel_sha256:
+        description: Independently approved wheel SHA-256
+        required: true
+        type: string
+      sdist_sha256:
+        description: Independently approved sdist SHA-256
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: pypi-production
+  cancel-in-progress: false
+
+jobs:
+  verify-and-publish:
+    name: Verify and publish exact artifacts
+    environment: pypi-production
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      actions: read # Read and download the approved release workflow run.
+      attestations: read # Verify provenance for both release subjects.
+      contents: read
+      id-token: write # Authenticate to PyPI through Trusted Publishing.
+    outputs:
+      project: ${{ steps.identity.outputs.project }}
+      version: ${{ steps.identity.outputs.version }}
+    env:
+      EXPECTED_HEAD_SHA: ${{ inputs.expected_head_sha }}
+      RELEASE_RUN_ID: ${{ inputs.release_run_id }}
+      INDEPENDENT_RUN_ID: ${{ inputs.independent_run_id }}
+      EXPECTED_WHEEL_SHA256: ${{ inputs.wheel_sha256 }}
+      EXPECTED_SDIST_SHA256: ${{ inputs.sdist_sha256 }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Validate immutable dispatch inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$RELEASE_RUN_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$INDEPENDENT_RUN_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$EXPECTED_WHEEL_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$EXPECTED_SDIST_SHA256" =~ ^[0-9a-f]{64}$ ]]
+      - name: Check out exact verification code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.expected_head_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify the referenced release run and download artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          run="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RELEASE_RUN_ID")"
+          [[ "$(jq -r .head_sha <<< "$run")" == "$EXPECTED_HEAD_SHA" ]]
+          [[ "$(jq -r .conclusion <<< "$run")" == "success" ]]
+          [[ "$(jq -r .path <<< "$run")" == ".github/workflows/release-assurance.yml" ]]
+          [[ "$(jq -r .run_attempt <<< "$run")" == "1" ]]
+          independent="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$INDEPENDENT_RUN_ID")"
+          [[ "$(jq -r .head_sha <<< "$independent")" == "$EXPECTED_HEAD_SHA" ]]
+          [[ "$(jq -r .conclusion <<< "$independent")" == "success" ]]
+          [[ "$(jq -r .path <<< "$independent")" == ".github/workflows/external-release-verification.yml" ]]
+          [[ "$(jq -r .run_attempt <<< "$independent")" == "1" ]]
+          mkdir -p .artifacts/download packages
+          gh run download "$RELEASE_RUN_ID" --name release-artifacts --dir .artifacts/download
+          gh run download "$INDEPENDENT_RUN_ID" \
+            --name "independent-release-verification-$EXPECTED_HEAD_SHA" \
+            --dir .artifacts/independent
+          mapfile -t wheels < <(find .artifacts/download -type f -name '*.whl')
+          mapfile -t sdists < <(find .artifacts/download -type f -name '*.tar.gz')
+          [[ "${#wheels[@]}" == 1 && "${#sdists[@]}" == 1 ]]
+          cp "${wheels[0]}" "${sdists[0]}" packages/
+      - name: Require approved digests, provenance, and archive structure
+        shell: bash
+        run: |
+          set -euo pipefail
+          wheel="$(find packages -maxdepth 1 -type f -name '*.whl')"
+          sdist="$(find packages -maxdepth 1 -type f -name '*.tar.gz')"
+          [[ "$(sha256sum "$wheel" | cut -d' ' -f1)" == "$EXPECTED_WHEEL_SHA256" ]]
+          [[ "$(sha256sum "$sdist" | cut -d' ' -f1)" == "$EXPECTED_SDIST_SHA256" ]]
+          for artifact in "$wheel" "$sdist"; do
+            gh attestation verify "$artifact" --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release-assurance.yml" \
+              --source-digest "$EXPECTED_HEAD_SHA"
+          done
+          independent_wheel="$(find .artifacts/independent -type f -name '*.whl')"
+          [[ "$(sha256sum "$independent_wheel" | cut -d' ' -f1)" == "$EXPECTED_WHEEL_SHA256" ]]
+          gh attestation verify "$independent_wheel" --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/external-release-verification.yml" \
+            --source-digest "$EXPECTED_HEAD_SHA"
+          python -I scripts/verify_release_independent.py packages \
+            --source-date-epoch "$(git show -s --format=%ct HEAD)" \
+            --output .artifacts/publish-verification.json
+      - name: Export package identity
+        id: identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "project=$(jq -r .artifacts.wheel.project .artifacts/publish-verification.json)" >> "$GITHUB_OUTPUT"
+          echo "version=$(jq -r .artifacts.wheel.version .artifacts/publish-verification.json)" >> "$GITHUB_OUTPUT"
+      - name: Publish with PyPI Trusted Publishing
+        uses: pypa/gh-action-pypi-publish@a892a5a61159132606e93a2fa6f4358831b04d26 # v1.14.2
+        with:
+          packages-dir: packages
+          skip-existing: false
+          verbose: true
+          print-hash: true
+          verify-metadata: true
+
+  post-publish-roundtrip:
+    name: Verify the public PyPI round trip
+    needs: verify-and-publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      PROJECT: ${{ needs.verify-and-publish.outputs.project }}
+      VERSION: ${{ needs.verify-and-publish.outputs.version }}
+      EXPECTED_WHEEL_SHA256: ${{ inputs.wheel_sha256 }}
+      EXPECTED_SDIST_SHA256: ${{ inputs.sdist_sha256 }}
+    steps:
+      - name: Download the exact published files and verify digests
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in {1..12}; do
+            rm -rf public-wheel public-sdist
+            mkdir public-wheel public-sdist
+            if python -m pip download --no-deps --only-binary=:all: \
+                --dest public-wheel "$PROJECT==$VERSION" && \
+              python -m pip download --no-deps --no-binary=:all: \
+                --dest public-sdist "$PROJECT==$VERSION"; then
+              break
+            fi
+            [[ "$attempt" == 12 ]] && exit 1
+            sleep 10
+          done
+          wheel="$(find public-wheel -type f -name '*.whl')"
+          sdist="$(find public-sdist -type f -name '*.tar.gz')"
+          [[ "$(sha256sum "$wheel" | cut -d' ' -f1)" == "$EXPECTED_WHEEL_SHA256" ]]
+          [[ "$(sha256sum "$sdist" | cut -d' ' -f1)" == "$EXPECTED_SDIST_SHA256" ]]
+          python -m venv publish-roundtrip
+          publish-roundtrip/bin/python -m pip install "$wheel"
+          publish-roundtrip/bin/pysec --help >/dev/null

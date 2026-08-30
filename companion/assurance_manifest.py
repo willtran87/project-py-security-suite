@@ -44,6 +44,7 @@ KINDS = {
     "iast",
     "in-toto",
     "kubescape",
+    "llm-adversarial",
     "mobsf",
     "mutmut",
     "native-sanitizers",

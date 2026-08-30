@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:benchmark-execution-receipt:1.0",
+  "type": "object",
+  "required": ["schema_version", "analysis", "execution_id", "benchmark_id", "protocol", "benchmark_subject_sha256", "manifest_sha256", "corpus_sha256", "attestations", "replay_protected", "stages", "decision", "receipt_sha256"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "analysis": {"const": "benchmark-adapter-execution"},
+    "execution_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "benchmark_id": {"type": "string"},
+    "protocol": {"type": "string"},
+    "benchmark_subject_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "manifest_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "corpus_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "attestations": {"type": "object"},
+    "replay_protected": {"const": true},
+    "stages": {"type": "array", "minItems": 1},
+    "decision": {"enum": ["pass", "fail"]},
+    "receipt_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
+}

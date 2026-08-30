@@ -21,7 +21,10 @@ from jsonschema import (  # pylint: disable=import-error
 )
 
 from py_security_suite.effectiveness_corpus import (
+    _balanced_accuracy,
     _consume_remote_effectiveness_replay,
+    _mcc,
+    _wilson_interval,
     _validate_fixture_paths,
     _verify_consistency,
     _verify_inclusion,
@@ -32,6 +35,11 @@ from py_security_suite.strict_json import canonical_bytes
 
 
 class EffectivenessCorpusTests(unittest.TestCase):
+    def test_confusion_metrics_are_undefined_without_both_classes(self) -> None:
+        self.assertIsNone(_mcc(1, 0, 0, 0))
+        self.assertIsNone(_balanced_accuracy(1, 0, 0, 0))
+        self.assertIsNone(_wilson_interval(0, 0))
+
     def setUp(self) -> None:
         temporary = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with
         self.addCleanup(temporary.cleanup)
@@ -382,6 +390,9 @@ class EffectivenessCorpusTests(unittest.TestCase):
         )
         self.assertEqual(result["metrics"]["precision"], 0.5)
         self.assertEqual(result["metrics"]["recall"], 0.5)
+        self.assertEqual(result["metrics"]["mcc"], 0.0)
+        self.assertEqual(result["metrics"]["balanced_accuracy"], 0.5)
+        self.assertEqual(result["metrics"]["false_positive_rate"], 0.5)
         self.assertEqual(len(result["failures"]), 2)
         schema = json.loads(read_bundled_schema("effectiveness-evaluation-1.0"))
         Draft202012Validator.check_schema(schema)
@@ -694,6 +705,10 @@ class EffectivenessCorpusTests(unittest.TestCase):
                 "mutation_operator": 2,
             },
         )
+        self.assertEqual(result["coverage_summary"]["positive_labels"], 13)
+        self.assertEqual(result["coverage_summary"]["negative_labels"], 12)
+        self.assertEqual(result["label_outcomes"], [])
+        self.assertEqual(result["feedback_policy"], "aggregate-only")
 
     def test_governed_fixture_digest_is_bound_to_source_inventory(self) -> None:
         with self.assertRaisesRegex(ValueError, "detached from the sealed"):

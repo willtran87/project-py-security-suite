@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:benchmark-duplicate-analysis:1.1",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "algorithm", "case_sha256", "duplicate_count", "canonicalization", "case_semantic_sha256", "semantic_duplicate_count"],
+  "properties": {
+    "schema_version": {"const": "1.1"}, "algorithm": {"const": "sha256"}, "case_sha256": {"$ref": "#/$defs/digests"}, "duplicate_count": {"const": 0},
+    "canonicalization": {"const": "ast-token-shape-v1"}, "case_semantic_sha256": {"$ref": "#/$defs/digests"}, "semantic_duplicate_count": {"const": 0}
+  },
+  "$defs": {"digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "digests": {"type": "array", "minItems": 1, "maxItems": 10000000, "uniqueItems": true, "items": {"$ref": "#/$defs/digest"}}}
+}

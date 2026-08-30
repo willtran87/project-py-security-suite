@@ -7,7 +7,7 @@ creates a GitHub-friendly report artifact.
 
 | Area | Capability |
 |---|---|
-| Portfolio | 64 governed adapters across source security, secrets, dependencies, architecture, quality, delivery, artifacts, and assurance evidence |
+| Portfolio | 89 governed adapters across source security, secrets, dependencies, architecture, quality, delivery, artifacts, and assurance evidence; every scan emits generated selected/applicable/completed capability truth |
 | Decisions | Explicit `PASS`, `WARN`, `FAIL`, and `INCOMPLETE` outcomes |
 | Reports | Markdown, self-contained HTML, SARIF 2.1.0, SonarQube external issues, normalized JSON, an owned closure backlog, and SHA-256 manifests |
 | Risk context | Digest-pinned CISA KEV, FIRST EPSS, CycloneDX VEX, alias-aware advisory decisions, scanner-attributed fix candidates, finding lifecycle, CODEOWNERS, and governed acceptances |
@@ -15,12 +15,17 @@ creates a GitHub-friendly report artifact.
 | Reachability | Offline three-state executable/load-only/disconnected graph with explained dispatch paths, ranked islands, and optional coverage corroboration |
 | Graph context | Graphify code-only topology joined to findings for blast radius, structural hotspots, and cross-tool neighborhoods |
 | Advanced analysis | Typed evidence graph with control dominance and bypass detection, scanner-confirmed SARIF taint paths, artifact activation parity, threat-control-test traceability, security mutation leverage, telemetry privacy topology, dependency trust routes, and digest-bound attack-surface regression comparison |
+| Accuracy controls | Multi-axis finding validation with proof-bound reproduction, executed framework model canaries, OpenAPI/auth behavior drift, argv-safe authorized scenario handoffs, exact advisory-function calls, async/exception lifecycle defects, root-cause review clustering, semantic reachability context, ranked architecture refactoring targets that distinguish exact contracts from heuristics, native/Tach architecture enforcement, unified entry-point discovery, bounded Git temporal coupling, and generated profile execution truth |
+| Domain assurance | Conservative applicability plus source-, artifact-, and passing-test-bound requirements across 33 first-class and opt-in domains, adding privileged control planes, distributed correctness, secure human interaction, ML supply chains, secret lifecycles, observability integrity, developer environments, hostile content, trust and safety, confidential computing, regulated transactions, and physical security |
+| LLM adversarial guidance | Provider-neutral, digest-bound campaigns derived from findings, API abuse, domain gaps, architecture targets, and code-health root causes; proposals are confined to generated tests and require deterministic oracles, negative controls, mutation validation, human approval, and authenticated source-bound evidence |
+| Industry assurance | Versioned crosswalks for 481 application, lifecycle, architecture, audit, assessment, assurance-case, V&V, evaluator, enterprise-risk, firmware/hardware trust, cryptographic-module, biometric, privacy-engineering/PET/LINDDUN, data-quality, service-management, FAPI/FIDO2/EUDI credentials, MCP/A2A, provider-native cloud/SCuBA/Kubernetes/FedRAMP 20x, resilience/BIA, memory safety, CSIRT/PSIRT and information handling, web-platform/content provenance, supply-chain/supplier-due-diligence/reproducibility and federal producer attestation, EUCC/SESIP/NIS2, HITRUST/PCI SSF, secure-by-design, financial/payment/automotive/telecom/consumer-IoT regulation, AI/AISVS/agentic/ethical-design, accessibility, testing/AST/RASP, secure-coding, weakness, and threat-modeling references; 47 quarantined publisher watch items with semantic diffs, signed snapshots, and human promotion; 147 selectable evidence-backed assurance packs; nine governed foundational assessments including ISO 15026/SACM graph validation and source-bound threat-model graph semantics; source-retained CVSS v4 and SSVC prioritization; OSCAL 1.2.2 lifecycle output; 182 governed benchmark families and 100 maintained adapters with eleven typed protocols; cryptographically verified subject-bound attestations and hardened OCI/laboratory execution |
 | Risk routes | Bounded multi-entry exposure matrices from every retained declared interface to findings, sensitive sinks, and exact dependency-advisory importers. End-to-end sensitive-data route records join scanner-confirmed or inventory-only sink evidence to data classes, trust boundaries, protections, entry/runtime breadth, validation, scanner assurance, lifecycle, ownership, and applicable bounded citations. A separate secret-provenance ledger joins redacted credential candidates to source/graph/artifact membership, current-tree or history origin, verification, scanner trust, lifecycle, and owners. Exact-file and bounded Graphify-route intersections then highlight production secret candidates co-located with logging, telemetry, URL, or network sinks while explicitly remaining non-taint review evidence. Their validation handoff names candidate tests and joins retained execution, coverage, source binding, assurance, shared-test quality, findings, and ownership without claiming that a synthetic canary assertion already exists. When that same retained sensitive route also has an exact SDK-advisory intersection, a bounded compound ledger coordinates credential, boundary-protection, and dependency-remediation review without claiming disclosure or vulnerable-function execution. Routes also retain fail-closed source/artifact package lifecycle checks, comparable-baseline finding/change attribution, ordered CODEOWNERS handoffs, shared validation campaigns, shared-test quality, and explicit model gaps. Graph/source/artifact applicability fusion separates genuine Python route gaps from artifact, generated-evidence, test, and non-Python controls without dropping findings; exact structural-island joins then distinguish missing entry models, runtime conflicts, test-only scope, and dormant-capability retirement review without declaring code dead. |
 | Evidence fusion | Source-to-artifact package lineage, semantic finding links, changed-line/test/graph context, exact selected-test execution, full-chain RFC 3161 run context and signature timestamps, threshold/external DSSE signatures, signed atomic replay receipts, downgrade-resistant assurance profiles, composed SLSA/Sigstore/VSA/dependency verification, and feedback into owned exposure and SDK-package verification plans |
 | Structural synthesis | Cross-validated dead code, island boundaries, structural orphans, import-cycle hotspots, change-risk scoring, graph-guided test targets, exact execution status, and test/changed-line coverage alignment |
 | Advisory fusion | Package-scoped CVE/GHSA/PYSEC/OSV alias clustering across source and artifact scanners, with distinct-risk/observation counts plus CycloneDX introducing-root paths, pipdeptree environment health, Graphify imports, reachability/runtime state, and deptry-use context |
 | Data exposure | CWE-grounded flows into logs, telemetry, URL queries, client errors, runtime-state dumps, and process streams; monorepo SDK/configuration inventory; owner-, graph-, change-risk-, runtime-, test-, and SDK-package-aware disclosure triage |
 | Runtime | Python 3.11+; scanners are installed separately from approved offline bundles |
+| Suite assurance | Exact 144-boundary dependency graph with one frozen eight-module bootstrap SCC; mypy plus a pinned strict Pyright trust-boundary gate; 45 security-critical coverage ratchets; six performance workloads including the real code-health/static-architecture pipeline; AST-verified live-test policy plus complete JUnit engine/role matrix evidence; and aggregate-only governed effectiveness statistics that preserve holdout secrecy while supporting release thresholds |
 
 Key trust properties:
 
@@ -54,6 +59,12 @@ Markdown is the canonical documentation format:
 - [Structural synthesis for dead code and islands](docs/structural-synthesis.md)
 - [Sensitive-data exposure analysis](docs/data-exposure.md)
 - [Detection effectiveness and operational coverage](docs/effectiveness.md)
+- [Finding accuracy, framework models, and architecture history](docs/analysis-accuracy.md)
+- [Cross-domain assurance](docs/domain-assurance.md)
+- [LLM-guided adversarial testing](docs/llm-adversarial-testing.md)
+- [Industry standards, benchmark scorecards, and OSCAL](docs/industry-standards-benchmarks.md)
+- [Benchmark signer, replay, trusted-time, and audit operations](docs/benchmark-operations.md)
+- [Public API and schema compatibility policy](docs/api-compatibility.md)
 - [Governed release readiness](docs/release-readiness.md)
 - [Compatibility and coverage matrix](docs/compatibility-matrix.md)
 - [Tool-selection and portfolio governance](docs/tool-selection.md)
@@ -74,9 +85,27 @@ flowchart LR
         Project["Python project"] --> Doctor["Preflight applicability and trust"]
         Doctor --> Plan["Offline provisioning plan"]
         Plan --> Scan["Run applicable adapters"]
-        Scan --> Findings["Normalize and correlate"]
-        Findings --> Policy["PASS | WARN | FAIL | INCOMPLETE"]
+        Scan --> ToolEvidence["Scanner findings + native evidence"]
+        Policies["Repository analysis policies<br/>health | architecture | cross-domain obligations"] --> Context
+        Scan --> Context["Context analyzers<br/>frameworks | scenarios | root causes | architecture | domain coverage"]
+        Context --> Handoff["Authorized companion handoff<br/>argv + actor + oracle + subjects"]
+        ToolEvidence --> Findings["Normalize and correlate<br/>semantic subject | flow sink | location"]
+        Context --> Findings
+        Findings --> AdversarialPlan["LLM adversarial plan<br/>digest-bound objectives + oracles"]
+        AdversarialPlan --> ModelProposal["External model proposal<br/>schema-bound, untrusted output"]
+        ModelProposal --> ProposalCheck["Confined validation<br/>execution_authorized = false"]
+        ProposalCheck --> ApprovedLane["Human-approved disposable lane<br/>network denied + generated tests only"]
+        ApprovedLane --> AdversarialProof["Deterministic proof<br/>negative control + mutation + failed case"]
+        AdversarialProof --> Findings
+        Benchmarks["Pinned OWASP/NIST/LLM/holdout corpora"] --> BenchmarkLane["Disposable benchmark lane"]
+        BenchmarkLane --> Scorecards["Replay-protected scorecards + deltas"]
+        Scorecards --> Policy
+        Standards["Versioned standards + repository controls"] --> ControlAssessment["Evidence assessment + OSCAL"]
+        ControlAssessment --> Policy
+        Findings --> Validate["Multi-axis validation<br/>candidate to reproduced"]
+        Validate --> Policy["PASS | WARN | FAIL | INCOMPLETE"]
         Policy --> Reports["Seal reports and evidence"]
+        Handoff --> Pack
         Reports --> Pack["Atomic evidence pack<br/>role views + audit archive"]
     end
     Transfer --> Doctor
@@ -149,7 +178,7 @@ pysec qualify-bundle PATH_TO_PROJECT --config pysec.toml --profile production \
   --effectiveness-evaluation effectiveness-evaluation.json \
   --effectiveness-report PATH_TO_CORPUS_SCAN_REPORT \
   --effectiveness-sha256 APPROVED_SHA256 \
-  --minimum-effectiveness-labels 25 \
+  --minimum-effectiveness-labels 500 \
   --required-effectiveness-tool bandit \
   --format markdown --output .artifacts/bundle-qualification.md
 pysec generate-hooks PATH_TO_PROJECT --profile quick
@@ -316,8 +345,130 @@ pysec benchmark REPORT --corpus CORPUS.json \
   --output effectiveness-evaluation.json
 ```
 
+For an upstream benchmark adapter, use the digest-pinned staged runtime. The
+authorization flag is intentionally mandatory and is never inserted by a
+generated registry task:
+
+```text
+pysec benchmark-prepare REQUEST.json --workspace DISPOSABLE_WORKSPACE \
+  --output ADAPTER.json
+pysec benchmark-runtime-probe /usr/bin/docker \
+  --runtime-sha256 APPROVED_RUNTIME_SHA256 --runtime-name docker \
+  --runtime-version APPROVED_RUNTIME_VERSION --authorize-execution \
+  --output OCI-RUNTIME-PROOF.json
+pysec benchmark-provider-check \
+  --profile /etc/pysec/provider.json \
+  --profile-sha256 APPROVED_PROFILE_SHA256 \
+  --output provider-conformance.json
+pysec benchmark-run ADAPTER.json --workspace DISPOSABLE_WORKSPACE \
+  --authority-trust-policy /etc/pysec/benchmark-authorities.json \
+  --authority-trust-policy-sha256 APPROVED_POLICY_SHA256 \
+  --authority-trust-policy-signature /etc/pysec/benchmark-authorities.sig \
+  --authority-trust-root /etc/pysec/benchmark-authority-root.pem \
+  --authority-trust-root-sha256 APPROVED_ROOT_SHA256 \
+  --trusted-time-context /var/lib/pysec/benchmark-time-context.json \
+  --trusted-time-context-sha256 APPROVED_TIME_CONTEXT_SHA256 \
+  --replay-ledger /var/lib/pysec/benchmark-replay.sqlite3 \
+  --replay-checkpoint-state /var/lib/pysec/benchmark-replay-checkpoint.json \
+  --receipt-signing-key /run/secrets/benchmark-receipt-key.pem \
+  --receipt-signing-key-sha256 APPROVED_RECEIPT_KEY_SHA256 \
+  --security-event-log /var/log/pysec/benchmark-events.jsonl \
+  --authorize-execution --output benchmark-execution.json
+
+pysec assurance-catalog-export --output assurance-catalog.json
+pysec standards-manifest-build BASELINE-INVENTORY.json \
+  --output STANDARDS-SOURCES.json
+
+pysec standards-monitor STANDARDS-SOURCES.json \
+  --output standards-snapshots --authorize-network \
+  --signing-key STANDARDS-MONITOR-ED25519.pem
+pysec standards-monitor-verify standards-snapshots/standards-monitor-report.json \
+  --report-sha256 APPROVED_SHA256 --public-key STANDARDS-MONITOR-PUBLIC.pem
+```
+
+Add `--initialize-replay-checkpoint` only for an explicitly approved first
+enrollment. Later runs verify and atomically advance the signed retained state.
+Schema 1.2 recomputes protocol-selected power and derives leakage, duplicate,
+and contamination fingerprints by parsing the governed corpus artifacts itself;
+producer-supplied semantic hashes alone are rejected. It verifies DSSE-wrapped
+in-toto/SLSA provenance against an admitted builder, binds the exact build type,
+source repository, and immutable revision, and actively probes digest-pinned OCI runtime capabilities before
+executing a container. Its signed write-ahead intent closes the ledger/checkpoint
+crash window and rejects forward injection. The Python API includes a
+digest-pinned, shell-free `ExternalEd25519SigningProvider` bridge for PKCS#11,
+HSM, or KMS-backed signing.
+`benchmark-provider-check` actively challenges that bridge, verifies its
+signatures locally, and emits a portable 1.1 receipt whose Ed25519 statement
+binds provider metadata, profile and executable digests, observation time, and
+optional trusted-time identity. `release-check` independently replays exact
+digest-pinned receipts and enforces required identities and freshness. A protected
+weekly workflow runs the same check against deployment-owned providers; local
+CI cannot claim live HSM, Vault, or cloud-KMS conformance.
+
+`standards-monitor` quarantines changed publisher payloads for semantic and
+licensed-text review; it never promotes a new normative edition automatically.
+
+`benchmark-prepare` compiles a maintained adapter specification and registry
+lane into schema 1.2, pins every required input and executable, and refuses a
+high-risk companion request without a disposable OCI/external sandbox and
+cleanup stage. Before execution, the runner structurally validates JSON and
+archive inputs, uses the maintained registry by default, and verifies separately
+signed acceptance-criteria, adapter-conformance, runtime-observation, isolation,
+and cleanup evidence. Schema 1.2 adds strict current-head replay continuity,
+signed recovery intents, globally sequenced structured security events, full
+SLSA v1 build/source and complete-material-set semantics, protocol-selected
+exact-binomial or standardized-mean power replay with Bonferroni/design-effect
+adjustment, and parser-derived structural, normalized lexical/operator, and
+control-flow signals plus multi-signal Jaccard-shingle leakage,
+duplicate, near-duplicate, and contamination fingerprints; schema 1.1
+remains frozen for compatibility. Both enforce signer and organization
+quorums, role/key separation, evidence validity and revocation bindings,
+root-signed deployment-policy admission, hash-chained replay consumption with an
+automatically advanced signed rollback checkpoint, advanced RFC 3161 replay, a signed
+canonical execution receipt, post-run input-integrity verification, and
+conservative confidence-bound thresholds. The runner verifies DSSE-wrapped
+in-toto/SLSA provenance and replays the SBOM, power calculation, leakage,
+duplicates, contamination, environment, repeated conformance runs, raw runtime
+samples, and independent cleanup probes from digest-bound evidence documents.
+In OCI mode the workspace is read-only and only a byte/file-count-bounded
+`.pysec-output` is writable; images cannot be pulled, seccomp profiles are
+digest-pinned, the runtime capability surface is actively probed, and the
+container has no network, capabilities, or privilege
+escalation. Policy 1.3 gives every scoring protocol its own exact threshold
+vocabulary; policies 1.0 through 1.2 remain readable. Python embedders must opt
+in explicitly with `allow_legacy_unregistered=True` to execute an unregistered
+legacy manifest; the CLI never enables that bypass.
+
+Receipt verification at the scorecard boundary is independently anchored. Policy
+1.3 deliberately cannot name trusted receipt keys. The scanner loads the same
+root-signed, digest-pinned deployment authority format from the five
+`PYSEC_INDUSTRY_RECEIPT_AUTHORITY_*` settings (policy, policy SHA-256, detached
+signature, trust root, and trust-root SHA-256), all outside the target workspace.
+Only active `execution-receipt` entries are projected into the scorecard registry;
+an otherwise valid self-signed receipt cannot bootstrap its own authority. Replay
+transitions hold an OS-backed cross-process
+lease across intent, SQLite ledger, and signed checkpoint writes; the precise
+post-checkpoint crash window is reconciled without accepting a second advance.
+`--security-event-log` writes fsynced, hash-chained JSONL events outside the
+target workspace, including authorization and other early failures. Signed log
+anchors verify immutable prefixes, so later append-only growth does not invalidate
+an earlier checkpoint. Anchor schema 1.1 additionally requires a pinned trusted-time
+receipt, lifecycle-aware `security-event-anchor` authority, a genesis link, and
+monotonic rotation sequence.
+
 The strict contracts are exported offline with `pysec schema effectiveness-1.1`,
-`effectiveness-corpus-1.0`, and `effectiveness-evaluation-1.0`. The corpus
+`effectiveness-corpus-1.0`, `effectiveness-evaluation-1.0`,
+`benchmark-adapter-manifest-1.0`, `benchmark-adapter-manifest-1.1`,
+`benchmark-adapter-manifest-1.2`, `benchmark-attestation-1.1`,
+`benchmark-attestation-1.2`, `benchmark-preparation-request-1.0`,
+`benchmark-authority-trust-policy-1.0`, `benchmark-execution-receipt-1.1`,
+`benchmark-execution-receipt-1.2`,
+`benchmark-signing-provider-profile-1.0`,
+`benchmark-signing-provider-conformance-1.1`, `architecture-assurance-1.0`,
+`performance-assurance-1.1`,
+`industry-assurance-policy-1.3`,
+`assurance-catalog-export-1.0`, `standards-baseline-inventory-1.0`, and
+`standards-source-manifest-1.0`. The corpus
 contract accepts legacy schema 1.0 for non-governed benchmarking and governed
 schema 2.0 for production/release; production/release reject unsigned legacy
 evaluations.
@@ -360,12 +511,13 @@ pysec evidence-pack REPORT --output security-evidence \
   --previous-report PREVIOUS_REPORT \
   --effectiveness-evaluation effectiveness-evaluation.json \
   --effectiveness-sha256 APPROVED_EVALUATION_SHA256 \
-  --minimum-effectiveness-labels 25 \
-  --minimum-effectiveness-positive-labels 10 \
-  --minimum-effectiveness-negative-labels 10 \
-  --minimum-effectiveness-tools 2 \
-  --minimum-effectiveness-labels-per-tool 2 \
+  --minimum-effectiveness-labels 500 \
+  --minimum-effectiveness-positive-labels 200 \
+  --minimum-effectiveness-negative-labels 200 \
+  --minimum-effectiveness-tools 3 \
+  --minimum-effectiveness-labels-per-tool 50 \
   --required-effectiveness-tool bandit \
+  --required-effectiveness-tool codeql \
   --required-effectiveness-tool semgrep \
   --passport-verification passport-verification.json \
   --passport-verification-sha256 APPROVED_PASSPORT_SHA256 \
@@ -395,15 +547,22 @@ sidecar independently.
 pysec release-check REPORT --format json \
   --effectiveness-evaluation effectiveness-evaluation.json \
   --effectiveness-sha256 APPROVED_SHA256 \
-  --minimum-effectiveness-labels 25 \
-  --minimum-effectiveness-positive-labels 10 \
-  --minimum-effectiveness-negative-labels 10 \
-  --minimum-effectiveness-labels-per-tool 2 \
+  --minimum-effectiveness-labels 500 \
+  --minimum-effectiveness-positive-labels 200 \
+  --minimum-effectiveness-negative-labels 200 \
+  --minimum-effectiveness-tools 3 \
+  --minimum-effectiveness-labels-per-tool 50 \
   --required-effectiveness-tool bandit \
+  --required-effectiveness-tool codeql \
   --required-effectiveness-tool semgrep \
   --passport-verification passport-verification.json \
   --passport-verification-sha256 APPROVED_SHA256 \
-  --require-passport --output release-readiness.json
+  --require-passport \
+  --provider-conformance provider-conformance.json \
+  --provider-conformance-sha256 APPROVED_PROVIDER_RECEIPT_SHA256 \
+  --required-provider-id provider-generic-hsm \
+  --maximum-provider-conformance-age-hours 168 \
+  --require-provider-conformance --output release-readiness.json
 
 pysec evidence-draft REPORT --format json \
   --output governance-evidence-draft.json
@@ -729,6 +888,14 @@ python-security-report/
 |-- structural-synthesis.json        # dead code, island boundaries, change risk, and graph-guided tests
 |-- data-exposure.json               # prioritized disclosure paths joined with graph, coverage, reachability, and fusion
 |-- evidence-fusion.json             # cross-scanner, advisory-alias, and source/artifact evidence joins
+|-- finding-validation.json          # independent proof dimensions plus conservative compatibility tier
+|-- framework-model-coverage.json    # detected frameworks, model identities, canaries, and engine completion
+|-- application-contract-analysis.json # scenario manifests/tasks, drift, wrapper reachability, vulnerable calls
+|-- llm-adversarial-plan.json        # source-bound campaigns and safe companion handoffs
+|-- capability-manifest.json         # portfolio, profile intent, applicability, completion, and execution gaps
+|-- code-health.json                 # ranked root-cause clusters plus bounded complexity and behavioral symptoms
+|-- static-architecture.json         # ranked refactoring targets, semantic graph context, module/symbol graph, and policy
+|-- architecture-history.json        # structural profiles: bounded co-change and finding-overlaid hotspots
 |-- coverage-summary.json           # validated pre-generated test coverage
 |-- junit-summary.json              # bounded output-free test case/file/result ledger
 |-- reuse-compliance.json           # when a REUSE marker opts the repo in
@@ -867,7 +1034,7 @@ contact those targets.
 
 ## Current boundaries
 
-This is an alpha foundation. All 88 offline/static, evidence-ingestion, and
+This is an alpha foundation. All 89 offline/static, evidence-ingestion, and
 artifact adapters are
 implemented, but enterprise
 rollout still requires pinned approved assets, framework-specific Pysa models,

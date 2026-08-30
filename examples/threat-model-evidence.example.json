@@ -1,0 +1,155 @@
+{
+  "schema_version": "1.0",
+  "model_id": "checkout-threat-model",
+  "source_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "architecture_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "methodology": "OWASP four-question framework with STRIDE",
+  "reviewed_at": "2026-08-20T12:00:00Z",
+  "assets": [
+    {
+      "id": "customer-credentials",
+      "title": "Customer authentication credentials",
+      "owner": "identity-team",
+      "classification": "restricted",
+      "criticality": 5
+    }
+  ],
+  "components": [
+    {
+      "id": "customer-browser",
+      "name": "Customer browser",
+      "kind": "external-client",
+      "zone": "internet",
+      "owner": "customer"
+    },
+    {
+      "id": "identity-api",
+      "name": "Identity API",
+      "kind": "service",
+      "zone": "production",
+      "owner": "identity-team"
+    }
+  ],
+  "trust_boundaries": [
+    {
+      "id": "internet-edge",
+      "from_zone": "internet",
+      "to_zone": "production",
+      "control_ids": [
+        "TLS-CLIENT-AUTH",
+        "RATE-LIMIT"
+      ]
+    }
+  ],
+  "data_flows": [
+    {
+      "id": "login-request",
+      "source_component": "customer-browser",
+      "destination_component": "identity-api",
+      "data_classes": [
+        "credentials"
+      ],
+      "boundary_ids": [
+        "internet-edge"
+      ],
+      "encrypted": true,
+      "authenticated": true
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "approved-edge",
+      "statement": "The approved edge terminates TLS and preserves authenticated origin identity.",
+      "owner": "platform-team",
+      "status": "validated",
+      "expires_at": "2027-08-20T12:00:00Z"
+    }
+  ],
+  "mitigations": [
+    {
+      "id": "credential-abuse-controls",
+      "title": "Authenticate and rate-limit login attempts.",
+      "owner": "identity-team",
+      "status": "verified",
+      "control_ids": [
+        "TLS-CLIENT-AUTH",
+        "RATE-LIMIT"
+      ],
+      "evidence": [
+        {
+          "artifact": "control-assessment.json",
+          "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "subject_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      ]
+    }
+  ],
+  "tests": [
+    {
+      "id": "credential-stuffing-negative-case",
+      "threat_ids": [
+        "credential-stuffing"
+      ],
+      "kind": "rate-limit-negative-case",
+      "negative_case": true,
+      "result": "passed",
+      "evidence_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "subject_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  ],
+  "threats": [
+    {
+      "id": "credential-stuffing",
+      "title": "Automated credential stuffing",
+      "category": "spoofing",
+      "asset_ids": [
+        "customer-credentials"
+      ],
+      "component_ids": [
+        "identity-api"
+      ],
+      "flow_ids": [
+        "login-request"
+      ],
+      "boundary_ids": [
+        "internet-edge"
+      ],
+      "preconditions": [
+        "The attacker possesses credentials reused from another service."
+      ],
+      "attack_steps": [
+        "Replay candidate credentials against the login endpoint."
+      ],
+      "likelihood": 4,
+      "impact": 5,
+      "risk_score": 20,
+      "status": "mitigated",
+      "mitigation_ids": [
+        "credential-abuse-controls"
+      ],
+      "test_ids": [
+        "credential-stuffing-negative-case"
+      ],
+      "residual_risk": 5,
+      "owner": "identity-team",
+      "acceptance": null
+    }
+  ],
+  "change_triggers": [
+    {
+      "id": "architecture-snapshot",
+      "artifact": "static-architecture.json",
+      "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "assessed": true
+    }
+  ],
+  "review": {
+    "reviewed_at": "2026-08-20T12:00:00Z",
+    "independent_reviewers": [
+      "security-reviewer",
+      "architecture-reviewer"
+    ],
+    "approved": true,
+    "approval_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+  }
+}

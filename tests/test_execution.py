@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.metadata
 import json
 import os
 import signal
@@ -18,8 +19,10 @@ from py_security_suite.execution import (
     _kill_process_group_after_leader_exit,
     _process_tree_resident_bytes,
     _terminate_process_tree,
+    governed_asset_sha256,
     isolated_environment,
     native_runtime_closure_sha256,
+    python_runtime_closure_sha256,
     resolve_executable,
     run_command,
     sealed_governed_assets,
@@ -30,6 +33,55 @@ from py_security_suite.execution import (
 
 
 class IsolatedEnvironmentTests(unittest.TestCase):
+    def test_governed_input_boundaries_reject_abusive_commands(self) -> None:
+        cases = [
+            ([], 30, 1024),
+            (["x"] * 1025, 30, 1024),
+            (["bad\x00argument"], 30, 1024),
+            (["x"], 0, 1024),
+            (["x"], 30, 0),
+        ]
+        for command, timeout, output_limit in cases:
+            with self.subTest(command_length=len(command), timeout=timeout):
+                with self.assertRaises(ValueError):
+                    run_command(
+                        command,
+                        cwd=Path.cwd(),
+                        timeout_seconds=timeout,
+                        max_output_bytes=output_limit,
+                    )
+
+    def test_governed_input_boundaries_reject_oversized_environment(self) -> None:
+        with self.assertRaisesRegex(ValueError, "environment"):
+            run_command(
+                [sys.executable, "-c", "pass"],
+                cwd=Path.cwd(),
+                timeout_seconds=30,
+                max_output_bytes=1024,
+                environment=CommandEnvironment(
+                    extra={f"PYSEC_TEST_{index}": "x" for index in range(257)}
+                ),
+            )
+
+    def test_missing_sandbox_launcher_is_rejected_before_spawn(self) -> None:
+        with (
+            patch("py_security_suite.execution.resolve_executable", return_value=None),
+            self.assertRaisesRegex(ValueError, "sandbox launcher was not found"),
+        ):
+            run_command(
+                [sys.executable, "-c", "pass"],
+                cwd=Path.cwd(),
+                timeout_seconds=30,
+                max_output_bytes=1024,
+                environment=CommandEnvironment(sandbox_prefix=("missing-sandbox",)),
+            )
+
+    def test_missing_governed_asset_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            missing = Path(directory) / "missing"
+            with self.assertRaisesRegex(ValueError, "not a regular file or directory"):
+                governed_asset_sha256(missing)
+
     def test_darwin_shared_cache_allowlist_is_system_scoped(self) -> None:
         with patch("py_security_suite.execution.sys.platform", "darwin"):
             self.assertTrue(
@@ -83,6 +135,115 @@ class IsolatedEnvironmentTests(unittest.TestCase):
                     os.chmod(snapshot, 0o600)
                     snapshot.write_bytes(b'{"rule":"tampered"}')
 
+    def test_governed_directory_snapshot_is_sealed_and_stable(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            original = Path(directory) / "rules"
+            nested = original / "nested"
+            nested.mkdir(parents=True)
+            (original / "root.json").write_bytes(b'{"rule":"root"}')
+            (nested / "child.json").write_bytes(b'{"rule":"child"}')
+            digest = governed_asset_sha256(original)
+
+            with sealed_governed_assets(
+                {"rules": original}, {"rules": digest}
+            ) as copies:
+                snapshot = copies["rules"]
+                self.assertEqual(governed_asset_sha256(snapshot), digest)
+                self.assertEqual(
+                    (snapshot / "nested" / "child.json").read_bytes(),
+                    b'{"rule":"child"}',
+                )
+
+            with sealed_governed_assets({}, {}) as copies:
+                self.assertEqual(copies, {})
+            with self.assertRaisesRegex(ValueError, "no preflight digest"):
+                with sealed_governed_assets({"rules": original}, {}):
+                    pass
+
+    def test_python_runtime_closure_binds_packages_stdlib_and_native_code(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            package_root = root / "packages"
+            stdlib = root / "stdlib"
+            package_root.mkdir()
+            stdlib.mkdir()
+            primary_file = package_root / "scanner.py"
+            dependency_file = package_root / "dependency.py"
+            native_file = root / "native-component.bin"
+            primary_file.write_bytes(b"scanner package")
+            dependency_file.write_bytes(b"dependency package")
+            native_file.write_bytes(b"native runtime")
+            (stdlib / "runtime.py").write_bytes(b"standard library")
+
+            primary = MagicMock()
+            primary.metadata = {"Name": "scanner-package"}
+            primary.files = [Path("scanner.py")]
+            primary.locate_file.side_effect = lambda relative: package_root / relative
+            primary.requires = ["dependency-package>=1", "not a requirement"]
+            dependency = MagicMock()
+            dependency.metadata = {"Name": "dependency-package"}
+            dependency.files = [Path("dependency.py")]
+            dependency.locate_file.side_effect = lambda relative: (
+                package_root / relative
+            )
+            dependency.requires = []
+            entry_point = MagicMock(name="scanner")
+            entry_point.name = "scanner"
+            entry_point.dist = primary
+            entry_points = MagicMock()
+            entry_points.select.return_value = [entry_point]
+
+            def distribution(name: str) -> MagicMock:
+                if name == "dependency-package":
+                    return dependency
+                raise importlib.metadata.PackageNotFoundError(name)
+
+            with (
+                patch(
+                    "py_security_suite.execution.importlib.metadata.entry_points",
+                    return_value=entry_points,
+                ),
+                patch(
+                    "py_security_suite.execution.importlib.metadata.distributions",
+                    return_value=[primary, dependency],
+                ),
+                patch(
+                    "py_security_suite.execution.importlib.metadata.distribution",
+                    side_effect=distribution,
+                ),
+                patch(
+                    "py_security_suite.execution.sysconfig.get_path",
+                    return_value=str(stdlib),
+                ),
+                patch(
+                    "py_security_suite.execution._native_runtime_components",
+                    return_value={native_file},
+                ),
+                patch(
+                    "py_security_suite.execution._native_dependency_closure",
+                    return_value=[native_file],
+                ),
+                patch(
+                    "py_security_suite.execution._darwin_system_runtime_record",
+                    return_value=None,
+                ),
+                patch("py_security_suite.execution._ENVIRONMENT_RUNTIME_CLOSURE", None),
+            ):
+                digest = python_runtime_closure_sha256(
+                    str(root / "scanner-script.py"),
+                    include_environment=True,
+                    refresh=True,
+                )
+                self.assertEqual(len(digest or ""), 64)
+                self.assertEqual(
+                    python_runtime_closure_sha256(
+                        str(root / "scanner-script.py"), include_environment=True
+                    ),
+                    digest,
+                )
+
     def test_ambient_proxy_configuration_is_not_forwarded(self) -> None:
         ambient = {
             "HTTP_PROXY": "https://proxy.invalid",
@@ -109,6 +270,10 @@ class IsolatedEnvironmentTests(unittest.TestCase):
         self.assertNotIn("DYLD_LIBRARY_PATH", environment)
         self.assertNotIn("PYTHONPATH", environment)
         self.assertNotIn(str(Path.cwd()), environment["PATH"].split(os.pathsep))
+
+    def test_isolated_environment_rejects_loader_path_overrides(self) -> None:
+        with self.assertRaisesRegex(ValueError, "cannot override"):
+            isolated_environment({"PYTHONPATH": "untrusted"})
 
     def test_scanner_process_receives_disposable_private_home(self) -> None:
         process = MagicMock()
@@ -149,7 +314,7 @@ class IsolatedEnvironmentTests(unittest.TestCase):
             ) as terminate,
             patch(
                 "py_security_suite.execution.time.monotonic",
-                side_effect=[0.0, 2.0, 2.0],
+                side_effect=[0.0, *([2.0] * 8)],
             ),
         ):
             result = run_command(
@@ -179,7 +344,7 @@ class IsolatedEnvironmentTests(unittest.TestCase):
             ) as terminate,
             patch(
                 "py_security_suite.execution.time.monotonic",
-                side_effect=[0.0, 0.0],
+                side_effect=[0.0] * 8,
             ),
             patch(
                 "py_security_suite.execution._directory_size_exceeds",

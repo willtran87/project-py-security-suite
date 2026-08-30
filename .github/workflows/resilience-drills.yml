@@ -1,0 +1,56 @@
+name: Scheduled assurance resilience drills
+
+on:
+  schedule:
+    - cron: "29 6 * * 2"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: resilience-drills-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  failure-injection:
+    name: Failure injection / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025]
+    steps:
+      - name: Check out immutable source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.11.19"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - name: Install the locked assurance environment
+        run: uv sync --locked --all-groups --python "3.14"
+      - name: Exercise timeout, output-flood, rollback, fork, and cleanup controls
+        run: >-
+          uv run --frozen pytest -q
+          tests/resilience/test_assurance_resilience.py
+          tests/test_trusted_time.py
+          tests/test_benchmark_pipeline.py
+          tests/test_benchmark_signing.py
+          --junitxml=.artifacts/resilience/junit.xml
+      - name: Recheck scale budgets after fault recovery
+        run: >-
+          uv run --frozen python scripts/validate_performance_budgets.py
+          --output .artifacts/resilience/performance-assurance.json
+      - name: Retain drill evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: resilience-drill-${{ matrix.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .artifacts/resilience
+          if-no-files-found: error
+          retention-days: 180

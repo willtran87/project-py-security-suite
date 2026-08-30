@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:assurance-case-assessment:1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "analysis",
+    "applicable",
+    "case_id",
+    "scope_sha256",
+    "model_format",
+    "model_version",
+    "claims_assessed",
+    "top_level_claims",
+    "defeaters_assessed",
+    "evidence_assessed",
+    "relationships_assessed",
+    "independent_reviewers",
+    "complete",
+    "gaps",
+    "claim_boundary"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "analysis": {"const": "structured-assurance-case-conformance"},
+    "applicable": {"type": "boolean"},
+    "case_id": {"type": "string", "maxLength": 200},
+    "scope_sha256": {"type": "string", "pattern": "^([0-9a-f]{64})?$"},
+    "model_format": {"type": "string"},
+    "model_version": {"type": "string"},
+    "claims_assessed": {"type": "integer", "minimum": 0, "maximum": 20000},
+    "top_level_claims": {"type": "integer", "minimum": 0, "maximum": 20000},
+    "defeaters_assessed": {"type": "integer", "minimum": 0, "maximum": 20000},
+    "evidence_assessed": {"type": "integer", "minimum": 0, "maximum": 100000},
+    "relationships_assessed": {"type": "integer", "minimum": 0, "maximum": 200000},
+    "independent_reviewers": {"type": "integer", "minimum": 0, "maximum": 10000},
+    "complete": {"type": "boolean"},
+    "gaps": {
+      "type": "array",
+      "maxItems": 200,
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1, "maxLength": 1000}
+    },
+    "claim_boundary": {"type": "string", "minLength": 1}
+  }
+}

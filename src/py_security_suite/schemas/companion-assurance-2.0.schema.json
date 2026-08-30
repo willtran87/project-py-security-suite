@@ -18,6 +18,10 @@
     {
       "if": {"properties": {"kind": {"const": "surface-inventory"}}, "required": ["kind"]},
       "then": {"properties": {"execution": {"required": ["surface_proof"]}}}
+    },
+    {
+      "if": {"properties": {"kind": {"const": "llm-adversarial"}}, "required": ["kind"]},
+      "then": {"properties": {"execution": {"required": ["control_proof"]}}}
     }
   ],
   "properties": {
@@ -27,7 +31,7 @@
         "ai-security", "atheris", "authorization-security", "browser-security", "check-manifest", "clamav",
         "cloud-attack-path", "clusterfuzzlite", "crosshair", "database-security", "event-security", "falco",
         "fuzz-introspector", "github-attestation", "iast", "in-toto", "kubescape",
-        "mobsf", "mutmut", "native-sanitizers", "nuclei", "oast", "oci-image",
+        "llm-adversarial", "mobsf", "mutmut", "native-sanitizers", "nuclei", "oast", "oci-image",
         "polyglot", "prowler", "protocol-security", "pytm", "rasp",
         "reproducible-build", "restler", "ruleset-regression", "secret-verification", "surface-inventory", "tls-scan", "yara", "zap"
       ]

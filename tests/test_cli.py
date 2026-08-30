@@ -34,6 +34,22 @@ class CliSafetyTests(unittest.TestCase):
         self.assertIn("pysec inspect PROJECT/.artifacts/pysec-report", help_text)
         parsed = parser.parse_args(["list-tools"])
         self.assertEqual(parsed.command, "list-tools")
+        runtime_probe = parser.parse_args(
+            [
+                "benchmark-runtime-probe",
+                "docker",
+                "--runtime-sha256",
+                "a" * 64,
+                "--runtime-name",
+                "docker",
+                "--runtime-version",
+                "27.0.0",
+                "--authorize-execution",
+                "--output",
+                "runtime-proof.json",
+            ]
+        )
+        self.assertEqual(runtime_probe.command, "benchmark-runtime-probe")
         adapter_check = parser.parse_args(
             ["adapter-check", "--format", "json", "--output", "adapters.json"]
         )
@@ -1703,6 +1719,41 @@ class CliSafetyTests(unittest.TestCase):
             ):
                 _append_github_summary(summary)
             self.assertEqual(destination.read_text(encoding="utf-8"), "# Result\n\n")
+
+    def test_benchmark_run_keeps_sensitive_receipt_fields_out_of_terminal(self) -> None:
+        receipt = {
+            "decision": "pass",
+            "receipt_signature": {"sensitive_test_marker": "must-not-be-logged"},
+        }
+        with (
+            patch(
+                "py_security_suite.cli.execute_benchmark_manifest",
+                return_value=receipt,
+            ),
+            patch("py_security_suite.cli._write_atomic_output") as write_output,
+            patch("builtins.print") as terminal,
+        ):
+            self.assertEqual(
+                main(
+                    [
+                        "benchmark-run",
+                        "manifest.json",
+                        "--workspace",
+                        ".",
+                        "--authorize-execution",
+                        "--output",
+                        "receipt.json",
+                    ]
+                ),
+                0,
+            )
+        terminal_text = terminal.call_args.args[0]
+        self.assertEqual(
+            terminal_text,
+            "PASS: benchmark execution receipt written to receipt.json",
+        )
+        self.assertNotIn("must-not-be-logged", terminal_text)
+        self.assertIn("must-not-be-logged", write_output.call_args.kwargs["content"])
 
 
 if __name__ == "__main__":

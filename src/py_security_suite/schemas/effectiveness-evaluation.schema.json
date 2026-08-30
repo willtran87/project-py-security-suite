@@ -4,7 +4,7 @@
   "title": "Scanner effectiveness evaluation",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "verdict", "report", "corpus", "time_authority", "replay_protected", "replay_receipt", "confusion_matrix", "metrics", "feedback_policy", "failures", "label_outcomes"],
+  "required": ["schema_version", "verdict", "report", "corpus", "time_authority", "replay_protected", "replay_receipt", "confusion_matrix", "coverage_summary", "metrics", "confidence_intervals_95", "feedback_policy", "failures", "label_outcomes"],
   "properties": {
     "schema_version": {"enum": ["1.0", "2.0"]},
     "verdict": {"enum": ["pass", "fail"]},
@@ -46,6 +46,31 @@
         "false_negative": {"type": "integer", "minimum": 0}
       }
     },
+    "coverage_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["positive_labels", "negative_labels", "tool_counts", "tool_expectations"],
+      "properties": {
+        "positive_labels": {"type": "integer", "minimum": 0, "maximum": 10000},
+        "negative_labels": {"type": "integer", "minimum": 0, "maximum": 10000},
+        "tool_counts": {
+          "type": "object",
+          "maxProperties": 256,
+          "additionalProperties": {"type": "integer", "minimum": 0, "maximum": 10000}
+        },
+        "tool_expectations": {
+          "type": "object",
+          "maxProperties": 256,
+          "additionalProperties": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 2,
+            "uniqueItems": true,
+            "items": {"enum": ["finding", "clean"]}
+          }
+        }
+      }
+    },
     "metrics": {
       "type": "object",
       "additionalProperties": false,
@@ -54,7 +79,40 @@
         "precision": {"$ref": "#/$defs/nullableRatio"},
         "recall": {"$ref": "#/$defs/nullableRatio"},
         "specificity": {"$ref": "#/$defs/nullableRatio"},
-        "f1": {"$ref": "#/$defs/nullableRatio"}
+        "f1": {"$ref": "#/$defs/nullableRatio"},
+        "mcc": {"anyOf": [{"type": "number", "minimum": -1, "maximum": 1}, {"type": "null"}]},
+        "balanced_accuracy": {"$ref": "#/$defs/nullableRatio"},
+        "false_positive_rate": {"$ref": "#/$defs/nullableRatio"},
+        "youden_j": {"anyOf": [{"type": "number", "minimum": -1, "maximum": 1}, {"type": "null"}]}
+      }
+    },
+    "confidence_intervals_95": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["precision", "recall", "specificity", "false_positive_rate"],
+      "properties": {
+        "precision": {"$ref": "#/$defs/nullableInterval"},
+        "recall": {"$ref": "#/$defs/nullableInterval"},
+        "specificity": {"$ref": "#/$defs/nullableInterval"},
+        "false_positive_rate": {"$ref": "#/$defs/nullableInterval"}
+      }
+    },
+    "stratum_scorecards": {
+      "type": "array",
+      "maxItems": 60000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["dimension", "value", "labels", "confusion_matrix", "precision", "recall", "false_positive_rate"],
+        "properties": {
+          "dimension": {"enum": ["cwe", "language", "parser_variant", "boundary_type", "severity", "mutation_operator"]},
+          "value": {"type": "string", "minLength": 1, "maxLength": 160},
+          "labels": {"type": "integer", "minimum": 1, "maximum": 10000},
+          "confusion_matrix": {"$ref": "#/properties/confusion_matrix"},
+          "precision": {"$ref": "#/$defs/nullableRatio"},
+          "recall": {"$ref": "#/$defs/nullableRatio"},
+          "false_positive_rate": {"$ref": "#/$defs/nullableRatio"}
+        }
       }
     },
     "feedback_policy": {"enum": ["detailed", "aggregate-only"]},
@@ -70,6 +128,12 @@
     }
   },
   "$defs": {
+    "nullableInterval": {
+      "oneOf": [
+        {"type": "null"},
+        {"type": "object", "additionalProperties": false, "required": ["lower", "upper"], "properties": {"lower": {"type": "number", "minimum": 0, "maximum": 1}, "upper": {"type": "number", "minimum": 0, "maximum": 1}}}
+      ]
+    },
     "nullableRatio": {
       "anyOf": [
         {"type": "number", "minimum": 0, "maximum": 1},

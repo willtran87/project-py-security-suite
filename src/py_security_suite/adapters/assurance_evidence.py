@@ -645,6 +645,26 @@ class AiSecurityAdapter(AssuranceEvidenceAdapter):
         return _classified_evidence_applicability(self, target, "ai")
 
 
+class LlmAdversarialAdapter(AssuranceEvidenceAdapter):
+    name = "llm-adversarial"
+    evidence_kind = "llm-adversarial"
+    default_report = "llm-adversarial.json"
+    default_domain = "security"
+    default_area = "llm-guided-adversarial-code-testing"
+    reference = "https://owasp.org/www-project-agentic-ai-threats-and-mitigations/"
+
+    def not_applicable_reason(self, target: Path) -> str | None:
+        configured = configured_path(
+            target, self.config.artifacts_path, self.default_report
+        )
+        if (
+            configured.is_file()
+            or (target / "security" / "llm-adversarial-policy.json").is_file()
+        ):
+            return None
+        return "no LLM adversarial policy or pre-generated evidence was found"
+
+
 class ClusterFuzzLiteAdapter(AssuranceEvidenceAdapter):
     name = "clusterfuzzlite"
     evidence_kind = "clusterfuzzlite"

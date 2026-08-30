@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:process-capability-assessment:1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "analysis", "complete", "measurement_scale", "minimum_capability_level", "dimensions_assessed", "dimensions_level_2_or_higher", "dimensions", "gaps", "claim_boundary"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "analysis": {"const": "software-process-capability-assessment"},
+    "complete": {"type": "boolean"},
+    "measurement_scale": {"const": "ISO-IEC-33020-inspired-bounded-levels-0-through-3"},
+    "minimum_capability_level": {"type": "integer", "minimum": 0, "maximum": 3},
+    "dimensions_assessed": {"const": 7},
+    "dimensions_level_2_or_higher": {"type": "integer", "minimum": 0, "maximum": 7},
+    "dimensions": {"type": "array", "minItems": 7, "maxItems": 7, "items": {"$ref": "#/$defs/dimension"}},
+    "gaps": {"$ref": "#/$defs/strings"},
+    "claim_boundary": {"type": "string", "minLength": 1, "maxLength": 2000}
+  },
+  "$defs": {
+    "strings": {"type": "array", "maxItems": 100, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 1000}},
+    "dimension": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "capability_level", "evidence_required", "evidence_present", "gaps"],
+      "properties": {
+        "id": {"enum": ["requirements", "implementation-quality", "verification", "build-and-release", "vulnerability-response", "incident-and-operation", "governance-and-improvement"]},
+        "capability_level": {"type": "integer", "minimum": 0, "maximum": 3},
+        "evidence_required": {"$ref": "#/$defs/strings"},
+        "evidence_present": {"$ref": "#/$defs/strings"},
+        "gaps": {"$ref": "#/$defs/strings"}
+      }
+    }
+  }
+}

@@ -45,6 +45,9 @@ class CycloneDxAdapter(ScannerAdapter):
         command.extend(
             [
                 "--output-reproducible",
+                "--spec-version",
+                "1.7",
+                "--validate",
                 "--output-format",
                 "JSON",
                 "--output-file",
@@ -200,6 +203,9 @@ class CycloneDxAdapter(ScannerAdapter):
             "requirements",
             str(requirements),
             "--output-reproducible",
+            "--spec-version",
+            "1.7",
+            "--validate",
             "--output-format",
             "JSON",
             "--output-file",
@@ -284,6 +290,8 @@ class CycloneDxAdapter(ScannerAdapter):
         document = _document(payload)
         if document.get("bomFormat") != "CycloneDX":
             raise ValueError("output is not a CycloneDX BOM")
+        if document.get("specVersion") != "1.7":
+            raise ValueError("output is not a CycloneDX 1.7 BOM")
         components = document.get("components", [])
         if components is not None and not isinstance(components, list):
             raise TypeError("CycloneDX components must be a list")

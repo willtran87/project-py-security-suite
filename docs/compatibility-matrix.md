@@ -1,6 +1,6 @@
 # Python Security Suite compatibility and coverage matrix
 
-Last reviewed: 2026-08-12
+Last reviewed: 2026-08-30
 
 See the [documentation index](index.md), [solution design](design.md), and
 [operations guide](operations.md) for the surrounding architecture.
@@ -11,10 +11,13 @@ See the [documentation index](index.md), [solution design](design.md), and
 flowchart LR
     Source["Python source"] --> Static["Patterns, data flow, types, and quality"]
     Repo["Repository configuration"] --> Delivery["Workflows, IaC, containers, and architecture"]
+    AnalysisPolicy["Health thresholds + architecture policy"] --> Context["Native contextual analyzers"]
+    Source --> Context
     Dependencies["Locks and manifests"] --> Components["Vulnerabilities, SBOMs, licenses, and package behavior"]
     Artifacts["Wheel, sdist, and images"] --> Supply["Structure, metadata, malware, provenance, and signatures"]
     Evidence["Trusted companion lanes"] --> Dynamic["Tests, DAST, fuzzing, threat models, and reproducibility"]
     Static --> Model["Normalized finding and evidence model"]
+    Context --> Model
     Delivery --> Model
     Components --> Model
     Supply --> Model
@@ -64,11 +67,19 @@ closed instead of hiding findings.
 | Security Passport | Yes for unsigned handoff and verification; Cosign 2 detached signing is offline; Cosign 3 bundle signing is an explicitly authorized connected approval action | Report checksums, applied-configuration digest, optional approved Cosign digest, signing configuration, and trusted public key | Portable in-toto/SLSA statement plus version-compatible signature material |
 | CISA KEV enrichment | Yes | Bounded JSON, mandatory approved SHA-256, maximum age | Known exploitation classification, `P0`, blocking policy |
 | FIRST EPSS enrichment | Yes | Bounded CSV/gzip, mandatory approved SHA-256, maximum age, numeric validation | Probability/percentile context and priority |
-| CycloneDX VEX | Yes | Bounded CycloneDX JSON, mandatory approved SHA-256, maximum age, state validation | Product-context state without automatic suppression |
+| CycloneDX, OpenVEX, and CSAF VEX | Yes | Bounded JSON, mandatory approved SHA-256, maximum age, format-specific status validation | Normalized product-context state with retained source format and no automatic suppression |
 | Finding lifecycle | Yes | Bounded prior `findings.json` and mandatory approved SHA-256 | New, existing, regressed, and resolved evidence |
+| Semantic and flow correlation | Yes | Exact semantic anchors, native ordered code-flow sinks, logical rule families, and source locations | Joins presentation-line differences while partitioning ambiguous or incompatible subjects and paths; never creates independent corroboration |
+| Application contract analysis | Yes | Sealed Python routes, retained OpenAPI and optional baseline, declared endpoint/test obligations, exact advisory symbols, and source-bound test evidence | Route/auth/input drift, relative-import and class-wrapper vulnerable-call reachability, and auth/tenant/boundary/replay scenarios with argv-safe authorized companion tasks; plans are not execution evidence |
+| Cross-domain assurance | Yes | Sealed repository signals plus optional strict `security/domain-assurance-policy.json`, regular-file enforcement points, complete governed artifacts, and passing source-bound test identities | Explicit `not-applicable`, `unmodeled`, `partial`, or `covered` status across 33 domains, including privileged control planes, distributed correctness, secure human interaction, ML/data provenance, credential lifecycles, observability, developer environments, hostile content, trust and safety, confidential computing, regulated transactions, and physical security; applicability is not a vulnerability and coverage is not absence-of-defects proof |
+| LLM adversarial planning | Yes | Sealed source inventory, normalized findings, deterministic API scenarios, domain gaps, ranked architecture targets, and code-health root causes | Provider-neutral campaigns with digest-bound untrusted context, bounded tools and iterations, network-denied/generated-test-only handoff, deterministic oracles, negative controls, mutation validation, and authenticated companion result accounting; model output alone is never a finding |
+| Configurable code health | Yes | Sealed Python AST plus optional strict `security/code-health-policy.json` | Policy-calibrated complexity, coupling, responsibilities, cohesion, exception and async lifecycle defects, mutable globals, duplicate/semantic clones, and severity-diversified bounded detail with explicit omitted totals |
+| Declared architecture policy | Yes | Local Python imports/calls, unified entry-point evidence, dynamic imports, optional approved edge baseline, and strict native JSON with deterministic Tach fallback | Exact high-confidence layer/forbidden/undeclared-edge and Tach-forbidden cycle violations kept separate from syntactic calls, unresolved dynamic-import gaps, fan-out, hubs, instability, co-change, and new-edge heuristics |
 | CODEOWNERS routing | Yes | Repository-local bounded file | Owner metadata in reports and SARIF |
 | Effectiveness summary | Yes | Current normalized findings, tool runs, primary/helper executable identities, trust approval, and continuity | Attribution, actionability, corroboration, tool contribution, and exact per-tool evidence posture consumed by risk routes; not a precision/recall or finding-truth claim |
-| Labeled effectiveness benchmark | Yes | Verified report plus digest-bound corpus; production/release require schema 2.0, separate training/holdout identities, and lifecycle-valid signatures from two trusted organizations | TP/TN/FP/FN, precision, recall, specificity, F1, exact failed labels, and enforced CWE/language/parser/boundary/severity/mutation diversity |
+| Labeled effectiveness benchmark | Yes | Verified report plus digest-bound corpus; production/release require schema 2.0, separate training/holdout identities, and lifecycle-valid signatures from two trusted organizations | TP/TN/FP/FN, precision, recall, specificity, F1, MCC, balanced accuracy, false-positive rate, exact failed labels, and CWE/language/parser/boundary/severity/mutation strata |
+| Industry benchmark registry and regression | Yes; external vulnerable targets use disposable companion lanes | Pinned corpus digests and revisions; held-handle hostile-input validation and production-parser fuzzing; independently signed acceptance, conformance, and runtime observation; root-signed short-lived active-key and builder admission with four-signer/two-organization separation; raw RFC 3161/statistical/leakage/duplicate/contamination/environment replay; hash-chained external nonce replay with automatically advanced signed checkpoints; provider-neutral protected execution receipts; active two-signature PKCS#11/Vault/cloud-KMS conformance receipts; deterministic time, throughput, growth, and memory budgets; digest-pinned executables and actively probed OCI runtime; shell-free bounded execution; no-pull/read-only/capability-free/no-network OCI mode with pinned seccomp, bounded output, and opt-in live containment tests; semantic SBOM, DSSE SLSA provenance, repeated conformance/runtime, and independent cleanup-proof replay; post-run immutable-input verification; conservative confidence bounds; and negative controls | 182 families spanning OWASP/NIST/LLM/AI/identity/FIDO2/EUDI/FAPI/MCP/A2A/crypto/polyglot/IaC/container/Kubernetes/SBOM/SCITT/C2PA/fuzzing/AST/RASP/agentic/architecture/API/web-platform/telemetry/resilience/STIG/OT/forensics/accessibility, FedRAMP 20x, supplier due diligence, SAMM, SCuBA and native AWS/Azure/GCP posture, memory safety, LINDDUN, CSIRT/PSIRT and TLP/IEP handling, EUCC/SESIP/NIS2/NESAS, HITRUST/PCI SSF, DORA/FFIEC/C5/FCC/TISAX/PCI sector assurance, and existing governed domains; eleven executable scoring protocols and 100 maintained adapter specifications |
+| Standards controls, procedures, prioritization, and OSCAL | Yes | Strict policy 1.2 selecting bounded assurance packs or naming custom controls/procedures, complete evidence, explicit execution authorization, fail-closed catalog referential integrity, quarantined HTTPS publisher observations, signed snapshots, semantic change analysis, affected-control mapping, human promotion approval, verified assessor credentials, and source-provided prioritization data; policy 1.0/1.1 remain readable | 481-reference crosswalk plus publisher monitor, lifecycle ledger, and 47-item publication watchlist; 147 general and conditional assurance packs including FedRAMP 20x, FIDO2, EUDI, HITRUST 11.8, PCI SSF 2.0/Secure SLC, NIS2, supplier due diligence, SAMM, and existing domains; CVSS v4/SSVC without fabricated scores; 182 benchmark contracts with 100 maintained adapters and 11 scoring protocols; and seven official-schema-valid OSCAL 1.2.2 lifecycle models |
 | Operational domain scorecard | Yes | Applicable tool status, normalized findings, policy reasons, and executable identity | Separate A-F execution, observed-risk, and evidence grades across 12 domains; release disposition and N/A remain distinct |
 | Conditional-control activation | Yes | Not-applicable reason and selected adapter identity | Owner, activation trigger, concrete action, required closure evidence, and tool reference |
 | Scanner trust catalog | Yes | Organization-approved catalog bound by SHA-256, platform, role, version, source, approver, and expiry | Reusable executable approval with per-entry audit evidence and explicit-pin precedence |
@@ -88,6 +99,15 @@ closed instead of hiding findings.
 
 This is distinct from `unavailable`, which means relevant analysis could not be
 performed.
+
+Benchmark execution schema 1.2 strengthens the registry row above with strict
+live-head replay equality, a signed write-ahead recovery intent, complete SLSA
+build-definition/material checks, locally verified digest-pinned HSM/KMS signer
+bridging, globally sequenced and externally anchorable security events,
+verifier-derived semantic corpus evidence, protocol-selected power analysis,
+time-aware signer lifecycle admission, exact SLSA source binding, and mandatory
+Docker/rootless-Podman OCI containment CI.
+Schema 1.1 remains frozen and readable.
 
 ## Portfolio
 
@@ -177,6 +197,7 @@ performed.
 | Database security evidence | Least privilege, FORCE RLS, migration, query-boundary, restore, negotiated TLS, and audit behavior | Native Psycopg driver attests the negotiated TLS protocol/cipher, rejects superuser/BYPASSRLS/owner RLS oracles, and uses read-only canary transactions | runtime and broader when configured | Yes |
 | Ruleset regression evidence | TP/TN, parser variants, false-positive budget, and mutation sensitivity | Exact corpus/ruleset digests, minimum samples, confidence level, point scores, and Wilson intervals are compared with the signed baseline | runtime and broader | Yes |
 | AI security evidence | Prompt injection, tool authorization, agency, memory, output handling, and exfiltration | Repeated sanitized trials bind model/provider/prompt/dataset digests and enforce per-control sample sizes plus confidence-bounded failure policy | runtime and broader when configured | Yes |
+| LLM adversarial evidence | Model-proposed adversarial tests against application code, contracts, invariants, and architecture | Strict proposal schema, prompt-injection resistance, disposable worktree, command allowlist, network denial, deterministic oracle, negative control, mutation validation, authenticated source binding, and control proof | repo and broader when policy or evidence exists | Yes |
 | OWASP pytm evidence | Threat model, DFD, trust boundaries, and enumerated threats | Model executes in a design lane; reviewed threats are ingested | repo, comprehensive, production, release when a model exists | Yes |
 | in-toto evidence | Authorized build steps, materials, products, and functionaries | Offline layout/link verification in the release lane | artifact, comprehensive, release | Yes |
 | Reproducible-build evidence | Independent build equivalence and explained differences | `reprotest`/`diffoscope` execute in a build lane | artifact, comprehensive, release | Yes |

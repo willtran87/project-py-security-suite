@@ -5,6 +5,7 @@ import hashlib
 import base64
 import os
 import sqlite3
+from collections import Counter
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Any
@@ -25,31 +26,59 @@ from .failure_domain import require_independent_failure_domains, verify_failure_
 _ARTIFACT_SCHEMAS = {
     "admission-decisions.json": "admission-decisions.schema.json",
     "advanced-analysis.json": "advanced-analysis.schema.json",
+    "application-contract-analysis.json": "application-contract-analysis-1.3.schema.json",
+    "architecture-history.json": "architecture-history-1.0.schema.json",
+    "architecture-evaluation.json": "architecture-evaluation-1.0.schema.json",
     "artifact-manifest.json": "artifact-manifest.schema.json",
     "artifact-sbom.cdx.json": "cyclonedx-artifact.schema.json",
     "assurance-claims.json": "assurance-claims-1.1.schema.json",
+    "assurance-case-assessment.json": "assurance-case-assessment-1.0.schema.json",
+    "threat-model-assessment.json": "threat-model-assessment-1.0.schema.json",
     "boundary-graph.json": "boundary-graph-1.0.schema.json",
+    "benchmark-delta.json": "benchmark-delta-1.0.schema.json",
+    "benchmark-registry.json": "benchmark-registry-1.0.schema.json",
+    "benchmark-scorecard.json": "benchmark-scorecard-1.0.schema.json",
+    "assurance-profile-registry.json": "assurance-profile-registry-1.0.schema.json",
+    "capability-manifest.json": "capability-manifest-1.0.schema.json",
     "closure-plan.json": "closure-plan.schema.json",
+    "code-health.json": "code-health-1.4.schema.json",
+    "control-assessment.json": "control-assessment-1.0.schema.json",
+    "procedure-assessment.json": "procedure-assessment-1.0.schema.json",
     "data-exposure.json": "data-exposure-1.5.schema.json",
     "dependency-surface.json": "dependency-surface-1.1.schema.json",
+    "domain-assurance.json": "domain-assurance-1.0.schema.json",
     "deptry-dependencies.json": "deptry-artifact.schema.json",
     "diff-coverage.json": "diff-coverage-artifact.schema.json",
     "effectiveness.json": "effectiveness-1.1.schema.json",
+    "external-conformity-assessment.json": "external-conformity-assessment-1.0.schema.json",
     "evidence-fusion.json": "evidence-fusion.schema.json",
     "graph-analysis.json": "graph-analysis.schema.json",
     "graphify.json": "graphify-evidence.schema.json",
     "git-sizer.json": "git-sizer-artifact.schema.json",
     "hypothesis-summary.json": "test-summary-artifact.schema.json",
     "intelligence-approval.json": "intelligence-approval.schema.json",
+    "industry-assurance.json": "industry-assurance-1.0.schema.json",
     "isolation-attestation.json": "isolation-attestation.schema.json",
     "isolation-boundary.json": "isolation-boundary-1.0.schema.json",
     "isolation-probe.json": "isolation-probe-1.0.schema.json",
     "osv-manifest-receipts.json": "osv-manifest-receipts-1.0.schema.json",
+    "oscal-assessment-plan.json": "oscal-model-1.2.2.schema.json",
+    "oscal-assessment-results.json": "oscal-model-1.2.2.schema.json",
+    "oscal-catalog.json": "oscal-model-1.2.2.schema.json",
+    "oscal-component-definition.json": "oscal-model-1.2.2.schema.json",
+    "oscal-poam.json": "oscal-model-1.2.2.schema.json",
+    "oscal-profile.json": "oscal-model-1.2.2.schema.json",
+    "oscal-system-security-plan.json": "oscal-model-1.2.2.schema.json",
     "finding-delta.json": "finding-delta-1.1.schema.json",
+    "finding-validation.json": "finding-validation-1.0.schema.json",
+    "framework-model-coverage.json": "framework-model-coverage-1.0.schema.json",
     "checkov-iac.json": "checkov-artifact.schema.json",
     "coverage-summary.json": "coverage-artifact.schema.json",
     "junit-summary.json": "test-summary-artifact.schema.json",
     "kics-iac.json": "kics-artifact.schema.json",
+    "llm-adversarial-plan.json": "llm-adversarial-plan-1.0.schema.json",
+    "lifecycle-traceability.json": "lifecycle-traceability-1.0.schema.json",
+    "maturity-model-assessment.json": "maturity-model-assessment-1.0.schema.json",
     "pipdeptree-summary.json": "pipdeptree-artifact.schema.json",
     "pylint-summary.json": "pylint-artifact.schema.json",
     "radon-complexity.json": "radon-artifact.schema.json",
@@ -61,6 +90,8 @@ _ARTIFACT_SCHEMAS = {
     "scanner-trust.json": "scanner-trust-1.0.schema.json",
     "schemathesis-summary.json": "test-summary-artifact.schema.json",
     "portfolio-health.json": "portfolio-health-1.1.schema.json",
+    "prioritization-calibration.json": "prioritization-calibration-1.0.schema.json",
+    "process-capability-assessment.json": "process-capability-assessment-1.0.schema.json",
     "report-security.json": "report-security-1.0.schema.json",
     "resource-limits.json": "resource-limits-1.0.schema.json",
     "risk-paths.json": "risk-paths.schema.json",
@@ -69,7 +100,11 @@ _ARTIFACT_SCHEMAS = {
     "runtime-trace-correlation.json": "runtime-trace-correlation-1.0.schema.json",
     "semantic-language-coverage.json": "semantic-language-coverage-1.0.schema.json",
     "security-requirements-coverage.json": "security-requirements-coverage-1.0.schema.json",
+    "security-automation-interoperability.json": "security-automation-interoperability-1.0.schema.json",
     "source-inventory.json": "source-inventory.schema.json",
+    "static-architecture.json": "static-architecture-1.4.schema.json",
+    "standards-crosswalk.json": "standards-crosswalk-1.0.schema.json",
+    "standardized-prioritization.json": "standardized-prioritization-1.0.schema.json",
     "structural-synthesis.json": "structural-synthesis-1.2.schema.json",
     "trust-policy-attestation.json": "trust-policy-attestation-1.0.schema.json",
     "trust-policy.json": "trust-policy-1.0.schema.json",
@@ -79,12 +114,6 @@ _TYPED_VALIDATORS: dict[str, Callable[[object], None]] = {}
 _OPERATION_STATE_GENESIS_SHA256 = hashlib.sha256(
     b"pysec-operation-receipt-state-genesis-v1"
 ).hexdigest()
-
-
-def _digest(value: str) -> bool:
-    return len(value) == 64 and all(
-        character in "0123456789abcdef" for character in value
-    )
 
 
 def _typed_validator(
@@ -97,6 +126,289 @@ def _typed_validator(
         return function
 
     return register
+
+
+@_typed_validator("standards-crosswalk.json")
+def _validate_standards_crosswalk_accounting(value: object) -> None:
+    if not isinstance(value, dict):
+        raise TypeError("standards crosswalk artifact is invalid")
+    catalogs = value.get("catalogs")
+    mappings = value.get("mappings")
+    if not isinstance(catalogs, list) or not isinstance(mappings, list):
+        raise TypeError("standards crosswalk collections are invalid")
+    catalog_ids = [item.get("id") for item in catalogs if isinstance(item, dict)]
+    mapping_ids = [item.get("standard") for item in mappings if isinstance(item, dict)]
+    watchlist = value.get("watchlist")
+    if not isinstance(watchlist, list):
+        raise TypeError("standards watchlist is invalid")
+    watchlist_ids = [item.get("id") for item in watchlist if isinstance(item, dict)]
+    lifecycle = value.get("lifecycle_governance")
+    if not isinstance(lifecycle, dict):
+        raise TypeError("standards lifecycle governance is invalid")
+    lifecycle_records = lifecycle.get("records")
+    if not isinstance(lifecycle_records, list):
+        raise TypeError("standards lifecycle records are invalid")
+    lifecycle_ids = [
+        item.get("id") for item in lifecycle_records if isinstance(item, dict)
+    ]
+    lifecycle_complete = sum(
+        item.get("complete") is True
+        for item in lifecycle_records
+        if isinstance(item, dict)
+    )
+    input_gaps = lifecycle.get("input_gaps")
+    if not isinstance(input_gaps, list):
+        raise TypeError("standards lifecycle input gaps are invalid")
+    expected_lifecycle_complete = (
+        len(lifecycle_records) == len(catalogs)
+        and lifecycle_complete == len(lifecycle_records)
+        and not input_gaps
+    )
+    if (
+        value.get("catalogs_registered") != len(catalogs)
+        or len(catalog_ids) != len(catalogs)
+        or len(set(catalog_ids)) != len(catalog_ids)
+        or mapping_ids != catalog_ids
+        or len(watchlist_ids) != len(watchlist)
+        or len(set(watchlist_ids)) != len(watchlist_ids)
+        or not set(watchlist_ids).isdisjoint(catalog_ids)
+        or lifecycle_ids != catalog_ids
+        or lifecycle.get("catalogs_assessed") != len(lifecycle_records)
+        or lifecycle.get("catalogs_complete") != lifecycle_complete
+        or lifecycle.get("complete") is not expected_lifecycle_complete
+    ):
+        raise ValueError("standards crosswalk accounting does not match")
+
+
+def _validate_extended_assessment(
+    value: object,
+    *,
+    collection: str,
+    required: str,
+    assessed: str,
+    completed: str,
+) -> None:
+    if not isinstance(value, dict):
+        raise TypeError("extended assurance artifact is invalid")
+    rows = value.get(collection)
+    required_ids = value.get(required)
+    if not isinstance(rows, list) or not isinstance(required_ids, list):
+        raise TypeError("extended assurance collections are invalid")
+    row_ids = [item.get("id") for item in rows if isinstance(item, dict)]
+    complete_count = sum(
+        item.get("complete") is True for item in rows if isinstance(item, dict)
+    )
+    expected_complete = len(rows) == len(required_ids) and complete_count == len(rows)
+    if (
+        len(row_ids) != len(rows)
+        or row_ids != required_ids
+        or len(set(row_ids)) != len(row_ids)
+        or value.get(assessed) != len(rows)
+        or value.get(completed) != complete_count
+        or value.get("complete") is not expected_complete
+    ):
+        raise ValueError("extended assurance accounting does not match")
+
+
+@_typed_validator("maturity-model-assessment.json")
+def _validate_maturity_model_assessment(value: object) -> None:
+    _validate_extended_assessment(
+        value,
+        collection="models",
+        required="required_models",
+        assessed="models_assessed",
+        completed="models_complete",
+    )
+
+
+@_typed_validator("security-automation-interoperability.json")
+def _validate_security_automation_interoperability(value: object) -> None:
+    _validate_extended_assessment(
+        value,
+        collection="protocols",
+        required="protocols_required",
+        assessed="protocols_assessed",
+        completed="protocols_complete",
+    )
+
+
+@_typed_validator("external-conformity-assessment.json")
+def _validate_external_conformity_assessment(value: object) -> None:
+    _validate_extended_assessment(
+        value,
+        collection="assessments",
+        required="schemes_required",
+        assessed="schemes_assessed",
+        completed="schemes_complete",
+    )
+
+
+@_typed_validator("assurance-case-assessment.json")
+def _validate_assurance_case_assessment(value: object) -> None:
+    if not isinstance(value, dict) or not isinstance(value.get("gaps"), list):
+        raise TypeError("assurance case assessment artifact is invalid")
+    expected_complete = not value["gaps"]
+    if (
+        value.get("complete") is not expected_complete
+        or value.get("top_level_claims", 0) > value.get("claims_assessed", 0)
+        or value.get("defeaters_assessed", 0) > value.get("claims_assessed", 0)
+        or (value.get("applicable") is False and expected_complete)
+    ):
+        raise ValueError("assurance case assessment accounting does not match")
+
+
+@_typed_validator("threat-model-assessment.json")
+def _validate_threat_model_assessment(value: object) -> None:
+    if (
+        not isinstance(value, dict)
+        or not isinstance(value.get("scope"), dict)
+        or not isinstance(value.get("coverage"), dict)
+        or not isinstance(value.get("gaps"), list)
+    ):
+        raise TypeError("threat model assessment artifact is invalid")
+    scope = value["scope"]
+    coverage = value["coverage"]
+    bounded = (
+        ("assets_with_threats", "assets"),
+        ("cross_boundary_flows", "data_flows"),
+        ("cross_boundary_flows_modeled", "cross_boundary_flows"),
+        ("threats_with_mitigations", "threats"),
+        ("threats_with_verification", "threats"),
+        ("verified_mitigations", "mitigations"),
+        ("passed_negative_tests", "tests"),
+        ("open_assumptions", "assumptions"),
+        ("unresolved_high_risk", "threats"),
+        ("change_triggers_assessed", "change_triggers"),
+    )
+    for observed, total in bounded:
+        limit = coverage.get(total) if total in coverage else scope.get(total)
+        if not isinstance(limit, int) or coverage.get(observed, -1) > limit:
+            raise ValueError("threat model assessment coverage exceeds its scope")
+    expected_complete = not value["gaps"]
+    if value.get("complete") is not expected_complete or (
+        value.get("applicable") is False and expected_complete
+    ):
+        raise ValueError("threat model assessment completion does not match its gaps")
+
+
+@_typed_validator("lifecycle-traceability.json")
+def _validate_lifecycle_traceability(value: object) -> None:
+    if (
+        not isinstance(value, dict)
+        or not isinstance(value.get("stages"), list)
+        or not isinstance(value.get("requirements_traceability"), dict)
+        or not isinstance(value.get("graph_traceability"), dict)
+        or not isinstance(value.get("gaps"), list)
+    ):
+        raise TypeError("lifecycle traceability artifact is invalid")
+    stages = value["stages"]
+    requirements = value["requirements_traceability"]
+    graph = value["graph_traceability"]
+    if (
+        value.get("stages_complete")
+        != sum(item.get("complete") is True for item in stages)
+        or graph.get("applicable_nodes", 0) > graph.get("nodes", 0)
+        or graph.get("verified_change_sets", 0) > graph.get("change_sets", 0)
+        or graph.get("requirements_with_end_to_end_trace", 0)
+        > graph.get("applicable_nodes", 0)
+    ):
+        raise ValueError("lifecycle traceability accounting does not match")
+    expected_complete = (
+        bool(value.get("source_sha256"))
+        and requirements.get("bidirectional_trace_complete") is True
+        and all(item.get("complete") is True for item in stages)
+        and graph.get("complete") is True
+        and not value["gaps"]
+    )
+    if value.get("complete") is not expected_complete:
+        raise ValueError(
+            "lifecycle traceability completion does not match its evidence"
+        )
+
+
+@_typed_validator("control-assessment.json")
+def _validate_control_assessment_accounting(value: object) -> None:
+    if not isinstance(value, dict) or not isinstance(value.get("controls"), list):
+        raise TypeError("control assessment artifact is invalid")
+    controls = value["controls"]
+    counts = Counter(str(item.get("status")) for item in controls)
+    applicable = sum(item.get("applicable") is True for item in controls)
+    satisfied = counts["satisfied"]
+    expected_complete = not value.get("parse_errors") and (
+        value.get("enforced") is not True or satisfied == applicable
+    )
+    if (
+        value.get("controls_assessed") != len(controls)
+        or value.get("applicable_controls") != applicable
+        or value.get("controls_satisfied") != satisfied
+        or value.get("status_counts")
+        != {
+            name: counts.get(name, 0) for name in ("satisfied", "gap", "not-applicable")
+        }
+        or value.get("complete") is not expected_complete
+    ):
+        raise ValueError("control assessment accounting does not match")
+
+
+@_typed_validator("procedure-assessment.json")
+def _validate_procedure_assessment_accounting(value: object) -> None:
+    if not isinstance(value, dict) or not isinstance(value.get("procedures"), list):
+        raise TypeError("procedure assessment artifact is invalid")
+    procedures = value["procedures"]
+    counts = Counter(str(item.get("status")) for item in procedures)
+    applicable = sum(item.get("applicable") is True for item in procedures)
+    satisfied = counts["satisfied"]
+    names = (
+        "satisfied",
+        "planned",
+        "evidence-gap",
+        "authorization-gap",
+        "not-applicable",
+    )
+    expected_complete = not value.get("parse_errors") and (
+        value.get("enforced") is not True or satisfied == applicable
+    )
+    if (
+        value.get("procedures_assessed") != len(procedures)
+        or value.get("applicable_procedures") != applicable
+        or value.get("procedures_satisfied") != satisfied
+        or value.get("status_counts") != {name: counts.get(name, 0) for name in names}
+        or value.get("complete") is not expected_complete
+    ):
+        raise ValueError("procedure assessment accounting does not match")
+
+
+@_typed_validator("benchmark-scorecard.json")
+def _validate_benchmark_scorecard_accounting(value: object) -> None:
+    if not isinstance(value, dict) or not isinstance(value.get("benchmarks"), list):
+        raise TypeError("benchmark scorecard artifact is invalid")
+    rows = value["benchmarks"]
+    scope = value.get("benchmark_scope")
+    expected_scope = [
+        {
+            "benchmark_id": item.get("benchmark_id"),
+            "benchmark_protocol": item.get("benchmark_protocol"),
+            "corpus_sha256": item.get("corpus_sha256"),
+        }
+        for item in rows
+    ]
+    executed = sum(item.get("evidence_valid") is True for item in rows)
+    passed = sum(item.get("passed") is True for item in rows)
+    if (
+        value.get("benchmarks_enabled") != len(rows)
+        or value.get("benchmarks_executed") != executed
+        or value.get("benchmarks_passed") != passed
+        or value.get("complete") is not (executed == len(rows))
+        or value.get("passed") is not (bool(rows) and passed == len(rows))
+        or scope != expected_scope
+    ):
+        raise ValueError("benchmark scorecard accounting does not match")
+
+
+def _digest(value: str) -> bool:
+    return len(value) == 64 and all(
+        character in "0123456789abcdef" for character in value
+    )
 
 
 def validate_governed_artifacts(artifacts: dict[str, Any] | None) -> dict[str, str]:
@@ -141,6 +453,116 @@ def validate_governed_artifacts(artifacts: dict[str, Any] | None) -> dict[str, s
     receipts = _validate_operation_receipt_graph(artifacts or {})
     _consume_operation_receipts(receipts, artifacts or {})
     return validated
+
+
+@_typed_validator("domain-assurance.json")
+def _validate_domain_assurance_accounting(value: object) -> None:
+    if not isinstance(value, dict) or not isinstance(value.get("domains"), list):
+        raise TypeError("domain assurance artifact is invalid")
+    domains = value["domains"]
+    names = [item.get("name") for item in domains]
+    counts = Counter(str(item.get("status")) for item in domains)
+    applicable = [item for item in domains if item.get("applicable") is True]
+    covered = [item for item in applicable if item.get("status") == "covered"]
+    score = round(100 * len(covered) / len(applicable)) if applicable else 100
+    if (
+        len(names) != len(set(names))
+        or value.get("domains_detected") != len(domains)
+        or value.get("applicable_domains") != len(applicable)
+        or value.get("covered_domains") != len(covered)
+        or value.get("status_counts") != dict(sorted(counts.items()))
+        or value.get("coverage_score") != score
+        or value.get("coverage_complete")
+        is not all(
+            item.get("status") in {"covered", "not-applicable"} for item in domains
+        )
+        or value.get("complete")
+        is not (not value.get("parse_errors") and value.get("truncated") is not True)
+        or (value.get("policy_path") is not None)
+        is not (value.get("policy_present") is True)
+    ):
+        raise ValueError("domain assurance summary accounting does not match")
+    for domain in domains:
+        requirements = domain.get("requirements")
+        gaps = domain.get("gaps")
+        if not isinstance(requirements, list) or not isinstance(gaps, list):
+            raise TypeError("domain assurance domain accounting is invalid")
+        expected_status = (
+            "not-applicable"
+            if domain.get("applicable") is not True
+            else "unmodeled"
+            if domain.get("policy_present") is not True
+            else "partial"
+            if gaps
+            else "covered"
+        )
+        satisfied = sum(item.get("status") == "satisfied" for item in requirements)
+        if (
+            domain.get("status") != expected_status
+            or domain.get("requirements_detected") != len(requirements)
+            or domain.get("requirements_satisfied") != satisfied
+            or any(
+                item.get("status") != ("satisfied" if not item.get("gaps") else "gap")
+                for item in requirements
+            )
+        ):
+            raise ValueError("domain assurance detail accounting does not match")
+
+
+@_typed_validator("llm-adversarial-plan.json")
+def _validate_llm_adversarial_accounting(value: object) -> None:
+    if not isinstance(value, dict):
+        raise TypeError("LLM adversarial plan must be an object")
+    context = value.get("context")
+    campaigns = value.get("campaigns")
+    execution = value.get("execution_plan")
+    counts = value.get("campaign_status_counts")
+    evidence = value.get("evidence")
+    if (
+        not isinstance(context, list)
+        or not isinstance(campaigns, list)
+        or not isinstance(execution, dict)
+        or not isinstance(execution.get("tasks"), list)
+        or not isinstance(counts, dict)
+        or not isinstance(evidence, dict)
+    ):
+        raise TypeError("LLM adversarial plan accounting fields are invalid")
+    context_ids = [item.get("id") for item in context]
+    campaign_ids = [item.get("id") for item in campaigns]
+    tasks = execution["tasks"]
+    status_counter = Counter(str(item.get("evidence_status")) for item in campaigns)
+    expected_counts = {
+        status: status_counter.get(status, 0)
+        for status in (
+            "not-run",
+            "inconclusive",
+            "exercised-no-confirmed-defect",
+            "confirmed-defect",
+        )
+    }
+    references = {
+        reference
+        for campaign in campaigns
+        for reference in campaign.get("context_ids", [])
+    }
+    task_campaigns = [task.get("campaign_id") for task in tasks]
+    if (
+        len(context_ids) != len(set(context_ids))
+        or len(campaign_ids) != len(set(campaign_ids))
+        or not references.issubset(set(context_ids))
+        or value.get("campaigns_retained") != len(campaigns)
+        or value.get("campaigns_omitted")
+        != value.get("campaigns_detected", 0) - len(campaigns)
+        or value.get("context_entries_retained") != len(context)
+        or value.get("context_bytes")
+        != sum(int(item.get("size_bytes", 0)) for item in context)
+        or counts != expected_counts
+        or execution.get("tasks_detected") != len(tasks)
+        or len(task_campaigns) != len(set(task_campaigns))
+        or (tasks and set(task_campaigns) != set(campaign_ids))
+        or evidence.get("confirmed_defects") != expected_counts["confirmed-defect"]
+    ):
+        raise ValueError("LLM adversarial plan accounting does not match")
 
 
 @_typed_validator("runtime-trace-correlation.json")

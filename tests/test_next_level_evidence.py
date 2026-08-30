@@ -43,6 +43,7 @@ from py_security_suite.passport import (
     verify_report,
 )
 from py_security_suite.risk_intelligence import enrich_findings
+from py_security_suite.risk_intelligence import _load_vex
 from tests.report_fixtures import write_embedded_statement
 
 
@@ -112,6 +113,13 @@ class RiskIntelligenceTests(unittest.TestCase):
                     "vulnerabilities": [
                         {
                             "id": "CVE-2026-12345",
+                            "ratings": [
+                                {
+                                    "method": "CVSSv4",
+                                    "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N",
+                                    "score": 9.3,
+                                }
+                            ],
                             "analysis": {
                                 "state": "not_affected",
                                 "justification": "code_not_reachable",
@@ -139,11 +147,14 @@ class RiskIntelligenceTests(unittest.TestCase):
         )
         self.assertEqual(result.errors, [])
         self.assertEqual(result.artifact["known_exploited_matches"], 1)
+        self.assertEqual(result.artifact["vex_formats"], ["cyclonedx"])
         self.assertIn("CISA-KEV", finding.classifications)
         self.assertIn("EPSS-HIGH", finding.classifications)
         self.assertIn("VEX-NOT-AFFECTED", finding.classifications)
         self.assertEqual(finding.status, FindingStatus.NEW)
         self.assertIn("risk_intelligence", finding.evidence)
+        self.assertEqual(finding.evidence["cvss"]["score"], 9.3)
+        self.assertEqual(finding.evidence["cvss"]["version"], "4.0")
         self.assertEqual(len(finding.citations), 3)
 
     def test_snapshot_digest_mismatch_fails_closed(self) -> None:
@@ -164,6 +175,110 @@ class RiskIntelligenceTests(unittest.TestCase):
             IntelligenceConfig(epss_path=self.epss, epss_sha256=_digest(self.epss)),
         )
         self.assertIn("must be between 0 and 1", result.errors[0])
+
+    def test_openvex_and_csaf_are_normalized(self) -> None:
+        documents = {
+            "openvex": {
+                "@context": "https://openvex.dev/ns/v0.2.0",
+                "timestamp": "2026-08-01T00:00:00Z",
+                "statements": [
+                    {
+                        "vulnerability": {"name": "CVE-2026-12345"},
+                        "products": [{"@id": "pkg:pypi/example@1"}],
+                        "status": "not_affected",
+                        "justification": "vulnerable_code_not_in_execute_path",
+                    }
+                ],
+            },
+            "csaf": {
+                "document": {
+                    "category": "csaf_vex",
+                    "csaf_version": "2.0",
+                    "tracking": {"current_release_date": "2026-08-01T00:00:00Z"},
+                },
+                "vulnerabilities": [
+                    {
+                        "cve": "CVE-2026-12345",
+                        "product_status": {"known_affected": ["CSAFPID-1"]},
+                    }
+                ],
+            },
+        }
+        for expected_format, document in documents.items():
+            with self.subTest(expected_format=expected_format):
+                path = self.root / f"{expected_format}.json"
+                path.write_text(json.dumps(document), encoding="utf-8")
+                finding = _finding()
+                result = enrich_findings(
+                    [finding],
+                    IntelligenceConfig(vex_path=path, vex_sha256=_digest(path)),
+                )
+                self.assertEqual(result.errors, [])
+                self.assertEqual(result.artifact["vex_formats"], [expected_format])
+                self.assertTrue(result.artifact["vex_versions"][expected_format])
+                self.assertIn(
+                    expected_format,
+                    finding.evidence["risk_intelligence"]["vex"][0]["format"],
+                )
+
+    def test_vex_parsers_reject_malformed_documents(self) -> None:
+        malformed = [
+            [],
+            {"specVersion": "1.7", "vulnerabilities": []},
+            {
+                "bomFormat": "CycloneDX",
+                "specVersion": "1.6",
+                "vulnerabilities": [],
+            },
+            {"statements": ["invalid"]},
+            {"statements": [{"vulnerability": "CVE-2026-12345", "status": "unknown"}]},
+            {"document": {"category": "csaf_vex"}},
+            {
+                "document": {"category": "csaf_vex"},
+                "vulnerabilities": ["invalid"],
+            },
+            {
+                "document": {"category": "csaf_vex"},
+                "vulnerabilities": [{"cve": "invalid", "product_status": {}}],
+            },
+            {
+                "document": {"category": "csaf_vex"},
+                "vulnerabilities": [{"cve": "CVE-2026-12345", "product_status": {}}],
+            },
+        ]
+        for document in malformed:
+            with (
+                self.subTest(document=document),
+                self.assertRaises((TypeError, ValueError)),
+            ):
+                _load_vex(json.dumps(document).encode(), ".json")
+
+        for document in (
+            {
+                "statements": [
+                    {
+                        "vulnerability": "CVE-2026-12345",
+                        "status": "affected",
+                    }
+                ],
+                "@context": "https://openvex.dev/ns/v0.2.0",
+            },
+            {
+                "document": {"category": "csaf_vex", "csaf_version": "2.0"},
+                "vulnerabilities": [
+                    {
+                        "cve": "CVE-2026-12345",
+                        "product_status": {"fixed": ["product"]},
+                    }
+                ],
+            },
+        ):
+            with (
+                self.subTest(limit_document=document),
+                patch("py_security_suite.risk_intelligence._MAX_RECORDS", 0),
+                self.assertRaises(ValueError),
+            ):
+                _load_vex(json.dumps(document).encode(), ".json")
 
 
 class FindingDeltaTests(unittest.TestCase):

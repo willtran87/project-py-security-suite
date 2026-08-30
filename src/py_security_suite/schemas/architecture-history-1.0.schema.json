@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:architecture-history:1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "analysis", "complete", "commits_analyzed", "history_limit", "file_truncated_commits", "pair_analysis_omitted_commits", "couplings_detected", "hotspots_detected", "output_truncated", "temporal_couplings", "change_risk_hotspots", "limitations"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "analysis": {"const": "bounded-git-temporal-coupling-and-change-risk"},
+    "complete": {"type": "boolean"},
+    "commits_analyzed": {"type": "integer", "minimum": 0, "maximum": 500},
+    "history_limit": {"const": 500},
+    "file_truncated_commits": {"type": "integer", "minimum": 0, "maximum": 500},
+    "pair_analysis_omitted_commits": {"type": "integer", "minimum": 0, "maximum": 500},
+    "couplings_detected": {"type": "integer", "minimum": 0},
+    "hotspots_detected": {"type": "integer", "minimum": 0},
+    "output_truncated": {"type": "boolean"},
+    "temporal_couplings": {"type": "array", "maxItems": 50, "items": {"$ref": "#/$defs/coupling"}},
+    "change_risk_hotspots": {"type": "array", "maxItems": 50, "items": {"$ref": "#/$defs/hotspot"}},
+    "limitations": {"type": "array", "minItems": 1, "maxItems": 10, "items": {"type": "string", "minLength": 1, "maxLength": 1000}}
+  },
+  "$defs": {
+    "path": {"type": "string", "minLength": 1, "maxLength": 1000},
+    "coupling": {
+      "type": "object", "additionalProperties": false,
+      "required": ["left", "right", "shared_commits", "left_commits", "right_commits", "coupling_ratio", "overlaps_architecture_contract_violation"],
+      "properties": {
+        "left": {"$ref": "#/$defs/path"}, "right": {"$ref": "#/$defs/path"},
+        "shared_commits": {"type": "integer", "minimum": 8, "maximum": 500},
+        "left_commits": {"type": "integer", "minimum": 1, "maximum": 500},
+        "right_commits": {"type": "integer", "minimum": 1, "maximum": 500},
+        "coupling_ratio": {"type": "number", "minimum": 0.8, "maximum": 1},
+        "overlaps_architecture_contract_violation": {"type": "boolean"}
+      }
+    },
+    "hotspot": {
+      "type": "object", "additionalProperties": false,
+      "required": ["path", "commits", "related_findings"],
+      "properties": {
+        "path": {"$ref": "#/$defs/path"},
+        "commits": {"type": "integer", "minimum": 10, "maximum": 500},
+        "related_findings": {"type": "integer", "minimum": 1, "maximum": 1000000}
+      }
+    }
+  }
+}

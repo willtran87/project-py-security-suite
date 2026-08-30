@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:performance-assurance:1.1",
+  "title": "Extended performance assurance receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "environment", "repetitions", "workloads", "passed", "failures"],
+  "properties": {
+    "schema_version": {"const": "1.1"},
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["python_implementation", "python_version", "platform_system", "machine"],
+      "properties": {
+        "python_implementation": {"type": "string", "minLength": 1, "maxLength": 64},
+        "python_version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+        "platform_system": {"type": "string", "minLength": 1, "maxLength": 64},
+        "machine": {"type": "string", "minLength": 1, "maxLength": 128}
+      }
+    },
+    "repetitions": {"type": "integer", "minimum": 5, "maximum": 100},
+    "workloads": {
+      "type": "array",
+      "minItems": 6,
+      "maxItems": 32,
+      "items": {"$ref": "#/$defs/workload"}
+    },
+    "passed": {"type": "boolean"},
+    "failures": {
+      "type": "array",
+      "maxItems": 128,
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1, "maxLength": 512}
+    }
+  },
+  "$defs": {
+    "seconds": {"type": "number", "minimum": 0},
+    "workload": {
+      "oneOf": [
+        {"$ref": "#/$defs/scaled"},
+        {"$ref": "#/$defs/fixed"}
+      ]
+    },
+    "base": {
+      "type": "object",
+      "required": ["name", "kind", "peak_mib", "budgets", "passed", "failures"],
+      "properties": {
+        "name": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,127}$"},
+        "kind": {"enum": ["scaled", "fixed"]},
+        "peak_mib": {"$ref": "#/$defs/seconds"},
+        "passed": {"type": "boolean"},
+        "failures": {
+          "type": "array",
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1, "maxLength": 256}
+        }
+      }
+    },
+    "scaled": {
+      "allOf": [
+        {"$ref": "#/$defs/base"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "kind", "small_cases", "large_cases", "median_small_seconds", "median_large_seconds", "p95_large_seconds", "large_cases_per_second", "growth_ratio", "peak_mib", "budgets", "passed", "failures"],
+          "properties": {
+            "name": {"type": "string"},
+            "kind": {"const": "scaled"},
+            "small_cases": {"type": "integer", "minimum": 1},
+            "large_cases": {"type": "integer", "minimum": 2},
+            "median_small_seconds": {"$ref": "#/$defs/seconds"},
+            "median_large_seconds": {"$ref": "#/$defs/seconds"},
+            "p95_large_seconds": {"$ref": "#/$defs/seconds"},
+            "large_cases_per_second": {"$ref": "#/$defs/seconds"},
+            "growth_ratio": {"$ref": "#/$defs/seconds"},
+            "peak_mib": {"$ref": "#/$defs/seconds"},
+            "budgets": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["maximum_p95_seconds", "minimum_median_cases_per_second", "maximum_peak_mib", "maximum_growth_ratio"],
+              "properties": {
+                "maximum_p95_seconds": {"type": "number", "exclusiveMinimum": 0},
+                "minimum_median_cases_per_second": {"type": "number", "exclusiveMinimum": 0},
+                "maximum_peak_mib": {"type": "number", "exclusiveMinimum": 0},
+                "maximum_growth_ratio": {"type": "number", "exclusiveMinimum": 0}
+              }
+            },
+            "passed": {"type": "boolean"},
+            "failures": {"type": "array"}
+          }
+        }
+      ]
+    },
+    "fixed": {
+      "allOf": [
+        {"$ref": "#/$defs/base"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "kind", "sample_count", "median_seconds", "p95_seconds", "peak_mib", "budgets", "passed", "failures"],
+          "properties": {
+            "name": {"type": "string"},
+            "kind": {"const": "fixed"},
+            "sample_count": {"type": "integer", "minimum": 1, "maximum": 100},
+            "median_seconds": {"$ref": "#/$defs/seconds"},
+            "p95_seconds": {"$ref": "#/$defs/seconds"},
+            "peak_mib": {"$ref": "#/$defs/seconds"},
+            "budgets": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["maximum_p95_seconds", "maximum_peak_mib"],
+              "properties": {
+                "maximum_p95_seconds": {"type": "number", "exclusiveMinimum": 0},
+                "maximum_peak_mib": {"type": "number", "exclusiveMinimum": 0}
+              }
+            },
+            "passed": {"type": "boolean"},
+            "failures": {"type": "array"}
+          }
+        }
+      ]
+    }
+  }
+}

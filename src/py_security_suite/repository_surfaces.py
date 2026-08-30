@@ -6,7 +6,7 @@ import re
 import tomllib
 from pathlib import Path
 
-from .adapters.staging import maintained_repository_files
+from .repository_file_policy import maintained_repository_files
 
 
 _MAX_DESCRIPTOR_BYTES = 4 * 1024 * 1024

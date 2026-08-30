@@ -1,5 +1,397 @@
 # Changelog
 
+- Replace live-browser source-token checks with AST-verified parametrization and
+  complete JUnit matrix receipts; pin and enforce a strict Pyright boundary in
+  CI; fix governed aggregate-only effectiveness evidence so a private holdout
+  can satisfy release floors without disclosing label identities; add a real
+  repository code-health/static-architecture pipeline performance budget;
+  durably flush report, evidence-pack, and Passport directory transitions;
+  protect console-script targets and Python callable signatures; and extract
+  dependency-neutral governance quorum verification, reducing the sole
+  trust/runtime SCC from nine modules to eight.
+
+- Eliminate the configuration/governance and adapter/repository dependency
+  cycles; isolate reusable repository traversal, governance replay, atomic
+  publication, process-input policy, and diagnostic redaction; split the
+  12,000-line industry-assurance data block into three bounded catalogs; publish schema-valid architecture
+  assurance evidence; expand compatibility protection to all 58 commands, 469
+  argument contracts, and 164 bundled schemas; benchmark production inventory
+  and AST parsing; require live OCI, OS containment, service, and browser lanes;
+  and add atomic-write fault injection plus governed subprocess input ceilings.
+
+- Add portable metadata-bound signing-provider conformance 1.1 receipts and
+  release-gate identity/freshness enforcement; expand performance assurance to
+  repeated p95 scoring, canonicalization, and complete schema-catalog workloads;
+  enforce an exact 135-boundary Tach graph, freeze three existing dependency
+  cycle debt groups against expansion, and add file, function, and decision budgets;
+  protect CLI action shapes and exact schema bytes in API baseline 1.1; terminate
+  hostile subprocess descendants; and raise production effectiveness corpus and
+  per-tool evidence floors.
+
+- Add canonical-digest-pinned, 600-observation multilingual semantic
+  calibration with per-language Wilson confidence gates; raise trust and
+  benchmark coverage/mutation ratchets; extract benchmark CLI registration;
+  and tighten progressive file/function architecture limits. Add active
+  two-signature HSM/Vault/cloud-KMS conformance receipts and protected provider
+  drills, deterministic parser/scoring time-memory-throughput budgets, weekly
+  cross-platform failure injection, and an additive public CLI/schema
+  compatibility baseline.
+
+- Move execution-receipt admission to an external, root-signed and digest-pinned
+  deployment trust policy; bind adapter conformance to multiple golden,
+  malformed, and semantic-inversion fixtures plus an independent oracle digest;
+  and strengthen cross-language similarity with parser-derived structural,
+  lexical/operator, and control-flow signals. Add effect-size sensitivity power
+  replay, trusted-time authority-lifecycle event anchors with rotation
+  continuity, schema/runtime drift validation, expanded parser fuzz targets,
+  protocol-wide scoring tests, and aggregate plus security-critical
+  branch-coverage ratchets. Add an explicit non-reentrant benchmark execution
+  state machine, isolated stage/scoring/receipt components, injected-failure
+  cleanup tests, digest-pinned PKCS#11/HSM/Vault/cloud-KMS provider profiles,
+  complete Draft 2020-12 schema validation with runtime enum drift checks,
+  architecture concentration ratchets, direct trust/time/parser-worker tests,
+  a multilingual semantic calibration fixture, and a deployment rotation,
+  alerting, and recovery runbook.
+
+- Correct schema 1.2 statistical semantics with explicit Bonferroni naming,
+  distinct exact-binomial and standardized-mean models, bounded numerically stable
+  computation, and a digest-verified analysis-plan document. Bind complete SLSA
+  resolved-material sets, make downstream receipt trust lifecycle-aware, and add
+  a multi-fixture adapter conformance matrix with independent parser and semantic
+  inversion controls.
+
+- Upgrade corpus evidence to parser-material-bound AST field shapes and bounded
+  Jaccard shingle similarity for near-duplicate detection. Enforce aggregate byte,
+  record, syntax-node, and comparison budgets; make dependent schemas standalone;
+  validate exact security-event contracts; and make signed audit anchors verify
+  immutable prefixes across subsequent append-only growth.
+
+- Derive high-assurance semantic leakage, duplication, and contamination evidence
+  from bounded corpus files with identity-pinned Python/tree-sitter parsers; add
+  protocol-selected power models with preregistered analysis-plan binding; bind
+  SLSA provenance to the exact build type, repository, and revision; enforce
+  receipt-key lifecycle windows; globally sequence and externally sign audit-log
+  heads; and exercise OCI containment across Docker and rootless Podman.
+
+- Require independently configured receipt-signer admission at downstream
+  benchmark scoring, serialize the full replay transition with an OS-backed
+  cross-process lease, and reconcile the post-checkpoint crash window. Bound
+  external signer output during execution and revalidate its executable after
+  use. Add fsynced hash-chained failure telemetry, active OCI egress/noexec
+  canaries, and exportable raw statistical, environment, replay-state, and audit
+  schemas.
+
+- Introduce frozen benchmark execution schema 1.2 with strict replay-head
+  continuity, signed write-ahead intent and exact-one crash recovery, complete
+  SLSA v1 build-definition/material validation, locally verified digest-pinned
+  external Ed25519 signer bridging, signed security events, modular protocol
+  scoring, multiplicity/design-effect-adjusted power and semantic-fingerprint
+  leakage/duplication/contamination replay, and a mandatory live OCI containment
+  CI lane. Schema 1.1 remains
+  readable without retroactive contract changes.
+
+- Harden benchmark execution schema 1.1 with a root-signed, short-lived,
+  deployment-owned authority policy; active raw-key/organization/revocation
+  admission; raw advanced RFC 3161 replay; signed canonical execution receipts;
+  and a hash-chained, rollback-detecting SQLite replay ledger outside the
+  workspace. Verify DSSE runner-provenance envelopes, repeated conformance
+  and runtime records, and independent cleanup probes. Stream and bound hostile
+  archive metadata, recheck immutable deployment inputs after execution, and
+  enforce no-pull OCI execution with pinned seccomp and byte/file-count-bounded
+  output in a dedicated runtime module. Add receipt schema 1.1,
+  authority-policy schema 1.0, mutation coverage, and attestation parser fuzzing.
+  Recompute statistical, leakage, duplicate, contamination, and environment
+  outcomes from raw evidence; require DSSE in-toto/SLSA provenance from a
+  policy-admitted builder; automatically retain and advance signed replay
+  checkpoints; actively probe OCI runtime capabilities and provide an opt-in
+  live containment test; parse archives through one held handle and fuzz the
+  production validator; and add a protected provider/version signing interface
+  for PKCS#11, HSM, and KMS adapters.
+
+- Add registry-bound benchmark manifest 1.1 compilation, maintained-adapter
+  input binding and structural archive/JSON validation, enforced high-risk
+  isolation and cleanup, signed external sandbox evidence, and protocol-specific
+  statistical sufficiency with conservative Wilson-bound decisions. Require
+  independently signed acceptance-criteria, adapter-conformance, and runtime-
+  observation evidence; enforce signer, organization, role, validity, revocation,
+  and key-separation policy; cross-bind OCI runtime identity, SBOM/provenance,
+  environment, network, resource, cleanup, and pre-registration claims; and
+  consume a replay nonce. Add canonical scorecard evidence and
+  protocol-aware assurance policy 1.3. Add deterministic
+  assurance catalog export and a fail-closed standards source-manifest compiler
+  that verifies every selected publisher baseline. Preserve legacy benchmark
+  manifest 1.0 and assurance policy 1.0 through 1.2 behavior.
+
+- Expand industry assurance to 481 version-explicit references, 147 selectable
+  packs, 182 benchmark families, 100 maintained adapters, and 47 publication
+  watch items. Add final FAPI 2.0, W3C/OpenID digital credentials, CISA SCuBA,
+  CIS Kubernetes, LINDDUN, matched SAST/DAST/IAST and RASP evaluation, GSMA
+  NESAS/3GPP SCAS, TISAX/VDA ISA, C2PA, and PCI MPoC/P2PE assurance. Add A2A
+  1.0 delegated-agent protocol assurance; SESIP 1.2 and
+  EN 17927 IoT platform evaluation; FIRST TLP/IEP and VERIS information
+  handling; CSP2/SRI1 browser defense; DORA Level 2 technical acts; current
+  FFIEC IT Handbooks with retired-CAT exclusion; BSI C5 cloud attestation; and
+  FCC Cyber Trust Mark conformance. Ship eight conditional evidence packs and
+  nine maintained fail-closed adapters with synthetic labs, qualified-party
+  boundaries, assessor independence, downgrade/forgery cases, and explicit
+  certification, attestation, supervisory, and label claim limits. Quarantine
+  draft CSP3, SRI2, Trusted Types, and BSI TR-03183 instead of promoting draft
+  material into normative claims. Add governed FedRAMP 20x, FIDO2/CTAP 2.2
+  and metadata, EUDI Wallet ARF 3.0.0,
+  HITRUST CSF 11.8.0, PCI Secure Software 2.0/Secure SLC 1.1, NIS2 technical
+  implementation, NIST SP 1326 supplier due diligence, and OWASP SAMM 2.1
+  assurance packs and executable benchmark contracts. Enforce fail-closed
+  catalog referential integrity, add 24 maintained external adapters, and
+  quarantine CTAP 2.3 and candidate EU cybersecurity schemes until final.
+  Add the complete NIST IR 8286 Revision 1 series with official
+  risk-register schema, estimation, prioritization, roll-up, business-impact,
+  appetite, correlation, unit, lineage, and mutation evidence; CIS RAM 2.2
+  attack-path calibration; and licensed Open FAIR quantitative-risk controls.
+  Add ISO/IEC 25001 SQuaRE planning and management, ISO/IEC TR 42106:2026
+  differentiated AI benchmarking, ISO/IEC 8183/12792, TS 6254/8200/12791, and
+  TR 5469 lifecycle, transparency, explanation, controllability, bias, and
+  functional-safety evidence. Add licensed reference-only COBIT 2019, TOGAF
+  10th Edition TC1, ArchiMate 3.2, and Open FAIR 2.0 architecture governance,
+  plus a hardened PyRIT adapter with pinned scenarios, targets, scorers,
+  cross-evaluator calibration, bounded authority and spend, no-egress
+  isolation, private holdouts, and signed cleanup receipts. Keep ISO/IEC 42105
+  and 24970 final drafts outside normative claims pending publication.
+  Add OWASP AISVS 1.0 requirement-level verification; ISO/IEC TS 25058 AI
+  quality evaluation; EUCC certificate, laboratory, scope, and assurance
+  continuity; CISA federal producer attestation; IEEE 7000-series ethical
+  design, transparency, privacy, bias, and fail-safe evidence; ISO/IEC 38500
+  and ISO 9001 IT/quality governance; NIST CSF current-to-target profile
+  lifecycle; ISO privacy operationalisation, model, and zero-knowledge-proof
+  assurance; and separate MLCommons AILuminate Safety and Jailbreak contracts.
+  Quarantine ISO/IEC 42007, NIST IR 8596, the next ISO/IEC TR 24030 edition,
+  and unreleased AILuminate Agentic and Multimodal contracts until stable.
+  Add stable MCP 2025-11-25 and OWASP MCP security assurance; AWS FSBP,
+  Microsoft MCSB v1, and Google Enterprise Foundations posture; FIRST
+  CSIRT/PSIRT services and maturity; CISA memory-safety roadmaps; IEEE 2863
+  organizational AI governance and IEEE 7010 well-being impact; ISO 22316 and
+  ISO/TS 22317 resilience/BIA; OpenSSF Best Practices Badge; and ISO/IEC
+  27003/27022 ISMS implementation and process capability. Ship eight bounded
+  assurance packs, ten qualified benchmark contracts, and ten maintained
+  fail-closed adapters covering protocol authorization and tool safety,
+  provider inventory and native findings, blinded response and governance
+  assessment, unsafe/FFI reachability and sanitizer/fuzz evidence, disruption
+  exercises, project-claim recomputation, and ISMS assessor calibration.
+  Keep the MCP 2026 release candidate, MCSB v2 preview, next ISO/IEC 27003,
+  and ISO 22316 revision non-normative, and deliberately exclude withdrawn
+  ISO/IEC 27009.
+
+- Correct the privacy-framework baseline to ISO/IEC 29100:2024 and expand the
+  governed catalog with lifecycle management and information
+  items, software risk and quality management, SQuaRE model and measurement
+  standards, enterprise risk, privacy engineering and PII controls, data and AI
+  governance, ML system architecture, protective-security architecture, OWASP
+  code review and Cornucopia, and CIS/SAFECode Secure by Design. Extend the
+  existing lifecycle, quality, risk, privacy, AI, architecture, secure-coding,
+  threat-model, and secure-by-design packs with evidence-bound controls and
+  adversarial procedures. Quarantine draft SSDF 1.2, NIST SP 800-154, and the
+  ISO/IEC 25022 replacement instead of permitting premature conformity claims.
+  Add HarmBench,
+  AgentHarm Inspect Evals 6-B, version-pinned garak probe conformance, and OWASP Cornucopia
+  scenario coverage. Require five-run stochastic evidence, model/configuration
+  identity, public-corpus contamination analysis, private holdouts, confidence
+  intervals, harmful-output governance, inert agent tools, plugin allowlists,
+  bounded cost and authority, independent adjudication, and destruction proof.
+
+- Add a governed threat-model quality assessment that validates a source-bound
+  asset/component/flow/boundary graph, exact risk arithmetic, referential
+  integrity, sensitive cross-zone protections, assumption expiry, verified
+  mitigation evidence, passing negative tests, current risk acceptance,
+  architecture-change triggers, and two-person independent approval. Publish a
+  strict schema and complete example, integrate the result into foundational
+  assurance and artifact validation, and raise threat-model readiness from
+  evidence-presence checks to semantic 9/10 assurance.
+  Upgrade lifecycle traceability with a bounded, source-bound graph across all
+  seven life-cycle stages, directional and digest-backed links, end-to-end
+  requirement reachability, verified change-impact samples, strict accounting,
+  and two-person independent approval.
+
+- Expand governed industry assurance with ISO 15026/OMG SACM structured
+  assurance cases, IEEE 1012 integrity V&V, separate CMVP and international
+  cryptographic-module profiles, ISO biometric performance/PAD, integrated
+  service/security management, and ISO 17043 proficiency testing with eleven
+  executable scoring protocols. Replace the generic ISO/IEC/IEEE 29119
+  series entry with current Parts 1-5; add SQuaRE quality-in-use/cloud,
+  ISO 31000/IEC 31010 risk techniques, CISA Secure by Design, TLS 1.3,
+  reproducible builds, AMTSO, DICE, telecom, NICE workforce, CREST/PTES, and
+  DORA delivery-outcome coverage. Add pinned, provenance-bound adapters for
+  test-process conformance, cloud quality, risk calibration, loopback TLS,
+  environment-varied rebuilds, secure defaults, harmless/inert malware-control
+  evaluation, attestation, telecom, workforce, penetration-test engagement
+  quality, and five-metric delivery outcomes. Keep draft ISO 31000, DICE 1.3,
+  ISO/IEC/IEEE 29119-14, and release-ambiguous OWASP ISVS on the non-normative
+  watchlist. Correct ISO/IEC 27403 and 27404 identities and add
+  lifecycle/watchlist governance for audit and certification bodies,
+  ISO/IEC 19896 evaluator competence, the complete published ISO/IEC 27034
+  application-security series, NIST service-mesh/access-control/firmware and
+  differential-privacy guidance, TPM 2.0, SQuaRE quality measurement, health,
+  energy, and e-discovery. Add protocol-specific NIST Dioptra, firmware/TPM,
+  authorization-policy, differential-privacy, blinded evaluator-calibration,
+  and SQuaRE benchmark adapters with immutable corpora, licenses, labels,
+  golden controls, provenance, replay ledgers, and hardened execution.
+
+- Add an executable industry benchmark adapter runtime with explicit operator
+  authorization, digest-pinned executables and corpora, shell-free staged
+  commands, minimized environments, timeouts, bounded captures, process-tree
+  cleanup, normalized case-level scoring, attestation digests, and atomic
+  receipts. Add restricted-HTTPS standards publisher monitoring with public-IP
+  and host allowlisting, redirect validation, immutable quarantine snapshots,
+  human-only promotion, change reports, and optional Ed25519 signing. Expand
+  assurance to 283 standards and 97 benchmark families with NIST SP 800-18r2,
+  SP 800-92, SP 800-188, ISO/IEC 27014, 27032, 27033, 27040, 27555, 27559,
+  W3C ACT Rules 1.1, CFReDS/CFTT, DroidBench, Ghera, SecBench.js, Chaos
+  Mesh/Litmus, Sonobuoy, and platform-specific CIS/SCAP. External conformity
+  evidence now requires active, validity-bounded, revocation-checked,
+  signature-validated assessor credentials tied to an immutable registry
+  snapshot.
+
+- Extend industry assurance to 268 versioned references, 80 selectable packs,
+  and 89 governed benchmark families. Add the final CISA-led 2026 v2.1 SBOM
+  minimum elements while excluding the 2025 public-comment draft from normative claims,
+  enhanced CUI requirements and assessment, developer verification minimums,
+  cryptographic key lifecycle and agility, continuous monitoring, ICT
+  continuity, digital forensics, and accessibility assurance. Standards
+  promotion now fails closed without digest-bound signed source snapshots,
+  publisher change reports, observation provenance, and named human approval;
+  supersession metadata keeps historical editions visible without presenting
+  them as current. Authorized benchmark runners now require digest-pinned OCI
+  images, runner SBOM and provenance, resource limits, enforced network policy,
+  egress transcripts, and target cleanup/destruction receipts.
+  Add cloud-native API/service-mesh,
+  SCITT transparency, consumer dependency, agentic AI testing, vulnerability
+  operations, API/telemetry interoperability, regional resilience, automotive
+  update, energy protocol, product testing, consent receipt, and ATAM coverage.
+  Add protocol-specific benchmark scoring,
+  governed DevSecOps and test maturity, AI quality and conformity, independent
+  cloud assurance, CACAO/OpenC2/OCSF interoperability, federal vulnerability
+  disclosure, UK PSTI/ETSI EN 18031 applicability, MITRE ATT&CK Evaluations,
+  licensed normative evidence, external cohort comparison, and standards
+  publication watchlists. Add governed lifecycle traceability,
+  scenario-based architecture evaluation, bounded process-capability assessment,
+  point-in-time EPSS/KEV calibration, comprehensive CWE mapping, formal-analysis
+  competitions, signing/verifier conformance, remote attestation, AI lifecycle
+  and data quality, supplier relationships, OT patching, continuing
+  airworthiness, maritime cyber resilience, and financial-messaging assurance.
+  Add independent evaluator and laboratory
+  qualification, complete OT system/operations, healthcare, airborne software,
+  federal STIG, formal software-quality evaluation, incident management,
+  privacy-impact assessment, supply-chain identity, and threat-model quality
+  assurance. Add Vul4J, BugsInPy, AgentDojo, OSS-Fuzz/ClusterFuzzLite, DISA
+  STIG/SCAP, IEC 62443 system-conformance, and expert-labeled threat-model
+  benchmark contracts. Qualified conformance results now fail closed without
+  method-validation, evaluator-competency, impartiality-review, and measurement-
+  traceability digests. The earlier expansion also added systems engineering, risk
+  measurement, security-data interoperability, product certification, threat
+  intelligence, secure coding, formal testing, safety/security, specialized
+  target validation, AI robustness/impact, privacy-by-design, and zero-trust
+  implementation to the existing identity/protocol, cloud/container/
+  zero-trust, cryptography/PQC, operational-resilience, EU digital regulation,
+  IoT, OT, automotive, medical-device, and federal-cloud/defense profiles. Add
+  cryptographic, identity, WebAuthn, attack-emulation, repository-posture,
+  polyglot CVE, artifact-conformance, scale/determinism, recovery, and protocol-
+  evasion benchmark contracts. Authorized companion evidence now fails closed
+  without dataset-license, label-authority, contamination, split, isolation,
+  runner, target, toolset, oracle, environment, and control evidence;
+  organization corpora require at least two independent reviewers.
+
+- Raise every previously lower-scoring industry-readiness area to at least 8/10
+  with 58 versioned references, nine selectable enterprise/privacy/PSIRT/
+  supply-chain/AI/regulatory assurance packs, policy schema 1.2, and an
+  independently schema-validated profile registry. Expand the benchmark catalog
+  from nine to 18 families with Python CVE-pair, IaC, container/Kubernetes,
+  secret, SBOM/SCA, malicious-package, fuzzing, agentic-security, and
+  architecture-quality holdouts; organization corpora now fail closed without
+  runner, target, environment, toolset, oracle, control, repetition, and
+  isolation evidence.
+
+- Expand evidence-backed industry assurance to 39 versioned standards and
+  taxonomy references, repository-owned controls and authorized assessment
+  procedures, source-retained CVSS v4 and SSVC prioritization, seven OSCAL
+  1.2.2 lifecycle models, nine pinned benchmark families, reproducibility
+  contracts, Wilson confidence intervals, Youden's J, and comparable benchmark
+  deltas. Enforce CycloneDX 1.7 generation and parsing, preserve VEX source
+  scores, and retain explicit non-certification and authorization boundaries.
+
+- Expand cross-domain assurance from 21 to 33 governed domains with privileged
+  control-plane, distributed temporal correctness, secure human interaction,
+  ML model/data supply-chain, credential lifecycle, observability integrity,
+  developer environment, parser/content, trust-and-safety, confidential
+  computing, regulated transaction, and physical/environmental requirements;
+  retain conservative applicability and source-bound behavioral evidence.
+- Expand cross-domain assurance from 11 to 21 first-class domains with identity
+  assurance, tenant isolation, abuse resistance, workload identity,
+  third-party integration security, incident response and recovery, data
+  integrity and lineage, serverless/edge security, external asset and
+  communication security, and OT/ICS safety. Add bounded source/configuration
+  signals, 60 domain-specific requirement kinds, relevant governed-evidence
+  mappings and standards citations, a complete policy example, and refreshed
+  schemas, reports, guidance, and diagrams without treating applicability as a
+  vulnerability or generic evidence as behavioral proof.
+
+- Add governed cross-domain assurance across business logic, privacy lifecycle,
+  resilience, detection engineering, cryptographic agility, notebooks,
+  messaging, desktop clients, firmware/IoT, Web3, and GraphQL. Reconcile strict
+  repository obligations with regular-file enforcement points, complete named
+  artifacts, and passing source-bound test identities; emit normalized policy
+  gaps, a semantically validated `domain-assurance.json` 1.0 scorecard, report
+  summary, exportable policy schema, full-domain example, and updated diagrams.
+
+- Consolidate code-health symptoms into ranked file/symbol/family root-cause
+  review clusters with explicit evidence, omission accounting, and remediation;
+  rank architecture cycles, contract failures, baseline regressions, fan-out,
+  hubs, and instability as refactoring targets while distinguishing exact
+  repository-contract failures from heuristic topology. Carry governed
+  reachability confidence, completeness, graph size, typed-receiver precision,
+  and framework-resolution context into static architecture without claiming
+  runtime proof; publish the governed code-health and static-architecture 1.4
+  schemas and refresh the solution diagrams.
+
+- Refresh the solution, contextual-analysis, and validation diagrams for schema
+  1.3; document capability-aware scenario routing, authorized execution boundaries,
+  ranked code-health retention, unified entry points, deterministic native/Tach
+  policy precedence, and exact Tach cycle enforcement across the README,
+  architecture guide, compatibility matrix, and tool-selection reference.
+
+- Emit argv-safe, source-bound companion execution plans for generated contract
+  scenarios with exact actor/oracle/subject metadata and consumer capability
+  routing; detect unawaited coroutines, discarded tasks, swallowed cancellation,
+  and implicit exception translation without leaking across callable boundaries;
+  rank bounded code-health details by severity and threshold overage while
+  retaining per-kind and omitted totals; discover packaging, module-main, and
+  main-guard entry points; and enforce repository-root Tach dependency contracts
+  through the native architecture artifact when no JSON policy overrides them.
+
+- Correlate exact semantic subjects and shared native flow sinks across scanner
+  presentation-line differences; generate OpenAPI-derived authorization,
+  tenant-boundary, constraint, and replay test scenarios with deterministic
+  actors, oracles, consumers, subjects, and replay counts; resolve relative
+  imports and class-method wrapper chains; add calibrated nesting,
+  call-coupling, class-responsibility, cohesion, swallowed-exception,
+  async-blocking, and mutable-global analysis; retain symbol-call edges,
+  decorator entry points, and literal/unresolved dynamic imports; enforce
+  declared architecture layers and forbidden dependency edges; and raise protected
+  production calibration to 200 independently governed labels with balanced
+  positive and negative evidence across at least three engines.
+
+- Add conservative multi-axis per-finding validation, exact proof-bound
+  reproduction and graph-bound runtime promotion, executed digest-bound
+  framework model canaries, OpenAPI/auth and business-test contract analysis,
+  exact advisory-function call matching, static dependency cycles/fan-out,
+  bounded cognitive complexity and duplicate-AST findings, Git temporal-coupling and change-risk
+  hotspots, a broad non-runtime `audit` profile, and generated profile versus
+  execution capability truth. Deepen local-import typing, complexity thresholds,
+  Radon findings, and mutation targets while preserving explicit truncation and
+  claim boundaries.
+  Require passing source-bound business-logic cases, detect weakened OpenAPI
+  inputs and authorization scopes, propagate advisory-listed calls through local
+  wrappers to API entry points, partition correlation by semantic subjects, add
+  semantic clone review, strict typing rules, and architecture instability,
+  hub, stable-dependency, and baseline-new-edge analysis.
+
 - Eliminate the residual trust-boundary shortcuts: raw hardware attestation
   replay now binds a digest-pinned native verifier in an independent registered
   failure domain; registry transparency uses witness-quorum checkpoints,
@@ -1044,3 +1436,11 @@ for published releases.
 
 - Maintained-file discovery prunes generated and tool-owned directories before
   traversal, materially reducing comprehensive preflight and scan duration.
+- Add provider-neutral LLM-guided adversarial planning across confirmed and
+  candidate findings, API abuse scenarios, domain gaps, architecture targets,
+  and code-health root causes. Plans omit source contents, bind context by
+  digest, constrain tools/writes/network/iterations, require human approval,
+  deterministic oracles, negative controls, mutation validation, and ingest
+  only authenticated source-bound companion evidence with control proofs. The
+  proposal validator never authorizes execution, and confirmed defects require
+  an exact binding to the failed control-ledger case.

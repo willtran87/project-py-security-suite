@@ -14,6 +14,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  discover:
+    name: Discover CodeQL languages
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      matrix: ${{ steps.languages.outputs.matrix }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Discover every non-Python CodeQL language
+        id: languages
+        shell: bash
+        run: >-
+          echo "matrix=$(python scripts/discover_codeql_languages.py
+          --github-matrix --exclude python)" >> "$GITHUB_OUTPUT"
+
   analyze:
     name: Analyze Python
     runs-on: ubuntu-latest
@@ -38,3 +58,38 @@ jobs:
         uses: github/codeql-action/analyze@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4
         with:
           category: /language:python
+
+  analyze-polyglot:
+    name: Analyze ${{ matrix.language }}
+    needs: discover
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.discover.outputs.matrix) }}
+    permissions:
+      actions: read # Read workflow metadata for CodeQL analysis.
+      contents: read
+      packages: read # Fetch GitHub-published CodeQL query packs.
+      security-events: write # Upload language-specific SARIF results.
+    steps:
+      - name: Check out source
+        if: matrix.language != 'none'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Initialize CodeQL
+        if: matrix.language != 'none'
+        uses: github/codeql-action/init@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build_mode }}
+          queries: security-extended
+      - name: Autobuild compiled source
+        if: matrix.language != 'none' && matrix.build_mode == 'autobuild'
+        uses: github/codeql-action/autobuild@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4
+      - name: Analyze
+        if: matrix.language != 'none'
+        uses: github/codeql-action/analyze@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4
+        with:
+          category: /language:${{ matrix.language }}

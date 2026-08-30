@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:benchmark-environment-capture:1.0",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "runtime", "runtime_version", "platform_sha256", "toolset_sha256", "network_policy_sha256", "hermetic"],
+  "properties": {
+    "schema_version": {"const": "1.0"}, "runtime": {"type": "string", "minLength": 1, "maxLength": 256}, "runtime_version": {"type": "string", "minLength": 1, "maxLength": 256},
+    "platform_sha256": {"$ref": "#/$defs/digest"}, "toolset_sha256": {"$ref": "#/$defs/digest"}, "network_policy_sha256": {"$ref": "#/$defs/digest"}, "hermetic": {"type": "boolean"}
+  },
+  "$defs": {"digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}
+}

@@ -65,6 +65,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
             throw "Distribution build failed"
           }
+          $uvIgnore = Join-Path $releaseDirectory ".gitignore"
+          if (Test-Path -LiteralPath $uvIgnore -PathType Leaf) {
+            Remove-Item -LiteralPath $uvIgnore -Force
+          }
           $sdists = @(Get-ChildItem -LiteralPath $releaseDirectory -Filter "*.tar.gz")
           if ($sdists.Count -ne 1) {
             throw "Expected exactly one source distribution, found $($sdists.Count)"
@@ -78,7 +82,7 @@ jobs:
             throw "Source distribution normalization failed"
           }
       - name: Attest exact builder subjects
-        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: .artifacts/release-${{ matrix.builder }}/*
       - name: Retain independent builder output
@@ -132,9 +136,15 @@ jobs:
               --source-ref "$GITHUB_REF"
           done
       - name: Require byte-for-byte reproducibility
-        run: >-
-          uv run pysec compare-builds .artifacts/release-a .artifacts/release-b
-          --format json --output .artifacts/reproducible-build.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv run pysec compare-builds .artifacts/release-a .artifacts/release-b \
+            --format json --output .artifacts/reproducible-build.json
+          python -I scripts/verify_release_independent.py \
+            .artifacts/release-a .artifacts/release-b \
+            --source-date-epoch "$(git show -s --format=%ct HEAD)" \
+            --output .artifacts/independent-release-verification.json
       - name: Create a closed dependency wheelhouse
         shell: bash
         run: |
@@ -157,4 +167,5 @@ jobs:
           path: |
             .artifacts/release-a
             .artifacts/reproducible-build.json
+            .artifacts/independent-release-verification.json
           if-no-files-found: error

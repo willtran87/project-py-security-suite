@@ -390,7 +390,7 @@ class SpecializedAdapterRuntimeTests(unittest.TestCase):
             return RawExecution(
                 command=command,
                 exit_code=0,
-                stdout='{"bomFormat":"CycloneDX","components":[]}',
+                stdout='{"bomFormat":"CycloneDX","specVersion":"1.7","components":[]}',
                 stderr="",
                 duration_seconds=0.01,
             )
@@ -436,13 +436,18 @@ class SpecializedAdapterRuntimeTests(unittest.TestCase):
         self.assertEqual(finding.area, "complexity")
         self.assertEqual(finding.severity.value, "low")
         self.assertEqual(finding.classifications, ["MCCABE-C901"])
-        self.assertIn("E9,F,B,C90,PERF,RUF,UP", command)
-        self.assertIn("lint.mccabe.max-complexity=20", command)
+        self.assertIn("E9,F,B,C90,DTZ,PERF,PLC,PLE,PLW,RET,RUF,SIM,TRY,UP", command)
+        self.assertIn("lint.mccabe.max-complexity=15", command)
 
     def test_ruff_quality_metadata_covers_supported_rule_families(self) -> None:
         cases = (
             ("C901", "complexity", "MCCABE-C901", "low"),
             ("PERF401", "performance", "PERFLINT-PERF401", "low"),
+            ("DTZ001", "time-correctness", "FLAKE8-DATETIMEZ-DTZ001", "medium"),
+            ("PLW0603", "code-correctness", "PYLINT-PLW0603", "medium"),
+            ("RET505", "control-flow", "FLAKE8-RETURN-RET505", "medium"),
+            ("SIM102", "control-flow", "FLAKE8-SIMPLIFY-SIM102", "medium"),
+            ("TRY301", "control-flow", "TRYCERATOPS-TRY301", "medium"),
             ("UP001", "compatibility", "PYUPGRADE-UP001", "low"),
             ("E902", "code-correctness", "PYCODESTYLE-E902", "medium"),
             ("F401", "code-correctness", "PYFLAKES-F401", "medium"),

@@ -1,7 +1,7 @@
 schema_version = "1"
-# quick | standard | extended | deep | supply-chain | artifact | quality |
+# quick | standard | audit | extended | deep | supply-chain | artifact | quality |
 # repo | iac-deep | governance | comprehensive | production | release
-profile = "standard"
+profile = "audit"
 
 [paths]
 # `@bundle/...` references resolve beneath this root without environment expansion.
@@ -639,6 +639,12 @@ enabled = true
 executable = "pysec-evidence"
 timeout_seconds = 60
 artifacts_path = "ai-security.json"
+
+[tools.llm-adversarial]
+enabled = true
+executable = "pysec-evidence"
+timeout_seconds = 60
+artifacts_path = "llm-adversarial.json"
 
 [tools.pytm]
 enabled = true

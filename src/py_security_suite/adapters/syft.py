@@ -41,7 +41,7 @@ class SyftAdapter(ScannerAdapter):
             "scan",
             f"dir:{artifact_root}",
             "--output",
-            "cyclonedx-json",
+            "cyclonedx-json@1.7",
             "--quiet",
         ]
 
@@ -49,6 +49,8 @@ class SyftAdapter(ScannerAdapter):
         document = _document(payload)
         if document.get("bomFormat") != "CycloneDX":
             raise ValueError("Syft output is not a CycloneDX BOM")
+        if document.get("specVersion") != "1.7":
+            raise ValueError("Syft output is not a CycloneDX 1.7 BOM")
         return []
 
     def derived_artifacts(self, payload: str, target: Path) -> dict[str, Any]:

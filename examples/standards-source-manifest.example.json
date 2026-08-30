@@ -1,0 +1,28 @@
+{
+  "schema_version": "1.0",
+  "allowed_hosts": ["csrc.nist.gov", "www.iso.org", "www.w3.org"],
+  "sources": [
+    {
+      "id": "NIST-SP-800-18",
+      "baseline_version": "2",
+      "publisher": "NIST",
+      "url": "https://csrc.nist.gov/pubs/sp/800/18/r2/final",
+      "baseline_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "maximum_bytes": 8388608,
+      "baseline_path": "standards-baselines/nist-sp-800-18.html",
+      "media_type": "text/html",
+      "impact": {"profiles": ["enterprise-security"], "controls": ["NIST-SP-800-18"], "benchmarks": []}
+    },
+    {
+      "id": "W3C-ACT-RULES-FORMAT",
+      "baseline_version": "1.1",
+      "publisher": "W3C",
+      "url": "https://www.w3.org/TR/act-rules-format-1.1/",
+      "baseline_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "maximum_bytes": 8388608,
+      "baseline_path": "standards-baselines/w3c-act-rules-format.html",
+      "media_type": "text/html",
+      "impact": {"profiles": ["accessibility"], "controls": ["W3C-ACT-RULES-FORMAT"], "benchmarks": ["w3c-act-rules-conformance"]}
+    }
+  ]
+}

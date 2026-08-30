@@ -139,7 +139,7 @@ class StaticAdapterContractTests(unittest.TestCase):
         self.assertIsNone(configured.prerequisite_error())
         command = configured.build_command("mypy", self.root)
         self.assertIn("--no-site-packages", command)
-        self.assertIn("--follow-imports=skip", command)
+        self.assertIn("--follow-imports=normal", command)
         with self.assertRaisesRegex(TypeError, "JSON line"):
             configured.parse("[]", self.root)
         payload = "\n" + json.dumps(
@@ -328,12 +328,17 @@ class EvidenceAndArtifactAdapterTests(unittest.TestCase):
         self.assertEqual(
             adapter.environment().extra["SYFT_CHECK_FOR_APP_UPDATE"], "false"
         )
-        self.assertIn("cyclonedx-json", adapter.build_command("syft", self.root))
+        self.assertIn("cyclonedx-json@1.7", adapter.build_command("syft", self.root))
         with self.assertRaisesRegex(TypeError, "must be an object"):
             _document("[]")
         with self.assertRaisesRegex(ValueError, "not a CycloneDX"):
             adapter.parse("{}", self.root)
-        self.assertEqual(adapter.parse('{"bomFormat":"CycloneDX"}', self.root), [])
+        self.assertEqual(
+            adapter.parse('{"bomFormat":"CycloneDX","specVersion":"1.7"}', self.root),
+            [],
+        )
+        with self.assertRaisesRegex(ValueError, "CycloneDX 1.7"):
+            adapter.parse('{"bomFormat":"CycloneDX","specVersion":"1.6"}', self.root)
 
         dist = self.root / "dist"
         dist.mkdir()
@@ -648,6 +653,178 @@ class CorrelationTests(unittest.TestCase):
         self.assertTrue(corroboration["runtime_observed"])
         self.assertEqual(corroboration["dynamic_tools"], ["iast"])
         self.assertIn("does not by itself prove", corroboration["claim_boundary"])
+
+    def test_correlation_does_not_merge_distinct_data_flows_at_same_sink(self) -> None:
+        first = self._finding(
+            "codeql",
+            "py/sql-injection",
+            severity=Severity.HIGH,
+            confidence=Confidence.HIGH,
+            classification="CWE-89",
+        )
+        second = self._finding(
+            "semgrep",
+            "sql-injection",
+            severity=Severity.HIGH,
+            confidence=Confidence.HIGH,
+            classification="CWE-89",
+        )
+        first.evidence["sarif_code_flows"] = [
+            {
+                "steps": [
+                    {"path": "request.py", "line": 1},
+                    {"path": "app.py", "line": 7},
+                ]
+            }
+        ]
+        second.evidence["sarif_code_flows"] = [
+            {"steps": [{"path": "config.py", "line": 2}, {"path": "app.py", "line": 7}]}
+        ]
+
+        result = correlate_findings([first, second])
+
+        self.assertEqual(len(result), 2)
+
+    def test_correlation_preserves_secondary_flow_and_counts_engine_families(
+        self,
+    ) -> None:
+        first = self._finding(
+            "ruff",
+            "S001",
+            severity=Severity.MEDIUM,
+            confidence=Confidence.HIGH,
+        )
+        second = self._finding(
+            "ruff-quality",
+            "S001",
+            severity=Severity.MEDIUM,
+            confidence=Confidence.HIGH,
+        )
+        second.evidence["sarif_code_flows"] = [
+            {"steps": [{"path": "input.py", "line": 1}, {"path": "app.py", "line": 7}]}
+        ]
+
+        merged = correlate_findings([first, second])[0]
+
+        self.assertEqual(len(merged.evidence["sarif_code_flows"]), 1)
+        corroboration = merged.evidence["cross_tool_corroboration"]
+        self.assertEqual(corroboration["engine_families"], ["ruff"])
+        self.assertEqual(corroboration["independent_perspectives"], 1)
+
+    def test_correlation_separates_distinct_semantic_subjects_without_flows(
+        self,
+    ) -> None:
+        first = self._finding(
+            "semgrep",
+            "auth-check",
+            severity=Severity.HIGH,
+            confidence=Confidence.HIGH,
+            classification="CWE-862",
+        )
+        second = self._finding(
+            "codeql",
+            "auth-check",
+            severity=Severity.HIGH,
+            confidence=Confidence.HIGH,
+            classification="CWE-862",
+        )
+        first.evidence["application_contracts"] = {"operation": "GET /admin"}
+        second.evidence["application_contracts"] = {"operation": "POST /billing"}
+
+        result = correlate_findings([first, second])
+
+        self.assertEqual(len(result), 2)
+
+    def test_correlation_joins_exact_semantic_subject_across_reported_lines(
+        self,
+    ) -> None:
+        first = self._finding(
+            "semgrep",
+            "auth-check",
+            severity=Severity.HIGH,
+            confidence=Confidence.HIGH,
+            classification="CWE-862",
+        )
+        second = self._finding(
+            "codeql",
+            "auth-check",
+            severity=Severity.HIGH,
+            confidence=Confidence.HIGH,
+            classification="CWE-862",
+        )
+        first.evidence["application_contracts"] = {"operation": "GET /admin"}
+        second.evidence["application_contracts"] = {"operation": "GET /admin"}
+        second.locations = [Location(path="app.py", start_line=12)]
+
+        merged = correlate_findings([first, second])
+
+        self.assertEqual(len(merged), 1)
+        self.assertEqual(
+            merged[0].evidence["cross_tool_corroboration"]["independent_perspectives"],
+            2,
+        )
+
+    def test_correlation_joins_matching_flow_sink_across_primary_locations(
+        self,
+    ) -> None:
+        first = self._finding(
+            "semgrep",
+            "sql",
+            severity=Severity.HIGH,
+            confidence=Confidence.HIGH,
+            classification="CWE-89",
+        )
+        second = self._finding(
+            "codeql",
+            "sql",
+            severity=Severity.HIGH,
+            confidence=Confidence.HIGH,
+            classification="CWE-89",
+        )
+        second.locations = [Location(path="query.py", start_line=30)]
+        flow = {
+            "steps": [
+                {"path": "request.py", "line": 1},
+                {"path": "query.py", "line": 30},
+            ]
+        }
+        first.evidence["sarif_code_flows"] = [flow]
+        second.evidence["sarif_code_flows"] = [flow]
+
+        self.assertEqual(len(correlate_findings([first, second])), 1)
+
+    def test_correlation_preserves_reproduction_proof_and_ignores_bad_flows(
+        self,
+    ) -> None:
+        first = self._finding(
+            "semgrep",
+            "sql",
+            severity=Severity.HIGH,
+            confidence=Confidence.HIGH,
+            classification="CWE-89",
+        )
+        second = self._finding(
+            "codeql",
+            "sql",
+            severity=Severity.HIGH,
+            confidence=Confidence.HIGH,
+            classification="CWE-89",
+        )
+        first.evidence["reproduction_binding"] = {
+            "artifact": "authorized-reproduction.json",
+            "verified": True,
+        }
+        first.evidence["sarif_code_flows"] = [{}, {"steps": [{}]}]
+
+        merged = correlate_findings([first, second])[0]
+
+        self.assertEqual(
+            merged.evidence["reproduction_bindings"],
+            [{"artifact": "authorized-reproduction.json", "verified": True}],
+        )
+        self.assertEqual(
+            merged.evidence["cross_tool_corroboration"]["flow_signatures"], []
+        )
 
 
 if __name__ == "__main__":

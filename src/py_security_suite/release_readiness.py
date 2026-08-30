@@ -1,23 +1,27 @@
 from __future__ import annotations
 
 import hashlib
+import os
+from datetime import datetime, timedelta
 
-from .strict_json import loads as strict_json_loads
 from pathlib import Path
 from typing import Any
 
+from .artifact_validation import validate_governed_artifacts
+from .benchmark_signing import verify_portable_signing_provider_conformance
 from .execution import sha256_file
 from .passport import verify_report
 from .path_safety import resolve_regular_file
-from .artifact_validation import validate_governed_artifacts
+from .strict_json import loads as strict_json_loads
+from .trusted_observation import governed_now
 
 _MAX_JSON_BYTES = 128 * 1024 * 1024
 _GOVERNED_EFFECTIVENESS_MINIMUMS = {
-    "labels": 25,
-    "positive_labels": 10,
-    "negative_labels": 10,
-    "tools": 2,
-    "labels_per_tool": 5,
+    "labels": 500,
+    "positive_labels": 200,
+    "negative_labels": 200,
+    "tools": 3,
+    "labels_per_tool": 50,
 }
 _CONTROL_REMEDIATION = {
     "scan-policy": (
@@ -74,6 +78,14 @@ _CONTROL_REMEDIATION = {
         "Restore retained diff-coverage assessment scope, resolve every changed-file focused-test and changed-line coverage mismatch, then regenerate the sealed report.",
         [],
     ),
+    "signing-provider-conformance": (
+        "platform-security",
+        "organization-security",
+        "Provide fresh, portable conformance receipts for every required external signing provider and key version.",
+        [
+            "pysec benchmark-provider-check --profile PROFILE --profile-sha256 SHA256 --output RECEIPT.json"
+        ],
+    ),
 }
 
 
@@ -91,6 +103,11 @@ def assess_release_readiness(
     passport_verification: Path | None = None,
     passport_verification_sha256: str = "",
     require_passport: bool = False,
+    provider_conformance: tuple[Path, ...] = (),
+    provider_conformance_sha256: tuple[str, ...] = (),
+    required_provider_ids: tuple[str, ...] = (),
+    maximum_provider_conformance_age_hours: int = 168,
+    require_provider_conformance: bool = False,
 ) -> dict[str, Any]:
     """Build one fail-closed release decision from verified evidence."""
     for value, label in (
@@ -114,6 +131,18 @@ def assess_release_readiness(
         passport_verification_sha256,
         "passport verification",
     )
+    if len(provider_conformance) != len(provider_conformance_sha256):
+        raise ValueError(
+            "provider conformance paths and SHA-256 values must have equal counts"
+        )
+    if not 1 <= maximum_provider_conformance_age_hours <= 24 * 90:
+        raise ValueError(
+            "maximum provider conformance age must be between 1 and 2160 hours"
+        )
+    if any(not value for value in required_provider_ids) or len(
+        set(required_provider_ids)
+    ) != len(required_provider_ids):
+        raise ValueError("required provider IDs must be non-empty and unique")
     verification = verify_report(report)
     root = report.expanduser().resolve()
     manifest = _read_object(root / "scan-manifest.json")
@@ -149,7 +178,8 @@ def assess_release_readiness(
         }
         required_effectiveness_tools = tuple(
             sorted(
-                set(required_effectiveness_tools) | ({"bandit", "semgrep"} & run_names)
+                set(required_effectiveness_tools)
+                | ({"bandit", "codeql", "semgrep"} & run_names)
             )
         )
     findings_document = _read_object(root / "findings.json")
@@ -242,6 +272,15 @@ def assess_release_readiness(
     )
     if passport_control is not None:
         controls.append(passport_control)
+    provider_control = _provider_conformance_control(
+        provider_conformance,
+        provider_conformance_sha256,
+        required_provider_ids,
+        maximum_provider_conformance_age_hours,
+        require_provider_conformance,
+    )
+    if provider_control is not None:
+        controls.append(provider_control)
 
     return _decision(
         controls=controls,
@@ -250,6 +289,58 @@ def assess_release_readiness(
         findings=findings,
         trust=trust,
         closure=closure,
+    )
+
+
+def _provider_conformance_control(
+    paths: tuple[Path, ...],
+    digests: tuple[str, ...],
+    required_provider_ids: tuple[str, ...],
+    maximum_age_hours: int,
+    required: bool,
+) -> dict[str, Any] | None:
+    if not paths and not required_provider_ids and not required:
+        return None
+    verified: dict[str, dict[str, Any]] = {}
+    evidence: list[str] = []
+    now = governed_now()
+    hardened = (
+        os.environ.get("PYSEC_REQUIRE_HARDENED_RELEASE_EVIDENCE", "").strip() == "1"
+    )
+    stale: list[str] = []
+    for path, digest in zip(paths, digests, strict=True):
+        document = _digest_bound_object(path, digest, "provider conformance receipt")
+        result = verify_portable_signing_provider_conformance(document)
+        provider_id = str(result["provider_id"])
+        if provider_id in verified:
+            raise ValueError(f"duplicate provider conformance receipt: {provider_id}")
+        observed = result["observed_at"]
+        if not isinstance(observed, datetime):
+            raise ValueError("provider conformance observation time is invalid")
+        if observed > now or now - observed > timedelta(hours=maximum_age_hours):
+            stale.append(provider_id)
+        if hardened and not result["time_context_sha256"]:
+            stale.append(f"{provider_id}:trusted-time")
+        verified[provider_id] = result
+        evidence.append(f"{path}#provider_id={provider_id}")
+    missing = sorted(set(required_provider_ids) - set(verified))
+    passed = bool(verified) and not missing and not stale
+    details: list[str] = []
+    if missing:
+        details.append("missing " + ", ".join(missing))
+    if stale:
+        details.append("stale or untrusted-time " + ", ".join(sorted(stale)))
+    if not verified:
+        details.append("no portable conformance receipt supplied")
+    return _control(
+        "signing-provider-conformance",
+        passed,
+        (
+            f"{len(verified)} fresh provider conformance receipt(s) verified."
+            if passed
+            else "Provider conformance failed: " + "; ".join(details)
+        ),
+        evidence or ["benchmark-signing-provider-conformance-1.1"],
     )
 
 
@@ -897,26 +988,54 @@ def _effectiveness_control(
         if isinstance(label_outcomes, list)
         else []
     )
-    positive_labels = sum(item.get("expected") == "finding" for item in outcomes)
-    negative_labels = sum(item.get("expected") == "clean" for item in outcomes)
-    tool_counts: dict[str, int] = {}
-    for item in outcomes:
-        match = item.get("match")
-        if not isinstance(match, dict) or not match.get("tool"):
-            continue
-        tool = str(match["tool"])
-        tool_counts[tool] = tool_counts.get(tool, 0) + 1
+    aggregate = evaluation.get("coverage_summary")
+    aggregate_present = isinstance(aggregate, dict)
+    tool_expectations: dict[str, set[str]]
+    if isinstance(aggregate, dict):
+        positive_labels = int(aggregate.get("positive_labels") or 0)
+        negative_labels = int(aggregate.get("negative_labels") or 0)
+        raw_tool_counts = aggregate.get("tool_counts")
+        raw_tool_expectations = aggregate.get("tool_expectations")
+        tool_counts = (
+            {
+                str(tool): int(count)
+                for tool, count in raw_tool_counts.items()
+                if isinstance(tool, str)
+                and isinstance(count, int)
+                and not isinstance(count, bool)
+                and count >= 0
+            }
+            if isinstance(raw_tool_counts, dict)
+            else {}
+        )
+        tool_expectations = (
+            {
+                str(tool): {str(value) for value in expectations}
+                for tool, expectations in raw_tool_expectations.items()
+                if isinstance(tool, str) and isinstance(expectations, list)
+            }
+            if isinstance(raw_tool_expectations, dict)
+            else {}
+        )
+    else:
+        positive_labels = sum(item.get("expected") == "finding" for item in outcomes)
+        negative_labels = sum(item.get("expected") == "clean" for item in outcomes)
+        tool_counts = {}
+        tool_expectations = {}
+        for item in outcomes:
+            match = item.get("match")
+            if not isinstance(match, dict) or not match.get("tool"):
+                continue
+            tool = str(match["tool"])
+            tool_counts[tool] = tool_counts.get(tool, 0) + 1
+            tool_expectations.setdefault(tool, set()).add(str(item.get("expected")))
     covered_tools = {
         tool for tool, count in tool_counts.items() if count >= minimum_labels_per_tool
     }
     missing_required_tools = sorted(
         set(normalized_required_tools).difference(covered_tools)
     )
-    all_matched_tools = {
-        str(match.get("tool"))
-        for item in outcomes
-        if isinstance((match := item.get("match")), dict) and match.get("tool")
-    }
+    all_matched_tools = set(tool_counts)
     corpus_authority = corpus.get("authority") if isinstance(corpus, dict) else None
     declared_diversity = corpus.get("diversity") if isinstance(corpus, dict) else None
     strata_names = (
@@ -941,6 +1060,15 @@ def _effectiveness_control(
         )
         for name in strata_names
     }
+    if (
+        evaluation.get("schema_version") == "2.0"
+        and aggregate_present
+        and isinstance(declared_diversity, dict)
+        and not outcomes
+    ):
+        observed_diversity = {
+            name: int(declared_diversity.get(name) or 0) for name in strata_names
+        }
     minimum_diversity = {
         "cwe": 5,
         "language": 2,
@@ -953,20 +1081,36 @@ def _effectiveness_control(
         observed_diversity[name] >= minimum
         for name, minimum in minimum_diversity.items()
     )
-    tool_expectations = {
-        tool: {
-            str(item.get("expected"))
-            for item in outcomes
-            if isinstance(item.get("match"), dict) and item["match"].get("tool") == tool
-        }
-        for tool in normalized_required_tools
-    }
     tools_have_positive_and_negative = all(
-        expectations >= {"finding", "clean"}
-        for expectations in tool_expectations.values()
+        tool_expectations.get(tool, set()) >= {"finding", "clean"}
+        for tool in normalized_required_tools
+    )
+    confusion = evaluation.get("confusion_matrix")
+    confusion_total = (
+        sum(
+            int(confusion.get(name) or 0)
+            for name in (
+                "true_positive",
+                "true_negative",
+                "false_positive",
+                "false_negative",
+            )
+        )
+        if isinstance(confusion, dict)
+        else labels
+    )
+    aggregate_consistent = not aggregate_present or (
+        positive_labels + negative_labels == labels
+        and confusion_total == labels
+        and all(count <= labels for count in tool_counts.values())
+        and all(
+            expectations and expectations <= {"finding", "clean"}
+            for expectations in tool_expectations.values()
+        )
     )
     governed = bool(
         evaluation.get("schema_version") == "2.0"
+        and aggregate_present
         and isinstance(corpus_authority, dict)
         and corpus_authority.get("validated") is True
         and corpus_authority.get("organization_approved") is True
@@ -976,6 +1120,7 @@ def _effectiveness_control(
         and declared_diversity == observed_diversity
         and diversity_passed
         and tools_have_positive_and_negative
+        and aggregate_consistent
     )
     passed = (
         evaluation.get("schema_version") in {"1.0", "2.0"}
@@ -987,6 +1132,7 @@ def _effectiveness_control(
         and negative_labels >= minimum_negative_labels
         and len(covered_tools) >= minimum_tools
         and not missing_required_tools
+        and aggregate_consistent
         and (governed or not require_governed_authority)
     )
     return _control(

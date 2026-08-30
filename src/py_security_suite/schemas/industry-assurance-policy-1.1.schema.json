@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:industry-assurance-policy:1.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "enforce", "controls", "procedures", "benchmarks", "benchmark_baseline_path"],
+  "properties": {
+    "schema_version": {"const": "1.1"},
+    "enforce": {"type": "boolean"},
+    "benchmark_baseline_path": {"type": ["string", "null"]},
+    "controls": {"type": "array", "maxItems": 10000, "items": {"type": "object", "additionalProperties": false, "required": ["standard", "control_id", "objective", "applicable", "evidence_artifacts"], "properties": {"standard": {"type": "string"}, "control_id": {"type": "string", "minLength": 1}, "objective": {"type": "string", "minLength": 1}, "applicable": {"type": "boolean"}, "evidence_artifacts": {"type": "array", "items": {"type": "string", "pattern": "^[^/\\\\]+\\.json$"}}}}},
+    "procedures": {"type": "array", "maxItems": 20000, "items": {"type": "object", "additionalProperties": false, "required": ["standard", "procedure_id", "objective", "applicable", "execution", "test_type", "authorization_required", "evidence_artifacts"], "properties": {"standard": {"type": "string"}, "procedure_id": {"type": "string", "minLength": 1}, "objective": {"type": "string", "minLength": 1}, "applicable": {"type": "boolean"}, "execution": {"enum": ["planned", "executed"]}, "test_type": {"enum": ["examine", "interview", "test", "static", "dynamic", "manual"]}, "authorization_required": {"type": "boolean"}, "evidence_artifacts": {"type": "array", "items": {"type": "string", "pattern": "^[^/\\\\]+\\.json$"}}}}},
+    "benchmarks": {"type": "array", "maxItems": 100, "items": {"type": "object", "additionalProperties": false, "required": ["id", "enabled", "corpus_sha256", "evidence_artifact", "minimum_precision", "minimum_recall", "minimum_f1", "maximum_false_positive_rate"], "properties": {"id": {"type": "string"}, "enabled": {"type": "boolean"}, "corpus_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "evidence_artifact": {"type": "string", "pattern": "^[^/\\\\]+\\.json$"}, "minimum_precision": {"type": "number", "minimum": 0, "maximum": 1}, "minimum_recall": {"type": "number", "minimum": 0, "maximum": 1}, "minimum_f1": {"type": "number", "minimum": 0, "maximum": 1}, "maximum_false_positive_rate": {"type": "number", "minimum": 0, "maximum": 1}}}}
+  }
+}

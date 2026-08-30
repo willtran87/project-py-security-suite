@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import sys
 import tempfile
 from pathlib import Path
 
-from . import __version__
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+
+from .version import __version__
 from .adapter_conformance import (
     assess_adapter_conformance,
     render_adapter_conformance,
@@ -38,6 +42,28 @@ from .evidence_pack import create_evidence_pack, verify_evidence_pack
 from .finding_register import build_finding_register
 from .github_annotations import build_github_annotations, render_github_commands
 from .effectiveness_corpus import evaluate_report_corpus
+from .benchmark_execution import execute_benchmark_manifest
+from .benchmark_runtime import (
+    BenchmarkRuntimeError,
+    probe_oci_runtime_capabilities,
+)
+from .benchmark_compiler import compile_benchmark_manifest
+from .benchmark_adapters import benchmark_execution_contracts
+from .benchmark_assurance import BENCHMARK_REPLAY_GENESIS_SHA256
+from .benchmark_signing import (
+    ExternalEd25519SigningProvider,
+    load_external_signing_provider_profile,
+    verify_signing_provider_conformance,
+)
+from .benchmark_telemetry import (
+    DurableJsonlSecurityEventSink,
+    verify_durable_security_event_log,
+)
+from .path_safety import read_regular_file
+from .assurance_catalog import (
+    build_standards_source_manifest,
+    export_assurance_catalog,
+)
 from .execution import sanitize_terminal_text
 from .native_bundle import (
     render_native_bundle_verification,
@@ -100,6 +126,13 @@ from .reproducibility import (
     normalize_sdist,
     render_reproducibility_markdown,
 )
+from .standards_monitor import (
+    monitor_standard_sources,
+    verify_standards_monitor_report,
+)
+from .trusted_observation import governed_now, scan_time_identity
+from .cli_benchmark_arguments import add_benchmark_commands
+from .cli_release_arguments import add_release_check_command
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -642,60 +675,45 @@ def build_parser() -> argparse.ArgumentParser:
     config_check.add_argument("--output", type=Path, metavar="FILE")
     config_check.add_argument("--overwrite", action="store_true")
 
-    benchmark = subparsers.add_parser(
-        "benchmark",
-        help="measure a verified report against a digest-bound labeled corpus",
+    add_benchmark_commands(
+        subparsers,
+        replay_genesis_sha256=BENCHMARK_REPLAY_GENESIS_SHA256,
     )
-    benchmark.add_argument("report", type=Path, metavar="REPORT_DIRECTORY")
-    benchmark.add_argument("--corpus", type=Path, required=True)
-    benchmark.add_argument("--corpus-sha256", required=True)
-    benchmark.add_argument("--trusted-time", type=Path)
-    benchmark.add_argument("--trusted-time-sha256", default="")
-    benchmark.add_argument("--replay-ledger", type=Path)
-    benchmark.add_argument("--replay-service-url", default="")
-    benchmark.add_argument("--replay-service-token-env", default="")
-    benchmark.add_argument("--replay-service-receipt-key", type=Path)
-    benchmark.add_argument("--replay-service-receipt-key-sha256", default="")
-    benchmark.add_argument("--replay-query-budget", type=int, default=1)
-    benchmark.add_argument("--format", choices=("text", "json"), default="text")
-    benchmark.add_argument(
-        "--output",
-        type=Path,
-        metavar="FILE",
-        help="atomically publish the effectiveness evaluation outside the sealed report",
-    )
-    benchmark.add_argument("--overwrite", action="store_true")
 
-    release_check = subparsers.add_parser(
-        "release-check",
-        help="aggregate verified report, trust, isolation, effectiveness, and passport evidence",
+    standards_build = subparsers.add_parser(
+        "standards-manifest-build",
+        help="compile verified local baselines into a standards monitor manifest",
     )
-    release_check.add_argument("report", type=Path, metavar="REPORT_DIRECTORY")
-    release_check.add_argument("--effectiveness-evaluation", type=Path)
-    release_check.add_argument("--effectiveness-sha256", default="")
-    release_check.add_argument("--minimum-effectiveness-labels", type=int, default=0)
-    release_check.add_argument(
-        "--minimum-effectiveness-positive-labels", type=int, default=0
+    standards_build.add_argument("inventory", type=Path, metavar="BASELINE_INVENTORY")
+    standards_build.add_argument("--standard", action="append", default=[])
+    standards_build.add_argument("--output", type=Path, required=True, metavar="FILE")
+    standards_build.add_argument("--overwrite", action="store_true")
+
+    standards_monitor = subparsers.add_parser(
+        "standards-monitor",
+        help="quarantine publisher snapshots and report standards lifecycle changes",
     )
-    release_check.add_argument(
-        "--minimum-effectiveness-negative-labels", type=int, default=0
+    standards_monitor.add_argument("manifest", type=Path, metavar="SOURCE_MANIFEST")
+    standards_monitor.add_argument(
+        "--output", type=Path, required=True, metavar="DIRECTORY"
     )
-    release_check.add_argument("--minimum-effectiveness-tools", type=int, default=0)
-    release_check.add_argument(
-        "--minimum-effectiveness-labels-per-tool", type=int, default=0
+    standards_monitor.add_argument(
+        "--authorize-network",
+        action="store_true",
+        help="confirm authorization for restricted HTTPS publisher retrieval",
     )
-    release_check.add_argument(
-        "--required-effectiveness-tool",
-        action="append",
-        default=[],
-        help="require labeled effectiveness evidence for this scanner (repeatable)",
+    standards_monitor.add_argument("--signing-key", type=Path)
+    standards_monitor.add_argument("--overwrite", action="store_true")
+
+    standards_verify = subparsers.add_parser(
+        "standards-monitor-verify",
+        help="verify a signed standards publisher lifecycle report",
     )
-    release_check.add_argument("--passport-verification", type=Path)
-    release_check.add_argument("--passport-verification-sha256", default="")
-    release_check.add_argument("--require-passport", action="store_true")
-    release_check.add_argument("--format", choices=("text", "json"), default="text")
-    release_check.add_argument("--output", type=Path, metavar="FILE")
-    release_check.add_argument("--overwrite", action="store_true")
+    standards_verify.add_argument("report", type=Path)
+    standards_verify.add_argument("--report-sha256", required=True)
+    standards_verify.add_argument("--public-key", type=Path, required=True)
+
+    add_release_check_command(subparsers)
 
     evidence_draft = subparsers.add_parser(
         "evidence-draft",
@@ -1113,6 +1131,15 @@ def _dispatch_command(args: argparse.Namespace) -> int:
         "generate-hooks": _generate_hooks_command,
         "config-check": _config_check_command,
         "benchmark": _benchmark_command,
+        "benchmark-run": _benchmark_run_command,
+        "benchmark-provider-check": _benchmark_provider_check_command,
+        "benchmark-runtime-probe": _benchmark_runtime_probe_command,
+        "benchmark-security-log-verify": _benchmark_security_log_verify_command,
+        "benchmark-prepare": _benchmark_prepare_command,
+        "assurance-catalog-export": _assurance_catalog_export_command,
+        "standards-manifest-build": _standards_manifest_build_command,
+        "standards-monitor": _standards_monitor_command,
+        "standards-monitor-verify": _standards_monitor_verify_command,
         "release-check": _release_check_command,
         "evidence-draft": _evidence_draft_command,
         "promotion-plan": _promotion_plan_command,
@@ -1805,6 +1832,243 @@ def _benchmark_command(args: argparse.Namespace) -> int:
     return 0 if result["verdict"] == "pass" else 1
 
 
+def _benchmark_run_command(args: argparse.Namespace) -> int:
+    event_sink = (
+        DurableJsonlSecurityEventSink(
+            args.security_event_log,
+            workspace=args.workspace,
+        )
+        if args.security_event_log is not None
+        else None
+    )
+    signing_provider = _external_benchmark_signing_provider(args)
+    if signing_provider is not None and args.receipt_signing_key is not None:
+        raise ValueError(
+            "local and external benchmark receipt signing providers are mutually exclusive"
+        )
+    receipt = execute_benchmark_manifest(
+        args.manifest,
+        args.workspace,
+        authorized=args.authorize_execution,
+        benchmark_contracts=benchmark_execution_contracts(),
+        authority_trust_policy=args.authority_trust_policy,
+        authority_trust_policy_sha256=args.authority_trust_policy_sha256,
+        authority_trust_policy_signature=args.authority_trust_policy_signature,
+        authority_trust_root=args.authority_trust_root,
+        authority_trust_root_sha256=args.authority_trust_root_sha256,
+        trusted_time_context=args.trusted_time_context,
+        trusted_time_context_sha256=args.trusted_time_context_sha256,
+        replay_ledger=args.replay_ledger,
+        replay_minimum_sequence=args.replay_minimum_sequence,
+        replay_checkpoint_sha256=args.replay_checkpoint_sha256,
+        replay_checkpoint_state=args.replay_checkpoint_state,
+        initialize_replay_checkpoint=args.initialize_replay_checkpoint,
+        receipt_signing_key=args.receipt_signing_key,
+        receipt_signing_key_sha256=args.receipt_signing_key_sha256,
+        receipt_signing_provider=signing_provider,
+        security_event_sink=event_sink,
+    )
+    rendered = json.dumps(receipt, indent=2, sort_keys=True)
+    _write_atomic_output(
+        output=args.output,
+        content=rendered,
+        overwrite=args.overwrite,
+        label="benchmark execution receipt",
+    )
+    terminal_decision = "PASS" if receipt["decision"] == "pass" else "FAIL"
+    terminal_output = sanitize_terminal_text(str(args.output), maximum=512)
+    print(
+        f"{terminal_decision}: benchmark execution receipt written to {terminal_output}"
+    )
+    return 0 if receipt["decision"] == "pass" else 2
+
+
+def _benchmark_provider_check_command(args: argparse.Namespace) -> int:
+    provider = load_external_signing_provider_profile(args.profile, args.profile_sha256)
+    configured_time = any(
+        os.environ.get(name, "").strip()
+        for name in (
+            "PYSEC_SCAN_TIME_CONTEXT_PATH",
+            "PYSEC_SCAN_TIME_CONTEXT_SHA256",
+            "PYSEC_SCAN_TIME_CHALLENGE_SHA256",
+        )
+    )
+    result = verify_signing_provider_conformance(
+        provider,
+        portable=True,
+        observed_at=governed_now(),
+        profile_sha256=args.profile_sha256.casefold(),
+        time_context_sha256=scan_time_identity() if configured_time else "",
+    )
+    rendered = json.dumps(result, indent=2, sort_keys=True)
+    _write_atomic_output(
+        output=args.output,
+        content=rendered,
+        overwrite=args.overwrite,
+        label="benchmark signing provider conformance receipt",
+    )
+    print(rendered)
+    return 0
+
+
+def _external_benchmark_signing_provider(
+    args: argparse.Namespace,
+) -> ExternalEd25519SigningProvider | None:
+    profile = args.receipt_signing_provider_profile
+    profile_sha256 = args.receipt_signing_provider_profile_sha256
+    executable = args.receipt_signing_provider_executable
+    values = (
+        args.receipt_signing_provider_executable_sha256,
+        args.receipt_signing_provider_public_key,
+        args.receipt_signing_provider_public_key_sha256,
+        args.receipt_signing_provider_id,
+        args.receipt_signing_provider_key_version,
+    )
+    if profile is not None or profile_sha256:
+        if profile is None or not profile_sha256:
+            raise ValueError(
+                "external signing provider profile configuration is incomplete"
+            )
+        if (
+            executable is not None
+            or any(values)
+            or args.receipt_signing_provider_argument
+        ):
+            raise ValueError(
+                "external signing provider profile and individual provider options are mutually exclusive"
+            )
+        return load_external_signing_provider_profile(profile, profile_sha256)
+    if executable is None and not any(values):
+        return None
+    if executable is None or not all(values):
+        raise ValueError(
+            "external benchmark receipt signing configuration is incomplete"
+        )
+    _, public_payload = read_regular_file(
+        args.receipt_signing_provider_public_key,
+        "external receipt signer public key",
+        maximum_bytes=64 * 1024,
+    )
+    if hashlib.sha256(public_payload).hexdigest() != (
+        args.receipt_signing_provider_public_key_sha256
+    ):
+        raise ValueError("external receipt signer public key digest does not match")
+    if len(public_payload) == 32:
+        public_bytes = public_payload
+    else:
+        key = serialization.load_pem_public_key(public_payload)
+        if not isinstance(key, Ed25519PublicKey):
+            raise ValueError("external receipt signer public key must use Ed25519")
+        public_bytes = key.public_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PublicFormat.Raw,
+        )
+    return ExternalEd25519SigningProvider(
+        executable=executable,
+        executable_sha256=args.receipt_signing_provider_executable_sha256,
+        arguments=tuple(args.receipt_signing_provider_argument),
+        public_key=public_bytes,
+        provider_id=args.receipt_signing_provider_id,
+        key_version=args.receipt_signing_provider_key_version,
+    )
+
+
+def _benchmark_runtime_probe_command(args: argparse.Namespace) -> int:
+    if not args.authorize_execution:
+        raise BenchmarkRuntimeError(
+            "OCI runtime probing requires explicit --authorize-execution"
+        )
+    result = probe_oci_runtime_capabilities(
+        runtime_path=args.runtime,
+        runtime_sha256=args.runtime_sha256,
+        runtime_name=args.runtime_name,
+        runtime_version=args.runtime_version,
+    )
+    rendered = json.dumps(result, indent=2, sort_keys=True)
+    _write_atomic_output(
+        output=args.output,
+        content=rendered,
+        overwrite=args.overwrite,
+        label="OCI runtime capability proof",
+    )
+    print(rendered)
+    return 0
+
+
+def _benchmark_security_log_verify_command(args: argparse.Namespace) -> int:
+    result = verify_durable_security_event_log(args.log)
+    print(json.dumps(result, indent=2, sort_keys=True))
+    return 0
+
+
+def _benchmark_prepare_command(args: argparse.Namespace) -> int:
+    result = compile_benchmark_manifest(args.request, args.workspace)
+    rendered_manifest = json.dumps(result["manifest"], indent=2, sort_keys=True)
+    _write_atomic_output(
+        output=args.output,
+        content=rendered_manifest,
+        overwrite=args.overwrite,
+        label="compiled benchmark adapter manifest",
+    )
+    print(
+        json.dumps(
+            {key: value for key, value in result.items() if key != "manifest"},
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    return 0
+
+
+def _assurance_catalog_export_command(args: argparse.Namespace) -> int:
+    result = export_assurance_catalog()
+    rendered = json.dumps(result, indent=2, sort_keys=True)
+    _write_atomic_output(
+        output=args.output,
+        content=rendered,
+        overwrite=args.overwrite,
+        label="assurance catalog export",
+    )
+    print(rendered)
+    return 0
+
+
+def _standards_manifest_build_command(args: argparse.Namespace) -> int:
+    selected = set(args.standard) if args.standard else None
+    result = build_standards_source_manifest(args.inventory, selected_ids=selected)
+    rendered = json.dumps(result, indent=2, sort_keys=True)
+    _write_atomic_output(
+        output=args.output,
+        content=rendered,
+        overwrite=args.overwrite,
+        label="standards source manifest",
+    )
+    print(rendered)
+    return 0
+
+
+def _standards_monitor_command(args: argparse.Namespace) -> int:
+    report = monitor_standard_sources(
+        args.manifest,
+        args.output,
+        network_authorized=args.authorize_network,
+        overwrite=args.overwrite,
+        signing_key_path=args.signing_key,
+    )
+    print(json.dumps(report, indent=2, sort_keys=True))
+    return 0 if report["decision"] == "current" else 2
+
+
+def _standards_monitor_verify_command(args: argparse.Namespace) -> int:
+    receipt = verify_standards_monitor_report(
+        args.report,
+        args.public_key,
+        report_sha256=args.report_sha256,
+    )
+    print(json.dumps(receipt, indent=2, sort_keys=True))
+    return 0
+
+
 def _release_check_command(args: argparse.Namespace) -> int:
     if args.overwrite and not args.output:
         raise ValueError("release-check --overwrite requires --output")
@@ -1827,6 +2091,13 @@ def _release_check_command(args: argparse.Namespace) -> int:
         passport_verification=args.passport_verification,
         passport_verification_sha256=args.passport_verification_sha256,
         require_passport=args.require_passport,
+        provider_conformance=tuple(args.provider_conformance),
+        provider_conformance_sha256=tuple(args.provider_conformance_sha256),
+        required_provider_ids=tuple(args.required_provider_id),
+        maximum_provider_conformance_age_hours=(
+            args.maximum_provider_conformance_age_hours
+        ),
+        require_provider_conformance=args.require_provider_conformance,
     )
     rendered_json = json.dumps(result, indent=2, sort_keys=True)
     if args.output:

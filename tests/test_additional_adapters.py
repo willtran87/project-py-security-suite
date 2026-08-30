@@ -44,7 +44,7 @@ class AdditionalAdapterTests(unittest.TestCase):
 
     def test_cyclonedx_is_retained_as_a_derived_artifact(self) -> None:
         payload = json.dumps(
-            {"bomFormat": "CycloneDX", "specVersion": "1.6", "components": []}
+            {"bomFormat": "CycloneDX", "specVersion": "1.7", "components": []}
         )
         adapter = CycloneDxAdapter(ToolConfig(), 4096)
         self.assertEqual(adapter.parse(payload, self.target), [])

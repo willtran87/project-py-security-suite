@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:benchmark-signing-provider-conformance:1.0",
+  "title": "Benchmark signing provider conformance receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "provider_id",
+    "key_version",
+    "algorithm",
+    "backend",
+    "credential_mode",
+    "public_key_sha256",
+    "challenge_sha256",
+    "statement_sha256",
+    "signature_sha256",
+    "executable_sha256",
+    "deterministic_signature",
+    "verified"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "provider_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"},
+    "key_version": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"},
+    "algorithm": {"const": "Ed25519"},
+    "backend": {
+      "enum": [
+        "local-ed25519",
+        "pkcs11",
+        "generic-hsm",
+        "hashicorp-vault-transit",
+        "aws-kms",
+        "azure-key-vault",
+        "gcp-cloud-kms"
+      ]
+    },
+    "credential_mode": {
+      "enum": ["local-key", "workload-identity", "secure-agent", "hardware-session"]
+    },
+    "public_key_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "challenge_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "statement_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "signature_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "executable_sha256": {"type": "string", "pattern": "^$|^[0-9a-f]{64}$"},
+    "deterministic_signature": {"const": true},
+    "verified": {"const": true}
+  }
+}

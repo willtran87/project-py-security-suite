@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:architecture-evaluation:1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "analysis", "complete", "criteria_assessed", "criteria_satisfied", "criteria", "gaps", "claim_boundary"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "analysis": {"const": "scenario-based-architecture-evaluation"},
+    "complete": {"type": "boolean"},
+    "criteria_assessed": {"const": 6},
+    "criteria_satisfied": {"type": "integer", "minimum": 0, "maximum": 6},
+    "criteria": {"type": "array", "minItems": 6, "maxItems": 6, "items": {"$ref": "#/$defs/criterion"}},
+    "gaps": {"$ref": "#/$defs/strings"},
+    "claim_boundary": {"type": "string", "minLength": 1, "maxLength": 2000}
+  },
+  "$defs": {
+    "strings": {"type": "array", "maxItems": 100, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 1000}},
+    "criterion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "evidence_required", "evidence_present", "complete", "gaps"],
+      "properties": {
+        "id": {"enum": ["stakeholder-concerns", "quality-attributes", "risk-and-threat-paths", "decisions-and-change", "structural-corroboration", "independent-review"]},
+        "evidence_required": {"$ref": "#/$defs/strings"},
+        "evidence_present": {"$ref": "#/$defs/strings"},
+        "complete": {"type": "boolean"},
+        "gaps": {"$ref": "#/$defs/strings"}
+      }
+    }
+  }
+}

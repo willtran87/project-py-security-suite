@@ -1,0 +1,125 @@
+{
+  "schema_version": "1.0",
+  "source_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "nodes": [
+    {
+      "id": "requirement-authentication",
+      "stage": "requirements",
+      "artifact": "security-requirements-coverage.json",
+      "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+      "subject_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "applicable": true
+    },
+    {
+      "id": "architecture-identity-boundary",
+      "stage": "architecture",
+      "artifact": "static-architecture.json",
+      "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "subject_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "applicable": true
+    },
+    {
+      "id": "implementation-auth-handler",
+      "stage": "implementation",
+      "artifact": "source-inventory.json",
+      "sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+      "subject_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "applicable": true
+    },
+    {
+      "id": "verification-auth-negative-cases",
+      "stage": "verification",
+      "artifact": "test-evidence.json",
+      "sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+      "subject_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "applicable": true
+    },
+    {
+      "id": "release-auth-control",
+      "stage": "release",
+      "artifact": "release-readiness.json",
+      "sha256": "5555555555555555555555555555555555555555555555555555555555555555",
+      "subject_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "applicable": true
+    },
+    {
+      "id": "operation-auth-monitoring",
+      "stage": "operation",
+      "artifact": "operational-trend.json",
+      "sha256": "6666666666666666666666666666666666666666666666666666666666666666",
+      "subject_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "applicable": true
+    },
+    {
+      "id": "retirement-auth-data",
+      "stage": "retirement",
+      "artifact": "closure-plan.json",
+      "sha256": "7777777777777777777777777777777777777777777777777777777777777777",
+      "subject_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "applicable": true
+    }
+  ],
+  "links": [
+    {
+      "source": "requirement-authentication",
+      "target": "architecture-identity-boundary",
+      "type": "derives",
+      "evidence_sha256": "8888888888888888888888888888888888888888888888888888888888888888"
+    },
+    {
+      "source": "architecture-identity-boundary",
+      "target": "implementation-auth-handler",
+      "type": "implements",
+      "evidence_sha256": "9999999999999999999999999999999999999999999999999999999999999999"
+    },
+    {
+      "source": "implementation-auth-handler",
+      "target": "verification-auth-negative-cases",
+      "type": "verifies",
+      "evidence_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    {
+      "source": "verification-auth-negative-cases",
+      "target": "release-auth-control",
+      "type": "releases",
+      "evidence_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    {
+      "source": "release-auth-control",
+      "target": "operation-auth-monitoring",
+      "type": "operates",
+      "evidence_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    },
+    {
+      "source": "operation-auth-monitoring",
+      "target": "retirement-auth-data",
+      "type": "retires",
+      "evidence_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    }
+  ],
+  "change_sets": [
+    {
+      "id": "change-42",
+      "changed_node_ids": [
+        "implementation-auth-handler"
+      ],
+      "impact_node_ids": [
+        "verification-auth-negative-cases",
+        "release-auth-control",
+        "operation-auth-monitoring",
+        "retirement-auth-data"
+      ],
+      "verified": true,
+      "evidence_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    }
+  ],
+  "review": {
+    "reviewed_at": "2026-08-20T12:00:00Z",
+    "independent_reviewers": [
+      "quality-reviewer",
+      "security-reviewer"
+    ],
+    "approved": true,
+    "approval_sha256": "abababababababababababababababababababababababababababababababab"
+  }
+}

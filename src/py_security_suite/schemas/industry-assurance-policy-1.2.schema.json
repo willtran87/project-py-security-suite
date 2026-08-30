@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:industry-assurance-policy:1.2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "enforce", "profiles", "controls", "procedures", "benchmarks", "benchmark_baseline_path"],
+  "properties": {
+    "schema_version": {"const": "1.2"},
+    "enforce": {"type": "boolean"},
+    "benchmark_baseline_path": {"type": ["string", "null"]},
+    "profiles": {
+      "type": "array",
+      "maxItems": 160,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "applicable", "procedure_execution"],
+        "properties": {
+          "id": {
+            "enum": [
+              "enterprise-security", "privacy", "psirt-incident", "software-supply-chain", "ai-development", "eu-cra", "payment-software", "federal-cui", "service-organization", "identity-protocol-security", "cloud-container-zero-trust", "cryptography-pqc", "operational-resilience", "eu-digital-regulation", "iot-consumer", "ot-industrial", "automotive", "medical-device", "federal-cloud-defense", "systems-risk-measurement", "security-data-interoperability", "product-certification", "detection-threat-intelligence", "secure-coding", "software-testing-vv", "safety-security", "specialized-target-validation", "ai-robustness-impact", "privacy-by-design", "zero-trust-implementation", "independent-evaluator-assurance", "ot-system-operations", "healthcare-security", "airborne-software-assurance", "federal-configuration-hardening", "software-quality-evaluation", "incident-management", "privacy-impact-assessment", "supply-chain-identity", "threat-model-quality", "software-lifecycle-traceability", "architecture-evaluation-process", "software-process-capability", "comprehensive-weakness-mapping", "exploit-prioritization-validation", "ai-lifecycle-data-evaluation", "supplier-relationship-assurance", "software-signing-conformance", "remote-attestation-assurance", "ot-patch-management", "continuing-airworthiness-security", "maritime-cyber-resilience", "financial-messaging-security", "devsecops-maturity", "test-maturity", "ai-conformity-quality", "security-automation-interoperability", "cloud-independent-assurance", "federal-vulnerability-disclosure", "consumer-product-regulation", "detection-product-evaluation", "external-maturity-comparison", "cloud-native-api-assurance", "supply-chain-transparency-consumer", "ai-agentic-testing", "vulnerability-intake-patch-operations", "runtime-contract-interoperability", "uk-cyber-resilience", "australian-essential-eight", "cisa-cross-sector-cpg", "automotive-software-update", "energy-product-security", "modern-sbom-assurance", "enhanced-cui-assurance", "developer-verification-minimums", "cryptographic-key-agility", "continuous-security-monitoring", "ict-continuity-readiness", "digital-forensics-readiness", "accessibility-quality", "audit-assessment-integrity", "security-evaluator-competence", "application-security-governance", "firmware-hardware-trust", "differential-privacy-engineering", "data-quality-engineering", "quality-in-use-cloud", "enterprise-risk-techniques", "secure-by-design-product", "tls-protocol-assurance", "reproducible-build-assurance", "malware-protection-validation", "confidential-computing-attestation", "telecommunications-security", "cyber-workforce-assurance", "penetration-testing-governance", "software-delivery-outcomes", "structured-assurance-case", "integrity-level-vv", "cmvp-cryptographic-module", "international-cryptographic-module", "biometric-identity-assurance", "integrated-service-security-management", "interlaboratory-proficiency", "enterprise-cyber-risk-integration", "enterprise-architecture-governance", "ai-benchmark-governance", "ai-application-security-verification", "responsible-ai-system-assurance", "eucc-product-certification", "federal-software-attestation", "it-quality-governance", "nist-csf-profile-management", "privacy-engineering-pets", "mcp-protocol-security", "cloud-provider-native-security", "incident-response-service-maturity", "memory-safety-engineering", "organizational-ai-governance-impact", "organizational-resilience-bia", "open-source-project-assurance", "isms-implementation-process", "a2a-protocol-security", "sesip-iot-platform-evaluation", "threat-intelligence-handling", "web-platform-defense", "dora-level2-financial-resilience", "ffiec-banking-technology", "bsi-c5-cloud-assurance", "us-cyber-trust-mark", "digital-credential-security", "federal-saas-hardening", "kubernetes-hardening-conformance", "privacy-threat-modeling", "ast-modality-effectiveness", "telecom-equipment-assurance", "tisax-automotive-information-assurance", "content-provenance-authenticity", "payment-acceptance-security", "fedramp-20x-continuous-assurance", "fido2-authenticator-assurance", "eudi-wallet-assurance", "hitrust-assessment-assurance", "pci-software-security-framework", "nis2-implementation-assurance", "supplier-due-diligence", "software-assurance-maturity"
+            ]
+          },
+          "applicable": {"type": "boolean"},
+          "procedure_execution": {"enum": ["planned", "executed"]}
+        }
+      }
+    },
+    "controls": {
+      "type": "array",
+      "maxItems": 10000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["standard", "control_id", "objective", "applicable", "evidence_artifacts"],
+        "properties": {
+          "standard": {"type": "string"},
+          "control_id": {"type": "string", "minLength": 1},
+          "objective": {"type": "string", "minLength": 1},
+          "applicable": {"type": "boolean"},
+          "evidence_artifacts": {"type": "array", "items": {"type": "string", "pattern": "^[^/\\\\]+\\.json$"}}
+        }
+      }
+    },
+    "procedures": {
+      "type": "array",
+      "maxItems": 20000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["standard", "procedure_id", "objective", "applicable", "execution", "test_type", "authorization_required", "evidence_artifacts"],
+        "properties": {
+          "standard": {"type": "string"},
+          "procedure_id": {"type": "string", "minLength": 1},
+          "objective": {"type": "string", "minLength": 1},
+          "applicable": {"type": "boolean"},
+          "execution": {"enum": ["planned", "executed"]},
+          "test_type": {"enum": ["examine", "interview", "test", "static", "dynamic", "manual"]},
+          "authorization_required": {"type": "boolean"},
+          "evidence_artifacts": {"type": "array", "items": {"type": "string", "pattern": "^[^/\\\\]+\\.json$"}}
+        }
+      }
+    },
+    "benchmarks": {
+      "type": "array",
+      "maxItems": 192,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "enabled", "corpus_sha256", "evidence_artifact", "minimum_precision", "minimum_recall", "minimum_f1", "maximum_false_positive_rate"],
+        "properties": {
+          "id": {"type": "string"},
+          "enabled": {"type": "boolean"},
+          "corpus_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "evidence_artifact": {"type": "string", "pattern": "^[^/\\\\]+\\.json$"},
+          "minimum_precision": {"type": "number", "minimum": 0, "maximum": 1},
+          "minimum_recall": {"type": "number", "minimum": 0, "maximum": 1},
+          "minimum_f1": {"type": "number", "minimum": 0, "maximum": 1},
+          "maximum_false_positive_rate": {"type": "number", "minimum": 0, "maximum": 1}
+          ,"adapter_manifest": {"type": ["string", "null"]}
+        }
+      }
+    }
+  }
+}

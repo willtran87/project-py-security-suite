@@ -13,6 +13,43 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  oci-containment-integration:
+    name: Real OCI containment / ${{ matrix.runtime }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runtime: docker
+            executable: /usr/bin/docker
+          - runtime: podman-rootless
+            executable: /usr/bin/podman
+    env:
+      PYSEC_TEST_OCI_RUNTIME: ${{ matrix.executable }}
+      PYSEC_TEST_OCI_IMAGE: postgres:17.6-alpine@sha256:747d5ed1fdeeb124b880fbe3d7c6557d2c4064ae41d6b6297d417882effce4be
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.11.19"
+          enable-cache: false
+      - name: Install locked dependencies
+        run: uv sync --locked --all-groups --python "3.13"
+      - name: Install rootless Podman runtime
+        if: matrix.runtime == 'podman-rootless'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes podman slirp4netns uidmap
+      - name: Pull the immutable containment fixture
+        run: '"$PYSEC_TEST_OCI_RUNTIME" pull "$PYSEC_TEST_OCI_IMAGE"'
+      - name: Exercise live OCI security controls
+        run: uv run --frozen pytest -q tests/integration/test_benchmark_oci_live.py
+
   containment-integration:
     name: Real containment / ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
@@ -217,18 +254,45 @@ jobs:
       - name: Exercise the live browser security lane
         env:
           PYSEC_RUN_LIVE_INTEGRATION: "1"
-        run: >-
-          uv run --project companion --frozen pytest -q
-          tests/integration/test_browser_live.py
+        run: |
+          mkdir -p .artifacts/live-assurance
+          uv run --project companion --frozen pytest -q \
+            --junitxml=.artifacts/live-assurance/browser-junit.xml \
+            tests/integration/test_browser_live.py
+          uv run --frozen python -m scripts.validate_live_test_results \
+            --policy security/live-assurance-policy.json \
+            --job companion-browser-integration \
+            --output .artifacts/live-assurance/browser-matrix.json \
+            .artifacts/live-assurance/browser-junit.xml
+      - name: Retain live browser matrix evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: browser-live-assurance-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .artifacts/live-assurance
+          if-no-files-found: error
+          retention-days: 90
 
   test:
-    name: Test Python ${{ matrix.python-version }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+    name: Test ${{ matrix.os }} / Python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12", "3.13"]
+        include:
+          - os: ubuntu-latest
+            python-version: "3.11"
+          - os: ubuntu-latest
+            python-version: "3.12"
+          - os: ubuntu-latest
+            python-version: "3.13"
+          - os: ubuntu-latest
+            python-version: "3.14"
+          - os: windows-latest
+            python-version: "3.14"
+          - os: macos-latest
+            python-version: "3.14"
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -243,11 +307,73 @@ jobs:
             uv.lock
             companion/uv.lock
       - name: Install locked dependencies
+        shell: bash
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
         run: uv sync --locked --all-groups --python "$PYTHON_VERSION"
+      - name: Prepare canonical test temporary directory
+        env:
+          PYSEC_TEST_TEMP: ${{ runner.temp }}/pysec-tests
+        run: >-
+          uv run --frozen python -c
+          "import os; from pathlib import Path;
+          Path(os.environ['PYSEC_TEST_TEMP']).mkdir(parents=True, exist_ok=True)"
       - name: Run tests
+        env:
+          TMP: ${{ runner.temp }}/pysec-tests
+          TEMP: ${{ runner.temp }}/pysec-tests
+          TMPDIR: ${{ runner.temp }}/pysec-tests
         run: uv run --frozen pytest -q
+
+  test-assurance:
+    name: Branch and changed-line coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out full source history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.11.19"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - name: Install locked assurance dependencies
+        run: uv sync --locked --all-groups --python "3.14"
+      - name: Execute the complete suite with branch coverage
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .artifacts/test-assurance
+          uv run --frozen coverage erase
+          uv run --frozen coverage run --branch -m pytest -q \
+            --junitxml=.artifacts/test-assurance/junit.xml
+          uv run --frozen coverage xml \
+            -o .artifacts/test-assurance/coverage.xml
+          uv run --frozen coverage json \
+            -o .artifacts/test-assurance/coverage.json
+          uv run --frozen coverage report --fail-under=80
+          uv run --frozen python scripts/validate_security_critical_coverage.py \
+            .artifacts/test-assurance/coverage.json
+      - name: Require 90 percent changed-line coverage
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        shell: bash
+        run: >-
+          uv run --frozen diff-cover .artifacts/test-assurance/coverage.xml
+          --compare-branch "origin/$BASE_REF" --fail-under=90
+      - name: Retain test-assurance evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: test-assurance-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .artifacts/test-assurance
+          if-no-files-found: error
+          retention-days: 90
 
   quality:
     name: Quality and dependency audit
@@ -272,13 +398,60 @@ jobs:
         run: uv run --frozen ruff format --check .
       - name: Lint
         run: uv run --frozen ruff check .
+      - name: Validate benchmark schema/runtime consistency
+        run: uv run --frozen python scripts/validate_benchmark_schema_consistency.py
+      - name: Enforce public CLI and schema compatibility
+        run: uv run --frozen python scripts/validate_public_api.py
+      - name: Enforce mandatory live-assurance lanes
+        run: uv run --frozen python scripts/validate_live_assurance_policy.py
+      - name: Enforce architecture concentration ratchets
+        run: uv run --frozen python scripts/validate_architecture_limits.py
+      - name: Enforce declared dependency boundaries
+        run: uv run --frozen tach check
+      - name: Prevent dependency cycle expansion
+        run: |
+          uv run --frozen python scripts/validate_architecture_cycles.py
+          uv run --frozen python -m scripts.generate_architecture_assurance --output .artifacts/architecture/architecture-assurance.json
+      - name: Enforce deterministic performance and memory budgets
+        run: >-
+          uv run --frozen python scripts/validate_performance_budgets.py
+          --output .artifacts/performance/performance-assurance.json
       - name: Audit GitHub workflows
         run: uv run --frozen zizmor --pedantic --no-progress --color never .github
       - name: Check types
         run: >-
           uv run --frozen mypy src companion scripts/audit_pages.py
+          scripts/validate_architecture_limits.py
+          scripts/validate_architecture_cycles.py
+          scripts/generate_architecture_assurance.py
+          scripts/discover_codeql_languages.py scripts/fuzz_security_parsers.py
           scripts/mkdocs_hooks.py scripts/validate-checkpoint-authority.py
+          scripts/validate_benchmark_schema_consistency.py
+          scripts/validate_security_critical_coverage.py
+          scripts/validate_performance_budgets.py
+          scripts/validate_public_api.py
+          scripts/validate_live_assurance_policy.py
+          scripts/validate_live_test_results.py
           scripts/validate-native-attestation-fixtures.py
+          scripts/verify_release_independent.py
+      - name: Enforce the strict secondary type-contract surface
+        run: uv run --frozen pyright
+      - name: Retain performance assurance evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: performance-assurance-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .artifacts/performance/performance-assurance.json
+          if-no-files-found: error
+          retention-days: 90
+      - name: Retain architecture assurance evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: architecture-assurance-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .artifacts/architecture/architecture-assurance.json
+          if-no-files-found: error
+          retention-days: 90
       - name: Build distributions
         run: uv build --no-sources
 
@@ -290,7 +463,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        python-version: ["3.11", "3.13"]
+        python-version: ["3.11", "3.13", "3.14"]
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -339,10 +512,12 @@ jobs:
     name: CI required gate
     if: always()
     needs:
+      - oci-containment-integration
       - containment-integration
       - companion-service-integration
       - companion-browser-integration
       - test
+      - test-assurance
       - quality
       - dependency-audit
     runs-on: ubuntu-latest

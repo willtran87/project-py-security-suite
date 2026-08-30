@@ -36,6 +36,16 @@ class FindingStatus(StrEnum):
     SUPPRESSED = "suppressed"
 
 
+class ValidationStatus(StrEnum):
+    """Evidence tier for a finding, kept separate from severity and lifecycle."""
+
+    STATIC_CANDIDATE = "static-candidate"
+    CORROBORATED = "corroborated"
+    STATIC_PATH_CONFIRMED = "static-path-confirmed"
+    RUNTIME_OBSERVED = "runtime-observed"
+    REPRODUCED = "reproduced"
+
+
 class ToolStatus(StrEnum):
     COMPLETED = "completed"
     UNAVAILABLE = "unavailable"
@@ -95,6 +105,9 @@ class Finding:
     area: str
     domain: str = "security"
     status: FindingStatus = FindingStatus.NEW
+    validation_status: ValidationStatus = ValidationStatus.STATIC_CANDIDATE
+    validation_reasons: list[str] = field(default_factory=list)
+    validation_limitations: list[str] = field(default_factory=list)
     classifications: list[str] = field(default_factory=list)
     locations: list[Location] = field(default_factory=list)
     sources: list[Source] = field(default_factory=list)

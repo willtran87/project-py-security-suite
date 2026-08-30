@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:framework-model-coverage:1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "analysis", "manifest_path", "manifest_present", "frameworks_detected", "frameworks_modeled", "complete", "frameworks", "parse_errors", "parse_errors_omitted", "manifest_errors", "qualified_canary_finding_ids", "claim_boundary"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "analysis": {"const": "framework-specific-semantic-model-coverage"},
+    "manifest_path": {"type": ["string", "null"]},
+    "manifest_present": {"type": "boolean"},
+    "frameworks_detected": {"type": "integer", "minimum": 0, "maximum": 1000},
+    "frameworks_modeled": {"type": "integer", "minimum": 0, "maximum": 1000},
+    "complete": {"type": "boolean"},
+    "frameworks": {"type": "array", "maxItems": 1000, "items": {"$ref": "#/$defs/framework"}},
+    "parse_errors": {"$ref": "#/$defs/strings"},
+    "parse_errors_omitted": {"type": "integer", "minimum": 0},
+    "manifest_errors": {"$ref": "#/$defs/strings"},
+    "qualified_canary_finding_ids": {"type": "array", "maxItems": 100000, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 200}},
+    "claim_boundary": {"type": "string", "minLength": 1, "maxLength": 1000}
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "strings": {"type": "array", "maxItems": 1000, "items": {"type": "string", "minLength": 1, "maxLength": 1000}},
+    "import": {
+      "type": "object", "additionalProperties": false, "required": ["path", "line"],
+      "properties": {"path": {"type": "string", "minLength": 1, "maxLength": 1000}, "line": {"type": "integer", "minimum": 1}}
+    },
+    "model": {
+      "type": "object", "additionalProperties": false,
+      "required": ["framework", "engine", "model_path", "model_sha256", "positive_canary_path", "positive_canary_sha256", "negative_canary_path", "negative_canary_sha256", "expected_rule_ids", "verified", "canary_execution_verified", "positive_matches", "negative_matches"],
+      "properties": {
+        "framework": {"type": "string", "minLength": 1, "maxLength": 100},
+        "engine": {"enum": ["codeql", "pysa", "semgrep"]},
+        "model_path": {"type": "string", "minLength": 1, "maxLength": 1000},
+        "model_sha256": {"$ref": "#/$defs/digest"},
+        "positive_canary_path": {"type": "string", "minLength": 1, "maxLength": 1000},
+        "positive_canary_sha256": {"$ref": "#/$defs/digest"},
+        "negative_canary_path": {"type": "string", "minLength": 1, "maxLength": 1000},
+        "negative_canary_sha256": {"$ref": "#/$defs/digest"},
+        "expected_rule_ids": {"type": "array", "maxItems": 100, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 1000}},
+        "verified": {"type": "boolean"},
+        "canary_execution_verified": {"type": "boolean"},
+        "positive_matches": {"type": "array", "maxItems": 100, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 1000}},
+        "negative_matches": {"type": "array", "maxItems": 100, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 1000}}
+      }
+    },
+    "framework": {
+      "type": "object", "additionalProperties": false,
+      "required": ["framework", "category", "imports", "declared_models", "completed_model_engines", "complete", "gaps"],
+      "properties": {
+        "framework": {"type": "string", "minLength": 1, "maxLength": 100},
+        "category": {"type": "string", "minLength": 1, "maxLength": 100},
+        "imports": {"type": "array", "minItems": 1, "maxItems": 100, "items": {"$ref": "#/$defs/import"}},
+        "declared_models": {"type": "array", "maxItems": 1000, "items": {"$ref": "#/$defs/model"}},
+        "completed_model_engines": {"type": "array", "maxItems": 3, "uniqueItems": true, "items": {"enum": ["codeql", "pysa", "semgrep"]}},
+        "complete": {"type": "boolean"},
+        "gaps": {"$ref": "#/$defs/strings"}
+      }
+    }
+  }
+}

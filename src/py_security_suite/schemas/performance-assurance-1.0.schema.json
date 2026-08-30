@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:performance-assurance:1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "workload", "measurements", "budgets", "passed", "failures"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "workload": {"const": "strict-json-plus-classification-scoring"},
+    "measurements": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["small_cases", "large_cases", "small_seconds", "large_seconds", "growth_ratio", "large_cases_per_second", "peak_mib"],
+      "properties": {
+        "small_cases": {"type": "integer", "minimum": 1},
+        "large_cases": {"type": "integer", "minimum": 1},
+        "small_seconds": {"type": "number", "minimum": 0},
+        "large_seconds": {"type": "number", "minimum": 0},
+        "growth_ratio": {"type": "number", "minimum": 0},
+        "large_cases_per_second": {"type": "number", "minimum": 0},
+        "peak_mib": {"type": "number", "minimum": 0}
+      }
+    },
+    "budgets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["maximum_large_seconds", "maximum_growth_ratio", "minimum_large_cases_per_second", "maximum_peak_mib"],
+      "properties": {
+        "maximum_large_seconds": {"type": "number", "exclusiveMinimum": 0},
+        "maximum_growth_ratio": {"type": "number", "exclusiveMinimum": 0},
+        "minimum_large_cases_per_second": {"type": "number", "exclusiveMinimum": 0},
+        "maximum_peak_mib": {"type": "number", "exclusiveMinimum": 0}
+      }
+    },
+    "passed": {"type": "boolean"},
+    "failures": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+  }
+}

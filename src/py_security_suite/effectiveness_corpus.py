@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import base64
+import math
 import os
 import ssl
 import sqlite3
@@ -110,6 +111,9 @@ def evaluate_report_corpus(
     false_positive = counts["false_positive"]
     false_negative = counts["false_negative"]
     true_negative = counts["true_negative"]
+    recall = _ratio(true_positive, true_positive + false_negative)
+    specificity = _ratio(true_negative, true_negative + false_positive)
+    coverage_summary = _coverage_summary(outcomes)
     return {
         "schema_version": str(document["schema_version"]),
         "verdict": "pass" if not false_positive and not false_negative else "fail",
@@ -131,12 +135,38 @@ def evaluate_report_corpus(
         "replay_protected": bool(replay_receipt),
         "replay_receipt": replay_receipt,
         "confusion_matrix": counts,
+        "coverage_summary": coverage_summary,
         "metrics": {
             "precision": _ratio(true_positive, true_positive + false_positive),
-            "recall": _ratio(true_positive, true_positive + false_negative),
-            "specificity": _ratio(true_negative, true_negative + false_positive),
+            "recall": recall,
+            "specificity": specificity,
             "f1": _f1(true_positive, false_positive, false_negative),
+            "mcc": _mcc(true_positive, true_negative, false_positive, false_negative),
+            "balanced_accuracy": _balanced_accuracy(
+                true_positive, true_negative, false_positive, false_negative
+            ),
+            "false_positive_rate": _ratio(
+                false_positive, false_positive + true_negative
+            ),
+            "youden_j": (
+                round(recall + specificity - 1, 6)
+                if recall is not None and specificity is not None
+                else None
+            ),
         },
+        "confidence_intervals_95": {
+            "precision": _wilson_interval(
+                true_positive, true_positive + false_positive
+            ),
+            "recall": _wilson_interval(true_positive, true_positive + false_negative),
+            "specificity": _wilson_interval(
+                true_negative, true_negative + false_positive
+            ),
+            "false_positive_rate": _wilson_interval(
+                false_positive, false_positive + true_negative
+            ),
+        },
+        "stratum_scorecards": _stratum_scorecards(outcomes),
         "feedback_policy": (
             "aggregate-only" if document.get("schema_version") == "2.0" else "detailed"
         ),
@@ -148,6 +178,31 @@ def evaluate_report_corpus(
             if outcome["outcome"] in {"false_positive", "false_negative"}
         ],
         "label_outcomes": [] if document.get("schema_version") == "2.0" else outcomes,
+    }
+
+
+def _coverage_summary(outcomes: list[dict[str, Any]]) -> dict[str, Any]:
+    tool_counts: dict[str, int] = {}
+    tool_expectations: dict[str, set[str]] = {}
+    for outcome in outcomes:
+        match = outcome.get("match")
+        tool = str(match.get("tool") or "") if isinstance(match, dict) else ""
+        if not tool:
+            continue
+        tool_counts[tool] = tool_counts.get(tool, 0) + 1
+        tool_expectations.setdefault(tool, set()).add(str(outcome["expected"]))
+    return {
+        "positive_labels": sum(
+            outcome.get("expected") == "finding" for outcome in outcomes
+        ),
+        "negative_labels": sum(
+            outcome.get("expected") == "clean" for outcome in outcomes
+        ),
+        "tool_counts": dict(sorted(tool_counts.items())),
+        "tool_expectations": {
+            tool: sorted(expectations)
+            for tool, expectations in sorted(tool_expectations.items())
+        },
     }
 
 
@@ -1100,3 +1155,108 @@ def _ratio(numerator: int, denominator: int) -> float | None:
 def _f1(true_positive: int, false_positive: int, false_negative: int) -> float | None:
     denominator = 2 * true_positive + false_positive + false_negative
     return round(2 * true_positive / denominator, 6) if denominator else None
+
+
+def _mcc(
+    true_positive: int,
+    true_negative: int,
+    false_positive: int,
+    false_negative: int,
+) -> float | None:
+    denominator = math.sqrt(
+        (true_positive + false_positive)
+        * (true_positive + false_negative)
+        * (true_negative + false_positive)
+        * (true_negative + false_negative)
+    )
+    if not denominator:
+        return None
+    return round(
+        (true_positive * true_negative - false_positive * false_negative) / denominator,
+        6,
+    )
+
+
+def _balanced_accuracy(
+    true_positive: int,
+    true_negative: int,
+    false_positive: int,
+    false_negative: int,
+) -> float | None:
+    recall = _ratio(true_positive, true_positive + false_negative)
+    specificity = _ratio(true_negative, true_negative + false_positive)
+    if recall is None or specificity is None:
+        return None
+    return round((recall + specificity) / 2, 6)
+
+
+def _wilson_interval(successes: int, total: int) -> dict[str, float] | None:
+    if total <= 0:
+        return None
+    z = 1.959963984540054
+    proportion = successes / total
+    denominator = 1 + z * z / total
+    center = (proportion + z * z / (2 * total)) / denominator
+    margin = (
+        z
+        * math.sqrt(proportion * (1 - proportion) / total + z * z / (4 * total * total))
+        / denominator
+    )
+    return {
+        "lower": round(max(0.0, center - margin), 6),
+        "upper": round(min(1.0, center + margin), 6),
+    }
+
+
+def _stratum_scorecards(outcomes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for dimension in (
+        "cwe",
+        "language",
+        "parser_variant",
+        "boundary_type",
+        "severity",
+        "mutation_operator",
+    ):
+        values = sorted(
+            {
+                str(outcome.get("strata", {}).get(dimension) or "")
+                for outcome in outcomes
+                if isinstance(outcome.get("strata"), dict)
+                and outcome["strata"].get(dimension)
+            }
+        )
+        for value in values:
+            selected = [
+                outcome
+                for outcome in outcomes
+                if isinstance(outcome.get("strata"), dict)
+                and outcome["strata"].get(dimension) == value
+            ]
+            counts = {
+                name: sum(item["outcome"] == name for item in selected)
+                for name in (
+                    "true_positive",
+                    "true_negative",
+                    "false_positive",
+                    "false_negative",
+                )
+            }
+            true_positive = counts["true_positive"]
+            true_negative = counts["true_negative"]
+            false_positive = counts["false_positive"]
+            false_negative = counts["false_negative"]
+            rows.append(
+                {
+                    "dimension": dimension,
+                    "value": value,
+                    "labels": len(selected),
+                    "confusion_matrix": counts,
+                    "precision": _ratio(true_positive, true_positive + false_positive),
+                    "recall": _ratio(true_positive, true_positive + false_negative),
+                    "false_positive_rate": _ratio(
+                        false_positive, false_positive + true_negative
+                    ),
+                }
+            )
+    return rows

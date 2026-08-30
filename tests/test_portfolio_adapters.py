@@ -19,6 +19,7 @@ from py_security_suite.adapters.assurance_evidence import (
     IastAdapter,
     InTotoAdapter,
     KubescapeAdapter,
+    LlmAdversarialAdapter,
     MobSfAdapter,
     NativeSanitizersAdapter,
     NucleiAdapter,
@@ -476,12 +477,22 @@ class PortfolioAdapterTests(unittest.TestCase):
             (root / ".clusterfuzzlite").mkdir()
             self.assertIsNone(fuzz.not_applicable_reason(root))
 
+            adversarial = LlmAdversarialAdapter(ToolConfig(), 4096)
+            self.assertIn(
+                "no LLM adversarial policy",
+                adversarial.not_applicable_reason(root) or "",
+            )
+            (root / "security").mkdir()
+            (root / "security" / "llm-adversarial-policy.json").write_text(
+                "{}", encoding="utf-8"
+            )
+            self.assertIsNone(adversarial.not_applicable_reason(root))
+
             self.assertIsNone(
                 AuthorizationSecurityAdapter(ToolConfig(), 4096).not_applicable_reason(
                     root
                 )
             )
-            (root / "security").mkdir()
             (root / "security" / "authorization-contract.json").write_text(
                 "{}", encoding="utf-8"
             )
@@ -585,6 +596,11 @@ class PortfolioAdapterTests(unittest.TestCase):
             ),
             (OciImageAdapter, "supply-chain", "container-image-security"),
             (YaraAdapter, "security", "malware-scanning"),
+            (
+                LlmAdversarialAdapter,
+                "security",
+                "llm-guided-adversarial-code-testing",
+            ),
         ]
         for adapter_type, domain, area in adapters:
             adapter = adapter_type(ToolConfig(), 4096)

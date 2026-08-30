@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:static-architecture:1.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "analysis", "complete", "files_analyzed", "modules_detected", "edges_detected", "cycles_detected", "fan_out_hotspots_detected", "hub_modules_detected", "unstable_dependency_edges_detected", "cycles", "fan_out_hotspots", "module_metrics", "hub_modules", "unstable_dependency_edges", "baseline_path", "baseline_present", "new_dependency_edges", "policy_path", "policy_present", "policy_violations_detected", "policy_violations", "parse_errors", "truncated", "thresholds", "claim_boundary"],
+  "properties": {
+    "schema_version": {"const": "1.1"},
+    "analysis": {"const": "python-local-module-dependency-graph"},
+    "complete": {"type": "boolean"},
+    "files_analyzed": {"type": "integer", "minimum": 0, "maximum": 50000},
+    "modules_detected": {"type": "integer", "minimum": 0, "maximum": 50000},
+    "edges_detected": {"type": "integer", "minimum": 0, "maximum": 250000},
+    "cycles_detected": {"type": "integer", "minimum": 0},
+    "fan_out_hotspots_detected": {"type": "integer", "minimum": 0},
+    "hub_modules_detected": {"type": "integer", "minimum": 0},
+    "unstable_dependency_edges_detected": {"type": "integer", "minimum": 0},
+    "cycles": {"type": "array", "maxItems": 500, "items": {"$ref": "#/$defs/cycle"}},
+    "fan_out_hotspots": {"type": "array", "maxItems": 500, "items": {"$ref": "#/$defs/fanout"}},
+    "module_metrics": {"type": "array", "maxItems": 50000, "items": {"$ref": "#/$defs/metric"}},
+    "hub_modules": {"type": "array", "maxItems": 500, "items": {"$ref": "#/$defs/metric"}},
+    "unstable_dependency_edges": {"type": "array", "maxItems": 1000, "items": {"$ref": "#/$defs/unstableEdge"}},
+    "baseline_path": {"type": ["string", "null"], "maxLength": 1000},
+    "baseline_present": {"type": "boolean"},
+    "new_dependency_edges": {"type": "array", "maxItems": 1000, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 2200}},
+    "policy_path": {"type": ["string", "null"], "maxLength": 1000},
+    "policy_present": {"type": "boolean"},
+    "policy_violations_detected": {"type": "integer", "minimum": 0},
+    "policy_violations": {"type": "array", "maxItems": 1000, "items": {"$ref": "#/$defs/policyViolation"}},
+    "parse_errors": {"$ref": "#/$defs/strings"},
+    "truncated": {"type": "boolean"},
+    "thresholds": {"type": "object", "additionalProperties": false, "required": ["module_fan_out", "hub_total_degree", "instability_delta"], "properties": {"module_fan_out": {"type": "integer", "minimum": 1, "maximum": 50000}, "hub_total_degree": {"type": "integer", "minimum": 1, "maximum": 50000}, "instability_delta": {"type": "number", "minimum": 0, "maximum": 1}}},
+    "claim_boundary": {"type": "string", "minLength": 1, "maxLength": 2000}
+  },
+  "$defs": {
+    "strings": {"type": "array", "maxItems": 1000, "items": {"type": "string", "minLength": 1, "maxLength": 2000}},
+    "cycle": {"type": "object", "additionalProperties": false, "required": ["modules", "edges"], "properties": {"modules": {"type": "array", "minItems": 2, "maxItems": 50000, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 1000}}, "edges": {"type": "array", "minItems": 2, "maxItems": 250000, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 2200}}}},
+    "fanout": {"type": "object", "additionalProperties": false, "required": ["module", "dependencies", "count"], "properties": {"module": {"type": "string", "minLength": 1, "maxLength": 1000}, "dependencies": {"type": "array", "minItems": 1, "maxItems": 50000, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 1000}}, "count": {"type": "integer", "minimum": 1, "maximum": 50000}}},
+    "metric": {"type": "object", "additionalProperties": false, "required": ["module", "fan_in", "fan_out", "instability"], "properties": {"module": {"type": "string", "minLength": 1, "maxLength": 1000}, "fan_in": {"type": "integer", "minimum": 0, "maximum": 50000}, "fan_out": {"type": "integer", "minimum": 0, "maximum": 50000}, "instability": {"type": "number", "minimum": 0, "maximum": 1}}},
+    "unstableEdge": {"type": "object", "additionalProperties": false, "required": ["source", "destination", "source_instability", "destination_instability"], "properties": {"source": {"type": "string", "minLength": 1, "maxLength": 1000}, "destination": {"type": "string", "minLength": 1, "maxLength": 1000}, "source_instability": {"type": "number", "minimum": 0, "maximum": 1}, "destination_instability": {"type": "number", "minimum": 0, "maximum": 1}}},
+    "policyViolation": {"type": "object", "additionalProperties": false, "required": ["kind", "source", "destination", "rule"], "properties": {"kind": {"enum": ["forbidden-edge", "layer-dependency"]}, "source": {"type": "string", "minLength": 1, "maxLength": 1000}, "destination": {"type": "string", "minLength": 1, "maxLength": 1000}, "rule": {"type": "string", "minLength": 1, "maxLength": 2000}}}
+  }
+}

@@ -6,7 +6,10 @@ from pathlib import Path
 from unittest.mock import patch
 
 from py_security_suite.path_safety import (
+    HeldParentDirectory,
     is_link_like,
+    open_regular_file,
+    read_regular_file,
     resolve_regular_directory,
     resolve_regular_file,
     resolve_unlinked_path,
@@ -78,6 +81,60 @@ class PathSafetyTests(unittest.TestCase):
             escaped = root / ".." / "outside.json"
             with self.assertRaisesRegex(ValueError, "cannot traverse outside"):
                 resolve_unlinked_path(escaped, "evidence", boundary=root)
+
+    def test_bounded_read_uses_one_regular_file_handle(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = Path(directory) / "evidence.json"
+            evidence.write_bytes(b"trusted")
+
+            resolved, payload = read_regular_file(evidence, "evidence", maximum_bytes=7)
+
+            self.assertEqual(resolved, evidence.resolve())
+            self.assertEqual(payload, b"trusted")
+
+    def test_regular_file_open_rejects_invalid_limits_and_non_files(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with self.assertRaisesRegex(ValueError, "maximum_bytes must be positive"):
+                with open_regular_file(root, "evidence", maximum_bytes=0):
+                    pass
+            with self.assertRaisesRegex(ValueError, "not a regular file|opened safely"):
+                with open_regular_file(root, "evidence", maximum_bytes=10):
+                    pass
+
+    def test_open_file_detects_ancestor_identity_change(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = Path(directory) / "evidence.json"
+            evidence.write_bytes(b"trusted")
+            with (
+                patch(
+                    "py_security_suite.path_safety._component_identities",
+                    side_effect=[(("before", 1, 1, 0),), (("after", 1, 2, 0),)],
+                ),
+                self.assertRaisesRegex(ValueError, "path components changed"),
+            ):
+                with open_regular_file(evidence, "evidence", maximum_bytes=10) as (
+                    _,
+                    handle,
+                    _,
+                ):
+                    self.assertEqual(handle.read(), b"trusted")
+
+    def test_bounded_read_rejects_oversized_payload(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = Path(directory) / "evidence.json"
+            evidence.write_bytes(b"too-large")
+            with self.assertRaisesRegex(ValueError, "exceeds 3 bytes"):
+                read_regular_file(evidence, "evidence", maximum_bytes=3)
+
+    def test_held_parent_mutations_cannot_escape_pinned_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).absolute()
+            held = HeldParentDirectory(root, None)
+            with self.assertRaisesRegex(ValueError, "rename must remain"):
+                held.rename(root / "source", root.parent / "destination")
+            with self.assertRaisesRegex(ValueError, "deletion must remain"):
+                held.remove_tree(root.parent / "outside")
 
 
 if __name__ == "__main__":

@@ -12,13 +12,14 @@ from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from . import __version__
+from .version import __version__
 from .execution import CommandEnvironment, resolve_executable, run_command, sha256_file
 from .models import ScanManifest, json_ready
 from .path_safety import is_link_like as _is_link_like
 from .path_safety import resolve_regular_directory
 from .path_safety import resolve_regular_file as _regular_file
 from .path_safety import resolve_unlinked_path as _resolve_evidence_root
+from .path_safety import sync_parent_directory
 from .source_inventory import verify_source_inventory_file
 
 _MAX_FILE_BYTES = 128 * 1024 * 1024
@@ -338,18 +339,23 @@ def _publish_provenance_staging(
 ) -> None:
     if not output.exists() and not _is_link_like(output):
         staging.replace(output)
+        sync_parent_directory(output, "release provenance publication")
         return
     _prepare_provenance_directory(output, overwrite)
     backup = Path(tempfile.mkdtemp(prefix=f".{output.name}.backup-", dir=output.parent))
     backup.rmdir()
     output.replace(backup)
+    sync_parent_directory(output, "release provenance backup")
     try:
         staging.replace(output)
+        sync_parent_directory(output, "release provenance publication")
     except Exception:
         if backup.exists() and not output.exists():
             backup.replace(output)
+            sync_parent_directory(output, "release provenance rollback")
         raise
     shutil.rmtree(backup)
+    sync_parent_directory(output, "release provenance cleanup")
 
 
 def _preflight_signing(
@@ -502,18 +508,23 @@ def _read_signing_password(path: Path | None) -> str:
 def _publish_staging(staging: Path, output: Path, *, overwrite: bool) -> None:
     if not output.exists() and not _is_link_like(output):
         staging.replace(output)
+        sync_parent_directory(output, "attestation publication")
         return
     _prepare_directory(output, overwrite)
     backup = Path(tempfile.mkdtemp(prefix=f".{output.name}.backup-", dir=output.parent))
     backup.rmdir()
     output.replace(backup)
+    sync_parent_directory(output, "attestation backup")
     try:
         staging.replace(output)
+        sync_parent_directory(output, "attestation publication")
     except Exception:
         if backup.exists() and not output.exists():
             backup.replace(output)
+            sync_parent_directory(output, "attestation rollback")
         raise
     shutil.rmtree(backup)
+    sync_parent_directory(output, "attestation cleanup")
 
 
 def verify_attestation(

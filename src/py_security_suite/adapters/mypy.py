@@ -45,7 +45,7 @@ class MypyAdapter(ScannerAdapter):
             "--no-incremental",
             "--no-site-packages",
             "--ignore-missing-imports",
-            "--follow-imports=skip",
+            "--follow-imports=normal",
             "--show-error-codes",
             "--show-column-numbers",
             "--no-error-summary",

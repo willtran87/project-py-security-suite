@@ -51,7 +51,7 @@ class RadonAdapter(ScannerAdapter):
             path = normalize_repo_path(target, str(raw_path))
             for block in _flatten_blocks(blocks):
                 rank = str(block.get("rank") or "C").upper()
-                if rank not in {"E", "F"}:
+                if rank not in {"D", "E", "F"}:
                     continue
                 complexity = _integer(block.get("complexity"))
                 line = _integer(block.get("lineno"))

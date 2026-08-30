@@ -1,6 +1,6 @@
 # Production security gate
 
-Last reviewed: 2026-08-21
+Last reviewed: 2026-08-26
 
 ## Purpose
 
@@ -29,17 +29,30 @@ launched process token to prove AppContainer membership and zero capabilities,
 then proves denial of multiple host-file canaries and loopback network access;
 Job Object resource controls remain a separate availability mechanism.
 
-- the locked test environment runs on Python 3.11, 3.12, and 3.13;
+- the locked test environment runs on Python 3.11 through 3.14 on Linux, with
+  Python 3.14 parity lanes on Windows and macOS;
+- the full suite enforces at least 80% combined line/branch coverage, and pull
+  requests enforce at least 90% coverage on changed executable lines;
 - an explicit Ruff baseline covers correctness, async hazards, common bugs,
   broad exception handling, and Bandit-derived security rules;
 - zizmor audits every GitHub workflow with its pedantic ruleset;
-- mypy checks production source and the Pages audit hooks;
+- mypy checks production source and the Pages audit hooks, while a separately
+  pinned strict Pyright gate covers the trust, replay, publication,
+  effectiveness, performance, architecture-policy, and API-policy boundaries;
 - `pip-audit` evaluates platform-resolved, hash-pinned exports of both the
   scanner and companion locked dependency graphs on Linux, Windows, and macOS
-  with Python 3.11 and 3.13, excluding only the unpublished local projects;
-- distributions are built from the locked checkout; and
-- CodeQL runs the Python `security-extended` query suite and uploads SARIF to
-  GitHub code scanning.
+  with Python 3.11, 3.13, and 3.14, excluding only the unpublished local projects;
+- distributions are built from the locked checkout;
+- CodeQL runs the Python `security-extended` query suite, discovers every
+  supported non-Python source language, selects no-build or autobuild extraction
+  as required, and uploads separately categorized SARIF;
+- pull-request, main-branch, and daily parser fuzzing exercise a discovered
+  matrix covering binary ZIP/TAR structure, defused XML, strict JSON, SARIF,
+  and every evidence adapter with cross-invocation state checks; pull requests
+  use eight complete adapter shards while main and daily runs retain individual
+  adapter campaigns; evolved corpora are retained for 180 days; and
+- weekly deep assurance builds and self-scans the scanner container and
+  mutation-tests security-critical archive, path, artifact, and JSON code.
 
 Secret-bearing findings cross an additional fail-closed boundary before
 correlation or derived analysis: scanner-controlled titles, descriptions,
@@ -55,20 +68,46 @@ Python lock, the companion runtime lock, and the separately hashed documentation
 seven-day version-update cooldown. Security updates are not a replacement for
 the locked dependency audit.
 
+## Protected external controls
+
+Three workflows intentionally remain inert until their fixed GitHub
+Environments, reviewers, runner labels, variables, and secrets are configured:
+
+- `external-security-assurance.yml` requires an organization-hashed isolation
+  verifier, a complete native production bundle, a separately governed
+  schema-2.0 holdout corpus, trusted time, a consume-once replay service, and an
+  allowlisted active-test target. It directly runs stateful Schemathesis and
+  requires an approved producer to execute Nuclei, ZAP, RESTler, OAST, IAST,
+  and MobSF before their raw output crosses the bounded normalizers.
+- `external-release-verification.yml` runs only on a protected
+  `pysec-independent-builder` runner. It hashes the provider-controlled Python,
+  `uv`, and GitHub CLI, verifies the exact upstream run and attestations, then
+  requires a third wheel build to match byte-for-byte.
+- `publish-pypi.yml` runs only behind `pypi-production`. It requires separately
+  approved wheel/sdist hashes, verifies provenance and archive internals, uses
+  PyPI Trusted Publishing, downloads both public files, rechecks their hashes,
+  and installs and executes the exact public wheel.
+
+Missing protected configuration is a hard failure. Repository code cannot
+provision an independent provider, approve its own target or holdout corpus, or
+review its own publication; these workflows enforce the handoff contract.
+
 ## Release flow
 
 ```mermaid
 flowchart LR
-    Clone["Full immutable VCS checkout"] --> Static["Production profile<br/>offline static gate"]
+    Clone["Full immutable VCS checkout"] --> Static["Production profile<br/>offline static + contextual analysis"]
     Lock["Approved dependency lock<br/>and advisory snapshots"] --> Static
     Static --> Build["Hermetic build"]
     Build --> Artifact["Final wheel, image, or deployment artifact"]
     Artifact --> ArtifactScan["Release profile<br/>SBOM | vulnerability | structure | provenance"]
     Artifact --> Dynamic["Sandboxed tests, property testing,<br/>fuzzing, and applicable DAST"]
     ArtifactScan --> Provenance["Digest, signature, and<br/>SLSA/in-toto provenance"]
-    Dynamic --> Decision{"Risk owner<br/>approves release?"}
+    Artifact --> External["Independent build and release verification"]
+    Dynamic --> Decision{"Protected reviewer and<br/>risk owner approve?"}
     Provenance --> Decision
     Static --> Decision
+    External --> Decision
     Decision -->|All evidence passes| Promote["Production promotion"]
     Decision -->|Finding or missing evidence| Stop["Block release"]
 ```
@@ -145,7 +184,7 @@ Passport evidence. See [Governed release readiness](release-readiness.md).
 
 | Layer | Suite coverage | Required production companion |
 |---|---|---|
-| Python source and structure | Bandit, Semgrep, Ruff, Pylint, mypy, Pyright, deptry, Vulture, Radon, Tach, reachability, Pysa, CodeQL through `run-codeql` | Review configured dynamic roots, unreachable-island candidates, sensitive business logic, authorization, and intentional architecture changes |
+| Python source and structure | Bandit, Semgrep, Ruff, Pylint, mypy, Pyright, deptry, Vulture, Radon, Tach, reachability, Pysa, CodeQL through `run-codeql`, framework-model canaries, code/OpenAPI/auth contract drift, exact vulnerable-symbol calls, cognitive complexity and semantic clones, import cycles/hubs/instability, and bounded co-change hotspots | Review configured dynamic roots, reflection and runtime dispatch, business-logic and authorization abuse, architectural intent, and independently labeled false-negative/false-positive holdouts |
 | Secrets | detect-secrets, Gitleaks, and TruffleHog | Full history, rotation workflow, and secret-manager controls |
 | Sensitive-data disclosure | Semgrep taint/configuration rules, organization Pysa/CodeQL models, Graphify, reachability, and SDK/sink inventory | Logging, telemetry, request-body, URL-query, client-error, and automatic-PII minimization; approved transforms, third-party boundaries, retention, and synthetic-canary verification |
 | Dependencies | OSV-Scanner, GuardDog, CycloneDX | Governed lock updates, advisory freshness SLA, dependency-owner review, and a raw-output-bound OSV receipt naming and hashing every covered manifest |
@@ -289,7 +328,7 @@ additional-properties-closed contracts.
 Production and release decisions always require schema-2.0 labeled-corpus
 effectiveness evidence with a distinct training digest, an exact holdout-label
 digest, a lifecycle-valid quorum from at least two trusted organizations, at
-least 25 labels, 10 positive labels, 10 negative labels, two tools, and five
+least 500 labels, 200 positive labels, 200 negative labels, three tools, and 50
 labels for each required tool. CWE, language, parser, boundary, severity, and
 mutation diversity minimums are enforced, and every required tool needs both
 positive and negative cases. Omitting CLI flags cannot disable this gate.

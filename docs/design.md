@@ -1,7 +1,7 @@
 # Python Security Suite design
 
 Status: alpha foundation  
-Last reviewed: 2026-08-13
+Last reviewed: 2026-08-30
 
 ## Purpose
 
@@ -42,13 +42,28 @@ flowchart LR
         Install["install-native-tools.ps1<br/>hash verification + pip --no-index"]
         Project["Python project<br/>read-only by policy"]
         Suite["Python Security Suite"]
-        Scanners["64 governed adapters<br/>security | quality | testing | policy | architecture | supply chain | artifact | governance"]
-        Reports["Markdown | HTML | SARIF | SonarQube | JSON<br/>SBOM + delta + intelligence + Security Passport"]
+        Scanners["89 governed adapters<br/>security | quality | testing | policy | architecture | supply chain | artifact | governance"]
+        Analyzers["Native contextual analyzers<br/>framework | contract | validation | health | architecture | domain assurance"]
+        Reports["Markdown | HTML | SARIF | SonarQube | JSON<br/>SBOM + validation + architecture + domain coverage + Security Passport"]
+        Standards["481 versioned standards references + 147 assurance packs<br/>deterministic catalog export + verified source-manifest compiler<br/>publisher quarantine + signed promotion"]
+        Benchmarks["182 governed benchmark families + 100 maintained adapters<br/>multi-fixture + pinned semantic-oracle admission<br/>AST + lexical + control-flow near-duplicate evidence<br/>exact equal-tail/mean statistics + full SLSA materials"]
+        BenchmarkTrust["Root-signed external benchmark trust<br/>lifecycle-aware downstream receipt admission<br/>leased intent/checkpoint recovery<br/>HSM/KMS receipts + trusted-time rotation anchors"]
+        AssuranceCase["ISO 15026 + SACM 2.3 assurance case<br/>claims + evidence + defeaters + confidence + review"]
+        Priority["CVSS v4 + SSVC<br/>source evidence only"]
+        OSCAL["OSCAL 1.2.2 lifecycle<br/>7 official-schema-valid models"]
         Contracts["Version-explicit JSON Schemas<br/>installed package resources"]
         Install --> Suite
         Project --> Suite
         Suite --> Scanners
         Scanners --> Suite
+        Suite --> Analyzers
+        Analyzers --> Suite
+        Standards --> Suite
+        Benchmarks --> Suite
+        BenchmarkTrust --> Benchmarks
+        AssuranceCase --> Suite
+        Suite --> Priority
+        Suite --> OSCAL
         Suite --> Reports
         Suite --> Contracts
     end
@@ -60,6 +75,127 @@ flowchart LR
     Reports --> GitHub
     Contracts --> GitHub
 ```
+
+The adapter portfolio and the native contextual analyzers are different
+layers. Adapters acquire or normalize independent tool and companion evidence;
+native analyzers operate on the sealed source snapshot and retained artifacts.
+`capability-manifest.json` records the former's selection and execution truth,
+while the contextual artifacts state their own bounded inputs, parse errors,
+and completeness.
+
+Industry assurance is also layered deliberately. Stable publications enter the
+versioned crosswalk; organization-selected profiles turn applicable references
+into controls and procedures; maintained adapters define measurable evidence
+contracts; and authorized disposable lanes execute adversarial or conformance
+cases. A2A, CSP/SRI, TLP/IEP/VERIS, SESIP, DORA, FFIEC, C5, and FCC coverage
+therefore does not imply certification or regulatory approval. Draft CSP3,
+SRI2, Trusted Types, and BSI TR-03183 remain in the non-normative watchlist,
+and the retired FFIEC CAT is excluded from current claims.
+
+Enhanced benchmark execution is an explicit guarded transaction. Code cannot
+skip or repeat a phase, and the replay transition is committed before any
+untrusted stage runs.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Authorized
+    Authorized --> ManifestAdmitted
+    ManifestAdmitted --> TrustAdmitted
+    TrustAdmitted --> EvidenceVerified
+    EvidenceVerified --> ReplayCommitted
+    ReplayCommitted --> StagesExecuted
+    StagesExecuted --> InputsReverified
+    InputsReverified --> Scored
+    Scored --> ReceiptAssembled
+    ReceiptAssembled --> ReceiptSigned: enhanced schema
+    ReceiptAssembled --> Completed: legacy schema
+    ReceiptSigned --> Completed
+    Authorized --> Failed: admission or execution error
+    ManifestAdmitted --> Failed: admission or execution error
+    TrustAdmitted --> Failed: admission or execution error
+    EvidenceVerified --> Failed: admission or execution error
+    ReplayCommitted --> Failed: admission or execution error
+    StagesExecuted --> Failed: admission or execution error
+```
+
+### Contextual analysis and validation
+
+```mermaid
+flowchart TB
+    Source["Sealed source snapshot"] --> Frameworks["Framework model coverage<br/>models + positive/negative canaries"]
+    Source --> Contracts["Application contracts<br/>code/OpenAPI/auth + exact advisory calls"]
+    OpenAPI["OpenAPI + approved baseline"] --> Contracts
+    ContractPolicy["Declared endpoint/test obligations"] --> Contracts
+    Contracts --> Scenarios["Actionable scenarios<br/>actor + oracle + subject + repeat"]
+    Scenarios --> CapabilityRoute{"Consumer capability"}
+    CapabilityRoute --> AuthTasks["Authorization tasks<br/>allow | deny | tenant | replay"]
+    CapabilityRoute --> PropertyTasks["Property tasks<br/>Schemathesis | Hypothesis"]
+    Source --> Health["Code health<br/>complexity + async/exception/state risks + clones"]
+    HealthPolicy["Code-health threshold policy"] --> Health
+    Health --> RankedHealth["Ranked bounded detail + root-cause review queue<br/>family + symbol + symptoms + priority"]
+    Source --> Architecture["Static architecture<br/>module/symbol calls + unified entry points + dynamic imports + policy"]
+    Reachability["Semantic reachability<br/>typed receivers + framework dispatch"] --> Architecture
+    NativePolicy["Native architecture policy"] --> PolicySelect{"Native present?"}
+    TachPolicy["Tach fallback policy"] --> PolicySelect
+    PolicySelect --> Architecture
+    EdgeBaseline["Approved edge baseline"] --> Architecture
+    Source --> Domains["Cross-domain applicability<br/>33 governed assurance areas"]
+    Correlate --> Findings["Normalized findings"]
+    Findings --> LLMPlan["LLM adversarial plan<br/>digest context + objective oracle"]
+    Domains --> LLMPlan
+    Contracts --> LLMPlan
+    RankedHealth --> LLMPlan
+    Architecture --> LLMPlan
+    LLMPlan --> Model["External LLM planner<br/>repository text remains untrusted data"]
+    Model --> Proposal["Schema-bound proposal<br/>plan + source + model + prompt digests"]
+    Proposal --> ProposalCheck["Confined validator<br/>execution_authorized = false"]
+    ProposalCheck --> Approval{"Human execution approval"}
+    Approval --> Sandbox["Disposable network-denied lane<br/>read-only source + generated-tests writes"]
+    Sandbox --> AdversarialTools["Deterministic tools + application-owned oracle"]
+    AdversarialTools --> Proof["Authenticated source-bound proof<br/>negative control + mutation + failed case"]
+    Proof --> Findings
+    DomainPolicy["Domain obligations<br/>owner + subjects + requirements"] --> Domains
+    ToolEvidence --> Domains
+    Domains --> DomainStatus["Source/artifact/test-bound<br/>coverage + policy gaps"]
+    History["Bounded sealed Git history"] --> Temporal["Architecture history<br/>co-change + finding hotspots"]
+    ToolEvidence["Normalized scanner evidence"] --> Correlate["Conservative finding correlation<br/>semantic anchor | flow sink | location"]
+    Frameworks --> Correlate
+    Contracts --> Correlate
+    AuthTasks --> Reports["Contextual artifact summaries"]
+    PropertyTasks --> Reports
+    RankedHealth --> Correlate
+    Architecture --> Refactor["Ranked refactoring targets<br/>exact contracts kept distinct from heuristics"]
+    Refactor --> Correlate
+    Temporal --> Correlate
+    DomainStatus --> Correlate
+    DomainStatus --> Reports
+    Correlate --> Validation["Finding validation<br/>independent proof dimensions"]
+    AuthTasks --> AuthorizedLane["Separate authorized execution lane"]
+    PropertyTasks --> AuthorizedLane
+    AuthorizedLane --> Runtime["Digest-bound runtime and reproduction evidence"]
+    Runtime --> Validation
+    Validation --> Policy["Policy + closure ownership"]
+    Capabilities["Profile intent + tool runs"] --> Manifest["Capability manifest"]
+    Manifest --> Policy
+```
+
+Framework, contract, and cross-domain assurance analysis run for every profile
+so model, behavioral, and specialized-domain gaps stay visible. Generated contract scenarios and their tokenized companion
+commands remain authorized-lane plans until source-bound passing evidence
+satisfies a declared obligation. Code health,
+static architecture, and architecture history run for `audit`, `quality`,
+`repo`, `comprehensive`, `production`, and `release`. Declared architecture
+violations remain distinct from heuristic topology and maintainability signals.
+Validation does not convert structural inference into exploitability: attacker
+control, path confirmation, runtime execution, harmful effect, reproduction,
+and production parity remain independent dimensions.
+
+The adversarial branch has two separate authority decisions. The proposal
+validator establishes only schema, digest, path, tool, and oracle constraints;
+it always returns `execution_authorized: false`. An externally administered
+human-approved sandbox performs any test execution. A campaign becomes a
+confirmed defect only when authenticated evidence binds the source revision,
+campaign, and exact failed ledger case.
 
 ### Evidence-plane-aware route synthesis
 
@@ -277,6 +413,65 @@ originated in organization policy. The release gate requires both plus an
 unchanged post-execution digest. This prevents a repository from approving its
 own toolchain while preserving useful local tamper detection.
 
+## Continuous assurance gates
+
+```mermaid
+flowchart LR
+    Change[Source or contract change] --> CI[Protected continuous integration]
+    CI --> Tests[Cross-platform tests]
+    CI --> Coverage[Branch + changed-line + critical-module coverage]
+    CI --> Schema[Schema/runtime + public API compatibility]
+    CI --> Architecture[Dependency graph + file/function/decision ratchets]
+    CI --> Performance[Repeated p95 + throughput + memory + growth budgets]
+    Change --> Daily[Daily parser assurance]
+    Daily --> Fuzz[Persistent coverage-guided parser fuzzing]
+    Change --> Weekly[Weekly deep assurance]
+    Weekly --> Mutation[Security-critical mutation testing]
+    Weekly --> Resilience[Timeout + flood + rollback + cleanup drills]
+    Weekly --> Providers[Protected live HSM/Vault/KMS conformance]
+    Tests --> Gate[Release evidence]
+    Coverage --> Gate
+    Schema --> Gate
+    Architecture --> Gate
+    Performance --> Gate
+    Mutation --> Gate
+    Fuzz --> Gate
+    Resilience --> Gate
+    Providers --> Gate
+```
+
+Benchmark and release command registration are isolated in
+`cli_benchmark_arguments.py` and `cli_release_arguments.py`; execution
+transitions, receipt construction, signing, scoring, and performance assurance
+remain separate modules. Shared repository traversal, governance replay,
+atomic publication, process-input policy, and diagnostic redaction are isolated
+behind focused modules. The 12,000-line assurance data block is separated into
+standards, benchmark, and profile catalogs, leaving the evaluation engine near
+5,300 lines. Tach enforces exact imports across 144 production module boundaries.
+A separate strongly-connected-component ratchet permits only one explicitly
+recorded legacy trust/runtime cycle group and rejects any new member, edge
+expansion, or additional cycle. CI also freezes concentration ceilings and rejects
+accidental file, function, or decision growth while later extractions can lower
+each ceiling without weakening behavior.
+
+The continuous gate currently protects 58 commands, 469 positional/option
+contracts, 164 immutable versioned schema contracts, three console-script
+targets, and two Python callable signatures; enforces concentration
+ceilings across 14 files, 13 functions, and 6 decision-node budgets; and repeats
+five representative workloads five times plus one isolated full-repository
+analysis pipeline. The workload suite covers 10,000-case
+strict JSON/classification scoring, canonical evidence serialization, and the
+complete bundled-schema catalog plus real production-source inventory and AST
+parsing. The isolated workload executes the actual code-health and static-
+architecture analyzers with child-process peak-memory and wall-clock budgets.
+The pull
+request gate also requires Docker/rootless-Podman, cross-platform containment,
+PostgreSQL/Kafka, and authenticated Chromium/Firefox/WebKit lanes. The browser
+gate verifies literal parametrization from the test AST and then proves every
+required engine/role combination passed from retained JUnit evidence. Protected
+provider drills remain separate because their deployment authority does not fit
+an untrusted pull-request runner.
+
 ## Runtime architecture
 
 ```mermaid
@@ -339,7 +534,8 @@ point is rehashed after execution; a mismatch or mid-scan change fails closed.
 Python console scanners can additionally pin and recheck the complete
 recursively installed distribution closure.
 
-Subprocesses receive a reduced environment, deterministic executable search
+Subprocesses reject abusive argv, timeout, output, and environment sizes before
+host interaction. They receive a reduced environment, deterministic executable search
 path, and a disposable private home, app-data, and cache root. Ambient proxy,
 loader, Python import, and user-site configuration are not forwarded. Output is
 spooled to private temporary files and the complete process tree is terminated
@@ -357,9 +553,16 @@ classifications, source and artifact package inventories, exact artifact
 digests, changed-line coverage, runtime observations, complexity, ownership,
 and graph neighborhoods. It emits explanatory triage context without changing
 scanner severity or treating missing observations as negative evidence.
-Every internal dependency is explicit, unconfigured source modules are
-forbidden, circular dependencies fail the check, and unused declarations fail
-because exact mode is enabled.
+Every top-level production module has an explicit boundary, root leakage is
+forbidden, and undeclared or unused dependencies fail because exact mode is
+enabled. The configuration/governance and adapter/repository-surface cycles have
+been eliminated; dependency-neutral governance quorum verification has also
+removed the assurance-profile module from the bootstrap cycle. The repository
+currently carries one explicit eight-module
+trust/runtime cycle-debt group. `validate_architecture_cycles.py`
+computes strongly connected components from the synchronized graph and fails on
+any expansion or new cycle; shrinking a group also fails until the baseline is
+deliberately lowered in the same reviewed change.
 
 ```mermaid
 flowchart TB
@@ -371,6 +574,10 @@ flowchart TB
     Integrations --> Services
     Integrations --> Core
     Services --> Core
+    Graph["Tach exact graph<br/>144 boundaries"] --> Debt["SCC debt ratchet<br/>1 frozen group / 8 modules"]
+    Debt -->|new or expanded cycle| Fail["CI failure"]
+    Graph --> Evidence["Schema-valid architecture assurance<br/>edges + SCCs + concentration"]
+    Evidence --> Artifact["90-day CI evidence artifact"]
 ```
 
 Tach findings use the common quality-domain contract: tool and native rule,
@@ -719,10 +926,11 @@ classDiagram
     Finding "1" --> "0..*" Citation
 ```
 
-Every finding has a stable suite ID and fingerprint. Scanner observations at
-the same path, line, and logical rule are correlated. Correlation preserves all
-unique sources and citations while selecting the strongest severity and
-confidence.
+Every finding has a stable suite ID and fingerprint. Correlation first prefers
+one exact semantic subject, then one native source-to-sink flow sink, and then
+falls back to the primary path, line, and logical rule. Ambiguous semantic or
+flow identities remain partitioned. Correlation preserves all unique sources
+and citations while selecting the strongest severity and confidence.
 
 Classifications favor native CWE metadata. Adapters add conservative mappings
 where a scanner does not supply one, such as CWE-798 for credential findings.
@@ -1040,7 +1248,7 @@ See [configuration.md](configuration.md) for the complete supported schema.
 
 The native Windows self-scan process verifies:
 
-- the `comprehensive` profile selects all 88 adapters;
+- the `comprehensive` profile selects all 89 adapters;
 - the latest readiness assessment identifies 37 applicable controls and 26
   conditional or content-not-applicable controls, with no unavailable scanner;
 - Pylint, Radon, Ruff formatting, coverage, and JUnit adapters executed through

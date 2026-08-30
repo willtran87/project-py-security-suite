@@ -1,6 +1,34 @@
 # Detection effectiveness and operational coverage
 
-Last reviewed: 2026-08-24
+Last reviewed: 2026-08-30
+
+The benchmark semantic canonicalizer is regression-calibrated against the
+canonical-digest-pinned multilingual fixture at
+[`tests/fixtures/semantic-calibration-1.1.json`](../tests/fixtures/semantic-calibration-1.1.json).
+The schema-1.1 fixture expands its independently reviewed positive and negative
+seeds into 600 deterministic metamorphic observations across Python,
+JavaScript, TypeScript, Go, Java, and Rust. Every language must independently
+meet precision, recall, and specificity floors plus a 95% Wilson lower-bound
+floor. A sidecar pins the exact RFC 8785 canonical fixture digest, so silent
+fixture replacement fails the gate.
+Those intervals quantify repeatable mutation-matrix stability; correlated
+metamorphic variants are not represented as independent field observations.
+This repository fixture detects algorithm regressions; production effectiveness
+claims still require independently labeled, signed holdouts through the corpus
+workflow below.
+
+```mermaid
+flowchart LR
+    Seeds["Independently reviewed<br/>positive and negative seeds"] --> Expand["Deterministic metamorphic expansion<br/>600 multilingual observations"]
+    Expand --> Canonical["Semantic canonicalizer"]
+    Canonical --> PerLanguage["Per-language precision,<br/>recall, specificity, and Wilson floor"]
+    Digest["RFC 8785 fixture digest"] --> Gate{"Regression gate"}
+    PerLanguage --> Gate
+    Gate -->|pass| Regression["Algorithm regression assurance"]
+    Gate -->|fail| Stop["Block the change"]
+    Holdout["Independent signed<br/>production holdout"] --> Production["Production effectiveness claim"]
+    Regression -. does not establish .-> Production
+```
 
 The suite separates five questions that are often incorrectly collapsed into
 one score:
@@ -30,6 +58,8 @@ flowchart LR
     Corpus["Approved labeled corpus<br/>SHA-256 bound"] --> Benchmark["pysec benchmark"]
     Normalize --> Benchmark
     Benchmark --> Metrics["TP | TN | FP | FN<br/>precision | recall | specificity | F1"]
+    Floor["Production floor<br/>500 labels | 200 positive | 200 negative<br/>3 engines | 50 labels per required engine"] --> Release["release-check"]
+    Metrics --> Release
 ```
 
 ## Per-tool evidence posture
@@ -120,8 +150,10 @@ parser variant, boundary type, severity, and mutation operator. The evaluator
 rejects duplicate normalized match predicates and rejects a report finding that
 matches more than one label. These checks prevent duplicated cases, overlapping
 selectors, or one broad finding from inflating coverage and recall. Release
-readiness recomputes those
-strata from the exact label outcomes and requires at least five CWEs, two
+readiness verifies an aggregate-only coverage summary containing
+positive/negative totals, per-tool counts, and per-tool expectation classes. It
+recomputes strata from detailed schema-1.0 outcomes or verifies the signed
+schema-2.0 aggregate against the corpus diversity commitment, and requires at least five CWEs, two
 languages, two parser variants, three boundary types, three severities, and two
 non-`none` mutation operators. Every named required tool must have both a
 positive and a negative case. A schema-1.0 evaluation, a self-signed corpus, a
@@ -135,8 +167,10 @@ the authority-validation time. A rollbackable local SQLite ledger is rejected
 for schema 2.0. The service atomically consumes that report/corpus/time tuple,
 returns a deployment-pinned Ed25519 receipt and monotonic sequence, and enforces
 the configured holdout query budget. Governed output is aggregate-only: label
-identities and per-label failures are withheld to reduce tuning leakage. Release
-readiness requires both `time_authority.validated` and
+identities and per-label failures are withheld to reduce tuning leakage, while
+bounded aggregate counts remain available for release thresholds. Release
+readiness checks those totals against the corpus label count and confusion
+matrix and requires both `time_authority.validated` and
 `replay_protected` in addition to the corpus quorum.
 The evaluation retains the exact signed statement, verification key, request
 commitment, service-key identity, sequence, holdout-use count, leaf identity,
@@ -197,3 +231,14 @@ independent enterprise authority.
 `pysec release-check --minimum-effectiveness-labels N` can require this
 evaluation, its exact SHA-256, a passing verdict, a binding to the same report
 seal, and a non-trivial minimum corpus size before promotion.
+
+For meaningful empirical calibration, use a separately maintained holdout of at
+least 500 labels with balanced positive and negative controls across every
+required scanner, representative frameworks, real historical defects, parser
+variants, custom wrappers and sanitizers, and mutation operators. The built-in
+production floor now enforces 500 labels, including at least 200 positive and 200
+negative cases, three engines, and 50 labels for every required engine. It is
+still a minimum rather than proof that the sample is representative. Track
+precision, recall, false-positive rate, and
+false-negative rate per tool, rule, CWE, framework, and parser variant; do not
+replace the governed holdout with fixtures used to tune scanner rules.

@@ -1,6 +1,6 @@
 # Product enhancement matrix
 
-Last reviewed: 2026-08-10
+Last reviewed: 2026-08-27
 
 The latest findings-driven 89-item backlog is resolved in the
 [closure register](findings-closure.md), including conditional activation and
@@ -32,13 +32,13 @@ bounded handoff, but an independent enterprise control must grant approval.
 | 18 | Profile-specific gates | Implemented | Quick, comprehensive, production, and release profiles. |
 | 19 | Independent verification receipt | Implemented | Report, inspection, signing-request, and Passport verification receipts. |
 | 20 | Acceptance expiry | Implemented | Digest-bound risk-acceptance ledger with expiry and owner. |
-| 21 | Labeled detection corpus | Implemented | Bounded offline corpus and confusion-matrix evaluation. |
-| 22 | Perspective-specific effectiveness | Implemented now | Positive, negative, tool-count, named-tool, and per-tool minimum gates. |
+| 21 | Labeled detection corpus | Implemented | Bounded offline corpus and confusion-matrix evaluation; production requires at least 500 labels with 200 positive and 200 negative cases. |
+| 22 | Perspective-specific effectiveness | Implemented now | Positive, negative, three-engine, named-tool, and 50-label-per-required-engine minimum gates. |
 | 23 | Mutation evidence | Implemented | Optional `mutmut` companion adapter. |
 | 24 | Parser fuzzing | Implemented | Bounded parsing plus generative/fuzz-oriented tests. |
 | 25 | Adapter contract tests | Implemented | Shared runtime hardening and scanner-specific fixtures. |
 | 26 | Governed risk acceptance | Implemented | Exact fingerprint, scope, owner, reason, expiry, and digest. |
-| 27 | Duplicate correlation | Implemented | Normalized fingerprints retain every contributing source. |
+| 27 | Duplicate correlation | Implemented | Exact semantic subjects and native flow sinks bridge presentation-line differences; ambiguous subjects remain partitioned and every contributing source is retained. |
 | 28 | Risk thresholds | Implemented | Severity, confidence, quality, coverage, reachability, and release controls. |
 | 29 | Comparable finding baseline | Implemented now | Profile/tool-set mismatch or unverified production VCS ancestry yields `unclassified`, never false “new.” `baseline-candidate` prepares the exact approval handoff. |
 | 30 | Artifact baseline | Implemented | Artifact findings and identities participate in sealed delta evidence. |
@@ -84,10 +84,10 @@ bounded handoff, but an independent enterprise control must grant approval.
 | 70 | Relocatable scanner bundle | Implemented now | `[paths] bundle_root` and traversal-safe `@bundle/...` references remove machine-specific paths from native configurations. |
 | 71 | Offline provisioning workflow | Implemented now | `provision-plan` emits non-mutating text, strict JSON, or GitHub-ready Markdown with root-cause batches and safe argv. |
 | 72 | Multi-axis admission cards | Implemented now | Reports and `admission-decisions.json` separate source, tests, dependencies, artifacts, and governance without weakening the aggregate gate. |
-| 73 | Adapter conformance command | Implemented now | `adapter-check` emits a strict offline receipt for all 88 registry and SDK contracts without executing scanners. |
+| 73 | Adapter conformance command | Implemented now | `adapter-check` emits a strict offline receipt for all 89 registry and SDK contracts without executing scanners. |
 | 74 | Hardened CI generator | Implemented now | `generate-ci` requires immutable action pins and produces a no-install, least-privilege, fail-closed workflow for pre-provisioned isolated runners. |
 | 75 | Safe local developer hooks | Implemented now | `generate-hooks` emits local adapter/readiness diagnostics without installing dependencies, forwarding source paths, executing scanners, or claiming production isolation. |
-| 76 | Scanner bundle qualification | Implemented now | `qualify-bundle` joins all 88 adapter contracts with profile applicability, assets, exact executable identities, required readiness, and organization-approval state. |
+| 76 | Scanner bundle qualification | Implemented now | `qualify-bundle` joins all 89 adapter contracts with profile applicability, assets, exact executable identities, required readiness, and organization-approval state. |
 | 77 | Configuration validation and migration guidance | Implemented now | `config-check` emits a tolerant, strict receipt for valid, invalid, or unsupported configuration; inventories portable paths and refuses unsafe automatic semantic migration. |
 | 78 | Closed offline scanner bundle | Implemented now | `verify-native-bundle` rejects undeclared, missing, changed, linked, unsafe, or malformed content and can require no-index resolution of every declared Python environment. |
 | 79 | Behavioral scanner qualification | Implemented now | Bundle qualification 1.1 binds approved labeled-corpus evidence and its verified report, requires current unchanged scanner digests to match the measured run, and enforces fail-closed minimums while keeping execution a separate event. |
