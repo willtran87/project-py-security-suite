@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.metadata
 import json
 import os
 import signal
@@ -21,6 +22,7 @@ from py_security_suite.execution import (
     governed_asset_sha256,
     isolated_environment,
     native_runtime_closure_sha256,
+    python_runtime_closure_sha256,
     resolve_executable,
     run_command,
     sealed_governed_assets,
@@ -132,6 +134,115 @@ class IsolatedEnvironmentTests(unittest.TestCase):
                     self.assertEqual(snapshot.read_bytes(), b'{"rule":"approved"}')
                     os.chmod(snapshot, 0o600)
                     snapshot.write_bytes(b'{"rule":"tampered"}')
+
+    def test_governed_directory_snapshot_is_sealed_and_stable(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            original = Path(directory) / "rules"
+            nested = original / "nested"
+            nested.mkdir(parents=True)
+            (original / "root.json").write_bytes(b'{"rule":"root"}')
+            (nested / "child.json").write_bytes(b'{"rule":"child"}')
+            digest = governed_asset_sha256(original)
+
+            with sealed_governed_assets(
+                {"rules": original}, {"rules": digest}
+            ) as copies:
+                snapshot = copies["rules"]
+                self.assertEqual(governed_asset_sha256(snapshot), digest)
+                self.assertEqual(
+                    (snapshot / "nested" / "child.json").read_bytes(),
+                    b'{"rule":"child"}',
+                )
+
+            with sealed_governed_assets({}, {}) as copies:
+                self.assertEqual(copies, {})
+            with self.assertRaisesRegex(ValueError, "no preflight digest"):
+                with sealed_governed_assets({"rules": original}, {}):
+                    pass
+
+    def test_python_runtime_closure_binds_packages_stdlib_and_native_code(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            package_root = root / "packages"
+            stdlib = root / "stdlib"
+            package_root.mkdir()
+            stdlib.mkdir()
+            primary_file = package_root / "scanner.py"
+            dependency_file = package_root / "dependency.py"
+            native_file = root / "native-component.bin"
+            primary_file.write_bytes(b"scanner package")
+            dependency_file.write_bytes(b"dependency package")
+            native_file.write_bytes(b"native runtime")
+            (stdlib / "runtime.py").write_bytes(b"standard library")
+
+            primary = MagicMock()
+            primary.metadata = {"Name": "scanner-package"}
+            primary.files = [Path("scanner.py")]
+            primary.locate_file.side_effect = lambda relative: package_root / relative
+            primary.requires = ["dependency-package>=1", "not a requirement"]
+            dependency = MagicMock()
+            dependency.metadata = {"Name": "dependency-package"}
+            dependency.files = [Path("dependency.py")]
+            dependency.locate_file.side_effect = lambda relative: (
+                package_root / relative
+            )
+            dependency.requires = []
+            entry_point = MagicMock(name="scanner")
+            entry_point.name = "scanner"
+            entry_point.dist = primary
+            entry_points = MagicMock()
+            entry_points.select.return_value = [entry_point]
+
+            def distribution(name: str) -> MagicMock:
+                if name == "dependency-package":
+                    return dependency
+                raise importlib.metadata.PackageNotFoundError(name)
+
+            with (
+                patch(
+                    "py_security_suite.execution.importlib.metadata.entry_points",
+                    return_value=entry_points,
+                ),
+                patch(
+                    "py_security_suite.execution.importlib.metadata.distributions",
+                    return_value=[primary, dependency],
+                ),
+                patch(
+                    "py_security_suite.execution.importlib.metadata.distribution",
+                    side_effect=distribution,
+                ),
+                patch(
+                    "py_security_suite.execution.sysconfig.get_path",
+                    return_value=str(stdlib),
+                ),
+                patch(
+                    "py_security_suite.execution._native_runtime_components",
+                    return_value={native_file},
+                ),
+                patch(
+                    "py_security_suite.execution._native_dependency_closure",
+                    return_value=[native_file],
+                ),
+                patch(
+                    "py_security_suite.execution._darwin_system_runtime_record",
+                    return_value=None,
+                ),
+                patch("py_security_suite.execution._ENVIRONMENT_RUNTIME_CLOSURE", None),
+            ):
+                digest = python_runtime_closure_sha256(
+                    str(root / "scanner-script.py"),
+                    include_environment=True,
+                    refresh=True,
+                )
+                self.assertEqual(len(digest or ""), 64)
+                self.assertEqual(
+                    python_runtime_closure_sha256(
+                        str(root / "scanner-script.py"), include_environment=True
+                    ),
+                    digest,
+                )
 
     def test_ambient_proxy_configuration_is_not_forwarded(self) -> None:
         ambient = {

@@ -289,7 +289,9 @@ def _open_component_safe(path: Path, flags: int) -> int:
     return final
 
 
-def _open_windows_component_safe(path: Path, flags: int) -> int:
+def _open_windows_component_safe(  # pragma: no cover - exercised on Windows CI
+    path: Path, flags: int
+) -> int:
     """Pin all Windows components with non-delete-sharing reparse-point handles.
 
     Keeping these handles open prevents an attacker from renaming or replacing
@@ -370,7 +372,9 @@ def _open_windows_component_safe(path: Path, flags: int) -> int:
             close_handle(wintypes.HANDLE(handle_value))
 
 
-def _hold_windows_components(path: Path) -> list[int]:
+def _hold_windows_components(  # pragma: no cover - exercised on Windows CI
+    path: Path,
+) -> list[int]:
     import ctypes
     from ctypes import wintypes
 
@@ -417,7 +421,9 @@ def _hold_windows_components(path: Path) -> list[int]:
         raise
 
 
-def _close_windows_handles(handles: list[int]) -> None:
+def _close_windows_handles(  # pragma: no cover - exercised on Windows CI
+    handles: list[int],
+) -> None:
     if not handles:
         return
     import ctypes

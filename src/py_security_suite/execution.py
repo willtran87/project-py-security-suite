@@ -734,7 +734,7 @@ def _native_dependencies(path: Path, application_root: Path) -> set[Path]:
     return set()
 
 
-def _pe_dependencies(path: Path, application_root: Path) -> set[Path]:
+def _pe_dependencies(path: Path, application_root: Path) -> set[Path]:  # pragma: no cover  # fmt: skip
     import pefile  # type: ignore[import-untyped]
 
     try:
@@ -807,7 +807,7 @@ def _elf_dependencies(path: Path, application_root: Path) -> set[Path]:
     )
 
 
-def _macho_dependencies(path: Path, application_root: Path) -> set[Path]:
+def _macho_dependencies(path: Path, application_root: Path) -> set[Path]:  # pragma: no cover  # fmt: skip
     from macholib.MachO import MachO  # type: ignore[import-untyped]
 
     names = {
@@ -849,7 +849,7 @@ def _darwin_shared_cache_dependency(name: str) -> bool:
     )
 
 
-def _darwin_system_runtime_record() -> dict[str, object] | None:
+def _darwin_system_runtime_record() -> dict[str, object] | None:  # pragma: no cover
     """Bind cache-resident Mach-O dependencies to the sealed OS build identity."""
     if sys.platform != "darwin":
         return None
@@ -1343,7 +1343,7 @@ def _apply_process_resource_limits(
     return tuple(report["enforced"]), tuple(report["errors"]), None
 
 
-def _apply_windows_job_limits(
+def _apply_windows_job_limits(  # pragma: no cover - exercised on Windows CI
     process: subprocess.Popen[bytes],
     *,
     timeout_seconds: int,
@@ -1450,7 +1450,7 @@ def _apply_windows_job_limits(
     )
 
 
-def _close_windows_handle(handle: int) -> None:
+def _close_windows_handle(handle: int) -> None:  # pragma: no cover
     import ctypes
 
     kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
