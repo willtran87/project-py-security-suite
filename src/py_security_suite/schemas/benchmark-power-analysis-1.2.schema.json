@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:benchmark-power-analysis:1.2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "method", "protocol", "alpha", "sample_size",
+    "achieved_power", "hypothesis_count", "adjusted_alpha", "design_effect",
+    "analysis_plan_path", "analysis_plan_sha256", "effect_source_sha256", "sensitivity_power"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.2"},
+    "method": {"enum": ["exact-binomial-equal-tail-two-sided-bonferroni", "normal-standardized-effect-bonferroni"]},
+    "protocol": {"enum": ["classification", "detection-evaluation", "verification-competition", "test-generation", "conformance", "temporal-calibration", "stochastic-adversarial", "assessor-agreement", "biometric-performance", "proficiency-testing", "fuzzing-statistical"]},
+    "alpha": {"const": 0.05},
+    "null_rate": {"$ref": "#/$defs/probability"},
+    "alternative_rate": {"$ref": "#/$defs/probability"},
+    "standardized_effect": {"type": "number", "exclusiveMinimum": 0, "maximum": 10},
+    "sample_size": {"type": "integer", "minimum": 2, "maximum": 10000},
+    "achieved_power": {"$ref": "#/$defs/probability"},
+    "sensitivity_power": {"$ref": "#/$defs/probability"},
+    "hypothesis_count": {"type": "integer", "minimum": 1, "maximum": 128},
+    "adjusted_alpha": {"type": "number", "exclusiveMinimum": 0, "maximum": 0.05},
+    "design_effect": {"type": "number", "minimum": 1, "maximum": 100},
+    "analysis_plan_path": {"type": "string", "minLength": 1, "maxLength": 4096},
+    "analysis_plan_sha256": {"$ref": "#/$defs/sha256"},
+    "effect_source_sha256": {"$ref": "#/$defs/sha256"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"protocol": {"enum": ["classification", "detection-evaluation", "verification-competition", "test-generation", "conformance", "assessor-agreement", "biometric-performance", "proficiency-testing"]}}},
+      "then": {
+        "required": ["null_rate", "alternative_rate"],
+        "properties": {"method": {"const": "exact-binomial-equal-tail-two-sided-bonferroni"}},
+        "not": {"required": ["standardized_effect"]}
+      }
+    },
+    {
+      "if": {"properties": {"protocol": {"enum": ["temporal-calibration", "stochastic-adversarial", "fuzzing-statistical"]}}},
+      "then": {
+        "required": ["standardized_effect"],
+        "properties": {"method": {"const": "normal-standardized-effect-bonferroni"}},
+        "not": {"anyOf": [{"required": ["null_rate"]}, {"required": ["alternative_rate"]}]}
+      }
+    }
+  ],
+  "$defs": {
+    "probability": {"type": "number", "minimum": 0, "maximum": 1},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
+}

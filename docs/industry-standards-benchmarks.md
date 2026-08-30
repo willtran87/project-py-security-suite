@@ -1,5 +1,7 @@
 # Industry standards and benchmarks
 
+Last reviewed: 2026-08-30
+
 The suite keeps five assurance layers separate so that a catalog reference is
 never mistaken for test execution or certification:
 
@@ -15,7 +17,7 @@ proof that an application is vulnerability-free.
 
 ## Coverage
 
-`standards-crosswalk.json` registers 358 version-explicit references:
+`standards-crosswalk.json` registers 481 version-explicit references:
 
 - verification and test methods: OWASP ASVS 5.0, MASVS 2.1, TCASVS 5.0, WSTG
   4.2, MASTG 2.0, SCVS 1.0, and AITG 1.0;
@@ -163,18 +165,106 @@ proof that an application is vulnerability-free.
   20085 Parts 1 and 2, ISO/IEC 19795-1:2021 and 30107 Parts 3 and 4,
   ISO/IEC 20000-1 with Amendment 1:2024, ISO/IEC 27013 with Amendment 1:2024,
   and ISO/IEC 17043:2023.
+- lifecycle, quality, and enterprise risk completion: ISO/IEC/IEEE 24748-1:2024,
+  15289:2019, 16085:2021, and 90003:2018; ISO/IEC 25002:2024, 25021:2012,
+  25022:2016, and 25051:2014; and NIST SP 800-30r1 and SP 800-39;
+- current privacy, data, and AI governance: ISO/IEC 29100:2024, 29151:2026,
+  27557:2022, TR 27550:2019, 38505-1:2026, 22989:2022, 23053:2022, and
+  38507:2022; and
+- protective architecture and practical review guidance: ISO 22340:2024,
+  OWASP Code Review Guide 2.0, the policy-pinned 2026 OWASP Cornucopia
+  Companion Edition, and CIS/SAFECode Secure by Design 1.1;
+- enterprise cyber-risk integration: the complete NIST IR 8286 Revision 1
+  series for risk identification, estimation, prioritization, response,
+  governance roll-up, and business-impact analysis, plus CIS RAM 2.2;
+- SQuaRE governance and differentiated AI benchmarking: ISO/IEC 25001:2014,
+  confirmed in 2026, and ISO/IEC TR 42106:2026;
+- AI data, transparency, explanation, control, bias, and safety: ISO/IEC
+  8183:2023, 12792:2025, TS 6254:2025, TS 8200:2024, TS 12791:2024, and
+  TR 5469:2024; and
+- licensed enterprise governance and architecture: COBIT 2019, TOGAF 10th
+  Edition with Technical Corrigendum 1, ArchiMate 3.2, and Open FAIR 2.0,
+  represented only through identifiers and organization-supplied licensed
+  requirement digests;
+- AI application verification, quality, use cases, and ethical engineering:
+  OWASP AISVS 1.0, ISO/IEC TS 25058:2024, ISO/IEC TR 24030:2024 and
+  27563:2023, and IEEE 7000/7001/7002/7003/7009;
+- product certification and federal procurement assurance: the EUCC scheme
+  with its 2025 amendment and the policy-pinned CISA Secure Software
+  Development Attestation common form;
+- organizational IT, quality, and CSF profile governance: ISO/IEC 38500:2024,
+  ISO 9001:2026, ISO/IEC 27000:2026, and NIST SP 1301; and
+- privacy operationalisation and PET engineering: ISO/IEC 27561:2024,
+  ISO/IEC TS 27564:2025, and ISO/IEC 27565:2026 zero-knowledge-proof guidance;
+- agent-tool protocol security: the stable MCP 2025-11-25 protocol revision
+  plus a date-pinned OWASP MCP Security Cheat Sheet, with authorization,
+  capability, tool, resource, prompt, task, sampling, and proxy boundaries;
+- provider-native cloud posture: AWS Foundational Security Best Practices 1.0,
+  Microsoft Cloud Security Benchmark v1, and the reviewed Google Cloud
+  Enterprise Foundations Blueprint, supplementing CSA, CIS, and ISO controls;
+- operational response maturity and memory safety: FIRST CSIRT Services
+  Framework 2.1, PSIRT Services Framework 1.1 and PSIRT Maturity, plus the
+  CISA memory-safe roadmap and buffer-overflow guidance;
+- organizational AI impact and resilience: IEEE 2863-2026, IEEE 7010-2020,
+  ISO 22316:2017, and ISO/TS 22317:2021; and
+- project and ISMS implementation practices: OpenSSF Best Practices Badge
+  criteria, ISO/IEC 27003:2017, and ISO/IEC TS 27022:2021.
+- interoperable agent-to-agent security: A2A Protocol 1.0.0 identity,
+  Agent Card, transport, task, message, artifact, streaming, webhook, and
+  delegated-authorization boundaries, kept separate from MCP tool-protocol
+  assurance;
+- IoT platform evaluation and composition: GlobalPlatform SESIP 1.2 and
+  EN 17927:2023 security-functional, assurance, evaluation, certification,
+  composition, vulnerability, change, and expiry evidence;
+- controlled threat-information exchange and incident analysis: FIRST TLP 2.0,
+  FIRST IEP 2.0, and policy-pinned VERIS 1.3.6 label, redistribution,
+  deidentification, schema, provenance, and analytic-equivalence controls;
+- stable web runtime defenses: W3C CSP Level 2 and Subresource Integrity 1.0
+  policy enforcement, integrity, redirect, CORS, substitution, multi-policy,
+  reporting, fallback, and cross-browser evidence;
+- regulated financial and cloud assurance: the DORA Level 2 technical acts for
+  ICT risk, incident classification/reporting, provider registers, and TLPT;
+  the current FFIEC Development, Acquisition, and Maintenance, Architecture,
+  Infrastructure, and Operations, and Information Security booklets; and BSI
+  C5:2020 cloud-control attestation; and
+- consumer-IoT labeling: FCC 24-26 Cyber Trust Mark product, laboratory,
+  applicant, QR, registry, renewal, withdrawal, and anti-forgery boundaries.
+- digital credentials and financial-grade identity: W3C Verifiable Credentials
+  Data Model 2.0, Data Integrity 1.0, Bitstring Status List 1.0, final OpenID4VP,
+  OpenID4VCI, HAIP, and FAPI 2.0 profile, attacker model, and message signing;
+- operational cloud and Kubernetes hardening: CISA SCuBA Microsoft 365 and
+  Google Workspace baselines plus CIS Kubernetes Benchmark 2.0.1;
+- privacy, runtime, and analysis-method assurance: LINDDUN PRO privacy threat
+  modeling and independently scored SAST, DAST, IAST, and RASP evidence;
+- conditional industry schemes: GSMA NESAS 3.0 with product-applicable 3GPP
+  SCAS, VDA ISA 6.0.3/TISAX, PCI MPoC/P2PE, and C2PA 2.4 content credentials.
 
 `mapping_status=evidence-surface-present` means only that a related artifact
 exists. Taxonomy versions marked `policy-pinned` must be selected and approved
 by the organization rather than silently floating to a network release.
-The crosswalk also carries a non-normative publication watchlist. ISO/IEC 27090,
+The crosswalk also carries a non-normative publication watchlist. Draft NIST
+SSDF 1.2, NIST SP 800-154, and ISO/IEC 25000-22 remain quarantined while the
+final NIST SSDF 1.1 and ISO/IEC 25022:2016 baselines remain normative. ISO/IEC 27090,
 NIST Privacy Framework 1.1, ISO/IEC 42119 parts 3, 7, and 8, the next ISO/IEC
 27004 and ISO 31000 editions, EN 301 549 V4, TCG DICE 1.3, and draft
 ISO/IEC/IEEE 29119-14, the next ISO/IEC/IEEE 15026-4 edition, and IEEE P1012
 remain outside normative claims until final publication, version pinning, and
-legal review. OWASP ISVS stays on the watchlist while its
+legal review. ISO/IEC 42105 human oversight and ISO/IEC 24970 AI logging also
+remain watch items at final-draft status. OWASP ISVS stays on the watchlist while its
 public page exposes conflicting release-candidate and final-release labels;
 the suite does not infer a stable edition from that ambiguity.
+ISO/IEC 42007 and NIST IR 8596 remain draft AI conformity and Cyber AI Profile
+inputs, and the next ISO/IEC TR 24030 edition remains a new project. MLCommons
+AILuminate Agentic and Multimodal remain non-normative watch items until each
+has an immutable released corpus, evaluator, scoring method, and split contract.
+The MCP 2026 release candidate, MCSB v2 preview, W3C VC Data Model 2.1,
+OpenID4VP 1.1, VDA ISA 2027, next ISO/IEC 27003 edition,
+ISO 22316 revision, CSP Level 3, Subresource Integrity 2, Trusted Types, and
+draft BSI TR-03183 Parts 1 and 3 are also quarantined. The retired FFIEC
+Cybersecurity Assessment Tool is explicitly excluded from current FFIEC
+claims. ISO/IEC 27009 is deliberately
+excluded because ISO withdrew the 2020 edition; the suite does not preserve a
+withdrawn sector-extension standard merely to increase catalog breadth.
 
 Standards lifecycle governance is fail closed. Optional
 `standards-lifecycle-evidence.json` input must provide, for every promoted
@@ -189,13 +279,13 @@ replacement; the 2025 public-comment draft is not a normative entry.
 ## Controls and assessment procedures
 
 Copy [the example policy](../examples/industry-assurance-policy.example.json) to
-`security/industry-assurance-policy.json`. Policy schema 1.2 supports selectable
-assurance packs plus custom `controls` and `procedures`; legacy 1.0 and 1.1
-policies remain readable.
+`security/industry-assurance-policy.json`. Policy schema 1.3 supports selectable
+assurance packs, custom `controls` and `procedures`, and exact protocol-specific
+benchmark thresholds. Frozen 1.0 through 1.2 policies remain readable.
 The strict parser accepts only known standard identifiers, unique identities,
 bounded text and collections, and safe report-local JSON artifact names.
 
-`assurance-profile-registry.json` exposes 104 built-in packs:
+`assurance-profile-registry.json` exposes 147 built-in packs:
 
 | Pack | Coverage |
 |---|---|
@@ -234,7 +324,7 @@ bounded text and collections, and safe report-local JSON artifact names.
 | `healthcare-security` | HIPAA ePHI safeguards, NIST SP 800-66 mappings, and licensed HITRUST evidence |
 | `airborne-software-assurance` | DO-178C lifecycle objectives, DO-330 tool qualification, and model/OO/formal-method supplements |
 | `federal-configuration-hardening` | Version-pinned DISA STIG/SRG and SCAP validation with manual-check review |
-| `software-quality-evaluation` | ISO/IEC 25040/25041 evaluation design, execution, rating, limitations, and evaluator viewpoint |
+| `software-quality-evaluation` | ISO/IEC 25001/25040/25041 quality-requirements planning, evaluation design, execution, rating, limitations, and evaluator viewpoint |
 | `incident-management` | ISO/IEC 27035 and ISO/IEC/IEEE 23612 preparation-through-recovery and software-incident traceability |
 | `privacy-impact-assessment` | ISO/IEC 29134 PIA scope, stakeholder, impact, treatment, approval, and negative-scenario evidence |
 | `supply-chain-identity` | in-toto/DSSE subject integrity and lossless CPE, SWID, purl, OSV, and CVE identities |
@@ -244,7 +334,7 @@ bounded text and collections, and safe report-local JSON artifact names.
 | `software-process-capability` | Evidence-bounded capability levels across requirements, implementation, verification, release, response, operations, and improvement |
 | `comprehensive-weakness-mapping` | Full CWE release and abstraction-policy mapping rather than Top-25-only coverage |
 | `exploit-prioritization-validation` | Point-in-time EPSS/KEV outcome calibration with future-data exclusion and operational budget metrics |
-| `ai-lifecycle-data-evaluation` | AI lifecycle, data quality, measurement, robustness, and repeatable empirical evaluation |
+| `ai-lifecycle-data-evaluation` | AI lifecycle, data quality, bias, transparency, explainability, robustness, supervised-learning evaluation, and repeatable empirical benchmarking |
 | `supplier-relationship-assurance` | Supplier agreements, component/service monitoring, ICT supply-chain controls, and cloud-chain accountability |
 | `software-signing-conformance` | Sigstore and SLSA verifier trust-root, identity-policy, subject, and negative-case conformance |
 | `remote-attestation-assurance` | RATS/EAT evidence, endorsement, appraisal, freshness, verifier, and relying-party boundaries |
@@ -303,6 +393,49 @@ bounded text and collections, and safe report-local JSON artifact names.
 | `biometric-identity-assurance` | ISO biometric comparison and PAD design with locked thresholds, demographic strata, attack instruments, and confidence bounds |
 | `integrated-service-security-management` | ISO/IEC 20000-1 and 27013 service, change, configuration, supplier, incident, continuity, and ISMS integration |
 | `interlaboratory-proficiency` | ISO/IEC 17043 blinded round-robin agreement, reference accuracy, bias, drift, adjudication, and corrective action |
+| `enterprise-cyber-risk-integration` | NIST IR 8286 risk records, estimation, prioritization, roll-up, business impact, CIS RAM attack paths, and optional licensed quantitative risk |
+| `enterprise-architecture-governance` | Licensed COBIT, TOGAF, ArchiMate, and Open FAIR governance, model semantics, decision traceability, and risk sensitivity |
+| `ai-benchmark-governance` | ISO/IEC TR 42106 differentiated AI benchmarking with complexity, context, strata, uncertainty, metamorphic stability, and bounded claims |
+| `ai-application-security-verification` | OWASP AISVS Level 1-3 applicability, AI asset/data/model/tool/memory traceability, bounded authority, and adversarial requirement conformance |
+| `responsible-ai-system-assurance` | ISO AI quality/use-case evaluation plus IEEE ethical design, measurable transparency, privacy process, bias, and fail-safe validation |
+| `eucc-product-certification` | EUCC scheme, laboratory and certification authority, product/certificate identity, vulnerability management, and assurance continuity |
+| `federal-software-attestation` | CISA producer/product scope, authorized signatory, SSDF evidence, exceptions, release binding, expiry, and re-attestation |
+| `it-quality-governance` | ISO/IEC 38500 governing-body direction and ISO 9001/90003 quality-management evidence with blinded assessor challenge |
+| `nist-csf-profile-management` | CSF 2.0 current and target profiles, traceable gaps/actions, valid identifiers, priorities, exceptions, and reassessment |
+| `privacy-engineering-pets` | Privacy operationalisation and model validation plus adversarial zero-knowledge-proof implementation and composition evidence |
+| `mcp-protocol-security` | MCP schema, lifecycle, capability, OAuth, task, tool, prompt, resource, sampling, consent, proxy, and adversarial containment evidence |
+| `cloud-provider-native-security` | AWS FSBP, MCSB v1, and Google Enterprise Foundations inventory, posture, exception, drift, attack-path, cleanup, and rescan evidence |
+| `incident-response-service-maturity` | FIRST CSIRT/PSIRT mandate, constituency, service catalog, operational outcomes, maturity, exercise, assessor agreement, and improvement |
+| `memory-safety-engineering` | Unsafe-code and FFI inventory, production hardening, static/sanitizer/fuzz evidence, exception governance, and risk-prioritized migration |
+| `organizational-ai-governance-impact` | IEEE 2863 governing-body process and IEEE 7010 stakeholder well-being impact, indicators, monitoring, adjudication, and improvement |
+| `organizational-resilience-bia` | ISO 22316/22317 dependency and impact analysis, tolerances, RTO/RPO, degraded operation, restoration, reconciliation, and reassessment |
+| `open-source-project-assurance` | OpenSSF baseline/metal criteria with evidence-bound answers, freshness, independent sampling, recomputation, and bounded badge claims |
+| `isms-implementation-process` | ISO/IEC 27003 implementation guidance and ISO/IEC TS 27022 process capability with assessor calibration and certification boundaries |
+| `a2a-protocol-security` | A2A 1.0 Agent Card and endpoint binding, principal-to-skill/task/artifact authority, transport equivalence, OAuth, webhook/stream containment, quotas, and teardown evidence |
+| `sesip-iot-platform-evaluation` | SESIP 1.2 and EN 17927 target, profile, assurance-level, composition, certificate, vulnerability, change, evaluator, laboratory, and claim-boundary evidence |
+| `threat-intelligence-handling` | FIRST TLP/IEP labeling and redistribution plus VERIS incident classification, policy resolution, round trips, deidentification, audit, and downgrade resistance |
+| `web-platform-defense` | CSP2 and SRI1 browser policy, integrity, origin, redirect, CORS, reporting, fallback, substitution, and cross-engine validation |
+| `dora-level2-financial-resilience` | DORA ICT-risk, incident classification/reporting, provider-register, and authorized TLPT technical-standard conformance |
+| `ffiec-banking-technology` | Current FFIEC DAM, AIO, and Information Security handbook assessment with blinded examiner agreement and retired-CAT exclusion |
+| `bsi-c5-cloud-assurance` | C5 cloud-service boundary, control design/operation, customer responsibility, deviations, assessor independence, and attestation-versus-certification precision |
+| `us-cyber-trust-mark` | FCC consumer-IoT boundary, recognized-laboratory evidence, application authority, QR/registry integrity, renewal, withdrawal, and mark-overclaim resistance |
+| `digital-credential-security` | W3C VC/Data Integrity/status plus final OpenID4VP, OpenID4VCI, HAIP, and issuer-wallet-verifier evidence |
+| `federal-saas-hardening` | CISA SCuBA M365/GWS tenant inventory, read-only assessment, exception, remediation, and drift evidence |
+| `kubernetes-hardening-conformance` | CIS Kubernetes 2.0.1 control-plane, node, workload, manual-check, exception, and rescan evidence |
+| `privacy-threat-modeling` | LINDDUN data-flow, threat-tree, misuse-case, mitigation, blinded-review, and residual-risk evidence |
+| `ast-modality-effectiveness` | Matched SAST/DAST/IAST effectiveness plus separately governed RASP prevention evidence |
+| `telecom-equipment-assurance` | NESAS development-process and product-applicable 3GPP SCAS laboratory assurance |
+| `tisax-automotive-information-assurance` | VDA ISA/TISAX scope, maturity, assessor independence, follow-up, sharing, and label boundaries |
+| `content-provenance-authenticity` | C2PA manifest, claim, ingredient, signature, trust, tamper, and truth-claim boundaries |
+| `payment-acceptance-security` | PCI MPoC/P2PE solution, payment-flow, key, laboratory, tamper, and validation-claim boundaries |
+| `fedramp-20x-continuous-assurance` | Final 2026 Classes A-C rules, security goals, measures, KSIs, independent validation, persistent packages, continuous monitoring, and agency-decision boundaries |
+| `fido2-authenticator-assurance` | CTAP 2.2, WebAuthn, MDS 3.1, transport, user verification, authenticator metadata, recovery, and certification-claim boundaries |
+| `eudi-wallet-assurance` | eIDAS 2, consolidated implementing acts, ARF 3.0.0/FCAF wallet, issuer, relying-party, privacy, trust-list, and lifecycle conformance |
+| `hitrust-assessment-assurance` | Licensed HITRUST CSF 11.8.0 e1/i1/r2 scope, factors, maturity, assessor independence, corrective action, validity, and certification boundaries |
+| `pci-software-security-framework` | PCI Secure Software 2.0 and Secure SLC 1.1 product, SDK, module, sensitive-asset, change, annual-attestation, and listing boundaries |
+| `nis2-implementation-assurance` | NIS2 Implementing Regulation 2024/2690 and ENISA guidance applicability, technical measures, effectiveness, incidents, suppliers, and notification boundaries |
+| `supplier-due-diligence` | NIST SP 1326 supplier identity, ownership, provenance, dependencies, authoritative sources, contract decisions, monitoring, exit, and deception testing |
+| `software-assurance-maturity` | OWASP SAMM 2.1 activity-quality evidence, blinded assessor agreement, roadmaps, reassessment, privacy-safe cohort comparison, and sample limitations |
 
 Applicability must be explicit. A selected pack expands into evidence-backed
 controls and procedures; an applicable planned procedure remains incomplete.
@@ -324,13 +457,13 @@ dynamic test.
 
 ## Foundational evidence assessments
 
-Eight strict, schema-validated artifacts turn broad standards references into
+Nine strict, schema-validated artifacts turn broad standards references into
 reviewable engineering evidence. They are generated on every run and fail
 closed when an input is absent or declares itself incomplete:
 
 | Artifact | Governed claim |
 |---|---|
-| `lifecycle-traceability.json` | Seven life-cycle stages are evidenced, the source is digest-bound, and all applicable requirements have bidirectional evidence |
+| `lifecycle-traceability.json` | Seven life-cycle stages are evidenced; the source is digest-bound; applicable requirements have bidirectional evidence and end-to-end graph reachability; directional links, verified change-impact samples, and independent approval are complete |
 | `architecture-evaluation.json` | Stakeholder concerns, quality attributes, risk paths, decisions, structural corroboration, and independent review are present |
 | `process-capability-assessment.json` | Seven process dimensions reach at least bounded level 2; level 3 additionally requires independent audit-package verification |
 | `prioritization-calibration.json` | At least 100 point-in-time observations use pinned EPSS, KEV, corpus, and outcome snapshots with no future leakage and report calibration, recall-at-budget, effort, and KEV response time |
@@ -338,11 +471,21 @@ closed when an input is absent or declares itself incomplete:
 | `security-automation-interoperability.json` | Selected STIX/TAXII, CACAO/OpenC2/OCSF, SCITT/COSE receipt, OpenAPI/AsyncAPI/GraphQL/JSON Schema, and OpenTelemetry versions, schemas, fixtures, positive/negative cases, round trips, semantic equivalence, authority, and replay protection are complete |
 | `external-conformity-assessment.json` | Applicable AI, cloud, disclosure, product, detection, and licensed normative assessments bind scope, method, report, assessor, validity, authority, and applicability basis; assessor credentials require an immutable registry snapshot, issuer and scheme, active validity window, signature validation, and revocation check |
 | `assurance-case-assessment.json` | ISO 15026/SACM claims, defeaters, evidence, relationships, scope binding, freshness, confidence, graph semantics, round-trip validity, and independent approval are complete |
+| `threat-model-assessment.json` | The source-bound asset/component/flow/boundary graph has exact references and risk arithmetic; sensitive crossings are protected; mitigated threats have verified controls and passing negative tests; assumptions, acceptances, change triggers, and independent review are current |
 
 The four extended assessments consume deliberately separate evidence inputs:
 `maturity-model-evidence.json`, `security-automation-evidence.json`, and
 `external-conformity-evidence.json`, plus
 [`structured-assurance-case.json`](../examples/structured-assurance-case.example.json).
+Threat-model semantics consume the separate
+[`threat-model-evidence.json`](../examples/threat-model-evidence.example.json)
+contract so scanner-derived topology cannot silently substitute for reviewed
+assets, attack steps, risk decisions, mitigation proof, or approval.
+Lifecycle semantics similarly consume
+[`lifecycle-traceability-evidence.json`](../examples/lifecycle-traceability-evidence.example.json)
+and reject dangling, duplicate, reverse-stage, orphaned, source-unbound, or
+incompletely propagated relationships rather than inferring traceability from
+artifact presence.
 The structured case is intentionally strict: it requires SACM 2.3 schema,
 semantic, and round-trip validation; unique claims and evidence; digest-bound
 subjects; fresh verified evidence; acyclic support; resolved defeaters; no
@@ -396,7 +539,7 @@ complete decision tree or outcome.
 
 ## Benchmark registry
 
-`benchmark-registry.json` includes 124 families:
+`benchmark-registry.json` includes 182 families:
 
 | Family | Purpose | Execution lane |
 |---|---|---|
@@ -443,6 +586,10 @@ complete decision tree or outcome.
 | Vul4J | Reproducible Java vulnerabilities, proof-of-vulnerability tests, and human patches | Disposable companion |
 | BugsInPy | Reproducible Python functional defects, coverage, mutation, and repair behavior | Disposable companion |
 | AgentDojo | Agent prompt-injection attack success and utility under attack | Disposable companion |
+| HarmBench | Standardized automated LLM red teaming, robust refusal, utility, and private-holdout generalization | Disposable companion |
+| AgentHarm Inspect Evals 6-B | Multi-step harmful agent behavior, refusal, tool-authority containment, benign utility, and scorer-correctness checks | Disposable companion |
+| garak probe conformance | Version-pinned probe, detector, generator, plugin, calibration, and regression execution | Disposable companion |
+| OWASP Cornucopia threat-model coverage | Card-to-threat-to-control-to-test traceability, omission mutations, and independent adjudication | Disposable companion |
 | OSS-Fuzz/ClusterFuzzLite | Continuous fuzzing integration, crash discovery, deduplication, and regression | Disposable companion |
 | DISA STIG/SCAP conformance | Version-pinned automated and manual federal hardening checks | Disposable companion |
 | IEC 62443 system conformance | Licensed system-requirement and claimed-security-level assessment | Disposable companion |
@@ -524,8 +671,62 @@ complete decision tree or outcome.
 | Biometric performance and PAD | Locked-threshold FMR, FNMR, IAPAR, demographic and attack-instrument strata with Wilson bounds | Consent-governed sequestered biometric laboratory |
 | Service/security management integration | Change, release, configuration, supplier, incident, problem, continuity, recovery, and corrective-action traceability | Read-only evidence plus disposable service twin |
 | Interlaboratory proficiency | Blinded assigned-value agreement, reference accuracy, bias, drift, outliers, appeals, and corrective action | Separated proficiency-provider workspace |
+| NIST IR 8286 enterprise risk register | Official schema validation, estimation and prioritization re-performance, roll-up lineage, correlation, units, BIA, appetite, and mutation cases | Read-only risk evidence workspace |
+| CIS RAM attack-path analysis | Pinned risk criteria, threat and safeguard analysis, blinded assessor agreement, sensitivity, adjudication, and acceptance | Blinded risk assessment workspace |
+| SQuaRE quality governance | Licensed ISO/IEC 25001 planning, methods, tools, competence, decisions, feedback, and management fault injection | Independent quality-evaluation workspace |
+| ISO/IEC TR 42106 differentiated AI benchmarking | Complexity- and context-stratified quality benchmarking, uncertainty, aggregation, metamorphic rank stability, evaluator robustness, and claim boundaries | Disposable AI benchmark laboratory |
+| Enterprise architecture governance | Licensed framework mapping, ArchiMate semantics, stakeholder and decision trace, assessor agreement, and quantitative-risk sensitivity | Read-only blinded architecture workspace |
+| Microsoft PyRIT AI red team | Pinned multi-turn scenarios, objectives, techniques, converters, targets, scorers, memory, private holdouts, calibration, and cleanup | No-egress disposable AI sandbox |
+| OWASP AISVS 1.0 conformance | Requirement levels, applicability, system boundary, complete control/test/evidence trace, prompt/data/model/tool/memory negative cases, mutation, and adjudication | No-egress disposable AI application sandbox |
+| ISO/IEC TS 25058 AI quality evaluation | Licensed quality-model criteria, context, measures, datasets, strata, uncertainty, metamorphic/adverse cases, decisions, and monitoring | Independent AI quality laboratory |
+| EUCC scheme assurance | Regulation/amendment/SotA pinning, CC/CEM and security-target map, ITSEF/CB authority, certificate/product binding, and assurance continuity | Read-only separated certification workspace |
+| CISA secure-software attestation | Common-form and SSDF claim map, product/release scope, signatory authority, exceptions, forgery, replay, staleness, and change triggers | Read-only test-signing workspace |
+| IEEE 7000-series AI ethics | Ethical-value trace, transparency, privacy, subgroup bias, application boundaries, fail-safe behavior, appeals, uncertainty, and adjudication | Disposable responsible-AI assessment workspace |
+| AI use-case security/privacy | Domain context and boundary, security/privacy risks and controls, normal/adverse/out-of-domain/misuse cases, and residual-risk review | Disposable domain use-case workspace |
+| IT/quality governance assessor agreement | Licensed ISO/IEC 38500/ISO 9001 mapping, blinded cases, competence, agreement, nonconformity, correction, and adjudication | Blinded governance assessment workspace |
+| NIST CSF profile reassessment | Valid CSF identifiers, current/target state, gap/risk/action/owner trace, exceptions, expiry, mutation, regression, and reassessment | Read-only governance evidence workspace |
+| MLCommons AILuminate Safety | Versioned safety standard, locale, hazards, public/private split, evaluator calibration, grading, contamination, utility, and uncertainty | No-egress disposable model worker |
+| MLCommons AILuminate Jailbreak | Versioned attack/baseline corpus, protected split, evaluator calibration, naive-versus-attack grading, variance, utility, and contamination | No-egress disposable model worker |
+| Privacy engineering/PET conformance | Privacy model and attacker boundary plus ZKP statement/setup/parameter binding, malformed/replay/linkability/composition/differential cases, and cryptographic review | Disposable cryptographic privacy laboratory |
+| MCP client/server security conformance | Schema, lifecycle, capability, transport, OAuth discovery, audience, scopes, redirects, tasks, tools, resources, prompts, sampling, injection, SSRF, confused-deputy, replay, and cleanup cases | No-egress disposable MCP laboratory |
+| AWS FSBP/Security Hub conformance | Account/OU/region/resource coverage, controls, findings, suppressions, expiry, drift, remediation, CloudTrail, cleanup, and rescan | Read-only AWS assessment plus disposable test accounts |
+| Microsoft MCSB/Defender conformance | Tenant/subscription/resource coverage, v1 baselines, Defender findings, exemptions, preview separation, drift, remediation, activity log, cleanup, and rescan | Read-only Azure assessment plus disposable subscriptions |
+| GCP Enterprise Foundations conformance | Organization hierarchy, identities, policies, networks, logging, keys, secrets, SCC, Terraform drift, deviations, cleanup, and rescan | Read-only GCP assessment plus disposable projects |
+| FIRST CSIRT/PSIRT maturity | Mandate, constituency, service portfolio, competencies, outcomes, capacity, handoffs, exercises, blinded assessor agreement, and improvement | Blinded synthetic response workspace |
+| Memory-safety engineering | Unsafe and FFI reachability, production build hardening, static analysis, sanitizers, fuzzing, crash regressions, exceptions, and migration parity | No-egress native-code builders and runners |
+| IEEE AI governance/well-being | Governing authority, roles, lifecycle, stakeholders, indicators, baselines, impacts, tradeoffs, monitoring, appeals, and assessor agreement | Blinded human-impact assessment workspace |
+| Organizational resilience/BIA exercise | Dependencies, impact timelines, tolerances, RTO/RPO, capacity, disruption, degradation, failover, restoration, reconciliation, and reassessment | Authorized disposable service twin |
+| OpenSSF badge conformance | Criteria revisions, project identity, response export, evidence freshness, disabled controls, stale links, inflated levels, and recomputation | Read-only project assessment workspace |
+| ISMS implementation/process assessment | ISO/IEC 27003/27022 mapping, scope, interfaces, measures, capability, tailoring, audit/corrective-action cases, agreement, and claim boundaries | Blinded ISMS assessment workspace |
+| A2A protocol security conformance | Agent Card identity, endpoint/version binding, principal/skill/task/message/artifact/subscription authorization, transport equivalence, downgrade, cross-tenant, SSRF, replay, race, and cleanup cases | No-egress disposable A2A laboratory with synthetic agents and callback sinkholes |
+| SESIP IoT platform evaluation | SESIP/EN 17927 target, profile, assurance, composition, certificate, vulnerability, change, expiry, evaluator, laboratory, and negative-claim evidence | Separated authorized IoT laboratory with representative non-production hardware or emulators |
+| FIRST TLP/IEP information handling | Label and policy semantics, recipients, communities, actions, attribution, storage, redistribution, STIX/TAXII round trips, downgrade, removal, and unauthorized-sharing cases | No-egress synthetic information-exchange laboratory with disclosure sinkholes |
+| VERIS incident schema conformance | Schema/vocabulary identity, actor/action/asset/attribute/timeline/impact semantics, unknown values, round trips, aggregation, deidentification, and truth-claim boundaries | Read-only no-egress workspace using deidentified or synthetic incidents |
+| W3C web-platform defense | CSP2/SRI1 policy, nonce/hash/source and integrity behavior, redirect/CORS/CDN substitution, multiple policies, reporting, fallback, recovery, and cross-engine results | Disposable loopback browser laboratory with synthetic origins and digest-pinned engines |
+| DORA Level 2 technical standards | ICT-risk controls, incident classification/timelines/forms/channels, register templates, TLPT scope/testers/intelligence/safety/remediation, and legal claim boundaries | Legally reviewed synthetic assessment workspace plus separately authorized disposable TLPT service twin |
+| FFIEC IT Handbook assessment | DAM 2024, AIO 2021, and Information Security 2016 scope, controls, outcomes, blinded examiner decisions, independence, and retired-CAT exclusion | Blinded financial-technology examination workspace with synthetic institutions and minimized data |
+| BSI C5 cloud assurance | Service boundary, locations, architecture, subservices, control design/operation, customer controls, deviations, opinion period, samples, validity, and assessor agreement | Blinded licensed-criteria workspace with no provider mutation |
+| FCC Cyber Trust Mark conformance | Product/component boundary, recognized-laboratory evidence, application and label-administrator authority, QR/registry integrity, renewal, forgery, expiry, withdrawal, and overclaim cases | Separated consumer-IoT laboratory with synthetic registry and no real mark application |
+| OpenID digital credential conformance | VC issuance/presentation, selective disclosure, status, holder binding, privacy, and interoperability | Synthetic no-egress issuer-wallet-verifier laboratory |
+| CISA SCuBA SaaS posture | M365/GWS tenant coverage, read-only findings, exceptions, remediation, drift, and rescans | Least-privilege read-only tenant lane |
+| CIS Kubernetes hardening | Automated/manual Kubernetes 2.0.1 checks, applicability, negative cases, exceptions, and rescans | Disposable clusters plus immutable production snapshots |
+| LINDDUN privacy threat modeling | DFD completeness, threat elicitation, mitigations, omission mutations, and assessor agreement | Blinded deidentified assessment workspace |
+| OWASP Benchmark AST modality comparison | Matched SAST, DAST, and IAST precision/recall, overlap, latency, and capability boundaries | Separate matched-corpus runners |
+| RASP prevention effectiveness | Attack block/observe/bypass, false positives, latency, health, tamper, and fail-mode behavior | Disposable instrumented application |
+| GSMA NESAS/3GPP SCAS | Development-process and product security test assurance with laboratory authority and retest | Authorized segmented telecom laboratory |
+| TISAX/VDA ISA | Scope, protection needs, maturity, findings, follow-up, assessor agreement, sharing, and label boundaries | Blinded licensed-criteria workspace |
+| C2PA content credentials | Manifest/signature/trust validation, round trips, edits, revocation, tamper, and parser limits | Synthetic-media test-trust laboratory |
+| PCI payment acceptance | MPoC/P2PE components, flows, keys, controls, tamper, updates, remediation, and claim limits | Authorized synthetic-data payment laboratory |
+| FedRAMP 20x continuous validation | Class rules, security goals, measures, KSIs, validation code, evidence freshness, boundary drift, Marketplace status, and agency-decision limits | Authorized read-only cloud evidence workspace |
+| FIDO2 authenticator conformance | CTAP 2.2/WebAuthn transports, credentials, UV/PIN, malformed CBOR, downgrade, replay, MDS freshness, status, and recovery | No-egress test-authenticator laboratory |
+| EUDI wallet functional conformance | ARF 3.0.0/FCAF issuance, presentation, wallet-to-wallet, trust lists, consent, minimization, replay, recovery, and privacy | Synthetic cross-wallet laboratory |
+| HITRUST CSF assessment | Licensed 11.8.0 e1/i1/r2 scope, inheritance, samples, maturity, assessor agreement, QA, corrective action, validity, and claims | Blinded licensed assessment workspace |
+| PCI Secure Software Framework | Secure Software 2.0/Secure SLC 1.1 product, SDK, module, lifecycle, delta, vulnerability, attestation, and listing evidence | Authorized synthetic-payment software laboratory |
+| NIS2 implementing regulation | Applicability, technical measures, evidence effectiveness, incident thresholds/timing, supply chain, continuity, exceptions, and legal/guidance boundaries | Synthetic notification and service exercise |
+| NIST supplier due diligence | Supplier ownership, provenance, dependencies, authoritative sources, contradictions, contract decisions, monitoring, exit, aliases, and deception | Blinded immutable-source workspace |
+| OWASP SAMM assessment benchmark | SAMM 2.1 scope, quality criteria, maturity evidence, assessor agreement, roadmap, reassessment, cohort privacy, and representativeness | Blinded privacy-protected assessment workspace |
 
-The maintained adapter catalog in `py_security_suite.benchmark_adapters`
+The maintained 100-adapter catalog in `py_security_suite.benchmark_adapters`
 defines acquisition, license, input, normalizer, positive/negative control, and
 isolation requirements for CFReDS/CFTT, ACT Rules, DroidBench, Ghera,
 SecBench.js, Chaos Mesh/Litmus, Sonobuoy, CIS-CAT/SCAP, Wycheproof, TIBER-EU,
@@ -536,7 +737,23 @@ builds, secure-by-design negative testing, AMTSO malware protection, DICE,
 telecom, NICE workforce coverage, penetration-test engagement quality, and
 DORA delivery outcomes, structured assurance cases, integrity-level V&V,
 CMVP and international cryptographic-module conformance, biometric performance
-and PAD, integrated service/security management, and interlaboratory proficiency.
+and PAD, integrated service/security management, interlaboratory proficiency,
+HarmBench, AgentHarm Inspect Evals, garak, OWASP Cornucopia, Microsoft PyRIT,
+OWASP AISVS, EUCC, CISA secure-software attestation, NIST CSF profile
+reassessment, and separate MLCommons AILuminate Safety and Jailbreak contracts.
+It also defines fail-closed adapters for MCP clients/servers/proxies, AWS FSBP,
+MCSB/Defender, Google Enterprise Foundations/SCC, FIRST CSIRT/PSIRT maturity,
+memory-safety engineering, IEEE AI governance and well-being, resilience/BIA
+exercises, OpenSSF badge recomputation, ISMS process assessment, A2A 1.0,
+SESIP/EN 17927, FIRST TLP/IEP, VERIS, CSP2/SRI1, DORA Level 2 technical acts,
+FFIEC IT Handbook assessment, BSI C5, and FCC Cyber Trust Mark conformance.
+The current tranche adds FedRAMP 20x, FIDO2, EUDI Wallet, HITRUST 11.8,
+PCI Secure Software 2.0/Secure SLC, NIS2 implementation, NIST SP 1326, and
+OWASP SAMM adapters, and promotes maintained contracts for OWASP Benchmark,
+Juliet, ACVP, WPT WebAuthn, STIG/SCAP, Sigstore, SLSA, SV-COMP, Test-Comp,
+ATT&CK Evaluations, Atomic Red Team, Defects4J, SWE-bench Verified, Vul4J,
+BugsInPy, and OpenSSF Scorecard. Candidate CTAP 2.3 and EUCS, EUMSS, EUDIW,
+and EU5G certification schemes remain in the non-normative publisher watchlist.
 It deliberately does not vendor licensed content, organization targets, or
 floating upstream branches.
 
@@ -550,6 +767,21 @@ scope and rules of engagement, target allowlists, kill switches, cleanup, and
 restoration proof. DORA metrics are research-backed operational outcomes, not
 security certification, and CISA/CREST/PTES/Reproducible Builds publications
 remain typed as guidance even though their measurable procedures are governed.
+AISVS and AILuminate model tests require no-egress disposable targets,
+synthetic identities and data, protected-split separation, scorer-manipulation
+tests, bounded cost and authority, harmful-output quarantine, kill switches,
+reset, and destruction proof. EUCC and federal attestation adapters are
+verification-only: they cannot issue certificates or sign producer claims.
+A2A, web, information-sharing, and regulatory adapters use synthetic parties,
+origins, incidents, registries, and supervisory channels; SESIP, C5, FFIEC,
+DORA, and FCC claims remain bounded to the applicable external scheme,
+qualified party, and legal scope.
+AST modality results are never collapsed into one union score: SAST, DAST, and
+IAST retain separate identities and confusion matrices, while RASP uses the
+detection/effectiveness protocol because prevention behavior is not a static
+finding-classification claim. C2PA validity is also kept separate from content
+truth, and all PCI, TISAX, NESAS, OpenID, and CIS outcomes retain external
+authority and certification or label boundaries.
 
 External vulnerable applications are never executed by the core scanner. Each
 enabled family gets a runner contract naming its adapter, expected labels,
@@ -562,7 +794,33 @@ to `benchmark-run`. The generated command intentionally omits
 
 ### Executable adapter contract
 
-Start from
+For maintained adapters, start from the schema
+[`benchmark-preparation-request-1.0` example](../examples/benchmark-preparation-request.example.json)
+and let the compiler bind the
+registry version, lane, protocol, adapter-spec digest, required inputs, corpus,
+and executable identities:
+
+```shell
+pysec benchmark-prepare security/benchmark-requests/droidbench.json \
+  --workspace .artifacts/droidbench-workspace \
+  --output security/benchmark-adapters/droidbench.json
+pysec benchmark-runtime-probe /usr/bin/docker \
+  --runtime-sha256 APPROVED_RUNTIME_SHA256 --runtime-name docker \
+  --runtime-version APPROVED_RUNTIME_VERSION --authorize-execution \
+  --output .artifacts/docker-capabilities.json
+```
+
+The compiler does not fabricate independent evidence. After the subject digest
+is known, trusted authorities issue and sign the referenced acceptance-criteria,
+adapter-conformance, runtime-observation, time, replay, contamination, SBOM,
+provenance, environment, external-isolation, and cleanup attestations. Schema
+1.2 requires role-correct, lifecycle-bounded authority envelopes with revocation
+state, at least four distinct signer keys and two organizations, and declared
+key/organization separation groups. High-risk `authorized-companion` contracts
+reject process mode, inherited networking, non-disposable targets, and missing
+cleanup stages.
+
+For frozen legacy integrations, start from
 [`benchmark-adapter-manifest.example.json`](../examples/benchmark-adapter-manifest.example.json)
 and replace every placeholder with approved, immutable evidence. The runtime
 requires an absolute executable path and SHA-256 for every stage, a digest-bound
@@ -572,31 +830,132 @@ and an exact normalized-result location.
 
 ```shell
 pysec schema benchmark-adapter-manifest-1.0 > benchmark-adapter.schema.json
+pysec schema benchmark-adapter-manifest-1.1 > benchmark-adapter-1.1.schema.json
+pysec schema benchmark-adapter-manifest-1.2 > benchmark-adapter-1.2.schema.json
 pysec benchmark-run security/benchmark-adapters/droidbench.json \
   --workspace .artifacts/droidbench-workspace \
+  --authority-trust-policy /etc/pysec/benchmark-authorities.json \
+  --authority-trust-policy-sha256 APPROVED_POLICY_SHA256 \
+  --authority-trust-policy-signature /etc/pysec/benchmark-authorities.sig \
+  --authority-trust-root /etc/pysec/benchmark-authority-root.pem \
+  --authority-trust-root-sha256 APPROVED_ROOT_SHA256 \
+  --trusted-time-context /var/lib/pysec/benchmark-time-context.json \
+  --trusted-time-context-sha256 APPROVED_TIME_CONTEXT_SHA256 \
+  --replay-ledger /var/lib/pysec/benchmark-replay.sqlite3 \
+  --replay-checkpoint-state /var/lib/pysec/benchmark-replay-checkpoint.json \
+  --receipt-signing-key /run/secrets/benchmark-receipt-key.pem \
+  --receipt-signing-key-sha256 APPROVED_RECEIPT_KEY_SHA256 \
   --authorize-execution \
   --output .artifacts/droidbench-execution.json
 ```
 
-Each of the six evidence references names an artifact, digest, detached Ed25519
+Use `--initialize-replay-checkpoint` only during an explicitly approved first
+enrollment. The retained state is signed, bound to the ledger location, checked
+before nonce consumption, and atomically advanced after consumption. Schema 1.2
+first persists a signed intent, requires the retained checkpoint to be the live
+ledger head, holds a cross-process operating-system lease for the complete
+transition, and recovers only one exact matching advance after interruption.
+Scorecard admission is a separate trust decision: policy 1.3 cannot declare
+receipt authorities. The relying deployment supplies a root-signed, expiring,
+digest-pinned authority policy outside the workspace through the five
+`PYSEC_INDUSTRY_RECEIPT_AUTHORITY_*` settings. Active `execution-receipt` entries
+are evaluated at receipt completion, so repository content and receipt-controlled
+public keys cannot bootstrap downstream authority.
+
+The preferred deployment authority file follows
+[`benchmark-authority-trust-policy-1.1`](../src/py_security_suite/schemas/benchmark-authority-trust-policy-1.1.schema.json);
+the repository includes a non-secret
+[`example`](../examples/benchmark-authority-trust-policy-1.1.example.json). Its
+approved digest, root signature, trusted-time context, replay checkpoint, and
+receipt signer are deployment inputs, not manifest or workspace inputs. They
+must resolve outside the benchmark workspace and should be protected by the
+orchestrator's service-account ACLs. Policies expire within 31 days; public-key
+identities hash canonical raw Ed25519 keys rather than serialization bytes.
+Schema 1.1 binds key versions, activation/retirement windows, and revocation time;
+the relying party evaluates the receipt completion time against those fields.
+
+Each evidence reference names an artifact, digest, detached Ed25519
 signature, and pinned public key. The runner verifies the signature and exact
 benchmark subject (corpus, binaries, versions, protocol, and isolation policy),
-then validates kind-specific claims. Replay protection is true only when the
-signed receipt records a consumed unique nonce; SLSA provenance, RFC 3161 time,
-SBOM validity, environment capture, and contamination status are likewise
-derived from verified artifacts.
+then validates kind-specific claims and their cross-bindings. Acceptance must
+bind the exact criteria, thresholds, protocol, and pre-registration; conformance
+must bind the adapter spec, executable, normalizer, at least three golden,
+malformed, and label-inversion fixtures, deterministic repetitions, the complete
+fixture-set digest, and a named, digest-pinned semantic oracle; runtime
+observation must bind the isolation mode,
+target, image, network/resource controls, repetitions, power/leakage/duplicate
+checks, and sequestered holdout. Replay protection is true only when the signed
+receipt records a consumed unique nonce, that nonce is atomically consumed in
+the deployment SQLite ledger, and its SHA-256 chain reproduces the retained
+deployment checkpoint. Every signer must also match an active,
+role-specific Ed25519 key, organization, and revocation-state digest in the
+deployment policy. CycloneDX/SPDX SBOM subjects, DSSE Ed25519 envelopes over
+canonical in-toto/SLSA v1 provenance with a signed complete-material-set digest
+and count, repeated conformance outcomes, per-repetition runtime
+observations, and two independent cleanup probes are replayed from digest-bound
+documents rather than accepted as signed booleans alone. Advanced RFC 3161 time
+is replayed from the raw receipt, pinned TSA chain, policy, revocation snapshot,
+nonce, challenge, and deployment monotonic state. Power is recomputed with a
+protocol-selected exact equal-tail two-sided binomial or standardized-mean model, explicit
+Bonferroni adjustment, and a digest-verified preregistered analysis-plan document.
+Training/holdout leakage, duplicate-case, and
+training-corpus contamination are derived from the actual bounded corpus files
+with material-digest-pinned Python/tree-sitter parsers; supplied semantic digests
+must reproduce and cannot substitute for the files. Bounded multi-signal Jaccard
+analysis combines AST structure, normalized lexical/operator sequences, and
+control-flow features to reject high-similarity near-duplicates across languages.
+
+Maintained adapters can use `run_adapter_conformance_suite` to produce a
+multi-fixture qualification report by executing their real normalizer at least
+three times. Golden, malformed, and label-inverted fixture classes each require
+at least three cases; malformed parsing and semantic inversion are evaluated by
+separate controls. The compatibility `run_adapter_conformance` helper remains
+available for frozen single-fixture contracts. Each canonical golden output must
+match its approved oracle, and a metadata-only declaration cannot produce a
+passing report.
 
 Commands are argument vectors, never shell strings. The runner verifies the
 executable immediately before each stage, supplies a minimal environment,
 disables stdin, bounds execution time and captured output, terminates child
 process trees on timeout, validates unique normalized case identities, computes
 accuracy metrics, applies thresholds, and emits an atomic digest-bound receipt.
-`process` isolation can claim only inherited network behavior. `oci` mode starts
-a digest-pinned runtime and image with a read-only root filesystem, all Linux
+After cleanup it rehashes the manifest, all attestation/signature/key material,
+claim-referenced evidence, corpus, adapter inputs, and executables. Any mutation
+or disappearance changes the decision to fail.
+Schema 1.1 additionally rejects statistically insufficient or unbalanced samples
+using protocol-specific floors and strata, rejects confidence intervals wider
+than policy, and compares minimum metrics against Wilson lower bounds and maximum
+error/attack rates against Wilson upper bounds. Its canonical receipt is consumed
+directly by the industry scorecard without a hand-authored translation layer.
+`process` isolation can claim only inherited network behavior. Before `oci`
+execution, the runner actively probes the digest-pinned runtime version and
+required containment options and binds the probe-output digests into the signed
+receipt. It then starts a preloaded image with `--pull=never`, a read-only root filesystem, all Linux
 capabilities dropped, no-new-privileges, denied networking, non-root identity,
-bounded CPU/memory/PIDs, a no-exec temporary filesystem, optional seccomp and
-AppArmor profiles, a read-only corpus, and automatic container removal. A
+bounded CPU/memory/PIDs/open files/core dumps, an init process, a no-exec
+temporary filesystem, digest-pinned optional seccomp and named AppArmor
+profiles, a read-only workspace and corpus, a single initially empty writable
+`.pysec-output` mount with byte and file-count ceilings, explicit container-path
+environment variables, and automatic container removal. A
 target-restricted network claim requires a separately verified sandbox receipt.
+
+The Linux CI matrix supplies Docker and rootless Podman through
+`PYSEC_TEST_OCI_RUNTIME` with a digest-pinned `PYSEC_TEST_OCI_IMAGE` and
+mandatorily verifies actual non-root, zero-capability, read-only-root,
+no-exec-temporary-filesystem, isolated-network behavior against the immutable image.
+Receipt signing is provider-neutral in the Python API: deployments can inject a
+`ReceiptSigningProvider` backed by PKCS#11, an HSM, or a KMS. The included
+`ExternalEd25519SigningProvider` is a digest-pinned, no-shell vendor bridge that
+passes payloads on standard input and verifies returned signatures locally. Provider identity
+and key version are cryptographically protected, and the returned Ed25519 public
+key must remain admitted by the root-signed authority policy. The CLI retains a
+digest-pinned local PEM provider for compatible offline deployments.
+
+Audit JSONL records carry a cross-process global sequence in addition to their
+hash link and fsync durability. `sign_security_event_log_head` creates an
+HSM/KMS-compatible signed checkpoint whose signer is independently pinned by the
+retaining party; subsequent verification rejects log replacement, truncation,
+untrusted signers, or a broken anchor chain.
 
 The normalized adapter output is deliberately small and tool-neutral:
 
@@ -617,6 +976,19 @@ The normalized adapter output is deliberately small and tool-neutral:
 ```
 
 ### Publisher lifecycle monitor
+
+The compiled catalog and source manifest can be produced deterministically:
+
+```shell
+pysec assurance-catalog-export --output .artifacts/assurance-catalog.json
+pysec standards-manifest-build security/standards-baselines.json \
+  --output .artifacts/standards-source-manifest.json
+```
+
+The catalog export carries a digest for every component and the complete
+catalog. The manifest builder verifies every selected local publisher baseline,
+derives the exact HTTPS host allowlist and profile/control impact map, and fails
+closed on missing or digest-mismatched inventory records.
 
 `standards-monitor` retrieves only explicitly allowlisted HTTPS publisher hosts,
 rejects credentials, fragments, nonstandard ports, and non-public resolved
@@ -647,29 +1019,46 @@ human approval.
 
 ```mermaid
 flowchart TB
+    BaselineInventory["Verified local publisher baselines"] --> ManifestBuilder["standards-manifest-build<br/>complete inventory + digest verification"]
+    CatalogExport["assurance-catalog-export<br/>component + whole-catalog digests"] --> Review
+    ManifestBuilder --> Monitor
     Publisher["Allowlisted HTTPS publisher sources"] --> Monitor["standards-monitor<br/>bounded retrieval + quarantine + JSON/XML/HTML/PDF/text diff"]
     Monitor --> Review["Normative and lifecycle classification<br/>impact map + named human approval"]
-    Review --> Catalog["358 pinned standards and taxonomies"]
+    Review --> Catalog["481 pinned standards and taxonomies"]
     Catalog --> Crosswalk["standards-crosswalk.json + lifecycle ledger + watchlist"]
-    Packs["104 assurance packs"] --> ProfileRegistry["assurance-profile-registry.json"]
-    Policy["Policy 1.2: packs + controls + procedures"] --> Control["control-assessment.json"]
+    Stable["Stable technical baselines<br/>VC/OpenID/FAPI | SCuBA/Kubernetes | LINDDUN/C2PA"] --> Review
+    Evaluation["Evaluation and certification inputs<br/>SESIP/EUCC | NESAS/SCAS"] --> Review
+    Sector["Conditional sector baselines<br/>DORA/FFIEC/C5/FCC | TISAX/PCI"] --> Review
+    Drafts["47 non-normative watch items<br/>CTAP 2.3 + EU candidate schemes<br/>retired FFIEC CAT excluded"] --> Monitor
+    Packs["147 assurance packs"] --> ProfileRegistry["assurance-profile-registry.json"]
+    Policy["Policy 1.3: packs + controls + procedures<br/>protocol-specific thresholds"] --> Control["control-assessment.json"]
     ProfileRegistry --> Control
     Policy --> Procedure["procedure-assessment.json"]
     Evidence["Complete governed artifacts"] --> Control
     Evidence --> Procedure
     Authorization["Explicit execution authorization"] --> Procedure
     Crosswalk --> Control
-    Evidence --> Foundation["Lifecycle + architecture + process + prioritization<br/>maturity + interoperability + external conformity + structured assurance case"]
+    ThreatModel["Source-bound threat model<br/>assets + flows + boundaries + threats + controls + tests"] --> Foundation
+    Evidence --> Foundation["Lifecycle + architecture + process + prioritization<br/>maturity + interoperability + conformity + assurance/threat graphs"]
     Foundation --> Control
     Control --> OSCAL["OSCAL 1.2.2 lifecycle package<br/>7 models"]
     Procedure --> OSCAL
 
     Findings["Normalized findings + KEV/EPSS/VEX"] --> Priority["CVSS v4 + SSVC<br/>no fabricated decisions"]
-    Corpus["Pinned labels + revision + authority<br/>license + split + contamination manifest"] --> Adapter["benchmark-run<br/>verified subject evidence + 11 protocol scorers"]
-    Adapter --> Lane["Authorized disposable benchmark lane"]
+    Corpus["Pinned labels + revision + authority<br/>license + split + contamination manifest"] --> Compiler["benchmark-prepare<br/>registry-bound manifest 1.1"]
+    Compiler --> InputGate["Structural input gate<br/>strict JSON + safe ZIP/TAR + size/ratio bounds"]
+    InputGate --> Adapter["100 maintained adapters<br/>verified subject evidence + 11 protocol scorers"]
+    Acceptance["Independent acceptance authority<br/>criteria + thresholds + pre-registration"] --> Adapter
+    Conformance["Independent adapter authority<br/>golden + malformed + inversion + determinism"] --> Adapter
+    RuntimeObserver["Independent runtime observer<br/>OCI + network + resources + repetitions + holdout"] --> Lane
+    DeploymentPolicy["Deployment-owned trust policy<br/>active role + organization + Ed25519 key + revocation digest"] --> Adapter
+    Adapter --> Lane["Authorized disposable benchmark lane<br/>synthetic agents/origins/incidents/entities/devices"]
     Qualification["Native digest-only OCI isolation<br/>read-only + no capabilities/network + resource limits<br/>signed SBOM/SLSA evidence"] --> Lane
     Target["Pinned benchmark target"] --> Lane
-    Lane --> Report["Checksum-verified suite report"]
+    Lane --> Replay["Deployment SQLite replay ledger<br/>outside workspace + atomic nonce uniqueness"]
+    Lane --> Integrity["Post-run immutable-input rehash<br/>manifest + evidence + corpus + executables"]
+    Integrity --> Report
+    Replay --> Report["Checksum-verified suite report<br/>confidence-bounded metrics"]
     Report --> Evaluate["pysec benchmark"]
     Corpus --> Evaluate
     Evaluate --> Score["Replay-protected score evidence"]
@@ -677,6 +1066,14 @@ flowchart TB
     Baseline["Approved prior scorecard"] --> Delta["benchmark-delta.json"]
     Scorecard --> Delta
 ```
+
+The diagram separates four claim layers that must not be collapsed. A catalog
+entry records a reviewed publication; a selected pack records applicability;
+an adapter records how evidence must be acquired and normalized; and a passing
+score records only the pinned subject, corpus, method, authority, and execution
+context. SESIP, EUCC, C5, FCC, DORA, and FFIEC outcomes remain external-scheme
+or regulatory evidence and never become suite-issued certifications,
+attestations, labels, examinations, or supervisory submissions.
 
 A benchmark score is eligible to pass only with the pinned corpus digest,
 organization-approved authority, corpus revision, replay protection, validated
@@ -716,54 +1113,58 @@ applicable pack, evidence, procedures, authority, and benchmark thresholds pass.
 |---|---:|---|
 | Application security standards | 9/10 | Versioned catalogs, requirement policy, procedures, and retained evidence |
 | SAST/DAST methodology | 9/10 | Static, dynamic, API, mobile, and authorized adversarial lanes |
-| Software supply chain | 9/10 | SLSA/OpenChain/SPDX profile plus provenance, SBOM, signing, and release evidence |
-| Benchmark methodology | 9/10 | Eleven scoring protocols, typed metrics, approved acceptance criteria, strata, replay protection, confidence bounds, and deltas |
-| Benchmark execution governance | 9/10 | 124 task contracts plus explicit authorization, subject-bound Ed25519 evidence, consumed replay receipts, eleven protocol-specific scorers, 35 maintained adapters, digest-pinned argv-only stages, hardened native OCI execution, SBOM/SLSA provenance, contamination checks, negative controls, and conditional laboratory qualification |
+| Software supply chain | 9/10 | SLSA/OpenChain/SPDX profile plus provenance, SBOM, signing, release evidence, and product/version-bound federal producer attestation with authorized-signatory and exception validation |
+| Benchmark methodology | 9/10 | Eleven scoring protocols, typed metrics, independently signed acceptance criteria, strata, power/leakage/duplicate/holdout checks, conservative Wilson decisions, replay protection, and deltas |
+| Benchmark execution governance | 9/10 | 182 task contracts plus explicit authorization, default registry enforcement, structural corpus validation, deployment-owned active-key admission with four-signer/two-organization separation, subject/cross-bound Ed25519 evidence, durable external SQLite replay receipts, strict claim schemas, independently replayed conformance/runtime/SBOM/SLSA/cleanup documents, post-run immutable-input verification, eleven protocol-specific scorers, 100 maintained adapters, digest-pinned argv-only stages and OCI runtime, read-only-workspace OCI execution, contamination checks, negative controls, and conditional laboratory qualification |
 | Audit and assessment integrity | 9/10 | ISO 19011, ISO/IEC 27007/27008/27006-1/17021-1/17029 with scoped sampling, independence, validity, and reperformance |
 | Security evaluator competence | 9/10 | ISO/IEC 19896 role-specific qualification plus blinded golden cases, agreement, drift, adjudication, and bounded claims |
 | Firmware and hardware trust | 9/10 | NIST SP 800-193 and TPM 2.0 protect/detect/recover, measured-boot replay, fault injection, and recoverable laboratory isolation |
 | Differential privacy engineering | 9/10 | NIST SP 800-226 guarantee, accountant, composition, implementation-hazard, reproducibility, and utility evidence |
-| Data, software, and cloud quality measurement | 9/10 | ISO/IEC 25012/25019/25020/25024/25030 and TS 25052 requirements, contexts, models, measures, workloads, uncertainty, and golden outcomes |
-| Enterprise risk technique assurance | 9/10 | ISO 31000/IEC 31010 governance, technique selection, multi-method comparison, sensitivity, blinded scenarios, agreement, and adjudication |
+| Data, software, and cloud quality measurement | 9/10 | ISO/IEC 25001/25012/25019/25020/25024/25030 and TS 25052 planning, governance, requirements, contexts, models, measures, workloads, uncertainty, and golden outcomes |
+| Enterprise risk technique assurance | 9/10 | ISO 31000/IEC 31010 plus NIST IR 8286 and CIS RAM governance, schemas, technique selection, multi-tier roll-up, BIA, sensitivity, blinded scenarios, agreement, and adjudication |
 | Secure-by-design product assurance | 9/10 | CISA secure-default properties and product bad-practice negative cases with explicit guidance-versus-certification boundaries |
 | Build reproducibility | 9/10 | Independent no-egress rebuilds across controlled environment variations with artifact equivalence, classified diffs, and provenance subjects |
 | Workforce and engagement quality | 9/10 | NICE 2.2.0 coverage plus CREST/PTES authorization, competence, evidence, cleanup, remediation, retest, and closure controls |
 | DevSecOps and test maturity | 8/10 | DSOVS, DSOMM, TMMi, licensed-model evidence, blinded reassessment, and assessor agreement |
-| AI quality and conformity | 9/10 | ISO/IEC 42006, 25059, TR 24027/24028, TR 29119-11, TS 42119-2, OWASP Agentic Top 10, CSA AICM, independent scope, validity, and stochastic acceptance |
-| Cloud independent assurance | 8/10 | CSA STAR/CAIQ scope, registry claim boundaries, shared responsibility, assessor independence, and sampled evidence challenge |
-| Security automation interoperability | 8/10 | CACAO 2.0, OpenC2, and OCSF schema, negative-case, round-trip, and semantic-equivalence evidence |
-| Consumer-product regulation | 8/10 | UK PSTI and ETSI EN 18031 applicability, technical evidence, negative cases, and legal claim boundaries |
+| AI quality and conformity | 9/10 | ISO/IEC 42006, 25058, 25059, TR 42106/24030/27563, 8183, 12792, TS 6254/8200/12791, TR 5469, TR 29119-11, TS 42119-2, IEEE 7000-series, CSA AICM, differentiated context, validity, ethics, and stochastic acceptance |
+| Cloud independent and provider-native assurance | 9/10 | CSA STAR/CAIQ plus AWS FSBP, MCSB v1, and Google Enterprise Foundations scope, complete inventory, native findings, independent drift reconciliation, exceptions, cleanup, and rescans |
+| Security automation interoperability | 9/10 | CACAO 2.0, OpenC2, OCSF, FIRST TLP/IEP, and VERIS schema, downgrade, deidentification, negative-case, round-trip, and semantic-equivalence evidence |
+| Consumer-product regulation | 9/10 | UK PSTI, ETSI EN 18031, and FCC Cyber Trust Mark applicability, product/lab/QR/registry evidence, negative cases, withdrawal, and legal claim boundaries |
 | Detection product evaluation | 8/10 | ATT&CK Evaluations ingestion and replay with separate coverage, false-positive, visibility, protection, and latency semantics |
 | Public conformance integration | 8/10 | ACVP, FAPI, WebAuthn/WPT, ATT&CK emulation, and OpenSSF runner contracts |
 | Cross-language real-world benchmarks | 8/10 | Time/project-split CVE-pair contract across Python, JavaScript, Java, C/C++, C#, Go, and Rust |
 | Independent benchmark assurance | 8/10 | Label-authority and contamination digests plus two-reviewer minimum for organization corpora |
-| Enterprise governance | 8/10 | ISO ISMS/application-security pack with OSCAL lifecycle output |
-| Vulnerability and PSIRT lifecycle | 8/10 | Disclosure, handling, remediation, and incident-exercise controls |
-| Privacy engineering | 8/10 | ISO 27701/NIST Privacy pack joined to data exposure and risk paths |
-| Conditional regulatory readiness | 8/10 | CRA, PCI, CUI, and service-organization packs with explicit applicability |
-| Identity and protocol security | 8/10 | NIST digital identity, OAuth BCP, WebAuthn, and FAPI controls plus conformance handoff |
+| Enterprise governance | 9/10 | ISO ISMS/application security, ISO/IEC 38500 governing-body oversight, ISO 9001/90003 quality management, NIST IR 8286, CSF current/target profile management, and optional licensed COBIT, TOGAF, ArchiMate, and Open FAIR packs with evidence-bound OSCAL output |
+| Vulnerability, CSIRT, and PSIRT lifecycle | 9/10 | FIRST service catalogs and PSIRT maturity plus disclosure, handling, outcomes, exercises, blinded assessment, improvement, and reassessment controls |
+| Privacy engineering | 9/10 | ISO 27701/NIST Privacy plus ISO/IEC 27561 operationalisation, TS 27564 model validation, 27565 ZKP guidance, adversarial PET cases, data exposure, and risk-path evidence |
+| Conditional regulatory readiness | 9/10 | CRA, EUCC, DORA technical acts, FFIEC handbooks, BSI C5, FCC labeling, PCI, CUI, federal software producer attestation, and service-organization packs with explicit applicability, scope, authority, expiry, and claim boundaries |
+| Identity, MCP, A2A, and protocol security | 9/10 | NIST digital identity, OAuth BCP, WebAuthn, FAPI, stable MCP schema/auth/task/tool conformance, and A2A Agent Card/principal/task/artifact/subscription authorization with confused-deputy, SSRF, cross-tenant, downgrade, replay, and cleanup cases |
+| Web runtime defense | 9/10 | CSP2 and SRI1 policy/integrity behavior across nonce, hash, source, redirect, CORS, CDN substitution, reporting, fallback, multiple policies, and digest-pinned browser engines |
+| Financial technology assurance | 9/10 conditional | DORA Level 2 ICT-risk, incident, provider-register, reporting, and TLPT evidence plus current FFIEC DAM/AIO/Information Security handbook assessment with legal scope, qualified testers, blinded examiners, and retired-CAT exclusion |
+| Cloud-service attestation precision | 9/10 conditional | BSI C5 service/control/customer-responsibility evidence, independent practitioner decisions, report validity, and explicit attestation-versus-certification boundaries |
 | Cloud, container, API, and zero trust | 9/10 | ISO cloud controls, NIST API/microservices/service-mesh/container/ZTA references, CIS execution, and workload-bound evidence |
 | Cryptography, TLS, and PQC readiness | 9/10 | Module and algorithm conformance, TLS 1.3 BoGo/tlsfuzzer behavior, algorithm transition, PQC inventory, migration, and ACVP evidence requirements |
-| Operational resilience | 8/10 | Continuity and contingency controls with authorized failure and restoration exercises |
-| EU digital regulation | 8/10 | Explicit GDPR, NIS2, DORA, AI Act, and CRA applicability pack |
-| IoT and consumer products | 8/10 | Current manufacturer/device/support baselines and consumer-IoT lifecycle testing |
+| Operational resilience and BIA | 9/10 | ISO 22316/22317 resilience and impact analysis plus dependency, tolerance, RTO/RPO, degraded-mode, failover, restoration, reconciliation, variance, and reassessment evidence |
+| Memory-safety engineering | 9/10 | CISA roadmap, unsafe/FFI reachability inventory, production hardening, language rules, static analysis, sanitizers, fuzzing, regression, exception, and risk-prioritized migration evidence |
+| EU digital regulation | 9/10 | Explicit GDPR, NIS2, DORA, AI Act, and CRA applicability plus DORA Level 2 risk, incident, register, reporting, and TLPT execution contracts |
+| IoT and consumer products | 9/10 conditional | Current manufacturer/device/support baselines, SESIP/EN 17927 platform evaluation and composition, FCC Cyber Trust Mark laboratory/registry controls, and consumer-IoT lifecycle testing |
 | OT and industrial systems | 9/10 | Full product, service-provider, asset-owner, zone/conduit, system-level, energy, and conformance coverage |
 | Automotive | 9/10 | ISO/SAE lifecycle, ISO 24089 update engineering, UNECE management/update controls, and qualified negative-case testing |
 | Medical devices | 8/10 | IEC lifecycle/safety-security plus FDA SBOM and vulnerability evidence |
 | Federal cloud and defense | 8/10 | FedRAMP OSCAL, CMMC, NIST CUI controls, and assessment procedures |
-| AI security | 9/10 | AI SSDF, AI RMF, AITG, ATLAS, stochastic, and agentic benchmark coverage |
+| AI security | 9/10 | OWASP AISVS Level 1-3, AI SSDF, AI RMF, AITG, ATLAS, bounded tool/data/memory authority, mutation testing, and stochastic agentic benchmark coverage |
 | Architecture and code quality | 9/10 | Policy enforcement, history, labeled holdout, and structural evidence |
 | Interoperability and audit evidence | 9/10 | SARIF, SBOM/VEX, SCAP, OSCAL, STIX/TAXII, CACAO/OpenC2/OCSF, SCITT, API contracts, OpenTelemetry, signed evidence, and fail-closed protocol evidence |
-| Systems security engineering and risk measurement | 8/10 | Trustworthy-systems, cyber-resiliency, RMF, risk, and measurement controls with traceable review evidence |
+| Systems security engineering and risk measurement | 9/10 | Trustworthy-systems, cyber-resiliency, RMF, NIST SP 800-30/39 multi-tier risk, ISO/IEC/IEEE 16085 lifecycle risk, and measurement controls with traceable review evidence |
 | Security-data interoperability | 9/10 | Explicit SARIF, CSAF, STIX/TAXII, OpenVEX, OSCAL, and CycloneDX contracts plus official-schema benchmark handoff |
-| Product certification readiness | 8/10 | Common Criteria security-target, evaluation-evidence, and claimed-scope assessment pack |
-| Detection engineering and threat intelligence | 8/10 | Sigma, ATT&CK, STIX/TAXII, and authorized Atomic Red Team validation contracts |
+| Product certification readiness | 9/10 | Common Criteria, EUCC, and SESIP/EN 17927 scheme pinning, accredited or qualified laboratory/certification authority, target/product/component/certificate identity, assurance continuity, vulnerability handling, public status, and negative-claim validation |
+| Detection engineering and threat intelligence | 9/10 | Sigma, ATT&CK, STIX/TAXII, FIRST TLP/IEP handling, VERIS classification/deidentification, and authorized Atomic Red Team validation contracts |
 | Language-specific secure coding | 8/10 | CERT C/C++/Java, MISRA C, and ISO rule catalogs with governed conformance corpus |
 | Formal software testing and V&V | 9/10 | Exact ISO/IEC/IEEE 29119 Parts 1-5 and ISO/IEC 20246 controls joined to a maintained process/document/technique conformance adapter and real-defect benchmarks |
 | Safety and security co-engineering | 8/10 | IEC 61508, ISO 26262, ISO 14971, and avionics assurance with explicit safety-impact review |
 | Specialized target validation | 8/10 | OWASP MAS Crackmes, CloudGoat, SmartBugs, IoT conformance, and protocol-specific disposable lanes |
 | AI robustness and impact | 8/10 | NIST AI impact assessment and ISO robustness/measurement controls with stochastic evidence requirements |
-| Privacy by design | 9/10 | ISO privacy principles, privacy-by-design lifecycle controls, consent-record interoperability, and explicit data-flow procedures |
+| Privacy by design | 9/10 | ISO privacy principles, privacy-by-design and operationalisation lifecycle controls, model validation, consent-record interoperability, explicit data-flow procedures, and cryptographic PET evidence |
 | Zero-trust implementation | 8/10 | NIST ZTA, CISA maturity, OT boundaries, and workload-identity implementation evidence |
 | Canonical fuzzing and functional benchmarks | 9/10 | FuzzBench, Magma, OSS-Fuzz, Defects4J, SWE-bench, Vul4J, and BugsInPy contracts with pinned identities and qualified execution |
 | Independent evaluator and laboratory assurance | 8/10 | ISO/IEC 17025/17020/17065 controls plus method, competency, impartiality, traceability, and independent-review evidence |
@@ -776,18 +1177,18 @@ applicable pack, evidence, procedures, authority, and benchmark thresholds pass.
 | Healthcare security operations | 8/10 | HIPAA safeguards and NIST SP 800-66 mapping/testing complement device-specific lifecycle assurance |
 | Airborne software assurance | 8/10 | DO-178C/330 lifecycle and tool qualification with model-based, object-oriented, and formal-method supplements |
 | Federal configuration conformance | 8/10 | Version-pinned DISA STIG/SRG and SCAP benchmark with qualified automated and manual assessment |
-| Software quality evaluation process | 8/10 | ISO/IEC 25040/25041 evaluation design, execution, ratings, limitations, and evaluator viewpoint |
+| Software quality evaluation process | 9/10 | ISO/IEC 25001/25002/25021/25022/25040/25041/25051 planning, technology management, model selection, measure elements, quality-in-use reproduction, evaluation design, product acceptance, ratings, limitations, and evaluator viewpoint |
 | Incident management lifecycle | 8/10 | ISO/IEC 27035 and ISO/IEC/IEEE 23612 preparation, response, recovery, traceability, and exercise controls |
 | Privacy impact assessment | 8/10 | ISO/IEC 29134 PIA report and negative-scenario procedure integrated with data-flow evidence |
 | Supply-chain identifier integrity | 9/10 | in-toto/DSSE verification and lossless CPE, SWID, purl, OSV, CVE, CycloneDX, and SPDX identities |
-| Threat-model quality | 8/10 | Evidence-backed four-question model, systems-engineering traceability, independent challenge, and labeled benchmark |
-| Software and systems lifecycle traceability | 8/10 | Seven-stage, source-bound lifecycle artifact with complete bidirectional requirement evidence and mutation benchmark |
+| Threat-model quality | 9/10 | A source-bound asset/component/flow/boundary graph with referential integrity, exact risk arithmetic, assumption and acceptance expiry, verified mitigations, passing negative tests, architecture-change coverage, two-person independent approval, systems-engineering traceability, and a labeled benchmark |
+| Software and systems lifecycle traceability | 9/10 | Seven-stage, source-bound graph with complete bidirectional requirement evidence, directional digest-backed links, end-to-end requirement reachability, independently verified change-impact samples, two-person review, and a mutation benchmark |
 | Scenario-based architecture evaluation | 9/10 | ISO architecture evaluation plus ATAM utility trees, sensitivity and trade-off points, risk themes, dispositions, and blinded assessor scenarios |
 | Software process capability | 8/10 | Seven bounded evidence dimensions with level semantics, independent verification, and assessor-agreement benchmark |
 | Comprehensive weakness mapping | 8/10 | Complete versioned CWE catalog plus release- and abstraction-policy-bound mapping conformance |
 | Exploit prioritization validation | 8/10 | Point-in-time EPSS/KEV calibration with future-data exclusion, outcome authority, recall-at-budget, effort, and response-time evidence |
 | Formal verification and test generation | 8/10 | SV-COMP and Test-Comp contracts with pinned tasks, validated witnesses or test suites, and resource limits |
-| AI lifecycle, data quality, and evaluation | 8/10 | ISO lifecycle/data references plus ARIA/Inspect stochastic, digest-bound evaluation contracts |
+| AI lifecycle, data quality, and evaluation | 9/10 | ISO/IEC 22989 terminology, 23053 ML architecture, 38507 governance, 38505-1 data governance, 5338 lifecycle, 5259 data quality, TS 25058 quality evaluation, TR 24030/27563 domain cases, and ARIA/Inspect/AILuminate stochastic digest-bound evaluation contracts |
 | Supplier relationship assurance | 8/10 | ISO/IEC 27036 governance, agreements, monitoring, incident, change, and exit evidence |
 | Software-signing conformance | 9/10 | Sigstore and SLSA verifier contracts bind suites, trust roots, identities, subjects, and negative cases |
 | Remote attestation assurance | 9/10 | DICE/TPM/RATS/EAT layered identity, evidence, endorsements, freshness, mutations, appraisal, reset/recovery, and relying-party decision boundaries |
@@ -796,7 +1197,7 @@ applicable pack, evidence, procedures, authority, and benchmark thresholds pass.
 | Maritime cyber resilience | 8/10 | IACS UR E26/E27 ship and onboard-system lifecycle, update, recovery, and qualified conformance evidence |
 | Financial messaging security | 8/10 | SWIFT CSCF architecture, access, credentials, transactions, monitoring, response, and independent assessment |
 | Reproducible real-world defect benchmarks | 9/10 | Defects4J, SWE-bench Verified, Vul4J, BugsInPy, CVE pairs, and governed project/time splits |
-| Agent security benchmark realism | 8/10 | AgentDojo plus internal holdout with attack-success, utility, contamination, and five-repetition requirements |
+| Agent security benchmark realism | 9/10 | AgentDojo, HarmBench, AgentHarm Inspect Evals 6-B, version-pinned garak probes, and an internal holdout with attack success, utility retention, scorer-manipulation tests, contamination analysis, private-case generalization, confidence intervals, inert tools, bounded authority, and five-repetition requirements |
 
 Classification scorecards report precision, recall, specificity, F1, Matthews
 correlation coefficient, balanced accuracy, false-positive rate, and Youden's J.
@@ -847,7 +1248,15 @@ sources include [ISO/IEC 17025](https://www.iso.org/standard/66912.html),
 [in-toto specifications](https://in-toto.io/docs/specs/),
 [Vul4J](https://github.com/tuhh-softsec/vul4j),
 [BugsInPy](https://github.com/soarsmu/BugsInPy), and
-[AgentDojo](https://github.com/ethz-spylab/agentdojo). The added foundational
+[AgentDojo](https://github.com/ethz-spylab/agentdojo). The AI adversarial
+execution sources also include
+[HarmBench](https://github.com/centerforaisafety/HarmBench),
+[AgentHarm in Inspect Evals](https://github.com/UKGovernmentBEIS/inspect_evals/tree/main/src/inspect_evals/agentharm),
+[NVIDIA garak](https://github.com/NVIDIA/garak), and
+[OWASP Cornucopia](https://cornucopia.owasp.org/), and
+[Microsoft PyRIT](https://github.com/microsoft/PyRIT). Their outputs remain
+corpus-, implementation-, scorer-, model-, and configuration-specific and are
+not presented as proof of general AI safety. The added foundational
 and conformance sources include [MITRE CWE](https://cwe.mitre.org/),
 [FIRST EPSS](https://www.first.org/epss/),
 [CISA KEV](https://www.cisa.gov/known-exploited-vulnerabilities-catalog),
@@ -906,12 +1315,64 @@ V&V, module, biometric, service, and proficiency extensions use
 [ISO/IEC 24759:2025](https://www.iso.org/standard/82424.html),
 [ISO/IEC 30107-3:2023](https://www.iso.org/standard/79520.html),
 [ISO/IEC 20000-1](https://www.iso.org/standard/70636.html), and
-[ISO/IEC 17043:2023](https://www.iso.org/standard/80864.html).
+[ISO/IEC 17043:2023](https://www.iso.org/standard/80864.html). Enterprise-risk,
+quality-governance, AI, and architecture additions use
+[NIST IR 8286 Rev. 1](https://csrc.nist.gov/pubs/ir/8286/r1/final),
+[CIS RAM 2.2](https://learn.cisecurity.org/cis-ram-v2-2),
+[ISO/IEC 25001](https://www.iso.org/standard/64787.html),
+[ISO/IEC TR 42106](https://www.iso.org/standard/86903.html),
+[ISO/IEC 8183](https://www.iso.org/standard/83002.html),
+[ISO/IEC 12792](https://www.iso.org/standard/84111.html),
+[ISO/IEC TS 8200](https://www.iso.org/standard/83012.html),
+[COBIT](https://www.isaca.org/resources/cobit), and policy-pinned Open Group
+TOGAF, ArchiMate, and Open FAIR sources. Licensed content is never vendored;
+adopters must supply approved requirement and interpretation digests.
+The latest assurance tranche uses
+[OWASP AISVS 1.0](https://owasp.org/www-project-artificial-intelligence-security-verification-standard-aisvs-docs/),
+[ISO/IEC TS 25058](https://www.iso.org/standard/82570.html),
+[EUCC](https://certification.enisa.europa.eu/certification-library/eucc-certification-scheme_en),
+[CISA Secure Software Development Attestation](https://www.cisa.gov/resources-tools/resources/secure-software-development-attestation-form),
+[IEEE autonomous and intelligent system standards](https://standards.ieee.org/initiatives/autonomous-intelligence-systems/standards/),
+[ISO/IEC TR 27563](https://www.iso.org/standard/80396.html),
+[ISO/IEC TR 24030](https://www.iso.org/standard/84144.html),
+[ISO/IEC 38500](https://www.iso.org/standard/81684.html),
+[NIST SP 1301](https://csrc.nist.gov/pubs/sp/1301/final), and
+[MLCommons AILuminate](https://mlcommons.org/ailuminate/).
+The agent, IoT, information-handling, web, and sector additions use official
+[A2A 1.0](https://a2a-protocol.org/latest/specification/),
+[GlobalPlatform SESIP 1.2](https://globalplatform.org/specs-library/sesip-methodology/),
+[FIRST TLP 2.0](https://www.first.org/tlp/),
+[FIRST IEP 2.0](https://www.first.org/iep/),
+[VERIS](https://verisframework.org/),
+[W3C CSP Level 2](https://www.w3.org/TR/CSP2/),
+[W3C SRI 1.0](https://www.w3.org/TR/2016/REC-SRI-20160623/),
+[DORA delegated and implementing acts](https://www.eba.europa.eu/activities/direct-supervision-and-oversight/digital-operational-resilience-act),
+[FFIEC IT Handbooks](https://ithandbook.ffiec.gov/it-booklets/),
+[BSI C5](https://www.bsi.bund.de/dok/C5), and
+[FCC 24-26](https://docs.fcc.gov/public/attachments/FCC-24-26A1.pdf).
+The digital-credential, posture, privacy, telecom, provenance, automotive, and
+payment tranche uses official
+[W3C VC Data Model 2.0](https://www.w3.org/TR/vc-data-model-2.0/),
+[OpenID4VP 1.0](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html),
+[OpenID4VC HAIP 1.0](https://openid.net/specs/openid4vc-high-assurance-interoperability-profile-1_0-final.html),
+[FAPI 2.0 final specifications](https://openid.net/fapi-2-security-profile-attacker-model-final-specifications-approved/),
+[CISA SCuBA](https://github.com/cisagov/ScubaGear),
+[CIS Kubernetes Benchmark](https://www.cisecurity.org/benchmark/kubernetes),
+[LINDDUN](https://linddun.org/),
+[OWASP Benchmark](https://owasp.org/www-project-benchmark/),
+[GSMA NESAS](https://www.gsma.com/solutions-and-impact/technologies/security/network-equipment-security-assurance-scheme/),
+[ENX TISAX downloads](https://enx.com/en-us/TISAX/downloads/),
+[C2PA specifications](https://spec.c2pa.org/specifications/), and
+[PCI Security Standards](https://www.pcisecuritystandards.org/standards/).
 
 ISO/IEC 27090, NIST Privacy Framework 1.1, ISO/IEC 42119 parts 3, 7, and 8,
 the next ISO 31000 and ISO/IEC/IEEE 15026-4 editions, IEEE P1012, TCG DICE
-1.3, ISO/IEC/IEEE 29119-14, and
-release-ambiguous OWASP ISVS remain publication watch items. The registry
+1.3, ISO/IEC/IEEE 29119-14, ISO/IEC 42105, ISO/IEC 24970, ISO/IEC 42007,
+NIST IR 8596, the next ISO/IEC TR 24030 edition, unreleased AILuminate
+Agentic/Multimodal contracts, release-ambiguous OWASP ISVS, W3C CSP Level 3,
+SRI 2, Trusted Types, W3C VC Data Model 2.1, OpenID4VP 1.1, VDA ISA 2027,
+and draft BSI TR-03183 Parts 1 and 3 remain
+publication watch items. The registry
 intentionally avoids a normative claim until the responsible publisher exposes
 a stable final edition and the organization pins its version, source digest,
 applicability, and licensed requirements after legal review.

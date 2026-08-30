@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:benchmark-security-event-anchor:1.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "analysis", "records", "head_event_sha256", "log_sha256", "anchored_at", "trusted_time_observed_at", "trusted_time_receipt_sha256", "anchor_sequence", "previous_anchor_sha256", "organization_id", "key_provider", "key_version", "signer_key_id", "public_key", "anchor_sha256", "signature"],
+  "properties": {
+    "schema_version": {"const": "1.1"},
+    "analysis": {"const": "benchmark-security-event-log-verification"},
+    "records": {"type": "integer", "minimum": 1},
+    "head_event_sha256": {"$ref": "#/$defs/sha256"},
+    "log_sha256": {"$ref": "#/$defs/sha256"},
+    "anchored_at": {"type": "string", "format": "date-time"},
+    "trusted_time_observed_at": {"type": "string", "format": "date-time"},
+    "trusted_time_receipt_sha256": {"$ref": "#/$defs/sha256"},
+    "anchor_sequence": {"type": "integer", "minimum": 1},
+    "previous_anchor_sha256": {"$ref": "#/$defs/sha256"},
+    "organization_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"},
+    "key_provider": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"},
+    "key_version": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"},
+    "signer_key_id": {"$ref": "#/$defs/sha256"},
+    "public_key": {"type": "string", "minLength": 40, "maxLength": 128},
+    "anchor_sha256": {"$ref": "#/$defs/sha256"},
+    "signature": {"type": "string", "minLength": 80, "maxLength": 128}
+  },
+  "$defs": {"sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}
+}

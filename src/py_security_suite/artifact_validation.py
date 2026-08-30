@@ -33,6 +33,7 @@ _ARTIFACT_SCHEMAS = {
     "artifact-sbom.cdx.json": "cyclonedx-artifact.schema.json",
     "assurance-claims.json": "assurance-claims-1.1.schema.json",
     "assurance-case-assessment.json": "assurance-case-assessment-1.0.schema.json",
+    "threat-model-assessment.json": "threat-model-assessment-1.0.schema.json",
     "boundary-graph.json": "boundary-graph-1.0.schema.json",
     "benchmark-delta.json": "benchmark-delta-1.0.schema.json",
     "benchmark-registry.json": "benchmark-registry-1.0.schema.json",
@@ -254,6 +255,75 @@ def _validate_assurance_case_assessment(value: object) -> None:
         or (value.get("applicable") is False and expected_complete)
     ):
         raise ValueError("assurance case assessment accounting does not match")
+
+
+@_typed_validator("threat-model-assessment.json")
+def _validate_threat_model_assessment(value: object) -> None:
+    if (
+        not isinstance(value, dict)
+        or not isinstance(value.get("scope"), dict)
+        or not isinstance(value.get("coverage"), dict)
+        or not isinstance(value.get("gaps"), list)
+    ):
+        raise TypeError("threat model assessment artifact is invalid")
+    scope = value["scope"]
+    coverage = value["coverage"]
+    bounded = (
+        ("assets_with_threats", "assets"),
+        ("cross_boundary_flows", "data_flows"),
+        ("cross_boundary_flows_modeled", "cross_boundary_flows"),
+        ("threats_with_mitigations", "threats"),
+        ("threats_with_verification", "threats"),
+        ("verified_mitigations", "mitigations"),
+        ("passed_negative_tests", "tests"),
+        ("open_assumptions", "assumptions"),
+        ("unresolved_high_risk", "threats"),
+        ("change_triggers_assessed", "change_triggers"),
+    )
+    for observed, total in bounded:
+        limit = coverage.get(total) if total in coverage else scope.get(total)
+        if not isinstance(limit, int) or coverage.get(observed, -1) > limit:
+            raise ValueError("threat model assessment coverage exceeds its scope")
+    expected_complete = not value["gaps"]
+    if value.get("complete") is not expected_complete or (
+        value.get("applicable") is False and expected_complete
+    ):
+        raise ValueError("threat model assessment completion does not match its gaps")
+
+
+@_typed_validator("lifecycle-traceability.json")
+def _validate_lifecycle_traceability(value: object) -> None:
+    if (
+        not isinstance(value, dict)
+        or not isinstance(value.get("stages"), list)
+        or not isinstance(value.get("requirements_traceability"), dict)
+        or not isinstance(value.get("graph_traceability"), dict)
+        or not isinstance(value.get("gaps"), list)
+    ):
+        raise TypeError("lifecycle traceability artifact is invalid")
+    stages = value["stages"]
+    requirements = value["requirements_traceability"]
+    graph = value["graph_traceability"]
+    if (
+        value.get("stages_complete")
+        != sum(item.get("complete") is True for item in stages)
+        or graph.get("applicable_nodes", 0) > graph.get("nodes", 0)
+        or graph.get("verified_change_sets", 0) > graph.get("change_sets", 0)
+        or graph.get("requirements_with_end_to_end_trace", 0)
+        > graph.get("applicable_nodes", 0)
+    ):
+        raise ValueError("lifecycle traceability accounting does not match")
+    expected_complete = (
+        bool(value.get("source_sha256"))
+        and requirements.get("bidirectional_trace_complete") is True
+        and all(item.get("complete") is True for item in stages)
+        and graph.get("complete") is True
+        and not value["gaps"]
+    )
+    if value.get("complete") is not expected_complete:
+        raise ValueError(
+            "lifecycle traceability completion does not match its evidence"
+        )
 
 
 @_typed_validator("control-assessment.json")

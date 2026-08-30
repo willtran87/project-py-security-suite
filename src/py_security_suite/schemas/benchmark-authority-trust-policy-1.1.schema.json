@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:benchmark-authority-trust-policy:1.1",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "policy_id", "issued_at", "expires_at", "minimum_distinct_signers", "minimum_distinct_organizations", "authorities"],
+  "properties": {
+    "schema_version": {"const": "1.1"},
+    "policy_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{1,127}$"},
+    "issued_at": {"type": "string", "format": "date-time"},
+    "expires_at": {"type": "string", "format": "date-time"},
+    "minimum_distinct_signers": {"type": "integer", "minimum": 4, "maximum": 32},
+    "minimum_distinct_organizations": {"type": "integer", "minimum": 2, "maximum": 32},
+    "authorities": {"type": "array", "minItems": 4, "maxItems": 256, "items": {"$ref": "#/$defs/authority"}}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "authority": {
+      "type": "object", "additionalProperties": false,
+      "required": ["role", "organization_id", "public_key_sha256", "revocation_status_sha256", "status", "key_version", "valid_from", "valid_until", "revoked_at"],
+      "properties": {
+        "role": {"enum": ["trusted-time", "replay-protection", "contamination-manifest", "runner-sbom", "runner-provenance", "environment", "acceptance-criteria", "adapter-conformance", "runtime-observation", "external-isolation", "cleanup-capability", "execution-receipt", "provenance-builder", "security-event-anchor"]},
+        "organization_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{1,127}$"},
+        "public_key_sha256": {"$ref": "#/$defs/sha256"},
+        "revocation_status_sha256": {"$ref": "#/$defs/sha256"},
+        "status": {"enum": ["active", "revoked", "suspended"]},
+        "key_version": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{1,127}$"},
+        "valid_from": {"type": "string", "format": "date-time"},
+        "valid_until": {"type": "string", "format": "date-time"},
+        "revoked_at": {"type": ["string", "null"], "format": "date-time"}
+      }
+    }
+  }
+}

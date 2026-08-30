@@ -1,6 +1,34 @@
 # Detection effectiveness and operational coverage
 
-Last reviewed: 2026-08-26
+Last reviewed: 2026-08-30
+
+The benchmark semantic canonicalizer is regression-calibrated against the
+canonical-digest-pinned multilingual fixture at
+[`tests/fixtures/semantic-calibration-1.1.json`](../tests/fixtures/semantic-calibration-1.1.json).
+The schema-1.1 fixture expands its independently reviewed positive and negative
+seeds into 600 deterministic metamorphic observations across Python,
+JavaScript, TypeScript, Go, Java, and Rust. Every language must independently
+meet precision, recall, and specificity floors plus a 95% Wilson lower-bound
+floor. A sidecar pins the exact RFC 8785 canonical fixture digest, so silent
+fixture replacement fails the gate.
+Those intervals quantify repeatable mutation-matrix stability; correlated
+metamorphic variants are not represented as independent field observations.
+This repository fixture detects algorithm regressions; production effectiveness
+claims still require independently labeled, signed holdouts through the corpus
+workflow below.
+
+```mermaid
+flowchart LR
+    Seeds["Independently reviewed<br/>positive and negative seeds"] --> Expand["Deterministic metamorphic expansion<br/>600 multilingual observations"]
+    Expand --> Canonical["Semantic canonicalizer"]
+    Canonical --> PerLanguage["Per-language precision,<br/>recall, specificity, and Wilson floor"]
+    Digest["RFC 8785 fixture digest"] --> Gate{"Regression gate"}
+    PerLanguage --> Gate
+    Gate -->|pass| Regression["Algorithm regression assurance"]
+    Gate -->|fail| Stop["Block the change"]
+    Holdout["Independent signed<br/>production holdout"] --> Production["Production effectiveness claim"]
+    Regression -. does not establish .-> Production
+```
 
 The suite separates five questions that are often incorrectly collapsed into
 one score:

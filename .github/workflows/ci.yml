@@ -13,6 +13,43 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  oci-containment-integration:
+    name: Real OCI containment / ${{ matrix.runtime }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runtime: docker
+            executable: /usr/bin/docker
+          - runtime: podman-rootless
+            executable: /usr/bin/podman
+    env:
+      PYSEC_TEST_OCI_RUNTIME: ${{ matrix.executable }}
+      PYSEC_TEST_OCI_IMAGE: postgres:17.6-alpine@sha256:747d5ed1fdeeb124b880fbe3d7c6557d2c4064ae41d6b6297d417882effce4be
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.11.19"
+          enable-cache: false
+      - name: Install locked dependencies
+        run: uv sync --locked --all-groups --python "3.13"
+      - name: Install rootless Podman runtime
+        if: matrix.runtime == 'podman-rootless'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes podman slirp4netns uidmap
+      - name: Pull the immutable containment fixture
+        run: '"$PYSEC_TEST_OCI_RUNTIME" pull "$PYSEC_TEST_OCI_IMAGE"'
+      - name: Exercise live OCI security controls
+        run: uv run --frozen pytest -q tests/integration/test_benchmark_oci_live.py
+
   containment-integration:
     name: Real containment / ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
@@ -301,7 +338,11 @@ jobs:
             --junitxml=.artifacts/test-assurance/junit.xml
           uv run --frozen coverage xml \
             -o .artifacts/test-assurance/coverage.xml
+          uv run --frozen coverage json \
+            -o .artifacts/test-assurance/coverage.json
           uv run --frozen coverage report --fail-under=80
+          uv run --frozen python scripts/validate_security_critical_coverage.py \
+            .artifacts/test-assurance/coverage.json
       - name: Require 90 percent changed-line coverage
         if: github.event_name == 'pull_request'
         env:
@@ -342,15 +383,38 @@ jobs:
         run: uv run --frozen ruff format --check .
       - name: Lint
         run: uv run --frozen ruff check .
+      - name: Validate benchmark schema/runtime consistency
+        run: uv run --frozen python scripts/validate_benchmark_schema_consistency.py
+      - name: Enforce public CLI and schema compatibility
+        run: uv run --frozen python scripts/validate_public_api.py
+      - name: Enforce architecture concentration ratchets
+        run: uv run --frozen python scripts/validate_architecture_limits.py
+      - name: Enforce deterministic performance and memory budgets
+        run: >-
+          uv run --frozen python scripts/validate_performance_budgets.py
+          --output .artifacts/performance/performance-assurance.json
       - name: Audit GitHub workflows
         run: uv run --frozen zizmor --pedantic --no-progress --color never .github
       - name: Check types
         run: >-
           uv run --frozen mypy src companion scripts/audit_pages.py
+          scripts/validate_architecture_limits.py
           scripts/discover_codeql_languages.py scripts/fuzz_security_parsers.py
           scripts/mkdocs_hooks.py scripts/validate-checkpoint-authority.py
+          scripts/validate_benchmark_schema_consistency.py
+          scripts/validate_security_critical_coverage.py
+          scripts/validate_performance_budgets.py
+          scripts/validate_public_api.py
           scripts/validate-native-attestation-fixtures.py
           scripts/verify_release_independent.py
+      - name: Retain performance assurance evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: performance-assurance-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .artifacts/performance/performance-assurance.json
+          if-no-files-found: error
+          retention-days: 90
       - name: Build distributions
         run: uv build --no-sources
 

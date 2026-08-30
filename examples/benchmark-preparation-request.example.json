@@ -1,0 +1,94 @@
+{
+  "schema_version": "1.0",
+  "benchmark_id": "droidbench",
+  "adapter_version": "1.0.0",
+  "corpus": {
+    "path": "corpus/droidbench-corpus.tar.zst",
+    "license_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+    "label_authority_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+    "organization_approved": true
+  },
+  "required_inputs": {
+    "source-projects": "inputs/source-projects.tar.zst",
+    "apk-set": "inputs/apk-set.tar.zst",
+    "source-sink-labels": "inputs/source-sink-labels.json",
+    "android-image": "inputs/android-image.tar.zst"
+  },
+  "stages": [
+    {
+      "name": "run",
+      "executable": "/opt/pysec/bin/droidbench-adapter",
+      "arguments": ["--output", "normalized-result.json"],
+      "environment": {},
+      "timeout_seconds": 3600,
+      "expected_exit_codes": [0]
+    },
+    {
+      "name": "cleanup",
+      "executable": "/opt/pysec/bin/droidbench-cleanup",
+      "arguments": ["--workspace", "."],
+      "environment": {},
+      "timeout_seconds": 300,
+      "expected_exit_codes": [0]
+    }
+  ],
+  "normalized_result": {"path": "normalized-result.json", "sha256": null},
+  "thresholds": {
+    "minimum_precision": 0.9,
+    "minimum_recall": 0.9,
+    "minimum_f1": 0.9,
+    "maximum_false_positive_rate": 0.05
+  },
+  "evaluation": {
+    "minimum_cases": 20,
+    "split_strategy": "official-fixed",
+    "positive_controls": 5,
+    "negative_controls": 5,
+    "acceptance_criteria_sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+    "independent_reviewers": 2,
+    "random_seeds": [17],
+    "required_strata": ["cwe", "android-category"],
+    "power_analysis_sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+    "minimum_power": 0.8,
+    "confidence_level": 0.95,
+    "maximum_confidence_interval_width": 0.2,
+    "minimum_repetitions": 3,
+    "leakage_check_sha256": "5555555555555555555555555555555555555555555555555555555555555555",
+    "duplicate_check_sha256": "6666666666666666666666666666666666666666666666666666666666666666",
+    "holdout_sequestered": true
+  },
+  "authority_policy": {
+    "minimum_distinct_signers": 4,
+    "minimum_distinct_organizations": 2,
+    "key_separation_groups": [
+      ["trusted_time", "replay_protection"],
+      ["runner_sbom", "runner_provenance"],
+      ["acceptance_criteria", "adapter_conformance"],
+      ["external_isolation", "cleanup_capability"]
+    ],
+    "organization_separation_groups": [
+      ["acceptance_criteria", "runner_provenance"],
+      ["external_isolation", "cleanup_capability"]
+    ]
+  },
+  "isolation": {
+    "mode": "external-sandbox",
+    "network_policy": "authorized-target-only",
+    "disposable_target": true,
+    "external_receipt_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "oci": null
+  },
+  "attestations": {
+    "trusted_time": {"path": "attestations/trusted-time.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "media_type": "application/vnd.pysec.attestation+json;version=1.1", "public_key_path": "attestations/authority.pem", "public_key_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "signature_path": "attestations/trusted-time.sig"},
+    "replay_protection": {"path": "attestations/replay.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "media_type": "application/vnd.pysec.attestation+json;version=1.1", "public_key_path": "attestations/authority.pem", "public_key_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "signature_path": "attestations/replay.sig"},
+    "contamination_manifest": {"path": "attestations/contamination.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "media_type": "application/vnd.pysec.attestation+json;version=1.1", "public_key_path": "attestations/authority.pem", "public_key_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "signature_path": "attestations/contamination.sig"},
+    "runner_sbom": {"path": "attestations/runner-sbom.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "media_type": "application/vnd.pysec.attestation+json;version=1.1", "public_key_path": "attestations/authority.pem", "public_key_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "signature_path": "attestations/runner-sbom.sig"},
+    "runner_provenance": {"path": "attestations/runner-provenance.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "media_type": "application/vnd.pysec.attestation+json;version=1.1", "public_key_path": "attestations/authority.pem", "public_key_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "signature_path": "attestations/runner-provenance.sig"},
+    "environment": {"path": "attestations/environment.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "media_type": "application/vnd.pysec.attestation+json;version=1.1", "public_key_path": "attestations/authority.pem", "public_key_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "signature_path": "attestations/environment.sig"},
+    "acceptance_criteria": {"path": "attestations/acceptance-criteria.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "media_type": "application/vnd.pysec.attestation+json;version=1.1", "public_key_path": "attestations/acceptance-authority.pem", "public_key_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "signature_path": "attestations/acceptance-criteria.sig"},
+    "adapter_conformance": {"path": "attestations/adapter-conformance.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "media_type": "application/vnd.pysec.attestation+json;version=1.1", "public_key_path": "attestations/conformance-authority.pem", "public_key_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "signature_path": "attestations/adapter-conformance.sig"},
+    "runtime_observation": {"path": "attestations/runtime-observation.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "media_type": "application/vnd.pysec.attestation+json;version=1.1", "public_key_path": "attestations/runtime-authority.pem", "public_key_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "signature_path": "attestations/runtime-observation.sig"},
+    "external_isolation": {"path": "attestations/external-isolation.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "media_type": "application/vnd.pysec.attestation+json;version=1.1", "public_key_path": "attestations/authority.pem", "public_key_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "signature_path": "attestations/external-isolation.sig"},
+    "cleanup_capability": {"path": "attestations/cleanup.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "media_type": "application/vnd.pysec.attestation+json;version=1.1", "public_key_path": "attestations/authority.pem", "public_key_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "signature_path": "attestations/cleanup.sig"}
+  }
+}

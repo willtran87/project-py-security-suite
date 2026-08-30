@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 from jsonschema import Draft202012Validator
 
 from py_security_suite.artifact_validation import (
@@ -25,6 +26,7 @@ from py_security_suite.industry_assurance import (
     _benchmark_protocol,
     _benchmark_reproducibility_gaps,
     _benchmark_runner_contract,
+    _lifecycle_traceability,
     _protocol_metrics_valid,
     _process_capability_assessment,
     _procedure_assessment,
@@ -32,6 +34,7 @@ from py_security_suite.industry_assurance import (
     _standardized_prioritization,
     _validated_cvss,
     _validate_policy,
+    _validate_builtin_catalog,
     build_industry_assurance,
 )
 from py_security_suite.report_inspection import read_bundled_schema
@@ -75,10 +78,10 @@ class IndustryAssuranceTests(unittest.TestCase):
             )
         self.assertEqual(errors, [])
         self.assertEqual(
-            artifacts["standards-crosswalk.json"]["catalogs_registered"], 358
+            artifacts["standards-crosswalk.json"]["catalogs_registered"], 481
         )
         self.assertEqual(
-            artifacts["benchmark-registry.json"]["benchmarks_registered"], 124
+            artifacts["benchmark-registry.json"]["benchmarks_registered"], 182
         )
         supported = {
             item["format"]
@@ -96,12 +99,12 @@ class IndustryAssuranceTests(unittest.TestCase):
                 if name.startswith("oscal-")
             )
         )
-        self.assertEqual(len(validate_governed_artifacts(artifacts)), 24)
+        self.assertEqual(len(validate_governed_artifacts(artifacts)), 25)
         profiles = artifacts["assurance-profile-registry.json"]
-        self.assertEqual(profiles["profiles_available"], 104)
+        self.assertEqual(profiles["profiles_available"], 147)
         self.assertEqual(profiles["profiles_selected"], 0)
         lifecycle = artifacts["standards-crosswalk.json"]["lifecycle_governance"]
-        self.assertEqual(lifecycle["catalogs_assessed"], 358)
+        self.assertEqual(lifecycle["catalogs_assessed"], 481)
         self.assertEqual(lifecycle["catalogs_complete"], 0)
         self.assertFalse(lifecycle["complete"])
         self.assertTrue(lifecycle["signed_source_snapshot_required"])
@@ -219,6 +222,63 @@ class IndustryAssuranceTests(unittest.TestCase):
                 "ISO-IEC-20000-1",
                 "ISO-IEC-27013",
                 "ISO-IEC-17043",
+                "ISO-IEC-IEEE-24748-1",
+                "ISO-IEC-IEEE-15289",
+                "ISO-IEC-IEEE-16085",
+                "ISO-IEC-IEEE-90003",
+                "ISO-IEC-25002",
+                "ISO-IEC-25021",
+                "ISO-IEC-25022",
+                "ISO-IEC-25051",
+                "NIST-SP-800-30",
+                "NIST-SP-800-39",
+                "ISO-IEC-29151",
+                "ISO-IEC-27557",
+                "ISO-IEC-TR-27550",
+                "ISO-IEC-38505-1",
+                "ISO-IEC-22989",
+                "ISO-IEC-23053",
+                "ISO-IEC-38507",
+                "ISO-22340",
+                "OWASP-CODE-REVIEW-GUIDE",
+                "OWASP-CORNUCOPIA",
+                "CIS-SAFECODE-SECURE-BY-DESIGN",
+                "NIST-IR-8286",
+                "NIST-IR-8286A",
+                "NIST-IR-8286B",
+                "NIST-IR-8286C",
+                "NIST-IR-8286D",
+                "CIS-RAM",
+                "ISO-IEC-25001",
+                "ISO-IEC-TR-42106",
+                "ISO-IEC-8183",
+                "ISO-IEC-12792",
+                "ISO-IEC-TS-6254",
+                "ISO-IEC-TS-8200",
+                "ISO-IEC-TS-12791",
+                "ISO-IEC-TR-5469",
+                "COBIT-2019",
+                "TOGAF-STANDARD",
+                "ARCHIMATE",
+                "OPEN-FAIR",
+                "OWASP-AISVS",
+                "ISO-IEC-TS-25058",
+                "EU-EUCC",
+                "CISA-SECURE-SOFTWARE-ATTESTATION",
+                "IEEE-7000",
+                "IEEE-7001",
+                "IEEE-7002",
+                "IEEE-7003",
+                "IEEE-7009",
+                "ISO-IEC-TR-27563",
+                "ISO-IEC-TR-24030",
+                "ISO-IEC-38500",
+                "ISO-9001",
+                "NIST-SP-1301",
+                "ISO-IEC-27000",
+                "ISO-IEC-27561",
+                "ISO-IEC-TS-27564",
+                "ISO-IEC-27565",
             }
             <= {item["id"] for item in _STANDARDS}
         )
@@ -264,6 +324,16 @@ class IndustryAssuranceTests(unittest.TestCase):
                 "biometric-identity-assurance",
                 "integrated-service-security-management",
                 "interlaboratory-proficiency",
+                "enterprise-cyber-risk-integration",
+                "enterprise-architecture-governance",
+                "ai-benchmark-governance",
+                "ai-application-security-verification",
+                "responsible-ai-system-assurance",
+                "eucc-product-certification",
+                "federal-software-attestation",
+                "it-quality-governance",
+                "nist-csf-profile-management",
+                "privacy-engineering-pets",
             }
             <= set(_ASSURANCE_PROFILES)
         )
@@ -318,6 +388,27 @@ class IndustryAssuranceTests(unittest.TestCase):
                 "biometric-performance-pad",
                 "service-management-security-integration",
                 "interlaboratory-proficiency-testing",
+                "harmbench",
+                "agentharm",
+                "garak-llm-probe-conformance",
+                "owasp-cornucopia-threat-model",
+                "nist-8286-enterprise-risk-register",
+                "cis-ram-attack-path-analysis",
+                "square-quality-governance",
+                "iso-42106-differentiated-ai-benchmarking",
+                "enterprise-architecture-governance",
+                "pyrit-ai-red-team",
+                "owasp-aisvs-conformance",
+                "iso-25058-ai-quality-evaluation",
+                "eucc-scheme-assurance",
+                "cisa-secure-software-attestation",
+                "ieee-7000-ai-ethics-conformance",
+                "ai-use-case-security-privacy",
+                "it-quality-governance-assessor-agreement",
+                "nist-csf-profile-gap-reassessment",
+                "mlcommons-ailuminate-safety",
+                "mlcommons-ailuminate-jailbreak",
+                "privacy-engineering-pet-conformance",
             }
             <= {item["id"] for item in _BENCHMARKS}
         )
@@ -343,6 +434,16 @@ class IndustryAssuranceTests(unittest.TestCase):
                 "ISO-IEC-IEEE-29119-14",
                 "ISO-IEC-IEEE-15026-4-NEXT-EDITION",
                 "IEEE-P1012",
+                "NIST-SSDF-1.2",
+                "NIST-SP-800-154",
+                "ISO-IEC-25000-22",
+                "ISO-IEC-42105",
+                "ISO-IEC-24970",
+                "ISO-IEC-42007",
+                "NIST-IR-8596",
+                "ISO-IEC-TR-24030-NEXT-EDITION",
+                "MLCOMMONS-AILUMINATE-AGENTIC",
+                "MLCOMMONS-AILUMINATE-MULTIMODAL",
             }
             <= {item["id"] for item in _STANDARDS_WATCHLIST}
         )
@@ -350,6 +451,11 @@ class IndustryAssuranceTests(unittest.TestCase):
         standards = {item["id"]: item for item in _STANDARDS}
         self.assertEqual(standards["ISO-IEC-IEEE-29119-2"]["version"], "2021")
         self.assertEqual(standards["ISO-IEC-IEEE-29119-5"]["version"], "2024")
+        self.assertEqual(standards["ISO-IEC-29100"]["version"], "2024")
+        self.assertEqual(
+            standards["ISO-IEC-29100"]["reference"],
+            "https://www.iso.org/standard/85938.html",
+        )
         self.assertIn("voluntary", standards["CISA-SECURE-BY-DESIGN"]["kind"])
         self.assertIn(
             "research-backed",
@@ -569,6 +675,7 @@ class IndustryAssuranceTests(unittest.TestCase):
                 "security-automation-interoperability.json",
                 "external-conformity-assessment.json",
                 "assurance-case-assessment.json",
+                "threat-model-assessment.json",
             },
         )
         self.assertTrue(artifacts["prioritization-calibration.json"]["complete"])
@@ -623,6 +730,290 @@ class IndustryAssuranceTests(unittest.TestCase):
         )
         validate_governed_artifacts(artifacts)
         validate_governed_artifacts(invalid_artifacts)
+
+    def test_threat_model_assessment_requires_bound_graph_and_negative_tests(
+        self,
+    ) -> None:
+        source_sha256 = "a" * 64
+        threat_model = {
+            "schema_version": "1.0",
+            "model_id": "checkout-threat-model",
+            "source_sha256": source_sha256,
+            "architecture_sha256": "b" * 64,
+            "methodology": "OWASP four-question framework with STRIDE",
+            "reviewed_at": "2026-08-20T12:00:00Z",
+            "assets": [
+                {
+                    "id": "credentials",
+                    "title": "Customer credentials",
+                    "owner": "identity-team",
+                    "classification": "restricted",
+                    "criticality": 5,
+                }
+            ],
+            "components": [
+                {
+                    "id": "browser",
+                    "name": "Customer browser",
+                    "kind": "external-client",
+                    "zone": "internet",
+                    "owner": "customer",
+                },
+                {
+                    "id": "identity-api",
+                    "name": "Identity API",
+                    "kind": "service",
+                    "zone": "production",
+                    "owner": "identity-team",
+                },
+            ],
+            "trust_boundaries": [
+                {
+                    "id": "internet-edge",
+                    "from_zone": "internet",
+                    "to_zone": "production",
+                    "control_ids": ["TLS-CLIENT-AUTH", "RATE-LIMIT"],
+                }
+            ],
+            "data_flows": [
+                {
+                    "id": "login",
+                    "source_component": "browser",
+                    "destination_component": "identity-api",
+                    "data_classes": ["credentials"],
+                    "boundary_ids": ["internet-edge"],
+                    "encrypted": True,
+                    "authenticated": True,
+                }
+            ],
+            "assumptions": [
+                {
+                    "id": "tls-termination",
+                    "statement": "The approved edge terminates TLS.",
+                    "owner": "platform-team",
+                    "status": "validated",
+                    "expires_at": "2099-01-01T00:00:00Z",
+                }
+            ],
+            "mitigations": [
+                {
+                    "id": "credential-controls",
+                    "title": "Rate limit and authenticate login traffic.",
+                    "owner": "identity-team",
+                    "status": "verified",
+                    "control_ids": ["TLS-CLIENT-AUTH", "RATE-LIMIT"],
+                    "evidence": [
+                        {
+                            "artifact": "control-assessment.json",
+                            "sha256": "c" * 64,
+                            "subject_sha256": source_sha256,
+                        }
+                    ],
+                }
+            ],
+            "tests": [
+                {
+                    "id": "credential-abuse-test",
+                    "threat_ids": ["credential-stuffing"],
+                    "kind": "rate-limit-negative-case",
+                    "negative_case": True,
+                    "result": "passed",
+                    "evidence_sha256": "d" * 64,
+                    "subject_sha256": source_sha256,
+                }
+            ],
+            "threats": [
+                {
+                    "id": "credential-stuffing",
+                    "title": "Automated credential stuffing",
+                    "category": "spoofing",
+                    "asset_ids": ["credentials"],
+                    "component_ids": ["identity-api"],
+                    "flow_ids": ["login"],
+                    "boundary_ids": ["internet-edge"],
+                    "preconditions": ["Attacker possesses reused credentials."],
+                    "attack_steps": ["Replay credentials against the login endpoint."],
+                    "likelihood": 4,
+                    "impact": 5,
+                    "risk_score": 20,
+                    "status": "mitigated",
+                    "mitigation_ids": ["credential-controls"],
+                    "test_ids": ["credential-abuse-test"],
+                    "residual_risk": 5,
+                    "owner": "identity-team",
+                    "acceptance": None,
+                }
+            ],
+            "change_triggers": [
+                {
+                    "id": "architecture-snapshot",
+                    "artifact": "static-architecture.json",
+                    "sha256": "e" * 64,
+                    "assessed": True,
+                }
+            ],
+            "review": {
+                "reviewed_at": "2026-08-20T12:00:00Z",
+                "independent_reviewers": ["security-reviewer", "architecture-reviewer"],
+                "approved": True,
+                "approval_sha256": "f" * 64,
+            },
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            complete, errors = build_industry_assurance(
+                Path(directory),
+                {
+                    "source-inventory.json": {
+                        "complete": True,
+                        "source_sha256": source_sha256,
+                    },
+                    "threat-model-evidence.json": threat_model,
+                },
+            )
+            invalid_model = json.loads(json.dumps(threat_model))
+            invalid_model["data_flows"][0]["boundary_ids"] = []
+            invalid_model["tests"][0]["result"] = "failed"
+            invalid_model["change_triggers"][0]["assessed"] = False
+            invalid, invalid_errors = build_industry_assurance(
+                Path(directory),
+                {
+                    "source-inventory.json": {
+                        "complete": True,
+                        "source_sha256": source_sha256,
+                    },
+                    "threat-model-evidence.json": invalid_model,
+                },
+            )
+        self.assertEqual(errors, [])
+        self.assertEqual(invalid_errors, [])
+        assessment = complete["threat-model-assessment.json"]
+        self.assertTrue(assessment["complete"])
+        self.assertEqual(assessment["coverage"]["assets_with_threats"], 1)
+        self.assertEqual(assessment["coverage"]["threats_with_verification"], 1)
+        self.assertEqual(assessment["review"]["independent_reviewers"], 2)
+        invalid_assessment = invalid["threat-model-assessment.json"]
+        self.assertFalse(invalid_assessment["complete"])
+        self.assertTrue(
+            {
+                "cross-zone flow has no matching directional trust boundary: login",
+                "mitigated threat lacks verified controls or passing negative tests: credential-stuffing",
+                "architecture change has not been threat-modeled: architecture-snapshot",
+            }
+            <= set(invalid_assessment["gaps"])
+        )
+        validate_governed_artifacts(complete)
+        validate_governed_artifacts(invalid)
+
+    def test_lifecycle_traceability_requires_end_to_end_graph_and_change_impact(
+        self,
+    ) -> None:
+        source_sha256 = "a" * 64
+        stages = [
+            "requirements",
+            "architecture",
+            "implementation",
+            "verification",
+            "release",
+            "operation",
+            "retirement",
+        ]
+        nodes = [
+            {
+                "id": f"node-{stage}",
+                "stage": stage,
+                "artifact": f"{stage}.json",
+                "sha256": f"{index + 1:x}" * 64,
+                "subject_sha256": source_sha256,
+                "applicable": True,
+            }
+            for index, stage in enumerate(stages)
+        ]
+        link_types = [
+            "derives",
+            "implements",
+            "verifies",
+            "releases",
+            "operates",
+            "retires",
+        ]
+        links = [
+            {
+                "source": nodes[index]["id"],
+                "target": nodes[index + 1]["id"],
+                "type": link_types[index],
+                "evidence_sha256": f"{index + 8:x}" * 64,
+            }
+            for index in range(6)
+        ]
+        evidence = {
+            "schema_version": "1.0",
+            "source_sha256": source_sha256,
+            "nodes": nodes,
+            "links": links,
+            "change_sets": [
+                {
+                    "id": "change-42",
+                    "changed_node_ids": ["node-implementation"],
+                    "impact_node_ids": [
+                        "node-verification",
+                        "node-release",
+                        "node-operation",
+                        "node-retirement",
+                    ],
+                    "verified": True,
+                    "evidence_sha256": "e" * 64,
+                }
+            ],
+            "review": {
+                "reviewed_at": "2026-08-20T12:00:00Z",
+                "independent_reviewers": ["quality-reviewer", "security-reviewer"],
+                "approved": True,
+                "approval_sha256": "f" * 64,
+            },
+        }
+        artifacts = {
+            "security-requirements-coverage.json": {
+                "complete": True,
+                "applicable_requirements": 1,
+                "evidenced_requirements": 1,
+            },
+            "static-architecture.json": {"complete": True},
+            "architecture-history.json": {"complete": True},
+            "source-inventory.json": {"complete": True},
+            "test-evidence.json": {"complete": True},
+            "effectiveness.json": {"complete": True},
+            "release-readiness.json": {"complete": True},
+            "operational-trend.json": {"complete": True},
+            "closure-plan.json": {"complete": True},
+            "lifecycle-traceability-evidence.json": evidence,
+        }
+        assessment = _lifecycle_traceability(artifacts, source_sha256)
+        self.assertTrue(assessment["complete"])
+        self.assertEqual(
+            assessment["graph_traceability"]["requirements_with_end_to_end_trace"],
+            1,
+        )
+        self.assertEqual(assessment["graph_traceability"]["verified_change_sets"], 1)
+        validate_governed_artifacts({"lifecycle-traceability.json": assessment})
+
+        invalid_evidence = json.loads(json.dumps(evidence))
+        invalid_evidence["links"].pop()
+        invalid_evidence["change_sets"][0]["verified"] = False
+        invalid_artifacts = {
+            **artifacts,
+            "lifecycle-traceability-evidence.json": invalid_evidence,
+        }
+        invalid = _lifecycle_traceability(invalid_artifacts, source_sha256)
+        self.assertFalse(invalid["complete"])
+        self.assertIn(
+            "applicable lifecycle node has no downstream trace: node-operation",
+            invalid["gaps"],
+        )
+        self.assertIn(
+            "change impact is not independently verified: change-42",
+            invalid["gaps"],
+        )
+        validate_governed_artifacts({"lifecycle-traceability.json": invalid})
 
     def test_procedures_cvss_ssvc_and_full_oscal_lifecycle_are_governed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -1266,12 +1657,12 @@ class IndustryAssuranceTests(unittest.TestCase):
         registry = artifacts["assurance-profile-registry.json"]
         self.assertEqual(registry["profiles_selected"], 2)
         assessment = artifacts["control-assessment.json"]
-        self.assertEqual(assessment["controls_assessed"], 5)
+        self.assertEqual(assessment["controls_assessed"], 9)
         self.assertEqual(assessment["status_counts"]["gap"], 3)
-        self.assertEqual(assessment["status_counts"]["not-applicable"], 2)
+        self.assertEqual(assessment["status_counts"]["not-applicable"], 6)
         procedures = artifacts["procedure-assessment.json"]
         self.assertEqual(procedures["status_counts"]["planned"], 1)
-        self.assertEqual(procedures["status_counts"]["not-applicable"], 1)
+        self.assertEqual(procedures["status_counts"]["not-applicable"], 2)
         self.assertFalse(artifacts["industry-assurance.json"]["complete"])
         validate_governed_artifacts(artifacts)
 
@@ -1768,10 +2159,19 @@ class IndustryAssuranceTests(unittest.TestCase):
             "agentdojo": "stochastic-adversarial",
             "ai-agentic-testing-conformance": "stochastic-adversarial",
             "nist-dioptra-ai-evaluation": "stochastic-adversarial",
+            "harmbench": "stochastic-adversarial",
+            "agentharm": "stochastic-adversarial",
+            "garak-llm-probe-conformance": "stochastic-adversarial",
+            "pyrit-ai-red-team": "stochastic-adversarial",
+            "mlcommons-ailuminate-safety": "stochastic-adversarial",
+            "mlcommons-ailuminate-jailbreak": "stochastic-adversarial",
             "owasp-dsomm-maturity": "assessor-agreement",
             "regional-cyber-maturity-assessment": "assessor-agreement",
             "security-evaluator-calibration": "assessor-agreement",
             "risk-technique-calibration": "assessor-agreement",
+            "cis-ram-attack-path-analysis": "assessor-agreement",
+            "enterprise-architecture-governance": "assessor-agreement",
+            "it-quality-governance-assessor-agreement": "assessor-agreement",
             "biometric-performance-pad": "biometric-performance",
             "interlaboratory-proficiency-testing": "proficiency-testing",
             "cacao-openc2-ocsf-interoperability": "conformance",
@@ -1801,6 +2201,18 @@ class IndustryAssuranceTests(unittest.TestCase):
             "cmvp-fips-140-3-validation": "conformance",
             "iso-19790-24759-module-conformance": "conformance",
             "service-management-security-integration": "conformance",
+            "owasp-cornucopia-threat-model": "conformance",
+            "nist-8286-enterprise-risk-register": "conformance",
+            "square-quality-governance": "conformance",
+            "iso-42106-differentiated-ai-benchmarking": "conformance",
+            "owasp-aisvs-conformance": "conformance",
+            "iso-25058-ai-quality-evaluation": "conformance",
+            "eucc-scheme-assurance": "conformance",
+            "cisa-secure-software-attestation": "conformance",
+            "ieee-7000-ai-ethics-conformance": "conformance",
+            "ai-use-case-security-privacy": "conformance",
+            "nist-csf-profile-gap-reassessment": "conformance",
+            "privacy-engineering-pet-conformance": "conformance",
             "mitre-attack-evaluations": "detection-evaluation",
             "owasp-benchmark": "classification",
         }
@@ -1823,6 +2235,358 @@ class IndustryAssuranceTests(unittest.TestCase):
                         "acceptance-criteria-digest",
                         contract["required_execution_evidence"],
                     )
+
+    def test_enterprise_risk_architecture_quality_and_ai_contracts_are_specific(
+        self,
+    ) -> None:
+        expected = {
+            "nist-8286-enterprise-risk-register": {
+                "nist-8286-series-and-schema-digests",
+                "risk-rollup-lineage-correlation-and-unit-analysis",
+            },
+            "cis-ram-attack-path-analysis": {
+                "blinded-assessor-labels-and-agreement",
+                "sensitivity-adjudication-and-risk-acceptance-ledger",
+            },
+            "square-quality-governance": {
+                "licensed-25001-requirement-set-digest",
+                "management-fault-injection-results",
+            },
+            "iso-42106-differentiated-ai-benchmarking": {
+                "complexity-context-stakeholder-and-strata-design",
+                "metamorphic-rank-stability-and-evaluator-robustness-results",
+            },
+            "enterprise-architecture-governance": {
+                "licensed-framework-edition-and-requirement-map-digests",
+                "architecture-model-exchange-and-semantic-validation",
+            },
+            "pyrit-ai-red-team": {
+                "pyrit-release-lock-and-environment-digest",
+                "step-token-time-spend-kill-switch-reset-and-cleanup-receipts",
+            },
+        }
+        for identifier, evidence in expected.items():
+            with self.subTest(identifier=identifier):
+                contract = _benchmark_runner_contract(
+                    {"id": identifier, "version": "policy-pinned"}
+                )
+                self.assertTrue(
+                    evidence <= set(contract["required_execution_evidence"])
+                )
+        self.assertEqual(
+            _benchmark_runner_contract(
+                {"id": "pyrit-ai-red-team", "version": "policy-pinned"}
+            )["minimum_repetitions"],
+            5,
+        )
+
+    def test_ai_certification_attestation_governance_and_privacy_contracts_are_specific(
+        self,
+    ) -> None:
+        profile_standards = {
+            "ai-application-security-verification": {"OWASP-AISVS"},
+            "responsible-ai-system-assurance": {
+                "ISO-IEC-TS-25058",
+                "IEEE-7000",
+                "IEEE-7003",
+                "IEEE-7009",
+            },
+            "eucc-product-certification": {"EU-EUCC", "ISO-IEC-15408"},
+            "federal-software-attestation": {
+                "CISA-SECURE-SOFTWARE-ATTESTATION",
+                "NIST-SSDF",
+            },
+            "it-quality-governance": {"ISO-IEC-38500", "ISO-9001"},
+            "nist-csf-profile-management": {"NIST-CSF", "NIST-SP-1301"},
+            "privacy-engineering-pets": {
+                "ISO-IEC-27561",
+                "ISO-IEC-TS-27564",
+                "ISO-IEC-27565",
+            },
+        }
+        for profile, standards in profile_standards.items():
+            with self.subTest(profile=profile):
+                definition = _ASSURANCE_PROFILES[profile]
+                self.assertTrue(standards <= set(definition["standards"]))
+                self.assertTrue(definition["controls"])
+                self.assertTrue(definition["procedures"])
+
+        expected = {
+            "owasp-aisvs-conformance": {
+                "aisvs-release-requirement-and-level-digests",
+                "mutation-independent-review-and-adjudication-results",
+            },
+            "iso-25058-ai-quality-evaluation": {
+                "licensed-25058-criteria-and-quality-model-digests",
+                "reperformance-metamorphic-and-adverse-case-results",
+            },
+            "eucc-scheme-assurance": {
+                "eucc-regulation-amendment-and-sota-digests",
+                "assurance-continuity-vulnerability-and-change-results",
+            },
+            "cisa-secure-software-attestation": {
+                "signatory-authority-signature-time-and-revocation-record",
+                "forgery-replay-staleness-and-change-trigger-results",
+            },
+            "ieee-7000-ai-ethics-conformance": {
+                "stakeholder-value-harm-and-requirement-trace",
+                "fail-safe-intervention-recovery-and-appeal-results",
+            },
+            "ai-use-case-security-privacy": {
+                "domain-context-stakeholder-data-and-boundary-model",
+                "normal-adverse-out-of-domain-and-misuse-results",
+            },
+            "it-quality-governance-assessor-agreement": {
+                "blinded-assessor-labels-agreement-and-competence",
+                "nonconformity-corrective-action-and-improvement-trace",
+            },
+            "nist-csf-profile-gap-reassessment": {
+                "organizational-scope-current-and-target-profile-digests",
+                "identifier-mutation-regression-and-reassessment-results",
+            },
+            "mlcommons-ailuminate-safety": {
+                "sut-locale-persona-hazard-and-prompt-split-manifest",
+                "public-private-contamination-and-grading-results",
+            },
+            "mlcommons-ailuminate-jailbreak": {
+                "sut-attack-scenario-locale-and-protected-split-manifest",
+                "naive-versus-jailbreak-safety-and-grading-results",
+            },
+            "privacy-engineering-pet-conformance": {
+                "zkp-statement-relation-setup-parameter-and-implementation-digests",
+                "malformed-replay-linkability-composition-and-differential-results",
+            },
+        }
+        for identifier, evidence in expected.items():
+            with self.subTest(identifier=identifier):
+                contract = _benchmark_runner_contract(
+                    {"id": identifier, "version": "policy-pinned"}
+                )
+                self.assertTrue(
+                    evidence <= set(contract["required_execution_evidence"])
+                )
+        for identifier in (
+            "mlcommons-ailuminate-safety",
+            "mlcommons-ailuminate-jailbreak",
+        ):
+            self.assertEqual(
+                _benchmark_runner_contract(
+                    {"id": identifier, "version": "policy-pinned"}
+                )["minimum_repetitions"],
+                5,
+            )
+
+    def test_protocol_cloud_response_memory_and_operational_gaps_are_executable(
+        self,
+    ) -> None:
+        standards = {item["id"]: item for item in _STANDARDS}
+        self.assertTrue(
+            {
+                "MCP-SPECIFICATION",
+                "OWASP-MCP-SECURITY-CHEAT-SHEET",
+                "AWS-FOUNDATIONAL-SECURITY-BEST-PRACTICES",
+                "MICROSOFT-CLOUD-SECURITY-BENCHMARK",
+                "GCP-ENTERPRISE-FOUNDATIONS-BLUEPRINT",
+                "FIRST-CSIRT-SERVICES-FRAMEWORK",
+                "FIRST-PSIRT-SERVICES-FRAMEWORK",
+                "FIRST-PSIRT-MATURITY",
+                "CISA-MEMORY-SAFE-ROADMAPS",
+                "IEEE-2863",
+                "IEEE-7010",
+                "ISO-22316",
+                "ISO-TS-22317",
+                "OPENSSF-BEST-PRACTICES-BADGE",
+                "ISO-IEC-27003",
+                "ISO-IEC-TS-27022",
+            }
+            <= set(standards)
+        )
+        self.assertNotIn("ISO-IEC-27009", standards)
+        self.assertEqual(standards["MCP-SPECIFICATION"]["version"], "2025-11-25")
+        self.assertEqual(standards["IEEE-2863"]["lifecycle"]["edition_status"], "final")
+
+        profile_standards = {
+            "mcp-protocol-security": {"MCP-SPECIFICATION"},
+            "cloud-provider-native-security": {
+                "AWS-FOUNDATIONAL-SECURITY-BEST-PRACTICES",
+                "MICROSOFT-CLOUD-SECURITY-BENCHMARK",
+                "GCP-ENTERPRISE-FOUNDATIONS-BLUEPRINT",
+            },
+            "incident-response-service-maturity": {
+                "FIRST-CSIRT-SERVICES-FRAMEWORK",
+                "FIRST-PSIRT-SERVICES-FRAMEWORK",
+            },
+            "memory-safety-engineering": {"CISA-MEMORY-SAFE-ROADMAPS"},
+            "organizational-ai-governance-impact": {"IEEE-2863", "IEEE-7010"},
+            "organizational-resilience-bia": {"ISO-22316", "ISO-TS-22317"},
+            "open-source-project-assurance": {"OPENSSF-BEST-PRACTICES-BADGE"},
+            "isms-implementation-process": {"ISO-IEC-27003", "ISO-IEC-TS-27022"},
+        }
+        for identifier, required in profile_standards.items():
+            with self.subTest(profile=identifier):
+                profile = _ASSURANCE_PROFILES[identifier]
+                self.assertTrue(required <= set(profile["standards"]))
+                self.assertTrue(profile["controls"])
+                self.assertTrue(profile["procedures"])
+
+        contract_evidence = {
+            "mcp-client-server-security-conformance": {
+                "oauth-discovery-resource-scope-token-and-redirect-results",
+                "malformed-drift-confused-deputy-ssrf-injection-replay-and-cleanup-results",
+            },
+            "aws-fsbp-securityhub-conformance": {
+                "aws-account-ou-region-resource-and-coverage-inventory",
+                "cloudtrail-cleanup-rescan-and-claim-boundary-record",
+            },
+            "microsoft-mcsb-defender-conformance": {
+                "defender-assessment-exemption-and-remediation-trace",
+                "activity-log-cleanup-rescan-and-preview-separation-record",
+            },
+            "gcp-enterprise-foundations-conformance": {
+                "organization-policy-architecture-scc-deviation-and-remediation-trace",
+                "audit-log-cleanup-rescan-and-claim-boundary-record",
+            },
+            "first-csirt-psirt-maturity-assessment": {
+                "mandate-constituency-service-role-and-competence-map",
+                "blinded-assessor-agreement-conflict-and-adjudication-record",
+            },
+            "memory-safety-engineering-conformance": {
+                "static-sanitizer-fuzz-crash-and-regression-results",
+                "migration-roadmap-parity-performance-and-reassessment-record",
+            },
+            "organizational-resilience-bia-exercise": {
+                "impact-tolerance-rto-rpo-capacity-and-assumption-record",
+                "disruption-degradation-failover-restoration-and-reconciliation-results",
+            },
+            "openssf-best-practices-badge-conformance": {
+                "criterion-applicability-answer-source-and-freshness-map",
+                "recomputed-level-independent-sample-and-claim-boundary-record",
+            },
+        }
+        for identifier, required in contract_evidence.items():
+            with self.subTest(benchmark=identifier):
+                contract = _benchmark_runner_contract(
+                    {"id": identifier, "version": "policy-pinned"}
+                )
+                self.assertTrue(
+                    required <= set(contract["required_execution_evidence"])
+                )
+
+        watchlist = {item["id"] for item in _STANDARDS_WATCHLIST}
+        self.assertTrue(
+            {
+                "MCP-SPECIFICATION-2026-RELEASE",
+                "MICROSOFT-CLOUD-SECURITY-BENCHMARK-V2",
+                "ISO-IEC-27003-NEXT-EDITION",
+                "ISO-22316-NEXT-EDITION",
+            }
+            <= watchlist
+        )
+
+    def test_agent_iot_information_web_and_sector_gaps_are_executable(self) -> None:
+        standards = {item["id"]: item for item in _STANDARDS}
+        expected_standards = {
+            "A2A-PROTOCOL",
+            "GLOBALPLATFORM-SESIP",
+            "EN-17927",
+            "FIRST-TLP",
+            "FIRST-IEP",
+            "VERIS",
+            "W3C-CSP-LEVEL-2",
+            "W3C-SUBRESOURCE-INTEGRITY",
+            "EU-DORA-RTS-ICT-RISK",
+            "EU-DORA-RTS-INCIDENT-CLASSIFICATION",
+            "EU-DORA-ITS-REGISTER-OF-INFORMATION",
+            "EU-DORA-RTS-INCIDENT-REPORTING",
+            "EU-DORA-ITS-INCIDENT-REPORTING",
+            "EU-DORA-RTS-TLPT",
+            "FFIEC-IT-HANDBOOK-DAM",
+            "FFIEC-IT-HANDBOOK-AIO",
+            "FFIEC-IT-HANDBOOK-INFORMATION-SECURITY",
+            "BSI-C5",
+            "FCC-CYBER-TRUST-MARK",
+        }
+        self.assertTrue(expected_standards <= set(standards))
+        self.assertEqual(standards["A2A-PROTOCOL"]["version"], "1.0.0")
+        self.assertEqual(
+            standards["W3C-CSP-LEVEL-2"]["lifecycle"]["edition_status"],
+            "final",
+        )
+
+        expected_profiles = {
+            "a2a-protocol-security": {"A2A-PROTOCOL"},
+            "sesip-iot-platform-evaluation": {
+                "GLOBALPLATFORM-SESIP",
+                "EN-17927",
+            },
+            "threat-intelligence-handling": {"FIRST-TLP", "FIRST-IEP", "VERIS"},
+            "web-platform-defense": {
+                "W3C-CSP-LEVEL-2",
+                "W3C-SUBRESOURCE-INTEGRITY",
+            },
+            "dora-level2-financial-resilience": {"EU-DORA-RTS-TLPT"},
+            "ffiec-banking-technology": {"FFIEC-IT-HANDBOOK-DAM"},
+            "bsi-c5-cloud-assurance": {"BSI-C5"},
+            "us-cyber-trust-mark": {"FCC-CYBER-TRUST-MARK"},
+        }
+        for identifier, required in expected_profiles.items():
+            with self.subTest(profile=identifier):
+                profile = _ASSURANCE_PROFILES[identifier]
+                self.assertTrue(required <= set(profile["standards"]))
+                self.assertTrue(profile["controls"])
+                self.assertTrue(profile["procedures"])
+
+        expected_contracts = {
+            "a2a-protocol-security-conformance": {
+                "principal-skill-task-message-artifact-and-subscription-authorization-trace",
+                "downgrade-cross-tenant-credential-ssrf-replay-race-and-cleanup-results",
+            },
+            "sesip-iot-platform-evaluation-conformance": {
+                "composition-certificate-vulnerability-change-and-expiry-results",
+                "scheme-laboratory-evaluator-authority-and-negative-claim-record",
+            },
+            "first-tlp-iep-information-handling-conformance": {
+                "stix-taxii-json-roundtrip-and-semantic-equivalence-report",
+                "downgrade-removal-unauthorized-sharing-and-audit-negative-cases",
+            },
+            "veris-incident-schema-conformance": {
+                "roundtrip-aggregate-deidentification-and-analytic-equivalence-results",
+            },
+            "w3c-web-platform-defense-conformance": {
+                "redirect-cors-cdn-substitution-multi-policy-and-fallback-results",
+            },
+            "dora-level2-technical-standards-conformance": {
+                "incident-classification-timeline-template-and-secure-channel-results",
+            },
+            "ffiec-it-handbook-assessment": {
+                "retired-cat-exclusion-and-handbook-claim-boundary-review"
+            },
+            "bsi-c5-cloud-assurance-assessment": {
+                "attestation-versus-certification-claim-boundary-review"
+            },
+            "fcc-cyber-trust-mark-conformance": {
+                "forgery-copied-label-redirect-expiry-withdrawal-and-overclaim-results"
+            },
+        }
+        for identifier, required in expected_contracts.items():
+            with self.subTest(benchmark=identifier):
+                contract = _benchmark_runner_contract(
+                    {"id": identifier, "version": "policy-pinned"}
+                )
+                self.assertTrue(
+                    required <= set(contract["required_execution_evidence"])
+                )
+
+        watchlist = {item["id"] for item in _STANDARDS_WATCHLIST}
+        self.assertTrue(
+            {
+                "W3C-CSP-LEVEL-3",
+                "W3C-SUBRESOURCE-INTEGRITY-2",
+                "W3C-TRUSTED-TYPES",
+                "BSI-TR-03183-PARTS-1-AND-3",
+            }
+            <= watchlist
+        )
 
     def test_extended_assurance_requires_governed_external_evidence(self) -> None:
         digest = "a" * 64
@@ -2004,6 +2768,99 @@ class IndustryAssuranceTests(unittest.TestCase):
                     "passed": False,
                 }
             )
+
+
+def test_credentials_cloud_ast_privacy_and_sector_assurance_are_version_pinned() -> (
+    None
+):
+    standards = {item["id"]: item for item in _STANDARDS}
+    assert standards["OIDF-FAPI"]["version"] == "2.0-final-2025"
+    assert standards["OIDF-FAPI"]["lifecycle"]["edition_status"] == "final"
+    assert {
+        "W3C-VC-DATA-MODEL",
+        "OIDF-OPENID4VP",
+        "OIDF-OPENID4VCI",
+        "OIDF-OPENID4VC-HAIP",
+        "CISA-SCUBA-M365",
+        "CISA-SCUBA-GWS",
+        "CIS-KUBERNETES-BENCHMARK",
+        "LINDDUN-PRO",
+        "GSMA-NESAS",
+        "3GPP-SCAS",
+        "VDA-ISA",
+        "ENX-TISAX",
+        "C2PA-CONTENT-CREDENTIALS",
+        "PCI-MPOC",
+        "PCI-P2PE",
+    } <= standards.keys()
+
+    assert {
+        "digital-credential-security",
+        "federal-saas-hardening",
+        "kubernetes-hardening-conformance",
+        "privacy-threat-modeling",
+        "ast-modality-effectiveness",
+        "telecom-equipment-assurance",
+        "tisax-automotive-information-assurance",
+        "content-provenance-authenticity",
+        "payment-acceptance-security",
+    } <= _ASSURANCE_PROFILES.keys()
+
+    benchmark_ids = {item["id"] for item in _BENCHMARKS}
+    assert {
+        "openid-digital-credential-conformance",
+        "cisa-scuba-saas-posture-conformance",
+        "cis-kubernetes-hardening-conformance",
+        "linddun-privacy-threat-model-conformance",
+        "owasp-benchmark-ast-modality-comparison",
+        "rasp-prevention-effectiveness",
+        "gsma-nesas-scas-assurance",
+        "tisax-vda-isa-assessment",
+        "c2pa-content-credentials-conformance",
+        "pci-payment-acceptance-conformance",
+    } <= benchmark_ids
+
+    watch_ids = {item["id"] for item in _STANDARDS_WATCHLIST}
+    assert {
+        "W3C-VC-DATA-MODEL-2.1",
+        "OIDF-OPENID4VP-1.1",
+        "VDA-ISA-2027",
+        "FIDO-CTAP-2.3",
+        "ENISA-EUCS",
+        "ENISA-EUMSS",
+        "ENISA-EUDIW-CERTIFICATION",
+        "ENISA-EU5G",
+    } <= watch_ids
+
+
+def test_currency_profiles_are_pinned_and_catalog_references_fail_closed() -> None:
+    standards = {item["id"]: item for item in _STANDARDS}
+    assert standards["HITRUST-CSF"]["version"] == "11.8.0"
+    assert standards["PCI-SECURE-SOFTWARE"]["version"] == "2.0-2026"
+    assert standards["EU-EUDI-ARF"]["version"] == "3.0.0"
+    assert standards["FIDO-CTAP"]["version"] == "2.2-proposed-standard-2025-07-14"
+    assert {
+        "fedramp-20x-continuous-assurance",
+        "fido2-authenticator-assurance",
+        "eudi-wallet-assurance",
+        "hitrust-assessment-assurance",
+        "pci-software-security-framework",
+        "nis2-implementation-assurance",
+        "supplier-due-diligence",
+        "software-assurance-maturity",
+    } <= _ASSURANCE_PROFILES.keys()
+
+    broken = {
+        "broken": {
+            "standards": ["UNKNOWN"],
+            "controls": [("UNKNOWN", "C", "objective", ["evidence.json"])],
+            "procedures": [
+                ("UNKNOWN", "P", "objective", "test", False, ["evidence.json"])
+            ],
+        }
+    }
+    with pytest.raises(ValueError, match="unknown standards"):
+        _validate_builtin_catalog(profiles=broken)
 
 
 if __name__ == "__main__":

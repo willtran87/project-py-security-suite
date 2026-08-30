@@ -23,6 +23,27 @@ from defusedxml.common import DefusedXmlException  # type: ignore[import-untyped
 with atheris.instrument_imports() if atheris is not None else nullcontext():
     from py_security_suite.adapters import ADAPTER_TYPES
     from py_security_suite.adapters.sarif import parse_sarif_findings
+    from py_security_suite.benchmark_execution import (
+        BenchmarkExecutionError,
+        _validate_attestation_document,
+    )
+    from py_security_suite.benchmark_adapter_conformance import (
+        BenchmarkAdapterConformanceError,
+        run_adapter_conformance_suite,
+    )
+    from py_security_suite.benchmark_assurance import (
+        BenchmarkAssuranceError,
+        _validate_authority_entry,
+    )
+    from py_security_suite.benchmark_input_validation import (
+        BenchmarkInputError,
+        validate_benchmark_input,
+    )
+    from py_security_suite.benchmark_semantic_evidence import (
+        BenchmarkSemanticEvidenceError,
+        semantic_fingerprint,
+    )
+    from py_security_suite.benchmark_telemetry import _validate_security_event
     from py_security_suite.config import ToolConfig
     from py_security_suite.models import Finding, json_ready
     from py_security_suite.strict_json import canonical_bytes
@@ -62,6 +83,86 @@ def test_one_input(data: bytes) -> None:
         except (TypeError, ValueError):
             pass
         return
+    if _TARGET_NAME == "benchmark-attestation":
+        kinds = (
+            "trusted-time",
+            "replay-protection",
+            "contamination-manifest",
+            "runner-sbom",
+            "runner-provenance",
+            "environment",
+            "acceptance-criteria",
+            "adapter-conformance",
+            "runtime-observation",
+            "external-isolation",
+            "cleanup-capability",
+        )
+        try:
+            parsed = strict_loads(payload)
+            if isinstance(parsed, dict):
+                _validate_attestation_document(
+                    parsed,
+                    kinds[data[0] % len(kinds)],
+                    "0" * 64,
+                    require_authority=True,
+                )
+        except (BenchmarkExecutionError, TypeError, ValueError):
+            pass
+        return
+    if _TARGET_NAME == "benchmark-semantic-python":
+        try:
+            first = semantic_fingerprint(payload, language="python")
+            second = semantic_fingerprint(payload, language="python")
+            if first != second:
+                raise RuntimeError("semantic fingerprint is nondeterministic")
+        except BenchmarkSemanticEvidenceError:
+            pass
+        return
+    if _TARGET_NAME == "benchmark-authority-entry":
+        try:
+            parsed = strict_loads(payload)
+            _validate_authority_entry(
+                parsed,
+                policy={
+                    "schema_version": "1.1",
+                    "issued_at": "2026-01-01T00:00:00+00:00",
+                    "expires_at": "2026-12-31T00:00:00+00:00",
+                },
+            )
+        except (BenchmarkAssuranceError, TypeError, ValueError):
+            pass
+        return
+    if _TARGET_NAME == "benchmark-security-event":
+        try:
+            _validate_security_event(strict_loads(payload))
+        except (TypeError, ValueError):
+            pass
+        return
+    if _TARGET_NAME == "benchmark-adapter-conformance":
+
+        def normalizer(candidate: bytes) -> dict[str, Any]:
+            parsed = strict_loads(candidate)
+            if not isinstance(parsed, dict):
+                raise ValueError("fixture is not an object")
+            return parsed
+
+        try:
+            expected = normalizer(payload)
+            run_adapter_conformance_suite(
+                normalizer=normalizer,
+                golden_fixtures=[(payload, expected)] * 3,
+                malformed_fixtures=[b"", b"[]", b"null"],
+                inverted_fixtures=[payload] * 3,
+                semantic_oracle=lambda value: value.get("passed") is True,
+                adapter_spec_sha256="a" * 64,
+                runner_executable_sha256="b" * 64,
+                normalizer_identity="fuzz:strict-json-object",
+                semantic_oracle_identity="fuzz:passed-boolean:v1",
+                semantic_oracle_sha256="c" * 64,
+            )
+        except (BenchmarkAdapterConformanceError, TypeError, ValueError):
+            pass
+        return
     if _TARGET_NAME == "strict-xml":
         try:
             xml_first = _inspect_xml(payload)
@@ -72,21 +173,32 @@ def test_one_input(data: bytes) -> None:
             pass
         return
     if _TARGET_NAME == "zip-archive":
+        _assert_production_archive_deterministic(payload, ".zip")
         try:
             zip_first = _inspect_zip(payload)
             zip_second = _inspect_zip(payload)
             if zip_first != zip_second:
-                raise RuntimeError("ZIP inspection is nondeterministic")
-        except (OSError, RuntimeError, ValueError, zipfile.BadZipFile):
+                raise AssertionError("ZIP inspection is nondeterministic")
+        except (
+            OSError,
+            ValueError,
+            zipfile.BadZipFile,
+        ):
             pass
         return
     if _TARGET_NAME == "tar-archive":
+        _assert_production_archive_deterministic(payload, ".tar")
         try:
             tar_first = _inspect_tar(payload)
             tar_second = _inspect_tar(payload)
             if tar_first != tar_second:
-                raise RuntimeError("TAR inspection is nondeterministic")
-        except (EOFError, OSError, RuntimeError, ValueError, tarfile.TarError):
+                raise AssertionError("TAR inspection is nondeterministic")
+        except (
+            EOFError,
+            OSError,
+            ValueError,
+            tarfile.TarError,
+        ):
             pass
         return
     try:
@@ -226,6 +338,24 @@ def _inspect_tar(payload: bytes) -> tuple[tuple[str, int, str], ...]:
     return tuple(records)
 
 
+@_instrument_fuzz_function
+def _inspect_production_archive(payload: bytes, suffix: str) -> dict[str, Any]:
+    with tempfile.TemporaryDirectory(prefix="pysec-benchmark-fuzz-") as directory:
+        candidate = Path(directory) / f"input{suffix}"
+        candidate.write_bytes(payload)
+        return validate_benchmark_input(candidate)
+
+
+def _assert_production_archive_deterministic(payload: bytes, suffix: str) -> None:
+    try:
+        first = _inspect_production_archive(payload, suffix)
+        second = _inspect_production_archive(payload, suffix)
+    except (BenchmarkInputError, OSError, ValueError):
+        return
+    if first != second:
+        raise AssertionError("production archive validation is nondeterministic")
+
+
 def _parse_adapter(name: str, adapter: Any, text: str) -> list[Finding]:
     if name == "gitleaks":
         # Gitleaks writes JSON to --report-path instead of stdout. Recreate that
@@ -328,6 +458,32 @@ def _seed_target_corpus(target: str, destination: Path) -> None:
                 if member_type == tarfile.SYMTYPE:
                     tar_info.linkname = "target"
                 archive.addfile(tar_info, io.BytesIO(payload))
+    elif target == "benchmark-attestation":
+        (destination / "minimal.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": "1.1",
+                    "kind": "trusted-time",
+                    "subject_sha256": "0" * 64,
+                    "valid": True,
+                    "authority": {
+                        "organization_id": "fuzz-authority",
+                        "role": "trusted-time",
+                        "issued_at": "2026-01-01T00:00:00+00:00",
+                        "expires_at": "2026-12-31T00:00:00+00:00",
+                        "revocation_status_sha256": "1" * 64,
+                    },
+                    "claims": {
+                        "rfc3161_verified": True,
+                        "monotonic_state_verified": True,
+                        "trusted_time_receipt_sha256": "2" * 64,
+                        "observed_at": "2026-01-01T00:00:00+00:00",
+                    },
+                },
+                sort_keys=True,
+            ),
+            encoding="utf-8",
+        )
 
 
 def main() -> None:
@@ -364,6 +520,36 @@ def main() -> None:
                 "seconds": 420,
                 "coverage_floor": 10,
             },
+            {
+                "target": "benchmark-attestation",
+                "artifact": "benchmark-attestation",
+                "seconds": 420,
+                "coverage_floor": 12,
+            },
+            {
+                "target": "benchmark-semantic-python",
+                "artifact": "benchmark-semantic-python",
+                "seconds": 420,
+                "coverage_floor": 12,
+            },
+            {
+                "target": "benchmark-authority-entry",
+                "artifact": "benchmark-authority-entry",
+                "seconds": 420,
+                "coverage_floor": 12,
+            },
+            {
+                "target": "benchmark-security-event",
+                "artifact": "benchmark-security-event",
+                "seconds": 420,
+                "coverage_floor": 12,
+            },
+            {
+                "target": "benchmark-adapter-conformance",
+                "artifact": "benchmark-adapter-conformance",
+                "seconds": 420,
+                "coverage_floor": 12,
+            },
         ]
         targets.extend(
             {
@@ -397,6 +583,11 @@ def main() -> None:
         "strict-xml",
         "tar-archive",
         "zip-archive",
+        "benchmark-attestation",
+        "benchmark-semantic-python",
+        "benchmark-authority-entry",
+        "benchmark-security-event",
+        "benchmark-adapter-conformance",
     }:
         _selected_adapters(_TARGET_NAME)
     if atheris is None:

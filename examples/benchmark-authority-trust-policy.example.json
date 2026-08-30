@@ -1,0 +1,22 @@
+{
+  "schema_version": "1.0",
+  "policy_id": "production-benchmark-authorities",
+  "issued_at": "2026-08-15T00:00:00Z",
+  "expires_at": "2026-09-14T00:00:00Z",
+  "minimum_distinct_signers": 4,
+  "minimum_distinct_organizations": 2,
+  "authorities": [
+    {"role": "trusted-time", "organization_id": "time.example", "public_key_sha256": "1111111111111111111111111111111111111111111111111111111111111111", "revocation_status_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "status": "active"},
+    {"role": "replay-protection", "organization_id": "platform.example", "public_key_sha256": "2222222222222222222222222222222222222222222222222222222222222222", "revocation_status_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "status": "active"},
+    {"role": "contamination-manifest", "organization_id": "data.example", "public_key_sha256": "3333333333333333333333333333333333333333333333333333333333333333", "revocation_status_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "status": "active"},
+    {"role": "runner-sbom", "organization_id": "supply-chain.example", "public_key_sha256": "4444444444444444444444444444444444444444444444444444444444444444", "revocation_status_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd", "status": "active"},
+    {"role": "runner-provenance", "organization_id": "build.example", "public_key_sha256": "5555555555555555555555555555555555555555555555555555555555555555", "revocation_status_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "status": "active"},
+    {"role": "environment", "organization_id": "platform.example", "public_key_sha256": "6666666666666666666666666666666666666666666666666666666666666666", "revocation_status_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", "status": "active"},
+    {"role": "acceptance-criteria", "organization_id": "quality.example", "public_key_sha256": "7777777777777777777777777777777777777777777777777777777777777777", "revocation_status_sha256": "1111111111111111111111111111111111111111111111111111111111111111", "status": "active"},
+    {"role": "adapter-conformance", "organization_id": "laboratory.example", "public_key_sha256": "8888888888888888888888888888888888888888888888888888888888888888", "revocation_status_sha256": "2222222222222222222222222222222222222222222222222222222222222222", "status": "active"},
+    {"role": "runtime-observation", "organization_id": "platform.example", "public_key_sha256": "9999999999999999999999999999999999999999999999999999999999999999", "revocation_status_sha256": "3333333333333333333333333333333333333333333333333333333333333333", "status": "active"},
+    {"role": "external-isolation", "organization_id": "platform-security.example", "public_key_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "revocation_status_sha256": "4444444444444444444444444444444444444444444444444444444444444444", "status": "active"},
+    {"role": "cleanup-capability", "organization_id": "operations.example", "public_key_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "revocation_status_sha256": "5555555555555555555555555555555555555555555555555555555555555555", "status": "active"},
+    {"role": "execution-receipt", "organization_id": "release.example", "public_key_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "revocation_status_sha256": "6666666666666666666666666666666666666666666666666666666666666666", "status": "active"}
+  ]
+}

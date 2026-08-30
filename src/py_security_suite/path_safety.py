@@ -5,7 +5,7 @@ import stat
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterator
+from typing import BinaryIO, Iterator
 
 
 @dataclass(slots=True)
@@ -137,6 +137,27 @@ def read_regular_file(
     platform supports it, while the before/after descriptor identity check
     rejects files changed during the read.
     """
+    with open_regular_file(
+        path,
+        label,
+        maximum_bytes=maximum_bytes,
+        boundary=boundary,
+    ) as (resolved, handle, _):
+        payload = handle.read(maximum_bytes + 1)
+        if len(payload) > maximum_bytes:
+            raise ValueError(f"{label} exceeds {maximum_bytes} bytes")
+        return resolved, payload
+
+
+@contextmanager
+def open_regular_file(
+    path: Path,
+    label: str,
+    *,
+    maximum_bytes: int,
+    boundary: Path | None = None,
+) -> Iterator[tuple[Path, BinaryIO, int]]:
+    """Hold one link-safe regular-file handle through parsing and identity checks."""
     if maximum_bytes < 1:
         raise ValueError("maximum_bytes must be positive")
     requested = path.expanduser().absolute()
@@ -144,22 +165,19 @@ def read_regular_file(
     components_before = _component_identities(requested)
     flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
     try:
-        # Open the spelling the caller supplied. On POSIX the descriptor walk
-        # below refuses links in every component, closing the race that would
-        # be reintroduced by opening the already-resolved path.
         descriptor = _open_component_safe(requested, flags)
     except FileNotFoundError as exc:
         raise ValueError(f"{label} is not a regular file: {resolved}") from exc
     except OSError as exc:
         raise ValueError(f"{label} could not be opened safely: {resolved}") from exc
+    handle = os.fdopen(descriptor, "rb", closefd=False)
     try:
         before = os.fstat(descriptor)
         if not stat.S_ISREG(before.st_mode):
             raise ValueError(f"{label} is not a regular file: {resolved}")
-        if before.st_size > maximum_bytes:
+        if not 0 <= before.st_size <= maximum_bytes:
             raise ValueError(f"{label} exceeds {maximum_bytes} bytes")
-        with os.fdopen(descriptor, "rb", closefd=False) as handle:
-            payload = handle.read(maximum_bytes + 1)
+        yield resolved, handle, before.st_size
         after = os.fstat(descriptor)
         components_after = _component_identities(requested)
         if components_before != components_after:
@@ -181,10 +199,8 @@ def read_regular_file(
         )
         if identity_before != identity_after:
             raise ValueError(f"{label} changed while it was being read")
-        if len(payload) > maximum_bytes:
-            raise ValueError(f"{label} exceeds {maximum_bytes} bytes")
-        return resolved, payload
     finally:
+        handle.close()
         os.close(descriptor)
 
 

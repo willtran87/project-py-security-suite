@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:benchmark-signing-provider-profile:1.0",
+  "title": "Benchmark signing provider profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "backend",
+    "credential_mode",
+    "provider_id",
+    "key_version",
+    "executable",
+    "executable_sha256",
+    "arguments",
+    "public_key_base64",
+    "timeout_seconds"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "backend": {
+      "enum": [
+        "pkcs11",
+        "generic-hsm",
+        "hashicorp-vault-transit",
+        "aws-kms",
+        "azure-key-vault",
+        "gcp-cloud-kms"
+      ]
+    },
+    "credential_mode": {
+      "enum": ["workload-identity", "secure-agent", "hardware-session"]
+    },
+    "provider_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"
+    },
+    "key_version": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"
+    },
+    "executable": {"type": "string", "minLength": 1, "maxLength": 4096},
+    "executable_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "arguments": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {"type": "string", "maxLength": 1024}
+    },
+    "public_key_base64": {
+      "type": "string",
+      "contentEncoding": "base64",
+      "minLength": 44,
+      "maxLength": 44
+    },
+    "timeout_seconds": {"type": "number", "minimum": 0.1, "maximum": 60.0}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"backend": {"enum": ["aws-kms", "azure-key-vault", "gcp-cloud-kms"]}}},
+      "then": {"properties": {"credential_mode": {"const": "workload-identity"}}}
+    },
+    {
+      "if": {"properties": {"backend": {"enum": ["pkcs11", "generic-hsm"]}}},
+      "then": {"properties": {"credential_mode": {"enum": ["hardware-session", "secure-agent"]}}}
+    },
+    {
+      "if": {"properties": {"backend": {"const": "hashicorp-vault-transit"}}},
+      "then": {"properties": {"credential_mode": {"enum": ["workload-identity", "secure-agent"]}}}
+    }
+  ]
+}

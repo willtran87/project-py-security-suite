@@ -41,6 +41,7 @@ from .inventory import (
     source_snapshot,
 )
 from .industry_assurance import build_industry_assurance
+from .industry_receipt_trust import load_industry_receipt_trust
 from .isolation_probe import probe_isolation_boundary
 from .models import (
     Finding,
@@ -606,9 +607,16 @@ def _scan_sealed_project(
     ):
         reasons = llm_adversarial_errors or ["plan is truncated or incomplete"]
         context_errors.extend(f"LLM adversarial planning: {error}" for error in reasons)
-    industry_artifacts, industry_errors = build_industry_assurance(
-        scan_target, derived_artifacts, findings
+    receipt_trust_policy, receipt_trust_errors = load_industry_receipt_trust(
+        scan_target
     )
+    industry_artifacts, industry_errors = build_industry_assurance(
+        scan_target,
+        derived_artifacts,
+        findings,
+        receipt_trust_policy=receipt_trust_policy,
+    )
+    industry_errors = [*receipt_trust_errors, *industry_errors]
     derived_artifacts.update(industry_artifacts)
     control_assessment = industry_artifacts["control-assessment.json"]
     benchmark_scorecard = industry_artifacts["benchmark-scorecard.json"]

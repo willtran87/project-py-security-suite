@@ -1,0 +1,21 @@
+{
+  "schema_version": "1.3",
+  "enforce": true,
+  "profiles": [],
+  "controls": [],
+  "procedures": [],
+  "benchmarks": [
+    {
+      "id": "w3c-act-rules-conformance",
+      "enabled": true,
+      "corpus_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "evidence_artifact": "w3c-act-conformance.json",
+      "thresholds": {
+        "minimum_outcome_accuracy": 0.95,
+        "minimum_conformance_rate": 0.9
+      },
+      "adapter_manifest": "security/benchmark-adapters/w3c-act-rules.json"
+    }
+  ],
+  "benchmark_baseline_path": null
+}

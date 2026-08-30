@@ -1,0 +1,76 @@
+name: Protected signing provider conformance
+
+on:
+  schedule:
+    - cron: "11 4 * * 3"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: signing-provider-conformance
+  cancel-in-progress: false
+
+jobs:
+  live-provider-conformance:
+    name: Live HSM, Vault, and cloud KMS conformance
+    environment: production-signing-conformance
+    runs-on: [self-hosted, linux, x64, pysec-signing]
+    timeout-minutes: 30
+    env:
+      PKCS11_PROFILE: ${{ vars.PYSEC_PKCS11_PROFILE }}
+      PKCS11_SHA256: ${{ vars.PYSEC_PKCS11_PROFILE_SHA256 }}
+      VAULT_PROFILE: ${{ vars.PYSEC_VAULT_PROFILE }}
+      VAULT_SHA256: ${{ vars.PYSEC_VAULT_PROFILE_SHA256 }}
+      AWS_PROFILE_PATH: ${{ vars.PYSEC_AWS_KMS_PROFILE }}
+      AWS_PROFILE_SHA256: ${{ vars.PYSEC_AWS_KMS_PROFILE_SHA256 }}
+      AZURE_PROFILE: ${{ vars.PYSEC_AZURE_KEY_VAULT_PROFILE }}
+      AZURE_SHA256: ${{ vars.PYSEC_AZURE_KEY_VAULT_PROFILE_SHA256 }}
+      GCP_PROFILE: ${{ vars.PYSEC_GCP_CLOUD_KMS_PROFILE }}
+      GCP_SHA256: ${{ vars.PYSEC_GCP_CLOUD_KMS_PROFILE_SHA256 }}
+    steps:
+      - name: Check out immutable source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.11.19"
+          enable-cache: false
+      - name: Install the locked conformance client
+        run: uv sync --locked --all-groups --python "3.14"
+      - name: Actively verify every configured provider
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .artifacts/provider-conformance
+          providers=(
+            "pkcs11:pkcs11:PKCS11_PROFILE:PKCS11_SHA256"
+            "vault:hashicorp-vault-transit:VAULT_PROFILE:VAULT_SHA256"
+            "aws-kms:aws-kms:AWS_PROFILE_PATH:AWS_PROFILE_SHA256"
+            "azure-key-vault:azure-key-vault:AZURE_PROFILE:AZURE_SHA256"
+            "gcp-cloud-kms:gcp-cloud-kms:GCP_PROFILE:GCP_SHA256"
+          )
+          for entry in "${providers[@]}"; do
+            IFS=: read -r name expected_backend path_variable digest_variable <<< "$entry"
+            profile="${!path_variable:-}"
+            digest="${!digest_variable:-}"
+            [[ -f "$profile" ]]
+            [[ "$digest" =~ ^[0-9a-f]{64}$ ]]
+            uv run --frozen pysec benchmark-provider-check \
+              --profile "$profile" --profile-sha256 "$digest" \
+              --output ".artifacts/provider-conformance/$name.json"
+            EXPECTED_BACKEND="$expected_backend" RECEIPT_PATH=".artifacts/provider-conformance/$name.json" \
+              uv run --frozen python -c \
+              "import json,os,pathlib; value=json.loads(pathlib.Path(os.environ['RECEIPT_PATH']).read_text()); assert value['verified'] is True and value['backend'] == os.environ['EXPECTED_BACKEND']"
+          done
+      - name: Retain provider conformance receipts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: signing-provider-conformance-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .artifacts/provider-conformance
+          if-no-files-found: error
+          retention-days: 180

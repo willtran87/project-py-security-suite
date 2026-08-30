@@ -540,6 +540,7 @@ depends_on = [
     "py_security_suite.audience_report",
     "py_security_suite.adapter_conformance",
     "py_security_suite.ci_workflow",
+    "py_security_suite.cli_benchmark_arguments",
     "py_security_suite.closure_plan",
     "py_security_suite.config",
     "py_security_suite.config_advisor",
@@ -574,6 +575,19 @@ depends_on = [
     "py_security_suite.reproducibility",
 ]
 layer = "entrypoints"
+
+[[modules]]
+path = "py_security_suite.cli_benchmark_arguments"
+depends_on = []
+layer = "entrypoints"
+
+[[modules]]
+path = "py_security_suite.performance_assurance"
+depends_on = [
+    "py_security_suite.benchmark_scoring",
+    "py_security_suite.strict_json",
+]
+layer = "services"
 
 [[modules]]
 path = "py_security_suite.__main__"

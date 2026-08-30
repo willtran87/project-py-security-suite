@@ -11,14 +11,16 @@ def main() -> int:
     package_root = Path(__file__).resolve().parent.parent
     sys.path.insert(0, str(package_root))
     from py_security_suite.boundary_graph import _native_imports_in_process
+    from py_security_suite.path_safety import read_regular_file
 
-    path = Path(sys.argv[1]).resolve()
-    payload = path.read_bytes()
-    if len(payload) > 1024 * 1024:
-        raise ValueError("native parser input exceeds the bounded surface limit")
+    path, payload = read_regular_file(
+        Path(sys.argv[1]),
+        "native parser input",
+        maximum_bytes=1024 * 1024,
+    )
     print(json.dumps(_native_imports_in_process(path, payload), separators=(",", ":")))
     return 0
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover - exercised as an isolated subprocess
     raise SystemExit(main())

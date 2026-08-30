@@ -1,6 +1,6 @@
 # Python Security Suite documentation
 
-Last reviewed: 2026-08-27
+Last reviewed: 2026-08-30
 
 This directory is the canonical documentation set. The suite is offline-first:
 tool and data acquisition happens in a connected preparation lane; scanning and
@@ -27,7 +27,9 @@ verification happen inside an enterprise-controlled isolated boundary.
 | Understand source-to-artifact and cross-scanner joins | [Cross-tool evidence fusion](evidence-fusion.md) |
 | Measure scanner execution and labeled detection effectiveness | [Effectiveness](effectiveness.md) |
 | Map controls and run governed OWASP/NIST/LLM benchmark scorecards | [Industry standards and benchmarks](industry-standards-benchmarks.md) |
+| Operate benchmark signers, replay state, trusted time, and audit anchors | [Benchmark trust operations](benchmark-operations.md) |
 | Make one fail-closed promotion decision | [Governed release readiness](release-readiness.md) |
+| Govern CLI and schema compatibility across releases | [API compatibility policy](api-compatibility.md) |
 | Track every enhancement and its authority boundary | [Product enhancement matrix](product-enhancement-matrix.md) |
 | Review closure of the latest findings backlog | [Findings-driven closure register](findings-closure.md) |
 | Review the 52 findings-derived enhancements | [Findings enhancement plan](findings-enhancement-plan.md) |
@@ -70,8 +72,9 @@ flowchart LR
         ProposalCheck --> Sandbox["Human-approved disposable lane"]
         Sandbox --> AdversarialProof["Deterministic oracle + controls<br/>exact failed-case evidence"]
         AdversarialProof --> Correlate
-        Standards["358 standards references + 104 assurance packs"] --> Industry["Quarantined publisher monitor + semantic lifecycle diffs<br/>assurance cases + integrity V&V + crypto + biometrics + service management<br/>124 benchmarks + OSCAL 1.2.2"]
-        Benchmarks["124 benchmark families + 35 maintained adapters + 11 protocols<br/>verified attestations + native OCI/laboratory isolation"] --> Industry
+        Standards["481 standards references + 147 assurance packs<br/>stable editions + conditional applicability"] --> Industry["Industry evidence synthesis<br/>FIDO2/EUDI/FAPI | FedRAMP 20x | NIS2/HITRUST<br/>PCI SSF | SAMM | suppliers + OSCAL 1.2.2"]
+        Watch["47 quarantined watch items<br/>drafts, candidate schemes, semantic diffs, retired-item exclusions"] --> Industry
+        Benchmarks["182 benchmark families + 100 maintained adapters + 11 protocols<br/>raw replay + full SLSA builder trust + signed intent recovery<br/>mandatory live no-pull OCI containment"] --> Industry
         Industry --> Gate
         Validate --> Leverage["Typed evidence graph<br/>controls, taint, artifacts, privacy, trust"]
         Leverage --> Gate["Policy decision"]
@@ -132,6 +135,29 @@ action. `audit`, `quality`, `repo`,
 `comprehensive`, `production`, and `release` additionally emit code-health,
 static-architecture, and bounded architecture-history evidence.
 
+## Current repository assurance gates
+
+These are source-revision gates verified on 2026-08-30. Unlike the retained
+self-scan evidence below, they describe the current checkout and its protected
+automation contracts.
+
+| Gate | Current enforced scope |
+|---|---|
+| Unit and integration suite | 1,187 passed, 19 platform-limited skips, and 494 subtests |
+| Combined statement/branch coverage | 80.79%, with a minimum aggregate floor of 80% and 25 security-critical module ratchets |
+| Changed-line coverage | 90% minimum in protected CI |
+| Static typing | 217 source files checked by mypy |
+| Schema/runtime consistency | 201 bundled JSON Schemas and 161 runtime exports |
+| Public compatibility | 58 commands, 23 stable options, and 10 schema contracts |
+| Architecture concentration | Progressive ceilings for 6 files and 7 functions |
+| Reference performance | 10,000-case strict-JSON/classification workload; at least 2,000 cases/s, at most 5 seconds and 128 MiB, with growth ratio at most 25 |
+| Scheduled depth | Daily parser fuzzing; weekly mutation, resilience, CodeQL, and protected signing-provider conformance |
+| Documentation | Strict MkDocs build with repository link and generated-content validation, then audited GitHub Pages deployment |
+
+Machine-dependent performance timings are intentionally not treated as a
+portable benchmark result. The repository records thresholds and the workload;
+each runner emits its own `performance-assurance-1.0` receipt.
+
 ## Retained verified assurance baselines
 
 The following values describe named, retained evidence artifacts. They are not
@@ -155,7 +181,7 @@ self-scan to establish a new baseline.
 | Reachability graph | Schema 1.2; per-island confidence and explained edges |
 | Reachability states | 1,350 executable; 123 load-only; 0 disconnected; 0 reportable islands |
 | Runtime corroboration | Refreshed branch-aware coverage from every unit/property test; static states are not reclassified by runtime evidence |
-| Tests | 665 collected: 664 passed and 1 platform-limited skip; 302 subtests passed |
+| Retained test run | 1,061 collected: 1,043 passed and 18 platform-limited skips; 494 subtests passed |
 | Repository automation | Locked tests on Python 3.11–3.14 with 3.14 Windows/macOS parity; enforced branch and diff coverage, security/correctness lint, mutation assurance, pedantic workflow audit, mypy, strict dependency audit, polyglot CodeQL `security-extended`, and audited Pages deployment |
 | Combined line and branch coverage | 90.07% across 13,486 statements and 4,558 branches; 92.98% statement and 81.48% branch coverage |
 | Changed-line coverage | Recomputed on every scan; uncovered changed executable lines remain explicit in `diff-coverage.json` |
@@ -237,6 +263,8 @@ and zero findings on the safe negative control.
 | Offline provisioning plan | [1.0](../src/py_security_suite/schemas/provision-plan.schema.json) | Non-mutating, grouped acquisition/staging work and safe verification arguments |
 | Configuration advice | [1.0](../src/py_security_suite/schemas/config-advice.schema.json) | Tolerant validation, schema migration guidance, and portable-path inventory |
 | Adapter conformance | [1.0](../src/py_security_suite/schemas/adapter-conformance.schema.json) | Static registry and SDK contract qualification |
+| Signing-provider conformance | [1.0](../src/py_security_suite/schemas/benchmark-signing-provider-conformance-1.0.schema.json) | Active fresh-challenge qualification of a digest-pinned external receipt-signing bridge, its provider identity, key version, credential mode, and locally verified signatures |
+| Performance assurance | [1.0](../src/py_security_suite/schemas/performance-assurance-1.0.schema.json) | Deterministic workload measurements and explicit time, throughput, memory, and growth budgets |
 | Companion assurance | [2.0](../src/py_security_suite/schemas/companion-assurance-2.0.schema.json) | Fresh, complete, coverage-bearing, canary-verified producer evidence authenticated with a DSSE/in-toto binding; legacy [1.0](../src/py_security_suite/schemas/companion-assurance.schema.json) remains bundled for explicit compatibility |
 | Bundle qualification | [1.1](../src/py_security_suite/schemas/bundle-qualification-1.1.schema.json) | Adapter contracts and readiness joined with optional digest-bound behavioral evidence |
 | Native bundle verification | [1.0](../src/py_security_suite/schemas/native-bundle-verification.schema.json) | Closed file set, wheels, and optional no-index environment resolution |
@@ -297,6 +325,8 @@ pysec schema doctor-readiness-1.1 --output contracts/doctor-readiness.schema.jso
 pysec schema provision-plan-1.0 --output contracts/provision-plan.schema.json
 pysec schema admission-decisions-1.0 --output contracts/admission-decisions.schema.json
 pysec schema adapter-conformance-1.0 --output contracts/adapter-conformance.schema.json
+pysec schema benchmark-signing-provider-conformance-1.0 --output contracts/benchmark-signing-provider-conformance.schema.json
+pysec schema performance-assurance-1.0 --output contracts/performance-assurance.schema.json
 pysec schema bundle-qualification-1.1 --output contracts/bundle-qualification.schema.json
 pysec schema native-bundle-verification-1.0 --output contracts/native-bundle-verification.schema.json
 pysec schema config-advice-1.0 --output contracts/config-advice.schema.json

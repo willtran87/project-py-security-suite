@@ -1,0 +1,7 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "urn:project-py-security-suite:schema:benchmark-security-event-record:1.0",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "previous_event_sha256", "event", "event_sha256"],
+  "properties": {"schema_version": {"const": "1.0"}, "previous_event_sha256": {"$ref": "#/$defs/digest"}, "event": {"type": "object", "additionalProperties": false, "required": ["sequence", "occurred_at", "control", "outcome", "details_sha256"], "properties": {"sequence": {"type": "integer", "minimum": 1}, "occurred_at": {"type": "string", "format": "date-time"}, "control": {"type": "string", "minLength": 1, "maxLength": 128}, "outcome": {"enum": ["passed", "failed", "observed"]}, "details_sha256": {"$ref": "#/$defs/digest"}}}, "event_sha256": {"$ref": "#/$defs/digest"}},
+  "$defs": {"digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}
+}

@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:threat-model-assessment:1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "analysis", "applicable", "model_id", "source_sha256", "architecture_sha256", "scope", "coverage", "review", "complete", "gaps", "claim_boundary"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "analysis": {"const": "threat-model-quality-assessment"},
+    "applicable": {"type": "boolean"},
+    "model_id": {"type": "string", "maxLength": 200},
+    "source_sha256": {"$ref": "#/$defs/optionalDigest"},
+    "architecture_sha256": {"$ref": "#/$defs/optionalDigest"},
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["assets", "components", "trust_boundaries", "data_flows", "assumptions", "threats", "mitigations", "tests", "change_triggers"],
+      "properties": {
+        "assets": {"$ref": "#/$defs/count"},
+        "components": {"$ref": "#/$defs/count"},
+        "trust_boundaries": {"$ref": "#/$defs/count"},
+        "data_flows": {"$ref": "#/$defs/count"},
+        "assumptions": {"$ref": "#/$defs/count"},
+        "threats": {"$ref": "#/$defs/count"},
+        "mitigations": {"$ref": "#/$defs/count"},
+        "tests": {"$ref": "#/$defs/count"},
+        "change_triggers": {"$ref": "#/$defs/count"}
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["assets_with_threats", "cross_boundary_flows", "cross_boundary_flows_modeled", "threats_with_mitigations", "threats_with_verification", "verified_mitigations", "passed_negative_tests", "open_assumptions", "unresolved_high_risk", "change_triggers_assessed"],
+      "properties": {
+        "assets_with_threats": {"$ref": "#/$defs/count"},
+        "cross_boundary_flows": {"$ref": "#/$defs/count"},
+        "cross_boundary_flows_modeled": {"$ref": "#/$defs/count"},
+        "threats_with_mitigations": {"$ref": "#/$defs/count"},
+        "threats_with_verification": {"$ref": "#/$defs/count"},
+        "verified_mitigations": {"$ref": "#/$defs/count"},
+        "passed_negative_tests": {"$ref": "#/$defs/count"},
+        "open_assumptions": {"$ref": "#/$defs/count"},
+        "unresolved_high_risk": {"$ref": "#/$defs/count"},
+        "change_triggers_assessed": {"$ref": "#/$defs/count"}
+      }
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["independent_reviewers", "approved"],
+      "properties": {
+        "independent_reviewers": {"$ref": "#/$defs/count"},
+        "approved": {"type": "boolean"}
+      }
+    },
+    "complete": {"type": "boolean"},
+    "gaps": {"type": "array", "maxItems": 200, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 1000}},
+    "claim_boundary": {"type": "string", "minLength": 1, "maxLength": 2000}
+  },
+  "$defs": {
+    "count": {"type": "integer", "minimum": 0, "maximum": 10000},
+    "optionalDigest": {"type": "string", "pattern": "^([0-9a-f]{64})?$"}
+  }
+}

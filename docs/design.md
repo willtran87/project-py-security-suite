@@ -1,7 +1,7 @@
 # Python Security Suite design
 
 Status: alpha foundation  
-Last reviewed: 2026-08-28
+Last reviewed: 2026-08-30
 
 ## Purpose
 
@@ -45,8 +45,9 @@ flowchart LR
         Scanners["89 governed adapters<br/>security | quality | testing | policy | architecture | supply chain | artifact | governance"]
         Analyzers["Native contextual analyzers<br/>framework | contract | validation | health | architecture | domain assurance"]
         Reports["Markdown | HTML | SARIF | SonarQube | JSON<br/>SBOM + validation + architecture + domain coverage + Security Passport"]
-        Standards["358 versioned standards references<br/>104 selectable assurance packs<br/>publisher quarantine + semantic diff + signed promotion ledger"]
-        Benchmarks["124 governed benchmark families + 35 maintained adapters<br/>verified evidence + native OCI/lab + 11 executable protocols<br/>qualification + repetition + evidence + delta"]
+        Standards["481 versioned standards references + 147 assurance packs<br/>deterministic catalog export + verified source-manifest compiler<br/>publisher quarantine + signed promotion"]
+        Benchmarks["182 governed benchmark families + 100 maintained adapters<br/>multi-fixture + pinned semantic-oracle admission<br/>AST + lexical + control-flow near-duplicate evidence<br/>exact equal-tail/mean statistics + full SLSA materials"]
+        BenchmarkTrust["Root-signed external benchmark trust<br/>lifecycle-aware downstream receipt admission<br/>leased intent/checkpoint recovery<br/>HSM/KMS receipts + trusted-time rotation anchors"]
         AssuranceCase["ISO 15026 + SACM 2.3 assurance case<br/>claims + evidence + defeaters + confidence + review"]
         Priority["CVSS v4 + SSVC<br/>source evidence only"]
         OSCAL["OSCAL 1.2.2 lifecycle<br/>7 official-schema-valid models"]
@@ -59,6 +60,7 @@ flowchart LR
         Analyzers --> Suite
         Standards --> Suite
         Benchmarks --> Suite
+        BenchmarkTrust --> Benchmarks
         AssuranceCase --> Suite
         Suite --> Priority
         Suite --> OSCAL
@@ -80,6 +82,41 @@ native analyzers operate on the sealed source snapshot and retained artifacts.
 `capability-manifest.json` records the former's selection and execution truth,
 while the contextual artifacts state their own bounded inputs, parse errors,
 and completeness.
+
+Industry assurance is also layered deliberately. Stable publications enter the
+versioned crosswalk; organization-selected profiles turn applicable references
+into controls and procedures; maintained adapters define measurable evidence
+contracts; and authorized disposable lanes execute adversarial or conformance
+cases. A2A, CSP/SRI, TLP/IEP/VERIS, SESIP, DORA, FFIEC, C5, and FCC coverage
+therefore does not imply certification or regulatory approval. Draft CSP3,
+SRI2, Trusted Types, and BSI TR-03183 remain in the non-normative watchlist,
+and the retired FFIEC CAT is excluded from current claims.
+
+Enhanced benchmark execution is an explicit guarded transaction. Code cannot
+skip or repeat a phase, and the replay transition is committed before any
+untrusted stage runs.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Authorized
+    Authorized --> ManifestAdmitted
+    ManifestAdmitted --> TrustAdmitted
+    TrustAdmitted --> EvidenceVerified
+    EvidenceVerified --> ReplayCommitted
+    ReplayCommitted --> StagesExecuted
+    StagesExecuted --> InputsReverified
+    InputsReverified --> Scored
+    Scored --> ReceiptAssembled
+    ReceiptAssembled --> ReceiptSigned: enhanced schema
+    ReceiptAssembled --> Completed: legacy schema
+    ReceiptSigned --> Completed
+    Authorized --> Failed: admission or execution error
+    ManifestAdmitted --> Failed: admission or execution error
+    TrustAdmitted --> Failed: admission or execution error
+    EvidenceVerified --> Failed: admission or execution error
+    ReplayCommitted --> Failed: admission or execution error
+    StagesExecuted --> Failed: admission or execution error
+```
 
 ### Contextual analysis and validation
 
@@ -375,6 +412,48 @@ the observed executable matched a configured digest, and whether that digest
 originated in organization policy. The release gate requires both plus an
 unchanged post-execution digest. This prevents a repository from approving its
 own toolchain while preserving useful local tamper detection.
+
+## Continuous assurance gates
+
+```mermaid
+flowchart LR
+    Change[Source or contract change] --> CI[Protected continuous integration]
+    CI --> Tests[Cross-platform tests]
+    CI --> Coverage[Branch + changed-line + critical-module coverage]
+    CI --> Schema[Schema/runtime + public API compatibility]
+    CI --> Architecture[Progressive file/function concentration ratchets]
+    CI --> Performance[Time + throughput + memory budgets]
+    Change --> Daily[Daily parser assurance]
+    Daily --> Fuzz[Persistent coverage-guided parser fuzzing]
+    Change --> Weekly[Weekly deep assurance]
+    Weekly --> Mutation[Security-critical mutation testing]
+    Weekly --> Resilience[Timeout + flood + rollback + cleanup drills]
+    Weekly --> Providers[Protected live HSM/Vault/KMS conformance]
+    Tests --> Gate[Release evidence]
+    Coverage --> Gate
+    Schema --> Gate
+    Architecture --> Gate
+    Performance --> Gate
+    Mutation --> Gate
+    Fuzz --> Gate
+    Resilience --> Gate
+    Providers --> Gate
+```
+
+Benchmark command registration is isolated in
+`cli_benchmark_arguments.py`; execution transitions, receipt construction,
+signing, scoring, and performance assurance remain separate modules. CI freezes
+the current concentration ceilings and rejects accidental growth while later
+extractions can lower each ceiling without weakening behavior.
+
+The continuous gate currently protects 58 commands, 23 stable options, and 10
+versioned schema contracts; enforces concentration ceilings across 6 files and
+7 functions; and exercises a deterministic 10,000-case JSON/classification
+workload against time, throughput, peak-memory, and growth budgets. These
+numbers describe the checked-in ratchets, not the entire command or schema
+inventory. Daily fuzzing and weekly mutation, resilience, and provider checks
+remain separate because their cost or deployment authority does not fit every
+pull request.
 
 ## Runtime architecture
 

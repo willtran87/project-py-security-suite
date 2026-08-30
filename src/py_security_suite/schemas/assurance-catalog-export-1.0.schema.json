@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:assurance-catalog-export:1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "analysis", "counts", "component_sha256", "components", "claim_boundary", "catalog_sha256"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "analysis": {"const": "industry-assurance-catalog-export"},
+    "counts": {"$ref": "#/$defs/componentMap"},
+    "component_sha256": {"type": "object", "additionalProperties": false, "required": ["standards", "profiles", "benchmarks", "adapter_specs", "execution_contracts", "standards_watchlist"], "properties": {"standards": {"$ref": "#/$defs/sha256"}, "profiles": {"$ref": "#/$defs/sha256"}, "benchmarks": {"$ref": "#/$defs/sha256"}, "adapter_specs": {"$ref": "#/$defs/sha256"}, "execution_contracts": {"$ref": "#/$defs/sha256"}, "standards_watchlist": {"$ref": "#/$defs/sha256"}}},
+    "components": {"type": "object", "additionalProperties": false, "required": ["standards", "profiles", "benchmarks", "adapter_specs", "execution_contracts", "standards_watchlist"], "properties": {"standards": {"type": "array"}, "profiles": {"type": "array"}, "benchmarks": {"type": "array"}, "adapter_specs": {"type": "array"}, "execution_contracts": {"type": "array"}, "standards_watchlist": {"type": "array"}}},
+    "claim_boundary": {"type": "string", "minLength": 1},
+    "catalog_sha256": {"$ref": "#/$defs/sha256"}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "componentMap": {"type": "object", "additionalProperties": false, "required": ["standards", "profiles", "benchmarks", "adapter_specs", "execution_contracts", "standards_watchlist"], "properties": {"standards": {"type": "integer", "minimum": 0}, "profiles": {"type": "integer", "minimum": 0}, "benchmarks": {"type": "integer", "minimum": 0}, "adapter_specs": {"type": "integer", "minimum": 0}, "execution_contracts": {"type": "integer", "minimum": 0}, "standards_watchlist": {"type": "integer", "minimum": 0}}}
+  }
+}

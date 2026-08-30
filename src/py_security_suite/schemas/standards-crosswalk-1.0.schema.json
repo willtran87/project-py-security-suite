@@ -21,7 +21,7 @@
       "type": "object", "additionalProperties": false,
       "required": ["edition_status", "published", "observed_at"],
       "properties": {
-        "edition_status": {"enum": ["final", "historical", "final-under-review"]},
+        "edition_status": {"enum": ["final", "historical", "final-under-review", "policy-pinned"]},
         "published": {"type": "string", "minLength": 4, "maxLength": 10},
         "observed_at": {"type": "string", "format": "date"},
         "supersedes": {"$ref": "#/$defs/stringArray"},

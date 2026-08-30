@@ -1,11 +1,358 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "urn:project-py-security-suite:schema:benchmark-registry:1.0", "type": "object", "additionalProperties": false,
-  "required": ["schema_version", "analysis", "source_sha256", "benchmarks_registered", "benchmarks_enabled", "benchmarks", "tasks", "required_metrics", "required_strata", "claim_boundary"],
-  "properties": {
-    "schema_version": {"const": "1.0"}, "analysis": {"const": "industry-benchmark-registry"}, "source_sha256": {"type": "string", "pattern": "^([0-9a-f]{64})?$"}, "benchmarks_registered": {"type": "integer", "minimum": 0}, "benchmarks_enabled": {"type": "integer", "minimum": 0},
-    "benchmarks": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["id", "version", "kind", "source", "languages", "lane", "runner_contract", "enabled", "corpus_sha256", "evidence_artifact", "adapter_manifest", "thresholds"], "properties": {"id": {"type": "string"}, "version": {"type": "string"}, "kind": {"type": "string"}, "source": {"type": "string"}, "languages": {"type": "array", "items": {"type": "string"}}, "lane": {"enum": ["core-verified-report", "authorized-companion"]}, "runner_contract": {"$ref": "#/$defs/runner"}, "enabled": {"type": "boolean"}, "corpus_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"}, "evidence_artifact": {"type": ["string", "null"]}, "adapter_manifest": {"type": ["string", "null"]}, "thresholds": {"type": ["object", "null"], "additionalProperties": {"type": "number", "minimum": 0, "maximum": 1}}}}},
-    "tasks": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["benchmark_id", "lane", "command", "execution_mode", "requires_operator_authorization", "authorization_flag", "network_policy", "disposable_target_required", "source_bound", "runner_contract"], "properties": {"benchmark_id": {"type": "string"}, "lane": {"type": "string"}, "command": {"type": "array", "items": {"type": "string"}}, "execution_mode": {"enum": ["adapter", "report-scoring"]}, "requires_operator_authorization": {"type": "boolean"}, "authorization_flag": {"type": ["string", "null"]}, "network_policy": {"const": "deny"}, "disposable_target_required": {"type": "boolean"}, "source_bound": {"type": "boolean"}, "runner_contract": {"$ref": "#/$defs/runner"}}}},
-    "required_metrics": {"type": "array", "uniqueItems": true, "items": {"type": "string"}}, "required_strata": {"type": "array", "uniqueItems": true, "items": {"type": "string"}}, "claim_boundary": {"type": "string"}
-  },
-  "$defs": {"runner": {"type": "object", "additionalProperties": false, "required": ["adapter", "protocol", "expected_results", "minimum_repetitions", "required_execution_evidence", "score_semantics"], "properties": {"adapter": {"type": "string"}, "protocol": {"enum": ["classification", "temporal-calibration", "verification-competition", "test-generation", "fuzzing-statistical", "stochastic-adversarial", "assessor-agreement", "biometric-performance", "proficiency-testing", "conformance", "detection-evaluation"]}, "expected_results": {"type": "string"}, "minimum_repetitions": {"type": "integer", "minimum": 1}, "required_execution_evidence": {"type": "array", "uniqueItems": true, "items": {"type": "string"}}, "score_semantics": {"type": "array", "uniqueItems": true, "items": {"type": "string"}}}}}
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:project-py-security-suite:schema:benchmark-registry:1.0",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+        "schema_version",
+        "analysis",
+        "source_sha256",
+        "receipt_authority_policy",
+        "benchmarks_registered",
+        "benchmarks_enabled",
+        "benchmarks",
+        "tasks",
+        "required_metrics",
+        "required_strata",
+        "claim_boundary"
+    ],
+    "properties": {
+        "schema_version": {
+            "const": "1.0"
+        },
+        "analysis": {
+            "const": "industry-benchmark-registry"
+        },
+        "source_sha256": {
+            "type": "string",
+            "pattern": "^([0-9a-f]{64})?$"
+        },
+        "receipt_authority_policy": {
+            "anyOf": [
+                {
+                    "type": "null"
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                        "policy_id",
+                        "policy_sha256",
+                        "trust_root_key_id",
+                        "issued_at",
+                        "expires_at"
+                    ],
+                    "properties": {
+                        "policy_id": {
+                            "type": "string"
+                        },
+                        "policy_sha256": {
+                            "type": "string",
+                            "pattern": "^[0-9a-f]{64}$"
+                        },
+                        "trust_root_key_id": {
+                            "type": "string",
+                            "pattern": "^[0-9a-f]{64}$"
+                        },
+                        "issued_at": {
+                            "type": "string",
+                            "format": "date-time"
+                        },
+                        "expires_at": {
+                            "type": "string",
+                            "format": "date-time"
+                        }
+                    }
+                }
+            ]
+        },
+        "benchmarks_registered": {
+            "type": "integer",
+            "minimum": 0
+        },
+        "benchmarks_enabled": {
+            "type": "integer",
+            "minimum": 0
+        },
+        "benchmarks": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "id",
+                    "version",
+                    "kind",
+                    "source",
+                    "languages",
+                    "lane",
+                    "runner_contract",
+                    "enabled",
+                    "corpus_sha256",
+                    "evidence_artifact",
+                    "adapter_manifest",
+                    "trusted_receipt_signer_key_ids",
+                    "trusted_receipt_authorities",
+                    "thresholds"
+                ],
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "version": {
+                        "type": "string"
+                    },
+                    "kind": {
+                        "type": "string"
+                    },
+                    "source": {
+                        "type": "string"
+                    },
+                    "languages": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "lane": {
+                        "enum": [
+                            "core-verified-report",
+                            "authorized-companion"
+                        ]
+                    },
+                    "runner_contract": {
+                        "$ref": "#/$defs/runner"
+                    },
+                    "enabled": {
+                        "type": "boolean"
+                    },
+                    "corpus_sha256": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "pattern": "^[0-9a-f]{64}$"
+                    },
+                    "evidence_artifact": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "adapter_manifest": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "trusted_receipt_signer_key_ids": {
+                        "type": "array",
+                        "maxItems": 32,
+                        "uniqueItems": true,
+                        "items": {
+                            "type": "string",
+                            "pattern": "^[0-9a-f]{64}$"
+                        }
+                    },
+                    "trusted_receipt_authorities": {
+                        "type": "array",
+                        "maxItems": 32,
+                        "items": {
+                            "$ref": "#/$defs/receiptAuthority"
+                        }
+                    },
+                    "thresholds": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "additionalProperties": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1
+                        }
+                    }
+                }
+            }
+        },
+        "tasks": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "benchmark_id",
+                    "lane",
+                    "command",
+                    "execution_mode",
+                    "requires_operator_authorization",
+                    "authorization_flag",
+                    "network_policy",
+                    "disposable_target_required",
+                    "source_bound",
+                    "runner_contract"
+                ],
+                "properties": {
+                    "benchmark_id": {
+                        "type": "string"
+                    },
+                    "lane": {
+                        "type": "string"
+                    },
+                    "command": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "execution_mode": {
+                        "enum": [
+                            "adapter",
+                            "report-scoring"
+                        ]
+                    },
+                    "requires_operator_authorization": {
+                        "type": "boolean"
+                    },
+                    "authorization_flag": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "network_policy": {
+                        "const": "deny"
+                    },
+                    "disposable_target_required": {
+                        "type": "boolean"
+                    },
+                    "source_bound": {
+                        "type": "boolean"
+                    },
+                    "runner_contract": {
+                        "$ref": "#/$defs/runner"
+                    }
+                }
+            }
+        },
+        "required_metrics": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+                "type": "string"
+            }
+        },
+        "required_strata": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+                "type": "string"
+            }
+        },
+        "claim_boundary": {
+            "type": "string"
+        }
+    },
+    "$defs": {
+        "receiptAuthority": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "key_id",
+                "organization_id",
+                "key_version",
+                "status",
+                "valid_from",
+                "valid_until",
+                "revoked_at"
+            ],
+            "properties": {
+                "key_id": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                },
+                "organization_id": {
+                    "type": "string"
+                },
+                "key_version": {
+                    "type": "string"
+                },
+                "status": {
+                    "enum": [
+                        "active",
+                        "suspended",
+                        "revoked"
+                    ]
+                },
+                "valid_from": {
+                    "type": "string",
+                    "format": "date-time"
+                },
+                "valid_until": {
+                    "type": "string",
+                    "format": "date-time"
+                },
+                "revoked_at": {
+                    "type": [
+                        "string",
+                        "null"
+                    ],
+                    "format": "date-time"
+                }
+            }
+        },
+        "runner": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "adapter",
+                "protocol",
+                "expected_results",
+                "minimum_repetitions",
+                "required_execution_evidence",
+                "score_semantics"
+            ],
+            "properties": {
+                "adapter": {
+                    "type": "string"
+                },
+                "protocol": {
+                    "enum": [
+                        "classification",
+                        "temporal-calibration",
+                        "verification-competition",
+                        "test-generation",
+                        "fuzzing-statistical",
+                        "stochastic-adversarial",
+                        "assessor-agreement",
+                        "biometric-performance",
+                        "proficiency-testing",
+                        "conformance",
+                        "detection-evaluation"
+                    ]
+                },
+                "expected_results": {
+                    "type": "string"
+                },
+                "minimum_repetitions": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "required_execution_evidence": {
+                    "type": "array",
+                    "uniqueItems": true,
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "score_semantics": {
+                    "type": "array",
+                    "uniqueItems": true,
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        }
+    }
 }

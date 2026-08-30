@@ -1,0 +1,401 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:project-py-security-suite:schema:industry-assurance-policy:1.3",
+    "title": "Protocol-aware industry assurance policy",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+        "schema_version",
+        "enforce",
+        "profiles",
+        "controls",
+        "procedures",
+        "benchmarks",
+        "benchmark_baseline_path"
+    ],
+    "properties": {
+        "schema_version": {
+            "const": "1.3"
+        },
+        "enforce": {
+            "type": "boolean"
+        },
+        "benchmark_baseline_path": {
+            "type": [
+                "string",
+                "null"
+            ]
+        },
+        "profiles": {
+            "type": "array",
+            "maxItems": 160,
+            "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "id",
+                    "applicable",
+                    "procedure_execution"
+                ],
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
+                    },
+                    "applicable": {
+                        "type": "boolean"
+                    },
+                    "procedure_execution": {
+                        "enum": [
+                            "planned",
+                            "executed"
+                        ]
+                    }
+                }
+            }
+        },
+        "controls": {
+            "type": "array",
+            "maxItems": 10000,
+            "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "standard",
+                    "control_id",
+                    "objective",
+                    "applicable",
+                    "evidence_artifacts"
+                ],
+                "properties": {
+                    "standard": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "control_id": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "objective": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "applicable": {
+                        "type": "boolean"
+                    },
+                    "evidence_artifacts": {
+                        "$ref": "#/$defs/evidence"
+                    }
+                }
+            }
+        },
+        "procedures": {
+            "type": "array",
+            "maxItems": 20000,
+            "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "standard",
+                    "procedure_id",
+                    "objective",
+                    "applicable",
+                    "execution",
+                    "test_type",
+                    "authorization_required",
+                    "evidence_artifacts"
+                ],
+                "properties": {
+                    "standard": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "procedure_id": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "objective": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "applicable": {
+                        "type": "boolean"
+                    },
+                    "execution": {
+                        "enum": [
+                            "planned",
+                            "executed"
+                        ]
+                    },
+                    "test_type": {
+                        "enum": [
+                            "examine",
+                            "interview",
+                            "test",
+                            "static",
+                            "dynamic",
+                            "manual"
+                        ]
+                    },
+                    "authorization_required": {
+                        "type": "boolean"
+                    },
+                    "evidence_artifacts": {
+                        "$ref": "#/$defs/evidence"
+                    }
+                }
+            }
+        },
+        "benchmarks": {
+            "type": "array",
+            "maxItems": 192,
+            "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "id",
+                    "enabled",
+                    "corpus_sha256",
+                    "evidence_artifact",
+                    "thresholds",
+                    "adapter_manifest"
+                ],
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
+                    },
+                    "enabled": {
+                        "type": "boolean"
+                    },
+                    "corpus_sha256": {
+                        "$ref": "#/$defs/sha256"
+                    },
+                    "evidence_artifact": {
+                        "type": "string",
+                        "pattern": "^[^/\\\\]+\\.json$"
+                    },
+                    "adapter_manifest": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "thresholds": {
+                        "oneOf": [
+                            {
+                                "$ref": "#/$defs/classificationThresholds"
+                            },
+                            {
+                                "$ref": "#/$defs/accuracyThresholds"
+                            },
+                            {
+                                "$ref": "#/$defs/conformanceThresholds"
+                            },
+                            {
+                                "$ref": "#/$defs/temporalThresholds"
+                            },
+                            {
+                                "$ref": "#/$defs/stochasticThresholds"
+                            },
+                            {
+                                "$ref": "#/$defs/agreementThresholds"
+                            },
+                            {
+                                "$ref": "#/$defs/biometricThresholds"
+                            },
+                            {
+                                "$ref": "#/$defs/proficiencyThresholds"
+                            },
+                            {
+                                "$ref": "#/$defs/fuzzingThresholds"
+                            }
+                        ]
+                    }
+                }
+            }
+        }
+    },
+    "$defs": {
+        "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+        },
+        "ratio": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+        },
+        "classificationThresholds": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "minimum_precision",
+                "minimum_recall",
+                "minimum_f1",
+                "maximum_false_positive_rate"
+            ],
+            "properties": {
+                "minimum_precision": {
+                    "$ref": "#/$defs/ratio"
+                },
+                "minimum_recall": {
+                    "$ref": "#/$defs/ratio"
+                },
+                "minimum_f1": {
+                    "$ref": "#/$defs/ratio"
+                },
+                "maximum_false_positive_rate": {
+                    "$ref": "#/$defs/ratio"
+                }
+            }
+        },
+        "accuracyThresholds": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "minimum_accuracy"
+            ],
+            "properties": {
+                "minimum_accuracy": {
+                    "$ref": "#/$defs/ratio"
+                }
+            }
+        },
+        "conformanceThresholds": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "minimum_outcome_accuracy",
+                "minimum_conformance_rate"
+            ],
+            "properties": {
+                "minimum_outcome_accuracy": {
+                    "$ref": "#/$defs/ratio"
+                },
+                "minimum_conformance_rate": {
+                    "$ref": "#/$defs/ratio"
+                }
+            }
+        },
+        "temporalThresholds": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "maximum_brier_score"
+            ],
+            "properties": {
+                "maximum_brier_score": {
+                    "$ref": "#/$defs/ratio"
+                }
+            }
+        },
+        "stochasticThresholds": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "maximum_attack_success_rate",
+                "minimum_mean_utility"
+            ],
+            "properties": {
+                "maximum_attack_success_rate": {
+                    "$ref": "#/$defs/ratio"
+                },
+                "minimum_mean_utility": {
+                    "$ref": "#/$defs/ratio"
+                }
+            }
+        },
+        "agreementThresholds": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "minimum_agreement",
+                "minimum_chance_corrected_agreement"
+            ],
+            "properties": {
+                "minimum_agreement": {
+                    "$ref": "#/$defs/ratio"
+                },
+                "minimum_chance_corrected_agreement": {
+                    "$ref": "#/$defs/ratio"
+                }
+            }
+        },
+        "biometricThresholds": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "maximum_fmr_wilson_upper_95",
+                "maximum_fnmr_wilson_upper_95",
+                "maximum_iapar_wilson_upper_95",
+                "maximum_worst_group_fmr_wilson_upper_95",
+                "maximum_worst_group_fnmr_wilson_upper_95"
+            ],
+            "properties": {
+                "maximum_fmr_wilson_upper_95": {
+                    "$ref": "#/$defs/ratio"
+                },
+                "maximum_fnmr_wilson_upper_95": {
+                    "$ref": "#/$defs/ratio"
+                },
+                "maximum_iapar_wilson_upper_95": {
+                    "$ref": "#/$defs/ratio"
+                },
+                "maximum_worst_group_fmr_wilson_upper_95": {
+                    "$ref": "#/$defs/ratio"
+                },
+                "maximum_worst_group_fnmr_wilson_upper_95": {
+                    "$ref": "#/$defs/ratio"
+                }
+            }
+        },
+        "proficiencyThresholds": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "minimum_agreement",
+                "minimum_chance_corrected_agreement",
+                "minimum_reference_accuracy"
+            ],
+            "properties": {
+                "minimum_agreement": {
+                    "$ref": "#/$defs/ratio"
+                },
+                "minimum_chance_corrected_agreement": {
+                    "$ref": "#/$defs/ratio"
+                },
+                "minimum_reference_accuracy": {
+                    "$ref": "#/$defs/ratio"
+                }
+            }
+        },
+        "fuzzingThresholds": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "minimum_executions",
+                "minimum_coverage_gain"
+            ],
+            "properties": {
+                "minimum_executions": {
+                    "type": "number",
+                    "minimum": 0
+                },
+                "minimum_coverage_gain": {
+                    "$ref": "#/$defs/ratio"
+                }
+            }
+        },
+        "evidence": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+                "type": "string",
+                "pattern": "^[^/\\\\]+\\.json$"
+            }
+        }
+    }
+}

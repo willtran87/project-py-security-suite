@@ -1,0 +1,23 @@
+{
+  "schema_version": "1.1",
+  "threshold": 0.7,
+  "mutation_variants_per_case": 50,
+  "minimum_observations_per_class_per_language": 50,
+  "minimum_precision": 0.95,
+  "minimum_recall": 0.95,
+  "minimum_wilson_lower_bound": 0.9,
+  "cases": [
+    {"id":"python-renamed","language":"python","expected_duplicate":true,"left":"def allowed(user):\n    if user.active:\n        return user.role == 'admin'\n    return False\n","right":"def permitted(account):\n    if account.active:\n        return account.role == 'admin'\n    return False\n"},
+    {"id":"python-control-change","language":"python","expected_duplicate":false,"left":"def allowed(user):\n    if user.active:\n        return user.role == 'admin'\n    return False\n","right":"def total(values):\n    result = 0\n    for value in values:\n        while value > 0:\n            result += value\n            value -= 1\n    return result\n"},
+    {"id":"javascript-renamed","language":"javascript","expected_duplicate":true,"left":"function allowed(user) { if (user.active) { return user.role === 'admin'; } return false; }","right":"function permitted(account) { if (account.active) { return account.role === 'admin'; } return false; }"},
+    {"id":"javascript-control-change","language":"javascript","expected_duplicate":false,"left":"function allowed(user) { if (user.active) { return user.role === 'admin'; } return false; }","right":"function total(values) { let sum = 0; for (const value of values) { sum += value; } return sum; }"},
+    {"id":"typescript-renamed","language":"typescript","expected_duplicate":true,"left":"function allowed(user: User): boolean { if (user.active) { return user.role === 'admin'; } return false; }","right":"function permitted(account: User): boolean { if (account.active) { return account.role === 'admin'; } return false; }"},
+    {"id":"typescript-control-change","language":"typescript","expected_duplicate":false,"left":"function allowed(user: User): boolean { if (user.active) { return user.role === 'admin'; } return false; }","right":"function total(values: number[]): number { let sum = 0; for (const value of values) { sum += value; } return sum; }"},
+    {"id":"go-renamed","language":"go","expected_duplicate":true,"left":"package p\nfunc allowed(user User) bool { if user.Active { return user.Role == \"admin\" }; return false }","right":"package p\nfunc permitted(account User) bool { if account.Active { return account.Role == \"admin\" }; return false }"},
+    {"id":"go-control-change","language":"go","expected_duplicate":false,"left":"package p\nfunc allowed(user User) bool { if user.Active { return user.Role == \"admin\" }; return false }","right":"package p\nfunc total(values []int) int { sum := 0; for _, value := range values { sum += value }; return sum }"},
+    {"id":"java-renamed","language":"java","expected_duplicate":true,"left":"class Policy { boolean allowed(User user) { if (user.active) { return user.role.equals(\"admin\"); } return false; } }","right":"class Policy { boolean permitted(User account) { if (account.active) { return account.role.equals(\"admin\"); } return false; } }"},
+    {"id":"java-control-change","language":"java","expected_duplicate":false,"left":"class Policy { boolean allowed(User user) { if (user.active) { return user.role.equals(\"admin\"); } return false; } }","right":"class MathBox { int total(int[] values) { int sum = 0; for (int value : values) { sum += value; } return sum; } }"},
+    {"id":"rust-renamed","language":"rust","expected_duplicate":true,"left":"fn allowed(user: &User) -> bool { if user.active { return user.role == \"admin\"; } false }","right":"fn permitted(account: &User) -> bool { if account.active { return account.role == \"admin\"; } false }"},
+    {"id":"rust-control-change","language":"rust","expected_duplicate":false,"left":"fn allowed(user: &User) -> bool { if user.active { return user.role == \"admin\"; } false }","right":"fn total(values: &[i32]) -> i32 { let mut sum = 0; for value in values { sum += value; } sum }"}
+  ]
+}

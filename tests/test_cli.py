@@ -34,6 +34,22 @@ class CliSafetyTests(unittest.TestCase):
         self.assertIn("pysec inspect PROJECT/.artifacts/pysec-report", help_text)
         parsed = parser.parse_args(["list-tools"])
         self.assertEqual(parsed.command, "list-tools")
+        runtime_probe = parser.parse_args(
+            [
+                "benchmark-runtime-probe",
+                "docker",
+                "--runtime-sha256",
+                "a" * 64,
+                "--runtime-name",
+                "docker",
+                "--runtime-version",
+                "27.0.0",
+                "--authorize-execution",
+                "--output",
+                "runtime-proof.json",
+            ]
+        )
+        self.assertEqual(runtime_probe.command, "benchmark-runtime-probe")
         adapter_check = parser.parse_args(
             ["adapter-check", "--format", "json", "--output", "adapters.json"]
         )

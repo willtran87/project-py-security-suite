@@ -1,0 +1,14 @@
+{
+  "schema_version": "1.1",
+  "policy_id": "production-benchmark-authorities",
+  "issued_at": "2026-08-15T00:00:00Z",
+  "expires_at": "2026-09-14T00:00:00Z",
+  "minimum_distinct_signers": 4,
+  "minimum_distinct_organizations": 2,
+  "authorities": [
+    {"role": "trusted-time", "organization_id": "time.example", "public_key_sha256": "1111111111111111111111111111111111111111111111111111111111111111", "revocation_status_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "status": "active", "key_version": "time-2026-08", "valid_from": "2026-08-15T00:00:00Z", "valid_until": "2026-09-14T00:00:00Z", "revoked_at": null},
+    {"role": "replay-protection", "organization_id": "platform.example", "public_key_sha256": "2222222222222222222222222222222222222222222222222222222222222222", "revocation_status_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "status": "active", "key_version": "replay-2026-08", "valid_from": "2026-08-15T00:00:00Z", "valid_until": "2026-09-14T00:00:00Z", "revoked_at": null},
+    {"role": "execution-receipt", "organization_id": "release.example", "public_key_sha256": "3333333333333333333333333333333333333333333333333333333333333333", "revocation_status_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "status": "active", "key_version": "receipt-2026-08", "valid_from": "2026-08-15T00:00:00Z", "valid_until": "2026-09-14T00:00:00Z", "revoked_at": null},
+    {"role": "provenance-builder", "organization_id": "build.example", "public_key_sha256": "4444444444444444444444444444444444444444444444444444444444444444", "revocation_status_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd", "status": "active", "key_version": "builder-2026-08", "valid_from": "2026-08-15T00:00:00Z", "valid_until": "2026-09-14T00:00:00Z", "revoked_at": null}
+  ]
+}
