@@ -1535,7 +1535,7 @@ requires-dist = [
     { name = "tree-sitter-rust", specifier = ">=0.24,<0.25" },
     { name = "tree-sitter-swift", specifier = ">=0.7,<0.8" },
     { name = "tree-sitter-typescript", specifier = ">=0.23,<0.24" },
-    { name = "wasmtime", specifier = ">=47,<48" },
+    { name = "wasmtime", specifier = ">=47,<49" },
 ]
 
 [package.metadata.requires-dev]
@@ -1557,7 +1557,7 @@ dev = [
     { name = "pytest-subprocess", specifier = ">=1.5,<2" },
     { name = "pytest-timeout", specifier = ">=2.4,<3" },
     { name = "pytest-xdist", specifier = ">=3.8,<4" },
-    { name = "responses", specifier = ">=0.25,<0.26" },
+    { name = "responses", specifier = ">=0.25,<0.27" },
     { name = "respx", specifier = ">=0.22,<0.24" },
     { name = "ruff", specifier = ">=0.12,<1" },
     { name = "tach", specifier = ">=0.35,<0.36" },
