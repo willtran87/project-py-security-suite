@@ -30,13 +30,13 @@ set -eu
 if touch /pysec-root-write 2>/dev/null; then exit 31; fi
 [ "$(wc -l < /proc/net/route)" -le 1 ]
 command -v wget >/dev/null
-if wget -T 2 -qO /tmp/ipv4-egress http://1.1.1.1; then exit 32; fi
-if wget -T 2 -qO /tmp/dns-egress http://example.com; then exit 33; fi
+if wget -T 2 -qO /tmp/ipv4-egress http://1.1.1.1 2>/dev/null; then exit 32; fi
+if wget -T 2 -qO /tmp/dns-egress http://example.com 2>/dev/null; then exit 33; fi
 printf '#!/bin/sh\nexit 0\n' > /tmp/noexec-canary
 chmod 700 /tmp/noexec-canary
 if /tmp/noexec-canary 2>/dev/null; then exit 34; fi
 if touch /sys/pysec-write 2>/dev/null; then exit 35; fi
-[ ! -w /proc/1/mem ]
+if printf pysec > /proc/sys/kernel/hostname 2>/dev/null; then exit 36; fi
 [ ! -e /dev/sda ]
 touch /tmp/allowed
 """.strip()
@@ -46,6 +46,7 @@ touch /tmp/allowed
             "run",
             "--rm",
             "--pull=never",
+            "--log-driver=none",
             "--read-only",
             "--cap-drop=ALL",
             "--security-opt=no-new-privileges",

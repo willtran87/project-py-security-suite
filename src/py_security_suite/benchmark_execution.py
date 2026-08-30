@@ -1945,7 +1945,11 @@ def _execute_stage(
     )
     started = time.monotonic()
     with tempfile.TemporaryFile() as stdout, tempfile.TemporaryFile() as stderr:
-        creationflags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
+        creationflags = (
+            int(getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
+            if os.name == "nt"
+            else 0
+        )
         argv, executed_sha256 = _stage_argv(
             executable, stage, isolation, workspace, corpus
         )

@@ -842,7 +842,8 @@ def _lock_descriptor(descriptor: int) -> None:
     if os.name == "nt":
         import msvcrt
 
-        msvcrt.locking(descriptor, msvcrt.LK_NBLCK, 1)
+        msvcrt_api: Any = msvcrt
+        msvcrt_api.locking(descriptor, msvcrt_api.LK_NBLCK, 1)
         return
     import fcntl
 
@@ -855,7 +856,8 @@ def _unlock_descriptor(descriptor: int) -> None:
     if os.name == "nt":
         import msvcrt
 
-        msvcrt.locking(descriptor, msvcrt.LK_UNLCK, 1)
+        msvcrt_api: Any = msvcrt
+        msvcrt_api.locking(descriptor, msvcrt_api.LK_UNLCK, 1)
         return
     import fcntl
 
