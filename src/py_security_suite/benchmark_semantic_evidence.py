@@ -351,7 +351,12 @@ def _python_lexical_features(payload: bytes) -> list[str]:
                 features.append("lex-number")
             elif token.type == tokenize.STRING:
                 features.append("lex-string")
-    except (IndentationError, SyntaxError, tokenize.TokenError) as exc:
+    except (
+        IndentationError,
+        SyntaxError,
+        UnicodeDecodeError,
+        tokenize.TokenError,
+    ) as exc:
         raise BenchmarkSemanticEvidenceError(
             "python semantic artifact cannot be tokenized"
         ) from exc

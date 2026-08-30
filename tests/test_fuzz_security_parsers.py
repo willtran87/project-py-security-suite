@@ -63,6 +63,19 @@ def test_archive_oracles_reject_traversal_and_links() -> None:
         module._inspect_tar(tar_buffer.getvalue())
 
 
+def test_zip_oracle_normalizes_unsupported_versions() -> None:
+    module = _script()
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w") as archive:
+        archive.writestr("report.json", "{}")
+    payload = bytearray(zip_buffer.getvalue())
+    central_directory = payload.index(b"PK\x01\x02")
+    payload[central_directory + 6] = 102
+
+    with pytest.raises(ValueError, match="unsupported feature or version"):
+        module._inspect_zip(bytes(payload))
+
+
 def test_xml_oracle_rejects_external_entities() -> None:
     module = _script()
     assert module._inspect_xml(b"<root><child /></root>") == (2, 0, 0)

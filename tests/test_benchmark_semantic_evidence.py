@@ -83,6 +83,13 @@ def test_semantic_fingerprint_is_identifier_insensitive_but_control_sensitive() 
     assert left != weakened
 
 
+def test_semantic_fingerprint_normalizes_invalid_python_encoding() -> None:
+    malformed = b"B\ri\r\xc7\xb3x\rixs\rrxs\ri\r"
+
+    with pytest.raises(BenchmarkSemanticEvidenceError, match="cannot be tokenized"):
+        semantic_fingerprint(malformed, language="python")
+
+
 @pytest.mark.parametrize(
     ("language", "suffix", "payload"),
     [

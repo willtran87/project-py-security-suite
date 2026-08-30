@@ -293,23 +293,26 @@ def _inspect_xml(payload: bytes) -> tuple[int, int, int]:
 def _inspect_zip(payload: bytes) -> tuple[tuple[str, int, int], ...]:
     records: list[tuple[str, int, int]] = []
     total_size = 0
-    with zipfile.ZipFile(io.BytesIO(payload)) as archive:
-        entries = archive.infolist()
-        if len(entries) > 100_000:
-            raise ValueError("ZIP member limit exceeded")
-        for entry in entries:
-            name = _safe_archive_path(entry.filename)
-            mode = (entry.external_attr >> 16) & 0o170000
-            if mode == stat.S_IFLNK or entry.flag_bits & 0x1:
-                raise ValueError("ZIP links and encrypted entries are not accepted")
-            if entry.file_size > 64 * 1024 * 1024:
-                raise ValueError("ZIP member size limit exceeded")
-            total_size += entry.file_size
-            if total_size > 128 * 1024 * 1024:
-                raise ValueError("ZIP aggregate size limit exceeded")
-            if entry.file_size > max(1, entry.compress_size) * 1_000:
-                raise ValueError("ZIP compression ratio limit exceeded")
-            records.append((name, entry.file_size, entry.CRC))
+    try:
+        with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+            entries = archive.infolist()
+            if len(entries) > 100_000:
+                raise ValueError("ZIP member limit exceeded")
+            for entry in entries:
+                name = _safe_archive_path(entry.filename)
+                mode = (entry.external_attr >> 16) & 0o170000
+                if mode == stat.S_IFLNK or entry.flag_bits & 0x1:
+                    raise ValueError("ZIP links and encrypted entries are not accepted")
+                if entry.file_size > 64 * 1024 * 1024:
+                    raise ValueError("ZIP member size limit exceeded")
+                total_size += entry.file_size
+                if total_size > 128 * 1024 * 1024:
+                    raise ValueError("ZIP aggregate size limit exceeded")
+                if entry.file_size > max(1, entry.compress_size) * 1_000:
+                    raise ValueError("ZIP compression ratio limit exceeded")
+                records.append((name, entry.file_size, entry.CRC))
+    except NotImplementedError as exc:
+        raise ValueError("ZIP uses an unsupported feature or version") from exc
     return tuple(records)
 
 
