@@ -1875,7 +1875,11 @@ def _benchmark_run_command(args: argparse.Namespace) -> int:
         overwrite=args.overwrite,
         label="benchmark execution receipt",
     )
-    print(rendered)
+    terminal_decision = "PASS" if receipt["decision"] == "pass" else "FAIL"
+    terminal_output = sanitize_terminal_text(str(args.output), maximum=512)
+    print(
+        f"{terminal_decision}: benchmark execution receipt written to {terminal_output}"
+    )
     return 0 if receipt["decision"] == "pass" else 2
 
 
