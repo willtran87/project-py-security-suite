@@ -26,6 +26,7 @@ _REPORT_VERIFICATION_SCHEMA_ID = (
     "urn:project-py-security-suite:schema:report-verification:1.0"
 )
 BUNDLED_SCHEMA_RESOURCES = {
+    "architecture-assurance-1.0": "architecture-assurance-1.0.schema.json",
     "application-contract-analysis-1.0": "application-contract-analysis-1.0.schema.json",
     "application-contract-analysis-1.1": "application-contract-analysis-1.1.schema.json",
     "application-contract-analysis-1.2": "application-contract-analysis-1.2.schema.json",
@@ -73,7 +74,9 @@ BUNDLED_SCHEMA_RESOURCES = {
     "benchmark-security-event-anchor-1.1": "benchmark-security-event-anchor-1.1.schema.json",
     "benchmark-signing-provider-profile-1.0": "benchmark-signing-provider-profile-1.0.schema.json",
     "benchmark-signing-provider-conformance-1.0": "benchmark-signing-provider-conformance-1.0.schema.json",
+    "benchmark-signing-provider-conformance-1.1": "benchmark-signing-provider-conformance-1.1.schema.json",
     "performance-assurance-1.0": "performance-assurance-1.0.schema.json",
+    "performance-assurance-1.1": "performance-assurance-1.1.schema.json",
     "assurance-profile-registry-1.0": "assurance-profile-registry-1.0.schema.json",
     "assurance-catalog-export-1.0": "assurance-catalog-export-1.0.schema.json",
     "control-assessment-1.0": "control-assessment-1.0.schema.json",

@@ -254,9 +254,24 @@ jobs:
       - name: Exercise the live browser security lane
         env:
           PYSEC_RUN_LIVE_INTEGRATION: "1"
-        run: >-
-          uv run --project companion --frozen pytest -q
-          tests/integration/test_browser_live.py
+        run: |
+          mkdir -p .artifacts/live-assurance
+          uv run --project companion --frozen pytest -q \
+            --junitxml=.artifacts/live-assurance/browser-junit.xml \
+            tests/integration/test_browser_live.py
+          uv run --frozen python -m scripts.validate_live_test_results \
+            --policy security/live-assurance-policy.json \
+            --job companion-browser-integration \
+            --output .artifacts/live-assurance/browser-matrix.json \
+            .artifacts/live-assurance/browser-junit.xml
+      - name: Retain live browser matrix evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: browser-live-assurance-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .artifacts/live-assurance
+          if-no-files-found: error
+          retention-days: 90
 
   test:
     name: Test ${{ matrix.os }} / Python ${{ matrix.python-version }}
@@ -387,8 +402,16 @@ jobs:
         run: uv run --frozen python scripts/validate_benchmark_schema_consistency.py
       - name: Enforce public CLI and schema compatibility
         run: uv run --frozen python scripts/validate_public_api.py
+      - name: Enforce mandatory live-assurance lanes
+        run: uv run --frozen python scripts/validate_live_assurance_policy.py
       - name: Enforce architecture concentration ratchets
         run: uv run --frozen python scripts/validate_architecture_limits.py
+      - name: Enforce declared dependency boundaries
+        run: uv run --frozen tach check
+      - name: Prevent dependency cycle expansion
+        run: |
+          uv run --frozen python scripts/validate_architecture_cycles.py
+          uv run --frozen python -m scripts.generate_architecture_assurance --output .artifacts/architecture/architecture-assurance.json
       - name: Enforce deterministic performance and memory budgets
         run: >-
           uv run --frozen python scripts/validate_performance_budgets.py
@@ -399,20 +422,34 @@ jobs:
         run: >-
           uv run --frozen mypy src companion scripts/audit_pages.py
           scripts/validate_architecture_limits.py
+          scripts/validate_architecture_cycles.py
+          scripts/generate_architecture_assurance.py
           scripts/discover_codeql_languages.py scripts/fuzz_security_parsers.py
           scripts/mkdocs_hooks.py scripts/validate-checkpoint-authority.py
           scripts/validate_benchmark_schema_consistency.py
           scripts/validate_security_critical_coverage.py
           scripts/validate_performance_budgets.py
           scripts/validate_public_api.py
+          scripts/validate_live_assurance_policy.py
+          scripts/validate_live_test_results.py
           scripts/validate-native-attestation-fixtures.py
           scripts/verify_release_independent.py
+      - name: Enforce the strict secondary type-contract surface
+        run: uv run --frozen pyright
       - name: Retain performance assurance evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: performance-assurance-${{ github.run_id }}-${{ github.run_attempt }}
           path: .artifacts/performance/performance-assurance.json
+          if-no-files-found: error
+          retention-days: 90
+      - name: Retain architecture assurance evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: architecture-assurance-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .artifacts/architecture/architecture-assurance.json
           if-no-files-found: error
           retention-days: 90
       - name: Build distributions
@@ -475,6 +512,7 @@ jobs:
     name: CI required gate
     if: always()
     needs:
+      - oci-containment-integration
       - containment-integration
       - companion-service-integration
       - companion-browser-integration

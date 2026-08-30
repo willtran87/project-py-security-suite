@@ -13,8 +13,10 @@ from jsonschema import Draft202012Validator
 
 from py_security_suite.benchmark_signing import (
     ExternalEd25519SigningProvider,
+    _portable_conformance_statement,
     load_external_signing_provider_profile,
     verify_signing_provider_conformance,
+    verify_portable_signing_provider_conformance,
 )
 from py_security_suite.cli import (
     _external_benchmark_signing_provider,
@@ -228,7 +230,46 @@ def test_provider_conformance_cli_publishes_verified_receipt(tmp_path: Path) -> 
         )
         == 0
     )
-    assert json.loads(output.read_text(encoding="utf-8"))["verified"] is True
+    receipt = json.loads(output.read_text(encoding="utf-8"))
+    assert receipt["verified"] is True
+    assert receipt["schema_version"] == "1.1"
+    assert receipt["profile_sha256"] == _sha256(profile)
+    Draft202012Validator(
+        json.loads(read_bundled_schema("benchmark-signing-provider-conformance-1.1"))
+    ).validate(receipt)
+    verified = verify_portable_signing_provider_conformance(receipt)
+    assert verified["provider_id"] == "provider-generic-hsm"
+
+
+def test_portable_provider_conformance_rejects_detached_signature(
+    tmp_path: Path,
+) -> None:
+    executable = Path(sys.executable).resolve()
+    profile = tmp_path / "provider.json"
+    profile.write_text(json.dumps(_live_profile(executable)), encoding="utf-8")
+    provider = load_external_signing_provider_profile(profile, _sha256(profile))
+    receipt = verify_signing_provider_conformance(
+        provider,
+        challenge=b"p" * 32,
+        portable=True,
+        profile_sha256=_sha256(profile),
+    )
+    receipt["signature_base64"] = "A" * 88
+    with pytest.raises(ValueError, match="digest is detached"):
+        verify_portable_signing_provider_conformance(receipt)
+
+    receipt = verify_signing_provider_conformance(
+        provider,
+        challenge=b"p" * 32,
+        portable=True,
+        profile_sha256=_sha256(profile),
+    )
+    receipt["backend"] = "pkcs11"
+    receipt["statement_sha256"] = hashlib.sha256(
+        _portable_conformance_statement(receipt, b"p" * 32)
+    ).hexdigest()
+    with pytest.raises(ValueError, match="signature is invalid"):
+        verify_portable_signing_provider_conformance(receipt)
 
 
 def test_provider_conformance_rejects_invalid_challenge() -> None:

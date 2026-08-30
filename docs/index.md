@@ -143,20 +143,21 @@ automation contracts.
 
 | Gate | Current enforced scope |
 |---|---|
-| Unit and integration suite | 1,187 passed, 19 platform-limited skips, and 494 subtests |
-| Combined statement/branch coverage | 80.79%, with a minimum aggregate floor of 80% and 25 security-critical module ratchets |
+| Unit and integration suite | 1,233 passed, 20 platform-limited skips, and 499 subtests in the final retained full-suite run |
+| Combined statement/branch coverage | 81.00%, with a minimum aggregate floor of 80% plus 45 security-critical module ratchets |
 | Changed-line coverage | 90% minimum in protected CI |
-| Static typing | 217 source files checked by mypy |
-| Schema/runtime consistency | 201 bundled JSON Schemas and 161 runtime exports |
-| Public compatibility | 58 commands, 23 stable options, and 10 schema contracts |
-| Architecture concentration | Progressive ceilings for 6 files and 7 functions |
-| Reference performance | 10,000-case strict-JSON/classification workload; at least 2,000 cases/s, at most 5 seconds and 128 MiB, with growth ratio at most 25 |
-| Scheduled depth | Daily parser fuzzing; weekly mutation, resilience, CodeQL, and protected signing-provider conformance |
+| Static typing | 232 source files checked by the CI mypy command plus a pinned strict Pyright gate over 16 trust, resilience, performance, and policy boundary files |
+| Schema/runtime consistency | 204 bundled JSON Schemas and 164 runtime exports |
+| Public compatibility | Exhaustive additive baseline across 58 commands, 469 positional/option shape contracts, 164 byte-immutable bundled schemas, three console scripts, and two Python callable signatures |
+| Architecture enforcement | Exact Tach graph across 144 production module boundaries, one frozen eight-module trust/runtime SCC debt group that cannot expand, split standards/benchmark/profile catalogs, progressive concentration ceilings, and retained schema-valid architecture evidence |
+| Reference performance | Five-repetition p95 suite for 10,000-case strict JSON/scoring, canonical serialization, the complete schema catalog, production-source inventory, and full production AST parsing, plus an isolated real code-health/static-architecture repository pipeline with child-process memory and latency budgets |
+| Mandatory live assurance | Required Docker/rootless-Podman OCI, Linux/macOS/Windows containment, PostgreSQL/Kafka, and authenticated Chromium/Firefox/WebKit CI lanes; browser policy is AST-verified and every required engine/role case must pass in retained JUnit evidence |
+| Scheduled depth | Daily parser fuzzing; weekly mutation, descendant-process resilience, CodeQL, and protected signing-provider conformance |
 | Documentation | Strict MkDocs build with repository link and generated-content validation, then audited GitHub Pages deployment |
 
 Machine-dependent performance timings are intentionally not treated as a
 portable benchmark result. The repository records thresholds and the workload;
-each runner emits its own `performance-assurance-1.0` receipt.
+each runner emits its own `performance-assurance-1.1` receipt.
 
 ## Retained verified assurance baselines
 
@@ -188,7 +189,7 @@ self-scan to establish a new baseline.
 | Operational portfolio | Execution A; observed risk D; evidence F; the stale Grype database remains an explicit supply-chain evidence gap |
 | Labeled self-scan smoke benchmark | PASS; 1 TP, 1 TN, 0 FP, 0 FN; explicitly non-governed and insufficient for production |
 | Bundle behavioral qualification | PASS; 7 TP, 3 TN, 0 FP, 0 FN across Bandit, Semgrep, and detect-secrets; all three executable digests matched |
-| Protected production benchmark | Workflow-enforced schema 2.0 authority, trusted time, replay protection, at least 200 labels, 80 TP, 80 TN, three engines, and 20 labels per required engine; unavailable until the independent environment supplies its governed corpus |
+| Protected production benchmark | Workflow-enforced schema 2.0 authority, trusted time, replay protection, at least 500 labels, 200 positive, 200 negative, three engines, and 50 labels per required engine; unavailable until the independent environment supplies its governed corpus |
 
 Each closure self-scan is published beneath `.artifacts/maturity-selfscan-*`
 with an external verification receipt. The artifact is intentionally ignored
@@ -263,8 +264,9 @@ and zero findings on the safe negative control.
 | Offline provisioning plan | [1.0](../src/py_security_suite/schemas/provision-plan.schema.json) | Non-mutating, grouped acquisition/staging work and safe verification arguments |
 | Configuration advice | [1.0](../src/py_security_suite/schemas/config-advice.schema.json) | Tolerant validation, schema migration guidance, and portable-path inventory |
 | Adapter conformance | [1.0](../src/py_security_suite/schemas/adapter-conformance.schema.json) | Static registry and SDK contract qualification |
-| Signing-provider conformance | [1.0](../src/py_security_suite/schemas/benchmark-signing-provider-conformance-1.0.schema.json) | Active fresh-challenge qualification of a digest-pinned external receipt-signing bridge, its provider identity, key version, credential mode, and locally verified signatures |
-| Performance assurance | [1.0](../src/py_security_suite/schemas/performance-assurance-1.0.schema.json) | Deterministic workload measurements and explicit time, throughput, memory, and growth budgets |
+| Signing-provider conformance | [1.1](../src/py_security_suite/schemas/benchmark-signing-provider-conformance-1.1.schema.json) | Portable, independently replayed Ed25519 proof binding the fresh challenge, provider/key identity, backend, credential mode, executable/profile digests, observation time, and optional trusted-time identity; 1.0 remains bundled for compatibility |
+| Architecture assurance | [1.0](../src/py_security_suite/schemas/architecture-assurance-1.0.schema.json) | Generated exact boundary/edge/SCC evidence plus observed file, function, and decision concentration against enforced ceilings |
+| Performance assurance | [1.1](../src/py_security_suite/schemas/performance-assurance-1.1.schema.json) | Five-repetition p95 scoring, canonicalization, full schema-catalog, production-inventory, and production-AST measurements with explicit time, throughput, memory, and growth budgets; 1.0 remains bundled for compatibility |
 | Companion assurance | [2.0](../src/py_security_suite/schemas/companion-assurance-2.0.schema.json) | Fresh, complete, coverage-bearing, canary-verified producer evidence authenticated with a DSSE/in-toto binding; legacy [1.0](../src/py_security_suite/schemas/companion-assurance.schema.json) remains bundled for explicit compatibility |
 | Bundle qualification | [1.1](../src/py_security_suite/schemas/bundle-qualification-1.1.schema.json) | Adapter contracts and readiness joined with optional digest-bound behavioral evidence |
 | Native bundle verification | [1.0](../src/py_security_suite/schemas/native-bundle-verification.schema.json) | Closed file set, wheels, and optional no-index environment resolution |
@@ -325,8 +327,9 @@ pysec schema doctor-readiness-1.1 --output contracts/doctor-readiness.schema.jso
 pysec schema provision-plan-1.0 --output contracts/provision-plan.schema.json
 pysec schema admission-decisions-1.0 --output contracts/admission-decisions.schema.json
 pysec schema adapter-conformance-1.0 --output contracts/adapter-conformance.schema.json
-pysec schema benchmark-signing-provider-conformance-1.0 --output contracts/benchmark-signing-provider-conformance.schema.json
-pysec schema performance-assurance-1.0 --output contracts/performance-assurance.schema.json
+pysec schema benchmark-signing-provider-conformance-1.1 --output contracts/benchmark-signing-provider-conformance.schema.json
+pysec schema performance-assurance-1.1 --output contracts/performance-assurance.schema.json
+pysec schema architecture-assurance-1.0 --output contracts/architecture-assurance.schema.json
 pysec schema bundle-qualification-1.1 --output contracts/bundle-qualification.schema.json
 pysec schema native-bundle-verification-1.0 --output contracts/native-bundle-verification.schema.json
 pysec schema config-advice-1.0 --output contracts/config-advice.schema.json

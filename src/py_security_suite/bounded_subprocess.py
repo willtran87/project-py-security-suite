@@ -7,6 +7,8 @@ import time
 from dataclasses import dataclass
 from typing import Mapping, Sequence
 
+import psutil
+
 
 class BoundedSubprocessError(ValueError):
     """Raised when a subprocess violates timeout or output containment."""
@@ -17,6 +19,31 @@ class BoundedProcessResult:
     returncode: int
     stdout: bytes
     stderr: bytes
+
+
+def _kill_process_tree(process: subprocess.Popen[bytes]) -> None:
+    """Best-effort termination of the exact child and every descendant."""
+
+    try:
+        parent = psutil.Process(process.pid)
+        descendants = parent.children(recursive=True)
+    except psutil.Error:
+        descendants = []
+        parent = None
+    for child in reversed(descendants):
+        try:
+            child.kill()
+        except psutil.Error:
+            continue
+    if parent is not None:
+        try:
+            parent.kill()
+        except psutil.Error:
+            pass
+    elif process.poll() is None:
+        process.kill()
+    if descendants:
+        psutil.wait_procs(descendants, timeout=2.0)
 
 
 def run_bounded_subprocess(
@@ -88,16 +115,16 @@ def run_bounded_subprocess(
         while process.poll() is None:
             if overflow.is_set():
                 violation = "bounded subprocess output exceeded limit"
-                process.kill()
+                _kill_process_tree(process)
                 break
             if time.monotonic() >= deadline:
                 violation = "bounded subprocess timed out"
-                process.kill()
+                _kill_process_tree(process)
                 break
             time.sleep(0.01)
     finally:
         if process.poll() is None:
-            process.kill()
+            _kill_process_tree(process)
         process.wait()
         for reader in readers:
             reader.join(timeout=1.0)

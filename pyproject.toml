@@ -74,9 +74,11 @@ dev = [
   "pytest-subprocess>=1.5,<2",
   "pytest-timeout>=2.4,<3",
   "pytest-xdist>=3.8,<4",
+  "pyright==1.1.411",
   "responses>=0.25,<0.26",
   "respx>=0.22,<0.24",
   "ruff>=0.12,<1",
+  "tach>=0.35,<0.36",
   "time-machine>=2.19,<4",
   "types-psutil>=7.2,<8",
   "tox>=4.30,<5",
@@ -109,9 +111,32 @@ py_security_suite = [
 ]
 
 [tool.pyright]
-include = ["src", "tests"]
+include = [
+  "src/py_security_suite/atomic_file.py",
+  "src/py_security_suite/diagnostic_safety.py",
+  "src/py_security_suite/execution_policy.py",
+  "src/py_security_suite/effectiveness_corpus.py",
+  "src/py_security_suite/governance_replay.py",
+  "src/py_security_suite/governance_quorum.py",
+  "src/py_security_suite/performance_assurance.py",
+  "src/py_security_suite/repository_file_policy.py",
+  "src/py_security_suite/release_readiness.py",
+  "scripts/generate_architecture_assurance.py",
+  "scripts/validate_architecture_cycles.py",
+  "scripts/validate_architecture_limits.py",
+  "scripts/validate_live_assurance_policy.py",
+  "scripts/validate_live_test_results.py",
+  "scripts/validate_performance_budgets.py",
+  "scripts/validate_public_api.py",
+]
 pythonVersion = "3.11"
 typeCheckingMode = "strict"
+reportDeprecated = false
+reportPrivateUsage = false
+reportUnnecessaryIsInstance = false
+reportUnknownArgumentType = false
+reportUnknownMemberType = false
+reportUnknownVariableType = false
 
 [tool.ruff.lint]
 select = ["ASYNC", "B", "BLE", "E4", "E7", "E9", "F", "S"]
@@ -149,6 +174,9 @@ only_mutate = [
   "src/py_security_suite/benchmark_statistical_evidence.py",
   "src/py_security_suite/benchmark_telemetry.py",
   "src/py_security_suite/benchmark_scoring.py",
+  "src/py_security_suite/bounded_subprocess.py",
+  "src/py_security_suite/checkpoint_authority.py",
+  "src/py_security_suite/git_replay.py",
   "src/py_security_suite/industry_benchmark_scoring.py",
   "src/py_security_suite/industry_receipt_trust.py",
   "src/py_security_suite/native_parser_worker.py",
@@ -185,6 +213,9 @@ pytest_add_cli_args_test_selection = [
   "tests/test_semantic_calibration.py",
   "tests/test_benchmark_telemetry.py",
   "tests/test_benchmark_scoring.py",
+  "tests/test_git_replay.py",
+  "tests/resilience/test_assurance_resilience.py",
+  "tests/test_security_trust_closure.py",
   "tests/test_industry_benchmark_scoring.py",
   "tests/test_native_parser_worker.py",
   "tests/test_policy_attestations.py",
@@ -197,7 +228,12 @@ pytest_add_cli_args_test_selection = [
   "tests/test_risk_acceptance.py",
   "tests/test_reachability.py",
 ]
-pytest_add_cli_args = ["-p", "no:randomly", "--disable-socket", "-q"]
+pytest_add_cli_args = [
+  "-p", "no:randomly",
+  "-p", "no:tach",
+  "--disable-socket",
+  "-q",
+]
 mutate_only_covered_lines = true
 do_not_mutate_patterns = [
   "src/py_security_suite/__init__.py",
@@ -207,6 +243,7 @@ do_not_mutate_patterns = [
 [tool.pytest.ini_options]
 pythonpath = ["."]
 addopts = [
+  "-p", "no:tach",
   "--disable-socket",
   "--strict-config",
   "--strict-markers",

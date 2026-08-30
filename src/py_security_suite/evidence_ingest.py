@@ -28,7 +28,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
 from defusedxml import ElementTree as DefusedET  # type: ignore[import-untyped]
 from defusedxml.common import DefusedXmlException  # type: ignore[import-untyped]
 
-from . import __version__
+from .version import __version__
 from .assurance_profile import enforce_assurance_profile, load_assurance_profile
 from .control_proof import verify_control_proof
 from .inventory import source_snapshot

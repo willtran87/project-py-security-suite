@@ -1,6 +1,6 @@
 # Governed release readiness
 
-Last reviewed: 2026-08-26
+Last reviewed: 2026-08-30
 
 `pysec release-check` produces one fail-closed promotion decision from sealed,
 digest-bound evidence. It is intended for an enterprise admission job after the
@@ -20,7 +20,8 @@ flowchart TD
     Closure["Current closure-plan validation alignment"] --> Gate
     Isolation["Organization-authorized isolation receipt"] --> Gate["release-check"]
     Intel["Exact snapshot approval receipt"] --> Gate
-    Benchmark["Digest-bound effectiveness evaluation<br/>200 labels | 80 positive | 80 negative<br/>3 engines | 20 per required engine"] --> Gate
+    Benchmark["Digest-bound effectiveness evaluation<br/>500 labels | 200 positive | 200 negative<br/>3 engines | 50 per required engine"] --> Gate
+    Provider["Portable provider conformance<br/>exact digest | signature | identity | freshness"] --> Gate
     Passport["Authentic Passport verification"] --> Gate
     Policy --> Gate
     Findings --> Gate
@@ -190,17 +191,22 @@ pysec verify passport --report report --artifact-root payload `
 pysec release-check report --format json `
   --effectiveness-evaluation effectiveness-evaluation.json `
   --effectiveness-sha256 EVALUATION_SHA256 `
-  --minimum-effectiveness-labels 200 `
-  --minimum-effectiveness-positive-labels 80 `
-  --minimum-effectiveness-negative-labels 80 `
+  --minimum-effectiveness-labels 500 `
+  --minimum-effectiveness-positive-labels 200 `
+  --minimum-effectiveness-negative-labels 200 `
   --minimum-effectiveness-tools 3 `
-  --minimum-effectiveness-labels-per-tool 20 `
+  --minimum-effectiveness-labels-per-tool 50 `
   --required-effectiveness-tool bandit `
   --required-effectiveness-tool codeql `
   --required-effectiveness-tool semgrep `
   --passport-verification passport-verification.json `
   --passport-verification-sha256 PASSPORT_RECEIPT_SHA256 `
-  --require-passport --output release-readiness.json
+  --require-passport `
+  --provider-conformance provider-conformance.json `
+  --provider-conformance-sha256 PROVIDER_RECEIPT_SHA256 `
+  --required-provider-id provider-generic-hsm `
+  --maximum-provider-conformance-age-hours 168 `
+  --require-provider-conformance --output release-readiness.json
 ```
 
 The closed-admission workflow checks out and verifies the exact producer commit,

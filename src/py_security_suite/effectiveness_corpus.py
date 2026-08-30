@@ -113,6 +113,7 @@ def evaluate_report_corpus(
     true_negative = counts["true_negative"]
     recall = _ratio(true_positive, true_positive + false_negative)
     specificity = _ratio(true_negative, true_negative + false_positive)
+    coverage_summary = _coverage_summary(outcomes)
     return {
         "schema_version": str(document["schema_version"]),
         "verdict": "pass" if not false_positive and not false_negative else "fail",
@@ -134,6 +135,7 @@ def evaluate_report_corpus(
         "replay_protected": bool(replay_receipt),
         "replay_receipt": replay_receipt,
         "confusion_matrix": counts,
+        "coverage_summary": coverage_summary,
         "metrics": {
             "precision": _ratio(true_positive, true_positive + false_positive),
             "recall": recall,
@@ -176,6 +178,31 @@ def evaluate_report_corpus(
             if outcome["outcome"] in {"false_positive", "false_negative"}
         ],
         "label_outcomes": [] if document.get("schema_version") == "2.0" else outcomes,
+    }
+
+
+def _coverage_summary(outcomes: list[dict[str, Any]]) -> dict[str, Any]:
+    tool_counts: dict[str, int] = {}
+    tool_expectations: dict[str, set[str]] = {}
+    for outcome in outcomes:
+        match = outcome.get("match")
+        tool = str(match.get("tool") or "") if isinstance(match, dict) else ""
+        if not tool:
+            continue
+        tool_counts[tool] = tool_counts.get(tool, 0) + 1
+        tool_expectations.setdefault(tool, set()).add(str(outcome["expected"]))
+    return {
+        "positive_labels": sum(
+            outcome.get("expected") == "finding" for outcome in outcomes
+        ),
+        "negative_labels": sum(
+            outcome.get("expected") == "clean" for outcome in outcomes
+        ),
+        "tool_counts": dict(sorted(tool_counts.items())),
+        "tool_expectations": {
+            tool: sorted(expectations)
+            for tool, expectations in sorted(tool_expectations.items())
+        },
     }
 
 

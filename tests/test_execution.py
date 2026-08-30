@@ -18,6 +18,7 @@ from py_security_suite.execution import (
     _kill_process_group_after_leader_exit,
     _process_tree_resident_bytes,
     _terminate_process_tree,
+    governed_asset_sha256,
     isolated_environment,
     native_runtime_closure_sha256,
     resolve_executable,
@@ -30,6 +31,55 @@ from py_security_suite.execution import (
 
 
 class IsolatedEnvironmentTests(unittest.TestCase):
+    def test_governed_input_boundaries_reject_abusive_commands(self) -> None:
+        cases = [
+            ([], 30, 1024),
+            (["x"] * 1025, 30, 1024),
+            (["bad\x00argument"], 30, 1024),
+            (["x"], 0, 1024),
+            (["x"], 30, 0),
+        ]
+        for command, timeout, output_limit in cases:
+            with self.subTest(command_length=len(command), timeout=timeout):
+                with self.assertRaises(ValueError):
+                    run_command(
+                        command,
+                        cwd=Path.cwd(),
+                        timeout_seconds=timeout,
+                        max_output_bytes=output_limit,
+                    )
+
+    def test_governed_input_boundaries_reject_oversized_environment(self) -> None:
+        with self.assertRaisesRegex(ValueError, "environment"):
+            run_command(
+                [sys.executable, "-c", "pass"],
+                cwd=Path.cwd(),
+                timeout_seconds=30,
+                max_output_bytes=1024,
+                environment=CommandEnvironment(
+                    extra={f"PYSEC_TEST_{index}": "x" for index in range(257)}
+                ),
+            )
+
+    def test_missing_sandbox_launcher_is_rejected_before_spawn(self) -> None:
+        with (
+            patch("py_security_suite.execution.resolve_executable", return_value=None),
+            self.assertRaisesRegex(ValueError, "sandbox launcher was not found"),
+        ):
+            run_command(
+                [sys.executable, "-c", "pass"],
+                cwd=Path.cwd(),
+                timeout_seconds=30,
+                max_output_bytes=1024,
+                environment=CommandEnvironment(sandbox_prefix=("missing-sandbox",)),
+            )
+
+    def test_missing_governed_asset_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            missing = Path(directory) / "missing"
+            with self.assertRaisesRegex(ValueError, "not a regular file or directory"):
+                governed_asset_sha256(missing)
+
     def test_darwin_shared_cache_allowlist_is_system_scoped(self) -> None:
         with patch("py_security_suite.execution.sys.platform", "darwin"):
             self.assertTrue(
@@ -109,6 +159,10 @@ class IsolatedEnvironmentTests(unittest.TestCase):
         self.assertNotIn("DYLD_LIBRARY_PATH", environment)
         self.assertNotIn("PYTHONPATH", environment)
         self.assertNotIn(str(Path.cwd()), environment["PATH"].split(os.pathsep))
+
+    def test_isolated_environment_rejects_loader_path_overrides(self) -> None:
+        with self.assertRaisesRegex(ValueError, "cannot override"):
+            isolated_environment({"PYTHONPATH": "untrusted"})
 
     def test_scanner_process_receives_disposable_private_home(self) -> None:
         process = MagicMock()

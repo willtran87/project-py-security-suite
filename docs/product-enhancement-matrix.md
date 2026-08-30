@@ -32,8 +32,8 @@ bounded handoff, but an independent enterprise control must grant approval.
 | 18 | Profile-specific gates | Implemented | Quick, comprehensive, production, and release profiles. |
 | 19 | Independent verification receipt | Implemented | Report, inspection, signing-request, and Passport verification receipts. |
 | 20 | Acceptance expiry | Implemented | Digest-bound risk-acceptance ledger with expiry and owner. |
-| 21 | Labeled detection corpus | Implemented | Bounded offline corpus and confusion-matrix evaluation; production requires at least 200 labels with 80 positive and 80 negative cases. |
-| 22 | Perspective-specific effectiveness | Implemented now | Positive, negative, three-engine, named-tool, and 20-label-per-required-engine minimum gates. |
+| 21 | Labeled detection corpus | Implemented | Bounded offline corpus and confusion-matrix evaluation; production requires at least 500 labels with 200 positive and 200 negative cases. |
+| 22 | Perspective-specific effectiveness | Implemented now | Positive, negative, three-engine, named-tool, and 50-label-per-required-engine minimum gates. |
 | 23 | Mutation evidence | Implemented | Optional `mutmut` companion adapter. |
 | 24 | Parser fuzzing | Implemented | Bounded parsing plus generative/fuzz-oriented tests. |
 | 25 | Adapter contract tests | Implemented | Shared runtime hardening and scanner-specific fixtures. |

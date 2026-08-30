@@ -5,7 +5,6 @@ import hashlib
 import os
 import re
 import sqlite3
-import tempfile
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -19,6 +18,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
 )
 
 from .benchmark_signing import LocalEd25519SigningProvider, ReceiptSigningProvider
+from .atomic_file import atomic_write_bytes
 from .path_safety import read_regular_file, resolve_unlinked_path
 from .strict_json import canonical_bytes, loads as strict_loads
 
@@ -864,33 +864,11 @@ def _unlock_descriptor(descriptor: int) -> None:
 
 
 def _atomic_write_replay_state(destination: Path, state: dict[str, Any]) -> None:
-    payload = canonical_bytes(state) + b"\n"
-    parent = destination.parent
-    descriptor, temporary_name = tempfile.mkstemp(
-        prefix=f".{destination.name}.", suffix=".tmp", dir=parent
+    atomic_write_bytes(
+        destination,
+        canonical_bytes(state) + b"\n",
+        label="benchmark replay state",
     )
-    temporary = Path(temporary_name)
-    try:
-        if os.name != "nt":
-            os.fchmod(descriptor, 0o600)
-        with os.fdopen(descriptor, "wb", closefd=False) as handle:
-            handle.write(payload)
-            handle.flush()
-            os.fsync(descriptor)
-        os.close(descriptor)
-        descriptor = -1
-        os.replace(temporary, destination)
-        if os.name != "nt":
-            directory = os.open(parent, os.O_RDONLY)
-            try:
-                os.fsync(directory)
-            finally:
-                os.close(directory)
-    finally:
-        if descriptor >= 0:
-            os.close(descriptor)
-        if temporary.exists():
-            temporary.unlink()
 
 
 def sign_execution_receipt(

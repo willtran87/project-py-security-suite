@@ -36,7 +36,9 @@ Job Object resource controls remain a separate availability mechanism.
 - an explicit Ruff baseline covers correctness, async hazards, common bugs,
   broad exception handling, and Bandit-derived security rules;
 - zizmor audits every GitHub workflow with its pedantic ruleset;
-- mypy checks production source and the Pages audit hooks;
+- mypy checks production source and the Pages audit hooks, while a separately
+  pinned strict Pyright gate covers the trust, replay, publication,
+  effectiveness, performance, architecture-policy, and API-policy boundaries;
 - `pip-audit` evaluates platform-resolved, hash-pinned exports of both the
   scanner and companion locked dependency graphs on Linux, Windows, and macOS
   with Python 3.11, 3.13, and 3.14, excluding only the unpublished local projects;
@@ -325,7 +327,7 @@ additional-properties-closed contracts.
 Production and release decisions always require schema-2.0 labeled-corpus
 effectiveness evidence with a distinct training digest, an exact holdout-label
 digest, a lifecycle-valid quorum from at least two trusted organizations, at
-least 200 labels, 80 positive labels, 80 negative labels, three tools, and 20
+least 500 labels, 200 positive labels, 200 negative labels, three tools, and 50
 labels for each required tool. CWE, language, parser, boundary, severity, and
 mutation diversity minimums are enforced, and every required tool needs both
 positive and negative cases. Omitting CLI flags cannot disable this gate.

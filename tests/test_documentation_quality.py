@@ -121,11 +121,11 @@ class DocumentationQualityTests(unittest.TestCase):
         for document in documents:
             text = document.read_text(encoding="utf-8")
             for expected in (
-                "--minimum-effectiveness-labels 200",
-                "--minimum-effectiveness-positive-labels 80",
-                "--minimum-effectiveness-negative-labels 80",
+                "--minimum-effectiveness-labels 500",
+                "--minimum-effectiveness-positive-labels 200",
+                "--minimum-effectiveness-negative-labels 200",
                 "--minimum-effectiveness-tools 3",
-                "--minimum-effectiveness-labels-per-tool 20",
+                "--minimum-effectiveness-labels-per-tool 50",
                 "--required-effectiveness-tool codeql",
             ):
                 self.assertIn(expected, text)

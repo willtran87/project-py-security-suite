@@ -1,0 +1,4897 @@
+{
+  "compatibility_policy": "additive-with-versioned-replacement",
+  "minimum_package_version": "0.1.0",
+  "schema_version": "1.1",
+  "stable_cli_commands": [
+    "adapter-check",
+    "advanced-diff",
+    "assurance-catalog-export",
+    "attest",
+    "audience-report",
+    "audit-package",
+    "baseline-candidate",
+    "benchmark",
+    "benchmark-prepare",
+    "benchmark-provider-check",
+    "benchmark-run",
+    "benchmark-runtime-probe",
+    "benchmark-security-log-verify",
+    "closure-plan",
+    "compare-builds",
+    "config-check",
+    "config-provenance",
+    "decrypt-report",
+    "doctor",
+    "encrypt-report",
+    "evidence-draft",
+    "evidence-pack",
+    "finding-register",
+    "generate-ci",
+    "generate-hooks",
+    "github-annotations",
+    "init",
+    "inspect",
+    "list-tools",
+    "merge-coverage",
+    "normalize-sdist",
+    "policy-simulate",
+    "portfolio",
+    "prepare-signing",
+    "promotion-plan",
+    "provision-plan",
+    "purge-expired-report",
+    "qualify-bundle",
+    "reachability",
+    "reachability-diff",
+    "release-check",
+    "release-manifest",
+    "retention-status",
+    "scan",
+    "schema",
+    "sign-artifacts",
+    "standards-manifest-build",
+    "standards-monitor",
+    "standards-monitor-verify",
+    "trend",
+    "verify",
+    "verify-audit-package",
+    "verify-evidence-pack",
+    "verify-inspection",
+    "verify-native-bundle",
+    "verify-release-manifest",
+    "verify-report",
+    "verify-signing-request"
+  ],
+  "stable_cli_option_contracts": {
+    "adapter-check": {
+      "--format": {
+        "action": "_StoreAction",
+        "choices": [
+          "text",
+          "json"
+        ],
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--output": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--overwrite": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      }
+    },
+    "advanced-diff": {
+      "--baseline-sha256": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": null
+      },
+      "--current-sha256": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": null
+      },
+      "--format": {
+        "action": "_StoreAction",
+        "choices": [
+          "text",
+          "json",
+          "markdown"
+        ],
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--output": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--overwrite": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "baseline": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      },
+      "current": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      }
+    },
+    "assurance-catalog-export": {
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--output": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      },
+      "--overwrite": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      }
+    },
+    "attest": {
+      "--allow-signing-network": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--cosign-executable": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--cosign-sha256": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--output": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      },
+      "--overwrite": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--signing-config": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--signing-key": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--signing-password-file": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--unsigned": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "report": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      }
+    },
+    "audience-report": {
+      "--audience": {
+        "action": "_StoreAction",
+        "choices": [
+          "executive",
+          "developer",
+          "security",
+          "release_engineering",
+          "auditor"
+        ],
+        "nargs": null,
+        "required": true,
+        "type": null
+      },
+      "--format": {
+        "action": "_StoreAction",
+        "choices": [
+          "text",
+          "json",
+          "markdown"
+        ],
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--output": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--overwrite": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--plan-sha256": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": null
+      },
+      "--report": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      },
+      "plan": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      }
+    },
+    "audit-package": {
+      "--evidence": {
+        "action": "_AppendAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--format": {
+        "action": "_StoreAction",
+        "choices": [
+          "text",
+          "json"
+        ],
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--output": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      },
+      "--overwrite": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "report": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      }
+    },
+    "baseline-candidate": {
+      "--format": {
+        "action": "_StoreAction",
+        "choices": [
+          "text",
+          "json"
+        ],
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--output": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--overwrite": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "report": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      }
+    },
+    "benchmark": {
+      "--corpus": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      },
+      "--corpus-sha256": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": null
+      },
+      "--format": {
+        "action": "_StoreAction",
+        "choices": [
+          "text",
+          "json"
+        ],
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--output": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--overwrite": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--replay-ledger": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--replay-query-budget": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "int"
+      },
+      "--replay-service-receipt-key": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--replay-service-receipt-key-sha256": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--replay-service-token-env": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--replay-service-url": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--trusted-time": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--trusted-time-sha256": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "report": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      }
+    },
+    "benchmark-prepare": {
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--output": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      },
+      "--overwrite": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--workspace": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      },
+      "request": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      }
+    },
+    "benchmark-provider-check": {
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--output": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      },
+      "--overwrite": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--profile": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      },
+      "--profile-sha256": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": null
+      }
+    },
+    "benchmark-run": {
+      "--authority-trust-policy": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--authority-trust-policy-sha256": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--authority-trust-policy-signature": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--authority-trust-root": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--authority-trust-root-sha256": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--authorize-execution": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--initialize-replay-checkpoint": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--output": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      },
+      "--overwrite": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--receipt-signing-key": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--receipt-signing-key-sha256": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--receipt-signing-provider-argument": {
+        "action": "_AppendAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--receipt-signing-provider-executable": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--receipt-signing-provider-executable-sha256": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--receipt-signing-provider-id": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--receipt-signing-provider-key-version": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--receipt-signing-provider-profile": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--receipt-signing-provider-profile-sha256": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--receipt-signing-provider-public-key": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--receipt-signing-provider-public-key-sha256": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--replay-checkpoint-sha256": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--replay-checkpoint-state": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--replay-ledger": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--replay-minimum-sequence": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "int"
+      },
+      "--security-event-log": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--trusted-time-context": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--trusted-time-context-sha256": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--workspace": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      },
+      "manifest": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      }
+    },
+    "benchmark-runtime-probe": {
+      "--authorize-execution": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--output": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      },
+      "--overwrite": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--runtime-name": {
+        "action": "_StoreAction",
+        "choices": [
+          "docker",
+          "podman",
+          "nerdctl"
+        ],
+        "nargs": null,
+        "required": true,
+        "type": null
+      },
+      "--runtime-sha256": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": null
+      },
+      "--runtime-version": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": null
+      },
+      "runtime": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      }
+    },
+    "benchmark-security-log-verify": {
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "log": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      }
+    },
+    "closure-plan": {
+      "--coverage-target": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "float"
+      },
+      "--format": {
+        "action": "_StoreAction",
+        "choices": [
+          "text",
+          "json",
+          "markdown"
+        ],
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--hotspot-limit": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "int"
+      },
+      "--output": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--overwrite": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "report": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      }
+    },
+    "compare-builds": {
+      "--first-label": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--format": {
+        "action": "_StoreAction",
+        "choices": [
+          "text",
+          "json",
+          "markdown"
+        ],
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--output": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--overwrite": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--second-label": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "first": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      },
+      "second": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      }
+    },
+    "config-check": {
+      "--config": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      },
+      "--format": {
+        "action": "_StoreAction",
+        "choices": [
+          "text",
+          "json",
+          "markdown"
+        ],
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--output": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--overwrite": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--policy": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--profile": {
+        "action": "_StoreAction",
+        "choices": [
+          "artifact",
+          "audit",
+          "comprehensive",
+          "deep",
+          "extended",
+          "governance",
+          "iac-deep",
+          "production",
+          "quality",
+          "quick",
+          "release",
+          "repo",
+          "repo-health",
+          "runtime",
+          "standard",
+          "supply-chain"
+        ],
+        "nargs": null,
+        "required": false,
+        "type": null
+      }
+    },
+    "config-provenance": {
+      "--config": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--format": {
+        "action": "_StoreAction",
+        "choices": [
+          "text",
+          "json"
+        ],
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--output": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--overwrite": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--policy": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--profile": {
+        "action": "_StoreAction",
+        "choices": [
+          "quick",
+          "standard",
+          "extended",
+          "deep",
+          "supply-chain",
+          "artifact",
+          "quality",
+          "iac-deep",
+          "governance",
+          "runtime",
+          "repo",
+          "comprehensive",
+          "production",
+          "release",
+          "audit",
+          "repo-health"
+        ],
+        "nargs": null,
+        "required": false,
+        "type": null
+      }
+    },
+    "decrypt-report": {
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--output": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      },
+      "--recipient-private-key": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      },
+      "--recipient-private-key-sha256": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": null
+      },
+      "encrypted": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      }
+    },
+    "doctor": {
+      "--config": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--explain": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--format": {
+        "action": "_StoreAction",
+        "choices": [
+          "text",
+          "json",
+          "markdown"
+        ],
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--output": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--overwrite": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--policy": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--profile": {
+        "action": "_StoreAction",
+        "choices": [
+          "artifact",
+          "audit",
+          "comprehensive",
+          "deep",
+          "extended",
+          "governance",
+          "iac-deep",
+          "production",
+          "quality",
+          "quick",
+          "release",
+          "repo",
+          "repo-health",
+          "runtime",
+          "standard",
+          "supply-chain"
+        ],
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "target": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      }
+    },
+    "encrypt-report": {
+      "--delete-plaintext-after-encryption": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--key-authority-public-key": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      },
+      "--key-authority-public-key-sha256": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": null
+      },
+      "--key-lifecycle-receipt": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      },
+      "--key-lifecycle-receipt-sha256": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": null
+      },
+      "--key-lifecycle-signature": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      },
+      "--output": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      },
+      "--overwrite": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--provider-attestation": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      },
+      "--provider-attestation-sha256": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": null
+      },
+      "--provider-attestation-signature": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      },
+      "--provider-authority-public-key": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      },
+      "--provider-authority-public-key-sha256": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": null
+      },
+      "--recipient-public-key": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      },
+      "--recipient-public-key-sha256": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": null
+      },
+      "--trusted-time-context": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      },
+      "report": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      }
+    },
+    "evidence-draft": {
+      "--format": {
+        "action": "_StoreAction",
+        "choices": [
+          "text",
+          "json"
+        ],
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--output": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--overwrite": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "report": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      }
+    },
+    "evidence-pack": {
+      "--artifacts": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--block-severity": {
+        "action": "_AppendAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--config": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--effectiveness-evaluation": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--effectiveness-sha256": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--maximum-blocking-findings": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "int"
+      },
+      "--maximum-total-seconds": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "float"
+      },
+      "--minimum-confidence": {
+        "action": "_StoreAction",
+        "choices": [
+          "unknown",
+          "low",
+          "medium",
+          "high"
+        ],
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--minimum-effectiveness-labels": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "int"
+      },
+      "--minimum-effectiveness-labels-per-tool": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "int"
+      },
+      "--minimum-effectiveness-negative-labels": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "int"
+      },
+      "--minimum-effectiveness-positive-labels": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "int"
+      },
+      "--minimum-effectiveness-tools": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "int"
+      },
+      "--output": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      },
+      "--overwrite": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--passport-verification": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--passport-verification-sha256": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--performance-regression-percent": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "float"
+      },
+      "--policy": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--previous-register": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--previous-register-sha256": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--previous-report": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--profile": {
+        "action": "_StoreAction",
+        "choices": [
+          "quick",
+          "standard",
+          "extended",
+          "deep",
+          "supply-chain",
+          "artifact",
+          "quality",
+          "iac-deep",
+          "governance",
+          "runtime",
+          "repo",
+          "comprehensive",
+          "production",
+          "release",
+          "audit",
+          "repo-health"
+        ],
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--require-passport": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--require-tool": {
+        "action": "_AppendAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--required-effectiveness-tool": {
+        "action": "_AppendAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--tool-budget": {
+        "action": "_AppendAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "report": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      }
+    },
+    "finding-register": {
+      "--format": {
+        "action": "_StoreAction",
+        "choices": [
+          "text",
+          "json"
+        ],
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--output": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--overwrite": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--previous": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--previous-sha256": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "report": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      }
+    },
+    "generate-ci": {
+      "--checkout-sha": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": null
+      },
+      "--config": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--format": {
+        "action": "_StoreAction",
+        "choices": [
+          "text",
+          "json"
+        ],
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--isolation-command": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--output": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--overwrite": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--policy-variable": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--profile": {
+        "action": "_StoreAction",
+        "choices": [
+          "artifact",
+          "audit",
+          "comprehensive",
+          "deep",
+          "extended",
+          "governance",
+          "iac-deep",
+          "production",
+          "quality",
+          "quick",
+          "release",
+          "repo",
+          "repo-health",
+          "runtime",
+          "standard",
+          "supply-chain"
+        ],
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--runner-label": {
+        "action": "_AppendAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--upload-artifact-sha": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": null
+      },
+      "--upload-sarif-sha": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": null
+      },
+      "target": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      }
+    },
+    "generate-hooks": {
+      "--config": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--format": {
+        "action": "_StoreAction",
+        "choices": [
+          "text",
+          "json"
+        ],
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--output": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--overwrite": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--profile": {
+        "action": "_StoreAction",
+        "choices": [
+          "artifact",
+          "audit",
+          "comprehensive",
+          "deep",
+          "extended",
+          "governance",
+          "iac-deep",
+          "production",
+          "quality",
+          "quick",
+          "release",
+          "repo",
+          "repo-health",
+          "runtime",
+          "standard",
+          "supply-chain"
+        ],
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "target": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      }
+    },
+    "github-annotations": {
+      "--format": {
+        "action": "_StoreAction",
+        "choices": [
+          "github",
+          "json"
+        ],
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--output": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--overwrite": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--plan-sha256": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": null
+      },
+      "--report": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      },
+      "plan": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      }
+    },
+    "init": {
+      "--format": {
+        "action": "_StoreAction",
+        "choices": [
+          "text",
+          "json"
+        ],
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--output": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--overwrite": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--profile": {
+        "action": "_StoreAction",
+        "choices": [
+          "artifact",
+          "audit",
+          "comprehensive",
+          "deep",
+          "extended",
+          "governance",
+          "iac-deep",
+          "production",
+          "quality",
+          "quick",
+          "release",
+          "repo",
+          "repo-health",
+          "runtime",
+          "standard",
+          "supply-chain"
+        ],
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--template": {
+        "action": "_StoreAction",
+        "choices": [
+          "api",
+          "cli",
+          "library",
+          "monorepo",
+          "worker"
+        ],
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "target": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      }
+    },
+    "inspect": {
+      "--format": {
+        "action": "_StoreAction",
+        "choices": [
+          "text",
+          "json"
+        ],
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--limit": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "int"
+      },
+      "--output": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--overwrite": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "report": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      }
+    },
+    "list-tools": {
+      "--format": {
+        "action": "_StoreAction",
+        "choices": [
+          "text",
+          "json"
+        ],
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--profile": {
+        "action": "_StoreAction",
+        "choices": [
+          "artifact",
+          "audit",
+          "comprehensive",
+          "deep",
+          "extended",
+          "governance",
+          "iac-deep",
+          "production",
+          "quality",
+          "quick",
+          "release",
+          "repo",
+          "repo-health",
+          "runtime",
+          "standard",
+          "supply-chain"
+        ],
+        "nargs": null,
+        "required": false,
+        "type": null
+      }
+    },
+    "merge-coverage": {
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--output": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      },
+      "--overwrite": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--scenario": {
+        "action": "_AppendAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": null
+      }
+    },
+    "normalize-sdist": {
+      "--format": {
+        "action": "_StoreAction",
+        "choices": [
+          "text",
+          "json"
+        ],
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--output": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      },
+      "--overwrite": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--source-date-epoch": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "int"
+      },
+      "source": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      }
+    },
+    "policy-simulate": {
+      "--block-severity": {
+        "action": "_AppendAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--format": {
+        "action": "_StoreAction",
+        "choices": [
+          "text",
+          "json"
+        ],
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--maximum-blocking-findings": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "int"
+      },
+      "--minimum-confidence": {
+        "action": "_StoreAction",
+        "choices": [
+          "unknown",
+          "low",
+          "medium",
+          "high"
+        ],
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--output": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--overwrite": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--require-tool": {
+        "action": "_AppendAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "report": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      }
+    },
+    "portfolio": {
+      "--format": {
+        "action": "_StoreAction",
+        "choices": [
+          "text",
+          "json"
+        ],
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--output": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--overwrite": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "reports": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": "+",
+        "required": true,
+        "type": "Path"
+      }
+    },
+    "prepare-signing": {
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--output": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      },
+      "--overwrite": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "artifacts": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      },
+      "report": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      }
+    },
+    "promotion-plan": {
+      "--format": {
+        "action": "_StoreAction",
+        "choices": [
+          "text",
+          "json",
+          "markdown",
+          "html"
+        ],
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--operational-trend": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--operational-trend-sha256": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--output": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--overwrite": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--release-readiness": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--release-readiness-sha256": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "report": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      }
+    },
+    "provision-plan": {
+      "--config": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--format": {
+        "action": "_StoreAction",
+        "choices": [
+          "text",
+          "json",
+          "markdown"
+        ],
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--output": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--overwrite": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--policy": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--profile": {
+        "action": "_StoreAction",
+        "choices": [
+          "artifact",
+          "audit",
+          "comprehensive",
+          "deep",
+          "extended",
+          "governance",
+          "iac-deep",
+          "production",
+          "quality",
+          "quick",
+          "release",
+          "repo",
+          "repo-health",
+          "runtime",
+          "standard",
+          "supply-chain"
+        ],
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "target": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      }
+    },
+    "purge-expired-report": {
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--trusted-time-context": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      },
+      "report": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      }
+    },
+    "qualify-bundle": {
+      "--config": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--effectiveness-evaluation": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--effectiveness-report": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--effectiveness-sha256": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--format": {
+        "action": "_StoreAction",
+        "choices": [
+          "text",
+          "json",
+          "markdown"
+        ],
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--minimum-effectiveness-labels": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "int"
+      },
+      "--minimum-effectiveness-tools": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "int"
+      },
+      "--output": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--overwrite": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--policy": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--profile": {
+        "action": "_StoreAction",
+        "choices": [
+          "artifact",
+          "audit",
+          "comprehensive",
+          "deep",
+          "extended",
+          "governance",
+          "iac-deep",
+          "production",
+          "quality",
+          "quick",
+          "release",
+          "repo",
+          "repo-health",
+          "runtime",
+          "standard",
+          "supply-chain"
+        ],
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--required-effectiveness-tool": {
+        "action": "_AppendAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "target": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      }
+    },
+    "reachability": {
+      "--coverage": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--entry-point": {
+        "action": "_AppendAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--minimum-island-loc": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "int"
+      },
+      "--no-framework-roots": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--pretty": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--source-root": {
+        "action": "_AppendAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "target": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      }
+    },
+    "reachability-diff": {
+      "--baseline-sha256": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": null
+      },
+      "--current-sha256": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": null
+      },
+      "--format": {
+        "action": "_StoreAction",
+        "choices": [
+          "text",
+          "json"
+        ],
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--output": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--overwrite": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "baseline": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      },
+      "current": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      }
+    },
+    "release-check": {
+      "--effectiveness-evaluation": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--effectiveness-sha256": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--format": {
+        "action": "_StoreAction",
+        "choices": [
+          "text",
+          "json"
+        ],
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--maximum-provider-conformance-age-hours": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "int"
+      },
+      "--minimum-effectiveness-labels": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "int"
+      },
+      "--minimum-effectiveness-labels-per-tool": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "int"
+      },
+      "--minimum-effectiveness-negative-labels": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "int"
+      },
+      "--minimum-effectiveness-positive-labels": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "int"
+      },
+      "--minimum-effectiveness-tools": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "int"
+      },
+      "--output": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--overwrite": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--passport-verification": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--passport-verification-sha256": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--provider-conformance": {
+        "action": "_AppendAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--provider-conformance-sha256": {
+        "action": "_AppendAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--require-passport": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--require-provider-conformance": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--required-effectiveness-tool": {
+        "action": "_AppendAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--required-provider-id": {
+        "action": "_AppendAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "report": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      }
+    },
+    "release-manifest": {
+      "--evidence": {
+        "action": "_AppendAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": null
+      },
+      "--format": {
+        "action": "_StoreAction",
+        "choices": [
+          "text",
+          "json"
+        ],
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--output": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--overwrite": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "report": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      }
+    },
+    "retention-status": {
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "report": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      }
+    },
+    "scan": {
+      "--config": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--diagnostic-without-isolation": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--github-summary": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--network-isolated": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--output": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      },
+      "--overwrite": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--policy": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--profile": {
+        "action": "_StoreAction",
+        "choices": [
+          "artifact",
+          "audit",
+          "comprehensive",
+          "deep",
+          "extended",
+          "governance",
+          "iac-deep",
+          "production",
+          "quality",
+          "quick",
+          "release",
+          "repo",
+          "repo-health",
+          "runtime",
+          "standard",
+          "supply-chain"
+        ],
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "target": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      }
+    },
+    "schema": {
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--output": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--overwrite": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "name": {
+        "action": "_StoreAction",
+        "choices": [
+          "adapter-conformance-1.0",
+          "admission-decisions-1.0",
+          "advanced-analysis-1.0",
+          "advanced-analysis-delta-1.0",
+          "application-contract-analysis-1.0",
+          "application-contract-analysis-1.1",
+          "application-contract-analysis-1.2",
+          "application-contract-analysis-1.3",
+          "architecture-assurance-1.0",
+          "assurance-catalog-export-1.0",
+          "assurance-profile-registry-1.0",
+          "audience-report-1.0",
+          "audit-package-verification-1.0",
+          "baseline-candidate-1.0",
+          "benchmark-adapter-manifest-1.0",
+          "benchmark-adapter-manifest-1.1",
+          "benchmark-adapter-manifest-1.2",
+          "benchmark-attestation-1.1",
+          "benchmark-attestation-1.2",
+          "benchmark-authority-trust-policy-1.0",
+          "benchmark-authority-trust-policy-1.1",
+          "benchmark-contamination-analysis-1.1",
+          "benchmark-contamination-analysis-1.2",
+          "benchmark-delta-1.0",
+          "benchmark-duplicate-analysis-1.1",
+          "benchmark-duplicate-analysis-1.2",
+          "benchmark-environment-capture-1.0",
+          "benchmark-execution-receipt-1.0",
+          "benchmark-execution-receipt-1.1",
+          "benchmark-execution-receipt-1.2",
+          "benchmark-leakage-analysis-1.1",
+          "benchmark-leakage-analysis-1.2",
+          "benchmark-power-analysis-1.1",
+          "benchmark-power-analysis-1.2",
+          "benchmark-preparation-request-1.0",
+          "benchmark-registry-1.0",
+          "benchmark-replay-checkpoint-1.0",
+          "benchmark-replay-intent-1.0",
+          "benchmark-scorecard-1.0",
+          "benchmark-security-event-anchor-1.0",
+          "benchmark-security-event-anchor-1.1",
+          "benchmark-security-event-record-1.0",
+          "benchmark-security-event-record-1.1",
+          "benchmark-semantic-records-1.2",
+          "benchmark-signing-provider-conformance-1.0",
+          "benchmark-signing-provider-conformance-1.1",
+          "benchmark-signing-provider-profile-1.0",
+          "boundary-graph-1.0",
+          "bundle-qualification-1.0",
+          "bundle-qualification-1.1",
+          "closure-plan-1.0",
+          "closure-plan-1.1",
+          "closure-plan-1.2",
+          "code-health-1.0",
+          "code-health-1.1",
+          "code-health-1.2",
+          "code-health-1.3",
+          "code-health-1.4",
+          "companion-assurance-1.0",
+          "companion-assurance-2.0",
+          "config-advice-1.0",
+          "config-provenance-1.0",
+          "control-assessment-1.0",
+          "coverage-merge-1.0",
+          "data-exposure-1.0",
+          "data-exposure-1.1",
+          "data-exposure-1.2",
+          "data-exposure-1.3",
+          "data-exposure-1.4",
+          "data-exposure-1.5",
+          "dependency-surface-1.1",
+          "doctor-readiness-1.1",
+          "domain-assurance-1.0",
+          "domain-assurance-policy-1.0",
+          "effectiveness-1.1",
+          "effectiveness-corpus-1.0",
+          "effectiveness-evaluation-1.0",
+          "evidence-fusion-1.0",
+          "evidence-fusion-1.1",
+          "evidence-fusion-1.2",
+          "evidence-fusion-1.3",
+          "evidence-pack-1.0",
+          "evidence-pack-verification-1.0",
+          "finding-register-1.0",
+          "github-annotations-1.0",
+          "github-workflow-1.0",
+          "governance-evidence-draft-1.0",
+          "graph-analysis-1.0",
+          "graphify-evidence-1.0",
+          "industry-assurance-1.0",
+          "industry-assurance-policy-1.0",
+          "industry-assurance-policy-1.1",
+          "industry-assurance-policy-1.2",
+          "industry-assurance-policy-1.3",
+          "intelligence-approval-1.0",
+          "isolation-attestation-1.0",
+          "isolation-boundary-1.0",
+          "isolation-probe-1.0",
+          "llm-adversarial-plan-1.0",
+          "llm-adversarial-policy-1.0",
+          "llm-adversarial-proposal-1.0",
+          "native-bundle-verification-1.0",
+          "operational-trend-1.0",
+          "operational-trend-1.1",
+          "operational-trend-1.2",
+          "operational-trend-1.3",
+          "oscal-model-1.2.2",
+          "performance-assurance-1.0",
+          "performance-assurance-1.1",
+          "policy-simulation-1.0",
+          "portfolio-dashboard-1.0",
+          "portfolio-health-1.0",
+          "portfolio-health-1.1",
+          "precommit-config-1.0",
+          "procedure-assessment-1.0",
+          "project-init-1.0",
+          "promotion-plan-1.0",
+          "promotion-plan-1.1",
+          "promotion-plan-1.2",
+          "provision-plan-1.0",
+          "reachability-delta-1.0",
+          "release-evidence-manifest-1.0",
+          "release-evidence-manifest-verification-1.0",
+          "release-readiness-1.0",
+          "release-readiness-1.1",
+          "release-readiness-1.2",
+          "release-readiness-1.3",
+          "report-inspection-1.0",
+          "report-inspection-1.1",
+          "report-inspection-1.2",
+          "report-inspection-1.3",
+          "report-inspection-verification-1.0",
+          "report-inspection-verification-1.1",
+          "report-inspection-verification-1.2",
+          "report-inspection-verification-1.3",
+          "report-security-1.0",
+          "report-verification-1.0",
+          "reproducible-build-1.0",
+          "resource-limits-1.0",
+          "risk-paths-1.0",
+          "runtime-closure-1.0",
+          "scanner-trust-catalog-1.0",
+          "sdist-normalization-1.0",
+          "security-requirements-policy-1.0",
+          "semantic-language-coverage-1.0",
+          "signing-request-1.0",
+          "signing-request-verification-1.0",
+          "source-inventory-1.0",
+          "standardized-prioritization-1.0",
+          "standards-baseline-inventory-1.0",
+          "standards-crosswalk-1.0",
+          "standards-monitor-report-1.0",
+          "standards-monitor-verification-1.0",
+          "standards-source-manifest-1.0",
+          "static-architecture-1.0",
+          "static-architecture-1.1",
+          "static-architecture-1.2",
+          "static-architecture-1.3",
+          "static-architecture-1.4",
+          "structural-synthesis-1.0",
+          "structural-synthesis-1.1",
+          "structural-synthesis-1.2",
+          "trust-policy-1.0",
+          "trust-policy-attestation-1.0"
+        ],
+        "nargs": null,
+        "required": true,
+        "type": null
+      }
+    },
+    "sign-artifacts": {
+      "--allow-signing-network": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--cosign-executable": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--cosign-sha256": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": null
+      },
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--output": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      },
+      "--overwrite": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--signing-config": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--signing-key": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      },
+      "--signing-password-file": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "artifacts": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      }
+    },
+    "standards-manifest-build": {
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--output": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      },
+      "--overwrite": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--standard": {
+        "action": "_AppendAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "inventory": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      }
+    },
+    "standards-monitor": {
+      "--authorize-network": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--output": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      },
+      "--overwrite": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--signing-key": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "manifest": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      }
+    },
+    "standards-monitor-verify": {
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--public-key": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      },
+      "--report-sha256": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": null
+      },
+      "report": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      }
+    },
+    "trend": {
+      "--format": {
+        "action": "_StoreAction",
+        "choices": [
+          "text",
+          "json",
+          "markdown"
+        ],
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--maximum-total-seconds": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "float"
+      },
+      "--output": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--overwrite": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--performance-regression-percent": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "float"
+      },
+      "--tool-budget": {
+        "action": "_AppendAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "reports": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": "+",
+        "required": true,
+        "type": "Path"
+      }
+    },
+    "verify": {
+      "--allow-unsigned": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--artifact-root": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--cosign-executable": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--cosign-sha256": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--format": {
+        "action": "_StoreAction",
+        "choices": [
+          "json",
+          "text"
+        ],
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--output": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--overwrite": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--public-key": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--report": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "passport": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      }
+    },
+    "verify-audit-package": {
+      "--format": {
+        "action": "_StoreAction",
+        "choices": [
+          "text",
+          "json"
+        ],
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--output": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--overwrite": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--package-sha256": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": null
+      },
+      "package": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      }
+    },
+    "verify-evidence-pack": {
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--output": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--overwrite": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--pack-sha256": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--report": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "pack": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      }
+    },
+    "verify-inspection": {
+      "--format": {
+        "action": "_StoreAction",
+        "choices": [
+          "text",
+          "json"
+        ],
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--limit": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "int"
+      },
+      "--output": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--overwrite": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--report": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      },
+      "inspection": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      }
+    },
+    "verify-native-bundle": {
+      "--format": {
+        "action": "_StoreAction",
+        "choices": [
+          "text",
+          "json",
+          "markdown"
+        ],
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--manifest-sha256": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--output": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--overwrite": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--python": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--require-wheelhouse-closure": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "bundle": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      }
+    },
+    "verify-release-manifest": {
+      "--evidence-location": {
+        "action": "_AppendAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--format": {
+        "action": "_StoreAction",
+        "choices": [
+          "text",
+          "json"
+        ],
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--manifest-sha256": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": null
+      },
+      "--output": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--overwrite": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--report": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      },
+      "--required-evidence": {
+        "action": "_AppendAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "manifest": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      }
+    },
+    "verify-report": {
+      "--format": {
+        "action": "_StoreAction",
+        "choices": [
+          "text",
+          "json"
+        ],
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--output": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--overwrite": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "report": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      }
+    },
+    "verify-signing-request": {
+      "--format": {
+        "action": "_StoreAction",
+        "choices": [
+          "text",
+          "json"
+        ],
+        "nargs": null,
+        "required": false,
+        "type": null
+      },
+      "--help": {
+        "action": "_HelpAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--output": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": false,
+        "type": "Path"
+      },
+      "--overwrite": {
+        "action": "_StoreTrueAction",
+        "choices": null,
+        "nargs": 0,
+        "required": false,
+        "type": null
+      },
+      "--request-sha256": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": null
+      },
+      "artifacts": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      },
+      "request": {
+        "action": "_StoreAction",
+        "choices": null,
+        "nargs": null,
+        "required": true,
+        "type": "Path"
+      }
+    }
+  },
+  "stable_cli_options": {
+    "adapter-check": [
+      "--format",
+      "--help",
+      "--output",
+      "--overwrite"
+    ],
+    "advanced-diff": [
+      "--baseline-sha256",
+      "--current-sha256",
+      "--format",
+      "--help",
+      "--output",
+      "--overwrite",
+      "baseline",
+      "current"
+    ],
+    "assurance-catalog-export": [
+      "--help",
+      "--output",
+      "--overwrite"
+    ],
+    "attest": [
+      "--allow-signing-network",
+      "--cosign-executable",
+      "--cosign-sha256",
+      "--help",
+      "--output",
+      "--overwrite",
+      "--signing-config",
+      "--signing-key",
+      "--signing-password-file",
+      "--unsigned",
+      "report"
+    ],
+    "audience-report": [
+      "--audience",
+      "--format",
+      "--help",
+      "--output",
+      "--overwrite",
+      "--plan-sha256",
+      "--report",
+      "plan"
+    ],
+    "audit-package": [
+      "--evidence",
+      "--format",
+      "--help",
+      "--output",
+      "--overwrite",
+      "report"
+    ],
+    "baseline-candidate": [
+      "--format",
+      "--help",
+      "--output",
+      "--overwrite",
+      "report"
+    ],
+    "benchmark": [
+      "--corpus",
+      "--corpus-sha256",
+      "--format",
+      "--help",
+      "--output",
+      "--overwrite",
+      "--replay-ledger",
+      "--replay-query-budget",
+      "--replay-service-receipt-key",
+      "--replay-service-receipt-key-sha256",
+      "--replay-service-token-env",
+      "--replay-service-url",
+      "--trusted-time",
+      "--trusted-time-sha256",
+      "report"
+    ],
+    "benchmark-prepare": [
+      "--help",
+      "--output",
+      "--overwrite",
+      "--workspace",
+      "request"
+    ],
+    "benchmark-provider-check": [
+      "--help",
+      "--output",
+      "--overwrite",
+      "--profile",
+      "--profile-sha256"
+    ],
+    "benchmark-run": [
+      "--authority-trust-policy",
+      "--authority-trust-policy-sha256",
+      "--authority-trust-policy-signature",
+      "--authority-trust-root",
+      "--authority-trust-root-sha256",
+      "--authorize-execution",
+      "--help",
+      "--initialize-replay-checkpoint",
+      "--output",
+      "--overwrite",
+      "--receipt-signing-key",
+      "--receipt-signing-key-sha256",
+      "--receipt-signing-provider-argument",
+      "--receipt-signing-provider-executable",
+      "--receipt-signing-provider-executable-sha256",
+      "--receipt-signing-provider-id",
+      "--receipt-signing-provider-key-version",
+      "--receipt-signing-provider-profile",
+      "--receipt-signing-provider-profile-sha256",
+      "--receipt-signing-provider-public-key",
+      "--receipt-signing-provider-public-key-sha256",
+      "--replay-checkpoint-sha256",
+      "--replay-checkpoint-state",
+      "--replay-ledger",
+      "--replay-minimum-sequence",
+      "--security-event-log",
+      "--trusted-time-context",
+      "--trusted-time-context-sha256",
+      "--workspace",
+      "manifest"
+    ],
+    "benchmark-runtime-probe": [
+      "--authorize-execution",
+      "--help",
+      "--output",
+      "--overwrite",
+      "--runtime-name",
+      "--runtime-sha256",
+      "--runtime-version",
+      "runtime"
+    ],
+    "benchmark-security-log-verify": [
+      "--help",
+      "log"
+    ],
+    "closure-plan": [
+      "--coverage-target",
+      "--format",
+      "--help",
+      "--hotspot-limit",
+      "--output",
+      "--overwrite",
+      "report"
+    ],
+    "compare-builds": [
+      "--first-label",
+      "--format",
+      "--help",
+      "--output",
+      "--overwrite",
+      "--second-label",
+      "first",
+      "second"
+    ],
+    "config-check": [
+      "--config",
+      "--format",
+      "--help",
+      "--output",
+      "--overwrite",
+      "--policy",
+      "--profile"
+    ],
+    "config-provenance": [
+      "--config",
+      "--format",
+      "--help",
+      "--output",
+      "--overwrite",
+      "--policy",
+      "--profile"
+    ],
+    "decrypt-report": [
+      "--help",
+      "--output",
+      "--recipient-private-key",
+      "--recipient-private-key-sha256",
+      "encrypted"
+    ],
+    "doctor": [
+      "--config",
+      "--explain",
+      "--format",
+      "--help",
+      "--output",
+      "--overwrite",
+      "--policy",
+      "--profile",
+      "target"
+    ],
+    "encrypt-report": [
+      "--delete-plaintext-after-encryption",
+      "--help",
+      "--key-authority-public-key",
+      "--key-authority-public-key-sha256",
+      "--key-lifecycle-receipt",
+      "--key-lifecycle-receipt-sha256",
+      "--key-lifecycle-signature",
+      "--output",
+      "--overwrite",
+      "--provider-attestation",
+      "--provider-attestation-sha256",
+      "--provider-attestation-signature",
+      "--provider-authority-public-key",
+      "--provider-authority-public-key-sha256",
+      "--recipient-public-key",
+      "--recipient-public-key-sha256",
+      "--trusted-time-context",
+      "report"
+    ],
+    "evidence-draft": [
+      "--format",
+      "--help",
+      "--output",
+      "--overwrite",
+      "report"
+    ],
+    "evidence-pack": [
+      "--artifacts",
+      "--block-severity",
+      "--config",
+      "--effectiveness-evaluation",
+      "--effectiveness-sha256",
+      "--help",
+      "--maximum-blocking-findings",
+      "--maximum-total-seconds",
+      "--minimum-confidence",
+      "--minimum-effectiveness-labels",
+      "--minimum-effectiveness-labels-per-tool",
+      "--minimum-effectiveness-negative-labels",
+      "--minimum-effectiveness-positive-labels",
+      "--minimum-effectiveness-tools",
+      "--output",
+      "--overwrite",
+      "--passport-verification",
+      "--passport-verification-sha256",
+      "--performance-regression-percent",
+      "--policy",
+      "--previous-register",
+      "--previous-register-sha256",
+      "--previous-report",
+      "--profile",
+      "--require-passport",
+      "--require-tool",
+      "--required-effectiveness-tool",
+      "--tool-budget",
+      "report"
+    ],
+    "finding-register": [
+      "--format",
+      "--help",
+      "--output",
+      "--overwrite",
+      "--previous",
+      "--previous-sha256",
+      "report"
+    ],
+    "generate-ci": [
+      "--checkout-sha",
+      "--config",
+      "--format",
+      "--help",
+      "--isolation-command",
+      "--output",
+      "--overwrite",
+      "--policy-variable",
+      "--profile",
+      "--runner-label",
+      "--upload-artifact-sha",
+      "--upload-sarif-sha",
+      "target"
+    ],
+    "generate-hooks": [
+      "--config",
+      "--format",
+      "--help",
+      "--output",
+      "--overwrite",
+      "--profile",
+      "target"
+    ],
+    "github-annotations": [
+      "--format",
+      "--help",
+      "--output",
+      "--overwrite",
+      "--plan-sha256",
+      "--report",
+      "plan"
+    ],
+    "init": [
+      "--format",
+      "--help",
+      "--output",
+      "--overwrite",
+      "--profile",
+      "--template",
+      "target"
+    ],
+    "inspect": [
+      "--format",
+      "--help",
+      "--limit",
+      "--output",
+      "--overwrite",
+      "report"
+    ],
+    "list-tools": [
+      "--format",
+      "--help",
+      "--profile"
+    ],
+    "merge-coverage": [
+      "--help",
+      "--output",
+      "--overwrite",
+      "--scenario"
+    ],
+    "normalize-sdist": [
+      "--format",
+      "--help",
+      "--output",
+      "--overwrite",
+      "--source-date-epoch",
+      "source"
+    ],
+    "policy-simulate": [
+      "--block-severity",
+      "--format",
+      "--help",
+      "--maximum-blocking-findings",
+      "--minimum-confidence",
+      "--output",
+      "--overwrite",
+      "--require-tool",
+      "report"
+    ],
+    "portfolio": [
+      "--format",
+      "--help",
+      "--output",
+      "--overwrite",
+      "reports"
+    ],
+    "prepare-signing": [
+      "--help",
+      "--output",
+      "--overwrite",
+      "artifacts",
+      "report"
+    ],
+    "promotion-plan": [
+      "--format",
+      "--help",
+      "--operational-trend",
+      "--operational-trend-sha256",
+      "--output",
+      "--overwrite",
+      "--release-readiness",
+      "--release-readiness-sha256",
+      "report"
+    ],
+    "provision-plan": [
+      "--config",
+      "--format",
+      "--help",
+      "--output",
+      "--overwrite",
+      "--policy",
+      "--profile",
+      "target"
+    ],
+    "purge-expired-report": [
+      "--help",
+      "--trusted-time-context",
+      "report"
+    ],
+    "qualify-bundle": [
+      "--config",
+      "--effectiveness-evaluation",
+      "--effectiveness-report",
+      "--effectiveness-sha256",
+      "--format",
+      "--help",
+      "--minimum-effectiveness-labels",
+      "--minimum-effectiveness-tools",
+      "--output",
+      "--overwrite",
+      "--policy",
+      "--profile",
+      "--required-effectiveness-tool",
+      "target"
+    ],
+    "reachability": [
+      "--coverage",
+      "--entry-point",
+      "--help",
+      "--minimum-island-loc",
+      "--no-framework-roots",
+      "--pretty",
+      "--source-root",
+      "target"
+    ],
+    "reachability-diff": [
+      "--baseline-sha256",
+      "--current-sha256",
+      "--format",
+      "--help",
+      "--output",
+      "--overwrite",
+      "baseline",
+      "current"
+    ],
+    "release-check": [
+      "--effectiveness-evaluation",
+      "--effectiveness-sha256",
+      "--format",
+      "--help",
+      "--maximum-provider-conformance-age-hours",
+      "--minimum-effectiveness-labels",
+      "--minimum-effectiveness-labels-per-tool",
+      "--minimum-effectiveness-negative-labels",
+      "--minimum-effectiveness-positive-labels",
+      "--minimum-effectiveness-tools",
+      "--output",
+      "--overwrite",
+      "--passport-verification",
+      "--passport-verification-sha256",
+      "--provider-conformance",
+      "--provider-conformance-sha256",
+      "--require-passport",
+      "--require-provider-conformance",
+      "--required-effectiveness-tool",
+      "--required-provider-id",
+      "report"
+    ],
+    "release-manifest": [
+      "--evidence",
+      "--format",
+      "--help",
+      "--output",
+      "--overwrite",
+      "report"
+    ],
+    "retention-status": [
+      "--help",
+      "report"
+    ],
+    "scan": [
+      "--config",
+      "--diagnostic-without-isolation",
+      "--github-summary",
+      "--help",
+      "--network-isolated",
+      "--output",
+      "--overwrite",
+      "--policy",
+      "--profile",
+      "target"
+    ],
+    "schema": [
+      "--help",
+      "--output",
+      "--overwrite",
+      "name"
+    ],
+    "sign-artifacts": [
+      "--allow-signing-network",
+      "--cosign-executable",
+      "--cosign-sha256",
+      "--help",
+      "--output",
+      "--overwrite",
+      "--signing-config",
+      "--signing-key",
+      "--signing-password-file",
+      "artifacts"
+    ],
+    "standards-manifest-build": [
+      "--help",
+      "--output",
+      "--overwrite",
+      "--standard",
+      "inventory"
+    ],
+    "standards-monitor": [
+      "--authorize-network",
+      "--help",
+      "--output",
+      "--overwrite",
+      "--signing-key",
+      "manifest"
+    ],
+    "standards-monitor-verify": [
+      "--help",
+      "--public-key",
+      "--report-sha256",
+      "report"
+    ],
+    "trend": [
+      "--format",
+      "--help",
+      "--maximum-total-seconds",
+      "--output",
+      "--overwrite",
+      "--performance-regression-percent",
+      "--tool-budget",
+      "reports"
+    ],
+    "verify": [
+      "--allow-unsigned",
+      "--artifact-root",
+      "--cosign-executable",
+      "--cosign-sha256",
+      "--format",
+      "--help",
+      "--output",
+      "--overwrite",
+      "--public-key",
+      "--report",
+      "passport"
+    ],
+    "verify-audit-package": [
+      "--format",
+      "--help",
+      "--output",
+      "--overwrite",
+      "--package-sha256",
+      "package"
+    ],
+    "verify-evidence-pack": [
+      "--help",
+      "--output",
+      "--overwrite",
+      "--pack-sha256",
+      "--report",
+      "pack"
+    ],
+    "verify-inspection": [
+      "--format",
+      "--help",
+      "--limit",
+      "--output",
+      "--overwrite",
+      "--report",
+      "inspection"
+    ],
+    "verify-native-bundle": [
+      "--format",
+      "--help",
+      "--manifest-sha256",
+      "--output",
+      "--overwrite",
+      "--python",
+      "--require-wheelhouse-closure",
+      "bundle"
+    ],
+    "verify-release-manifest": [
+      "--evidence-location",
+      "--format",
+      "--help",
+      "--manifest-sha256",
+      "--output",
+      "--overwrite",
+      "--report",
+      "--required-evidence",
+      "manifest"
+    ],
+    "verify-report": [
+      "--format",
+      "--help",
+      "--output",
+      "--overwrite",
+      "report"
+    ],
+    "verify-signing-request": [
+      "--format",
+      "--help",
+      "--output",
+      "--overwrite",
+      "--request-sha256",
+      "artifacts",
+      "request"
+    ]
+  },
+  "stable_console_scripts": {
+    "py-security-suite": "py_security_suite.cli:main",
+    "pysec": "py_security_suite.cli:main",
+    "pysec-evidence": "py_security_suite.evidence_ingest:main"
+  },
+  "stable_python_callables": {
+    "py_security_suite.cli:main": "(argv: 'list[str] | None' = None) -> 'int'",
+    "py_security_suite.evidence_ingest:main": "(argv: 'list[str] | None' = None) -> 'int'"
+  },
+  "stable_python_exports": {
+    "py_security_suite": {
+      "__version__": "str"
+    }
+  },
+  "stable_schema_resources": [
+    "adapter-conformance-1.0",
+    "admission-decisions-1.0",
+    "advanced-analysis-1.0",
+    "advanced-analysis-delta-1.0",
+    "application-contract-analysis-1.0",
+    "application-contract-analysis-1.1",
+    "application-contract-analysis-1.2",
+    "application-contract-analysis-1.3",
+    "architecture-assurance-1.0",
+    "assurance-catalog-export-1.0",
+    "assurance-profile-registry-1.0",
+    "audience-report-1.0",
+    "audit-package-verification-1.0",
+    "baseline-candidate-1.0",
+    "benchmark-adapter-manifest-1.0",
+    "benchmark-adapter-manifest-1.1",
+    "benchmark-adapter-manifest-1.2",
+    "benchmark-attestation-1.1",
+    "benchmark-attestation-1.2",
+    "benchmark-authority-trust-policy-1.0",
+    "benchmark-authority-trust-policy-1.1",
+    "benchmark-contamination-analysis-1.1",
+    "benchmark-contamination-analysis-1.2",
+    "benchmark-delta-1.0",
+    "benchmark-duplicate-analysis-1.1",
+    "benchmark-duplicate-analysis-1.2",
+    "benchmark-environment-capture-1.0",
+    "benchmark-execution-receipt-1.0",
+    "benchmark-execution-receipt-1.1",
+    "benchmark-execution-receipt-1.2",
+    "benchmark-leakage-analysis-1.1",
+    "benchmark-leakage-analysis-1.2",
+    "benchmark-power-analysis-1.1",
+    "benchmark-power-analysis-1.2",
+    "benchmark-preparation-request-1.0",
+    "benchmark-registry-1.0",
+    "benchmark-replay-checkpoint-1.0",
+    "benchmark-replay-intent-1.0",
+    "benchmark-scorecard-1.0",
+    "benchmark-security-event-anchor-1.0",
+    "benchmark-security-event-anchor-1.1",
+    "benchmark-security-event-record-1.0",
+    "benchmark-security-event-record-1.1",
+    "benchmark-semantic-records-1.2",
+    "benchmark-signing-provider-conformance-1.0",
+    "benchmark-signing-provider-conformance-1.1",
+    "benchmark-signing-provider-profile-1.0",
+    "boundary-graph-1.0",
+    "bundle-qualification-1.0",
+    "bundle-qualification-1.1",
+    "closure-plan-1.0",
+    "closure-plan-1.1",
+    "closure-plan-1.2",
+    "code-health-1.0",
+    "code-health-1.1",
+    "code-health-1.2",
+    "code-health-1.3",
+    "code-health-1.4",
+    "companion-assurance-1.0",
+    "companion-assurance-2.0",
+    "config-advice-1.0",
+    "config-provenance-1.0",
+    "control-assessment-1.0",
+    "coverage-merge-1.0",
+    "data-exposure-1.0",
+    "data-exposure-1.1",
+    "data-exposure-1.2",
+    "data-exposure-1.3",
+    "data-exposure-1.4",
+    "data-exposure-1.5",
+    "dependency-surface-1.1",
+    "doctor-readiness-1.1",
+    "domain-assurance-1.0",
+    "domain-assurance-policy-1.0",
+    "effectiveness-1.1",
+    "effectiveness-corpus-1.0",
+    "effectiveness-evaluation-1.0",
+    "evidence-fusion-1.0",
+    "evidence-fusion-1.1",
+    "evidence-fusion-1.2",
+    "evidence-fusion-1.3",
+    "evidence-pack-1.0",
+    "evidence-pack-verification-1.0",
+    "finding-register-1.0",
+    "github-annotations-1.0",
+    "github-workflow-1.0",
+    "governance-evidence-draft-1.0",
+    "graph-analysis-1.0",
+    "graphify-evidence-1.0",
+    "industry-assurance-1.0",
+    "industry-assurance-policy-1.0",
+    "industry-assurance-policy-1.1",
+    "industry-assurance-policy-1.2",
+    "industry-assurance-policy-1.3",
+    "intelligence-approval-1.0",
+    "isolation-attestation-1.0",
+    "isolation-boundary-1.0",
+    "isolation-probe-1.0",
+    "llm-adversarial-plan-1.0",
+    "llm-adversarial-policy-1.0",
+    "llm-adversarial-proposal-1.0",
+    "native-bundle-verification-1.0",
+    "operational-trend-1.0",
+    "operational-trend-1.1",
+    "operational-trend-1.2",
+    "operational-trend-1.3",
+    "oscal-model-1.2.2",
+    "performance-assurance-1.0",
+    "performance-assurance-1.1",
+    "policy-simulation-1.0",
+    "portfolio-dashboard-1.0",
+    "portfolio-health-1.0",
+    "portfolio-health-1.1",
+    "precommit-config-1.0",
+    "procedure-assessment-1.0",
+    "project-init-1.0",
+    "promotion-plan-1.0",
+    "promotion-plan-1.1",
+    "promotion-plan-1.2",
+    "provision-plan-1.0",
+    "reachability-delta-1.0",
+    "release-evidence-manifest-1.0",
+    "release-evidence-manifest-verification-1.0",
+    "release-readiness-1.0",
+    "release-readiness-1.1",
+    "release-readiness-1.2",
+    "release-readiness-1.3",
+    "report-inspection-1.0",
+    "report-inspection-1.1",
+    "report-inspection-1.2",
+    "report-inspection-1.3",
+    "report-inspection-verification-1.0",
+    "report-inspection-verification-1.1",
+    "report-inspection-verification-1.2",
+    "report-inspection-verification-1.3",
+    "report-security-1.0",
+    "report-verification-1.0",
+    "reproducible-build-1.0",
+    "resource-limits-1.0",
+    "risk-paths-1.0",
+    "runtime-closure-1.0",
+    "scanner-trust-catalog-1.0",
+    "sdist-normalization-1.0",
+    "security-requirements-policy-1.0",
+    "semantic-language-coverage-1.0",
+    "signing-request-1.0",
+    "signing-request-verification-1.0",
+    "source-inventory-1.0",
+    "standardized-prioritization-1.0",
+    "standards-baseline-inventory-1.0",
+    "standards-crosswalk-1.0",
+    "standards-monitor-report-1.0",
+    "standards-monitor-verification-1.0",
+    "standards-source-manifest-1.0",
+    "static-architecture-1.0",
+    "static-architecture-1.1",
+    "static-architecture-1.2",
+    "static-architecture-1.3",
+    "static-architecture-1.4",
+    "structural-synthesis-1.0",
+    "structural-synthesis-1.1",
+    "structural-synthesis-1.2",
+    "trust-policy-1.0",
+    "trust-policy-attestation-1.0"
+  ],
+  "stable_schema_sha256": {
+    "adapter-conformance-1.0": "b8824c4e718df3e2ea3822ba9d9dc007a3817f85fa675c38f1edc55a7e9f8c3e",
+    "admission-decisions-1.0": "949671fa46eec0279604ca3b2fa9420227169f09d6c925e61ec150103df33a00",
+    "advanced-analysis-1.0": "64b6f99308dc4195e89a66d76342053b6a95af7d38bb5a0249e3a27c786547a5",
+    "advanced-analysis-delta-1.0": "7b554f266bd8a2f5264f3da44c465c048412724f91556d6f1c7578382041b68b",
+    "application-contract-analysis-1.0": "e94085914f5949b9f4ef247607a371ddc31049b3163d9e3bbdcafb155d0e30c7",
+    "application-contract-analysis-1.1": "7a346eabe8f1dc36ff4e1cec4fa826bdac7b3ef1817891f35ae0677e833f2819",
+    "application-contract-analysis-1.2": "7ab6c2711ed1535a21d51fb75d56d3e4faad171093aa8f3f76e63fe5f08721a0",
+    "application-contract-analysis-1.3": "14aca3e423f523b5bd0924868ae4ecccd3f1a48a49c05c15d838045e056d2c4f",
+    "architecture-assurance-1.0": "046c4bdc15933ec623516010127524964fa254635b8a552942a5122ac52afc59",
+    "assurance-catalog-export-1.0": "dd41c96161eebcb09fea4b05fbffcac16f411fc3bcba2a5a1f11727676c1a836",
+    "assurance-profile-registry-1.0": "ea7d8d811b62b17ded8f0c160842a04dfd7bafcfe442e3dab69ef951f6def9ea",
+    "audience-report-1.0": "064487e07714e489bddb9cf73e26fdac7f7dc2331f36386be966d0b646c3d560",
+    "audit-package-verification-1.0": "b05d0f5a27063ea5c0a61df7be2160f1b6715529c64be0ca9db7f5f1954a31fe",
+    "baseline-candidate-1.0": "c6aeda37da045f1c380e588bab5e056f688bdd8aa8978bb98eb614d5228d52e3",
+    "benchmark-adapter-manifest-1.0": "d5ef6ca1e707760c75768539505ae3f46840c404f603f97512b019a1d9d09e82",
+    "benchmark-adapter-manifest-1.1": "58bde182530d04d108814c6c561c3900bc2f66b3ac9448dbfd9de37a1727d4e1",
+    "benchmark-adapter-manifest-1.2": "4c390a2d8e87e8f1b611b3690c0568639967808cfbff2fa1754e31909fad8dd5",
+    "benchmark-attestation-1.1": "8eced46328bf4897bed4ccf752d9bf3a9049970b788387d7a664e74becfce93f",
+    "benchmark-attestation-1.2": "8a35264c245e1243d811cb50123281ef4eee910f6050cb09507ba8b00cec25c2",
+    "benchmark-authority-trust-policy-1.0": "bca45c781324149e9039b2e7aad9dcf5590d953ed807b70024c13d6415ed00fc",
+    "benchmark-authority-trust-policy-1.1": "dc14692ea8c6b01d3254c5a57d6681c4fdb821be23ee2c45339f9c01e6c2ae4d",
+    "benchmark-contamination-analysis-1.1": "332dd9d153545c1b9fb4841d3c4afc7c79ea0bc2376d54d6e690fd0d1518c95e",
+    "benchmark-contamination-analysis-1.2": "9394642960b708000d955c519df5d5fb70746d579c9698029096d6db74d979c6",
+    "benchmark-delta-1.0": "5dcff1c7f1842a82b94d52eeea4796a37df3f30d91c3fc8b015bc8f785f16495",
+    "benchmark-duplicate-analysis-1.1": "450210b2ea99d024635a91b9566521513368b7d24c7347bc1fb32c5bcb80ebf0",
+    "benchmark-duplicate-analysis-1.2": "ed26da483a95f50a52555945f4042961dd1403c0ea06347c1cd3d18d20113ffa",
+    "benchmark-environment-capture-1.0": "7fbaaff34f53096a802df0a9bc8e1480f3d0320e7304b8f4d6eda9634e5f7ced",
+    "benchmark-execution-receipt-1.0": "f66c82478e00bb583726885620500b2cb539eeed3c12b1a6e1fc34be20897ef6",
+    "benchmark-execution-receipt-1.1": "cf1d55e5a86a7bdacddb80033369087aa38c467406b4c80f6deb9fdf5038b1c4",
+    "benchmark-execution-receipt-1.2": "da6c32418b52c41bc42e36b69a94dafe50747b2c1d3fda0f58b848238a3c5e75",
+    "benchmark-leakage-analysis-1.1": "fa160bfe3c2e4e7181a84df6a2eb35ea4502929b8058503a9a334f9a9d4a632f",
+    "benchmark-leakage-analysis-1.2": "f287557332b2758212dcf594cf7e5553ff509133936745a4860942b23fd3211c",
+    "benchmark-power-analysis-1.1": "23ea56b294835adf3e20a1d6bc99da9380f54732a32c1e47afe512b25dabec4b",
+    "benchmark-power-analysis-1.2": "b0d6a4118c54487257c8075857c98b7d1f655b35fe64d4867bd88a4b547d9e51",
+    "benchmark-preparation-request-1.0": "0bf8c462731b6ef56094a06268ade1dcdb6fa4900e4b1f8de370380549436398",
+    "benchmark-registry-1.0": "133d56cc75df5b4f8e531b43e48d4c176cba3c8438b96c87cf49d7561c2d3667",
+    "benchmark-replay-checkpoint-1.0": "b17006f1cdf1be00092f9076bfc00117388aa06c108bf8b4ee48a4c3f23c7f10",
+    "benchmark-replay-intent-1.0": "11e4db3ed8d82a8883ba7b22f725162851d44d8fdbadb9f4a10fb97e914fd080",
+    "benchmark-scorecard-1.0": "dff6829a94963bc2c5a1976d44e3d6c156904cc56fcfa83c60182e54de1faba9",
+    "benchmark-security-event-anchor-1.0": "f2c77a899b05f96ddf925ca57058edec738876b111f4b7679387958eaceae000",
+    "benchmark-security-event-anchor-1.1": "0ab12b7bed5e625ecef6a8624ea63471d76763c0a7bc42d40b1dbdcf2dad9479",
+    "benchmark-security-event-record-1.0": "3bb9615caf5c07ffa3b0a8ff844df36a43e4e5d2b17e7f6e6ebb8029dee2cd1e",
+    "benchmark-security-event-record-1.1": "ac022cae186cfb8dbefb74f590d2cb3a99da205d240803efcd79711c485a78b2",
+    "benchmark-semantic-records-1.2": "c90c85c6a1e6b332a7500ffee792fe095c8b0836f34f177f7eb83891594dbab7",
+    "benchmark-signing-provider-conformance-1.0": "f04b7200a99bdfb22f2f68d1a10e07852e395eefe8b578595cec72f4d50a876a",
+    "benchmark-signing-provider-conformance-1.1": "68cc9c740f1e5472b43de09c572b6cf57724d30a4f184da6a920da61ce09e42b",
+    "benchmark-signing-provider-profile-1.0": "9dcefac74bb8c9c8a1292dd66f7a4c5bc80ac120c5eae1cf68a1cadb5d1547e5",
+    "boundary-graph-1.0": "70cd1d5e93e7327d35f7e5becf0b4ea334edd7712154de9751b38f42c83536ac",
+    "bundle-qualification-1.0": "784edf8b28703d936b080ced046ee49e01fbb0588b62edaceffd04c091546ad5",
+    "bundle-qualification-1.1": "9a0020ea625d888502518362a031e1496a5cff81d2fa2ecee7f4ee7737d14f86",
+    "closure-plan-1.0": "487d971cb3f2d1ab7aa29751a4f89f5d7604a9866112302f285c958440d2d55f",
+    "closure-plan-1.1": "8b51060123db98f5e867d61a9d9cf8979d89db9bde7aba886b4e25fbff8b6a5a",
+    "closure-plan-1.2": "c3c34f6c4bf7b54c83fcf94d105c80f4446e58fc32ce773890bdb9c58d465a2e",
+    "code-health-1.0": "cd107c8a240a5ef3cfe1232e9a12f7dd1ab81b15c91509f8fbb3073e5caf2342",
+    "code-health-1.1": "e3eca4dd8dfb170381ebeb917be8c5b7796af95da8e198801ea434259de4d63f",
+    "code-health-1.2": "78ee7e3b6364ec5c4cb37247c1184ba658e59701f0391c8b74c8b3c2dd870e28",
+    "code-health-1.3": "260253e5fd4d23535061ec378a700e8f60577ad424568e6c6bb7705baa8ac261",
+    "code-health-1.4": "9b631b9ac4861bebafbd9547ad15445c261f9c5a763e033017c26d044efba583",
+    "companion-assurance-1.0": "e1bd6b09a5476f663fa349c09df567a9b27422457a4fe55eeef0092fcf8ca726",
+    "companion-assurance-2.0": "f38785e5936fc6d45bbadea47e127ba316a34ccccc2bf300daa67d7a309b62f9",
+    "config-advice-1.0": "4903db70ddab7428202777941dcdbf6875c1b7bf25428cdf05423101b7efa601",
+    "config-provenance-1.0": "4cee691e3109269eb1b8776895981d8811dff32fc2fad2fa7412e725593b9742",
+    "control-assessment-1.0": "a14382fcd60a710572d94da82976a9d18f2e744dba69cb19abe6b771a5a24203",
+    "coverage-merge-1.0": "e82560751fae7ed43a57e4e306a95f2d25c80075f0b92fba10f71cf602a12464",
+    "data-exposure-1.0": "041c44605701e66783d5453054d953a3831bb4a7e273a7c9fd6d7f69b0f90a46",
+    "data-exposure-1.1": "17a34f8cdc4296574e98c32f7e07a0b3afa903b09d238ea0663d3bb098288dfa",
+    "data-exposure-1.2": "295718ef390ff4c5ca819e0dc85b60a4280c753ca5518ee0a41aedf3a1f044eb",
+    "data-exposure-1.3": "5b04e96bf9ea42659eb1d1e13847b8e838782fac0b6add67fa040778489b682f",
+    "data-exposure-1.4": "e0b9c8f799f316df90f208ba77047090819e5b66aa21399b77c2e89a9b14353b",
+    "data-exposure-1.5": "560e5c073c9f45a813621043dadc0dc684e0ee35bdcf04480d85df4aba4b822d",
+    "dependency-surface-1.1": "3299bc85caa0583a27d21bb647b27ab4e13551421ec0c168820379fab6ed6497",
+    "doctor-readiness-1.1": "262171a8f66bbdd93ee6a216309a8e514fc21b8e340535c3736890ff1e201b28",
+    "domain-assurance-1.0": "967a7eb9113c37e361070bb6450502f1d84ef3c7f5a6c964c3ea056f55d2b140",
+    "domain-assurance-policy-1.0": "0e9d03d6c1941216837ba3cdaf163737348e244f8deefab6d88c15f4fbbcf5dc",
+    "effectiveness-1.1": "2b4e4a8d2211f1e5c5b4de5f0e48edcd1891ba863d0a77df7cea108de556cbce",
+    "effectiveness-corpus-1.0": "a7a434e2b56d0b7ec241a270d1f3bb11a3c2b30910214ad0b7859cee0a8a2199",
+    "effectiveness-evaluation-1.0": "d3c355d62df3cebc64a13d983b7009466caa4462f55de024dbc4f917a5cb5667",
+    "evidence-fusion-1.0": "035ab45e7016c468f8f536c7f44b4c5a2f0349eb7def9ba538db484289c78d53",
+    "evidence-fusion-1.1": "71d01df617a3650d348cdff2178da63d239c65aff90a43f2a32388abf2222484",
+    "evidence-fusion-1.2": "2429c952f32928f0b9237d3818d4ec4e82898dbac6e7e318b6d3d0ae189dcc08",
+    "evidence-fusion-1.3": "a47ec691095398a0974f4c22a0058f43d9bcc57c148afd3ce5226d6d7ba7cbab",
+    "evidence-pack-1.0": "6b12dbeaf37002e7c691515b105c78b2f1fcd50633537edb65013836598a7085",
+    "evidence-pack-verification-1.0": "ba810fd5e322fea85ccbd9c78fadc87bc21ef06ca63cde4b3d0e0672079b70bd",
+    "finding-register-1.0": "03b87f7df642fddaafe54bc9bee593c7dfe68f6364b6488fabc17f8c3a003862",
+    "github-annotations-1.0": "c0eef663d01b30842c3a1d949eb7984085e39ffea5651d028fe6747153906e6e",
+    "github-workflow-1.0": "ab74b8d3ead81fd3f223ba0758b25dea4066bf280fe7e1182f679e67d951ed99",
+    "governance-evidence-draft-1.0": "362f5d4fae5531b66804d219493e2c4f9356ec4a1b98d77e7cc1d00c36fe7a78",
+    "graph-analysis-1.0": "10b960e0a144374307523106eb46fc489e4783675ec847507f851ec75611f281",
+    "graphify-evidence-1.0": "e45745907bf19039f75ea608096cad86d2c1de7edf29163ae2781be1aaaba136",
+    "industry-assurance-1.0": "d0868fa6f52163d21549c00c54603c577d4f1702face6ffe9d127279e5b854d3",
+    "industry-assurance-policy-1.0": "0375b1963507aa23d8e100fde7a8dc21d0d1295f587dab81e0f60246c9fe9e61",
+    "industry-assurance-policy-1.1": "dff675d91b152c18ade0599d7efbf2e4e4e00cfd24dff98f1940ac8efda2f233",
+    "industry-assurance-policy-1.2": "516b6252ae4717368032f0fd59ce9f04c494f42f52d22a1405cb9c5a9b7e79f2",
+    "industry-assurance-policy-1.3": "3088176e62aaccb8e69190a563be4c041f57bdffeaa8a01aa9bca53eed76bafa",
+    "intelligence-approval-1.0": "6fb010c9e94bfc1814151096afce9dba99f4830b9f37190c53c96cabe3d6cb90",
+    "isolation-attestation-1.0": "044b69156fbed984c4c099d5b3687f722dfbcf7bc10279ccc7816491fabdd81f",
+    "isolation-boundary-1.0": "3b9a4e6e5581eccd169b7189a9c38dfbbd4aa6f1eeca015c47db8799dbdadeb0",
+    "isolation-probe-1.0": "37d68ea263c1cae1c3dcdb9e58d8c20058edc70f27fde268bb2104bcfd1f683a",
+    "llm-adversarial-plan-1.0": "f6ced14b32bc98d604df823eb9c8306cd6ec83370733c33316912c72fbdc7b24",
+    "llm-adversarial-policy-1.0": "273249214cc1c7f57aec9211e19d2140a0de61a4422880776601d69d66ce0d8c",
+    "llm-adversarial-proposal-1.0": "4fb40f6c35040f9004c3b3e68e5b24239c054f8c61f8e681db6c12ba338a1cac",
+    "native-bundle-verification-1.0": "37e68ca23bff65a0aa36f64c105702ad0bc3c95b7742f274ccbf6a58be6c795c",
+    "operational-trend-1.0": "1612b2954d775520c2d5f84b3e82509d23b139921c48f804db425598992e7db0",
+    "operational-trend-1.1": "c8bfc80c6345694cc79c7d3a1be0c6578c9c0fd2f12d5e24c4263423ee5fd8d8",
+    "operational-trend-1.2": "09d7273325e483fed16554b3f184dfa65029ab32b1c5302bc330e6065eff7ff9",
+    "operational-trend-1.3": "651135bee9d5adc327fc7f9bf9a6a3bbf330842ae5f2879f9d33e2b25601e548",
+    "oscal-model-1.2.2": "65ba955cd9f475710293fb41a026287af63c400bc98e9aa270ee588a53d5cdac",
+    "performance-assurance-1.0": "79461c0540001292ea20afb7be234c5b4860ab615bd3fb6745ea9c911cab4cfa",
+    "performance-assurance-1.1": "6e1d3b65fcd58bf0daf1a159c6c9694ec6d4d11b3abbe22368a049f0350ff99c",
+    "policy-simulation-1.0": "4896d286e144d0f59ac0b93cf208acb935abfd75c421068d82733fa4bd031c95",
+    "portfolio-dashboard-1.0": "98a2ec995708f91ec81a9adc5d5d806af94a42cc0273a4f3f263f74cab79e0cd",
+    "portfolio-health-1.0": "79d8c10d1a678dd7985a00bb4498aa55381efab5d015ee15b244659238aa28b7",
+    "portfolio-health-1.1": "3c19738a8d2575fdc3fe5a47b5bd8b4f663a446f68d89bb87dae5d7a074d5bf0",
+    "precommit-config-1.0": "3b88c1a261e2add0fd158e1192e92686686854aaf9739101f4b1467b8f4384d5",
+    "procedure-assessment-1.0": "bd85618fb87dceb16d7e46a36c80f544c92998b9d1e7f60790c1ccf9987132ac",
+    "project-init-1.0": "e7f3df454ee75274ec308a197805a7b6aa3b11edb0d0369010daccb2d71f77bc",
+    "promotion-plan-1.0": "61b6f035848b65a51aa2102ab31290a0ee756c01d2c72bde1d55b66c78d9416f",
+    "promotion-plan-1.1": "3d3c97102901a482912ddb6ccc544935fca0faaf094b97dc498319a27d325d88",
+    "promotion-plan-1.2": "1eb57ce26e459b4f061b1f366cd9f16766684f95b10b23c0a3bde3d4b81a87c8",
+    "provision-plan-1.0": "a1388dc95967fbc711e2408e6485a9a9d38a4b30609c7144313b773d2b4c0509",
+    "reachability-delta-1.0": "cdb33ca631784d36f973b6a87fa239e4840d628c4b216a117ff691069b7cc119",
+    "release-evidence-manifest-1.0": "ed6d58d9d2a83bdf35db02281cd05ee17df5cf97a8f95e7e85f00aec948e9c06",
+    "release-evidence-manifest-verification-1.0": "5a509e3fea573f086344a47e7b46ed3824fd790d8175151c00168ba5b15f5d7e",
+    "release-readiness-1.0": "5ad76dda108be918d5bb6e97dc298c508fd9afd671662a02d0987fefd368d3ff",
+    "release-readiness-1.1": "83a2481f3be30070ff60115fc0a189ed5b35f71f264132b3c8ce626e8793609a",
+    "release-readiness-1.2": "a6de67b6c7e243b3df320e457830fc18410d6ed823fce99cda25e89e8accceba",
+    "release-readiness-1.3": "ed01d7352f19e66fe7d9e85a310bae0e078cdced8fc7ee916d43e7229d3211a0",
+    "report-inspection-1.0": "0afbb85a051058ff6139545c07792c5efa79d38e595964561d1f5084baaba758",
+    "report-inspection-1.1": "0339fd3bd43862ae6389a671f316c7ad3ce3b0fd9fe1ef85ced9324ac1b112e6",
+    "report-inspection-1.2": "01cfcabad122e3f98c9accd7837df519010da3452ecb5eb760cfeeb874b9f33f",
+    "report-inspection-1.3": "87590f22eb5f7a733603158f3c1faaf1542dfd892ddebf43471398eb120cad8b",
+    "report-inspection-verification-1.0": "5c9cc490082f26213862eed1d867dfa7e91932772933b6b049768294ca249955",
+    "report-inspection-verification-1.1": "02586738096d36bd42a154a661e4a786cb2635840f96ff26b5730a08a7bfbe68",
+    "report-inspection-verification-1.2": "cebdbd9c115f072de9f46359e7d2c5ec9bfd7fb975a8002f187f38cb06374a37",
+    "report-inspection-verification-1.3": "aad84425d03e0cb7993317ee0ce79314905ecabe9479494bb22d6b0f3b9128cd",
+    "report-security-1.0": "10b958ecc9189bd37625313a18b48464fa021fc5f3efe16cd8482f8761c3ac18",
+    "report-verification-1.0": "8224299f3ed2e1f3e96466179e5e8fb14719530f47022e58688024c5685102df",
+    "reproducible-build-1.0": "e6a7b4ae7710e788016cb2c7f17a4643fd33787add22566f8cf5744c92e441ec",
+    "resource-limits-1.0": "7a4bb3c5e2fc4dc886c40a2fbc18176fc6cdd86ef37ce7b47d245223b86b9d6d",
+    "risk-paths-1.0": "b3a62f84e78d693f52e60293cc472f1fb998413f506130d345580abda361bd39",
+    "runtime-closure-1.0": "efdeabd0210a99ad7867ee23430bfdc18fe749a3d5441a2920cd14527f669645",
+    "scanner-trust-catalog-1.0": "52e65337b6c12b581fb92aca53b9b936dc4806dda260a0c046f84b7da520eb0f",
+    "sdist-normalization-1.0": "1ceac2552aa79c9f1da61bf69f8664404fc6322433c9e078197a58d7ca11f770",
+    "security-requirements-policy-1.0": "2e9e0c2e95adc523571000bccdc23633a3cb887c38611d2eeeac9f41b1c0eac7",
+    "semantic-language-coverage-1.0": "01a3f264f0c957ba5b5e83690f92e2d480c78697fa09b15bee4ae6b76c7eeb02",
+    "signing-request-1.0": "29a0e5e01fdaf93a518d457f8412c5d96a349d16e0e38d0bcea7a37300e8fb25",
+    "signing-request-verification-1.0": "ce11898bf98152ef925107cd184b267f3e4314cce6485185f8d088ef00f1681a",
+    "source-inventory-1.0": "d7eec6b07f40ca9da034407cf88b4b874995e3dbf15084304345327a6ab2bf96",
+    "standardized-prioritization-1.0": "835946da0b8f2d6da033d87593233e4556c42bc5949a8a53b8f937cbfb73c4ca",
+    "standards-baseline-inventory-1.0": "aee7335c6bf95f7ced715c51bcfb1e5d19cb7be178efb1786f711a6791538204",
+    "standards-crosswalk-1.0": "e97a9a7be29b0bf65450626d21c82daf89dc7e37b97c05b404f58ef4c8e889f1",
+    "standards-monitor-report-1.0": "23f8375c87a782484e85233f8a2c5cdb6eefccf2eea9d468cbd5d621e9b943ae",
+    "standards-monitor-verification-1.0": "b3ca332012d7284fea8c3496c490cd4ac4a7a07ab98275a66f8bb26f8cd3302b",
+    "standards-source-manifest-1.0": "d5b60c3064dde1607a694fbe192deab39002fc39ca53dd32c2cf27001b44dffe",
+    "static-architecture-1.0": "268e0aae801c528214e0a6ae07b1ac2db6a2dc875406e416e015cd6f51a06c10",
+    "static-architecture-1.1": "b5ee23569f6aca012dd6a61da2b6ac07ff74f3f218b972156b7f3621013d4f2f",
+    "static-architecture-1.2": "48d0a3c9a6cca4475e31a3c5cc6a7dc64f04c32dd7a3e669b228c774f9b976c0",
+    "static-architecture-1.3": "0790bd7df99415e04317691a775a8a5c08fe977b420034f4b790cb8dac6be23d",
+    "static-architecture-1.4": "3fb845596ffd07c1e1f1ffaf4b2ed67b6352e35a5194e71524a0dd48c3498da5",
+    "structural-synthesis-1.0": "9b79a5e4970b5e2e0939b053eef010ce91532c96e303b5ac7cd4c143b749e2eb",
+    "structural-synthesis-1.1": "23122722a8f22482d234bdba0ce4b369b218b2ffd9a8c539ed206645d73de9b9",
+    "structural-synthesis-1.2": "e7450d3f25b9fe8f44843953453c9a5d61c16ffa2f1a8bd648b4b02b6d644d51",
+    "trust-policy-1.0": "761459a7ae145e5fd6f5a9acc8b6acb1dcec9c9958cd5e9480169b301301217d",
+    "trust-policy-attestation-1.0": "714ab577a7587c4156b6927c9194004e695f080f117695d850f2c9716343a16f"
+  }
+}

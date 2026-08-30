@@ -12,7 +12,7 @@ from pathlib import Path
 from datetime import timedelta
 from typing import Any
 
-from . import __version__
+from .version import __version__
 from .adapters import ADAPTER_TYPES
 from .adapters.base import AdapterResult, ScannerAdapter
 from .application_contracts import analyze_application_contracts

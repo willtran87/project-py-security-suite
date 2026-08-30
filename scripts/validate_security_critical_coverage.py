@@ -6,6 +6,7 @@ from pathlib import Path
 
 
 _FLOORS = {
+    "src/py_security_suite/atomic_file.py": 85.0,
     "src/py_security_suite/strict_json.py": 85.0,
     "src/py_security_suite/path_safety.py": 75.0,
     "src/py_security_suite/benchmark_input_validation.py": 75.0,
@@ -13,6 +14,7 @@ _FLOORS = {
     "src/py_security_suite/benchmark_receipt.py": 95.0,
     "src/py_security_suite/benchmark_signing.py": 75.0,
     "src/py_security_suite/bounded_subprocess.py": 70.0,
+    "src/py_security_suite/diagnostic_safety.py": 90.0,
     "src/py_security_suite/benchmark_adapter_conformance.py": 70.0,
     "src/py_security_suite/benchmark_semantic_evidence.py": 70.0,
     "src/py_security_suite/benchmark_telemetry.py": 70.0,
@@ -31,6 +33,24 @@ _FLOORS = {
     "src/py_security_suite/artifact_validation.py": 70.0,
     "src/py_security_suite/requirements_coverage.py": 65.0,
     "src/py_security_suite/adapters/assurance_evidence.py": 60.0,
+    "src/py_security_suite/git_replay.py": 65.0,
+    "src/py_security_suite/isolation_probe.py": 50.0,
+    "src/py_security_suite/checkpoint_authority.py": 50.0,
+    "src/py_security_suite/execution.py": 55.0,
+    "src/py_security_suite/execution_policy.py": 95.0,
+    "src/py_security_suite/governance_replay.py": 70.0,
+    "src/py_security_suite/governance_quorum.py": 85.0,
+    "src/py_security_suite/native_evidence.py": 55.0,
+    "src/py_security_suite/boundary_graph.py": 55.0,
+    "src/py_security_suite/inventory.py": 55.0,
+    "src/py_security_suite/evidence_ingest.py": 55.0,
+    "src/py_security_suite/attestation_formats.py": 60.0,
+    "src/py_security_suite/trust_policy.py": 65.0,
+    "src/py_security_suite/failure_domain.py": 65.0,
+    "src/py_security_suite/benchmark_runtime.py": 65.0,
+    "src/py_security_suite/performance_assurance.py": 80.0,
+    "src/py_security_suite/release_readiness.py": 90.0,
+    "src/py_security_suite/repository_file_policy.py": 90.0,
 }
 
 

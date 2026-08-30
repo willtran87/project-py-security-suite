@@ -305,12 +305,15 @@ pysec benchmark-provider-check \
   --output provider-conformance.json
 ```
 
-The command generates a fresh challenge, signs its domain-separated statement
-twice, proves Ed25519 determinism, locally verifies both signatures, confirms
-stable provider/key identity, and emits a schema-governed receipt containing
-only public identities and digests. The protected weekly provider workflow runs
-this contract against PKCS#11, Vault Transit, AWS KMS, Azure Key Vault, and GCP
-Cloud KMS deployments.
+The command generates a fresh challenge, proves Ed25519 determinism, locally
+verifies the signatures, confirms stable provider/key identity, and emits a
+portable 1.1 receipt. Its final domain-separated signature covers the provider,
+key, backend, credential mode, executable/profile digests, timestamp, and
+trusted-time identity as well as the challenge. The protected weekly provider
+workflow runs this contract against PKCS#11, Vault Transit, AWS KMS, Azure Key
+Vault, and GCP Cloud KMS deployments. Supply the receipt and its independently
+approved SHA-256 to `release-check`; require each expected provider ID and set a
+bounded maximum age so a historical enrollment cannot authorize a new release.
 
 Pass `--security-event-log /var/log/pysec/benchmark-events.jsonl` to persist
 success and early-failure control events outside the workspace. Records are

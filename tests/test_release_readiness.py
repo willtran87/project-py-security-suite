@@ -68,7 +68,9 @@ class ReleaseReadinessTests(unittest.TestCase):
         )
         self.assertIn("Governed corpus required: True", control["detail"])
         self.assertIn("validated: False", control["detail"])
-        self.assertIn("minimums 200 total, 80 positive, 80 negative", control["detail"])
+        self.assertIn(
+            "minimums 500 total, 200 positive, 200 negative", control["detail"]
+        )
 
     @patch("py_security_suite.release_readiness.verify_report")
     def test_complete_governed_evidence_is_approved(self, verify_report_mock) -> None:
@@ -450,6 +452,77 @@ class ReleaseReadinessTests(unittest.TestCase):
         )
         self.assertEqual(control["status"], "fail")
         self.assertIn("semgrep", control["detail"])
+
+    @patch("py_security_suite.release_readiness.verify_report")
+    def test_governed_aggregate_only_effectiveness_can_satisfy_release_floors(
+        self, verify_report_mock
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            report = Path(temporary) / "report"
+            report.mkdir()
+            _write_release_evidence(report, profile="release")
+            verification = _verification()
+            verify_report_mock.return_value = verification
+            evaluation = Path(temporary) / "evaluation.json"
+            diversity = {
+                "cwe": 5,
+                "language": 2,
+                "parser_variant": 2,
+                "boundary_type": 3,
+                "severity": 3,
+                "mutation_operator": 2,
+            }
+            digest = _write_json(
+                evaluation,
+                {
+                    "schema_version": "2.0",
+                    "verdict": "pass",
+                    "report": {"checksums_sha256": verification["checksums_sha256"]},
+                    "corpus": {
+                        "labels": 500,
+                        "authority": {
+                            "validated": True,
+                            "organization_approved": True,
+                        },
+                        "diversity": diversity,
+                    },
+                    "time_authority": {"validated": True},
+                    "replay_protected": True,
+                    "confusion_matrix": {
+                        "true_positive": 250,
+                        "true_negative": 250,
+                        "false_positive": 0,
+                        "false_negative": 0,
+                    },
+                    "coverage_summary": {
+                        "positive_labels": 250,
+                        "negative_labels": 250,
+                        "tool_counts": {
+                            "bandit": 100,
+                            "semgrep": 100,
+                            "codeql": 100,
+                        },
+                        "tool_expectations": {
+                            "bandit": ["finding", "clean"],
+                            "semgrep": ["finding", "clean"],
+                            "codeql": ["finding", "clean"],
+                        },
+                    },
+                    "label_outcomes": [],
+                },
+            )
+            result = assess_release_readiness(
+                report,
+                effectiveness_evaluation=evaluation,
+                effectiveness_sha256=digest,
+            )
+        control = next(
+            item
+            for item in result["controls"]
+            if item["id"] == "detection-effectiveness"
+        )
+        self.assertEqual(control["status"], "pass")
+        self.assertIn("500 labels", control["detail"])
 
     @patch("py_security_suite.release_readiness.verify_report")
     def test_verified_report_requires_array_findings_and_claims(

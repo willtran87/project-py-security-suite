@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from .adapters.staging import maintained_repository_files
+from .repository_file_policy import maintained_repository_files
 from .models import ToolRun, ToolStatus
 from .path_safety import read_regular_file
 from .strict_json import canonical_bytes

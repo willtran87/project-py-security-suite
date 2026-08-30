@@ -25,6 +25,7 @@ creates a GitHub-friendly report artifact.
 | Advisory fusion | Package-scoped CVE/GHSA/PYSEC/OSV alias clustering across source and artifact scanners, with distinct-risk/observation counts plus CycloneDX introducing-root paths, pipdeptree environment health, Graphify imports, reachability/runtime state, and deptry-use context |
 | Data exposure | CWE-grounded flows into logs, telemetry, URL queries, client errors, runtime-state dumps, and process streams; monorepo SDK/configuration inventory; owner-, graph-, change-risk-, runtime-, test-, and SDK-package-aware disclosure triage |
 | Runtime | Python 3.11+; scanners are installed separately from approved offline bundles |
+| Suite assurance | Exact 144-boundary dependency graph with one frozen eight-module bootstrap SCC; mypy plus a pinned strict Pyright trust-boundary gate; 45 security-critical coverage ratchets; six performance workloads including the real code-health/static-architecture pipeline; AST-verified live-test policy plus complete JUnit engine/role matrix evidence; and aggregate-only governed effectiveness statistics that preserve holdout secrecy while supporting release thresholds |
 
 Key trust properties:
 
@@ -177,7 +178,7 @@ pysec qualify-bundle PATH_TO_PROJECT --config pysec.toml --profile production \
   --effectiveness-evaluation effectiveness-evaluation.json \
   --effectiveness-report PATH_TO_CORPUS_SCAN_REPORT \
   --effectiveness-sha256 APPROVED_SHA256 \
-  --minimum-effectiveness-labels 200 \
+  --minimum-effectiveness-labels 500 \
   --required-effectiveness-tool bandit \
   --format markdown --output .artifacts/bundle-qualification.md
 pysec generate-hooks PATH_TO_PROJECT --profile quick
@@ -396,8 +397,11 @@ executing a container. Its signed write-ahead intent closes the ledger/checkpoin
 crash window and rejects forward injection. The Python API includes a
 digest-pinned, shell-free `ExternalEd25519SigningProvider` bridge for PKCS#11,
 HSM, or KMS-backed signing.
-`benchmark-provider-check` actively challenges that bridge twice, verifies both
-signatures locally, and emits a schema-valid conformance receipt. A protected
+`benchmark-provider-check` actively challenges that bridge, verifies its
+signatures locally, and emits a portable 1.1 receipt whose Ed25519 statement
+binds provider metadata, profile and executable digests, observation time, and
+optional trusted-time identity. `release-check` independently replays exact
+digest-pinned receipts and enforces required identities and freshness. A protected
 weekly workflow runs the same check against deployment-owned providers; local
 CI cannot claim live HSM, Vault, or cloud-KMS conformance.
 
@@ -460,7 +464,8 @@ The strict contracts are exported offline with `pysec schema effectiveness-1.1`,
 `benchmark-authority-trust-policy-1.0`, `benchmark-execution-receipt-1.1`,
 `benchmark-execution-receipt-1.2`,
 `benchmark-signing-provider-profile-1.0`,
-`benchmark-signing-provider-conformance-1.0`, `performance-assurance-1.0`,
+`benchmark-signing-provider-conformance-1.1`, `architecture-assurance-1.0`,
+`performance-assurance-1.1`,
 `industry-assurance-policy-1.3`,
 `assurance-catalog-export-1.0`, `standards-baseline-inventory-1.0`, and
 `standards-source-manifest-1.0`. The corpus
@@ -506,11 +511,11 @@ pysec evidence-pack REPORT --output security-evidence \
   --previous-report PREVIOUS_REPORT \
   --effectiveness-evaluation effectiveness-evaluation.json \
   --effectiveness-sha256 APPROVED_EVALUATION_SHA256 \
-  --minimum-effectiveness-labels 200 \
-  --minimum-effectiveness-positive-labels 80 \
-  --minimum-effectiveness-negative-labels 80 \
+  --minimum-effectiveness-labels 500 \
+  --minimum-effectiveness-positive-labels 200 \
+  --minimum-effectiveness-negative-labels 200 \
   --minimum-effectiveness-tools 3 \
-  --minimum-effectiveness-labels-per-tool 20 \
+  --minimum-effectiveness-labels-per-tool 50 \
   --required-effectiveness-tool bandit \
   --required-effectiveness-tool codeql \
   --required-effectiveness-tool semgrep \
@@ -542,17 +547,22 @@ sidecar independently.
 pysec release-check REPORT --format json \
   --effectiveness-evaluation effectiveness-evaluation.json \
   --effectiveness-sha256 APPROVED_SHA256 \
-  --minimum-effectiveness-labels 200 \
-  --minimum-effectiveness-positive-labels 80 \
-  --minimum-effectiveness-negative-labels 80 \
+  --minimum-effectiveness-labels 500 \
+  --minimum-effectiveness-positive-labels 200 \
+  --minimum-effectiveness-negative-labels 200 \
   --minimum-effectiveness-tools 3 \
-  --minimum-effectiveness-labels-per-tool 20 \
+  --minimum-effectiveness-labels-per-tool 50 \
   --required-effectiveness-tool bandit \
   --required-effectiveness-tool codeql \
   --required-effectiveness-tool semgrep \
   --passport-verification passport-verification.json \
   --passport-verification-sha256 APPROVED_SHA256 \
-  --require-passport --output release-readiness.json
+  --require-passport \
+  --provider-conformance provider-conformance.json \
+  --provider-conformance-sha256 APPROVED_PROVIDER_RECEIPT_SHA256 \
+  --required-provider-id provider-generic-hsm \
+  --maximum-provider-conformance-age-hours 168 \
+  --require-provider-conformance --output release-readiness.json
 
 pysec evidence-draft REPORT --format json \
   --output governance-evidence-draft.json

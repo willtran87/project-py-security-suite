@@ -4,7 +4,7 @@ import hashlib
 from itertools import combinations
 from typing import Any
 
-from . import __version__
+from .version import __version__
 from .strict_json import canonical_bytes
 
 

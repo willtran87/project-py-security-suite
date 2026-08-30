@@ -11,7 +11,7 @@ from pathlib import Path
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
-from . import __version__
+from .version import __version__
 from .adapter_conformance import (
     assess_adapter_conformance,
     render_adapter_conformance,
@@ -130,7 +130,9 @@ from .standards_monitor import (
     monitor_standard_sources,
     verify_standards_monitor_report,
 )
+from .trusted_observation import governed_now, scan_time_identity
 from .cli_benchmark_arguments import add_benchmark_commands
+from .cli_release_arguments import add_release_check_command
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -711,36 +713,7 @@ def build_parser() -> argparse.ArgumentParser:
     standards_verify.add_argument("--report-sha256", required=True)
     standards_verify.add_argument("--public-key", type=Path, required=True)
 
-    release_check = subparsers.add_parser(
-        "release-check",
-        help="aggregate verified report, trust, isolation, effectiveness, and passport evidence",
-    )
-    release_check.add_argument("report", type=Path, metavar="REPORT_DIRECTORY")
-    release_check.add_argument("--effectiveness-evaluation", type=Path)
-    release_check.add_argument("--effectiveness-sha256", default="")
-    release_check.add_argument("--minimum-effectiveness-labels", type=int, default=0)
-    release_check.add_argument(
-        "--minimum-effectiveness-positive-labels", type=int, default=0
-    )
-    release_check.add_argument(
-        "--minimum-effectiveness-negative-labels", type=int, default=0
-    )
-    release_check.add_argument("--minimum-effectiveness-tools", type=int, default=0)
-    release_check.add_argument(
-        "--minimum-effectiveness-labels-per-tool", type=int, default=0
-    )
-    release_check.add_argument(
-        "--required-effectiveness-tool",
-        action="append",
-        default=[],
-        help="require labeled effectiveness evidence for this scanner (repeatable)",
-    )
-    release_check.add_argument("--passport-verification", type=Path)
-    release_check.add_argument("--passport-verification-sha256", default="")
-    release_check.add_argument("--require-passport", action="store_true")
-    release_check.add_argument("--format", choices=("text", "json"), default="text")
-    release_check.add_argument("--output", type=Path, metavar="FILE")
-    release_check.add_argument("--overwrite", action="store_true")
+    add_release_check_command(subparsers)
 
     evidence_draft = subparsers.add_parser(
         "evidence-draft",
@@ -1908,7 +1881,21 @@ def _benchmark_run_command(args: argparse.Namespace) -> int:
 
 def _benchmark_provider_check_command(args: argparse.Namespace) -> int:
     provider = load_external_signing_provider_profile(args.profile, args.profile_sha256)
-    result = verify_signing_provider_conformance(provider)
+    configured_time = any(
+        os.environ.get(name, "").strip()
+        for name in (
+            "PYSEC_SCAN_TIME_CONTEXT_PATH",
+            "PYSEC_SCAN_TIME_CONTEXT_SHA256",
+            "PYSEC_SCAN_TIME_CHALLENGE_SHA256",
+        )
+    )
+    result = verify_signing_provider_conformance(
+        provider,
+        portable=True,
+        observed_at=governed_now(),
+        profile_sha256=args.profile_sha256.casefold(),
+        time_context_sha256=scan_time_identity() if configured_time else "",
+    )
     rendered = json.dumps(result, indent=2, sort_keys=True)
     _write_atomic_output(
         output=args.output,
@@ -2100,6 +2087,13 @@ def _release_check_command(args: argparse.Namespace) -> int:
         passport_verification=args.passport_verification,
         passport_verification_sha256=args.passport_verification_sha256,
         require_passport=args.require_passport,
+        provider_conformance=tuple(args.provider_conformance),
+        provider_conformance_sha256=tuple(args.provider_conformance_sha256),
+        required_provider_ids=tuple(args.required_provider_id),
+        maximum_provider_conformance_age_hours=(
+            args.maximum_provider_conformance_age_hours
+        ),
+        require_provider_conformance=args.require_provider_conformance,
     )
     rendered_json = json.dumps(result, indent=2, sort_keys=True)
     if args.output:

@@ -18,15 +18,15 @@ from pathlib import Path
 from typing import IO, Iterator, Mapping
 
 from .path_safety import read_regular_file
-from .assurance_profile import verify_governance_quorum
+from .execution_policy import validate_governed_command_input
+from .diagnostic_safety import (
+    sanitize_diagnostic as sanitize_diagnostic,
+    sanitize_terminal_text as sanitize_terminal_text,
+)
+from .governance_quorum import verify_governance_quorum
 from .strict_json import canonical_bytes, loads as strict_loads
 
 
-_CONTROL_CHARACTERS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
-_SECRET_ASSIGNMENT = re.compile(
-    r"(?i)\b(password|passwd|secret|token|api[_-]?key|private[_-]?key)"
-    r"(\s*[=:]\s*)([^\s,;]+)"
-)
 _RUNTIME_CLOSURE_LOCK = threading.Lock()
 _ENVIRONMENT_RUNTIME_CLOSURE: str | None = None
 _LIMIT_GATE_BOOTSTRAP = """
@@ -1045,6 +1045,12 @@ def run_command(
     max_output_bytes: int,
     environment: CommandEnvironment | None = None,
 ) -> RawExecution:
+    validate_governed_command_input(
+        command,
+        timeout_seconds=timeout_seconds,
+        max_output_bytes=max_output_bytes,
+        environment=environment.extra if environment is not None else None,
+    )
     if environment is not None and environment.max_resident_memory_bytes < 64 * 1024**2:
         raise ValueError("scanner resident-memory limit must be at least 64 MiB")
     sandbox_path: Path | None = None
@@ -1551,22 +1557,3 @@ def _terminate_process_tree(process: subprocess.Popen[bytes]) -> bool:
         process.kill()
         process.wait(timeout=10)
     return process.poll() is not None
-
-
-def sanitize_diagnostic(value: str, *, maximum: int = 4096) -> str:
-    cleaned = _CONTROL_CHARACTERS.sub("", value)
-    cleaned = _SECRET_ASSIGNMENT.sub(r"\1\2<redacted>", cleaned)
-    if len(cleaned) > maximum:
-        cleaned = cleaned[:maximum] + "\n<truncated>"
-    return cleaned.strip()
-
-
-def sanitize_terminal_text(value: str, *, maximum: int = 4096) -> str:
-    """Return one bounded, redacted line safe for an operator terminal."""
-    redacted = _SECRET_ASSIGNMENT.sub(r"\1\2<redacted>", value)
-    sanitized = "".join(
-        character if character.isprintable() else "�" for character in redacted
-    )
-    if len(sanitized) <= maximum:
-        return sanitized
-    return sanitized[: maximum - 1] + "…"

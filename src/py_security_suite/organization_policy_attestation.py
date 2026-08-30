@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from .assurance_profile import verify_governance_quorum
+from .governance_replay import consume_governance_replay
 from .path_safety import read_regular_file
 from .strict_json import loads as strict_loads
 
@@ -80,9 +81,6 @@ def validate_organization_policy_attestation(
     if environment.get("PYSEC_GOVERNANCE_REPLAY_SERVICE_URL") or environment.get(
         "PYSEC_GOVERNANCE_REPLAY_REQUIRE_REMOTE", ""
     ).casefold() in {"1", "true", "yes"}:
-        # Delayed import avoids the configuration/governance import cycle.
-        from .governance import consume_governance_replay
-
         consume_governance_replay(
             value,
             hashlib.sha256(payload).hexdigest(),

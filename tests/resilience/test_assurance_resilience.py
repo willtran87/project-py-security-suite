@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import os
 import sys
+import time
+from pathlib import Path
 
 import pytest
 
@@ -58,3 +60,25 @@ def test_stage_failure_still_executes_cleanup_once() -> None:
     )
     assert result.decision == "fail"
     assert executed == ["prepare", "attack", "cleanup"]
+
+
+def test_timeout_terminates_descendant_process_tree(tmp_path: Path) -> None:
+    marker = tmp_path / "orphan-marker"
+    child = (
+        "import pathlib,time; time.sleep(0.8); "
+        f"pathlib.Path({str(marker)!r}).write_text('orphaned')"
+    )
+    parent = (
+        "import subprocess,sys,time; "
+        f"subprocess.Popen([sys.executable, '-c', {child!r}]); time.sleep(10)"
+    )
+    with pytest.raises(BoundedSubprocessError, match="timed out"):
+        run_bounded_subprocess(
+            [sys.executable, "-I", "-c", parent],
+            timeout_seconds=0.2,
+            maximum_stdout_bytes=1024,
+            maximum_stderr_bytes=1024,
+            environment=_minimal_environment(),
+        )
+    time.sleep(1.0)
+    assert not marker.exists()

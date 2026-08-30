@@ -58,7 +58,7 @@ flowchart LR
     Corpus["Approved labeled corpus<br/>SHA-256 bound"] --> Benchmark["pysec benchmark"]
     Normalize --> Benchmark
     Benchmark --> Metrics["TP | TN | FP | FN<br/>precision | recall | specificity | F1"]
-    Floor["Production floor<br/>200 labels | 80 positive | 80 negative<br/>3 engines | 20 labels per required engine"] --> Release["release-check"]
+    Floor["Production floor<br/>500 labels | 200 positive | 200 negative<br/>3 engines | 50 labels per required engine"] --> Release["release-check"]
     Metrics --> Release
 ```
 
@@ -150,8 +150,10 @@ parser variant, boundary type, severity, and mutation operator. The evaluator
 rejects duplicate normalized match predicates and rejects a report finding that
 matches more than one label. These checks prevent duplicated cases, overlapping
 selectors, or one broad finding from inflating coverage and recall. Release
-readiness recomputes those
-strata from the exact label outcomes and requires at least five CWEs, two
+readiness verifies an aggregate-only coverage summary containing
+positive/negative totals, per-tool counts, and per-tool expectation classes. It
+recomputes strata from detailed schema-1.0 outcomes or verifies the signed
+schema-2.0 aggregate against the corpus diversity commitment, and requires at least five CWEs, two
 languages, two parser variants, three boundary types, three severities, and two
 non-`none` mutation operators. Every named required tool must have both a
 positive and a negative case. A schema-1.0 evaluation, a self-signed corpus, a
@@ -165,8 +167,10 @@ the authority-validation time. A rollbackable local SQLite ledger is rejected
 for schema 2.0. The service atomically consumes that report/corpus/time tuple,
 returns a deployment-pinned Ed25519 receipt and monotonic sequence, and enforces
 the configured holdout query budget. Governed output is aggregate-only: label
-identities and per-label failures are withheld to reduce tuning leakage. Release
-readiness requires both `time_authority.validated` and
+identities and per-label failures are withheld to reduce tuning leakage, while
+bounded aggregate counts remain available for release thresholds. Release
+readiness checks those totals against the corpus label count and confusion
+matrix and requires both `time_authority.validated` and
 `replay_protected` in addition to the corpus quorum.
 The evaluation retains the exact signed statement, verification key, request
 commitment, service-key identity, sequence, holdout-use count, leaf identity,
@@ -229,11 +233,11 @@ evaluation, its exact SHA-256, a passing verdict, a binding to the same report
 seal, and a non-trivial minimum corpus size before promotion.
 
 For meaningful empirical calibration, use a separately maintained holdout of at
-least 200 labels with balanced positive and negative controls across every
+least 500 labels with balanced positive and negative controls across every
 required scanner, representative frameworks, real historical defects, parser
 variants, custom wrappers and sanitizers, and mutation operators. The built-in
-production floor now enforces 200 labels, including at least 80 positive and 80
-negative cases, three engines, and 20 labels for every required engine. It is
+production floor now enforces 500 labels, including at least 200 positive and 200
+negative cases, three engines, and 50 labels for every required engine. It is
 still a minimum rather than proof that the sample is representative. Track
 precision, recall, false-positive rate, and
 false-negative rate per tool, rule, CWE, framework, and parser variant; do not

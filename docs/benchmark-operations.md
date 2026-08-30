@@ -29,12 +29,13 @@ flowchart LR
 flowchart LR
     Provision["Provision non-exportable<br/>Ed25519 key"] --> Admit["Admit provider, key version,<br/>role, lifecycle, and digests"]
     Admit --> Check["benchmark-provider-check<br/>fresh challenge + two signatures"]
-    Check --> Verify["Local signature and<br/>profile-binding verification"]
+    Check --> Verify["Portable replay<br/>metadata-bound signature"]
     Verify --> Review{"Deployment authority review"}
     Review -->|approved| Enable["Enable receipt signing"]
     Review -->|rejected| Remediate["Keep disabled and remediate"]
     Enable --> Scheduled["Weekly protected<br/>conformance workflow"]
     Scheduled --> Check
+    Verify --> Release["Digest-pinned release-check<br/>identity + freshness + trusted time"]
 ```
 
 1. Provision an Ed25519 signing key in the approved service or hardware device.
@@ -58,13 +59,32 @@ pysec benchmark-provider-check \
   --output provider-conformance.json
 ```
 
-The receipt binds a fresh challenge, the provider and key version, the exact
-public key and executable digests, backend and credential mode, and two locally
-verified deterministic signatures. The scheduled
+The 1.1 receipt contains the public key, challenge, and signature needed for an
+independent replay. Its domain-separated Ed25519 statement binds the challenge,
+provider and key version, backend, credential mode, public-key, executable and
+profile digests, observation time, and optional trusted-time identity. Changing
+any field invalidates the statement digest or signature. The scheduled
 `signing-provider-conformance.yml` workflow repeats this against each protected
 provider and retains the receipts for 180 days. Repository CI validates the
 contract and mock bridge behavior; only the protected workflow can establish
 that a live deployment-owned HSM, Vault, or KMS bridge is conformant.
+
+Bind every required provider receipt into the release decision by exact digest:
+
+```text
+pysec release-check report \
+  --provider-conformance provider-conformance.json \
+  --provider-conformance-sha256 APPROVED_RECEIPT_SHA256 \
+  --required-provider-id provider-generic-hsm \
+  --maximum-provider-conformance-age-hours 168 \
+  --require-provider-conformance --format json \
+  --output release-readiness.json
+```
+
+The gate rejects malformed or cryptographically detached receipts, duplicate or
+missing provider identities, future observations, and stale evidence. Hardened
+release evidence also requires the receipt to bind a deployment-verified
+trusted-time context.
 
 Use `--receipt-signing-provider-profile` together with
 `--receipt-signing-provider-profile-sha256`. The profile schema supports
@@ -112,7 +132,8 @@ reconciles exactly one prior transaction or fails closed without consuming a new
 nonce. Record drill evidence outside the repository and retain it under the
 organization’s audit policy.
 
-The automated drill injects signing-bridge timeout and output flooding, stage
+The automated drill injects signing-bridge timeout and output flooding, verifies
+that timeout containment terminates spawned descendants, exercises stage
 failure with mandatory cleanup, trusted-time rollback and fork attempts, and a
 post-recovery scale-budget check. It complements rather than replaces the
 external service and disaster-recovery exercise.

@@ -421,8 +421,8 @@ flowchart LR
     CI --> Tests[Cross-platform tests]
     CI --> Coverage[Branch + changed-line + critical-module coverage]
     CI --> Schema[Schema/runtime + public API compatibility]
-    CI --> Architecture[Progressive file/function concentration ratchets]
-    CI --> Performance[Time + throughput + memory budgets]
+    CI --> Architecture[Dependency graph + file/function/decision ratchets]
+    CI --> Performance[Repeated p95 + throughput + memory + growth budgets]
     Change --> Daily[Daily parser assurance]
     Daily --> Fuzz[Persistent coverage-guided parser fuzzing]
     Change --> Weekly[Weekly deep assurance]
@@ -440,20 +440,37 @@ flowchart LR
     Providers --> Gate
 ```
 
-Benchmark command registration is isolated in
-`cli_benchmark_arguments.py`; execution transitions, receipt construction,
-signing, scoring, and performance assurance remain separate modules. CI freezes
-the current concentration ceilings and rejects accidental growth while later
-extractions can lower each ceiling without weakening behavior.
+Benchmark and release command registration are isolated in
+`cli_benchmark_arguments.py` and `cli_release_arguments.py`; execution
+transitions, receipt construction, signing, scoring, and performance assurance
+remain separate modules. Shared repository traversal, governance replay,
+atomic publication, process-input policy, and diagnostic redaction are isolated
+behind focused modules. The 12,000-line assurance data block is separated into
+standards, benchmark, and profile catalogs, leaving the evaluation engine near
+5,300 lines. Tach enforces exact imports across 144 production module boundaries.
+A separate strongly-connected-component ratchet permits only one explicitly
+recorded legacy trust/runtime cycle group and rejects any new member, edge
+expansion, or additional cycle. CI also freezes concentration ceilings and rejects
+accidental file, function, or decision growth while later extractions can lower
+each ceiling without weakening behavior.
 
-The continuous gate currently protects 58 commands, 23 stable options, and 10
-versioned schema contracts; enforces concentration ceilings across 6 files and
-7 functions; and exercises a deterministic 10,000-case JSON/classification
-workload against time, throughput, peak-memory, and growth budgets. These
-numbers describe the checked-in ratchets, not the entire command or schema
-inventory. Daily fuzzing and weekly mutation, resilience, and provider checks
-remain separate because their cost or deployment authority does not fit every
-pull request.
+The continuous gate currently protects 58 commands, 469 positional/option
+contracts, 164 immutable versioned schema contracts, three console-script
+targets, and two Python callable signatures; enforces concentration
+ceilings across 14 files, 13 functions, and 6 decision-node budgets; and repeats
+five representative workloads five times plus one isolated full-repository
+analysis pipeline. The workload suite covers 10,000-case
+strict JSON/classification scoring, canonical evidence serialization, and the
+complete bundled-schema catalog plus real production-source inventory and AST
+parsing. The isolated workload executes the actual code-health and static-
+architecture analyzers with child-process peak-memory and wall-clock budgets.
+The pull
+request gate also requires Docker/rootless-Podman, cross-platform containment,
+PostgreSQL/Kafka, and authenticated Chromium/Firefox/WebKit lanes. The browser
+gate verifies literal parametrization from the test AST and then proves every
+required engine/role combination passed from retained JUnit evidence. Protected
+provider drills remain separate because their deployment authority does not fit
+an untrusted pull-request runner.
 
 ## Runtime architecture
 
@@ -517,7 +534,8 @@ point is rehashed after execution; a mismatch or mid-scan change fails closed.
 Python console scanners can additionally pin and recheck the complete
 recursively installed distribution closure.
 
-Subprocesses receive a reduced environment, deterministic executable search
+Subprocesses reject abusive argv, timeout, output, and environment sizes before
+host interaction. They receive a reduced environment, deterministic executable search
 path, and a disposable private home, app-data, and cache root. Ambient proxy,
 loader, Python import, and user-site configuration are not forwarded. Output is
 spooled to private temporary files and the complete process tree is terminated
@@ -535,9 +553,16 @@ classifications, source and artifact package inventories, exact artifact
 digests, changed-line coverage, runtime observations, complexity, ownership,
 and graph neighborhoods. It emits explanatory triage context without changing
 scanner severity or treating missing observations as negative evidence.
-Every internal dependency is explicit, unconfigured source modules are
-forbidden, circular dependencies fail the check, and unused declarations fail
-because exact mode is enabled.
+Every top-level production module has an explicit boundary, root leakage is
+forbidden, and undeclared or unused dependencies fail because exact mode is
+enabled. The configuration/governance and adapter/repository-surface cycles have
+been eliminated; dependency-neutral governance quorum verification has also
+removed the assurance-profile module from the bootstrap cycle. The repository
+currently carries one explicit eight-module
+trust/runtime cycle-debt group. `validate_architecture_cycles.py`
+computes strongly connected components from the synchronized graph and fails on
+any expansion or new cycle; shrinking a group also fails until the baseline is
+deliberately lowered in the same reviewed change.
 
 ```mermaid
 flowchart TB
@@ -549,6 +574,10 @@ flowchart TB
     Integrations --> Services
     Integrations --> Core
     Services --> Core
+    Graph["Tach exact graph<br/>144 boundaries"] --> Debt["SCC debt ratchet<br/>1 frozen group / 8 modules"]
+    Debt -->|new or expanded cycle| Fail["CI failure"]
+    Graph --> Evidence["Schema-valid architecture assurance<br/>edges + SCCs + concentration"]
+    Evidence --> Artifact["90-day CI evidence artifact"]
 ```
 
 Tach findings use the common quality-domain contract: tool and native rule,

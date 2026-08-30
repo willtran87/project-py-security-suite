@@ -13,6 +13,12 @@ class HeldParentDirectory:
     path: Path
     descriptor: int | None
 
+    def sync(self) -> None:
+        """Durably record completed sibling mutations where the OS supports it."""
+
+        if self.descriptor is not None and os.name != "nt":
+            os.fsync(self.descriptor)
+
     def rename(self, source: Path, destination: Path) -> None:
         if (
             source.parent.absolute() != self.path
@@ -30,6 +36,28 @@ class HeldParentDirectory:
             )
         else:
             source.rename(destination)
+        self.sync()
+
+    def replace(self, source: Path, destination: Path) -> None:
+        """Atomically replace a sibling while keeping its parent pinned."""
+
+        if (
+            source.parent.absolute() != self.path
+            or destination.parent.absolute() != self.path
+        ):
+            raise ValueError(
+                "held-parent replacement must remain within the pinned directory"
+            )
+        if self.descriptor is not None and os.name != "nt":
+            os.replace(
+                source.name,
+                destination.name,
+                src_dir_fd=self.descriptor,
+                dst_dir_fd=self.descriptor,
+            )
+        else:
+            os.replace(source, destination)
+        self.sync()
 
     def remove_tree(self, path: Path) -> None:
         import shutil
@@ -42,6 +70,7 @@ class HeldParentDirectory:
             shutil.rmtree(path.name, dir_fd=self.descriptor)
         else:
             shutil.rmtree(path)
+        self.sync()
 
 
 @contextmanager
@@ -68,6 +97,13 @@ def hold_parent_directory(path: Path, label: str) -> Iterator[HeldParentDirector
         yield HeldParentDirectory(parent, descriptor)
     finally:
         os.close(descriptor)
+
+
+def sync_parent_directory(path: Path, label: str) -> None:
+    """Flush a directory after an atomic publication or rollback transition."""
+
+    with hold_parent_directory(path, label) as held:
+        held.sync()
 
 
 def is_link_like(path: Path) -> bool:

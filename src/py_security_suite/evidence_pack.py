@@ -18,7 +18,12 @@ from .execution import sha256_file
 from .finding_register import build_finding_register
 from .github_annotations import build_github_annotations, render_github_commands
 from .passport import verify_report
-from .path_safety import is_link_like, resolve_regular_file, resolve_unlinked_path
+from .path_safety import (
+    is_link_like,
+    resolve_regular_file,
+    resolve_unlinked_path,
+    sync_parent_directory,
+)
 from .policy_simulation import simulate_policy
 from .portfolio_dashboard import build_portfolio_dashboard
 from .promotion import (
@@ -139,21 +144,26 @@ def create_evidence_pack(
             if backup.exists():
                 raise ValueError(f"evidence pack backup path already exists: {backup}")
             os.replace(destination, backup)
+            sync_parent_directory(destination, "evidence pack backup")
         try:
             os.replace(staging, destination)
+            sync_parent_directory(destination, "evidence pack publication")
         except BaseException:
             if backup is not None:
                 os.replace(backup, destination)
+                sync_parent_directory(destination, "evidence pack rollback")
                 backup = None
             raise
         if backup is not None:
             shutil.rmtree(backup)
+            sync_parent_directory(destination, "evidence pack cleanup")
             backup = None
     finally:
         if staging.exists():
             shutil.rmtree(staging)
         if backup is not None and not destination.exists():
             os.replace(backup, destination)
+            sync_parent_directory(destination, "evidence pack recovery")
     return _creation_receipt(destination, manifest)
 
 

@@ -705,6 +705,10 @@ class EffectivenessCorpusTests(unittest.TestCase):
                 "mutation_operator": 2,
             },
         )
+        self.assertEqual(result["coverage_summary"]["positive_labels"], 13)
+        self.assertEqual(result["coverage_summary"]["negative_labels"], 12)
+        self.assertEqual(result["label_outcomes"], [])
+        self.assertEqual(result["feedback_policy"], "aggregate-only")
 
     def test_governed_fixture_digest_is_bound_to_source_inventory(self) -> None:
         with self.assertRaisesRegex(ValueError, "detached from the sealed"):

@@ -1,5 +1,33 @@
 # Changelog
 
+- Replace live-browser source-token checks with AST-verified parametrization and
+  complete JUnit matrix receipts; pin and enforce a strict Pyright boundary in
+  CI; fix governed aggregate-only effectiveness evidence so a private holdout
+  can satisfy release floors without disclosing label identities; add a real
+  repository code-health/static-architecture pipeline performance budget;
+  durably flush report, evidence-pack, and Passport directory transitions;
+  protect console-script targets and Python callable signatures; and extract
+  dependency-neutral governance quorum verification, reducing the sole
+  trust/runtime SCC from nine modules to eight.
+
+- Eliminate the configuration/governance and adapter/repository dependency
+  cycles; isolate reusable repository traversal, governance replay, atomic
+  publication, process-input policy, and diagnostic redaction; split the
+  12,000-line industry-assurance data block into three bounded catalogs; publish schema-valid architecture
+  assurance evidence; expand compatibility protection to all 58 commands, 469
+  argument contracts, and 164 bundled schemas; benchmark production inventory
+  and AST parsing; require live OCI, OS containment, service, and browser lanes;
+  and add atomic-write fault injection plus governed subprocess input ceilings.
+
+- Add portable metadata-bound signing-provider conformance 1.1 receipts and
+  release-gate identity/freshness enforcement; expand performance assurance to
+  repeated p95 scoring, canonicalization, and complete schema-catalog workloads;
+  enforce an exact 135-boundary Tach graph, freeze three existing dependency
+  cycle debt groups against expansion, and add file, function, and decision budgets;
+  protect CLI action shapes and exact schema bytes in API baseline 1.1; terminate
+  hostile subprocess descendants; and raise production effectiveness corpus and
+  per-tool evidence floors.
+
 - Add canonical-digest-pinned, 600-observation multilingual semantic
   calibration with per-language Wilson confidence gates; raise trust and
   benchmark coverage/mutation ratchets; extract benchmark CLI registration;

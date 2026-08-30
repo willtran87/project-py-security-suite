@@ -774,7 +774,7 @@ pysec qualify-bundle . --config .pysec-tools\pysec.native.toml `
   --effectiveness-evaluation effectiveness-evaluation.json `
   --effectiveness-report .artifacts\detection-validation `
   --effectiveness-sha256 APPROVED_SHA256 `
-  --minimum-effectiveness-labels 200 `
+  --minimum-effectiveness-labels 500 `
   --minimum-effectiveness-tools 3 `
   --required-effectiveness-tool bandit `
   --required-effectiveness-tool codeql `

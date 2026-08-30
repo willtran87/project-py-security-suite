@@ -144,7 +144,9 @@ def test_organization_attestation_verifies_quorum_and_remote_replay(
         patch(
             "py_security_suite.organization_policy_attestation.verify_governance_quorum"
         ) as quorum,
-        patch("py_security_suite.governance.consume_governance_replay") as replay,
+        patch(
+            "py_security_suite.organization_policy_attestation.consume_governance_replay"
+        ) as replay,
     ):
         validate_organization_policy_attestation(
             POLICY_SHA256, observed_at=NOW, environment=environment

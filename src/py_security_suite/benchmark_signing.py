@@ -6,6 +6,7 @@ import os
 import re
 import secrets
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
@@ -18,7 +19,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
 
 from .bounded_subprocess import BoundedSubprocessError, run_bounded_subprocess
 from .path_safety import read_regular_file, resolve_regular_file
-from .strict_json import loads as strict_loads
+from .strict_json import canonical_bytes, loads as strict_loads
 
 
 _IDENTIFIER = re.compile(r"^[a-z0-9][a-z0-9._-]{0,127}$")
@@ -245,6 +246,10 @@ def verify_signing_provider_conformance(
     provider: ReceiptSigningProvider,
     *,
     challenge: bytes | None = None,
+    portable: bool = False,
+    observed_at: datetime | None = None,
+    profile_sha256: str = "",
+    time_context_sha256: str = "",
 ) -> dict[str, object]:
     """Actively prove provider identity, key stability, and Ed25519 signing behavior."""
     nonce = secrets.token_bytes(32) if challenge is None else challenge
@@ -257,19 +262,6 @@ def verify_signing_provider_conformance(
     public_key = provider.public_key_bytes()
     if len(public_key) != 32 or provider.public_key_bytes() != public_key:
         raise ValueError("signing provider public key is invalid or unstable")
-    statement = b"pysec-benchmark-signing-provider-conformance-v1\x00" + nonce
-    first = provider.sign(statement)
-    second = provider.sign(statement)
-    try:
-        verifier = Ed25519PublicKey.from_public_bytes(public_key)
-        verifier.verify(first, statement)
-        verifier.verify(second, statement)
-    except (InvalidSignature, ValueError) as exc:
-        raise ValueError("signing provider conformance signature is invalid") from exc
-    if first != second:
-        raise ValueError(
-            "Ed25519 signing provider returned nondeterministic signatures"
-        )
     result: dict[str, object] = {
         "schema_version": "1.0",
         "provider_id": provider.provider_id,
@@ -277,8 +269,6 @@ def verify_signing_provider_conformance(
         "algorithm": "Ed25519",
         "public_key_sha256": hashlib.sha256(public_key).hexdigest(),
         "challenge_sha256": hashlib.sha256(nonce).hexdigest(),
-        "statement_sha256": hashlib.sha256(statement).hexdigest(),
-        "signature_sha256": hashlib.sha256(first).hexdigest(),
         "deterministic_signature": True,
         "verified": True,
     }
@@ -298,7 +288,167 @@ def verify_signing_provider_conformance(
                 "executable_sha256": "",
             }
         )
+    if portable:
+        observed = datetime.now(UTC) if observed_at is None else observed_at
+        if observed.tzinfo is None:
+            raise ValueError("signing provider conformance time must be timezone-aware")
+        if not _DIGEST.fullmatch(profile_sha256):
+            raise ValueError("signing provider profile digest is invalid")
+        if time_context_sha256 and not _DIGEST.fullmatch(time_context_sha256):
+            raise ValueError("signing provider trusted-time identity is invalid")
+        result.update(
+            {
+                "schema_version": "1.1",
+                "observed_at": observed.astimezone(UTC).isoformat(),
+                "profile_sha256": profile_sha256,
+                "time_context_sha256": time_context_sha256,
+                "public_key_base64": base64.b64encode(public_key).decode("ascii"),
+                "challenge_base64": base64.b64encode(nonce).decode("ascii"),
+            }
+        )
+        statement = _portable_conformance_statement(result, nonce)
+    else:
+        statement = b"pysec-benchmark-signing-provider-conformance-v1\x00" + nonce
+    first = provider.sign(statement)
+    second = provider.sign(statement)
+    try:
+        verifier = Ed25519PublicKey.from_public_bytes(public_key)
+        verifier.verify(first, statement)
+        verifier.verify(second, statement)
+    except (InvalidSignature, ValueError) as exc:
+        raise ValueError("signing provider conformance signature is invalid") from exc
+    if first != second:
+        raise ValueError(
+            "Ed25519 signing provider returned nondeterministic signatures"
+        )
+    result.update(
+        {
+            "statement_sha256": hashlib.sha256(statement).hexdigest(),
+            "signature_sha256": hashlib.sha256(first).hexdigest(),
+        }
+    )
+    if portable:
+        result["signature_base64"] = base64.b64encode(first).decode("ascii")
     return result
+
+
+def verify_portable_signing_provider_conformance(
+    receipt: dict[str, object],
+) -> dict[str, object]:
+    """Independently replay a portable signing-provider conformance receipt."""
+
+    required = {
+        "schema_version",
+        "provider_id",
+        "key_version",
+        "algorithm",
+        "backend",
+        "credential_mode",
+        "public_key_sha256",
+        "challenge_sha256",
+        "statement_sha256",
+        "signature_sha256",
+        "executable_sha256",
+        "deterministic_signature",
+        "verified",
+        "observed_at",
+        "profile_sha256",
+        "time_context_sha256",
+        "public_key_base64",
+        "challenge_base64",
+        "signature_base64",
+    }
+    if set(receipt) != required or receipt.get("schema_version") != "1.1":
+        raise ValueError("portable signing provider conformance fields are invalid")
+    if (
+        receipt.get("algorithm") != "Ed25519"
+        or receipt.get("deterministic_signature") is not True
+        or receipt.get("verified") is not True
+        or receipt.get("backend") not in _PROVIDER_BACKENDS
+        or receipt.get("credential_mode") not in _CREDENTIAL_MODES
+        or not _IDENTIFIER.fullmatch(str(receipt.get("provider_id") or ""))
+        or not _IDENTIFIER.fullmatch(str(receipt.get("key_version") or ""))
+    ):
+        raise ValueError("portable signing provider conformance identity is invalid")
+    for field in (
+        "public_key_sha256",
+        "challenge_sha256",
+        "statement_sha256",
+        "signature_sha256",
+        "executable_sha256",
+        "profile_sha256",
+    ):
+        if not _DIGEST.fullmatch(str(receipt.get(field) or "")):
+            raise ValueError(f"portable signing provider {field} is invalid")
+    time_identity = str(receipt.get("time_context_sha256") or "")
+    if time_identity and not _DIGEST.fullmatch(time_identity):
+        raise ValueError("portable signing provider trusted-time identity is invalid")
+    try:
+        observed = datetime.fromisoformat(
+            str(receipt["observed_at"]).replace("Z", "+00:00")
+        )
+        public_key = base64.b64decode(str(receipt["public_key_base64"]), validate=True)
+        challenge = base64.b64decode(str(receipt["challenge_base64"]), validate=True)
+        signature = base64.b64decode(str(receipt["signature_base64"]), validate=True)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            "portable signing provider evidence encoding is invalid"
+        ) from exc
+    if observed.tzinfo is None or not 32 <= len(challenge) <= 4096:
+        raise ValueError("portable signing provider observation is invalid")
+    statement = _portable_conformance_statement(receipt, challenge)
+    expected_hashes = {
+        "public_key_sha256": hashlib.sha256(public_key).hexdigest(),
+        "challenge_sha256": hashlib.sha256(challenge).hexdigest(),
+        "statement_sha256": hashlib.sha256(statement).hexdigest(),
+        "signature_sha256": hashlib.sha256(signature).hexdigest(),
+    }
+    if any(receipt[name] != digest for name, digest in expected_hashes.items()):
+        raise ValueError("portable signing provider evidence digest is detached")
+    try:
+        Ed25519PublicKey.from_public_bytes(public_key).verify(signature, statement)
+    except (InvalidSignature, ValueError) as exc:
+        raise ValueError("portable signing provider signature is invalid") from exc
+    return {
+        "provider_id": receipt["provider_id"],
+        "key_version": receipt["key_version"],
+        "backend": receipt["backend"],
+        "credential_mode": receipt["credential_mode"],
+        "public_key_sha256": receipt["public_key_sha256"],
+        "executable_sha256": receipt["executable_sha256"],
+        "profile_sha256": receipt["profile_sha256"],
+        "time_context_sha256": time_identity,
+        "observed_at": observed.astimezone(UTC),
+    }
+
+
+def _portable_conformance_statement(
+    receipt: dict[str, object], challenge: bytes
+) -> bytes:
+    """Bind portable evidence and provider metadata into one domain statement."""
+
+    subject = {
+        "schema_version": receipt.get("schema_version"),
+        "provider_id": receipt.get("provider_id"),
+        "key_version": receipt.get("key_version"),
+        "algorithm": receipt.get("algorithm"),
+        "backend": receipt.get("backend"),
+        "credential_mode": receipt.get("credential_mode"),
+        "public_key_sha256": receipt.get("public_key_sha256"),
+        "challenge_sha256": receipt.get("challenge_sha256"),
+        "executable_sha256": receipt.get("executable_sha256"),
+        "deterministic_signature": receipt.get("deterministic_signature"),
+        "verified": receipt.get("verified"),
+        "observed_at": receipt.get("observed_at"),
+        "profile_sha256": receipt.get("profile_sha256"),
+        "time_context_sha256": receipt.get("time_context_sha256"),
+    }
+    return (
+        b"pysec-benchmark-signing-provider-conformance-portable-v1\x00"
+        + canonical_bytes(subject)
+        + b"\x00"
+        + challenge
+    )
 
 
 def _sha256_file(path: Path) -> str:
