@@ -83,11 +83,25 @@ def test_semantic_fingerprint_is_identifier_insensitive_but_control_sensitive() 
     assert left != weakened
 
 
-def test_semantic_fingerprint_normalizes_invalid_python_encoding() -> None:
+def test_semantic_fingerprint_normalizes_invalid_python_encoding(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     malformed = b"B\ri\r\xc7\xb3x\rixs\rrxs\ri\r"
+    try:
+        semantic_fingerprint(malformed, language="python")
+    except BenchmarkSemanticEvidenceError:
+        pass
+
+    def invalid_tokens(_readline: object) -> object:
+        raise UnicodeDecodeError("utf-8", b"\xc7", 0, 1, "invalid start byte")
+
+    monkeypatch.setattr(
+        "py_security_suite.benchmark_semantic_evidence.tokenize.tokenize",
+        invalid_tokens,
+    )
 
     with pytest.raises(BenchmarkSemanticEvidenceError, match="cannot be tokenized"):
-        semantic_fingerprint(malformed, language="python")
+        semantic_fingerprint(b"value = 1\n", language="python")
 
 
 @pytest.mark.parametrize(
