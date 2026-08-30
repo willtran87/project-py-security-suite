@@ -206,37 +206,44 @@ def open_regular_file(
         raise ValueError(f"{label} is not a regular file: {resolved}") from exc
     except OSError as exc:
         raise ValueError(f"{label} could not be opened safely: {resolved}") from exc
-    handle = os.fdopen(descriptor, "rb", closefd=False)
     try:
         before = os.fstat(descriptor)
         if not stat.S_ISREG(before.st_mode):
             raise ValueError(f"{label} is not a regular file: {resolved}")
         if not 0 <= before.st_size <= maximum_bytes:
             raise ValueError(f"{label} exceeds {maximum_bytes} bytes")
-        yield resolved, handle, before.st_size
-        after = os.fstat(descriptor)
-        components_after = _component_identities(requested)
-        if components_before != components_after:
-            raise ValueError(f"{label} path components changed while it was being read")
-        final_path = os.stat(requested, follow_symlinks=False)
-        if (after.st_dev, after.st_ino) != (final_path.st_dev, final_path.st_ino):
-            raise ValueError(f"{label} path was replaced while it was being read")
-        identity_before = (
-            before.st_dev,
-            before.st_ino,
-            before.st_size,
-            before.st_mtime_ns,
-        )
-        identity_after = (
-            after.st_dev,
-            after.st_ino,
-            after.st_size,
-            after.st_mtime_ns,
-        )
-        if identity_before != identity_after:
-            raise ValueError(f"{label} changed while it was being read")
+        try:
+            handle = os.fdopen(descriptor, "rb", closefd=False)
+        except OSError as exc:
+            raise ValueError(f"{label} could not be opened safely: {resolved}") from exc
+        try:
+            yield resolved, handle, before.st_size
+            after = os.fstat(descriptor)
+            components_after = _component_identities(requested)
+            if components_before != components_after:
+                raise ValueError(
+                    f"{label} path components changed while it was being read"
+                )
+            final_path = os.stat(requested, follow_symlinks=False)
+            if (after.st_dev, after.st_ino) != (final_path.st_dev, final_path.st_ino):
+                raise ValueError(f"{label} path was replaced while it was being read")
+            identity_before = (
+                before.st_dev,
+                before.st_ino,
+                before.st_size,
+                before.st_mtime_ns,
+            )
+            identity_after = (
+                after.st_dev,
+                after.st_ino,
+                after.st_size,
+                after.st_mtime_ns,
+            )
+            if identity_before != identity_after:
+                raise ValueError(f"{label} changed while it was being read")
+        finally:
+            handle.close()
     finally:
-        handle.close()
         os.close(descriptor)
 
 

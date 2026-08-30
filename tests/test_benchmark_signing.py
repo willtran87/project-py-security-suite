@@ -6,6 +6,7 @@ import json
 import sys
 from pathlib import Path
 
+import cryptography
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -62,6 +63,7 @@ def _live_profile(executable: Path, backend: str = "generic-hsm") -> dict[str, o
     )
     script = (
         "import base64,sys;"
+        f"sys.path.insert(0,{str(Path(cryptography.__file__).resolve().parent.parent)!r});"
         "from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey;"
         "key=Ed25519PrivateKey.from_private_bytes(base64.b64decode(sys.argv[1]));"
         "sys.stdout.write(base64.b64encode(key.sign(sys.stdin.buffer.read())).decode())"

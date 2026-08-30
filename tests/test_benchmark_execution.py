@@ -1138,6 +1138,7 @@ def test_default_registry_contract_rejects_legacy_process_for_high_risk_lane(
 
 
 def test_compiler_binds_maintained_inputs_and_registry_safety(tmp_path: Path) -> None:
+    executable = Path(sys.executable).resolve()
     (tmp_path / "corpus.bin").write_bytes(b"pinned corpus")
     for name in ("source-projects", "apk-set", "source-sink-labels", "android-image"):
         (tmp_path / name).write_text(name, encoding="utf-8")
@@ -1171,7 +1172,7 @@ def test_compiler_binds_maintained_inputs_and_registry_safety(tmp_path: Path) ->
         "stages": [
             {
                 "name": name,
-                "executable": sys.executable,
+                "executable": str(executable),
                 "arguments": ["-c", "pass"],
                 "environment": {},
                 "timeout_seconds": 10,
