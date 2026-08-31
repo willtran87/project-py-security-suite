@@ -21,7 +21,14 @@ def analyze_python_bytecode(payload: bytes) -> list[list[int | str]]:
         # Parsing is invoked in a resource- and OS-contained worker for production;
         # the function is separately exposed for the dedicated fuzzing process.
         root = marshal.loads(payload[16:])  # noqa: S302
-    except (EOFError, TypeError, ValueError) as exc:
+    except (
+        EOFError,
+        OverflowError,
+        RecursionError,
+        SystemError,
+        TypeError,
+        ValueError,
+    ) as exc:
         raise ValueError("Python bytecode marshal payload is invalid") from exc
     if not isinstance(root, types.CodeType):
         raise ValueError("Python bytecode payload is not a code object")
@@ -61,6 +68,6 @@ def analyze_python_bytecode(payload: bytes) -> list[list[int | str]]:
                     edges.add((line, "dynamic-dispatch", str(instruction.argval)))
                 if len(edges) > _MAX_EDGES:
                     raise ValueError("Python bytecode semantic edge limit exceeded")
-        except (IndexError, KeyError, TypeError) as exc:
+        except (IndexError, KeyError, SystemError, TypeError, ValueError) as exc:
             raise ValueError("Python bytecode instruction stream is invalid") from exc
     return [list(edge) for edge in sorted(edges)]

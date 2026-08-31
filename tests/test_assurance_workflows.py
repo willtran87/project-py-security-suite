@@ -100,7 +100,8 @@ def test_external_security_workflow_fails_closed_on_authority_gaps() -> None:
     assert "true_positive -lt 80" in workflow
     assert "true_negative -lt 80" in workflow
     assert "environment: authorized-dynamic-security" in workflow
-    assert "--phases examples,coverage,fuzzing,stateful" in workflow
+    assert '--phases "examples,coverage,fuzzing,stateful"' in workflow
+    assert '--report "junit,ndjson"' in workflow
     assert "--require-tools nuclei,zap,restler,oast,datadog-iast,mobsf" in workflow
 
 
