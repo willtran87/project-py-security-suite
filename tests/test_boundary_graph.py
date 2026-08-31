@@ -136,6 +136,19 @@ class BoundaryGraphTests(unittest.TestCase):
         self.assertTrue(surface["covered"])
         self.assertIn("pathlib", {edge["target"] for edge in edges})
 
+    def test_bytecode_parser_contains_adversarial_allocation_payload(self) -> None:
+        payload = base64.b64decode(
+            "8w0NCgAAAHt1iigoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgA"
+            "IABnASlmZWF0ZWEoKCh0e3JlcwPpAAROZCgodQ=="
+        )
+        payload = importlib.util.MAGIC_NUMBER + payload[4:]
+
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "hostile.pyc"
+            target.write_bytes(payload)
+            with self.assertRaisesRegex(ValueError, "semantic disassembly failed"):
+                _analyze_special_surface(payload, "hostile.pyc", "bytecode", target)
+
     def test_native_parser_uses_immutable_bounded_snapshot(self) -> None:
         payload = b"MZ" + (b"\0" * 64)
         with tempfile.TemporaryDirectory() as directory:

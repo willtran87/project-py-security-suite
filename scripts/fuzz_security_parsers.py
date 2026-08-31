@@ -49,10 +49,10 @@ with atheris.instrument_imports() if atheris is not None else nullcontext():
     )
     from py_security_suite.benchmark_telemetry import _validate_security_event
     from py_security_suite.boundary_graph import (
+        _analyze_special_surface,
         _native_imports_in_process,
         _wasm_imports,
     )
-    from py_security_suite.bytecode_analysis import analyze_python_bytecode
     from py_security_suite.config import ToolConfig
     from py_security_suite.models import Finding, json_ready
     from py_security_suite.strict_json import canonical_bytes
@@ -174,8 +174,8 @@ def test_one_input(data: bytes) -> None:
         return
     if _TARGET_NAME == "python-bytecode":
         try:
-            bytecode_first = analyze_python_bytecode(payload)
-            bytecode_second = analyze_python_bytecode(payload)
+            bytecode_first = _inspect_python_bytecode(payload)
+            bytecode_second = _inspect_python_bytecode(payload)
             if bytecode_first != bytecode_second:
                 raise RuntimeError("Python bytecode analysis is nondeterministic")
         except ValueError:
@@ -279,6 +279,18 @@ def test_one_input(data: bytes) -> None:
         _assert_normalized_findings(adapter_first)
     except (TypeError, ValueError):
         pass
+
+
+def _inspect_python_bytecode(payload: bytes) -> list[dict[str, Any]]:
+    """Exercise the production resource boundary around the unsafe marshal decoder."""
+
+    _surface, edges = _analyze_special_surface(
+        payload,
+        "fuzz-input.pyc",
+        "bytecode",
+        Path("fuzz-input.pyc"),
+    )
+    return edges
 
 
 @_instrument_fuzz_function
