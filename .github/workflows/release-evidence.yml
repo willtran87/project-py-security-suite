@@ -22,7 +22,7 @@ on:
 
 permissions:
   actions: read # Read the source run and its immutable artifact digest.
-  contents: read # Check out the verifier at the evidence-bound revision.
+  contents: read # Check out the protected trusted verifier, never candidate code.
 
 concurrency:
   group: release-evidence-assembly-${{ github.ref }}
@@ -35,19 +35,26 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - name: Check out evidence-bound verifier
+      - name: Validate trusted dispatch boundary
+        env:
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+          MANIFEST_SHA256: ${{ inputs.manifest_sha256 }}
+          EXPECTED_HEAD_SHA: ${{ inputs.expected_head_sha }}
+          EXPECTED_REF: ${{ inputs.expected_ref }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]]
+          [[ "$SOURCE_RUN_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$MANIFEST_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$EXPECTED_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$EXPECTED_REF" == "main" ]]
+      - name: Check out protected trusted verifier
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          ref: ${{ inputs.expected_head_sha }}
-      - name: Set up uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-        with:
-          version: "0.11.19"
-          enable-cache: false
-      - name: Install locked verifier
-        run: uv sync --locked --all-groups --python "3.13"
-      - name: Download the exact source artifact
+          ref: refs/heads/main
+      - name: Authorize source run before installing or executing repository code
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_RUN_ID: ${{ inputs.source_run_id }}
@@ -57,7 +64,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p .assembly/evidence
+          mkdir -p .assembly
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN_ID" > .assembly/source-run.json
           jq -e \
             --arg sha "$EXPECTED_HEAD_SHA" \
@@ -67,14 +74,33 @@ jobs:
             '.head_sha == $sha and .head_branch == $ref and .path == $workflow_path and .head_repository.full_name == $repository and .repository.full_name == $repository and .run_attempt == 1 and .conclusion == "success" and .event == "workflow_dispatch"' \
             .assembly/source-run.json >/dev/null
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN_ID/artifacts" > .assembly/source-artifacts.json
-          artifact_count="$(jq '[.artifacts[] | select(.name == "release-evidence-input" and .expired == false)] | length' .assembly/source-artifacts.json)"
-          [[ "$artifact_count" == "1" ]]
+          jq -e \
+            '[.artifacts[] | select(.name == "release-evidence-input" and .expired == false)] | length == 1' \
+            .assembly/source-artifacts.json >/dev/null
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.11.19"
+          enable-cache: false
+      - name: Install locked verifier
+        run: uv sync --locked --all-groups --python "3.13"
+      - name: Download and safely extract the exact source artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+          EXPECTED_HEAD_SHA: ${{ inputs.expected_head_sha }}
+          EXPECTED_REF: ${{ inputs.expected_ref }}
+          EXPECTED_WORKFLOW_PATH: .github/workflows/release-evidence-source.yml
+        shell: bash
+        run: |
+          set -euo pipefail
           artifact_id="$(jq -r '.artifacts[] | select(.name == "release-evidence-input" and .expired == false) | .id' .assembly/source-artifacts.json)"
           artifact_digest="$(jq -r '.artifacts[] | select(.name == "release-evidence-input" and .expired == false) | .digest' .assembly/source-artifacts.json)"
           gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$artifact_id/zip" > .assembly/source.zip
           observed_digest="sha256:$(sha256sum .assembly/source.zip | cut -d' ' -f1)"
           [[ "$artifact_digest" == "$observed_digest" ]]
-          unzip -q .assembly/source.zip -d .assembly/evidence
+          python -I scripts/extract_github_artifact.py \
+            .assembly/source.zip .assembly/evidence
       - name: Verify all hardened evidence before assembly
         env:
           PYSEC_REQUIRE_HARDENED_RELEASE_EVIDENCE: "1"

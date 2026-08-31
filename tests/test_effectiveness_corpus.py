@@ -203,6 +203,13 @@ class EffectivenessCorpusTests(unittest.TestCase):
             def read(self, _maximum):
                 return canonical_bytes(receipt)
 
+        requests = []
+
+        class Opener:
+            def open(self, request, *, timeout):
+                requests.append((request, timeout))
+                return Response()
+
         with (
             patch.dict(
                 os.environ,
@@ -219,9 +226,9 @@ class EffectivenessCorpusTests(unittest.TestCase):
                 },
             ),
             patch(
-                "py_security_suite.effectiveness_corpus.urlopen",
-                return_value=Response(),
-            ),
+                "py_security_suite.effectiveness_corpus.build_opener",
+                return_value=Opener(),
+            ) as build_opener,
             patch(
                 "py_security_suite.effectiveness_corpus.verify_governance_quorum"
             ) as gossip_quorum,
@@ -240,6 +247,12 @@ class EffectivenessCorpusTests(unittest.TestCase):
         self.assertEqual(result["mode"], "remote-signed-checkpoint")
         self.assertEqual(result["sequence"], 1)
         self.assertEqual(result["signed_statement"], signed)
+        request, timeout = requests[0]
+        self.assertEqual(request.full_url, "https://replay.example.invalid/consume")
+        self.assertEqual(timeout, 10)
+        self.assertNotIn("Authorization", request.headers)
+        self.assertEqual(request.unredirected_hdrs["Authorization"], "Bearer secret")
+        self.assertEqual(len(build_opener.call_args.args), 2)
         gossip_quorum.assert_called_once()
 
     def test_transparency_proofs_cover_unbalanced_merkle_trees(self) -> None:

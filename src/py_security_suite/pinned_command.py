@@ -21,7 +21,10 @@ from .operation_receipt import verify_operation_receipt
 from .path_safety import read_regular_file
 from .strict_json import canonical_bytes, loads as strict_loads
 from .attestation_formats import verify_format_evidence
-from .failure_domain import verify_registered_failure_domain
+from .failure_domain import (
+    require_independent_failure_domains,
+    verify_registered_failure_domain,
+)
 
 
 def run_pinned_json_command(
@@ -451,6 +454,7 @@ def _verify_remote_attestation(
             "control_plane_sha256": subject["control_plane_sha256"],
             "implementation_sha256": subject["implementation_sha256"],
         },
+        native_replay_verifier=_verify_native_raw_attestation_replay,
     )
     verify_registered_failure_domain(
         {
@@ -478,6 +482,71 @@ def _verify_remote_attestation(
         challenge_sha256=challenge,
         expected_key_sha256=expected_key,
     )
+
+
+def _verify_native_raw_attestation_replay(
+    *,
+    claims: dict[str, Any],
+    format_name: str,
+    expected_statement: dict[str, Any],
+    implementation_sha256: str,
+    replay_domain: object,
+    replay_key_sha256: str,
+    normalized_failure_domain: dict[str, object],
+    verification_method: str,
+    required: bool,
+) -> None:
+    """Execute and bind the independently pinned native format verifier."""
+
+    require_independent_failure_domains(
+        normalized_failure_domain,
+        replay_domain,
+        labels=("normalized attestation authority", "raw replay verifier"),
+    )
+    verify_registered_failure_domain(
+        replay_domain, replay_key_sha256, "raw attestation replay verifier"
+    )
+    prefix = "PYSEC_RAW_ATTESTATION_NATIVE_REPLAY"
+    if not command_configured(prefix):
+        if required:
+            raise ValueError("native raw attestation verifier is unavailable")
+        return
+    statement_sha256 = hashlib.sha256(canonical_bytes(expected_statement)).hexdigest()
+    response = run_pinned_json_command(
+        prefix,
+        {
+            "schema_version": "1.0",
+            "operation": "verify-raw-hardware-attestation",
+            "format": format_name,
+            "raw_evidence_base64": claims["raw_evidence_base64"],
+            "raw_evidence_sha256": expected_statement["raw_evidence_sha256"],
+            "expected_statement": expected_statement,
+            "expected_statement_sha256": statement_sha256,
+        },
+        timeout_seconds=60,
+        maximum_output_bytes=1024 * 1024,
+    )
+    attestation = response.pop("_effective_policy_attestation", None)
+    expected_response = {
+        "schema_version": "1.0",
+        "verified": True,
+        "format": format_name,
+        "raw_evidence_sha256": expected_statement["raw_evidence_sha256"],
+        "normalized_claims_sha256": expected_statement["normalized_claims_sha256"],
+        "verification_statement_sha256": statement_sha256,
+        "verification_method": verification_method,
+        "trust_root_sha256": expected_statement["trust_root_sha256"],
+    }
+    attested_subject = (
+        attestation.get("subject") if isinstance(attestation, dict) else None
+    )
+    if (
+        response != expected_response
+        or not isinstance(attested_subject, dict)
+        or attested_subject.get("executable_sha256") != implementation_sha256
+        or remote_attested_failure_domain(attestation) != replay_domain
+    ):
+        raise ValueError("native raw attestation replay result is detached or invalid")
 
 
 def command_configured(prefix: str) -> bool:

@@ -1,5 +1,37 @@
 # Changelog
 
+- Expand industry assurance to 635 versioned references, 215 selectable
+  profiles, 262 benchmark families, 192 maintained adapters, and 96 strict
+  semantic integrations. Add NIST ransomware recovery, NIST/IEEE media
+  sanitization, OT backup and remote access, IEC 62443 provider evaluation,
+  ISO crisis exercises, enterprise ICT risk aggregation, standards-crosswalk
+  semantics, and LNG/EV resilience. Add SAE ARP5150B/ARP5151B continuing-airworthiness
+  joins, end-to-end CCSDS space-mission communications assurance, deeper STIG,
+  OT patch, airworthiness, and SWIFT outcome contracts, applicability-gated
+  NSS/DoD authorization, NSA
+  2026 zero-trust implementation and microsegmentation, HHS healthcare
+  operational resilience, ARP4754B/ARP4761A aircraft-system assurance, ILAC
+  laboratory operating policy, and IMO maritime operational-risk coverage;
+  add independently replayed weakness/prioritization, formal-tool disagreement,
+  process/supplier assessor, and incident/privacy outcome calibration with
+  explicit no-authorization, accreditation, certification, compliance, or
+  production-actuation boundaries. Add governed semiconductor-equipment,
+  pipeline-control, GxP/Part 11 data-integrity, CJIS, Automotive SPICE,
+  IEC 61511 SIS, BACnet Secure Connect, industrial-robotics and data-centre
+  facility-resilience packs with licensed-source controls, inert execution
+  lanes, independent replay, domain mutations and false-certification gates.
+  Add AWWA/EPA water resilience, NENA NG911 and TIA/P25 interoperability,
+  international EU/WHO/PIC/S GxP data integrity, final NIST IR 8576 transit,
+  ISO 22320 emergency coordination, and AGA/API/IEC gas-SCADA cryptographic
+  assurance. Calibrate SWaT, WADI, and BATADAL only as research corpora with
+  license/source binding, contamination analysis, protected multi-axis
+  holdouts, repeated statistics, and explicit non-compliance boundaries;
+  quarantine the draft semiconductor profile and Annex 11 revision. Reconcile
+  all published catalog totals, Mermaid architecture and execution-lane
+  diagrams, benchmark tables, authoritative references, watchlist guidance,
+  and the policy 1.3 example; documentation tests now bind these surfaces to
+  the exported catalog and the eight new profile and benchmark identifiers.
+
 - Replace live-browser source-token checks with AST-verified parametrization and
   complete JUnit matrix receipts; pin and enforce a strict Pyright boundary in
   CI; fix governed aggregate-only effectiveness evidence so a private holdout

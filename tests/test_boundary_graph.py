@@ -5,13 +5,19 @@ import unittest
 import base64
 import hashlib
 import json
+import importlib.util
+import marshal
 import os
+from types import SimpleNamespace
 from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import patch
 
 from py_security_suite.boundary_graph import (
+    _analyze_special_surface,
     _compiler_semantic_differential,
+    _native_imports,
+    _parser_environment,
     build_boundary_graph,
 )
 from py_security_suite.strict_json import canonical_bytes
@@ -57,6 +63,114 @@ def _semantic_edge(
 
 
 class BoundaryGraphTests(unittest.TestCase):
+    @staticmethod
+    def _parser_result(stdout: str = "[]", **overrides: object) -> SimpleNamespace:
+        values: dict[str, object] = {
+            "exit_code": 0,
+            "timed_out": False,
+            "output_limit_exceeded": False,
+            "scratch_limit_exceeded": False,
+            "resident_memory_limit_exceeded": False,
+            "resource_limit_errors": (),
+            "stdout": stdout,
+        }
+        values.update(overrides)
+        return SimpleNamespace(**values)
+
+    def test_bytecode_parser_uses_immutable_bounded_snapshot(self) -> None:
+        code = compile("import os\n", "target.py", "exec")
+        payload = importlib.util.MAGIC_NUMBER + (b"\0" * 12) + marshal.dumps(code)
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "target.pyc"
+            target.write_bytes(payload)
+
+            def run(command: list[str], **kwargs: object) -> SimpleNamespace:
+                snapshot = Path(command[-1])
+                self.assertNotEqual(snapshot, target)
+                self.assertEqual(snapshot.read_bytes(), payload)
+                self.assertEqual(kwargs["cwd"], snapshot.parent)
+                target.write_bytes(b"replaced-after-validation")
+                return self._parser_result('[[1,"module-import","os"]]')
+
+            with patch("py_security_suite.boundary_graph.run_command", side_effect=run):
+                surface, edges = _analyze_special_surface(
+                    payload, "target.pyc", "bytecode", target
+                )
+
+        self.assertTrue(surface["covered"])
+        self.assertEqual(edges[0]["target"], "os")
+
+    def test_bytecode_parser_rejects_any_containment_failure(self) -> None:
+        code = compile("pass\n", "target.py", "exec")
+        payload = importlib.util.MAGIC_NUMBER + (b"\0" * 12) + marshal.dumps(code)
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "target.pyc"
+            target.write_bytes(payload)
+            with (
+                patch(
+                    "py_security_suite.boundary_graph.run_command",
+                    return_value=self._parser_result(
+                        resource_limit_errors=("address-space:unavailable",)
+                    ),
+                ),
+                self.assertRaisesRegex(ValueError, "semantic disassembly failed"),
+            ):
+                _analyze_special_surface(payload, "target.pyc", "bytecode", target)
+
+    def test_bytecode_parser_runs_valid_and_malformed_inputs_out_of_process(
+        self,
+    ) -> None:
+        code = compile("import pathlib\n", "target.py", "exec")
+        valid = importlib.util.MAGIC_NUMBER + (b"\0" * 12) + marshal.dumps(code)
+        malformed = importlib.util.MAGIC_NUMBER + (b"\0" * 12) + b"not-marshal"
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "target.pyc"
+            target.write_bytes(valid)
+            surface, edges = _analyze_special_surface(
+                valid, "target.pyc", "bytecode", target
+            )
+            target.write_bytes(malformed)
+            with self.assertRaisesRegex(ValueError, "semantic disassembly failed"):
+                _analyze_special_surface(malformed, "target.pyc", "bytecode", target)
+
+        self.assertTrue(surface["covered"])
+        self.assertIn("pathlib", {edge["target"] for edge in edges})
+
+    def test_native_parser_uses_immutable_bounded_snapshot(self) -> None:
+        payload = b"MZ" + (b"\0" * 64)
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "target.pyd"
+            target.write_bytes(payload)
+
+            def run(command: list[str], **kwargs: object) -> SimpleNamespace:
+                snapshot = Path(command[-1])
+                self.assertNotEqual(snapshot, target)
+                self.assertEqual(snapshot.read_bytes(), payload)
+                self.assertEqual(kwargs["cwd"], snapshot.parent)
+                return self._parser_result()
+
+            with patch("py_security_suite.boundary_graph.run_command", side_effect=run):
+                self.assertEqual(_native_imports(target, payload), [])
+
+    def test_parser_environment_has_bounded_resident_memory(self) -> None:
+        self.assertEqual(
+            _parser_environment().max_resident_memory_bytes,
+            256 * 1024 * 1024,
+        )
+
+    def test_direct_graph_construction_requires_governed_hostile_parsers(self) -> None:
+        code = compile("pass\n", "target.py", "exec")
+        payload = importlib.util.MAGIC_NUMBER + (b"\0" * 12) + marshal.dumps(code)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "target.pyc").write_bytes(payload)
+
+            graph = build_boundary_graph(root)
+
+        self.assertFalse(graph["complete"])
+        self.assertEqual(graph["special_surfaces"][0]["analysis"], "unsupported")
+        self.assertEqual(graph["errors"][0]["reason"], "bytecode-ValueError")
+
     def test_unrecognized_semantic_language_cannot_silently_disappear(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

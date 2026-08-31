@@ -8,13 +8,17 @@ from py_security_suite.benchmark_adapters import (
     benchmark_adapter_spec,
     benchmark_adapter_specs,
 )
-from py_security_suite.industry_assurance import _BENCHMARKS, _benchmark_protocol
+from py_security_suite.industry_assurance import (
+    _BENCHMARKS,
+    _benchmark_protocol,
+    _benchmark_runner_contract,
+)
 
 
 def test_maintained_adapter_specs_are_registered_and_protocol_aligned() -> None:
     registered = {item["id"] for item in _BENCHMARKS}
     identifiers = [item["benchmark_id"] for item in BUILTIN_ADAPTER_SPECS]
-    assert len(identifiers) == 100
+    assert len(identifiers) == 192
     assert len(identifiers) == len(set(identifiers))
     assert set(identifiers) <= registered
     for item in BUILTIN_ADAPTER_SPECS:
@@ -74,6 +78,111 @@ def test_currency_and_real_world_adapters_have_professional_boundaries() -> None
         "openssf-scorecard",
     ):
         assert benchmark_adapter_spec(identifier)["required_inputs"]
+
+
+def test_open_source_extension_adapters_have_professional_boundaries() -> None:
+    expected = {
+        "oss-crs-crsbench": "production vulnerability completeness",
+        "openssf-security-insights-conformance": "metadata presence proves security",
+        "guac-interoperability": "graph presence proves artifact trust",
+        "gittuf-source-policy-conformance": "production repositories",
+        "openssf-package-analysis-malicious-packages": "developer or production hosts",
+        "owasp-kubernetes-top10-conformance": "production clusters",
+        "owasp-cicd-top10-conformance": "no production deployment",
+        "sbomit-build-observed-sbom": "universal SBOM completeness",
+        "primevul-real-world-vulnerability-detection": "production vulnerability completeness",
+        "diversevul-unseen-project-generalization": "unseen-project generalization limits",
+        "cvefixes-chronological-fix-pair-validation": "every changed function is vulnerable",
+        "owasp-mobile-top10-conformance": "OWASP certification",
+        "owasp-smart-contract-top10-conformance": "public RPC access",
+        "cncf-cloud-native-security-controls-conformance": "CNCF or NIST certification",
+        "reposvul-repository-context-validation": "production vulnerability completeness",
+        "vuleval-repository-dependency-evaluation": "aggregate score",
+        "mitre-emb3d-property-threat-conformance": "certifies an embedded device",
+        "owasp-business-logic-abuse-top10-conformance": "production mutation",
+        "cncf-supply-chain-best-practices-v2-conformance": "CNCF certification",
+        "owasp-juice-shop": "production vulnerability completeness",
+        "owasp-webgoat": "corporate network access",
+        "owasp-crapi": "OWASP certification",
+        "owasp-api-security-testing-framework": "inherited 100-percent coverage",
+        "google-fuzzbench": "universal fuzzer superiority",
+        "magma-ground-truth": "production bug-discovery completeness",
+        "oss-fuzz-clusterfuzzlite": "OSS-Fuzz project acceptance",
+        "sbom-sca-holdout": "SBOM or SCA completeness",
+        "architecture-quality-holdout": "architecture certification",
+        "epss-kev-temporal-backtest": "individual exploitation event",
+        "scim-lifecycle-security-conformance": "no interoperability certification claim",
+        "openid-shared-signals-conformance": "no OpenID certification claim",
+        "spiffe-workload-identity-conformance": "experimental remote API excluded",
+        "openssf-model-signing-conformance": "no claim of model safety",
+        "cyclonedx-mlbom-conformance": "no claim that ML-BOM validity proves safety",
+        "uptane-ota-security-conformance": "no certification claim",
+        "darpa-aixcc-autonomous-vulnerability-remediation": "no inference that fragmented public materials form a ready benchmark",
+        "openssf-criticality-score-calibration": "no treatment of criticality as security quality",
+        "authzen-authorization-api-conformance": "no OpenID certification claim",
+        "openid-federation-conformance": "no OpenID certification claim",
+        "nist-hpc-ai-infrastructure-assurance": "no NIST certification claim",
+        "iso-24760-identity-management-assurance": "no suite-issued ISO certification claim",
+        "iso-5259-6-data-quality-visualization": "no conformance or ISO certification claim",
+    }
+    for identifier, boundary in expected.items():
+        adapter = benchmark_adapter_spec(identifier)
+        assert len(adapter["required_inputs"]) == 5
+        assert boundary in adapter["isolation"]
+        assert "policy" in " ".join(adapter["required_inputs"])
+        benchmark = next(item for item in _BENCHMARKS if item["id"] == identifier)
+        required = _benchmark_runner_contract(benchmark)["required_execution_evidence"]
+        assert "suite-owned-extension-evidence" in required
+
+    crs = next(item for item in _BENCHMARKS if item["id"] == "oss-crs-crsbench")
+    assert _benchmark_runner_contract(crs)["minimum_repetitions"] == 3
+
+    primevul = next(
+        item
+        for item in _BENCHMARKS
+        if item["id"] == "primevul-real-world-vulnerability-detection"
+    )
+    primevul_evidence = _benchmark_runner_contract(primevul)[
+        "required_execution_evidence"
+    ]
+    assert "independent-label-audit-report" in primevul_evidence
+    assert "project-and-chronological-split-manifest" in primevul_evidence
+    assert "training-overlap-assessment" in primevul_evidence
+
+    reposvul = next(
+        item
+        for item in _BENCHMARKS
+        if item["id"] == "reposvul-repository-context-validation"
+    )
+    repository_evidence = _benchmark_runner_contract(reposvul)[
+        "required_execution_evidence"
+    ]
+    assert "repository-snapshot-manifest" in repository_evidence
+    assert "dependency-context-oracle" in repository_evidence
+    assert "tangled-patch-audit" in repository_evidence
+    assert "multi-granularity-label-map" in repository_evidence
+
+    fuzzbench = next(item for item in _BENCHMARKS if item["id"] == "google-fuzzbench")
+    fuzzbench_evidence = _benchmark_runner_contract(fuzzbench)[
+        "required_execution_evidence"
+    ]
+    assert "repeated-trial-raw-data" in fuzzbench_evidence
+    assert "equal-resource-manifest" in fuzzbench_evidence
+    assert _benchmark_runner_contract(fuzzbench)["minimum_repetitions"] == 20
+
+    crapi = next(item for item in _BENCHMARKS if item["id"] == "owasp-crapi")
+    crapi_evidence = _benchmark_runner_contract(crapi)["required_execution_evidence"]
+    assert "target-label-authority-map" in crapi_evidence
+    assert "deterministic-target-reset" in crapi_evidence
+
+    temporal = next(
+        item for item in _BENCHMARKS if item["id"] == "epss-kev-temporal-backtest"
+    )
+    temporal_evidence = _benchmark_runner_contract(temporal)[
+        "required_execution_evidence"
+    ]
+    assert "dated-snapshot-manifest" in temporal_evidence
+    assert "future-data-exclusion-report" in temporal_evidence
 
 
 def test_high_risk_adapters_encode_domain_specific_safety_boundaries() -> None:

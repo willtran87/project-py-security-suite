@@ -26,7 +26,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PublicKey,
 )
 from defusedxml import ElementTree  # type: ignore[import-untyped]
-from pypdf import PdfReader
+from pypdf import PdfReader  # pyright: ignore[reportMissingImports]
 
 from .path_safety import (
     hold_parent_directory,

@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import json
 import io
+import importlib.util
+import marshal
 import os
 import re
 import stat
+import struct
 import sys
 import tarfile
 import tempfile
@@ -19,6 +22,7 @@ except ModuleNotFoundError:  # Listing targets and unit-testing oracles is porta
     atheris = None  # type: ignore[assignment]
 from defusedxml import ElementTree as safe_element_tree  # type: ignore[import-untyped]
 from defusedxml.common import DefusedXmlException  # type: ignore[import-untyped]
+from elftools.common.exceptions import ELFError  # type: ignore[import-untyped]
 
 with atheris.instrument_imports() if atheris is not None else nullcontext():
     from py_security_suite.adapters import ADAPTER_TYPES
@@ -44,6 +48,11 @@ with atheris.instrument_imports() if atheris is not None else nullcontext():
         semantic_fingerprint,
     )
     from py_security_suite.benchmark_telemetry import _validate_security_event
+    from py_security_suite.boundary_graph import (
+        _native_imports_in_process,
+        _wasm_imports,
+    )
+    from py_security_suite.bytecode_analysis import analyze_python_bytecode
     from py_security_suite.config import ToolConfig
     from py_security_suite.models import Finding, json_ready
     from py_security_suite.strict_json import canonical_bytes
@@ -162,6 +171,27 @@ def test_one_input(data: bytes) -> None:
             )
         except (BenchmarkAdapterConformanceError, TypeError, ValueError):
             pass
+        return
+    if _TARGET_NAME == "python-bytecode":
+        try:
+            bytecode_first = analyze_python_bytecode(payload)
+            bytecode_second = analyze_python_bytecode(payload)
+            if bytecode_first != bytecode_second:
+                raise RuntimeError("Python bytecode analysis is nondeterministic")
+        except ValueError:
+            pass
+        return
+    if _TARGET_NAME == "webassembly":
+        try:
+            wasm_first = _wasm_imports(payload)
+            wasm_second = _wasm_imports(payload)
+            if wasm_first != wasm_second:
+                raise RuntimeError("WebAssembly analysis is nondeterministic")
+        except ValueError:
+            pass
+        return
+    if _TARGET_NAME == "native-binary":
+        _inspect_native_binary(payload)
         return
     if _TARGET_NAME == "strict-xml":
         try:
@@ -287,6 +317,30 @@ def _inspect_xml(payload: bytes) -> tuple[int, int, int]:
         if text_bytes > 16 * 1024 * 1024:
             raise ValueError("XML text limit exceeded")
     return nodes, attributes, text_bytes
+
+
+def _inspect_native_binary(payload: bytes) -> None:
+    suffix = ".dll" if payload[:2] == b"MZ" else ".so"
+    with tempfile.TemporaryDirectory(prefix="pysec-native-fuzz-") as directory:
+        candidate = Path(directory) / f"input{suffix}"
+        candidate.write_bytes(payload)
+        try:
+            first = _native_imports_in_process(candidate, payload)
+            second = _native_imports_in_process(candidate, payload)
+        except (
+            EOFError,
+            ELFError,
+            IndexError,
+            OSError,
+            struct.error,
+            TypeError,
+            ValueError,
+        ):
+            return
+        if first != second or first != sorted(set(first)):
+            raise RuntimeError(
+                "native binary analysis is nondeterministic or noncanonical"
+            )
 
 
 @_instrument_fuzz_function
@@ -487,6 +541,21 @@ def _seed_target_corpus(target: str, destination: Path) -> None:
             ),
             encoding="utf-8",
         )
+    elif target == "python-bytecode":
+        code = compile("import json\neval('1')\n", "fuzz_seed.py", "exec")
+        (destination / "valid.pyc").write_bytes(
+            importlib.util.MAGIC_NUMBER + b"\0" * 12 + marshal.dumps(code)
+        )
+        (destination / "truncated.pyc").write_bytes(importlib.util.MAGIC_NUMBER)
+    elif target == "webassembly":
+        (destination / "minimal.wasm").write_bytes(b"\x00asm\x01\x00\x00\x00")
+        (destination / "truncated.wasm").write_bytes(b"\x00asm")
+    elif target == "native-binary":
+        (destination / "pe-header.bin").write_bytes(b"MZ" + b"\0" * 126)
+        (destination / "elf-header.bin").write_bytes(b"\x7fELF" + b"\0" * 124)
+        (destination / "macho-header.bin").write_bytes(
+            b"\xcf\xfa\xed\xfe" + b"\0" * 124
+        )
 
 
 def main() -> None:
@@ -554,6 +623,24 @@ def main() -> None:
                 "seconds": 420,
                 "coverage_floor": 12,
             },
+            {
+                "target": "python-bytecode",
+                "artifact": "python-bytecode",
+                "seconds": 420,
+                "coverage_floor": 12,
+            },
+            {
+                "target": "webassembly",
+                "artifact": "webassembly",
+                "seconds": 420,
+                "coverage_floor": 12,
+            },
+            {
+                "target": "native-binary",
+                "artifact": "native-binary",
+                "seconds": 420,
+                "coverage_floor": 12,
+            },
         ]
         if shard_adapters:
             targets.extend(
@@ -606,6 +693,9 @@ def main() -> None:
         "benchmark-authority-entry",
         "benchmark-security-event",
         "benchmark-adapter-conformance",
+        "python-bytecode",
+        "webassembly",
+        "native-binary",
     }:
         _selected_adapters(_TARGET_NAME)
     if atheris is None:

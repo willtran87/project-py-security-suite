@@ -117,6 +117,25 @@ def test_target_specific_corpus_seeds_reach_archive_validation(tmp_path: Path) -
         module._inspect_tar((tar_corpus / "tar-link").read_bytes())
 
 
+def test_hostile_binary_targets_have_deterministic_production_oracles(
+    tmp_path: Path,
+) -> None:
+    module = _script()
+    bytecode = tmp_path / "bytecode"
+    wasm = tmp_path / "wasm"
+    native = tmp_path / "native"
+    module._seed_target_corpus("python-bytecode", bytecode)
+    module._seed_target_corpus("webassembly", wasm)
+    module._seed_target_corpus("native-binary", native)
+
+    edges = module.analyze_python_bytecode((bytecode / "valid.pyc").read_bytes())
+    assert any(edge[1] == "module-import" for edge in edges)
+    assert any(edge[1] == "dynamic-dispatch" for edge in edges)
+    assert module._wasm_imports((wasm / "minimal.wasm").read_bytes()) == []
+    for seed in native.iterdir():
+        module._inspect_native_binary(seed.read_bytes())
+
+
 def test_pull_request_matrix_shards_every_adapter(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

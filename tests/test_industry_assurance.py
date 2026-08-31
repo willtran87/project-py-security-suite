@@ -78,10 +78,10 @@ class IndustryAssuranceTests(unittest.TestCase):
             )
         self.assertEqual(errors, [])
         self.assertEqual(
-            artifacts["standards-crosswalk.json"]["catalogs_registered"], 481
+            artifacts["standards-crosswalk.json"]["catalogs_registered"], 635
         )
         self.assertEqual(
-            artifacts["benchmark-registry.json"]["benchmarks_registered"], 182
+            artifacts["benchmark-registry.json"]["benchmarks_registered"], 262
         )
         supported = {
             item["format"]
@@ -101,10 +101,10 @@ class IndustryAssuranceTests(unittest.TestCase):
         )
         self.assertEqual(len(validate_governed_artifacts(artifacts)), 25)
         profiles = artifacts["assurance-profile-registry.json"]
-        self.assertEqual(profiles["profiles_available"], 147)
+        self.assertEqual(profiles["profiles_available"], 215)
         self.assertEqual(profiles["profiles_selected"], 0)
         lifecycle = artifacts["standards-crosswalk.json"]["lifecycle_governance"]
-        self.assertEqual(lifecycle["catalogs_assessed"], 481)
+        self.assertEqual(lifecycle["catalogs_assessed"], 635)
         self.assertEqual(lifecycle["catalogs_complete"], 0)
         self.assertFalse(lifecycle["complete"])
         self.assertTrue(lifecycle["signed_source_snapshot_required"])
@@ -1415,6 +1415,45 @@ class IndustryAssuranceTests(unittest.TestCase):
         }
         conformance_evidence = {
             **base_evidence,
+            "corpus": {"sha256": "1" * 64, "revision": "approved"},
+            "extension_evidence": {
+                "schema_version": "1.0",
+                "integration": "disa-stig-scap-conformance",
+                "source_sha256": "1" * 64,
+                "subject_sha256": "b" * 64,
+                "execution": {
+                    "isolated": True,
+                    "network_policy": "deny",
+                    "repetitions": 3,
+                    "budget_seconds": 300,
+                },
+                "claims": {
+                    "release_policy": "policy-pinned-quarterly-release",
+                    "assessment_modes": ["xccdf-oval", "manual"],
+                    "assets_evaluated": 3,
+                    "rules_evaluated": 10,
+                    "release_deltas_evaluated": 2,
+                    "release_signature_digest_and_delta_verified": True,
+                    "asset_cpe_profile_tailoring_and_applicability_verified": True,
+                    "automated_manual_and_engine_disagreement_adjudicated": True,
+                    "exception_poam_owner_and_expiry_verified": True,
+                    "laboratory_remediation_rollback_and_rescan_verified": True,
+                    "longitudinal_drift_and_durability_measured": True,
+                    "production_remediation_performed": False,
+                    "authorization_claimed": False,
+                },
+                "negative_cases": [
+                    {"id": "applicability-misbinding", "detected": True},
+                    {"id": "manual-check-disagreement", "detected": True},
+                ],
+                "provenance": {
+                    "producer": "digest-pinned-stig-normalizer",
+                    "producer_sha256": "2" * 64,
+                    "signature_verified": True,
+                    "independent_replay_verified": True,
+                },
+                "complete": True,
+            },
             "protocol_metrics": {
                 "passed_cases": 10,
                 "failed_cases": 0,
@@ -1487,7 +1526,7 @@ class IndustryAssuranceTests(unittest.TestCase):
                 },
                 temporal,
             ),
-            [],
+            ["suite-owned industry extension evidence is missing or invalid"],
         )
 
         contract_expectations = {
@@ -1614,11 +1653,11 @@ class IndustryAssuranceTests(unittest.TestCase):
         schema = json.loads(read_bundled_schema("industry-assurance-policy-1.2"))
         Draft202012Validator.check_schema(schema)
         Draft202012Validator(schema).validate(instance)
-        self.assertEqual(
+        self.assertLessEqual(
             {profile["id"] for profile in instance["profiles"]},
             set(_ASSURANCE_PROFILES),
         )
-        self.assertEqual(
+        self.assertLessEqual(
             {benchmark["id"] for benchmark in instance["benchmarks"]},
             {benchmark["id"] for benchmark in _BENCHMARKS},
         )
@@ -2861,6 +2900,79 @@ def test_currency_profiles_are_pinned_and_catalog_references_fail_closed() -> No
     }
     with pytest.raises(ValueError, match="unknown standards"):
         _validate_builtin_catalog(profiles=broken)
+
+
+def test_repository_embedded_logic_and_supply_chain_extensions_are_pinned() -> None:
+    standards = {item["id"]: item for item in _STANDARDS}
+    assert standards["OpenSSF-OSPS"]["version"] == "2026.08.28"
+    assert standards["MITRE-EMB3D"]["version"] == "2.0.2"
+    assert (
+        standards["OWASP-BUSINESS-LOGIC-ABUSE-TOP-10"]["version"]
+        == "2025-second-release"
+    )
+    assert (
+        standards["CNCF-SOFTWARE-SUPPLY-CHAIN-BEST-PRACTICES"]["version"]
+        == "v2-2025-policy-pinned"
+    )
+    assert {
+        "repository-level-vulnerability-context",
+        "embedded-device-threat-assurance",
+        "business-logic-abuse-assurance",
+        "cncf-supply-chain-practices-assurance",
+        "public-vulnerable-application-testing",
+        "statistical-fuzzing-evaluation",
+        "sbom-build-truth-validation",
+        "architecture-fitness-validation",
+    } <= _ASSURANCE_PROFILES.keys()
+    assert {
+        "reposvul-repository-context-validation",
+        "vuleval-repository-dependency-evaluation",
+        "mitre-emb3d-property-threat-conformance",
+        "owasp-business-logic-abuse-top10-conformance",
+        "cncf-supply-chain-best-practices-v2-conformance",
+        "owasp-api-security-testing-framework",
+    } <= {item["id"] for item in _BENCHMARKS}
+
+    watchlist = {item["id"]: item for item in _STANDARDS_WATCHLIST}
+    assert watchlist["ISO-IEC-27091"]["status"] == "under-development"
+    assert watchlist["OWASP-CLIENT-SIDE-TOP-10"]["status"] == "candidate"
+    assert watchlist["VULNGYM"]["status"] == "research-preview"
+    assert watchlist["SECVULEVAL"]["status"] == "research-preview"
+    assert watchlist["SPDX-3.1"]["status"] == "release-candidate"
+    assert watchlist["OWASP-BENCHMARK-PYTHON"]["status"] == "research-preview"
+
+
+def test_identity_model_automotive_and_calibration_extensions_are_pinned() -> None:
+    standards = {item["id"]: item for item in _STANDARDS}
+    assert standards["IETF-SCIM-CURSOR-RFC9865"]["version"] == "RFC9865-2025-10"
+    assert standards["IETF-SCIM-SET-RFC9967"]["version"] == "RFC9967-2026-03"
+    assert standards["OPENID-SSF-1.0"]["version"] == "1.0-final-2025-09-02"
+    assert standards["OPENSSF-MODEL-SIGNING"]["version"] == "1.0"
+    assert standards["CYCLONEDX-MLBOM"]["version"] == "1.7"
+    assert standards["UPTANE-STANDARD"]["version"] == "2.1.0"
+
+    assert {
+        "identity-lifecycle-continuous-access",
+        "workload-identity-federation",
+        "ai-ml-artifact-supply-chain",
+        "automotive-secure-update-protocol",
+        "open-source-criticality-prioritization",
+    } <= _ASSURANCE_PROFILES.keys()
+    assert {
+        "scim-lifecycle-security-conformance",
+        "openid-shared-signals-conformance",
+        "spiffe-workload-identity-conformance",
+        "openssf-model-signing-conformance",
+        "cyclonedx-mlbom-conformance",
+        "uptane-ota-security-conformance",
+        "darpa-aixcc-autonomous-vulnerability-remediation",
+        "openssf-criticality-score-calibration",
+    } <= {item["id"] for item in _BENCHMARKS}
+
+    watchlist = {item["id"]: item for item in _STANDARDS_WATCHLIST}
+    assert watchlist["OPENID-SSF-CONFORMANCE"]["status"] == "alpha"
+    assert watchlist["DARPA-AIXCC-PUBLIC-CORPUS"]["status"] == "research-transition"
+    assert watchlist["SPIFFE-REMOTE-WORKLOAD-API"]["status"] == "experimental"
 
 
 if __name__ == "__main__":

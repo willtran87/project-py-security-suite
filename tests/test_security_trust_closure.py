@@ -35,6 +35,7 @@ from py_security_suite.failure_domain import (
 from py_security_suite.operation_receipt import verify_operation_receipt
 from py_security_suite.boundary_graph import _canary_results_valid
 from py_security_suite.native_evidence import _provider_audit_readback
+from py_security_suite.pinned_command import _verify_native_raw_attestation_replay
 from py_security_suite.strict_json import canonical_bytes
 from py_security_suite.runtime_trace import _verify_raw_spans
 from py_security_suite.trust_policy import (
@@ -410,6 +411,7 @@ def test_tpm_attestation_requires_and_verifies_independent_raw_replay(
         implementation_sha256="9" * 64,
         normalized_authority_key_sha256=normalized_authority_key,
         normalized_failure_domain=normalized_domain,
+        native_replay_verifier=_verify_native_raw_attestation_replay,
     )
     evidence["claims"]["raw_evidence_sha256"] = "0" * 64
     with pytest.raises(ValueError, match="replay binding"):

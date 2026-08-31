@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from .industry_open_source_catalog import OPEN_SOURCE_PROFILES
+from .industry_resilience_catalog import RESILIENCE_PROFILES
+
 _ASSURANCE_PROFILES: dict[str, dict[str, Any]] = {
     "enterprise-security": {
         "standards": [
@@ -651,6 +654,392 @@ _ASSURANCE_PROFILES.update(
     }
 )
 
+_ASSURANCE_PROFILES.update(RESILIENCE_PROFILES)
+
+_ASSURANCE_PROFILES.update(
+    {
+        "water-sector-cyber-resilience": {
+            "standards": [
+                "AWWA-J100",
+                "AWWA-G430",
+                "AWWA-G440",
+                "EPA-WATER-CYBERSECURITY-ASSESSMENT",
+                "IEC-62443-3-3",
+            ],
+            "controls": [
+                (
+                    "AWWA-J100",
+                    "WATER-MISSION-HAZARD-CONSEQUENCE-AND-RESILIENCE-BOUNDARY",
+                    "Bind utility, treatment and distribution mission, population served, source water, process stage, chemical feed, pressure and quality invariant, cyber-physical asset, dependency, threat, consequence, resilience objective, owner and accepted residual risk to the current risk and resilience assessment.",
+                    ["domain-assurance.json", "safety-security-analysis.json"],
+                ),
+                (
+                    "AWWA-G430",
+                    "WATER-OT-ACCESS-MONITORING-MANUAL-OPERATION-AND-SUPPLIER-SECURITY",
+                    "Verify inventory, zoning, remote and local access, identity, least privilege, removable media, supplier service, configuration, logging, detection, communications, manual operation, laboratory dependencies, backups and compensating controls across water IT and OT boundaries.",
+                    ["control-assessment.json", "static-architecture.json"],
+                ),
+                (
+                    "AWWA-G440",
+                    "WATER-EMERGENCY-COMMAND-COMMUNICATION-RECOVERY-AND-PUBLIC-SAFETY",
+                    "Trace cyber incident recognition to command activation, public-health and emergency-partner communication, sampling, alternate treatment and supply, safe shutdown, restoration sequencing, water-quality confirmation, regulatory notification, lessons learned and five-year reassessment evidence.",
+                    [
+                        "incident-management-assessment.json",
+                        "procedure-assessment.json",
+                    ],
+                ),
+            ],
+            "procedures": [
+                (
+                    "EPA-WATER-CYBERSECURITY-ASSESSMENT",
+                    "WATER-TREATMENT-CYBER-PHYSICAL-ATTACK-RECOVERY-EXERCISE",
+                    "Use a validated inert treatment and distribution twin to replay forged sensors, unauthorized chemical or pump commands, stale telemetry, remote-access compromise, ransomware, communications loss, unsafe automation and restoration. Require process invariants, manual fallback, independent water-quality review, deterministic reset and no production actuation.",
+                    "dynamic",
+                    True,
+                    ["benchmark-scorecard.json", "safety-security-analysis.json"],
+                )
+            ],
+        },
+        "public-safety-emergency-communications": {
+            "standards": [
+                "NENA-STA-040",
+                "NENA-REF-012",
+                "NENA-STA-010",
+                "TIA-102-P25",
+                "DHS-P25-CAP",
+            ],
+            "controls": [
+                (
+                    "NENA-STA-040",
+                    "NG911-TRUST-ZONE-IDENTITY-ROUTING-LOGGING-AND-CONTINUITY",
+                    "Bind PSAP, ESInet, NGCS, functional element, identity, certificate, route, location, incident data object, administrative interface, logging path, external service, trust zone, continuity objective and accountable owner to the deployed NG911 architecture.",
+                    ["static-architecture.json", "control-assessment.json"],
+                ),
+                (
+                    "NENA-STA-010",
+                    "NG911-I3-EIDO-MESSAGE-ROUTING-LOCATION-AND-FAILOVER-SEMANTICS",
+                    "Validate protocol version, schema, message and incident identity, location and routing authority, integrity, authorization, duplicate and replay handling, overload, queueing, failover, fallback, audit correlation and privacy semantics across i3 interfaces without inferring operational certification.",
+                    [
+                        "application-contract-analysis.json",
+                        "security-automation-interoperability.json",
+                    ],
+                ),
+                (
+                    "TIA-102-P25",
+                    "P25-RADIO-IDENTITY-KEY-MANAGEMENT-CONFORMANCE-AND-INTEROPERABILITY",
+                    "Bind subscriber, infrastructure, talkgroup, unit identity, cryptographic keyset, algorithm, service and interface to the exact TIA-102 profile; retain conformance, performance, interoperability, key lifecycle, emergency signaling, roaming, failover and degraded-mode evidence from authorized fixtures.",
+                    ["procedure-assessment.json", "trust-policy-attestation.json"],
+                ),
+            ],
+            "procedures": [
+                (
+                    "DHS-P25-CAP",
+                    "NG911-P25-END-TO-END-INTEROPERABILITY-FAILURE-AND-RECOVERY-EXERCISE",
+                    "In an isolated public-safety communications laboratory, replay malformed and replayed i3 messages, false location, route manipulation, certificate and key rollover failures, denial and overload, radio interoperability mismatches, lost sites, dispatch failover and restoration; require independent ground truth and prohibit live emergency traffic.",
+                    "dynamic",
+                    True,
+                    ["benchmark-scorecard.json", "audit-package-verification.json"],
+                )
+            ],
+        },
+        "global-gxp-computerised-system-assurance": {
+            "standards": [
+                "EU-GMP-ANNEX-11",
+                "WHO-TRS-1033-ANNEX-4",
+                "PICS-PI-041-1",
+                "FDA-21-CFR-PART-11",
+                "ISPE-GAMP-5",
+            ],
+            "controls": [
+                (
+                    "EU-GMP-ANNEX-11",
+                    "GLOBAL-GXP-LIFECYCLE-VALIDATION-SUPPLIER-CHANGE-AND-CONTINUITY",
+                    "Bind regulated process, product and patient risk, system boundary, intended use, lifecycle category, supplier and service responsibility, user requirements, configuration, validation, release, operation, security, backup, restore, business continuity, change, periodic review, migration and retirement to approved evidence.",
+                    ["lifecycle-traceability.json", "procedure-assessment.json"],
+                ),
+                (
+                    "WHO-TRS-1033-ANNEX-4",
+                    "GLOBAL-GXP-ALCOA-PLUS-METADATA-AUDIT-TRAIL-AND-RECORD-GOVERNANCE",
+                    "Preserve attributable, legible, contemporaneous, original, accurate, complete, consistent, enduring and available records with metadata, audit trails, secure time, review, exception, retention, retrieval, true-copy, archiving and deletion governance across hybrid paper and electronic workflows.",
+                    ["audit-package-verification.json", "data-exposure.json"],
+                ),
+                (
+                    "PICS-PI-041-1",
+                    "GLOBAL-GXP-DATA-GOVERNANCE-CULTURE-OUTSOURCING-AND-INSPECTION-READINESS",
+                    "Verify accountable data governance, quality culture, role separation, training, privileged access, outsourced activity oversight, data-flow and vulnerability assessment, investigation, remediation, management review and inspection-ready reconstruction without asserting regulator acceptance.",
+                    ["control-assessment.json", "process-capability-assessment.json"],
+                ),
+            ],
+            "procedures": [
+                (
+                    "EU-GMP-ANNEX-11",
+                    "GLOBAL-GXP-RECORD-METADATA-AUDIT-TRAIL-MIGRATION-AND-RESTORE-CHALLENGE",
+                    "Exercise a synthetic multinational GxP workflow with record, metadata and audit-trail alteration or omission, backdating, shared credentials, signature transfer, clock drift, interface truncation, failed backup, incomplete restore, migration transformation, supplier outage and inspection-copy reconstruction; require independent quality review.",
+                    "test",
+                    True,
+                    ["benchmark-scorecard.json", "audit-package-verification.json"],
+                )
+            ],
+        },
+        "transit-cybersecurity-resilience": {
+            "standards": ["NIST-IR-8576", "NIST-CSF", "IEC-62443-3-3", "CLC-TS-50701"],
+            "controls": [
+                (
+                    "NIST-IR-8576",
+                    "TRANSIT-MISSION-SERVICE-SAFETY-IT-OT-AND-SUPPLY-CHAIN-PROFILE",
+                    "Bind transit agency, mode, route and service, rider and workforce safety, fare and passenger systems, signaling and vehicle OT, facilities, communications, cloud and suppliers to CSF 2.0 current and target outcomes, accountable owners, tolerances, dependencies and accepted residual risk.",
+                    ["domain-assurance.json", "control-assessment.json"],
+                ),
+                (
+                    "NIST-IR-8576",
+                    "TRANSIT-DEGRADED-OPERATION-INCIDENT-RECOVERY-AND-SERVICE-RECONCILIATION",
+                    "Prove detection, dispatch and operations coordination, passenger communication, safe degraded and manual operation, alternate service, emergency interfaces, restoration order, configuration and operational-state reconciliation, supplier recovery, after-action review and profile reassessment.",
+                    [
+                        "incident-management-assessment.json",
+                        "operational-trend.json",
+                    ],
+                ),
+            ],
+            "procedures": [
+                (
+                    "NIST-IR-8576",
+                    "TRANSIT-MULTIMODAL-IT-OT-SAFETY-AND-SERVICE-RESILIENCE-EXERCISE",
+                    "Use an inert multimodal transit twin to replay account compromise, fare and passenger-information disruption, vehicle and signaling telemetry deception, unauthorized commands, communications loss, ransomware, supplier outage and cascading service failure; preserve safety, dispatch authority, recovery and rider communication without production connectivity.",
+                    "dynamic",
+                    True,
+                    ["benchmark-scorecard.json", "safety-security-analysis.json"],
+                )
+            ],
+        },
+        "emergency-incident-coordination": {
+            "standards": ["ISO-22320", "ISO-22301", "NIST-SP-800-61"],
+            "controls": [
+                (
+                    "ISO-22320",
+                    "INCIDENT-COMMAND-ROLE-AUTHORITY-OBJECTIVE-AND-DECISION-TRACE",
+                    "Bind incident, objectives, command and coordination structure, roles, authority, competence, common operating picture, decision, resource request, action, handoff, communication, safety constraint and accountable record across participating organizations.",
+                    [
+                        "incident-management-assessment.json",
+                        "audit-package-verification.json",
+                    ],
+                ),
+                (
+                    "ISO-22320",
+                    "INCIDENT-INFORMATION-QUALITY-INTEROPERABILITY-RESOURCE-AND-RECOVERY",
+                    "Verify source, time, confidence, classification, dissemination, acknowledgement and correction of incident information; interoperable terminology and communications; resource tracking; escalation; transfer of command; recovery objectives; demobilization and lessons learned.",
+                    [
+                        "security-automation-interoperability.json",
+                        "procedure-assessment.json",
+                    ],
+                ),
+            ],
+            "procedures": [
+                (
+                    "ISO-22320",
+                    "MULTI-ORGANIZATION-INCIDENT-COMMAND-INFORMATION-AND-HANDOFF-EXERCISE",
+                    "Run a synthetic multi-organization exercise containing conflicting authority, stale and false reports, communication loss, terminology mismatch, resource contention, privacy and public-information tension, shift handoff, cascading events and recovery; require timed decisions, independent observers and complete after-action traceability.",
+                    "manual",
+                    False,
+                    ["benchmark-scorecard.json", "incident-management-assessment.json"],
+                )
+            ],
+        },
+        "gas-scada-cryptographic-resilience": {
+            "standards": [
+                "AGA-REPORT-12-PART-1",
+                "API-STD-1164",
+                "IEC-62351",
+                "IEC-62443-3-3",
+            ],
+            "controls": [
+                (
+                    "AGA-REPORT-12-PART-1",
+                    "GAS-SCADA-CHANNEL-ENDPOINT-KEY-AND-CRYPTOGRAPHIC-POLICY",
+                    "Bind control center, field site, endpoint, channel, protocol, command and telemetry object, cryptographic mechanism, key and credential lifecycle, clock, availability requirement, exception, compensating control and owner to the current gas SCADA architecture and API 1164 risk treatment.",
+                    ["static-architecture.json", "trust-policy-attestation.json"],
+                ),
+                (
+                    "AGA-REPORT-12-PART-1",
+                    "GAS-SCADA-FORGERY-REPLAY-DOWNGRADE-ROLLOVER-AND-RECOVERY-TEST-PLAN",
+                    "Verify origin and data integrity, confidentiality where required, replay resistance, sequence and time handling, key establishment and rollover, loss and revocation, legacy coexistence, fail-safe and manual operation, monitoring, performance, restoration and state reconciliation under bounded adverse cases.",
+                    [
+                        "application-contract-analysis.json",
+                        "procedure-assessment.json",
+                    ],
+                ),
+            ],
+            "procedures": [
+                (
+                    "AGA-REPORT-12-PART-1",
+                    "GAS-SCADA-CRYPTOGRAPHIC-PROTOCOL-DEGRADED-MODE-AND-RECOVERY-EXERCISE",
+                    "In an inert gas pipeline SCADA twin, replay message forgery, replay, reorder, delay, downgrade, endpoint and key substitution, rollover failure, clock loss, packet loss, partition and recovery; preserve safety, bounded latency, manual control, restoration and residue checks without production actuation.",
+                    "dynamic",
+                    True,
+                    ["benchmark-scorecard.json", "safety-security-analysis.json"],
+                )
+            ],
+        },
+    }
+)
+
+_ASSURANCE_PROFILES.update(
+    {
+        "authorization-decision-interoperability": {
+            "standards": [
+                "OIDF-AUTHZEN-AUTHORIZATION-API",
+                "NIST-SP-800-162",
+                "NIST-SP-800-192",
+            ],
+            "controls": [
+                (
+                    "OIDF-AUTHZEN-AUTHORIZATION-API",
+                    "AUTHZEN-PDP-PEP-DECISION-BOUNDARY",
+                    "Bind every policy decision request to the exact subject, resource, action, context, tenant, policy revision and enforcement point; negotiate only declared PDP capabilities; deny safely on malformed, ambiguous, unavailable, stale or unsupported decisions.",
+                    [
+                        "application-contract-analysis.json",
+                        "trust-policy-attestation.json",
+                    ],
+                ),
+                (
+                    "OIDF-AUTHZEN-AUTHORIZATION-API",
+                    "AUTHZEN-CACHE-BATCH-FAILURE-AND-DRAFT-BOUNDARY",
+                    "Constrain decision caching and batch evaluation by policy revision, subject and resource identity, isolate partial failures, and exclude obligations, access-request and approval drafts from normative Authorization API 1.0 claims unless separately versioned and approved.",
+                    ["risk-paths.json", "security-automation-interoperability.json"],
+                ),
+            ],
+            "procedures": [
+                (
+                    "OIDF-AUTHZEN-AUTHORIZATION-API",
+                    "AUTHZEN-DECISION-INTEROPERABILITY-AND-ABUSE",
+                    "Replay supported single, batch, search and metadata capabilities across independent PDP and PEP implementations; inject subject-resource-action confusion, unknown types, malformed context, cross-tenant identifiers, stale policy, poisoned cache, partial batch failure, timeout and PDP outage cases and require fail-closed enforcement.",
+                    "dynamic",
+                    True,
+                    [
+                        "benchmark-scorecard.json",
+                        "security-automation-interoperability.json",
+                    ],
+                )
+            ],
+        },
+        "openid-federation-security": {
+            "standards": [
+                "OIDF-OPENID-FEDERATION",
+                "OIDF-OPENID-FEDERATION-CONNECT",
+                "OIDF-FAPI",
+            ],
+            "controls": [
+                (
+                    "OIDF-OPENID-FEDERATION",
+                    "FEDERATION-ENTITY-STATEMENT-TRUST-CHAIN-AND-POLICY",
+                    "Cryptographically bind entity configurations, subordinate statements, authority hints, trust anchors, metadata policies, trust marks, keys, validity intervals and resolved trust paths; reject ambiguous, cyclic, expired, forked or unauthorized chains.",
+                    [
+                        "trust-policy-attestation.json",
+                        "security-automation-interoperability.json",
+                    ],
+                ),
+                (
+                    "OIDF-OPENID-FEDERATION-CONNECT",
+                    "FEDERATION-OIDC-METADATA-AND-CLIENT-BINDING",
+                    "Apply resolved federation metadata to OpenID Provider and Relying Party behavior without accepting weaker local metadata, algorithm downgrade, entity substitution, key confusion or registration outside the approved trust chain.",
+                    [
+                        "application-contract-analysis.json",
+                        "threat-model-assessment.json",
+                    ],
+                ),
+            ],
+            "procedures": [
+                (
+                    "OIDF-OPENID-FEDERATION",
+                    "FEDERATION-OFFICIAL-EARLY-SUITE-PLUS-NEGATIVE-ORACLES",
+                    "Run the official deployed-entity, OP and RP Federation plans as an explicitly early upstream suite, then independently replay signature, trust-chain, metadata-policy, authority-hint, trust-mark, rollover, expiration, cycle, forked-anchor, entity-substitution and downgrade cases; never translate an early-suite pass into OpenID certification.",
+                    "dynamic",
+                    True,
+                    [
+                        "benchmark-scorecard.json",
+                        "audit-package-verification.json",
+                    ],
+                )
+            ],
+        },
+        "hpc-ai-infrastructure-security": {
+            "standards": [
+                "NIST-SP-800-223",
+                "NIST-SP-800-234",
+                "NIST-SP-800-53",
+                "NIST-SP-800-53B",
+            ],
+            "controls": [
+                (
+                    "NIST-SP-800-223",
+                    "HPC-ZONE-COMPONENT-DATA-WORKFLOW-THREAT-MODEL",
+                    "Model the actual HPC zones, management and access planes, compute and accelerator nodes, schedulers, storage, software and data flows, trust boundaries, users, tenants and mission constraints; trace identified threats and shared-resource risks to retained mitigations.",
+                    ["static-architecture.json", "threat-model-assessment.json"],
+                ),
+                (
+                    "NIST-SP-800-234",
+                    "HPC-MODERATE-BASELINE-OVERLAY-TAILORING",
+                    "Apply all 60 SP 800-234 tailored controls and supplemental guidance against the pinned SP 800-53B moderate baseline, preserving applicability, organization-defined parameters, performance tradeoffs, compensating controls, residual risk and accountable approvals.",
+                    ["control-assessment.json", "oscal-assessment-plan.json"],
+                ),
+            ],
+            "procedures": [
+                (
+                    "NIST-SP-800-234",
+                    "HPC-OVERLAY-ARCHITECTURE-AND-FAILURE-EXERCISE",
+                    "Independently assess the complete overlay and exercise unauthorized cross-job access, scheduler compromise, accelerator and memory residue, storage leakage, management-plane loss, malicious workload, supply-chain substitution, telemetry blind spots and recovery while measuring containment, performance and restoration effects.",
+                    "test",
+                    True,
+                    ["benchmark-scorecard.json", "audit-package-verification.json"],
+                )
+            ],
+        },
+        "identity-management-framework": {
+            "standards": [
+                "ISO-IEC-24760-1",
+                "ISO-IEC-24760-2",
+                "ISO-IEC-24760-3",
+                "ISO-IEC-29100",
+                "NIST-SP-800-63-4",
+            ],
+            "controls": [
+                (
+                    "ISO-IEC-24760-1",
+                    "IDENTITY-CONCEPT-IDENTIFIER-ATTRIBUTE-AND-PRINCIPAL-SEMANTICS",
+                    "Use consistent identity, identifier, attribute, principal, entity, assurance and relationship semantics for people, organizations, devices and software; reject alias, reassignment, namespace and correlation ambiguities that would change authorization or privacy outcomes.",
+                    ["domain-assurance.json", "data-exposure.json"],
+                ),
+                (
+                    "ISO-IEC-24760-2",
+                    "IDENTITY-MANAGEMENT-REFERENCE-ARCHITECTURE",
+                    "Trace identity sources, authorities, service providers, relying parties, registries, lifecycle services, federation boundaries and privacy controls to the licensed reference architecture and system requirements.",
+                    ["static-architecture.json", "control-assessment.json"],
+                ),
+                (
+                    "ISO-IEC-24760-3",
+                    "IDENTITY-LIFECYCLE-PRACTICE-AND-ASSURANCE",
+                    "Govern proofing, enrollment, issuance, use, maintenance, recovery, suspension, revocation, deprovisioning and deletion with purpose limitation, data minimization, authoritative reconciliation, separation of duties and retained assurance evidence.",
+                    [
+                        "process-capability-assessment.json",
+                        "lifecycle-traceability.json",
+                    ],
+                ),
+            ],
+            "procedures": [
+                (
+                    "ISO-IEC-24760-3",
+                    "IDENTITY-ARCHITECTURE-LIFECYCLE-AND-PRIVACY-ASSESSMENT",
+                    "Assess licensed ISO/IEC 24760 criteria across representative person, organization, device and software identities; replay duplicate, recycled, stale, orphaned, over-correlated, cross-domain and prematurely retained identities and require authorized lifecycle closure without implying ISO certification.",
+                    "manual",
+                    False,
+                    ["benchmark-scorecard.json", "audit-package-verification.json"],
+                )
+            ],
+        },
+    }
+)
+
+_ASSURANCE_PROFILES.update(OPEN_SOURCE_PROFILES)
+
 _ASSURANCE_PROFILES.update(
     {
         "systems-risk-measurement": {
@@ -1240,12 +1629,18 @@ _ASSURANCE_PROFILES.update(
                     "Verify XCCDF, OVAL, CPE, signatures, benchmark identity, tailoring, scanner identity, and result provenance before accepting automated checks.",
                     ["audit-package-verification.json", "benchmark-scorecard.json"],
                 ),
+                (
+                    "DISA-STIG",
+                    "STIG-RELEASE-DELTA-APPLICABILITY-AND-DRIFT",
+                    "Ingest every approved quarterly release into an immutable baseline; independently review added, removed and changed rules, CPE and platform applicability, automated-to-manual coverage, tailoring and exception effects, then measure configuration drift and remediation durability against the exact assessed asset and release.",
+                    ["lifecycle-traceability.json", "operational-trend.json"],
+                ),
             ],
             "procedures": [
                 (
                     "DISA-STIG",
                     "STIG-SCAP-ASSESSMENT",
-                    "Execute the pinned application, operating-system, container, Kubernetes, database, and platform checks against disposable representative targets and review manual checks.",
+                    "Execute the pinned application, operating-system, container, Kubernetes, database, and platform checks against disposable representative targets; reconcile XCCDF and OVAL results with blinded manual-check decisions, inject applicability and engine-disagreement cases, verify exception expiry, perform authorized remediation and rollback in the laboratory, and rescan for durable closure without mutating production assets.",
                     "test",
                     True,
                     ["benchmark-scorecard.json", "procedure-assessment.json"],
@@ -1738,12 +2133,18 @@ _ASSURANCE_PROFILES.update(
                     "Retain supplier vulnerability, patch-development, validation, distribution, integrity, support-window, and end-of-life evidence.",
                     ["risk-intelligence.json", "audit-package-verification.json"],
                 ),
+                (
+                    "IEC-62443-2-3",
+                    "PATCH-SAFETY-AVAILABILITY-AND-COMPENSATION-OUTCOMES",
+                    "Bind each advisory and patch to affected firmware and asset identities, exploit and safety impact, vendor qualification, maintenance window, redundancy and safe-state constraints, acceptance tests, rollback triggers, compensating-control owner and expiry, deployment latency, availability effects, residual risk and observed recurrence.",
+                    ["enterprise-risk-assessment.json", "operational-trend.json"],
+                ),
             ],
             "procedures": [
                 (
                     "IEC-62443-2-3",
                     "PATCH-DEPLOYMENT-ROLLBACK-EXERCISE",
-                    "Execute an authorized representative IACS patch assessment, staged deployment, failure detection, rollback, compensating-control, and restoration exercise.",
+                    "Execute an authorized representative IACS exercise from signed supplier advisory through applicability, safety and availability review, laboratory qualification, staged deployment, health and process-invariant checks, induced partial failure, rollback, compensating-control activation and expiry, restoration, reconciliation and longitudinal recurrence review.",
                     "dynamic",
                     True,
                     ["benchmark-scorecard.json", "operational-trend.json"],
@@ -1751,7 +2152,13 @@ _ASSURANCE_PROFILES.update(
             ],
         },
         "continuing-airworthiness-security": {
-            "standards": ["RTCA-DO-355A", "RTCA-DO-326A", "RTCA-DO-356A"],
+            "standards": [
+                "RTCA-DO-355A",
+                "RTCA-DO-326A",
+                "RTCA-DO-356A",
+                "SAE-ARP5150B",
+                "SAE-ARP5151B",
+            ],
             "controls": [
                 (
                     "RTCA-DO-355A",
@@ -1765,12 +2172,24 @@ _ASSURANCE_PROFILES.update(
                     "Trace certified design assumptions, security requirements, verification, residual risk, operational limitations, and change triggers into continuing airworthiness.",
                     ["lifecycle-traceability.json", "audit-package-verification.json"],
                 ),
+                (
+                    "SAE-ARP5150B",
+                    "IN-SERVICE-SAFETY-SECURITY-SIGNAL-AND-FLEET-EFFECTIVITY",
+                    "Join transport-airplane service events, reliability and maintenance data, security intelligence and vulnerability reports to certified functions, hazards, safety objectives, aircraft and equipment configurations, fleet effectivity, interim limitations, corrective actions, approval authority, operator communication and verified field effectiveness.",
+                    ["operational-trend.json", "lifecycle-traceability.json"],
+                ),
+                (
+                    "SAE-ARP5151B",
+                    "GENERAL-AVIATION-ROTORCRAFT-SERVICE-DATA-AND-CORRECTIVE-ACTION",
+                    "Adapt continuing assessment to general-aviation and rotorcraft operating populations, sparse and heterogeneous service data, operator and maintainer communication, configuration identification, uncertainty, lessons learned and timely corrective action without treating transport-airplane evidence as automatically representative.",
+                    ["enterprise-risk-assessment.json", "procedure-assessment.json"],
+                ),
             ],
             "procedures": [
                 (
                     "RTCA-DO-355A",
                     "IN-SERVICE-SECURITY-EVENT-EXERCISE",
-                    "Exercise an authorized in-service vulnerability from intake through safety assessment, affected-configuration identification, mitigation approval, operator communication, and closure.",
+                    "Exercise authorized transport-airplane and general-aviation or rotorcraft in-service events from intake through independent security and safety triage, signal correlation, affected-tail and equipment configuration identification, hazard reassessment, interim action, approved corrective action, operator and maintainer communication, fleet deployment, effectiveness monitoring, recurrence detection and closure.",
                     "manual",
                     True,
                     ["benchmark-scorecard.json", "procedure-assessment.json"],
@@ -1819,12 +2238,18 @@ _ASSURANCE_PROFILES.update(
                     "Assess environment segregation, attack-surface reduction, access, credential protection, anomaly detection, transaction integrity, response, and recovery.",
                     ["domain-assurance.json", "operational-trend.json"],
                 ),
+                (
+                    "SWIFT-CSCF",
+                    "ANNUAL-CSCF-DELTA-SIGNIFICANT-CHANGE-AND-RELIANCE",
+                    "Bind the assessment to the current CSCF and Independent Assessment Framework, BIC and connectivity architecture, mandatory and advisory applicability, prior-year findings and evidence reliance; independently evaluate framework deltas and significant changes, prohibit evidence reuse beyond the permitted cycle, and retain assessor competence, independence, sampling and KYC-SA handoff decisions.",
+                    ["lifecycle-traceability.json", "audit-package-verification.json"],
+                ),
             ],
             "procedures": [
                 (
                     "SWIFT-CSCF",
                     "INDEPENDENT-CSCF-ASSESSMENT",
-                    "Perform a policy-pinned independent assessment with architecture scope, sampling, evidence authenticity, control design and operation, exceptions, findings, and attestation handoff.",
+                    "Perform a policy-pinned annual independent assessment with architecture-specific scope, complete mandatory-control applicability, current-versus-prior CSCF delta, significant-change detection, bounded prior-evidence reliance, assessor competence and independence, evidence authenticity, design and operating-effectiveness sampling, transaction and recovery scenarios, exceptions, findings, remediation, retest and KYC-SA attestation handoff.",
                     "manual",
                     False,
                     ["benchmark-scorecard.json", "audit-package-verification.json"],
@@ -4389,6 +4814,750 @@ _ASSURANCE_PROFILES["ai-lifecycle-data-evaluation"]["procedures"].append(
     )
 )
 
+_ASSURANCE_PROFILES["firmware-hardware-trust"]["standards"].extend(
+    [
+        "NIST-SP-800-147",
+        "NIST-SP-800-147B",
+        "NIST-SP-1800-34",
+        "NIST-CSWP-45",
+        "NIST-CSWP-52",
+    ]
+)
+_ASSURANCE_PROFILES["firmware-hardware-trust"]["controls"].extend(
+    [
+        (
+            "NIST-SP-800-147B",
+            "FIRMWARE-ROOT-OF-TRUST-UPDATE-AND-PLATFORM-IDENTITY",
+            "Bind client or server platform model, hardware and firmware components, immutable and mutable regions, root of trust for update, signing hierarchy, recovery authority, anti-rollback state, configuration and update policy to the exact acquired device and firmware release.",
+            ["trust-policy-attestation.json", "software-supply-chain.json"],
+        ),
+        (
+            "NIST-SP-1800-34",
+            "DEVICE-COMPONENT-PROVENANCE-AND-INTEGRITY-VALIDATION",
+            "Verify manufacturer and supplier provenance, component identity, platform certificate, firmware inventory, acquired-versus-observed configuration, cryptographic validation, substitution and tamper evidence across receipt, deployment, update and retirement.",
+            ["software-supply-chain.json", "audit-package-verification.json"],
+        ),
+        (
+            "NIST-CSWP-45",
+            "HARDWARE-WEAKNESS-ATTACK-THREAT-AND-SENSITIVITY-METRICS",
+            "Maintain a versioned hardware weakness and attack graph, reproduce threat and sensitivity metrics, preserve unsupported-component and uncertainty boundaries, and join bus-monitor observations to independently verified events without treating absence of telemetry as absence of compromise.",
+            ["domain-assurance.json", "operational-trend.json"],
+        ),
+    ]
+)
+_ASSURANCE_PROFILES["firmware-hardware-trust"]["procedures"].append(
+    (
+        "NIST-SP-1800-34",
+        "FIRMWARE-DEVICE-INTEGRITY-SUPPLY-UPDATE-MONITOR-RECOVER-EXERCISE",
+        "In an authorized recoverable laboratory, replay genuine, substituted, counterfeit, unsigned, revoked, downgraded, interrupted and corrupt component and firmware cases; independently verify update authorization, measured boot, bus-monitor detection, known-good recovery, post-recovery state and residue.",
+        "dynamic",
+        True,
+        [
+            "benchmark-scorecard.json",
+            "trust-policy-attestation.json",
+            "audit-package-verification.json",
+        ],
+    )
+)
+
+_ASSURANCE_PROFILES.update(
+    {
+        "space-software-product-assurance": {
+            "standards": [
+                "ECSS-E-ST-40C",
+                "ECSS-Q-ST-80C-REV2",
+                "NASA-STD-8739-8B",
+                "ISO-IEC-IEEE-12207",
+            ],
+            "controls": [
+                (
+                    "ECSS-E-ST-40C",
+                    "SPACE-SOFTWARE-CRITICALITY-LIFECYCLE-REQUIREMENT-AND-ARCHITECTURE-TRACE",
+                    "Bind mission, system, software item, criticality, acquisition and reuse status to plans, requirements, architecture, interfaces, code, verification, validation, operations and maintenance with bidirectional traceability, independence and tailoring rationale.",
+                    ["lifecycle-traceability.json", "static-architecture.json"],
+                ),
+                (
+                    "ECSS-Q-ST-80C-REV2",
+                    "SPACE-SOFTWARE-PRODUCT-ASSURANCE-REUSE-ANOMALY-AND-ACCEPTANCE",
+                    "Verify software product assurance organization and independence, supplier surveillance, process and product evidence, reuse and COTS qualification, safety and dependability interfaces, metrics, reviews, configuration, nonconformance, anomaly closure, delivery and acceptance.",
+                    ["assurance-case.json", "audit-package-verification.json"],
+                ),
+            ],
+            "procedures": [
+                (
+                    "ECSS-Q-ST-80C-REV2",
+                    "ECSS-SPACE-SOFTWARE-LIFECYCLE-MUTATION-AND-INDEPENDENT-ASSURANCE",
+                    "Assess a source-bound synthetic flight and ground software project; inject missing or inconsistent requirements, unsafe reuse, unqualified tools, architecture and interface drift, verification gaps, weak coverage, unresolved anomalies, configuration substitution and unsupported acceptance claims; require independent adjudication and corrected-package replay.",
+                    "test",
+                    True,
+                    ["benchmark-scorecard.json", "assurance-case.json"],
+                )
+            ],
+        },
+        "regional-financial-technology-resilience": {
+            "standards": [
+                "APRA-CPS-230",
+                "APRA-CPS-234",
+                "MAS-TRM",
+                "ISO-IEC-27001",
+                "ISO-22301",
+            ],
+            "controls": [
+                (
+                    "APRA-CPS-230",
+                    "FINANCIAL-CRITICAL-OPERATION-TOLERANCE-PROVIDER-AND-BOARD-ACCOUNTABILITY",
+                    "Bind regulated entity, jurisdiction, critical operation, tolerance, process, asset, dependency, material service provider, agreement, ownership, board oversight, scenario, continuity action and regulatory record to the applicable APRA or MAS obligation.",
+                    ["control-assessment.json", "audit-package-verification.json"],
+                ),
+                (
+                    "APRA-CPS-234",
+                    "FINANCIAL-INFORMATION-ASSET-CONTROL-TEST-INCIDENT-AND-NOTIFICATION",
+                    "Maintain information-asset criticality and sensitivity, threat and vulnerability, control design and operation, independent testing, third-party coverage, incident materiality, containment, notification decision, recovery, lessons and remediation evidence.",
+                    ["incident-management-assessment.json", "operational-trend.json"],
+                ),
+            ],
+            "procedures": [
+                (
+                    "MAS-TRM",
+                    "REGIONAL-FINANCIAL-TECHNOLOGY-RISK-OUTAGE-SUPPLIER-AND-INCIDENT-EXERCISE",
+                    "Run jurisdiction-specific, approved exercises over critical services using synthetic customers and transactions; inject cyber compromise, cloud and fourth-party failure, concentration, data corruption, tolerance breach, weak recovery, stale tests, late escalation and reporting errors without contacting a regulator or production provider.",
+                    "dynamic",
+                    True,
+                    ["benchmark-scorecard.json", "operational-trend.json"],
+                )
+            ],
+        },
+        "secure-information-sharing-and-competence": {
+            "standards": [
+                "ISO-IEC-27010",
+                "ISO-IEC-TR-27016",
+                "ISO-IEC-27021",
+                "FIRST-TLP",
+                "FIRST-IEP",
+            ],
+            "controls": [
+                (
+                    "ISO-IEC-27010",
+                    "INFORMATION-SHARING-COMMUNITY-AGREEMENT-CLASSIFICATION-AND-HANDLING",
+                    "Bind each sharing community, organization, participant, information object, purpose, classification, TLP or IEP policy, originator control, transport, recipient, onward disclosure, retention, deletion, incident and withdrawal to an approved agreement and interoperable enforcement evidence.",
+                    ["security-automation-interoperability.json", "data-exposure.json"],
+                ),
+                (
+                    "ISO-IEC-27021",
+                    "ISMS-PROFESSIONAL-ROLE-COMPETENCE-INDEPENDENCE-AND-CALIBRATION",
+                    "Define role-specific knowledge, skills, experience, authority and independence; verify qualification evidence, observed performance, blinded golden cases, agreement, bias, drift, continuing development, reassessment, expiry and conflicts without ranking individuals publicly.",
+                    [
+                        "process-capability-assessment.json",
+                        "audit-package-verification.json",
+                    ],
+                ),
+                (
+                    "ISO-IEC-TR-27016",
+                    "INFORMATION-SECURITY-ECONOMIC-DECISION-ASSUMPTION-AND-OUTCOME",
+                    "Trace limited-resource security decisions to alternatives, assumptions, costs, benefits, uncertainty, risk appetite, affected stakeholders, approval, realized outcomes and reassessment; keep Technical Report guidance distinct from mandatory ISMS requirements.",
+                    ["risk-assessment.json", "operational-trend.json"],
+                ),
+            ],
+            "procedures": [
+                (
+                    "ISO-IEC-27010",
+                    "CROSS-ORGANIZATION-SHARING-COMPETENCE-AND-ECONOMIC-DECISION-CALIBRATION",
+                    "Run blinded multi-organization cases with misclassification, unauthorized forwarding, recipient confusion, stale agreements, conflicting handling policies, privacy leakage, competence expiry, assessor conflict, weak economic assumptions and misleading optimization; measure agreement and verify containment, withdrawal and reassessment.",
+                    "manual",
+                    False,
+                    ["benchmark-scorecard.json", "audit-package-verification.json"],
+                )
+            ],
+        },
+    }
+)
+
+_ASSURANCE_PROFILES.update(
+    {
+        "space-mission-communications-security": {
+            "standards": [
+                "CCSDS-350-1-G-3",
+                "CCSDS-350-7-G-2",
+                "CCSDS-351-0-M-1",
+                "CCSDS-352-0-B-2",
+                "CCSDS-355-0-B-2",
+                "CCSDS-355-1-B-1",
+                "CCSDS-356-0-B-1",
+                "CCSDS-357-0-B-1",
+                "NASA-STD-8739-8B",
+            ],
+            "controls": [
+                (
+                    "CCSDS-350-1-G-3",
+                    "SPACE-MISSION-THREAT-SCOPE-AND-TRACEABILITY",
+                    "Bind mission phase, functions, assets, data, commands, telemetry, tracking, ground and flight segments, relay and cross-support services, interfaces, trust boundaries, threat actors, communication conditions, safety effects and assumptions to independently reviewed security objectives and traceable mitigations.",
+                    ["threat-model-assessment.json", "lifecycle-traceability.json"],
+                ),
+                (
+                    "CCSDS-351-0-M-1",
+                    "SPACE-DATA-SYSTEM-SECURITY-ARCHITECTURE",
+                    "Describe the end-to-end mission security architecture using explicit security domains, entities, interfaces, services, policy decisions, enforcement points, keys, credentials, security associations, monitoring, degraded modes and recovery boundaries; reconcile the reference architecture with the implemented mission configuration.",
+                    ["static-architecture.json", "assurance-case.json"],
+                ),
+                (
+                    "CCSDS-355-0-B-2",
+                    "SPACE-LINK-PROTOCOL-SECURITY-AND-ORDERING",
+                    "Pin every applicable telemetry, telecommand, AOS and unified space data link profile; verify security header and trailer processing, authentication and confidentiality selection, anti-replay state, virtual-channel and managed-parameter binding, COP and SDLS ordering, malformed-frame handling and explicit unsupported combinations.",
+                    ["application-contract-analysis.json", "control-assessment.json"],
+                ),
+                (
+                    "CCSDS-355-1-B-1",
+                    "SPACE-SECURITY-ASSOCIATION-KEY-CREDENTIAL-AND-MONITORING-LIFECYCLE",
+                    "Govern cryptographic algorithms, authentication credentials, key generation and distribution, security-association creation and rollover, sequence-state continuity, revocation, compromise, reset, monitoring and control, contingency operations, audit evidence and post-event reconciliation across ground and flight segments.",
+                    ["trust-policy-attestation.json", "operational-trend.json"],
+                ),
+            ],
+            "procedures": [
+                (
+                    "CCSDS-355-0-B-2",
+                    "SPACE-MISSION-LINK-SECURITY-CONFORMANCE-AND-RESILIENCE-EXERCISE",
+                    "In a no-production-connectivity mission digital twin, replay valid mission traffic and inject forged, modified, reordered, duplicated, delayed and stale commands and telemetry; wrong keys and credentials; security-association desynchronization; rollover and reset faults; protocol downgrade and ordering errors; ground-station and relay substitution; loss, delay and intermittent links; monitoring outage and recovery. Require independent expected decisions, preserved safety invariants, deterministic restoration, residue checks and an explicit no-flight-qualification or certification claim.",
+                    "dynamic",
+                    True,
+                    ["benchmark-scorecard.json", "procedure-assessment.json"],
+                )
+            ],
+        }
+    }
+)
+
+_ASSURANCE_PROFILES.update(
+    {
+        "national-security-system-authorization": {
+            "standards": [
+                "CNSSI-1253",
+                "DODI-8500-01",
+                "DODI-8510-01",
+                "NIST-SP-800-53",
+                "NIST-SP-800-53A",
+            ],
+            "controls": [
+                (
+                    "CNSSI-1253",
+                    "NSS-CATEGORIZATION-BASELINE-TAILORING-OVERLAY-AND-ODP-TRACE",
+                    "Identify the authoritative NSS determination, information types, confidentiality integrity and availability impacts, resulting category, CNSSI baseline, overlays, organization-defined parameters, tailoring decisions, inheritance, compensating controls and residual risk; bind every decision to the controlled-source edition and approval authority.",
+                    ["oscal-system-security-plan.json", "control-assessment.json"],
+                ),
+                (
+                    "DODI-8510-01",
+                    "DOD-RMF-ROLE-LIFECYCLE-AUTHORIZATION-POAM-AND-MONITORING",
+                    "Trace Prepare through Monitor activities to appointed system owner, program manager, control provider, assessor and authorizing official; bind implementation, assessment, findings, POA&M, acceptance, authorization term, acquisition phase, significant change and continuous-monitoring evidence without representing suite output as an authorization decision.",
+                    ["oscal-assessment-plan.json", "audit-package-verification.json"],
+                ),
+            ],
+            "procedures": [
+                (
+                    "DODI-8510-01",
+                    "NSS-DOD-AUTHORIZATION-PACKAGE-REPERFORMANCE-AND-ADVERSE-CASE-CHALLENGE",
+                    "Reperform synthetic authorization packages and inject NSS misclassification, high-water-mark substitution, missing overlays, stale control implementations, invalid inheritance, unapproved tailoring, incomplete POA&M, assessor conflicts, expired authorization, significant-change suppression and monitoring gaps; require two-person adjudication and preserve government-only authorization authority.",
+                    "manual",
+                    False,
+                    ["benchmark-scorecard.json", "audit-package-verification.json"],
+                )
+            ],
+        },
+        "operational-zero-trust-implementation": {
+            "standards": [
+                "NSA-ZIG-PRIMER",
+                "NSA-ZIG-DISCOVERY",
+                "NSA-ZIG-PHASE-1",
+                "NSA-ZIG-PHASE-2",
+                "CISA-ZT-MICROSEGMENTATION",
+                "NIST-SP-800-207",
+            ],
+            "controls": [
+                (
+                    "NSA-ZIG-DISCOVERY",
+                    "ZT-ASSET-DATA-APPLICATION-SERVICE-IDENTITY-AND-FLOW-BASELINE",
+                    "Maintain a time-bound inventory and relationship graph for users, workloads, devices, applications, services, data, identities, privileges, dependencies, communications and policy enforcement points; expose unknown, unmanaged, stale and conflicting observations instead of silently treating them as trusted.",
+                    ["boundary-graph.json", "control-assessment.json"],
+                ),
+                (
+                    "NSA-ZIG-PHASE-2",
+                    "ZT-CROSS-PILLAR-POLICY-DECISION-ENFORCEMENT-TELEMETRY-AND-RECOVERY",
+                    "Bind each applicable ZIG activity and capability across user, device, network, application and workload, data, visibility and analytics, and automation and orchestration pillars to policy decisions, enforcement, continuous signals, telemetry, exception expiry, fail-closed behavior, session revocation and recovery evidence.",
+                    ["application-contract-analysis.json", "operational-trend.json"],
+                ),
+            ],
+            "procedures": [
+                (
+                    "CISA-ZT-MICROSEGMENTATION",
+                    "ZT-MICROSEGMENTATION-LATERAL-MOVEMENT-POLICY-AND-FAILURE-EXERCISE",
+                    "Exercise identity-aware segmentation in an isolated topology using permitted and denied east-west paths; inject stale identity and posture, policy conflicts, propagation delay, enforcement outage, fail-open, discovery omissions, session persistence, emergency access, telemetry loss, rollback and recovery cases without disrupting production services.",
+                    "test",
+                    True,
+                    ["benchmark-scorecard.json", "boundary-graph.json"],
+                )
+            ],
+        },
+        "healthcare-operational-resilience-depth": {
+            "standards": ["HHS-HICP", "HHS-HPH-CPG", "NIST-SP-800-66", "HITRUST-CSF"],
+            "controls": [
+                (
+                    "HHS-HICP",
+                    "HEALTHCARE-THREAT-PRACTICE-CLINICAL-DEPENDENCY-AND-PATIENT-SAFETY-TRACE",
+                    "Map applicable HICP practices and HPH essential and enhanced goals to ransomware, email compromise, data loss, insider, connected-device and supply-chain threats; trace clinical services, ePHI, biomedical and facility dependencies, downtime procedures, recovery priorities and patient-safety consequences.",
+                    ["control-assessment.json", "incident-management-assessment.json"],
+                ),
+                (
+                    "HHS-HPH-CPG",
+                    "HEALTHCARE-IDENTITY-SEGMENTATION-BACKUP-VENDOR-AND-RECOVERY-OUTCOMES",
+                    "Verify unique credentials, MFA, privileged access, IT OT and clinical segmentation, asset and vulnerability management, immutable tested backups, vendor obligations, incident coordination, degraded clinical operations, restoration, reconciliation and measured patient-safety recovery outcomes.",
+                    ["operational-trend.json", "audit-package-verification.json"],
+                ),
+            ],
+            "procedures": [
+                (
+                    "HHS-HPH-CPG",
+                    "HEALTHCARE-RANSOMWARE-CLINICAL-CONTINUITY-AND-RECOVERY-EXERCISE",
+                    "Run a synthetic hospital exercise spanning identity compromise, ransomware, EHR and imaging outage, biomedical isolation, diversion, downtime documentation, emergency access, third-party coordination, ePHI decisions, staged restoration and reconciliation; use synthetic data and record service and patient-safety outcomes without asserting regulatory compliance.",
+                    "test",
+                    True,
+                    ["benchmark-scorecard.json", "incident-management-assessment.json"],
+                )
+            ],
+        },
+        "aircraft-system-development-safety-assurance": {
+            "standards": [
+                "SAE-ARP4754B",
+                "SAE-ARP4761A",
+                "RTCA-DO-178C",
+                "RTCA-DO-330",
+                "RTCA-DO-326A",
+            ],
+            "controls": [
+                (
+                    "SAE-ARP4754B",
+                    "AIRCRAFT-FUNCTION-REQUIREMENT-ARCHITECTURE-DAL-AND-DERIVED-TRACE",
+                    "Bind aircraft functions, operating conditions, requirements, architecture, interfaces, allocated development assurance levels, derived requirements, validation, verification, configuration, change impact and certification liaison evidence across system, item, software and airborne-security boundaries.",
+                    ["lifecycle-traceability.json", "structured-assurance-case.json"],
+                ),
+                (
+                    "SAE-ARP4761A",
+                    "AIRCRAFT-FHA-PSSA-SSA-SECURITY-INTERACTION-AND-INDEPENDENCE",
+                    "Trace functional hazards, failure conditions, severity, probability objectives, common causes, independence assumptions, preliminary and final safety assessments, security-originated failure effects, mitigations and residual limitations; preserve that ARP4761A safety assessment does not itself replace the DO-326A security process.",
+                    ["threat-model-assessment.json", "structured-assurance-case.json"],
+                ),
+            ],
+            "procedures": [
+                (
+                    "SAE-ARP4754B",
+                    "AIRCRAFT-SYSTEM-SAFETY-SECURITY-TRACE-MUTATION-AND-ASSESSOR-AGREEMENT",
+                    "Reperform licensed synthetic aircraft cases and inject untraced derived requirements, incorrect DAL allocation, interface omissions, shared-resource common causes, invalid independence, stale verification, tool qualification gaps, safety-security contradictions and change-impact omissions; require qualified independent adjudication and no certification claim.",
+                    "manual",
+                    False,
+                    ["benchmark-scorecard.json", "structured-assurance-case.json"],
+                )
+            ],
+        },
+        "accredited-laboratory-operating-assurance": {
+            "standards": [
+                "ISO-IEC-17025",
+                "ISO-IEC-17020",
+                "ISO-IEC-17065",
+                "ILAC-P9",
+                "ILAC-P10",
+                "ILAC-P14",
+                "ILAC-P15",
+            ],
+            "controls": [
+                (
+                    "ILAC-P9",
+                    "LAB-PROFICIENCY-PARTICIPATION-SCOPE-PERFORMANCE-AND-CORRECTIVE-ACTION",
+                    "Define the accredited or claimed scope, proficiency-testing and interlaboratory-comparison plan, participation frequency, provider suitability, assigned values, acceptance criteria, performance, investigation, corrective action and follow-up while distinguishing internal readiness from accreditation-body decisions.",
+                    ["proficiency-testing.json", "audit-package-verification.json"],
+                ),
+                (
+                    "ILAC-P10",
+                    "LAB-METROLOGICAL-TRACEABILITY-UNCERTAINTY-METHOD-AND-INSPECTION-IMPARTIALITY",
+                    "Bind equipment, calibration chain, reference, method validation, measurement uncertainty, environmental conditions, personnel competence, decision rule, inspection independence, impartiality risk and report authorization to each result with versioned evidence and stated limitations.",
+                    ["measurement-traceability.json", "measurement-uncertainty.json"],
+                ),
+            ],
+            "procedures": [
+                (
+                    "ILAC-P15",
+                    "LAB-BLINDED-PROFICIENCY-TRACEABILITY-UNCERTAINTY-AND-IMPARTIALITY-CHALLENGE",
+                    "Run blinded interlaboratory cases with assigned values and uncertainty; inject broken traceability, unsuitable proficiency providers, environmental drift, transcription error, invalid decision rules, competency gaps, conflicts, selective reporting and ineffective corrective actions; require independent review without claiming accreditation.",
+                    "manual",
+                    False,
+                    ["benchmark-scorecard.json", "proficiency-testing.json"],
+                )
+            ],
+        },
+        "maritime-operational-cyber-risk-depth": {
+            "standards": ["IMO-MSC-FAL-1-CIRC-3-REV3", "IACS-UR-E26", "IACS-UR-E27"],
+            "controls": [
+                (
+                    "IMO-MSC-FAL-1-CIRC-3-REV3",
+                    "MARITIME-GOVERN-IDENTIFY-PROTECT-DETECT-RESPOND-RECOVER-TRACE",
+                    "Trace accountable leadership, ship and shore inventories, safety-critical computer-based systems, ship-port interfaces, operational profile, threats, risk, access, segmentation, media, logging, training, continuity, supply chain, response, recovery, audit and feedback into the safety management system.",
+                    ["control-assessment.json", "incident-management-assessment.json"],
+                ),
+                (
+                    "IMO-MSC-FAL-1-CIRC-3-REV3",
+                    "MARITIME-SHIP-SHORE-SUPPLIER-OPERATIONAL-MODE-AND-RECOVERY-EVIDENCE",
+                    "Bind ship, fleet, shore, port and supplier responsibilities to navigation, propulsion, cargo, communications, access, update, remote support, degraded operation, manual fallback, restoration and reconciliation evidence while preserving flag, class and company authority boundaries.",
+                    ["boundary-graph.json", "operational-trend.json"],
+                ),
+            ],
+            "procedures": [
+                (
+                    "IMO-MSC-FAL-1-CIRC-3-REV3",
+                    "MARITIME-OPERATIONAL-MODE-CYBER-INCIDENT-AND-RECOVERY-EXERCISE",
+                    "Exercise an inert ship and shore digital twin across navigation, cargo and machinery modes; inject removable media, remote-support compromise, GPS and sensor inconsistency, network pivot, logging loss, supplier outage, communications failure and recovery reconciliation without production vessel actuation.",
+                    "test",
+                    True,
+                    ["benchmark-scorecard.json", "incident-management-assessment.json"],
+                )
+            ],
+        },
+        "empirical-assurance-benchmark-calibration": {
+            "standards": [
+                "MITRE-CWE",
+                "FIRST-EPSS",
+                "CISA-KEV",
+                "ISO-IEC-33020",
+                "ISO-IEC-27036-2",
+                "NIST-SP-800-61",
+                "ISO-IEC-29134",
+            ],
+            "controls": [
+                (
+                    "MITRE-CWE",
+                    "EMPIRICAL-LABEL-TIME-SPLIT-TOOL-VERSION-AND-DISAGREEMENT-GOVERNANCE",
+                    "Bind labels, abstraction policy, weakness release, exploit observation time, tool and solver versions, project and chronology splits, assessor identities, uncertainty, disagreement and adjudication; prevent future-data leakage, duplicate leakage, metric cherry-picking and unsupported causal claims.",
+                    ["benchmark-scorecard.json", "effectiveness.json"],
+                ),
+                (
+                    "ISO-IEC-33020",
+                    "EMPIRICAL-OUTCOME-REASSESSMENT-INCIDENT-PRIVACY-AND-SUPPLIER-VALIDATION",
+                    "Join process, supplier, incident and privacy decisions to longitudinal defects, escapes, exploitation, recovery, service, individual-impact and reassessment outcomes using compatible scope, blinded review, confidence intervals, negative controls and explicit external-validity limits.",
+                    ["operational-trend.json", "process-capability-assessment.json"],
+                ),
+            ],
+            "procedures": [
+                (
+                    "FIRST-EPSS",
+                    "MULTI-DOMAIN-HOLDOUT-CALIBRATION-MUTATION-AND-INDEPENDENT-REPLAY",
+                    "Execute governed weakness mapping, temporal prioritization, solver disagreement, assessor agreement, supplier incident, incident response and privacy-impact holdouts; mutate labels, time boundaries, scopes, dependencies, assumptions and outcomes; require independent replay, adjudication and confidence reporting.",
+                    "test",
+                    False,
+                    ["benchmark-scorecard.json", "effectiveness.json"],
+                )
+            ],
+        },
+    }
+)
+
+_ASSURANCE_PROFILES["devsecops-maturity"]["controls"].append(
+    (
+        "OWASP-DSOMM",
+        "DEVSECOPS-LONGITUDINAL-EVENT-OUTCOME-AND-ANTI-GAMING",
+        "Bind maturity ratings to immutable delivery events, quality and security outcomes, comparable team/product/time scopes, DORA metric definitions, uncertainty, exceptions, target actions and reassessment; reject aspirational policy, scope drift and metric gaming.",
+        ["maturity-model-assessment.json", "operational-trend.json"],
+    )
+)
+_ASSURANCE_PROFILES["devsecops-maturity"]["procedures"].append(
+    (
+        "OWASP-DSOVS",
+        "DEVSECOPS-LONGITUDINAL-BLINDED-OUTCOME-REASSESSMENT",
+        "Recompute maturity and delivery outcomes over multiple comparable periods, challenge stale evidence, level inflation, event manipulation and cohort leakage, and require independent reviewer agreement and adjudication.",
+        "manual",
+        False,
+        ["benchmark-scorecard.json", "operational-trend.json"],
+    )
+)
+_ASSURANCE_PROFILES["test-maturity"]["procedures"].append(
+    (
+        "TMMI",
+        "TEST-MATURITY-DEFECT-ESCAPE-MUTATION-AND-OUTCOME-CALIBRATION",
+        "Join test-process ratings to escaped defects, mutation sensitivity, changed-line coverage, flakiness, recovery and release outcomes over comparable periods while preserving causal uncertainty and independent reassessment.",
+        "manual",
+        False,
+        ["benchmark-scorecard.json", "maturity-model-assessment.json"],
+    )
+)
+_ASSURANCE_PROFILES["detection-product-evaluation"]["controls"].append(
+    (
+        "MITRE-ATTACK-EVALUATIONS",
+        "DETECTION-GROUND-TRUTH-FALSE-POSITIVE-EVASION-AND-DRIFT",
+        "Bind product, policy, sensor, content, environment and time; preserve visibility, detection and protection separately; measure benign-workload false positives, latency, evasion variants, telemetry loss, version drift and uncertainty against independent step-level ground truth.",
+        ["external-conformity-assessment.json", "operational-trend.json"],
+    )
+)
+_ASSURANCE_PROFILES["detection-product-evaluation"]["procedures"].append(
+    (
+        "MITRE-ATTACK-EVALUATIONS",
+        "DETECTION-LONGITUDINAL-CALIBRATION-AND-EVASION-REPLAY",
+        "Replay authorized ATT&CK steps and representative benign administration across product/content versions with fixed telemetry and clocks; inject encoding, fragmentation, timing, LOLBin, sensor-outage and policy variants and independently adjudicate misses and false positives.",
+        "dynamic",
+        True,
+        ["benchmark-scorecard.json", "external-conformity-assessment.json"],
+    )
+)
+
+_ASSURANCE_PROFILES.update(
+    {
+        "medical-device-cybersecurity-depth": {
+            "standards": [
+                "ANSI-AAMI-SW96",
+                "IEC-80001-1",
+                "IEC-TR-60601-4-5",
+                "IMDRF-CYBER-N60",
+                "IMDRF-CYBER-N70",
+                "IMDRF-CYBER-N73",
+                "IEC-81001-5-1",
+                "ISO-14971",
+            ],
+            "controls": [
+                (
+                    "ANSI-AAMI-SW96",
+                    "MEDICAL-DEVICE-SECURITY-RISK-AND-PATIENT-HARM-TRACE",
+                    "Bind device, intended use, interfaces, clinical environment, hazards, threat scenarios, exploitability, patient and operational harms, risk controls, benefit-risk decisions, residual risk, production and post-production evidence to the exact released configuration.",
+                    ["threat-model-assessment.json", "control-assessment.json"],
+                ),
+                (
+                    "IEC-80001-1",
+                    "CONNECTED-HEALTH-RESPONSIBILITY-CAPABILITY-AND-LIFECYCLE",
+                    "Assign manufacturer, healthcare delivery organization and service-provider responsibilities; map security capability levels, zones, conduits, SBOM, legacy support, vulnerability disclosure, patching, compensating controls and end-of-support decisions without substituting suite output for regulatory approval.",
+                    ["lifecycle-traceability.json", "software-supply-chain.json"],
+                ),
+            ],
+            "procedures": [
+                (
+                    "IEC-TR-60601-4-5",
+                    "MEDICAL-DEVICE-ADVERSARIAL-CAPABILITY-AND-SAFETY-REPLAY",
+                    "Exercise synthetic devices and clinical networks across declared capability levels; inject unauthorized access, unsafe command, malformed protocol, resource exhaustion, update failure, stale SBOM, legacy isolation failure and recovery cases while measuring patient-safety and clinical-availability effects.",
+                    "dynamic",
+                    True,
+                    ["benchmark-scorecard.json", "audit-package-verification.json"],
+                )
+            ],
+        },
+        "autonomous-physical-ai-safety": {
+            "standards": [
+                "ISO-21448",
+                "ISO-PAS-8800",
+                "ISO-34502",
+                "ANSI-UL-4600",
+                "ISO-26262",
+                "ISO-SAE-21434",
+            ],
+            "controls": [
+                (
+                    "ISO-PAS-8800",
+                    "PHYSICAL-AI-ODD-HAZARD-MODEL-DATA-AND-SAFETY-CASE",
+                    "Bind AI element, training and validation data, operational design domain, perception and decision limitations, hazards, safety goals, monitors, fallback, human interaction, cybersecurity dependencies and post-deployment evidence to a structured safety case.",
+                    ["ai-risk-assessment.json", "assurance-case.json"],
+                ),
+                (
+                    "ANSI-UL-4600",
+                    "AUTONOMY-EVIDENCE-INDEPENDENCE-UPDATE-AND-RESIDUAL-RISK",
+                    "Require independent challenge of claims, argument completeness, supplier evidence, tool qualification, simulation validity, closed-course and bounded field evidence, safety performance indicators, incident response and regression after every safety-relevant update.",
+                    [
+                        "external-conformity-assessment.json",
+                        "lifecycle-traceability.json",
+                    ],
+                ),
+            ],
+            "procedures": [
+                (
+                    "ISO-34502",
+                    "AUTONOMY-SCENARIO-BOUNDARY-DEGRADATION-AND-FALLBACK-BENCHMARK",
+                    "Run digest-pinned deterministic scenarios spanning nominal, boundary, rare and adversarial conditions; mutate sensors, timing, maps, communications, weather, actors and ODD assumptions; verify safe fallback, reproducibility, coverage, metamorphic consistency and no unsafe real-world actuation.",
+                    "dynamic",
+                    True,
+                    ["benchmark-scorecard.json", "assurance-case.json"],
+                )
+            ],
+        },
+        "critical-c-cpp-coding-assurance": {
+            "standards": [
+                "MISRA-C-2023",
+                "MISRA-CPP",
+                "SEI-CERT-C",
+                "SEI-CERT-CPP",
+                "ISO-IEC-TS-17961",
+            ],
+            "controls": [
+                (
+                    "MISRA-CPP",
+                    "CRITICAL-CODE-RULESET-COMPILER-DEVIATION-AND-TRACEABILITY",
+                    "Bind licensed rule identifiers and edition digest, language and compiler modes, generated code, third-party and FFI boundaries, required diagnostics, decidability, deviations, approvals and safety-security impact to each production configuration.",
+                    [
+                        "security-requirements-coverage.json",
+                        "audit-package-verification.json",
+                    ],
+                ),
+                (
+                    "MISRA-C-2023",
+                    "CRITICAL-CODE-UNDEFINED-BEHAVIOR-MEMORY-CONCURRENCY-AND-PORTABILITY",
+                    "Cross-check static rule results with compiler warnings, sanitizers, fuzzing, ABI and architecture variants; preserve true and false controls and prohibit tool compliance claims from being represented as product certification.",
+                    ["benchmark-scorecard.json", "effectiveness.json"],
+                ),
+            ],
+            "procedures": [
+                (
+                    "MISRA-CPP",
+                    "CRITICAL-CODE-MULTI-COMPILER-CONFORMANCE-AND-DEVIATION-CHALLENGE",
+                    "Compile and analyze licensed positive, negative and ambiguous cases across pinned compilers, optimizations and targets; replay undefined behavior, lifetime, bounds, conversion, concurrency, exception and preprocessor mutations and independently adjudicate disagreements and deviations.",
+                    "test",
+                    True,
+                    ["benchmark-scorecard.json", "audit-package-verification.json"],
+                )
+            ],
+        },
+        "cross-vendor-confidential-computing-attestation": {
+            "standards": [
+                "IETF-RFC-9334",
+                "IETF-RFC-9711",
+                "TCG-ATTESTATION-FRAMEWORK",
+                "AMD-SEV-SNP-ABI",
+                "INTEL-TDX-DCAP",
+                "ARM-CCA-ATTESTATION",
+            ],
+            "controls": [
+                (
+                    "TCG-ATTESTATION-FRAMEWORK",
+                    "CONFIDENTIAL-COMPUTE-EVIDENCE-ENDORSEMENT-POLICY-AND-DECISION",
+                    "Bind attester, verifier, relying party, endorsement, reference value, appraisal policy, hardware and firmware TCB, workload measurement, nonce, freshness, result and authorization decision while separating platform identity from workload trust and business authorization.",
+                    [
+                        "native-attestation-verification.json",
+                        "trust-policy-attestation.json",
+                    ],
+                ),
+                (
+                    "IETF-RFC-9334",
+                    "CONFIDENTIAL-COMPUTE-CROSS-VENDOR-REVOCATION-PRIVACY-AND-FAILURE",
+                    "Normalize only explicitly equivalent claims across SEV-SNP, TDX and CCA; verify certificate and endorsement chains, TCB status, revocation, privacy, verifier independence, outage behavior and fail-closed secret release without claiming hardware certification.",
+                    [
+                        "security-automation-interoperability.json",
+                        "audit-package-verification.json",
+                    ],
+                ),
+            ],
+            "procedures": [
+                (
+                    "IETF-RFC-9711",
+                    "CONFIDENTIAL-COMPUTE-ATTESTATION-NEGATIVE-CORPUS",
+                    "Replay genuine and synthetic evidence containing stale TCB, revoked endorsements, nonce replay, algorithm downgrade, claim confusion, debug mode, measurement substitution, verifier-policy drift and cross-vendor semantic mismatch; require independent verification and deterministic secret denial.",
+                    "dynamic",
+                    True,
+                    [
+                        "benchmark-scorecard.json",
+                        "native-attestation-verification.json",
+                    ],
+                )
+            ],
+        },
+        "voting-system-assurance": {
+            "standards": [
+                "EAC-VVSG",
+                "EAC-VVSG-TEST-ASSERTIONS",
+                "NIST-SP-800-53",
+                "W3C-WCAG",
+            ],
+            "controls": [
+                (
+                    "EAC-VVSG",
+                    "VOTING-SYSTEM-SOFTWARE-INDEPENDENCE-ACCESSIBILITY-AND-INTEGRITY",
+                    "Bind voting-system version, jurisdiction profile, ballot definition, trusted build, chain of custody, software independence, auditability, accessibility, usability, authentication, physical controls, cryptography, logging and recovery to accredited-laboratory evidence.",
+                    [
+                        "security-requirements-coverage.json",
+                        "external-conformity-assessment.json",
+                    ],
+                ),
+                (
+                    "EAC-VVSG",
+                    "VOTING-SYSTEM-CERTIFICATION-LAB-AND-JURISDICTION-BOUNDARY",
+                    "Verify VSTL authority, test campaign, interpretations, deviations, certificate identity and lifecycle while clearly separating suite readiness, federal certification and state or local acceptance decisions.",
+                    ["audit-package-verification.json", "lifecycle-traceability.json"],
+                ),
+            ],
+            "procedures": [
+                (
+                    "EAC-VVSG-TEST-ASSERTIONS",
+                    "VVSG-OFFICIAL-ASSERTION-SECURITY-ACCESSIBILITY-AND-RECOVERY-REPLAY",
+                    "Execute the exact Test Assertions 1.4 applicable matrix in an isolated synthetic election; challenge ballot integrity, privilege, removable media, wireless prohibition, logs, audit records, accessibility, power loss, recovery and end-to-end protocol behavior without handling real ballots or asserting EAC certification.",
+                    "dynamic",
+                    True,
+                    ["benchmark-scorecard.json", "external-conformity-assessment.json"],
+                )
+            ],
+        },
+        "critical-sector-safety-security": {
+            "standards": [
+                "IEC-62645",
+                "IEC-TR-63486",
+                "CLC-TS-50701",
+                "NASA-STD-8739-8B",
+                "IEC-61508",
+                "NIST-SP-800-160-1",
+            ],
+            "controls": [
+                (
+                    "IEC-62645",
+                    "CRITICAL-SECTOR-FUNCTION-HAZARD-ZONE-CONDUIT-AND-CYBER-RISK",
+                    "Select nuclear, rail or space applicability; bind essential functions, hazards, programmable systems, zones, conduits, operational modes, threat assumptions, safety-security interactions, independence, suppliers and residual risk to licensed sector criteria.",
+                    ["threat-model-assessment.json", "enterprise-risk-assessment.json"],
+                ),
+                (
+                    "NASA-STD-8739-8B",
+                    "CRITICAL-SECTOR-INDEPENDENT-ASSURANCE-IVV-CHANGE-AND-OPERATIONS",
+                    "Require competent independent assurance and IV&V, lifecycle traceability, anomaly and waiver governance, tool and model qualification, operational constraints, incident response, configuration control, safe recovery and reassessment after change.",
+                    ["assurance-case.json", "lifecycle-traceability.json"],
+                ),
+            ],
+            "procedures": [
+                (
+                    "IEC-TR-63486",
+                    "CRITICAL-SECTOR-DIGITAL-TWIN-FAILURE-RECOVERY-AND-ASSESSOR-CALIBRATION",
+                    "Use a sector-specific digital twin or inert laboratory to replay cyber-physical failures, loss of view or control, unsafe sequencing, time and communication faults, supply-chain compromise, degraded operation and recovery; require blinded assessor agreement and prohibit production actuation.",
+                    "dynamic",
+                    True,
+                    ["benchmark-scorecard.json", "assurance-case.json"],
+                )
+            ],
+        },
+        "stateful-smart-contract-assurance": {
+            "standards": ["OWASP-SMART-CONTRACT-TOP-10", "MITRE-CWE", "FIRST-CVSS"],
+            "controls": [
+                (
+                    "OWASP-SMART-CONTRACT-TOP-10",
+                    "SMART-CONTRACT-STATE-ECONOMIC-UPGRADE-AND-DEPENDENCY-MODEL",
+                    "Model contract state, roles, governance, assets, invariants, upgrade and proxy paths, external calls, bridges, oracles, flash liquidity, ordering, liveness and off-chain dependencies across deployment and migration boundaries.",
+                    [
+                        "threat-model-assessment.json",
+                        "application-contract-analysis.json",
+                    ],
+                ),
+                (
+                    "OWASP-SMART-CONTRACT-TOP-10",
+                    "SMART-CONTRACT-SOURCE-BYTECODE-CHAIN-AND-INCIDENT-BINDING",
+                    "Bind source, compiler, settings, bytecode, deployment, chain, libraries, privileged identities and incident oracles; separate static warnings from reproducible exploitability and quarantine alpha SCSVS material from normative claims.",
+                    ["artifact-analysis.json", "audit-package-verification.json"],
+                ),
+            ],
+            "procedures": [
+                (
+                    "OWASP-SMART-CONTRACT-TOP-10",
+                    "SMART-CONTRACT-STATEFUL-EXPLOIT-INVARIANT-AND-UPGRADE-BENCHMARK",
+                    "Replay labeled contracts and clean controls on a disposable chain with multi-transaction, multi-actor, oracle, governance, reentrancy, price, bridge, proxy, signature and denial mutations; require deterministic resets, economic invariant oracles and independent exploit replay.",
+                    "dynamic",
+                    True,
+                    ["benchmark-scorecard.json", "application-contract-analysis.json"],
+                )
+            ],
+        },
+    }
+)
+
 _ASSURANCE_PROFILES["architecture-evaluation-process"]["standards"].append("ISO-22340")
 _ASSURANCE_PROFILES["architecture-evaluation-process"]["controls"].append(
     (
@@ -5340,6 +6509,378 @@ _ASSURANCE_PROFILES.update(
                     "manual",
                     False,
                     ["benchmark-scorecard.json", "maturity-model-assessment.json"],
+                )
+            ],
+        },
+    }
+)
+
+_ASSURANCE_PROFILES["ai-lifecycle-data-evaluation"]["standards"].append(
+    "ISO-IEC-TR-5259-6"
+)
+_ASSURANCE_PROFILES["ai-lifecycle-data-evaluation"]["controls"].append(
+    (
+        "ISO-IEC-TR-5259-6",
+        "AI-DATA-QUALITY-VISUALIZATION-FIDELITY",
+        "Bind every data-quality visualization to the exact measure, dataset, population, stratum, time window, transformation, uncertainty and provenance; expose missingness and limitations and reject misleading scales, aggregation, color, ordering or comparison context.",
+        ["benchmark-scorecard.json", "effectiveness.json"],
+    )
+)
+_ASSURANCE_PROFILES["ai-lifecycle-data-evaluation"]["procedures"].append(
+    (
+        "ISO-IEC-TR-5259-6",
+        "AI-DATA-QUALITY-VISUALIZATION-ADVERSE-CASE-REVIEW",
+        "Reproduce role-appropriate visualizations from pinned quality measures and inject truncation, omitted uncertainty, hidden missing data, subgroup masking, aggregation reversal, stale provenance, inaccessible encoding and unsupported comparison cases; retain reviewer decisions and treat the Technical Report as guidance rather than certification criteria.",
+        "test",
+        False,
+        ["benchmark-scorecard.json", "audit-package-verification.json"],
+    )
+)
+
+_ASSURANCE_PROFILES["kubernetes-hardening-conformance"]["standards"].append(
+    "KUBERNETES-POD-SECURITY-STANDARDS"
+)
+_ASSURANCE_PROFILES["kubernetes-hardening-conformance"]["controls"].extend(
+    [
+        (
+            "KUBERNETES-POD-SECURITY-STANDARDS",
+            "K8S-PSS-LEVEL-MODE-VERSION-NAMESPACE-AND-WORKLOAD-BINDING",
+            "Bind every namespace and workload controller to explicit privileged, baseline or restricted policy, enforce, audit and warn modes, pinned Kubernetes minor version, operating-system semantics, exemptions, owner, expiry and admission evidence; treat unlabeled namespaces as unresolved scope.",
+            ["control-proof.json", "domain-assurance.json"],
+        ),
+        (
+            "KUBERNETES-POD-SECURITY-STANDARDS",
+            "K8S-PSS-ADMISSION-BYPASS-EXCEPTION-AND-DRIFT-CLOSURE",
+            "Trace direct pods and generated templates through admission; detect controller, namespace, user, runtime-class and operating-system bypasses; require least-privilege exception approval, compensating controls, expiry, migration, remediation, rescan and longitudinal drift evidence.",
+            ["control-assessment.json", "operational-trend.json"],
+        ),
+    ]
+)
+_ASSURANCE_PROFILES["kubernetes-hardening-conformance"]["procedures"].append(
+    (
+        "KUBERNETES-POD-SECURITY-STANDARDS",
+        "K8S-PSS-ADMISSION-NEGATIVE-BYPASS-REMEDIATION-AND-RESCAN",
+        "In disposable version-matched clusters, submit direct and controller-generated pods spanning every restricted field and supported operating system; verify enforce denial, audit and warning records, dry-run behavior, exemption limits, privileged namespace controls, webhook interaction, upgrade drift, remediation and clean rescan.",
+        "dynamic",
+        True,
+        ["benchmark-scorecard.json", "procedure-assessment.json"],
+    )
+)
+
+_ASSURANCE_PROFILES["payment-acceptance-security"]["standards"].extend(
+    ["PCI-PIN-SECURITY", "PCI-PTS-POI", "PCI-3DS-CORE", "EMVCO-3DS"]
+)
+_ASSURANCE_PROFILES["payment-acceptance-security"]["controls"].extend(
+    [
+        (
+            "PCI-PIN-SECURITY",
+            "PAYMENT-PIN-KEY-BLOCK-HSM-CEREMONY-AND-DUAL-CONTROL",
+            "Bind PIN data, cryptographic keys and key blocks to generation, distribution, loading, storage, use, rotation, compromise, destruction, HSM and operator identities with split knowledge, dual control, tamper evidence, inventories and ceremony records.",
+            ["control-proof.json", "audit-package-verification.json"],
+        ),
+        (
+            "PCI-PTS-POI",
+            "PAYMENT-POI-DEVICE-FIRMWARE-SRED-AND-LISTING-IDENTITY",
+            "Verify POI model, hardware and firmware revision, approval class and expiry, secure reading and exchange of data, interfaces, keys, deployment, inspection, substitution, tamper response, application inventory and listing scope without inferring merchant PCI DSS compliance.",
+            ["trust-policy-attestation.json", "external-conformity-assessment.json"],
+        ),
+        (
+            "PCI-3DS-CORE",
+            "PAYMENT-3DS-ACS-DS-SERVER-PROTOCOL-AND-ASSESSMENT-BOUNDARY",
+            "Bind ACS, Directory Server and 3DS Server components, EMV 3DS protocol version, message and transaction identity, authentication decision, keys, data, environment, qualified assessor, report, remediation and validity while excluding the sunset PCI 3DS SDK program from new claims.",
+            ["application-contract-analysis.json", "audit-package-verification.json"],
+        ),
+    ]
+)
+_ASSURANCE_PROFILES["payment-acceptance-security"]["procedures"].append(
+    (
+        "EMVCO-3DS",
+        "PAYMENT-PIN-POI-HSM-AND-3DS-END-TO-END-ADVERSARIAL-CONFORMANCE",
+        "Use synthetic account and transaction data and test keys to replay PIN-block, key-ceremony, HSM, POI tamper/substitution, SRED, ACS, DS, 3DS Server, challenge, frictionless, replay, downgrade, message mutation, outage, recovery and assessor-claim cases; prove key and data destruction afterward.",
+        "dynamic",
+        True,
+        ["benchmark-scorecard.json", "audit-package-verification.json"],
+    )
+)
+
+_ASSURANCE_PROFILES.update(
+    {
+        "semiconductor-equipment-cybersecurity": {
+            "standards": ["SEMI-E187", "SEMI-E188", "SEMI-E191", "IEC-62443-3-3"],
+            "controls": [
+                (
+                    "SEMI-E187",
+                    "FAB-EQUIPMENT-IDENTITY-HARDENING-SUPPORT-AND-MONITORING",
+                    "Bind fab, tool, supplier, integrator, computing device, OS and firmware release, supported lifetime, accounts, services, ports, protocols, endpoint controls, logs, monitoring ownership, exceptions and compensating controls to the exact delivered and maintained equipment configuration.",
+                    ["control-assessment.json", "software-supply-chain.json"],
+                ),
+                (
+                    "SEMI-E188",
+                    "MALWARE-FREE-DELIVERY-INSTALLATION-SERVICE-AND-RESTORATION",
+                    "Verify supplier build and staging hygiene, removable media and remote-service control, signed transfer, pre-shipment and receiving scans, installation state, maintenance authorization, component replacement, restoration images, incident handling and custody evidence throughout equipment integration.",
+                    ["procedure-assessment.json", "audit-package-verification.json"],
+                ),
+                (
+                    "SEMI-E191",
+                    "FAB-DEVICE-CYBERSECURITY-STATUS-REPORTING",
+                    "Normalize device identity, software and firmware inventory, support state, vulnerabilities, protections, monitoring health, exceptions and timestamps without treating incomplete or silent equipment as healthy.",
+                    [
+                        "operational-trend.json",
+                        "security-automation-interoperability.json",
+                    ],
+                ),
+            ],
+            "procedures": [
+                (
+                    "SEMI-E187",
+                    "SEMICONDUCTOR-EQUIPMENT-DELIVERY-SERVICE-AND-RECOVERY-EXERCISE",
+                    "In an isolated fab-equipment twin, replay clean and contaminated delivery, unsigned or stale images, unsupported OS, exposed services, removable-media and remote-service abuse, status-report suppression, component substitution and recovery; require independent verdicts, known-good restoration and residue checks.",
+                    "dynamic",
+                    True,
+                    ["benchmark-scorecard.json", "audit-package-verification.json"],
+                )
+            ],
+        },
+        "pipeline-control-system-cybersecurity": {
+            "standards": ["API-STD-1164", "IEC-62443-3-3", "NIST-CSF"],
+            "controls": [
+                (
+                    "API-STD-1164",
+                    "PIPELINE-IAC-BOUNDARY-ESSENTIAL-FUNCTION-AND-REMOTE-ACCESS",
+                    "Bind operator, pipeline segment, control center, SCADA and local-control assets, safety interfaces, zones, conduits, remote access, vendors, data flows, essential functions, tolerable degradation and ownership to the current IAC architecture and cyber-risk program.",
+                    ["static-architecture.json", "control-assessment.json"],
+                ),
+                (
+                    "API-STD-1164",
+                    "PIPELINE-DETECTION-MANUAL-CONTROL-RECOVERY-AND-RECONCILIATION",
+                    "Prove monitoring, alarm integrity, command authorization, fail-safe and manual operations, incident coordination, communications, backup configuration, restoration order, state reconciliation and lessons learned under loss or compromise of control-system services.",
+                    ["operational-trend.json", "incident-management-assessment.json"],
+                ),
+            ],
+            "procedures": [
+                (
+                    "API-STD-1164",
+                    "PIPELINE-CONTROL-SYSTEM-CYBER-RESILIENCE-EXERCISE",
+                    "Use an inert hydraulic and control-system digital twin to replay unauthorized commands, stale or forged telemetry, remote-access compromise, ransomware, segmentation failure, loss of communications and recovery; preserve pressure and flow safety invariants and prohibit production actuation.",
+                    "dynamic",
+                    True,
+                    ["benchmark-scorecard.json", "safety-security-analysis.json"],
+                )
+            ],
+        },
+        "gxp-computerized-system-data-integrity": {
+            "standards": ["FDA-21-CFR-PART-11", "ISPE-GAMP-5", "ISO-IEC-27001"],
+            "controls": [
+                (
+                    "FDA-21-CFR-PART-11",
+                    "GXP-RECORD-AUDIT-TRAIL-SIGNATURE-AND-RETENTION-INTEGRITY",
+                    "Bind regulated process, record, predicate rule, system boundary, user, role, signature meaning and event to validated functions, access and authority checks, secure time-stamped audit trails, signature-record linking, accurate copies, retention, retrieval and inspection readiness.",
+                    ["audit-package-verification.json", "lifecycle-traceability.json"],
+                ),
+                (
+                    "ISPE-GAMP-5",
+                    "GXP-RISK-BASED-VALIDATION-SUPPLIER-CHANGE-AND-PERIODIC-REVIEW",
+                    "Apply licensed criteria to intended use, patient and product risk, software category, supplier assessment, requirements, configuration, verification, deviations, release, operation, backup, incident, change, periodic review, retirement and data migration with accountable approval.",
+                    ["process-capability-assessment.json", "procedure-assessment.json"],
+                ),
+            ],
+            "procedures": [
+                (
+                    "FDA-21-CFR-PART-11",
+                    "GXP-ELECTRONIC-RECORD-AND-SIGNATURE-ADVERSARIAL-VALIDATION",
+                    "Exercise a synthetic regulated workflow with altered, deleted, backdated, replayed and orphaned records; shared credentials; signature transfer; clock drift; privilege escalation; incomplete copies; failed restoration; migration and configuration drift. Require attributable, legible, contemporaneous, original, accurate and complete evidence.",
+                    "test",
+                    True,
+                    ["benchmark-scorecard.json", "audit-package-verification.json"],
+                )
+            ],
+        },
+        "criminal-justice-information-security": {
+            "standards": [
+                "FBI-CJIS-SECURITY-POLICY",
+                "NIST-SP-800-53",
+                "NIST-SP-800-63-4",
+            ],
+            "controls": [
+                (
+                    "FBI-CJIS-SECURITY-POLICY",
+                    "CJI-BOUNDARY-AGENCY-PERSONNEL-DEVICE-AND-EXCHANGE-AGREEMENT",
+                    "Bind CSA, agency, contractor, personnel, purpose, CJI class, system, cloud service, device, network path, physical location, exchange agreement, management-control agreement, security addendum and responsibility to the exact authorized processing boundary.",
+                    ["control-assessment.json", "data-exposure.json"],
+                ),
+                (
+                    "FBI-CJIS-SECURITY-POLICY",
+                    "CJI-IDENTITY-ENCRYPTION-AUDIT-MOBILE-INCIDENT-AND-DISPOSAL",
+                    "Verify identity and access, privileged administration, encryption and key custody, audit generation and review, media and mobile safeguards, remote maintenance, personnel security, incident reporting, retention, sanitization, cloud inheritance and corrective-action evidence.",
+                    [
+                        "audit-package-verification.json",
+                        "incident-management-assessment.json",
+                    ],
+                ),
+            ],
+            "procedures": [
+                (
+                    "FBI-CJIS-SECURITY-POLICY",
+                    "CJIS-CJI-ACCESS-EXCHANGE-CLOUD-AND-MOBILE-EXERCISE",
+                    "Use synthetic CJI to challenge unauthorized purpose, stale personnel status, device loss, insecure transport, cloud responsibility gaps, privileged misuse, audit suppression, onward disclosure, incident delay and incomplete sanitization; require independent policy-version and jurisdiction review without claiming FBI approval.",
+                    "dynamic",
+                    True,
+                    ["benchmark-scorecard.json", "audit-package-verification.json"],
+                )
+            ],
+        },
+        "automotive-process-capability-assurance": {
+            "standards": [
+                "AUTOMOTIVE-SPICE-PAM",
+                "AUTOMOTIVE-SPICE-CYBERSECURITY",
+                "ISO-SAE-21434",
+            ],
+            "controls": [
+                (
+                    "AUTOMOTIVE-SPICE-PAM",
+                    "ASPICE-PROCESS-SCOPE-OUTCOME-WORK-PRODUCT-AND-CAPABILITY-EVIDENCE",
+                    "Bind assessment scope, organizational unit, project, lifecycle, process purpose, outcomes, base practices, information items, work products, capability attributes, evidence samples, ratings, weaknesses and improvement actions to the licensed PAM and assessment method.",
+                    [
+                        "process-capability-assessment.json",
+                        "audit-package-verification.json",
+                    ],
+                ),
+                (
+                    "AUTOMOTIVE-SPICE-CYBERSECURITY",
+                    "ASPICE-CYBERSECURITY-ENGINEERING-AND-ISO21434-TRACEABILITY",
+                    "Trace cybersecurity goals, claims, requirements, architecture, implementation, verification, validation, supplier and vulnerability-management evidence across cybersecurity engineering processes and ISO SAE 21434 work products without double counting shared artifacts.",
+                    ["lifecycle-traceability.json", "safety-security-analysis.json"],
+                ),
+            ],
+            "procedures": [
+                (
+                    "AUTOMOTIVE-SPICE-PAM",
+                    "ASPICE-BLINDED-PROCESS-CAPABILITY-AND-CYBERSECURITY-ASSESSMENT",
+                    "Calibrate qualified assessors on licensed golden cases; inject missing outcomes, weak or substituted work products, nonrepresentative samples, trace gaps, supplier omissions, unsupported capability ratings and conflicts; measure agreement and adjudicate every material disagreement.",
+                    "manual",
+                    False,
+                    ["benchmark-scorecard.json", "process-capability-assessment.json"],
+                )
+            ],
+        },
+        "process-industry-functional-safety-security": {
+            "standards": ["IEC-61511-1", "IEC-TR-63069", "IEC-61508", "IEC-62443-3-3"],
+            "controls": [
+                (
+                    "IEC-61511-1",
+                    "SIS-HAZARD-SIF-SIL-SRS-ARCHITECTURE-AND-LIFECYCLE-TRACE",
+                    "Bind process hazard, risk reduction, safety instrumented function, SIL target, safety requirements specification, sensors, logic solver, final elements, independence, architecture, application program, verification, validation, operation, proof testing, maintenance and modification across the SIS lifecycle.",
+                    ["safety-security-analysis.json", "lifecycle-traceability.json"],
+                ),
+                (
+                    "IEC-TR-63069",
+                    "FUNCTIONAL-SAFETY-SECURITY-DEPENDENCY-AND-CONFLICT-ANALYSIS",
+                    "Identify shared assets, communication, identities, tools, changes and failure modes across IEC 61511 or 61508 and IEC 62443; verify security controls do not defeat timing, independence, diagnostics, safe-state, bypass or recovery requirements and preserve residual-risk decisions.",
+                    ["safety-security-analysis.json", "control-assessment.json"],
+                ),
+            ],
+            "procedures": [
+                (
+                    "IEC-61511-1",
+                    "PROCESS-SIS-SAFETY-SECURITY-FAULT-INJECTION-AND-PROOF-TEST",
+                    "In an inert process and SIS twin, replay sensor faults, dangerous failures, common cause, bypass misuse, unauthorized logic change, network delay, stale configuration, proof-test gaps, partial trip, manual intervention and restoration; independently verify demand response, safe state and residue.",
+                    "dynamic",
+                    True,
+                    ["benchmark-scorecard.json", "safety-security-analysis.json"],
+                )
+            ],
+        },
+        "building-automation-secure-connect": {
+            "standards": ["ANSI-ASHRAE-135", "IEC-62443-3-3", "ISO-IEC-27001"],
+            "controls": [
+                (
+                    "ANSI-ASHRAE-135",
+                    "BACNET-SC-DEVICE-HUB-CERTIFICATE-AND-DATA-LINK-IDENTITY",
+                    "Bind building, system, device, BACnet network, Secure Connect node, hub, failover hub, VMAC, certificate, trust store, connection, object and command to an approved topology, role, ownership and lifecycle state.",
+                    [
+                        "application-contract-analysis.json",
+                        "trust-policy-attestation.json",
+                    ],
+                ),
+                (
+                    "ANSI-ASHRAE-135",
+                    "BUILDING-CONTROL-SEGMENTATION-FAILOVER-SAFE-MODE-AND-RECOVERY",
+                    "Verify certificate issuance, renewal and revocation, mutual authentication, authorization, segmentation, hub failover, broadcast handling, time, logging, remote administration, legacy gateway boundaries, operator override, safe fallback and post-event reconciliation.",
+                    ["control-assessment.json", "operational-trend.json"],
+                ),
+            ],
+            "procedures": [
+                (
+                    "ANSI-ASHRAE-135",
+                    "BACNET-SC-TRUST-FAILOVER-AND-SAFE-BUILDING-CONTROL-EXERCISE",
+                    "Use an inert building-automation twin to replay untrusted, expired and revoked certificates, node and hub substitution, message replay, unauthorized writes, legacy gateway escape, failover, network partition, time loss and recovery while preserving life-safety and environmental bounds.",
+                    "dynamic",
+                    True,
+                    ["benchmark-scorecard.json", "application-contract-analysis.json"],
+                )
+            ],
+        },
+        "industrial-robotics-safety-security": {
+            "standards": [
+                "ISO-10218-1",
+                "ISO-10218-2",
+                "ANSI-RIA-R15-08-1",
+                "IEC-62443-3-3",
+            ],
+            "controls": [
+                (
+                    "ISO-10218-1",
+                    "ROBOT-SAFETY-FUNCTION-MODE-STOP-LIMIT-AND-INTEGRITY",
+                    "Bind robot model, controller, software and parameter release, intended use, foreseeable misuse, operating mode, safety function, protective stop, emergency stop, speed and space limit, enabling device, diagnostics and validation to the delivered robot configuration.",
+                    ["safety-security-analysis.json", "assurance-case.json"],
+                ),
+                (
+                    "ISO-10218-2",
+                    "ROBOT-CELL-INTEGRATION-ZONE-TOOL-WORKPIECE-AND-HUMAN-INTERACTION",
+                    "Verify cell and mobile-robot risk assessment, layout, safeguarding, zones, end effectors, workpieces, interfaces, collaborative operation, restart, teach and maintenance access, cybersecurity dependencies, information for use and modification control.",
+                    ["static-architecture.json", "procedure-assessment.json"],
+                ),
+            ],
+            "procedures": [
+                (
+                    "ISO-10218-2",
+                    "INDUSTRIAL-ROBOT-CELL-AND-MOBILE-ROBOT-SAFETY-SECURITY-EXERCISE",
+                    "In a bounded simulator or physical safety cell, replay mode confusion, zone intrusion, sensor loss, stale map, command injection, speed-limit and stop failure, payload and tool substitution, mobile-route conflict, restart and recovery; require independent safety validation and prohibit production motion.",
+                    "dynamic",
+                    True,
+                    ["benchmark-scorecard.json", "safety-security-analysis.json"],
+                )
+            ],
+        },
+        "data-centre-facility-resilience": {
+            "standards": [
+                "ISO-IEC-22237-1",
+                "ISO-IEC-22237-2",
+                "ISO-IEC-TS-22237-31",
+                "ANSI-TIA-942-C",
+            ],
+            "controls": [
+                (
+                    "ISO-IEC-22237-1",
+                    "DATA-CENTRE-AVAILABILITY-SECURITY-ENERGY-CLASSIFICATION-AND-SCOPE",
+                    "Bind site, building, room, service, tenant, availability and physical-security class, energy objective, threat, dependency, capacity, topology, design assumption, owner and acceptance evidence over the planned facility lifetime.",
+                    ["static-architecture.json", "risk-assessment.json"],
+                ),
+                (
+                    "ANSI-TIA-942-C",
+                    "DATA-CENTRE-POWER-COOLING-CABLING-FIRE-PHYSICAL-AND-MONITORING-RESILIENCE",
+                    "Trace utility, generator, UPS, distribution, cooling, environmental control, cabling, telecommunications, fire protection, physical access, monitoring, redundancy, maintainability, fault tolerance, edge and high-density changes to verified design and operational evidence.",
+                    ["physical-security-assessment.json", "operational-trend.json"],
+                ),
+            ],
+            "procedures": [
+                (
+                    "ISO-IEC-TS-22237-31",
+                    "DATA-CENTRE-FAILURE-MAINTENANCE-RECOVERY-AND-RESILIENCE-KPI-EXERCISE",
+                    "Exercise an approved facility digital twin with utility loss, generator failure, UPS and distribution faults, cooling degradation, leak, fire alarm, network path loss, access compromise, sensor deception, maintenance error and cascading load; reproduce resilience KPIs and restoration without disrupting production.",
+                    "dynamic",
+                    True,
+                    ["benchmark-scorecard.json", "operational-trend.json"],
                 )
             ],
         },

@@ -2,6 +2,12 @@ from __future__ import annotations
 
 from typing import Any
 
+from .industry_open_source_catalog import OPEN_SOURCE_BENCHMARKS
+from .industry_resilience_catalog import (
+    RESILIENCE_BENCHMARKS,
+    RESILIENCE_WATCHLIST,
+)
+
 _STANDARDS_WATCHLIST: tuple[dict[str, str], ...] = (
     {
         "id": "NIST-SSDF-1.2",
@@ -30,6 +36,13 @@ _STANDARDS_WATCHLIST: tuple[dict[str, str], ...] = (
         "stage": "60.00",
         "reference": "https://www.iso.org/standard/56581.html",
         "reason": "Do not claim the unpublished edition as a final normative baseline.",
+    },
+    {
+        "id": "ISO-IEC-27091",
+        "status": "under-development",
+        "stage": "final-draft-50.00-policy-observed",
+        "reference": "https://www.iso.org/standard/56582.html",
+        "reason": "Keep AI privacy protection outside normative claims until ISO publishes the final edition and licensed requirements are source-pinned and approved.",
     },
     {
         "id": "NIST-PRIVACY-FRAMEWORK-1.1",
@@ -221,6 +234,41 @@ _STANDARDS_WATCHLIST: tuple[dict[str, str], ...] = (
         "reason": "Do not claim multimodal benchmark comparability until the released tasks, modalities, scorers, reference systems, and official split are immutable and source-pinned.",
     },
     {
+        "id": "OWASP-CLIENT-SIDE-TOP-10",
+        "status": "candidate",
+        "stage": "candidate-list-without-final-release",
+        "reference": "https://owasp.org/www-project-top-10-client-side-security-risks/",
+        "reason": "Retain CSP, SRI, browser, client-side dependency and data-flow controls while OWASP labels this list as candidates rather than a final Top 10 release.",
+    },
+    {
+        "id": "SPDX-3.1",
+        "status": "release-candidate",
+        "stage": "3.1-release-candidate-without-final-specification",
+        "reference": "https://spdx.dev/",
+        "reason": "Retain SPDX 3.0 as the stable interchange baseline until 3.1 is final, its schemas and validators are released, and compatibility is independently replayed.",
+    },
+    {
+        "id": "OWASP-BENCHMARK-PYTHON",
+        "status": "research-preview",
+        "stage": "0.1-without-stable-1.0-oracle-contract",
+        "reference": "https://owasp.org/www-project-benchmark/",
+        "reason": "Keep Python Benchmark results separate from stable Java Benchmark claims until OWASP publishes a stable release with immutable expected results and scorer semantics.",
+    },
+    {
+        "id": "VULNGYM",
+        "status": "research-preview",
+        "stage": "preprint-without-stable-corpus-contract",
+        "reference": "https://arxiv.org/abs/2608.02001",
+        "reason": "Do not claim coding-agent benchmark comparability until VulnGym publishes a stable licensed corpus, evaluator, protected split, scoring contract and reproducible execution release.",
+    },
+    {
+        "id": "SECVULEVAL",
+        "status": "research-preview",
+        "stage": "under-review-without-stable-release-contract",
+        "reference": "https://openreview.net/forum?id=lHa1bxq0eq",
+        "reason": "Keep statement-level context evaluation non-normative until peer review, immutable data, label authority, licensing, contamination controls and a reproducible evaluator are available.",
+    },
+    {
         "id": "MCP-SPECIFICATION-2026-RELEASE",
         "status": "release-candidate",
         "stage": "release-candidate-policy-observed",
@@ -345,10 +393,10 @@ _BENCHMARKS: tuple[dict[str, Any], ...] = (
     },
     {
         "id": "owasp-benchmark",
-        "version": "policy-pinned",
+        "version": "java-1.2-policy-pinned",
         "kind": "sast-dast",
         "source": "https://owasp.org/www-project-benchmark/",
-        "languages": ["java", "python"],
+        "languages": ["java"],
         "lane": "authorized-companion",
     },
     {
@@ -361,7 +409,7 @@ _BENCHMARKS: tuple[dict[str, Any], ...] = (
     },
     {
         "id": "owasp-juice-shop",
-        "version": "policy-pinned",
+        "version": "20.0.0-policy-pinned",
         "kind": "dast",
         "source": "https://owasp.org/www-project-juice-shop/",
         "languages": ["javascript"],
@@ -377,10 +425,18 @@ _BENCHMARKS: tuple[dict[str, Any], ...] = (
     },
     {
         "id": "owasp-crapi",
-        "version": "policy-pinned",
+        "version": "stable-image-digest-policy-pinned",
         "kind": "api-dast",
         "source": "https://owasp.org/www-project-crapi/",
         "languages": ["api"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "owasp-api-security-testing-framework",
+        "version": "2.0.1",
+        "kind": "api-security-top10-graphql-grpc-mtls-and-authorization-testing",
+        "source": "https://owasp.org/www-project-api-security-testing-framework/",
+        "languages": ["api", "graphql", "grpc", "java", "multi"],
         "lane": "authorized-companion",
     },
     {
@@ -569,6 +625,143 @@ _BENCHMARKS += (
         "kind": "protocol-evasion-and-parser-robustness",
         "source": "organization-approved encoded fragmented and ambiguous protocol corpus",
         "languages": ["protocol", "multi"],
+        "lane": "authorized-companion",
+    },
+)
+
+_BENCHMARKS += RESILIENCE_BENCHMARKS
+_STANDARDS_WATCHLIST += RESILIENCE_WATCHLIST
+
+_BENCHMARKS += (
+    {
+        "id": "ecss-space-software-product-assurance",
+        "version": "ecss-e-st-40c-2009-q-st-80c-rev2-2025",
+        "kind": "space-software-engineering-product-assurance-and-independent-verification-conformance",
+        "source": "ECSS-E-ST-40C and ECSS-Q-ST-80C Rev.2 with approved source-bound flight and ground software lifecycle, reuse, anomaly, configuration and acceptance fixtures",
+        "languages": ["space", "software", "safety", "assurance", "multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "regional-financial-technology-resilience-assurance",
+        "version": "apra-cps230-2026-cps234-2019-mas-trm-2021-policy-pinned",
+        "kind": "regional-financial-technology-risk-operational-resilience-and-incident-assurance",
+        "source": "APRA CPS 230 and CPS 234 plus policy-pinned MAS Technology Risk Management guidance with approved critical-operation, supplier, cyber incident, tolerance and recovery fixtures",
+        "languages": [
+            "financial",
+            "operational-risk",
+            "resilience",
+            "regulation",
+            "multi",
+        ],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "secure-information-sharing-competence-assurance",
+        "version": "iso27010-2015-tr27016-2014-27021-2017-amd1-2021-policy-pinned",
+        "kind": "cross-organization-information-sharing-economic-decision-and-practitioner-competence-assurance",
+        "source": "Licensed ISO IEC 27010, ISO IEC TR 27016 and ISO IEC 27021 criteria with approved sharing-community, handling-policy, economic-decision and blinded practitioner-calibration cases",
+        "languages": [
+            "information-sharing",
+            "governance",
+            "economics",
+            "competence",
+            "multi",
+        ],
+        "lane": "authorized-companion",
+    },
+)
+
+_BENCHMARKS += (
+    {
+        "id": "nss-dod-authorization-assurance",
+        "version": "cnssi1253-r5-dodi8500.01-ch1-dodi8510.01-2022",
+        "kind": "nss-categorization-control-selection-tailoring-authorization-and-monitoring-assurance",
+        "source": "Policy-pinned CNSSI 1253 Revision 5, DoDI 8500.01 Change 1, DoDI 8510.01 and approved synthetic OSCAL authorization packages with blinded government-role decisions",
+        "languages": ["federal", "defense", "oscal", "rmf", "multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "zero-trust-zig-microsegmentation-assurance",
+        "version": "nsa-zig-primer-discovery-phase1-phase2-cisa-microsegmentation-2026-08-31",
+        "kind": "seven-pillar-zero-trust-activity-capability-and-microsegmentation-outcome-evaluation",
+        "source": "Final NSA 2026 Zero Trust Implementation Guidelines and CISA microsegmentation planning guidance with approved synthetic enterprise topology and identity-policy failure fixtures",
+        "languages": ["zero-trust", "identity", "network", "policy", "multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "healthcare-operational-resilience-assurance",
+        "version": "hhs-hicp-2023-hph-cpg-current-2026-08-31",
+        "kind": "healthcare-ransomware-clinical-continuity-ephi-and-patient-safety-outcome-evaluation",
+        "source": "Final HHS HICP 2023 and HPH Cybersecurity Performance Goals with approved synthetic hospital, clinical workflow, vendor and recovery fixtures",
+        "languages": ["healthcare", "clinical", "incident", "resilience", "multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "aircraft-system-safety-development-assurance",
+        "version": "arp4754b-arp4761a-do178c-do330-do326a-policy-pinned",
+        "kind": "aircraft-system-development-safety-security-traceability-and-assessor-evaluation",
+        "source": "Licensed SAE ARP4754B and ARP4761A criteria joined to DO-178C, DO-330 and DO-326A with approved synthetic aircraft-system assurance cases",
+        "languages": ["airborne", "systems", "safety", "security", "multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "ilac-laboratory-operating-assurance",
+        "version": "iso17025-17020-17065-ilac-p9-2024-p10-p14-p15",
+        "kind": "laboratory-proficiency-traceability-uncertainty-competence-and-impartiality-evaluation",
+        "source": "Licensed ISO IEC conformity-assessment criteria and final ILAC P9, P10, P14 and P15 policies with blinded interlaboratory cases and assigned values",
+        "languages": [
+            "laboratory",
+            "measurement",
+            "inspection",
+            "accreditation",
+            "multi",
+        ],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "maritime-operational-cyber-resilience-assurance",
+        "version": "imo-msc-fal-1-circ-3-rev3-iacs-e26-e27",
+        "kind": "ship-shore-operational-cyber-risk-safety-management-and-recovery-evaluation",
+        "source": "Final IMO MSC-FAL.1 Circ.3 Rev.3 and IACS E26/E27 with approved inert ship, shore, port, supplier and degraded-operation digital-twin fixtures",
+        "languages": ["maritime", "ship", "ot", "resilience", "multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "weakness-prioritization-temporal-calibration",
+        "version": "cwe-epss-kev-chronological-holdout-2026-08-31",
+        "kind": "weakness-label-abstraction-exploit-prioritization-and-future-data-leakage-evaluation",
+        "source": "Pinned complete CWE, point-in-time EPSS and CISA KEV snapshots with independently labeled multi-language findings, project and chronology holdouts, duplicate audits and outcome adjudication",
+        "languages": [
+            "weakness",
+            "vulnerability",
+            "prioritization",
+            "calibration",
+            "multi",
+        ],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "formal-methods-tool-disagreement-assurance",
+        "version": "svcomp-testcomp-rers-chc-policy-pinned-2026-08-31",
+        "kind": "formal-verification-test-generation-witness-validation-and-tool-disagreement-evaluation",
+        "source": "Pinned SV-COMP and Test-Comp tasks plus approved RERS and constrained-Horn-clause cases with witness validators, resource limits, solver disagreement and independently adjudicated truth",
+        "languages": ["formal-methods", "verification", "solver", "witness", "multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "process-supplier-assessor-outcome-calibration",
+        "version": "iso33020-iso27036-blinded-longitudinal-2026-08-31",
+        "kind": "process-capability-supplier-resilience-assessor-agreement-and-longitudinal-outcome-evaluation",
+        "source": "Licensed ISO IEC 33020 and 27036 criteria with blinded assessors, completed-project evidence, synthetic supplier incidents, fourth-party dependencies and longitudinal defect and recovery outcomes",
+        "languages": ["process", "supplier", "assessment", "resilience", "multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "incident-privacy-outcome-exercise-calibration",
+        "version": "nist80061-iso27035-iso29134-longitudinal-2026-08-31",
+        "kind": "incident-response-privacy-impact-recovery-and-individual-outcome-evaluation",
+        "source": "NIST SP 800-61, licensed ISO IEC 27035 and 29134 criteria with synthetic incidents, data-flow and affected-person cases, measurable recovery, impact, residual-risk and reassessment outcomes",
+        "languages": ["incident", "privacy", "recovery", "impact", "multi"],
         "lane": "authorized-companion",
     },
 )
@@ -814,17 +1007,17 @@ _BENCHMARKS += (
     },
     {
         "id": "iec-62443-patch-management-exercise",
-        "version": "policy-pinned",
+        "version": "IEC-TR-62443-2-3-2015-stability-2027-policy-pinned",
         "kind": "iacs-patch-management-lifecycle",
-        "source": "licensed IEC 62443-2-3 requirements and organization-approved patch fixtures",
+        "source": "licensed IEC 62443-2-3 requirements and organization-approved vendor-advisory, firmware, safe-state, availability, rollback, compensating-control and longitudinal outcome fixtures",
         "languages": ["ot", "configuration"],
         "lane": "authorized-companion",
     },
     {
         "id": "do355-continuing-airworthiness-exercise",
-        "version": "policy-pinned",
+        "version": "DO-355A-ARP5150B-2026-ARP5151B-2025-policy-pinned",
         "kind": "aircraft-security-continuing-airworthiness",
-        "source": "licensed DO-355A procedures and organization-approved continuing-airworthiness scenarios",
+        "source": "licensed DO-355A, SAE ARP5150B and SAE ARP5151B criteria with organization-approved transport-airplane, general-aviation and rotorcraft in-service scenarios",
         "languages": ["airborne", "process", "multi"],
         "lane": "authorized-companion",
     },
@@ -840,8 +1033,16 @@ _BENCHMARKS += (
         "id": "swift-cscf-independent-assessment",
         "version": "2026",
         "kind": "financial-messaging-control-assessment",
-        "source": "SWIFT CSCF 2026 and Independent Assessment Framework",
+        "source": "SWIFT CSCF 2026 and Independent Assessment Framework with architecture-specific applicability, annual delta, significant-change, bounded reliance, remediation and retest fixtures",
         "languages": ["financial-messaging", "configuration"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "ccsds-space-mission-link-security",
+        "version": "active-publications-observed-2026-08-31",
+        "kind": "space-mission-threat-architecture-credential-and-link-security-conformance",
+        "source": "active CCSDS 350.1-G-3, 350.7-G-2, 351.0-M-1, 352.0-B-2, 355.0-B-2, 355.1-B-1, 356.0-B-1 and 357.0-B-1 publications with approved mission digital-twin fixtures",
+        "languages": ["space", "protocol", "configuration", "multi"],
         "lane": "authorized-companion",
     },
 )
@@ -1167,9 +1368,9 @@ _BENCHMARKS += (
     },
     {
         "id": "firmware-resilience-measured-boot",
-        "version": "nist-800-193-tpm2-policy-pinned",
-        "kind": "platform-firmware-protect-detect-recover-and-attestation",
-        "source": "NIST SP 800-193, TCG TPM 2.0, and an approved signed firmware corpus",
+        "version": "nist-800-147-147b-193-1800-34-cswp45-52-tpm2-policy-pinned",
+        "kind": "platform-firmware-device-provenance-protect-detect-monitor-recover-and-attestation",
+        "source": "NIST SP 800-147, 800-147B, 800-193 and 1800-34, NIST CSWP 45 and 52, TCG TPM 2.0, and approved signed component, firmware, measured-boot and bus-monitor corpora",
         "languages": ["firmware", "tpm", "binary", "multi"],
         "lane": "authorized-companion",
     },
@@ -1699,9 +1900,9 @@ _BENCHMARKS += (
 _BENCHMARKS += (
     {
         "id": "openid-digital-credential-conformance",
-        "version": "vc-2.0-openid4vp-1.0-openid4vci-1.0-haip-1.0",
+        "version": "vc-2.0-openid4vp-1.0-openid4vci-1.0-haip-1.0-self-certification-2026-08-07",
         "kind": "credential-issuer-wallet-verifier-security-and-interoperability-conformance",
-        "source": "W3C Verifiable Credentials 2.0 and final OpenID4VP OpenID4VCI and HAIP specifications with official conformance-suite profiles",
+        "source": "W3C Verifiable Credentials 2.0 and final OpenID4VP OpenID4VCI and HAIP specifications with complete official positive and negative conformance suites open for self-certification on 2026-08-07",
         "languages": ["identity", "oauth", "json-ld", "credential", "multi"],
         "lane": "authorized-companion",
     },
@@ -1715,9 +1916,9 @@ _BENCHMARKS += (
     },
     {
         "id": "cis-kubernetes-hardening-conformance",
-        "version": "cis-kubernetes-2.0.1",
-        "kind": "kubernetes-control-plane-node-and-policy-hardening-conformance",
-        "source": "Licensed CIS Kubernetes Benchmark 2.0.1 requirements with approved CIS-CAT or equivalent normalized evidence and negative fixtures",
+        "version": "cis-kubernetes-2.0.1-kubernetes-1.36-pss-psa",
+        "kind": "kubernetes-control-plane-node-pod-security-standard-and-admission-hardening-conformance",
+        "source": "Licensed CIS Kubernetes Benchmark 2.0.1 plus Kubernetes 1.36 Pod Security Standards and Admission with approved posture, admission, bypass, exception, remediation and drift fixtures",
         "languages": ["kubernetes", "yaml", "container", "multi"],
         "lane": "authorized-companion",
     },
@@ -1771,9 +1972,9 @@ _BENCHMARKS += (
     },
     {
         "id": "pci-payment-acceptance-conformance",
-        "version": "mpoc-1.x-p2pe-3.2-policy-pinned",
-        "kind": "mobile-payment-acceptance-and-point-to-point-encryption-conformance",
-        "source": "Licensed PCI MPoC and P2PE requirements with approved SDK, application, device, key, encryption, decryption, monitoring, laboratory, and listing fixtures",
+        "version": "mpoc-1.x-p2pe-3.2-pin-pts-poi-7-3ds-core-emv3ds-2.3.1.1-policy-pinned",
+        "kind": "payment-acceptance-pin-poi-hsm-encryption-and-three-domain-secure-conformance",
+        "source": "Licensed PCI MPoC, P2PE, PIN Security, PTS POI 7.0 and 3DS Core requirements plus EMV 3DS 2.3.1.1 with approved SDK, application, device, key, HSM, ACS, DS, 3DS Server, monitoring, laboratory and listing fixtures",
         "languages": ["payment", "mobile", "cryptography", "multi"],
         "lane": "authorized-companion",
     },
@@ -1842,6 +2043,356 @@ _BENCHMARKS += (
         "kind": "software-assurance-maturity-assessor-agreement-and-cohort-comparison",
         "source": "OWASP SAMM 2.1 assessment toolbox, quality criteria, organization-approved blinded cases, and privacy-preserving benchmark cohort snapshot",
         "languages": ["software-assurance", "maturity", "governance", "multi"],
+        "lane": "authorized-companion",
+    },
+)
+
+_STANDARDS_WATCHLIST += (
+    {
+        "id": "OPENID-SSF-CONFORMANCE",
+        "status": "alpha",
+        "stage": "official-alpha-testing-policy-observed",
+        "reference": "https://openid.net/certification/ssf_testing/",
+        "reason": "Use organization-owned SSF evidence gates and acknowledge the official suite's alpha status; do not issue or imply OpenID certification until the program is production-ready and separately authorized.",
+    },
+    {
+        "id": "DARPA-AIXCC-PUBLIC-CORPUS",
+        "status": "research-transition",
+        "stage": "public-materials-require-corpus-manifest",
+        "reference": "https://github.com/AIxCyberChallenge/scoring-pipeline",
+        "reason": "Do not infer a complete reproducible benchmark from fragmented public materials; require an approved immutable corpus, license manifest, scoring-pipeline digest, protected split, oracles and contamination assessment.",
+    },
+    {
+        "id": "SPIFFE-REMOTE-WORKLOAD-API",
+        "status": "experimental",
+        "stage": "roadmap-experimental-policy-observed",
+        "reference": "https://spiffe.io/blog/2026-08-18-spiffe-standard-roadmap/",
+        "reason": "Exclude the experimental remote Workload API from stable SPIFFE conformance claims until its specification is published, stable and governed through promotion.",
+    },
+    {
+        "id": "NIST-SP-800-239",
+        "status": "initial-public-draft",
+        "stage": "public-comment-through-2026-09-25",
+        "reference": "https://csrc.nist.gov/pubs/sp/800/239/ipd",
+        "reason": "Use final SP 800-223 and SP 800-234 for normative HPC claims; monitor the AI data-center analysis but do not promote draft threats or recommendations until NIST publishes a final edition and human review approves the change.",
+    },
+    {
+        "id": "OASIS-OPENEOX-1.0",
+        "status": "committee-specification-draft",
+        "stage": "csd01-public-review-completed-2026-08-13",
+        "reference": "https://docs.oasis-open.org/openeox/eox-core/v1.0/csd01/eox-core-v1.0-csd01.html",
+        "reason": "Retain current lifecycle and vulnerability-exchange controls while OpenEoX remains CSD01; require a final OASIS work product, stable schemas, migration review, fixtures and human promotion before normative use.",
+    },
+    {
+        "id": "OASIS-CSAF-2.1",
+        "status": "committee-specification-draft",
+        "stage": "csd01",
+        "reference": "https://docs.oasis-open.org/csaf/csaf/v2.1/csd01/csaf-v2.1-csd01.html",
+        "reason": "Keep CSAF 2.0 normative while 2.1 remains CSD01; quarantine its schema, publisher, retrieval and converter changes until final publication and governed compatibility testing.",
+    },
+)
+
+_BENCHMARKS += (
+    {
+        "id": "authzen-authorization-api-conformance",
+        "version": "authorization-api-1.0-final-2026-01-12",
+        "kind": "pdp-pep-authorization-decision-interoperability-and-adversarial-conformance",
+        "source": "OpenID Authorization API 1.0 Final with organization-owned PDP and PEP interoperability, failure, cache, batch and subject-resource-action confusion fixtures",
+        "languages": ["authorization", "identity", "http", "json", "multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "openid-federation-conformance",
+        "version": "openid-federation-1.1-final-early-suite-2026-08-31",
+        "kind": "federation-entity-trust-chain-metadata-policy-and-oidc-conformance",
+        "source": "OpenID Federation 1.1 and Federation for OpenID Connect 1.1 Final, official early conformance plans, and organization-owned trust-chain adversarial fixtures",
+        "languages": ["identity", "federation", "oidc", "jwt", "multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "nist-hpc-ai-infrastructure-assurance",
+        "version": "sp-800-223-2024-sp-800-234-2026",
+        "kind": "hpc-reference-architecture-threat-posture-and-control-overlay-conformance",
+        "source": "NIST SP 800-223 reference architecture and threat analysis plus SP 800-234 sixty-control HPC security overlay with approved architecture, workload and failure fixtures",
+        "languages": ["hpc", "ai-infrastructure", "oscal", "systems", "multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "iso-24760-identity-management-assurance",
+        "version": "iso-iec-24760-1-2-3-2025-policy-pinned",
+        "kind": "identity-concepts-reference-architecture-lifecycle-and-privacy-assessor-conformance",
+        "source": "Licensed ISO IEC 24760 Parts 1 through 3:2025 criteria with approved person, organization, device and software identity lifecycle cases and blinded assessor decisions",
+        "languages": ["identity", "architecture", "privacy", "governance", "multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "iso-5259-6-data-quality-visualization",
+        "version": "iso-iec-tr-5259-6-2026-policy-pinned",
+        "kind": "ai-data-quality-visualization-fidelity-uncertainty-and-adverse-presentation-evaluation",
+        "source": "Licensed ISO IEC TR 5259-6:2026 guidance with approved measures, datasets, visualizations, user roles, accessibility cases and misleading-presentation mutations",
+        "languages": ["ai", "data-quality", "visualization", "accessibility", "multi"],
+        "lane": "authorized-companion",
+    },
+)
+
+_BENCHMARKS += OPEN_SOURCE_BENCHMARKS
+
+_STANDARDS_WATCHLIST += (
+    {
+        "id": "OWASP-SCSVS",
+        "status": "alpha",
+        "stage": "initial-draft-0.0.1",
+        "reference": "https://owasp.org/www-project-smart-contract-security-verification-standard/",
+        "reason": "SCSVS remains an explicitly initial alpha draft. Retain its control taxonomy for research mapping only; require a stable release, immutable requirements, compatibility review and human promotion before it can support normative or certification claims.",
+    },
+)
+
+_BENCHMARKS += (
+    {
+        "id": "medical-device-cybersecurity-assurance",
+        "version": "sw96-2023-iec80001-1-2021-iec60601-4-5-2021-imdrf-n60-n70-n73",
+        "kind": "medical-device-security-risk-capability-lifecycle-and-patient-safety-evaluation",
+        "source": "Licensed AAMI and IEC criteria, final IMDRF lifecycle guidance, approved synthetic medical-device/network fixtures and independently adjudicated patient-safety oracles",
+        "languages": ["medical-device", "health-it", "embedded", "safety", "multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "autonomous-physical-ai-safety",
+        "version": "iso21448-2022-iso-pas8800-2024-iso34502-2022-ul4600-ed3",
+        "kind": "physical-ai-operational-design-domain-scenario-and-safety-case-evaluation",
+        "source": "Licensed autonomy safety criteria with approved deterministic simulator, operational-design-domain, degradation, fallback and safety-case challenge fixtures",
+        "languages": ["physical-ai", "automotive", "robotics", "simulation", "multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "critical-c-cpp-coding-conformance",
+        "version": "misra-c-2023-misra-cpp-2023-policy-pinned",
+        "kind": "licensed-critical-code-rule-multi-compiler-and-deviation-conformance",
+        "source": "Licensed MISRA C:2023 and MISRA C++:2023 rule digests with approved compiler, target, positive, negative, ambiguous, sanitizer and deviation fixtures",
+        "languages": ["c", "cpp", "embedded", "safety", "multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "confidential-computing-attestation-conformance",
+        "version": "rats-eat-tcg-sev-snp-tdx-cca-policy-pinned-2026-08-31",
+        "kind": "cross-vendor-confidential-computing-attestation-and-secret-release-conformance",
+        "source": "IETF RATS/EAT, policy-pinned TCG and vendor specifications, official evidence vectors and independently generated stale, revoked, replayed, downgraded and confused-claim cases",
+        "languages": [
+            "attestation",
+            "confidential-computing",
+            "hardware",
+            "cloud",
+            "multi",
+        ],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "vvsg-voting-system-assurance",
+        "version": "vvsg-2.0-test-assertions-1.4",
+        "kind": "voting-system-security-accessibility-reliability-and-software-independence-conformance",
+        "source": "EAC VVSG 2.0, official Test Assertions 1.4 and approved synthetic election fixtures with accredited-laboratory and jurisdiction claim boundaries",
+        "languages": [
+            "voting-system",
+            "embedded",
+            "accessibility",
+            "cryptography",
+            "multi",
+        ],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "critical-sector-safety-security-assurance",
+        "version": "iec62645-2019-iec63486-2024-clcts50701-2021-nasa8739-8b-2022",
+        "kind": "nuclear-rail-space-safety-security-and-independent-assurance-evaluation",
+        "source": "Licensed sector criteria and approved inert digital twins for nuclear, railway and space software with independent assurance, failure, degraded-mode and recovery oracles",
+        "languages": ["nuclear", "rail", "space", "cyber-physical", "multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "stateful-smart-contract-security",
+        "version": "owasp-smart-contract-top10-2026-smartbugs2-policy-pinned",
+        "kind": "stateful-smart-contract-exploit-economic-invariant-and-upgrade-security-evaluation",
+        "source": "OWASP Smart Contract Top 10, pinned SmartBugs corpus and approved multi-transaction DeFi, oracle, governance, bridge, proxy and clean-control fixtures; alpha SCSVS excluded",
+        "languages": ["solidity", "evm", "smart-contract", "defi", "multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "devsecops-test-maturity-longitudinal",
+        "version": "samm2.1-dsomm5.0.2-tmmi2.0-dora5-policy-pinned",
+        "kind": "longitudinal-devsecops-test-maturity-outcome-and-independent-reassessment",
+        "source": "OWASP SAMM/DSOMM/DSOVS, TMMi, DORA five-metric event evidence and organization-licensed BSIMM/CMMI criteria with blinded reassessment cases",
+        "languages": ["devsecops", "testing", "maturity", "delivery", "multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "detection-product-longitudinal-calibration",
+        "version": "attack-evaluations-amtso-ocsf-policy-pinned-2026-08-31",
+        "kind": "detection-visibility-protection-false-positive-latency-evasion-and-drift-calibration",
+        "source": "MITRE ATT&CK Evaluations and AMTSO methods with approved benign workloads, adversary emulation, telemetry normalization, evasion variants and longitudinal drift fixtures",
+        "languages": ["detection", "edr", "telemetry", "attack", "multi"],
+        "lane": "authorized-companion",
+    },
+)
+
+_BENCHMARKS += (
+    {
+        "id": "semi-fab-equipment-cybersecurity-assurance",
+        "version": "e187-0122-e188-0222-e191-policy-pinned-2026-08-31",
+        "kind": "semiconductor-equipment-hardening-malware-free-integration-status-and-recovery-assurance",
+        "source": "Licensed SEMI E187, E188 and E191 criteria with approved inert fab-equipment delivery, maintenance, monitoring and recovery fixtures",
+        "languages": ["semiconductor", "equipment", "ot", "firmware", "multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "api-1164-pipeline-control-resilience",
+        "version": "api-1164-third-edition-2021-policy-pinned",
+        "kind": "pipeline-industrial-automation-control-cybersecurity-safety-and-resilience-evaluation",
+        "source": "Licensed API Standard 1164 third-edition criteria with approved inert pipeline SCADA, local-control, remote-access and recovery digital-twin fixtures",
+        "languages": ["pipeline", "scada", "ot", "resilience", "multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "gxp-part11-data-integrity-assurance",
+        "version": "21-cfr-part11-current-gamp5-second-edition-policy-pinned",
+        "kind": "gxp-computerized-system-validation-record-audit-trail-and-electronic-signature-assurance",
+        "source": "Current FDA 21 CFR Part 11 requirements and licensed ISPE GAMP 5 second-edition guidance with synthetic regulated workflows and data-integrity mutations",
+        "languages": ["gxp", "life-sciences", "records", "validation", "multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "fbi-cjis-security-policy-assurance",
+        "version": "cjis-security-policy-6.1-2026-06-25",
+        "kind": "criminal-justice-information-boundary-access-encryption-audit-and-incident-assurance",
+        "source": "FBI CJIS Security Policy 6.1 with approved synthetic CJI, agency, cloud, mobile, exchange and audit fixtures",
+        "languages": [
+            "criminal-justice",
+            "information-security",
+            "cloud",
+            "mobile",
+            "multi",
+        ],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "automotive-spice-capability-assurance",
+        "version": "automotive-spice-pam-4.0-cybersecurity-2.0-policy-pinned",
+        "kind": "automotive-process-capability-cybersecurity-traceability-and-assessor-agreement",
+        "source": "Licensed Automotive SPICE PAM 4.0 and Cybersecurity PAM criteria with approved blinded process, work-product, sampling and rating cases",
+        "languages": ["automotive", "process", "cybersecurity", "assessment", "multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "iec-61511-sis-safety-security-assurance",
+        "version": "iec61511-1-2016-amd1-2017-iec-tr63069-2019-policy-pinned",
+        "kind": "process-safety-instrumented-system-functional-safety-security-and-recovery-assurance",
+        "source": "Licensed IEC 61511-1 and IEC TR 63069 criteria with approved inert process and SIS hazard, demand, fault, bypass, proof-test and recovery fixtures",
+        "languages": ["process-industry", "sis", "functional-safety", "ot", "multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "bacnet-secure-connect-assurance",
+        "version": "ansi-ashrae-135-2024-bacnet-sc-policy-pinned",
+        "kind": "building-automation-secure-connect-certificate-hub-failover-and-safe-control-assurance",
+        "source": "Licensed ANSI ASHRAE 135 BACnet Secure Connect criteria with approved inert node, hub, certificate, gateway and building-control fixtures",
+        "languages": ["building-automation", "bacnet", "ot", "pki", "multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "industrial-robotics-safety-security-assurance",
+        "version": "iso10218-1-2-2025-ria-r15.08-1-2020-policy-pinned",
+        "kind": "industrial-robot-cell-mobile-robot-functional-safety-and-cybersecurity-assurance",
+        "source": "Licensed ISO 10218-1 and 10218-2:2025 and ANSI RIA R15.08-1 criteria with approved bounded simulation and physical safety-cell fixtures",
+        "languages": ["robotics", "industrial", "safety", "cyber-physical", "multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "data-centre-facility-resilience-assurance",
+        "version": "iso-iec-22237-1-2021-2-2024-ts31-2026-tia942c-2024-policy-pinned",
+        "kind": "data-centre-physical-infrastructure-availability-security-and-resilience-assurance",
+        "source": "Licensed ISO IEC 22237 and ANSI TIA-942-C criteria with approved facility topology, power, cooling, cabling, fire, access, monitoring and recovery digital-twin fixtures",
+        "languages": [
+            "data-centre",
+            "facility",
+            "resilience",
+            "physical-security",
+            "multi",
+        ],
+        "lane": "authorized-companion",
+    },
+)
+
+_STANDARDS_WATCHLIST += (
+    {
+        "id": "NIST-IR-8546",
+        "status": "under-development",
+        "stage": "initial-public-draft-policy-observed",
+        "reference": "https://csrc.nist.gov/pubs/ir/8546/ipd",
+        "reason": "Keep the semiconductor manufacturing CSF profile outside normative claims until NIST publishes a final edition and governed promotion binds its final outcomes.",
+    },
+    {
+        "id": "EU-GMP-ANNEX-11-REVISION",
+        "status": "under-development",
+        "stage": "stakeholder-consultation-closed-policy-observed",
+        "reference": "https://health.ec.europa.eu/consultations/stakeholders-consultation-eudralex-volume-4-good-manufacturing-practice-guidelines-chapter-4-annex_en",
+        "reason": "Retain the January 2011 Annex 11 as normative until the European Commission adopts a final revision and its effective date and transition rules are approved.",
+    },
+)
+
+_BENCHMARKS += (
+    {
+        "id": "water-sector-cyber-resilience-assurance",
+        "version": "awwa-j100-21-g430-24-g440-22-epa-policy-pinned-2026-08-31",
+        "kind": "water-treatment-distribution-cyber-physical-risk-resilience-and-recovery-assurance",
+        "source": "Licensed AWWA criteria and current EPA water-sector assessment guidance with approved inert treatment and distribution digital-twin fixtures",
+        "languages": ["water", "wastewater", "ot", "cyber-physical", "multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "public-safety-communications-assurance",
+        "version": "nena-ngsec-i3-p25-cap-policy-pinned-2026-08-31",
+        "kind": "ng911-and-p25-security-protocol-conformance-interoperability-and-resilience-assurance",
+        "source": "NENA NG-SEC and i3 criteria plus TIA-102 and DHS P25 CAP policy with synthetic emergency-call, incident-data, dispatch and radio interoperability fixtures",
+        "languages": ["ng911", "p25", "radio", "protocol", "multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "global-gxp-data-integrity-assurance",
+        "version": "eu-annex11-2011-who-trs1033-pics-pi041-1-policy-pinned",
+        "kind": "international-gxp-computerised-system-validation-data-integrity-and-inspection-assurance",
+        "source": "EU GMP Annex 11, WHO TRS 1033 Annex 4 and PIC/S PI 041-1 criteria with synthetic multinational regulated records, metadata and audit-trail fixtures",
+        "languages": ["gxp", "pharmaceutical", "records", "data-integrity", "multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "transit-cybersecurity-resilience-assurance",
+        "version": "nist-ir-8576-final-2026-08-05",
+        "kind": "multimodal-transit-csf-it-ot-safety-service-continuity-and-recovery-assurance",
+        "source": "Final NIST IR 8576 outcomes with approved inert rail, bus, station, fare, passenger-information, communications and operations digital-twin fixtures",
+        "languages": ["transit", "rail", "bus", "ot", "multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "emergency-incident-coordination-assurance",
+        "version": "iso-22320-2018-policy-pinned",
+        "kind": "multi-organization-incident-command-information-decision-resource-and-handoff-assurance",
+        "source": "Licensed ISO 22320 criteria with synthetic multi-organization incidents, roles, decisions, information, resources, communications, handoffs and recovery fixtures",
+        "languages": ["incident", "emergency", "coordination", "resilience", "multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "gas-scada-cryptographic-assurance",
+        "version": "aga-report12-part1-api1164-iec62351-policy-pinned",
+        "kind": "gas-scada-cryptographic-channel-protocol-key-lifecycle-degraded-mode-and-recovery-assurance",
+        "source": "AGA Report No. 12 Part 1 supplemented by API 1164 and IEC 62351 with inert gas SCADA protocol, key-management, fault and recovery fixtures",
+        "languages": ["gas", "pipeline", "scada", "cryptography", "multi"],
+        "lane": "authorized-companion",
+    },
+    {
+        "id": "ot-water-research-corpus-calibration",
+        "version": "swat-wadi-batadal-research-policy-pinned-2026-08-31",
+        "kind": "water-ot-research-dataset-detection-generalization-contamination-and-process-fidelity-calibration",
+        "source": "License-verified SWaT, WADI and BATADAL research snapshots with independent label audit, temporal and facility holdouts, duplicate and contamination analysis and process-aware replay",
+        "languages": ["water", "ot", "detection", "dataset", "multi"],
         "lane": "authorized-companion",
     },
 )

@@ -1,10 +1,94 @@
 # Benchmark trust operations
 
-Last reviewed: 2026-08-30
+Last reviewed: 2026-08-31
 
 This runbook covers the deployment-owned controls around enhanced benchmark
 execution. Repository policy cannot authorize receipt signers, trusted-time
 authorities, replay state, or security-event anchors.
+
+The maintained execution surface currently contains 262 benchmark families,
+192 adapters, eleven typed scoring protocols, and 96 suite-owned semantic
+evidence integrations. A registry entry is not evidence that a benchmark ran;
+only a subject-bound, replay-protected scorecard from an authorized lane can
+satisfy an enabled policy threshold.
+
+## Domain execution and evidence flow
+
+```mermaid
+flowchart LR
+    Policy["Policy 1.3<br/>enabled family + exact thresholds"] --> Prepare["benchmark-prepare<br/>registry + adapter digest"]
+    Inputs["Pinned target, corpus, labels,<br/>toolchain, seeds, and oracles"] --> Prepare
+    Prepare --> Lane{"Authorized isolated or external lane"}
+    Lane --> Apps["Juice Shop / WebGoat / crAPI / ASTF<br/>state reset + identities + no egress"]
+    Lane --> Fuzz["FuzzBench 20x / Magma 10x / ClusterFuzzLite 3x<br/>matched resources + raw trials"]
+    Lane --> Truth["SBOM build truth / architecture fitness / EPSS-KEV<br/>independent and dated oracles"]
+    Lane --> Identity["AuthZEN / Federation / ISO 24760 / SCIM / SSF / SPIFFE<br/>synthetic identities + decision/trust/replay oracles"]
+    Lane --> Infrastructure["HPC + healthcare + physical AI + critical sectors<br/>overlay, safety-case and recovery mutations"]
+    Lane --> CriticalInfrastructure["Water/wastewater + NG911/P25 + transit + gas SCADA<br/>global GxP + incident coordination + research-only OT corpora"]
+    Lane --> Operations["NSS/DoD + zero trust + airborne/airworthiness + CCSDS space + labs + maritime<br/>authorization, segmentation, service signals, link security, proficiency and resilience cases"]
+    Lane --> Recovery["Ransomware + sanitization + OT backup/remote access + crisis exercises<br/>recovery, residual-data, assessor-agreement and retest oracles"]
+    Lane --> Governance["IEC 62443 provider + ICT risk + crosswalk + LNG/EV<br/>blinded evaluation, aggregation, mapping and cyber-physical oracles"]
+    Lane --> Specialized["C/C++ + formal tools + confidential compute + VVSG + smart contracts<br/>licensed rules, witnesses, attestation, assertions and stateful exploits"]
+    Lane --> Calibration["CWE/EPSS/KEV + process/supplier + incident/privacy<br/>time/project holdouts + assessor and outcome calibration"]
+    Lane --> Artifact["OMS / ML-BOM / Uptane / AIxCC<br/>signed artifacts + simulated fleet/corpus"]
+    Apps --> Normalize["Suite-owned normalizer"]
+    Fuzz --> Normalize
+    Truth --> Normalize
+    Identity --> Normalize
+    Infrastructure --> Normalize
+    CriticalInfrastructure --> Normalize
+    Operations --> Normalize
+    Recovery --> Normalize
+    Governance --> Normalize
+    Calibration --> Normalize
+    Artifact --> Normalize
+    Normalize --> Semantic["Semantic evidence gate<br/>source + subject digests<br/>negative cases + independent replay"]
+    Semantic --> Trust["Signed runtime, isolation, cleanup,<br/>provenance, time, and replay evidence"]
+    Trust --> Score["Typed scorecard + conservative decision"]
+```
+
+| Lane | Minimum operational evidence | Claim boundary |
+|---|---|---|
+| Vulnerable applications and API testing | Immutable target release or image, authoritative positive and clean labels, route and state coverage, reset proof, two-identity authorization replay, and complete egress transcript | Measures the pinned targets and cases only; ASTF 2.0.1 coverage is independently demonstrated and never inherited from the framework |
+| Statistical fuzzing | Equal resource budgets, pinned toolchains, seed and dictionary manifests, raw per-trial observations, crash replay and deduplication, baseline and deliberately broken controls, and measured environment drift | Requires 20 FuzzBench, 10 Magma, or 3 ClusterFuzzLite trials; one successful run is not a performance claim |
+| SBOM and SCA build truth | Declared, resolver, build, installed-artifact, and container-layer observations across at least three ecosystems, including known-unknown and false-advisory controls | Reports component, relationship, field, and advisory accuracy separately |
+| Architecture fitness | Approved rules, history, ownership, clean baselines, blinded labels, and exact cycle, layering, unstable-dependency, change-coupling, ownership-concentration, and drift mutations | Measures the pinned architecture rules and mutation set, not general design quality |
+| Regulated operational assurance | Applicability and authority record, controlled or licensed source digest, synthetic system/organization boundary, adverse operational cases, qualified independent review, recovery proof and immutable audit trail | Never grants an NSS authorization, accreditation, certification credit, regulatory compliance, government endorsement, flag/class approval or product listing |
+| Federal configuration conformance | Quarterly STIG/SRG/SCAP release and delta digest, asset/CPE and profile applicability, XCCDF/OVAL engine lock, blinded automated/manual decisions, exceptions and POA&M, laboratory remediation/rollback, rescan and drift history | Production snapshots are immutable and read-only; remediation occurs only on representative targets and does not establish system authorization or compliance |
+| OT patch lifecycle | Licensed IEC 62443-2-3 criteria, signed advisory and firmware identity, safety/availability review, qualification, maintenance window, safe state, partial failure, rollback, compensating-control expiry, restoration and outcome history | Inert IACS digital twin or representative laboratory only; no production process actuation or IEC certification claim |
+| Recovery, sanitization, and crisis assurance | Pinned NIST/ISO/IEC/IEEE editions, asset and dependency scope, protected positive/negative cases, independent residual-data or recovery verification, blinded assessor decisions where applicable, corrective owners, retest, cleanup and immutable ledgers | Uses synthetic data and inert or disposable systems; does not destroy production media, deploy ransomware, operate a live emergency, modify production OT, or issue certification/compliance claims |
+| Continuing airworthiness | Licensed DO-355A and ARP5150B/ARP5151B criteria, service and vulnerability signals, function/hazard/configuration trace, fleet effectivity, interim and corrective action, field deployment, effectiveness and recurrence | Synthetic fleets and inert system models with no aircraft or flight connectivity; results do not provide authority approval or certification credit |
+| Space-mission communications | Pinned CCSDS threat, architecture, algorithm, credential, SDLS and extended-procedure editions; mission topology, managed parameters, keys/security associations, forgery/replay/order/delay/desynchronization/link-fault cases, recovery and residue proof | No-egress digital twin with inert payload and actuator interfaces; no production spacecraft connectivity, flight qualification or certification claim |
+| Financial messaging assessment | CSCF 2026 and IAF lock, BIC/connectivity architecture, complete applicability, annual delta, significant change, assessor competence/independence, bounded prior reliance, design/operation samples, remediation, retest and KYC-SA handoff | Synthetic architecture, identities and transactions only; no production credentials/messages, attestation submission, Swift certification or compliance claim |
+| Empirical calibration | Independently audited labels, project and chronological splits, duplicate and contamination analysis, point-in-time inputs, blinded assessors or independent witness validators, disagreements, confidence and longitudinal outcomes | Measures the governed corpus, observation window and assessor/tool versions only; it does not establish universal accuracy or causal improvement |
+| Temporal prioritization | Three or more ordered dated EPSS, KEV, and outcome snapshots with as-of joins, alias reconciliation, future-data exclusion, censoring, calibration, operational budgets, and time-shift controls | Measures point-in-time prioritization without allowing future intelligence into an earlier decision |
+| Identity lifecycle and continuous access | Synthetic SCIM tenants and roles, full resource lifecycle, cursor/ETag/bulk/filter cases, signed SET replay, SSF push/poll streams, CAEP/RISC subject and revocation events, and alpha-suite acknowledgement | Does not issue OpenID certification; official SSF conformance remains alpha and organization-owned oracles are mandatory |
+| Authorization decision interoperability | AuthZEN 1.0 PDP/PEP roles, exact subject-resource-action-context bindings, declared capabilities, single/batch/search behavior, cache and policy revisions, confusion, partial failure, timeout, outage, and clean controls | Draft AuthZEN profiles are excluded; the suite supplies organization-owned conformance evidence and never issues OpenID certification |
+| Identity federation | Federation 1.1 trust anchors, intermediates and leaves, signed entity statements, authority hints, metadata policies, trust marks, OIDC behavior, rollover, expiry, cycle, fork, substitution and downgrade cases | Official Federation plans are explicitly early; independent negative replay is mandatory and a pass is not OpenID certification |
+| Identity-management framework | Licensed ISO/IEC 24760 Parts 1-3 criteria, people/organization/device/software identities, authorities, aliases and namespaces, privacy, federation, assurance and complete proofing-through-deletion lifecycle | Licensed criteria remain access-controlled; assessor agreement is bounded and the suite does not issue ISO certification |
+| Workload identity | Stable-spec snapshot, test trust domains, node/workload attestation, selector isolation, X.509/JWT SVIDs, Workload API authorization, rotation, revocation, bundles, and federation | Experimental remote Workload API is excluded; no production identity is issued |
+| HPC and AI infrastructure | SP 800-223 zones and threats, all 60 SP 800-234 tailored controls, applicability/ODPs, scheduler, accelerator, storage, shared-resource, management-plane, performance, residue and recovery evidence | Runs only in an authorized isolated partition, digital twin or representative laboratory; draft SP 800-239 is excluded and no NIST certification is claimed |
+| AI data-quality visualization | TR 5259-6 measure/dataset/population/stratum binding, transformation provenance, uncertainty, missingness, comparison context, accessibility and misleading-presentation mutations | Technical Report guidance supports evidence quality but cannot be presented as ISO conformance or certification |
+| Medical-device cybersecurity | SW96, IEC 80001-1/60601-4-5 and IMDRF risk, capability, SBOM, legacy and patient-safety evidence | Synthetic devices and patient data only; no regulatory approval claim |
+| Physical AI and autonomy | ISO 21448/PAS 8800/34502 and UL 4600 ODD, scenario, degradation, fallback and safety-case evidence | Deterministic simulation or inert bench only; no real-world actuation |
+| Critical C/C++ | Licensed MISRA C/C++ rule digests, compiler matrices, runtime corroboration and governed deviations | Licensed content stays outside artifacts; tool results are not product certification |
+| Confidential computing | RATS/EAT plus SEV-SNP, TDX and CCA evidence, endorsement, TCB, revocation and secret-denial cases | Synthetic secrets and fixed trust roots; no hardware certification |
+| Voting systems | VVSG 2.0 Test Assertions 1.4, software independence, accessibility, audit, media and recovery | Synthetic elections only; no EAC or jurisdiction certification |
+| Nuclear, rail and space | Sector applicability, hazards, digital-twin failures, degraded operation, recovery and independent assurance | Inert laboratories only; no production actuation or regulator claim |
+| Stateful smart contracts | Source-to-bytecode identity, multi-transaction exploits, economic invariants, upgrades, bridges, clean controls and fix replay | Disposable local chain and synthetic assets; alpha SCSVS excluded |
+| DevSecOps/test maturity | Immutable delivery events, maturity evidence, quality/security outcomes, escaped defects, anti-gaming, longitudinal uncertainty and blinded reassessment | Read-only governance lane with protected licensed criteria and privacy-safe cohorts |
+| Detection-product calibration | Independent ATT&CK step ground truth, benign workloads, visibility/detection/protection separation, false positives, latency, evasion and version drift | Isolated synthetic enterprise using inert payloads; no vendor endorsement |
+| AI/ML artifact supply chain | OMS 1.0 schemas and official verifier vectors, full multi-file manifests, signer identity, independent verification, CycloneDX 1.7 model cards, datasets, dependencies, provenance, roundtrip, omission and tamper cases | Signature proves bounded integrity/authenticity and an ML-BOM proves schema-valid inventory; neither proves model safety, fairness, quality, or fitness |
+| Automotive OTA | Simulated Director and Image repositories, full/partial verification ECUs, role/key thresholds, secure time, POUF, install/recovery, rollback, freeze, mix-and-match and compromise cases | Uses inert firmware and simulated vehicles; does not claim Uptane or regulatory certification |
+| Autonomous remediation and criticality | Immutable approved AIxCC corpus/scoring pipeline, protected splits, contamination and training-overlap analysis, independent proof/patch/functional replay, repeated resource-bounded trials; separately, reproducible OpenSSF Criticality Score signals and temporal calibration | Fragmented public AIxCC materials are not presumed benchmark-ready; criticality is context-only and never a security gate or vulnerability-likelihood score |
+
+Every one of these lanes must supply `suite-owned-extension-evidence` inside
+the governed score evidence. Domain-specific required inputs are exported by
+the maintained adapter contract, so missing raw trials, reset proof, build
+truth, architecture labels, or dated snapshots fail closed before a score can
+contribute to assurance. Use
+[`industry-assurance-policy-1.3.example.json`](../examples/industry-assurance-policy-1.3.example.json)
+as the disabled-by-default policy template.
 
 ## Deployment topology
 

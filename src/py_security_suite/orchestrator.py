@@ -197,6 +197,7 @@ def _scan_sealed_project(
     boundary_graph = build_boundary_graph(
         scan_target,
         require_governed_parsers=config.profile in {"production", "release"},
+        allow_ungoverned_binary_parsers=config.profile not in {"production", "release"},
     )
     derived_artifacts["boundary-graph.json"] = boundary_graph
     from .runtime_trace import runtime_trace_artifact

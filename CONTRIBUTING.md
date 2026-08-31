@@ -37,3 +37,10 @@ commands used for validation. Do not commit real secrets, private keys, licensed
 query packs, vulnerability databases, native tool bundles, or generated scan
 artifacts. Security-sensitive findings belong in a private advisory as described
 in [SECURITY.md](SECURITY.md).
+
+Protected branches require an approval from someone other than the last pusher.
+Repository administrators must therefore retain at least two independent people
+or teams with review authority and CODEOWNERS coverage. A single eligible owner
+is an explicit fail-closed governance state, not a reason to weaken required
+checks or silently bypass review; emergency overrides must be time-bounded,
+recorded, and followed by restoration and independent retrospective review.

@@ -133,8 +133,35 @@ class PathSafetyTests(unittest.TestCase):
             held = HeldParentDirectory(root, None)
             with self.assertRaisesRegex(ValueError, "rename must remain"):
                 held.rename(root / "source", root.parent / "destination")
+            with self.assertRaisesRegex(ValueError, "replacement must remain"):
+                held.replace(root / "source", root.parent / "destination")
             with self.assertRaisesRegex(ValueError, "deletion must remain"):
                 held.remove_tree(root.parent / "outside")
+
+    def test_held_parent_syncs_descriptor_on_posix(self) -> None:
+        held = HeldParentDirectory(Path.cwd().absolute(), 7)
+        with (
+            patch("py_security_suite.path_safety.os.name", "posix"),
+            patch("py_security_suite.path_safety.os.fsync") as fsync,
+        ):
+            held.sync()
+
+        fsync.assert_called_once_with(7)
+
+    def test_held_parent_uses_descriptor_relative_rename_on_posix(self) -> None:
+        root = Path.cwd().absolute()
+        held = HeldParentDirectory(root, 11)
+        with (
+            patch("py_security_suite.path_safety.os.name", "posix"),
+            patch("py_security_suite.path_safety.os.rename") as rename,
+            patch.object(HeldParentDirectory, "sync") as sync,
+        ):
+            held.rename(root / "source", root / "destination")
+
+        rename.assert_called_once_with(
+            "source", "destination", src_dir_fd=11, dst_dir_fd=11
+        )
+        sync.assert_called_once_with()
 
 
 if __name__ == "__main__":

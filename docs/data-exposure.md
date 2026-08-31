@@ -1,5 +1,7 @@
 # Sensitive-data exposure analysis
 
+Last reviewed: 2026-08-30
+
 The suite detects implementation paths that can disclose credentials or private
 data through logs, telemetry, analytics, metrics, error reporting, or outbound
 SDKs. Analysis remains offline and does not import or execute the target.

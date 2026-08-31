@@ -1,7 +1,76 @@
 {
   "schema_version": "1.3",
   "enforce": true,
-  "profiles": [],
+  "profiles": [
+    {"id": "autonomous-vulnerability-research", "applicable": false, "procedure_execution": "planned"},
+    {"id": "open-source-security-metadata-graph", "applicable": false, "procedure_execution": "planned"},
+    {"id": "forge-independent-source-integrity", "applicable": false, "procedure_execution": "planned"},
+    {"id": "malicious-package-behavior", "applicable": false, "procedure_execution": "planned"},
+    {"id": "cloud-native-delivery-risk-taxonomies", "applicable": false, "procedure_execution": "planned"},
+    {"id": "build-observed-sbom-assurance", "applicable": false, "procedure_execution": "planned"},
+    {"id": "real-world-vulnerability-generalization", "applicable": false, "procedure_execution": "planned"},
+    {"id": "mobile-risk-taxonomy-assurance", "applicable": false, "procedure_execution": "planned"},
+    {"id": "smart-contract-security-assurance", "applicable": false, "procedure_execution": "planned"},
+    {"id": "cloud-native-lifecycle-control-assurance", "applicable": false, "procedure_execution": "planned"},
+    {"id": "repository-level-vulnerability-context", "applicable": false, "procedure_execution": "planned"},
+    {"id": "embedded-device-threat-assurance", "applicable": false, "procedure_execution": "planned"},
+    {"id": "business-logic-abuse-assurance", "applicable": false, "procedure_execution": "planned"},
+    {"id": "cncf-supply-chain-practices-assurance", "applicable": false, "procedure_execution": "planned"},
+    {"id": "public-vulnerable-application-testing", "applicable": false, "procedure_execution": "planned"},
+    {"id": "statistical-fuzzing-evaluation", "applicable": false, "procedure_execution": "planned"},
+    {"id": "sbom-build-truth-validation", "applicable": false, "procedure_execution": "planned"},
+    {"id": "architecture-fitness-validation", "applicable": false, "procedure_execution": "planned"},
+    {"id": "identity-lifecycle-continuous-access", "applicable": false, "procedure_execution": "planned"},
+    {"id": "workload-identity-federation", "applicable": false, "procedure_execution": "planned"},
+    {"id": "ai-ml-artifact-supply-chain", "applicable": false, "procedure_execution": "planned"},
+    {"id": "automotive-secure-update-protocol", "applicable": false, "procedure_execution": "planned"},
+    {"id": "open-source-criticality-prioritization", "applicable": false, "procedure_execution": "planned"},
+    {"id": "authorization-decision-interoperability", "applicable": false, "procedure_execution": "planned"},
+    {"id": "openid-federation-security", "applicable": false, "procedure_execution": "planned"},
+    {"id": "hpc-ai-infrastructure-security", "applicable": false, "procedure_execution": "planned"},
+    {"id": "identity-management-framework", "applicable": false, "procedure_execution": "planned"},
+    {"id": "medical-device-cybersecurity-depth", "applicable": false, "procedure_execution": "planned"},
+    {"id": "autonomous-physical-ai-safety", "applicable": false, "procedure_execution": "planned"},
+    {"id": "critical-c-cpp-coding-assurance", "applicable": false, "procedure_execution": "planned"},
+    {"id": "cross-vendor-confidential-computing-attestation", "applicable": false, "procedure_execution": "planned"},
+    {"id": "voting-system-assurance", "applicable": false, "procedure_execution": "planned"},
+    {"id": "critical-sector-safety-security", "applicable": false, "procedure_execution": "planned"},
+    {"id": "space-mission-communications-security", "applicable": false, "procedure_execution": "planned"},
+    {"id": "stateful-smart-contract-assurance", "applicable": false, "procedure_execution": "planned"},
+    {"id": "national-security-system-authorization", "applicable": false, "procedure_execution": "planned"},
+    {"id": "operational-zero-trust-implementation", "applicable": false, "procedure_execution": "planned"},
+    {"id": "healthcare-operational-resilience-depth", "applicable": false, "procedure_execution": "planned"},
+    {"id": "aircraft-system-development-safety-assurance", "applicable": false, "procedure_execution": "planned"},
+    {"id": "accredited-laboratory-operating-assurance", "applicable": false, "procedure_execution": "planned"},
+    {"id": "maritime-operational-cyber-risk-depth", "applicable": false, "procedure_execution": "planned"},
+    {"id": "empirical-assurance-benchmark-calibration", "applicable": false, "procedure_execution": "planned"},
+    {"id": "devsecops-maturity", "applicable": false, "procedure_execution": "planned"},
+    {"id": "test-maturity", "applicable": false, "procedure_execution": "planned"},
+    {"id": "detection-product-evaluation", "applicable": false, "procedure_execution": "planned"},
+    {"id": "firmware-hardware-trust", "applicable": false, "procedure_execution": "planned"},
+    {"id": "kubernetes-hardening-conformance", "applicable": false, "procedure_execution": "planned"},
+    {"id": "payment-acceptance-security", "applicable": false, "procedure_execution": "planned"},
+    {"id": "space-software-product-assurance", "applicable": false, "procedure_execution": "planned"},
+    {"id": "regional-financial-technology-resilience", "applicable": false, "procedure_execution": "planned"},
+    {"id": "secure-information-sharing-and-competence", "applicable": false, "procedure_execution": "planned"},
+    {"id": "semiconductor-equipment-cybersecurity", "applicable": false, "procedure_execution": "planned"},
+    {"id": "pipeline-control-system-cybersecurity", "applicable": false, "procedure_execution": "planned"},
+    {"id": "gxp-computerized-system-data-integrity", "applicable": false, "procedure_execution": "planned"},
+    {"id": "criminal-justice-information-security", "applicable": false, "procedure_execution": "planned"},
+    {"id": "automotive-process-capability-assurance", "applicable": false, "procedure_execution": "planned"},
+    {"id": "process-industry-functional-safety-security", "applicable": false, "procedure_execution": "planned"},
+    {"id": "building-automation-secure-connect", "applicable": false, "procedure_execution": "planned"},
+    {"id": "industrial-robotics-safety-security", "applicable": false, "procedure_execution": "planned"},
+    {"id": "data-centre-facility-resilience", "applicable": false, "procedure_execution": "planned"},
+    {"id": "ransomware-resilience", "applicable": false, "procedure_execution": "planned"},
+    {"id": "media-sanitization", "applicable": false, "procedure_execution": "planned"},
+    {"id": "ot-backup-and-remote-access", "applicable": false, "procedure_execution": "planned"},
+    {"id": "iec-62443-provider-evaluation", "applicable": false, "procedure_execution": "planned"},
+    {"id": "crisis-leadership-and-exercises", "applicable": false, "procedure_execution": "planned"},
+    {"id": "enterprise-ict-risk-portfolio", "applicable": false, "procedure_execution": "planned"},
+    {"id": "standards-crosswalk-governance", "applicable": false, "procedure_execution": "planned"},
+    {"id": "lng-and-ev-infrastructure", "applicable": false, "procedure_execution": "planned"}
+  ],
   "controls": [],
   "procedures": [],
   "benchmarks": [
@@ -15,6 +84,686 @@
         "minimum_conformance_rate": 0.9
       },
       "adapter_manifest": "security/benchmark-adapters/w3c-act-rules.json"
+    },
+    {
+      "id": "oss-crs-crsbench",
+      "enabled": false,
+      "corpus_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "evidence_artifact": "oss-crs-crsbench-score.json",
+      "thresholds": {"maximum_attack_success_rate": 0.2, "minimum_mean_utility": 0.8},
+      "adapter_manifest": null
+    },
+    {
+      "id": "openssf-security-insights-conformance",
+      "enabled": false,
+      "corpus_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "evidence_artifact": "security-insights-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "guac-interoperability",
+      "enabled": false,
+      "corpus_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "evidence_artifact": "guac-interoperability-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "gittuf-source-policy-conformance",
+      "enabled": false,
+      "corpus_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "evidence_artifact": "gittuf-source-policy-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "openssf-package-analysis-malicious-packages",
+      "enabled": false,
+      "corpus_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "evidence_artifact": "package-analysis-score.json",
+      "thresholds": {"minimum_precision": 0.8, "minimum_recall": 0.8, "minimum_f1": 0.8, "maximum_false_positive_rate": 0.2},
+      "adapter_manifest": null
+    },
+    {
+      "id": "owasp-kubernetes-top10-conformance",
+      "enabled": false,
+      "corpus_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+      "evidence_artifact": "owasp-kubernetes-top10-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "owasp-cicd-top10-conformance",
+      "enabled": false,
+      "corpus_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "evidence_artifact": "owasp-cicd-top10-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "sbomit-build-observed-sbom",
+      "enabled": false,
+      "corpus_sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+      "evidence_artifact": "sbomit-build-observed-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "primevul-real-world-vulnerability-detection",
+      "enabled": false,
+      "corpus_sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+      "evidence_artifact": "primevul-real-world-score.json",
+      "thresholds": {"minimum_precision": 0.8, "minimum_recall": 0.8, "minimum_f1": 0.8, "maximum_false_positive_rate": 0.2},
+      "adapter_manifest": null
+    },
+    {
+      "id": "diversevul-unseen-project-generalization",
+      "enabled": false,
+      "corpus_sha256": "5555555555555555555555555555555555555555555555555555555555555555",
+      "evidence_artifact": "diversevul-generalization-score.json",
+      "thresholds": {"minimum_precision": 0.8, "minimum_recall": 0.8, "minimum_f1": 0.8, "maximum_false_positive_rate": 0.2},
+      "adapter_manifest": null
+    },
+    {
+      "id": "cvefixes-chronological-fix-pair-validation",
+      "enabled": false,
+      "corpus_sha256": "6666666666666666666666666666666666666666666666666666666666666666",
+      "evidence_artifact": "cvefixes-chronological-score.json",
+      "thresholds": {"minimum_precision": 0.8, "minimum_recall": 0.8, "minimum_f1": 0.8, "maximum_false_positive_rate": 0.2},
+      "adapter_manifest": null
+    },
+    {
+      "id": "owasp-mobile-top10-conformance",
+      "enabled": false,
+      "corpus_sha256": "7777777777777777777777777777777777777777777777777777777777777777",
+      "evidence_artifact": "owasp-mobile-top10-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "owasp-smart-contract-top10-conformance",
+      "enabled": false,
+      "corpus_sha256": "8888888888888888888888888888888888888888888888888888888888888888",
+      "evidence_artifact": "owasp-smart-contract-top10-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "cncf-cloud-native-security-controls-conformance",
+      "enabled": false,
+      "corpus_sha256": "9999999999999999999999999999999999999999999999999999999999999999",
+      "evidence_artifact": "cncf-cloud-native-controls-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "reposvul-repository-context-validation",
+      "enabled": false,
+      "corpus_sha256": "abababababababababababababababababababababababababababababababab",
+      "evidence_artifact": "reposvul-repository-context-score.json",
+      "thresholds": {"minimum_precision": 0.8, "minimum_recall": 0.8, "minimum_f1": 0.8, "maximum_false_positive_rate": 0.2},
+      "adapter_manifest": null
+    },
+    {
+      "id": "vuleval-repository-dependency-evaluation",
+      "enabled": false,
+      "corpus_sha256": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+      "evidence_artifact": "vuleval-repository-dependency-score.json",
+      "thresholds": {"minimum_precision": 0.8, "minimum_recall": 0.8, "minimum_f1": 0.8, "maximum_false_positive_rate": 0.2},
+      "adapter_manifest": null
+    },
+    {
+      "id": "mitre-emb3d-property-threat-conformance",
+      "enabled": false,
+      "corpus_sha256": "1212121212121212121212121212121212121212121212121212121212121212",
+      "evidence_artifact": "mitre-emb3d-conformance-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "owasp-business-logic-abuse-top10-conformance",
+      "enabled": false,
+      "corpus_sha256": "3434343434343434343434343434343434343434343434343434343434343434",
+      "evidence_artifact": "owasp-business-logic-abuse-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "cncf-supply-chain-best-practices-v2-conformance",
+      "enabled": false,
+      "corpus_sha256": "5656565656565656565656565656565656565656565656565656565656565656",
+      "evidence_artifact": "cncf-supply-chain-v2-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "owasp-juice-shop",
+      "enabled": false,
+      "corpus_sha256": "7878787878787878787878787878787878787878787878787878787878787878",
+      "evidence_artifact": "owasp-juice-shop-score.json",
+      "thresholds": {"minimum_precision": 0.8, "minimum_recall": 0.8, "minimum_f1": 0.8, "maximum_false_positive_rate": 0.2},
+      "adapter_manifest": null
+    },
+    {
+      "id": "owasp-webgoat",
+      "enabled": false,
+      "corpus_sha256": "9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a",
+      "evidence_artifact": "owasp-webgoat-score.json",
+      "thresholds": {"minimum_precision": 0.8, "minimum_recall": 0.8, "minimum_f1": 0.8, "maximum_false_positive_rate": 0.2},
+      "adapter_manifest": null
+    },
+    {
+      "id": "owasp-crapi",
+      "enabled": false,
+      "corpus_sha256": "bcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbc",
+      "evidence_artifact": "owasp-crapi-score.json",
+      "thresholds": {"minimum_precision": 0.8, "minimum_recall": 0.8, "minimum_f1": 0.8, "maximum_false_positive_rate": 0.2},
+      "adapter_manifest": null
+    },
+    {
+      "id": "owasp-api-security-testing-framework",
+      "enabled": false,
+      "corpus_sha256": "dededededededededededededededededededededededededededededededede",
+      "evidence_artifact": "owasp-astf-score.json",
+      "thresholds": {"minimum_precision": 0.8, "minimum_recall": 0.8, "minimum_f1": 0.8, "maximum_false_positive_rate": 0.2},
+      "adapter_manifest": null
+    },
+    {
+      "id": "google-fuzzbench",
+      "enabled": false,
+      "corpus_sha256": "f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0",
+      "evidence_artifact": "google-fuzzbench-score.json",
+      "thresholds": {"minimum_executions": 1000, "minimum_coverage_gain": 0.05},
+      "adapter_manifest": null
+    },
+    {
+      "id": "magma-ground-truth",
+      "enabled": false,
+      "corpus_sha256": "1313131313131313131313131313131313131313131313131313131313131313",
+      "evidence_artifact": "magma-ground-truth-score.json",
+      "thresholds": {"minimum_executions": 1000, "minimum_coverage_gain": 0.05},
+      "adapter_manifest": null
+    },
+    {
+      "id": "oss-fuzz-clusterfuzzlite",
+      "enabled": false,
+      "corpus_sha256": "2424242424242424242424242424242424242424242424242424242424242424",
+      "evidence_artifact": "oss-fuzz-clusterfuzzlite-score.json",
+      "thresholds": {"minimum_executions": 1000, "minimum_coverage_gain": 0.05},
+      "adapter_manifest": null
+    },
+    {
+      "id": "sbom-sca-holdout",
+      "enabled": false,
+      "corpus_sha256": "3535353535353535353535353535353535353535353535353535353535353535",
+      "evidence_artifact": "sbom-sca-build-truth-score.json",
+      "thresholds": {"minimum_precision": 0.8, "minimum_recall": 0.8, "minimum_f1": 0.8, "maximum_false_positive_rate": 0.2},
+      "adapter_manifest": null
+    },
+    {
+      "id": "architecture-quality-holdout",
+      "enabled": false,
+      "corpus_sha256": "4646464646464646464646464646464646464646464646464646464646464646",
+      "evidence_artifact": "architecture-fitness-score.json",
+      "thresholds": {"minimum_precision": 0.8, "minimum_recall": 0.8, "minimum_f1": 0.8, "maximum_false_positive_rate": 0.2},
+      "adapter_manifest": null
+    },
+    {
+      "id": "epss-kev-temporal-backtest",
+      "enabled": false,
+      "corpus_sha256": "5757575757575757575757575757575757575757575757575757575757575757",
+      "evidence_artifact": "epss-kev-temporal-score.json",
+      "thresholds": {"maximum_brier_score": 0.2},
+      "adapter_manifest": null
+    },
+    {
+      "id": "scim-lifecycle-security-conformance",
+      "enabled": false,
+      "corpus_sha256": "6868686868686868686868686868686868686868686868686868686868686868",
+      "evidence_artifact": "scim-lifecycle-conformance-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "openid-shared-signals-conformance",
+      "enabled": false,
+      "corpus_sha256": "7979797979797979797979797979797979797979797979797979797979797979",
+      "evidence_artifact": "openid-shared-signals-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "spiffe-workload-identity-conformance",
+      "enabled": false,
+      "corpus_sha256": "8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a",
+      "evidence_artifact": "spiffe-workload-identity-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "openssf-model-signing-conformance",
+      "enabled": false,
+      "corpus_sha256": "9b9b9b9b9b9b9b9b9b9b9b9b9b9b9b9b9b9b9b9b9b9b9b9b9b9b9b9b9b9b9b9b",
+      "evidence_artifact": "openssf-model-signing-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "cyclonedx-mlbom-conformance",
+      "enabled": false,
+      "corpus_sha256": "acacacacacacacacacacacacacacacacacacacacacacacacacacacacacacacac",
+      "evidence_artifact": "cyclonedx-mlbom-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "uptane-ota-security-conformance",
+      "enabled": false,
+      "corpus_sha256": "bdbdbdbdbdbdbdbdbdbdbdbdbdbdbdbdbdbdbdbdbdbdbdbdbdbdbdbdbdbdbdbd",
+      "evidence_artifact": "uptane-ota-security-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "darpa-aixcc-autonomous-vulnerability-remediation",
+      "enabled": false,
+      "corpus_sha256": "cececececececececececececececececececececececececececececececece",
+      "evidence_artifact": "darpa-aixcc-remediation-score.json",
+      "thresholds": {"maximum_attack_success_rate": 0.2, "minimum_mean_utility": 0.8},
+      "adapter_manifest": null
+    },
+    {
+      "id": "openssf-criticality-score-calibration",
+      "enabled": false,
+      "corpus_sha256": "dfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdf",
+      "evidence_artifact": "openssf-criticality-calibration-score.json",
+      "thresholds": {"maximum_brier_score": 0.2},
+      "adapter_manifest": null
+    },
+    {
+      "id": "authzen-authorization-api-conformance",
+      "enabled": false,
+      "corpus_sha256": "1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a",
+      "evidence_artifact": "authzen-authorization-api-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "openid-federation-conformance",
+      "enabled": false,
+      "corpus_sha256": "2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b",
+      "evidence_artifact": "openid-federation-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "nist-hpc-ai-infrastructure-assurance",
+      "enabled": false,
+      "corpus_sha256": "3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c",
+      "evidence_artifact": "nist-hpc-ai-infrastructure-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "iso-24760-identity-management-assurance",
+      "enabled": false,
+      "corpus_sha256": "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d",
+      "evidence_artifact": "iso-24760-identity-management-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "iso-5259-6-data-quality-visualization",
+      "enabled": false,
+      "corpus_sha256": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+      "evidence_artifact": "iso-5259-6-data-quality-visualization-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "medical-device-cybersecurity-assurance",
+      "enabled": false,
+      "corpus_sha256": "6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f",
+      "evidence_artifact": "medical-device-cybersecurity-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "autonomous-physical-ai-safety",
+      "enabled": false,
+      "corpus_sha256": "7070707070707070707070707070707070707070707070707070707070707070",
+      "evidence_artifact": "autonomous-physical-ai-safety-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "critical-c-cpp-coding-conformance",
+      "enabled": false,
+      "corpus_sha256": "7171717171717171717171717171717171717171717171717171717171717171",
+      "evidence_artifact": "critical-c-cpp-coding-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "confidential-computing-attestation-conformance",
+      "enabled": false,
+      "corpus_sha256": "7272727272727272727272727272727272727272727272727272727272727272",
+      "evidence_artifact": "confidential-computing-attestation-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "vvsg-voting-system-assurance",
+      "enabled": false,
+      "corpus_sha256": "7373737373737373737373737373737373737373737373737373737373737373",
+      "evidence_artifact": "vvsg-voting-system-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "critical-sector-safety-security-assurance",
+      "enabled": false,
+      "corpus_sha256": "7474747474747474747474747474747474747474747474747474747474747474",
+      "evidence_artifact": "critical-sector-safety-security-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "stateful-smart-contract-security",
+      "enabled": false,
+      "corpus_sha256": "7575757575757575757575757575757575757575757575757575757575757575",
+      "evidence_artifact": "stateful-smart-contract-security-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "devsecops-test-maturity-longitudinal",
+      "enabled": false,
+      "corpus_sha256": "7676767676767676767676767676767676767676767676767676767676767676",
+      "evidence_artifact": "devsecops-test-maturity-longitudinal-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "detection-product-longitudinal-calibration",
+      "enabled": false,
+      "corpus_sha256": "7777777777777777777777777777777777777777777777777777777777777777",
+      "evidence_artifact": "detection-product-longitudinal-calibration-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "nss-dod-authorization-assurance",
+      "enabled": false,
+      "corpus_sha256": "8888888888888888888888888888888888888888888888888888888888888888",
+      "evidence_artifact": "nss-dod-authorization-assurance-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "zero-trust-zig-microsegmentation-assurance",
+      "enabled": false,
+      "corpus_sha256": "9999999999999999999999999999999999999999999999999999999999999999",
+      "evidence_artifact": "zero-trust-zig-microsegmentation-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "healthcare-operational-resilience-assurance",
+      "enabled": false,
+      "corpus_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "evidence_artifact": "healthcare-operational-resilience-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "aircraft-system-safety-development-assurance",
+      "enabled": false,
+      "corpus_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "evidence_artifact": "aircraft-system-safety-development-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "ilac-laboratory-operating-assurance",
+      "enabled": false,
+      "corpus_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "evidence_artifact": "ilac-laboratory-operating-assurance-score.json",
+      "thresholds": {"minimum_agreement": 0.9, "minimum_chance_corrected_agreement": 0.8, "minimum_reference_accuracy": 0.95},
+      "adapter_manifest": null
+    },
+    {
+      "id": "maritime-operational-cyber-resilience-assurance",
+      "enabled": false,
+      "corpus_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "evidence_artifact": "maritime-operational-cyber-resilience-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "weakness-prioritization-temporal-calibration",
+      "enabled": false,
+      "corpus_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "evidence_artifact": "weakness-prioritization-temporal-calibration-score.json",
+      "thresholds": {"maximum_brier_score": 0.2},
+      "adapter_manifest": null
+    },
+    {
+      "id": "formal-methods-tool-disagreement-assurance",
+      "enabled": false,
+      "corpus_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "evidence_artifact": "formal-methods-tool-disagreement-score.json",
+      "thresholds": {"minimum_accuracy": 0.95},
+      "adapter_manifest": null
+    },
+    {
+      "id": "process-supplier-assessor-outcome-calibration",
+      "enabled": false,
+      "corpus_sha256": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+      "evidence_artifact": "process-supplier-assessor-outcome-score.json",
+      "thresholds": {"minimum_agreement": 0.9, "minimum_chance_corrected_agreement": 0.8},
+      "adapter_manifest": null
+    },
+    {
+      "id": "incident-privacy-outcome-exercise-calibration",
+      "enabled": false,
+      "corpus_sha256": "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+      "evidence_artifact": "incident-privacy-outcome-exercise-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "ccsds-space-mission-link-security",
+      "enabled": false,
+      "corpus_sha256": "0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c",
+      "evidence_artifact": "ccsds-space-mission-link-security-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "firmware-resilience-measured-boot",
+      "enabled": false,
+      "corpus_sha256": "0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d",
+      "evidence_artifact": "firmware-device-integrity-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "cis-kubernetes-hardening-conformance",
+      "enabled": false,
+      "corpus_sha256": "0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e",
+      "evidence_artifact": "kubernetes-pss-admission-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "pci-payment-acceptance-conformance",
+      "enabled": false,
+      "corpus_sha256": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
+      "evidence_artifact": "payment-pin-poi-hsm-3ds-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "ecss-space-software-product-assurance",
+      "enabled": false,
+      "corpus_sha256": "1010101010101010101010101010101010101010101010101010101010101010",
+      "evidence_artifact": "ecss-space-software-product-assurance-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "regional-financial-technology-resilience-assurance",
+      "enabled": false,
+      "corpus_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+      "evidence_artifact": "regional-financial-resilience-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "secure-information-sharing-competence-assurance",
+      "enabled": false,
+      "corpus_sha256": "1212121212121212121212121212121212121212121212121212121212121212",
+      "evidence_artifact": "information-sharing-competence-score.json",
+      "thresholds": {"minimum_agreement": 0.9, "minimum_chance_corrected_agreement": 0.8},
+      "adapter_manifest": null
+    },
+    {
+      "id": "semi-fab-equipment-cybersecurity-assurance",
+      "enabled": false,
+      "corpus_sha256": "1313131313131313131313131313131313131313131313131313131313131313",
+      "evidence_artifact": "semi-fab-equipment-cybersecurity-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "api-1164-pipeline-control-resilience",
+      "enabled": false,
+      "corpus_sha256": "1414141414141414141414141414141414141414141414141414141414141414",
+      "evidence_artifact": "api-1164-pipeline-resilience-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "gxp-part11-data-integrity-assurance",
+      "enabled": false,
+      "corpus_sha256": "1515151515151515151515151515151515151515151515151515151515151515",
+      "evidence_artifact": "gxp-part11-data-integrity-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "fbi-cjis-security-policy-assurance",
+      "enabled": false,
+      "corpus_sha256": "1616161616161616161616161616161616161616161616161616161616161616",
+      "evidence_artifact": "fbi-cjis-security-policy-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "automotive-spice-capability-assurance",
+      "enabled": false,
+      "corpus_sha256": "1717171717171717171717171717171717171717171717171717171717171717",
+      "evidence_artifact": "automotive-spice-capability-score.json",
+      "thresholds": {"minimum_agreement": 0.9, "minimum_chance_corrected_agreement": 0.8},
+      "adapter_manifest": null
+    },
+    {
+      "id": "iec-61511-sis-safety-security-assurance",
+      "enabled": false,
+      "corpus_sha256": "1818181818181818181818181818181818181818181818181818181818181818",
+      "evidence_artifact": "iec-61511-sis-safety-security-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "bacnet-secure-connect-assurance",
+      "enabled": false,
+      "corpus_sha256": "1919191919191919191919191919191919191919191919191919191919191919",
+      "evidence_artifact": "bacnet-secure-connect-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "industrial-robotics-safety-security-assurance",
+      "enabled": false,
+      "corpus_sha256": "1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a",
+      "evidence_artifact": "industrial-robotics-safety-security-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "data-centre-facility-resilience-assurance",
+      "enabled": false,
+      "corpus_sha256": "1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b",
+      "evidence_artifact": "data-centre-facility-resilience-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "ransomware-resilience-exercise",
+      "enabled": false,
+      "corpus_sha256": "1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c",
+      "evidence_artifact": "ransomware-resilience-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "media-sanitization-verification",
+      "enabled": false,
+      "corpus_sha256": "1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d",
+      "evidence_artifact": "media-sanitization-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "ot-backup-remote-access-recovery",
+      "enabled": false,
+      "corpus_sha256": "1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e",
+      "evidence_artifact": "ot-backup-remote-access-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "iec-62443-service-provider-evaluation",
+      "enabled": false,
+      "corpus_sha256": "1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f",
+      "evidence_artifact": "iec-62443-service-provider-evaluation-score.json",
+      "thresholds": {"minimum_agreement": 0.9, "minimum_chance_corrected_agreement": 0.8},
+      "adapter_manifest": null
+    },
+    {
+      "id": "crisis-exercise-assurance",
+      "enabled": false,
+      "corpus_sha256": "2020202020202020202020202020202020202020202020202020202020202020",
+      "evidence_artifact": "crisis-exercise-assurance-score.json",
+      "thresholds": {"minimum_agreement": 0.9, "minimum_chance_corrected_agreement": 0.8},
+      "adapter_manifest": null
+    },
+    {
+      "id": "enterprise-ict-risk-aggregation",
+      "enabled": false,
+      "corpus_sha256": "2121212121212121212121212121212121212121212121212121212121212121",
+      "evidence_artifact": "enterprise-ict-risk-aggregation-score.json",
+      "thresholds": {"minimum_agreement": 0.9, "minimum_chance_corrected_agreement": 0.8},
+      "adapter_manifest": null
+    },
+    {
+      "id": "standards-crosswalk-semantic-conformance",
+      "enabled": false,
+      "corpus_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "evidence_artifact": "standards-crosswalk-semantic-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "lng-ev-charging-sector-resilience",
+      "enabled": false,
+      "corpus_sha256": "2323232323232323232323232323232323232323232323232323232323232323",
+      "evidence_artifact": "lng-ev-charging-sector-resilience-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
     }
   ],
   "benchmark_baseline_path": null

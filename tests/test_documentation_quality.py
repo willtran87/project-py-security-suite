@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import json
 import re
 import unittest
 from pathlib import Path
 from urllib.parse import unquote
 
+from py_security_suite.assurance_catalog import export_assurance_catalog
 from py_security_suite.config import PROFILE_TOOLS, SUPPORTED_TOOLS
 
 _ROOT = Path(__file__).resolve().parents[1]
@@ -67,6 +69,103 @@ class DocumentationQualityTests(unittest.TestCase):
                 index,
             )
             self.assertIn(str(len(PROFILE_TOOLS[profile])), index)
+
+    def test_industry_catalog_counts_and_new_domains_are_documented(self) -> None:
+        counts = export_assurance_catalog()["counts"]
+        expectations = {
+            _ROOT / "README.md": (
+                f"{counts['standards']} versioned references",
+                f"{counts['standards_watchlist']} quarantined watch items",
+                f"{counts['profiles']} selectable profiles",
+                f"{counts['benchmarks']} governed benchmark families",
+                f"{counts['adapter_specs']} maintained adapters",
+                f"{counts['execution_contracts']} maintained benchmark adapters",
+            ),
+            _ROOT / "docs" / "design.md": (
+                f"{counts['standards']} versioned standards references",
+                f"{counts['profiles']} assurance packs",
+                f"{counts['benchmarks']} governed benchmark families",
+                f"{counts['adapter_specs']} maintained adapters",
+            ),
+            _ROOT / "docs" / "index.md": (
+                f"{counts['standards']} standards references",
+                f"{counts['standards_watchlist']} quarantined watch items",
+                f"{counts['profiles']} assurance packs",
+                f"{counts['benchmarks']} benchmark families",
+                f"{counts['adapter_specs']} maintained adapters",
+            ),
+            _ROOT / "docs" / "industry-standards-benchmarks.md": (
+                f"{counts['standards']} version-explicit references",
+                f"{counts['standards_watchlist']} non-normative watch items",
+                f"{counts['profiles']} built-in packs",
+                f"{counts['adapter_specs']}-adapter catalog",
+            ),
+        }
+        for path, phrases in expectations.items():
+            content = path.read_text(encoding="utf-8")
+            for phrase in phrases:
+                self.assertIn(phrase, content, f"{path.relative_to(_ROOT)} is stale")
+
+        profiles = {
+            "ransomware-resilience",
+            "media-sanitization",
+            "ot-backup-and-remote-access",
+            "iec-62443-provider-evaluation",
+            "crisis-leadership-and-exercises",
+            "enterprise-ict-risk-portfolio",
+            "standards-crosswalk-governance",
+            "lng-and-ev-infrastructure",
+        }
+        benchmarks = {
+            "ransomware-resilience-exercise",
+            "media-sanitization-verification",
+            "ot-backup-remote-access-recovery",
+            "iec-62443-service-provider-evaluation",
+            "crisis-exercise-assurance",
+            "enterprise-ict-risk-aggregation",
+            "standards-crosswalk-semantic-conformance",
+            "lng-ev-charging-sector-resilience",
+        }
+        industry = (_ROOT / "docs" / "industry-standards-benchmarks.md").read_text(
+            encoding="utf-8"
+        )
+        for identifier in profiles | benchmarks:
+            self.assertIn(identifier, industry)
+
+        example = json.loads(
+            (
+                _ROOT / "examples" / "industry-assurance-policy-1.3.example.json"
+            ).read_text(encoding="utf-8")
+        )
+        self.assertTrue(profiles <= {item["id"] for item in example["profiles"]})
+        self.assertTrue(benchmarks <= {item["id"] for item in example["benchmarks"]})
+
+    def test_industry_diagrams_show_the_new_assurance_lanes(self) -> None:
+        documents = {
+            "README.md": (_ROOT / "README.md").read_text(encoding="utf-8"),
+            "docs/design.md": (_ROOT / "docs" / "design.md").read_text(
+                encoding="utf-8"
+            ),
+            "docs/index.md": (_ROOT / "docs" / "index.md").read_text(encoding="utf-8"),
+            "docs/benchmark-operations.md": (
+                _ROOT / "docs" / "benchmark-operations.md"
+            ).read_text(encoding="utf-8"),
+        }
+        required = {
+            "README.md": (
+                "Recovery + sanitization + OT + crisis",
+                "crosswalk + LNG/EV",
+            ),
+            "docs/design.md": ("IEC-provider", "crosswalk/LNG-EV"),
+            "docs/index.md": ("ransomware | sanitization | OT recovery", "LNG/EV"),
+            "docs/benchmark-operations.md": (
+                "Ransomware + sanitization + OT backup/remote access",
+                "IEC 62443 provider + ICT risk + crosswalk + LNG/EV",
+            ),
+        }
+        for name, phrases in required.items():
+            for phrase in phrases:
+                self.assertIn(phrase, documents[name])
 
     def test_new_contextual_artifacts_are_documented(self) -> None:
         readme = (_ROOT / "README.md").read_text(encoding="utf-8")

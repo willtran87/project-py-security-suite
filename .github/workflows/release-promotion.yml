@@ -22,7 +22,7 @@ on:
 
 permissions:
   actions: read # Read and download the approved producer run.
-  contents: read # Check out the immutable verifier revision.
+  contents: read # Check out the protected trusted verifier, never candidate code.
 
 concurrency:
   group: release-promotion-${{ github.ref }}
@@ -35,19 +35,26 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Check out verifier
+      - name: Validate trusted dispatch boundary
+        env:
+          EVIDENCE_RUN_ID: ${{ inputs.evidence_run_id }}
+          MANIFEST_SHA256: ${{ inputs.manifest_sha256 }}
+          EXPECTED_HEAD_SHA: ${{ inputs.expected_head_sha }}
+          EXPECTED_REF: ${{ inputs.expected_ref }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]]
+          [[ "$EVIDENCE_RUN_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$MANIFEST_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$EXPECTED_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$EXPECTED_REF" == "main" ]]
+      - name: Check out protected trusted verifier
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          ref: ${{ inputs.expected_head_sha }}
-      - name: Set up uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-        with:
-          version: "0.11.19"
-          enable-cache: false
-      - name: Install locked verifier
-        run: uv sync --locked --all-groups --python "3.13"
-      - name: Download externally assembled closed evidence
+          ref: refs/heads/main
+      - name: Authorize producer run before installing or executing repository code
         env:
           GH_TOKEN: ${{ github.token }}
           EVIDENCE_RUN_ID: ${{ inputs.evidence_run_id }}
@@ -67,14 +74,33 @@ jobs:
             '.head_sha == $sha and .head_branch == $ref and .path == $workflow_path and .head_repository.full_name == $repository and .repository.full_name == $repository and .run_attempt == 1 and .event == "workflow_dispatch" and .conclusion == "success"' \
             .promotion/producer-run.json >/dev/null
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$EVIDENCE_RUN_ID/artifacts" > .promotion/producer-artifacts.json
-          artifact_count="$(jq '[.artifacts[] | select(.name == "release-evidence" and .expired == false)] | length' .promotion/producer-artifacts.json)"
-          [[ "$artifact_count" == "1" ]]
+          jq -e \
+            '[.artifacts[] | select(.name == "release-evidence" and .expired == false)] | length == 1' \
+            .promotion/producer-artifacts.json >/dev/null
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.11.19"
+          enable-cache: false
+      - name: Install locked verifier
+        run: uv sync --locked --all-groups --python "3.13"
+      - name: Download and safely extract externally assembled closed evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVIDENCE_RUN_ID: ${{ inputs.evidence_run_id }}
+          EXPECTED_HEAD_SHA: ${{ inputs.expected_head_sha }}
+          EXPECTED_REF: ${{ inputs.expected_ref }}
+          EXPECTED_WORKFLOW_PATH: .github/workflows/release-evidence.yml
+        shell: bash
+        run: |
+          set -euo pipefail
           artifact_id="$(jq -r '.artifacts[] | select(.name == "release-evidence" and .expired == false) | .id' .promotion/producer-artifacts.json)"
           artifact_digest="$(jq -r '.artifacts[] | select(.name == "release-evidence" and .expired == false) | .digest' .promotion/producer-artifacts.json)"
           gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$artifact_id/zip" > .promotion/release-evidence.zip
           observed_digest="sha256:$(sha256sum .promotion/release-evidence.zip | cut -d' ' -f1)"
           [[ "$artifact_digest" == "$observed_digest" ]]
-          unzip -q .promotion/release-evidence.zip -d .promotion/evidence
+          python -I scripts/extract_github_artifact.py \
+            .promotion/release-evidence.zip .promotion/evidence
       - name: Verify every hardened evidence class and report binding
         env:
           PYSEC_REQUIRE_HARDENED_RELEASE_EVIDENCE: "1"
