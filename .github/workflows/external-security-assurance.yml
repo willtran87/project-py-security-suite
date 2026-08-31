@@ -190,7 +190,7 @@ jobs:
           set -euo pipefail
           mkdir -p .artifacts/dynamic/raw .artifacts/dynamic/normalized
           arguments=(--no-color run "$SCHEMA_URL" --url "$TARGET_BASE_URL" \
-            --phases examples,coverage,fuzzing,stateful --workers 4 \
+            --phases "examples,coverage,fuzzing,stateful" --workers 4 \
             --report junit,ndjson \
             --report-junit-path .artifacts/dynamic/schemathesis-junit.xml \
             --report-ndjson-path .artifacts/dynamic/schemathesis.ndjson)
