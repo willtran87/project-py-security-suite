@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
+from . import industry_resilience_catalog as resilience_catalog
 from .benchmark_assurance import (
     BenchmarkAssuranceError,
     verify_execution_receipt_signature,
@@ -18,6 +19,10 @@ from .industry_benchmark_scoring import (
     protocol_metrics_valid as _protocol_metrics_valid,
 )
 from .industry_benchmark_catalog import _BENCHMARKS, _STANDARDS_WATCHLIST
+from .industry_extension_evidence import (
+    industry_extension_runner_requirements,
+    industry_extension_score_evidence_valid,
+)
 from .industry_profile_catalog import _ASSURANCE_PROFILES
 from .industry_receipt_trust import receipt_authority_projection
 from .industry_standards_catalog import _STANDARDS
@@ -2983,9 +2988,18 @@ def _benchmark_registry(
 
 
 def _benchmark_protocol(identifier: str) -> str:
+    if identifier in resilience_catalog.RESILIENCE_BENCHMARK_PROTOCOLS:
+        return resilience_catalog.RESILIENCE_BENCHMARK_PROTOCOLS[identifier]
     protocols = {
-        "temporal-calibration": {"epss-kev-temporal-backtest"},
-        "verification-competition": {"sv-comp"},
+        "temporal-calibration": {
+            "epss-kev-temporal-backtest",
+            "openssf-criticality-score-calibration",
+            "weakness-prioritization-temporal-calibration",
+        },
+        "verification-competition": {
+            "sv-comp",
+            "formal-methods-tool-disagreement-assurance",
+        },
         "test-generation": {"test-comp"},
         "fuzzing-statistical": {
             "google-fuzzbench",
@@ -3008,6 +3022,8 @@ def _benchmark_protocol(identifier: str) -> str:
             "pyrit-ai-red-team",
             "mlcommons-ailuminate-safety",
             "mlcommons-ailuminate-jailbreak",
+            "oss-crs-crsbench",
+            "darpa-aixcc-autonomous-vulnerability-remediation",
         },
         "assessor-agreement": {
             "architecture-evaluation-scenarios",
@@ -3033,9 +3049,15 @@ def _benchmark_protocol(identifier: str) -> str:
             "hitrust-csf-assessment",
             "nist-supplier-due-diligence",
             "owasp-samm-assessment-benchmark",
+            "process-supplier-assessor-outcome-calibration",
+            "secure-information-sharing-competence-assurance",
+            "automotive-spice-capability-assurance",
         },
         "biometric-performance": {"biometric-performance-pad"},
-        "proficiency-testing": {"interlaboratory-proficiency-testing"},
+        "proficiency-testing": {
+            "interlaboratory-proficiency-testing",
+            "ilac-laboratory-operating-assurance",
+        },
         "detection-evaluation": {
             "atomic-red-team",
             "mitre-caldera",
@@ -3045,6 +3067,9 @@ def _benchmark_protocol(identifier: str) -> str:
             "rasp-prevention-effectiveness",
         },
         "conformance": {
+            "mitre-emb3d-property-threat-conformance",
+            "owasp-business-logic-abuse-top10-conformance",
+            "cncf-supply-chain-best-practices-v2-conformance",
             "sigstore-client-conformance",
             "slsa-verifier-conformance",
             "nist-acvp-cryptography",
@@ -3055,6 +3080,9 @@ def _benchmark_protocol(identifier: str) -> str:
             "do355-continuing-airworthiness-exercise",
             "iacs-maritime-cyber-conformance",
             "swift-cscf-independent-assessment",
+            "ccsds-space-mission-link-security",
+            "ecss-space-software-product-assurance",
+            "regional-financial-technology-resilience-assurance",
             "cwe-mapping-conformance",
             "csa-star-caiq-conformance",
             "cacao-openc2-ocsf-interoperability",
@@ -3138,6 +3166,55 @@ def _benchmark_protocol(identifier: str) -> str:
             "eudi-wallet-functional-conformance",
             "pci-secure-software-conformance",
             "nis2-implementing-regulation-conformance",
+            "openssf-security-insights-conformance",
+            "guac-interoperability",
+            "gittuf-source-policy-conformance",
+            "owasp-kubernetes-top10-conformance",
+            "owasp-cicd-top10-conformance",
+            "sbomit-build-observed-sbom",
+            "owasp-mobile-top10-conformance",
+            "owasp-smart-contract-top10-conformance",
+            "cncf-cloud-native-security-controls-conformance",
+            "scim-lifecycle-security-conformance",
+            "openid-shared-signals-conformance",
+            "spiffe-workload-identity-conformance",
+            "openssf-model-signing-conformance",
+            "cyclonedx-mlbom-conformance",
+            "uptane-ota-security-conformance",
+            "authzen-authorization-api-conformance",
+            "openid-federation-conformance",
+            "nist-hpc-ai-infrastructure-assurance",
+            "iso-24760-identity-management-assurance",
+            "iso-5259-6-data-quality-visualization",
+            "medical-device-cybersecurity-assurance",
+            "autonomous-physical-ai-safety",
+            "critical-c-cpp-coding-conformance",
+            "confidential-computing-attestation-conformance",
+            "vvsg-voting-system-assurance",
+            "critical-sector-safety-security-assurance",
+            "stateful-smart-contract-security",
+            "devsecops-test-maturity-longitudinal",
+            "detection-product-longitudinal-calibration",
+            "nss-dod-authorization-assurance",
+            "zero-trust-zig-microsegmentation-assurance",
+            "healthcare-operational-resilience-assurance",
+            "aircraft-system-safety-development-assurance",
+            "maritime-operational-cyber-resilience-assurance",
+            "incident-privacy-outcome-exercise-calibration",
+            "semi-fab-equipment-cybersecurity-assurance",
+            "api-1164-pipeline-control-resilience",
+            "gxp-part11-data-integrity-assurance",
+            "fbi-cjis-security-policy-assurance",
+            "iec-61511-sis-safety-security-assurance",
+            "bacnet-secure-connect-assurance",
+            "industrial-robotics-safety-security-assurance",
+            "data-centre-facility-resilience-assurance",
+            "water-sector-cyber-resilience-assurance",
+            "public-safety-communications-assurance",
+            "global-gxp-data-integrity-assurance",
+            "transit-cybersecurity-resilience-assurance",
+            "emergency-incident-coordination-assurance",
+            "gas-scada-cryptographic-assurance",
         },
     }
     for protocol, identifiers in protocols.items():
@@ -3292,78 +3369,113 @@ def _benchmark_evidence(value: object, benchmark: dict[str, Any]) -> bool:
     )
 
 
-_LABORATORY_QUALIFIED_BENCHMARKS = frozenset(
-    {
-        "disa-stig-scap-conformance",
-        "iec-62443-system-conformance",
-        "process-capability-assessor-agreement",
-        "architecture-evaluation-scenarios",
-        "iec-62443-patch-management-exercise",
-        "do355-continuing-airworthiness-exercise",
-        "iacs-maritime-cyber-conformance",
-        "swift-cscf-independent-assessment",
-        "regional-cyber-maturity-assessment",
-        "automotive-software-update-conformance",
-        "energy-product-security-conformance",
-        "enhanced-cui-oscal-conformance",
-        "ict-continuity-recovery-exercise",
-        "digital-forensics-chain-of-custody",
-        "nist-cfreds-cftt",
-        "w3c-act-rules-conformance",
-        "cis-cat-scap-platform-conformance",
-        "iso-29119-test-process-conformance",
-        "square-quality-in-use-cloud",
-        "risk-technique-calibration",
-        "tls-protocol-conformance",
-        "reproducible-build-variation",
-        "cisa-secure-by-design-negative-assurance",
-        "amtso-malware-protection-evaluation",
-        "dice-attestation-conformance",
-        "telecom-security-controls-conformance",
-        "nice-workforce-coverage",
-        "penetration-test-engagement-quality",
-        "dora-delivery-outcomes",
-        "cmvp-fips-140-3-validation",
-        "iso-19790-24759-module-conformance",
-        "biometric-performance-pad",
-        "interlaboratory-proficiency-testing",
-        "eucc-scheme-assurance",
-        "mcp-client-server-security-conformance",
-        "aws-fsbp-securityhub-conformance",
-        "microsoft-mcsb-defender-conformance",
-        "gcp-enterprise-foundations-conformance",
-        "first-csirt-psirt-maturity-assessment",
-        "memory-safety-engineering-conformance",
-        "ieee-ai-governance-wellbeing-assessment",
-        "organizational-resilience-bia-exercise",
-        "openssf-best-practices-badge-conformance",
-        "isms-implementation-process-assessment",
-        "a2a-protocol-security-conformance",
-        "sesip-iot-platform-evaluation-conformance",
-        "w3c-web-platform-defense-conformance",
-        "dora-level2-technical-standards-conformance",
-        "ffiec-it-handbook-assessment",
-        "bsi-c5-cloud-assurance-assessment",
-        "fcc-cyber-trust-mark-conformance",
-        "openid-digital-credential-conformance",
-        "cisa-scuba-saas-posture-conformance",
-        "cis-kubernetes-hardening-conformance",
-        "linddun-privacy-threat-model-conformance",
-        "rasp-prevention-effectiveness",
-        "gsma-nesas-scas-assurance",
-        "tisax-vda-isa-assessment",
-        "c2pa-content-credentials-conformance",
-        "pci-payment-acceptance-conformance",
-        "oidf-fapi-conformance",
-        "fedramp-20x-continuous-validation",
-        "fido2-authenticator-conformance",
-        "eudi-wallet-functional-conformance",
-        "hitrust-csf-assessment",
-        "pci-secure-software-conformance",
-        "nis2-implementing-regulation-conformance",
-        "nist-supplier-due-diligence",
-        "owasp-samm-assessment-benchmark",
-    }
+_LABORATORY_QUALIFIED_BENCHMARKS = (
+    frozenset(
+        {
+            "disa-stig-scap-conformance",
+            "iec-62443-system-conformance",
+            "process-capability-assessor-agreement",
+            "architecture-evaluation-scenarios",
+            "iec-62443-patch-management-exercise",
+            "do355-continuing-airworthiness-exercise",
+            "iacs-maritime-cyber-conformance",
+            "swift-cscf-independent-assessment",
+            "ccsds-space-mission-link-security",
+            "ecss-space-software-product-assurance",
+            "regional-financial-technology-resilience-assurance",
+            "secure-information-sharing-competence-assurance",
+            "regional-cyber-maturity-assessment",
+            "automotive-software-update-conformance",
+            "energy-product-security-conformance",
+            "enhanced-cui-oscal-conformance",
+            "ict-continuity-recovery-exercise",
+            "digital-forensics-chain-of-custody",
+            "nist-cfreds-cftt",
+            "w3c-act-rules-conformance",
+            "cis-cat-scap-platform-conformance",
+            "iso-29119-test-process-conformance",
+            "square-quality-in-use-cloud",
+            "risk-technique-calibration",
+            "tls-protocol-conformance",
+            "reproducible-build-variation",
+            "cisa-secure-by-design-negative-assurance",
+            "amtso-malware-protection-evaluation",
+            "dice-attestation-conformance",
+            "telecom-security-controls-conformance",
+            "nice-workforce-coverage",
+            "penetration-test-engagement-quality",
+            "dora-delivery-outcomes",
+            "cmvp-fips-140-3-validation",
+            "iso-19790-24759-module-conformance",
+            "biometric-performance-pad",
+            "interlaboratory-proficiency-testing",
+            "eucc-scheme-assurance",
+            "mcp-client-server-security-conformance",
+            "aws-fsbp-securityhub-conformance",
+            "microsoft-mcsb-defender-conformance",
+            "gcp-enterprise-foundations-conformance",
+            "first-csirt-psirt-maturity-assessment",
+            "memory-safety-engineering-conformance",
+            "ieee-ai-governance-wellbeing-assessment",
+            "organizational-resilience-bia-exercise",
+            "openssf-best-practices-badge-conformance",
+            "isms-implementation-process-assessment",
+            "a2a-protocol-security-conformance",
+            "sesip-iot-platform-evaluation-conformance",
+            "w3c-web-platform-defense-conformance",
+            "dora-level2-technical-standards-conformance",
+            "ffiec-it-handbook-assessment",
+            "bsi-c5-cloud-assurance-assessment",
+            "fcc-cyber-trust-mark-conformance",
+            "openid-digital-credential-conformance",
+            "cisa-scuba-saas-posture-conformance",
+            "cis-kubernetes-hardening-conformance",
+            "linddun-privacy-threat-model-conformance",
+            "rasp-prevention-effectiveness",
+            "gsma-nesas-scas-assurance",
+            "tisax-vda-isa-assessment",
+            "c2pa-content-credentials-conformance",
+            "pci-payment-acceptance-conformance",
+            "oidf-fapi-conformance",
+            "fedramp-20x-continuous-validation",
+            "fido2-authenticator-conformance",
+            "eudi-wallet-functional-conformance",
+            "hitrust-csf-assessment",
+            "pci-secure-software-conformance",
+            "nis2-implementing-regulation-conformance",
+            "nist-supplier-due-diligence",
+            "owasp-samm-assessment-benchmark",
+            "oss-crs-crsbench",
+            "openssf-package-analysis-malicious-packages",
+            "owasp-kubernetes-top10-conformance",
+            "owasp-cicd-top10-conformance",
+            "authzen-authorization-api-conformance",
+            "openid-federation-conformance",
+            "nist-hpc-ai-infrastructure-assurance",
+            "iso-24760-identity-management-assurance",
+            "iso-5259-6-data-quality-visualization",
+            "medical-device-cybersecurity-assurance",
+            "autonomous-physical-ai-safety",
+            "critical-c-cpp-coding-conformance",
+            "confidential-computing-attestation-conformance",
+            "vvsg-voting-system-assurance",
+            "critical-sector-safety-security-assurance",
+            "stateful-smart-contract-security",
+            "devsecops-test-maturity-longitudinal",
+            "detection-product-longitudinal-calibration",
+            "nss-dod-authorization-assurance",
+            "zero-trust-zig-microsegmentation-assurance",
+            "healthcare-operational-resilience-assurance",
+            "aircraft-system-safety-development-assurance",
+            "ilac-laboratory-operating-assurance",
+            "maritime-operational-cyber-resilience-assurance",
+            "weakness-prioritization-temporal-calibration",
+            "formal-methods-tool-disagreement-assurance",
+            "process-supplier-assessor-outcome-calibration",
+            "incident-privacy-outcome-exercise-calibration",
+        }
+    )
+    | resilience_catalog.RESILIENCE_BENCHMARK_IDS
 )
 
 
@@ -3383,6 +3495,7 @@ def _benchmark_runner_contract(benchmark: dict[str, Any]) -> dict[str, Any]:
         "pyrit-ai-red-team",
         "mlcommons-ailuminate-safety",
         "mlcommons-ailuminate-jailbreak",
+        "oss-crs-crsbench",
     }
     continuous_fuzzing = identifier == "oss-fuzz-clusterfuzzlite"
     laboratory_qualified = identifier in _LABORATORY_QUALIFIED_BENCHMARKS
@@ -3419,6 +3532,9 @@ def _benchmark_runner_contract(benchmark: dict[str, Any]) -> dict[str, Any]:
     )
     if protocol != "classification":
         required_execution_evidence.append("acceptance-criteria-digest")
+    required_execution_evidence += list(
+        industry_extension_runner_requirements(identifier)
+    )
     if laboratory_qualified:
         required_execution_evidence.extend(
             [
@@ -4073,7 +4189,16 @@ def _benchmark_runner_contract(benchmark: dict[str, Any]) -> dict[str, Any]:
             if benchmark["version"] == "organization-pinned"
             else "official-corpus-labels"
         ),
-        "minimum_repetitions": 5 if stochastic else 3 if continuous_fuzzing else 1,
+        "minimum_repetitions": {
+            "google-fuzzbench": 20,
+            "magma-ground-truth": 10,
+            "oss-fuzz-clusterfuzzlite": 3,
+        }.get(
+            identifier,
+            3
+            if identifier == "oss-crs-crsbench" or continuous_fuzzing
+            else (5 if stochastic else 1),
+        ),
         "required_execution_evidence": list(dict.fromkeys(required_execution_evidence)),
         "score_semantics": (
             [
@@ -4190,6 +4315,9 @@ def _benchmark_reproducibility_gaps(
         gaps.append("trusted evaluation time is not validated")
     if value.get("replay_protected") is not True:
         gaps.append("evaluation replay protection is missing")
+    identifier = str(benchmark.get("id")) if isinstance(benchmark, dict) else ""
+    if not industry_extension_score_evidence_valid(value, identifier):
+        gaps.append("suite-owned industry extension evidence is missing or invalid")
     contract = benchmark.get("runner_contract") if isinstance(benchmark, dict) else None
     requires_qualified_context = isinstance(benchmark, dict) and (
         benchmark.get("version") == "organization-pinned"
@@ -4298,7 +4426,7 @@ def _benchmark_reproducibility_gaps(
                         gaps.append(
                             f"laboratory qualification {name} is missing or invalid"
                         )
-            identifier = benchmark.get("id") if isinstance(benchmark, dict) else None
+            identifier = str(benchmark.get("id")) if isinstance(benchmark, dict) else ""
             if identifier == "epss-kev-temporal-backtest":
                 for name in (
                     "epss_snapshot_sha256",

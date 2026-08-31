@@ -11,6 +11,8 @@ from types import ModuleType
 
 import pytest
 
+from py_security_suite.bytecode_analysis import analyze_python_bytecode
+
 
 _ROOT = Path(__file__).parent.parent
 
@@ -115,6 +117,45 @@ def test_target_specific_corpus_seeds_reach_archive_validation(tmp_path: Path) -
         module._inspect_tar((tar_corpus / "tar-traversal").read_bytes())
     with pytest.raises(ValueError, match="links"):
         module._inspect_tar((tar_corpus / "tar-link").read_bytes())
+
+
+def test_hostile_binary_targets_have_deterministic_production_oracles(
+    tmp_path: Path,
+) -> None:
+    module = _script()
+    bytecode = tmp_path / "bytecode"
+    wasm = tmp_path / "wasm"
+    native = tmp_path / "native"
+    module._seed_target_corpus("python-bytecode", bytecode)
+    module._seed_target_corpus("webassembly", wasm)
+    module._seed_target_corpus("native-binary", native)
+
+    edges = analyze_python_bytecode((bytecode / "valid.pyc").read_bytes())
+    assert any(edge[1] == "module-import" for edge in edges)
+    assert any(edge[1] == "dynamic-dispatch" for edge in edges)
+    assert module._wasm_imports((wasm / "minimal.wasm").read_bytes()) == []
+    for seed in native.iterdir():
+        module._inspect_native_binary(seed.read_bytes())
+
+
+def test_bytecode_fuzz_oracle_uses_resource_contained_production_boundary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _script()
+    calls: list[tuple[bytes, str, str, Path]] = []
+
+    def analyze(
+        payload: bytes, source: str, kind: str, path: Path
+    ) -> tuple[dict[str, object], list[dict[str, object]]]:
+        calls.append((payload, source, kind, path))
+        return {"covered": True}, [{"target": "json"}]
+
+    monkeypatch.setattr(module, "_analyze_special_surface", analyze)
+
+    assert module._inspect_python_bytecode(b"hostile-marshal") == [{"target": "json"}]
+    assert calls == [
+        (b"hostile-marshal", "fuzz-input.pyc", "bytecode", Path("fuzz-input.pyc"))
+    ]
 
 
 def test_pull_request_matrix_shards_every_adapter(

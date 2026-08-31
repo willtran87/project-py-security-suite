@@ -7,11 +7,10 @@ from typing import Any
 
 _ROOT = Path(__file__).resolve().parents[1]
 _CONFIG = _ROOT / "tach.toml"
-_MINIMUM_MODULE_BOUNDARIES = 144
+_MINIMUM_MODULE_BOUNDARIES = 148
 _ALLOWED_CYCLES = {
     frozenset(
         {
-            "py_security_suite.attestation_formats",
             "py_security_suite.checkpoint_authority",
             "py_security_suite.execution",
             "py_security_suite.failure_domain",

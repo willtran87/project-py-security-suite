@@ -55,7 +55,7 @@ depends_on = ["py_security_suite.trusted_observation", "py_security_suite.strict
 
 [[modules]]
 path = "py_security_suite.attestation_formats"
-depends_on = ["py_security_suite.failure_domain", "py_security_suite.pinned_command", "py_security_suite.strict_json"]
+depends_on = [ "py_security_suite.strict_json"]
 
 [[modules]]
 path = "py_security_suite.atomic_file"
@@ -79,7 +79,7 @@ depends_on = ["py_security_suite.strict_json"]
 
 [[modules]]
 path = "py_security_suite.benchmark_adapters"
-depends_on = ["py_security_suite.strict_json", "py_security_suite.industry_assurance"]
+depends_on = ["py_security_suite.strict_json", "py_security_suite.industry_assurance", "py_security_suite.industry_resilience_catalog"]
 
 [[modules]]
 path = "py_security_suite.benchmark_assurance"
@@ -144,6 +144,14 @@ depends_on = ["py_security_suite.strict_json", "py_security_suite.operation_rece
 [[modules]]
 path = "py_security_suite.bounded_subprocess"
 depends_on = []
+
+[[modules]]
+path = "py_security_suite.bytecode_analysis"
+depends_on = []
+
+[[modules]]
+path = "py_security_suite.bytecode_parser_worker"
+depends_on = ["py_security_suite.bytecode_analysis", "py_security_suite.path_safety"]
 
 [[modules]]
 path = "py_security_suite.bundle_qualification"
@@ -311,11 +319,11 @@ depends_on = ["py_security_suite.models"]
 
 [[modules]]
 path = "py_security_suite.industry_assurance"
-depends_on = ["py_security_suite.path_safety", "py_security_suite.industry_receipt_trust", "py_security_suite.prioritization", "py_security_suite.benchmark_assurance", "py_security_suite.benchmark_protocols", "py_security_suite.industry_benchmark_scoring", "py_security_suite.strict_json", "py_security_suite.industry_standards_catalog", "py_security_suite.industry_benchmark_catalog", "py_security_suite.industry_profile_catalog"]
+depends_on = ["py_security_suite.path_safety", "py_security_suite.industry_receipt_trust", "py_security_suite.prioritization", "py_security_suite.benchmark_assurance", "py_security_suite.benchmark_protocols", "py_security_suite.industry_benchmark_scoring", "py_security_suite.strict_json", "py_security_suite.industry_standards_catalog", "py_security_suite.industry_benchmark_catalog", "py_security_suite.industry_profile_catalog", "py_security_suite.industry_extension_evidence", "py_security_suite.industry_resilience_catalog"]
 
 [[modules]]
 path = "py_security_suite.industry_benchmark_catalog"
-depends_on = []
+depends_on = ["py_security_suite.industry_open_source_catalog", "py_security_suite.industry_resilience_catalog"]
 
 [[modules]]
 path = "py_security_suite.industry_benchmark_scoring"
@@ -323,6 +331,18 @@ depends_on = []
 
 [[modules]]
 path = "py_security_suite.industry_profile_catalog"
+depends_on = ["py_security_suite.industry_open_source_catalog", "py_security_suite.industry_resilience_catalog"]
+
+[[modules]]
+path = "py_security_suite.industry_extension_evidence"
+depends_on = ["py_security_suite.strict_json", "py_security_suite.industry_resilience_catalog"]
+
+[[modules]]
+path = "py_security_suite.industry_open_source_catalog"
+depends_on = []
+
+[[modules]]
+path = "py_security_suite.industry_resilience_catalog"
 depends_on = []
 
 [[modules]]
@@ -331,7 +351,7 @@ depends_on = ["py_security_suite.benchmark_assurance"]
 
 [[modules]]
 path = "py_security_suite.industry_standards_catalog"
-depends_on = []
+depends_on = ["py_security_suite.industry_open_source_catalog", "py_security_suite.industry_resilience_catalog"]
 
 [[modules]]
 path = "py_security_suite.inventory"

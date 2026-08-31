@@ -1,6 +1,6 @@
 # Python Security Suite documentation
 
-Last reviewed: 2026-08-30
+Last reviewed: 2026-08-31
 
 This directory is the canonical documentation set. The suite is offline-first:
 tool and data acquisition happens in a connected preparation lane; scanning and
@@ -72,9 +72,9 @@ flowchart LR
         ProposalCheck --> Sandbox["Human-approved disposable lane"]
         Sandbox --> AdversarialProof["Deterministic oracle + controls<br/>exact failed-case evidence"]
         AdversarialProof --> Correlate
-        Standards["481 standards references + 147 assurance packs<br/>stable editions + conditional applicability"] --> Industry["Industry evidence synthesis<br/>FIDO2/EUDI/FAPI | FedRAMP 20x | NIS2/HITRUST<br/>PCI SSF | SAMM | suppliers + OSCAL 1.2.2"]
-        Watch["47 quarantined watch items<br/>drafts, candidate schemes, semantic diffs, retired-item exclusions"] --> Industry
-        Benchmarks["182 benchmark families + 100 maintained adapters + 11 protocols<br/>raw replay + full SLSA builder trust + signed intent recovery<br/>mandatory live no-pull OCI containment"] --> Industry
+        Standards["635 standards references + 215 assurance packs<br/>stable editions + conditional applicability"] --> Industry["Industry evidence synthesis<br/>application | identity | AI/HPC | ransomware | sanitization | OT recovery | crisis | ICT risk | crosswalk semantics<br/>water | NG911/P25 | global GxP | transit | gas SCADA | LNG/EV | semiconductor | pipeline | CJIS<br/>automotive | SIS | buildings | robotics | data centres | healthcare | firmware | Kubernetes | payment<br/>finance | airborne | CCSDS | ECSS | laboratories | maritime | formal methods | OSCAL 1.2.2"]
+        Watch["66 quarantined watch items<br/>drafts, alpha suites, research transitions, retired-item exclusions"] --> Industry
+        Benchmarks["262 benchmark families + 192 maintained adapters + 11 protocols<br/>96 semantic integrations with domain oracles and independent replay<br/>negative cases + mandatory laboratory containment"] --> Industry
         Industry --> Gate
         Validate --> Leverage["Typed evidence graph<br/>controls, taint, artifacts, privacy, trust"]
         Leverage --> Gate["Policy decision"]
@@ -143,16 +143,16 @@ automation contracts.
 
 | Gate | Current enforced scope |
 |---|---|
-| Unit and integration suite | 1,233 passed, 20 platform-limited skips, and 499 subtests in the final retained full-suite run |
-| Combined statement/branch coverage | 81.00%, with a minimum aggregate floor of 80% plus 45 security-critical module ratchets |
+| Unit and integration suite | 1,280 passed, 20 platform-limited skips, and 499 subtests in the final retained full-suite run |
+| Combined statement/branch coverage | 81.65%, with a minimum aggregate floor of 80% plus 47 security-critical module ratchets |
 | Changed-line coverage | 90% minimum in protected CI |
-| Static typing | 232 source files checked by the CI mypy command plus a pinned strict Pyright gate over 16 trust, resilience, performance, and policy boundary files |
+| Static typing | The complete production, companion, and Pages-audit source set checked by mypy plus a pinned strict Pyright gate over 25 trust, parser, authority, replay, resilience, performance, and policy boundary files |
 | Schema/runtime consistency | 204 bundled JSON Schemas and 164 runtime exports |
 | Public compatibility | Exhaustive additive baseline across 58 commands, 469 positional/option shape contracts, 164 byte-immutable bundled schemas, three console scripts, and two Python callable signatures |
-| Architecture enforcement | Exact Tach graph across 144 production module boundaries, one frozen eight-module trust/runtime SCC debt group that cannot expand, split standards/benchmark/profile catalogs, progressive concentration ceilings, and retained schema-valid architecture evidence |
+| Architecture enforcement | Exact Tach graph across 148 production module boundaries, one frozen seven-module trust/runtime SCC debt group that cannot expand, dependency-inverted attestation parsing, split standards/benchmark/profile/open-source-extension catalogs, isolated bytecode parsing, progressive concentration ceilings, and retained schema-valid architecture evidence |
 | Reference performance | Five-repetition p95 suite for 10,000-case strict JSON/scoring, canonical serialization, the complete schema catalog, production-source inventory, and full production AST parsing, plus an isolated real code-health/static-architecture repository pipeline with child-process memory and latency budgets |
 | Mandatory live assurance | Required Docker/rootless-Podman OCI, Linux/macOS/Windows containment, PostgreSQL/Kafka, and authenticated Chromium/Firefox/WebKit CI lanes; browser policy is AST-verified and every required engine/role case must pass in retained JUnit evidence |
-| Scheduled depth | Daily parser fuzzing; weekly mutation, descendant-process resilience, CodeQL, and protected signing-provider conformance |
+| Scheduled depth | Daily JSON/XML/archive/SARIF/adapter plus Python-bytecode, WebAssembly, and PE/ELF/Mach-O parser fuzzing; weekly mutation, descendant-process resilience, CodeQL, and protected signing-provider conformance |
 | Documentation | Strict MkDocs build with repository link and generated-content validation, then audited GitHub Pages deployment |
 
 Machine-dependent performance timings are intentionally not treated as a
@@ -177,7 +177,7 @@ self-scan to establish a new baseline.
 | Graphify evidence | 9,614 nodes and 18,121 edges across 251 files; zero model tokens |
 | Evidence fusion | 2 findings enriched, 103 package lineages, 3 compound hotspots, 0 contradictions or version drift |
 | Latest deep source validation | Zero normalized findings; CodeQL, Bandit, Semgrep, detect-secrets, OSV-Scanner, CycloneDX, and Ruff completed (`maturity-source-deep-v68`) |
-| Latest structural validation | Verified, schema-valid synthesis over 10,408 Graphify nodes and 19,343 edges: 53 changed Python files mapped to 59 focused tests, 0 unmapped changes, 13 boundary-traced runtime-model gaps, 0 supported orphan/dead-code candidates, 0 cycles, and no truncation (`maturity-structural-quality-v73`) |
+| Retained structural validation | Verified, schema-valid synthesis over 10,408 Graphify nodes and 19,343 edges: 53 changed Python files mapped to 59 focused tests, 0 unmapped changes, 13 boundary-traced runtime-model gaps, 0 supported orphan/dead-code candidates, 0 cycles, and no truncation (`maturity-structural-quality-v73`). This is historical retained evidence, not a measurement of the current checkout. |
 | Latest data-exposure validation | Behavioral corpus correlated 17 exposure findings across logs, bound logger context, credential fields, precise request collections, runtime-state dumps, Sentry, GenAI capture, wildcard headers, URL queries, raw client errors, risky PII configuration, and weak pseudonymization. All 14 exposure/configuration rules executed, all 3 required scanner perspectives were present, actionable metadata was 100%, and safe controls—including `embedding_response.data`—produced 0 findings (`detection-validation-enhanced`). The 181-file schema-1.1 self-scan produced 0 exposure findings, 0 sink/configuration surfaces, and 0 parse errors; Bandit, Semgrep, and detect-secrets completed cleanly while the 10.6-day OSV snapshot correctly remained unavailable against its 10-day policy (`data-exposure-enhanced-self-scan`). |
 | Reachability graph | Schema 1.2; per-island confidence and explained edges |
 | Reachability states | 1,350 executable; 123 load-only; 0 disconnected; 0 reportable islands |

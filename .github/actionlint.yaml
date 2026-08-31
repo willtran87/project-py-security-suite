@@ -1,0 +1,7 @@
+self-hosted-runner:
+  labels:
+    - pysec-dynamic
+    - pysec-independent-builder
+    - pysec-isolated
+    - pysec-signing
+    - release-evidence

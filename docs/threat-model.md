@@ -1,6 +1,6 @@
 # Suite threat model
 
-Last reviewed: 2026-08-08
+Last reviewed: 2026-08-30
 
 The suite analyzes untrusted repositories with locally installed scanners and
 normalizes their output into sealed evidence. Its primary security objective is
@@ -20,6 +20,8 @@ flowchart LR
     Verify --> Manifest["Closed release evidence manifest"]
     Manifest --> Authority["External signer + security + release approver"]
     Authority --> Admission["Enterprise admission control"]
+    TrustedVerifier["Protected main verifier"] --> Admission
+    ControlAudit["Live environment/reviewer/runner audit"] --> Authority
 ```
 
 ## Assets and trust boundaries
@@ -45,6 +47,11 @@ flowchart LR
 | Scanner exfiltrates source | Offline arguments plus external egress-denied runner attestation | The suite cannot enforce its parent network namespace; platform security |
 | Stale or poisoned intelligence | Digest-bound snapshots, freshness checks, organization approval | Snapshot acquisition and provenance remain external; vulnerability management |
 | Malformed output exploits parser | Size/depth/count bounds, strict shapes, defensive parsers, regression tests, and scheduled Atheris coverage-guided fuzzing of strict JSON/SARIF entry points | Native parser/library defects remain possible; suite maintainers |
+| Candidate commit replaces its verifier | Release admission checks out only protected `main`, validates producer run/repository/SHA/ref before dependency installation, and never executes the candidate checkout | Protection of `main` and verifier-change review remain repository governance responsibilities |
+| Artifact archive escapes admission workspace | GitHub artifact digest verification followed by bounded standard-library extraction that rejects traversal, duplicates, links, devices, encryption, oversized entries, and compression bombs | Artifact retention and GitHub service integrity remain external |
+| Bytecode or native parser compromises its process | Exact private input snapshot, isolated worker, output/scratch/resident-memory/time limits, default-required OS sandbox for direct graph construction, and dedicated bytecode/Wasm/native fuzz targets | Sandbox implementation and parser-library vulnerabilities remain platform and dependency risks |
+| Replay credential crosses an origin | Credential-free HTTPS URL policy, unredirected authorization header, and rejection of every redirect | DNS, TLS trust roots, and replay-service operation remain deployment responsibilities |
+| One actor controls authoring, review, runner, and release | Versioned live readiness audit requires three maintainers, two reviewer principals, self-review prevention, protected branches, and labeled online runners | Organizations must supply genuinely independent people and infrastructure |
 | Finding is hidden by aggregation | Source attribution, native rule, classifications, locations, context, citations, fingerprints, and multi-source retention | Scanner blind spots require corpus and disagreement review; AppSec |
 | Baseline hides a regression | Same profile/tool set, source identity, and verified VCS ancestry for production/release | Baseline approval and retention remain external; release engineering |
 | Artifact/report substitution | Closed inventory, SHA-256 seal, report verification, payload verification, release-manifest verification | SHA-256 and storage controls must remain approved; release engineering |
@@ -66,6 +73,10 @@ Release validation should exercise these cases at least quarterly:
 - missing signature bundle, substituted distribution, or extra payload subject;
 - interrupted scan and partial artifact publication;
 - unavailable required scanner and conditional input incorrectly claimed as covered.
+- candidate SHA supplied as the verifier before producer-run validation;
+- archive traversal, portable-name collision, symlink, and compression-bomb artifacts;
+- replay endpoint redirect to the same or a different origin;
+- missing environment, sole reviewer, self-review, or unavailable protected runner.
 
 Any failure must produce `INCOMPLETE`, `NOT_APPROVED`, or an equivalent blocking
 receipt. A clean scan is evidence about configured controls—not proof of safety.

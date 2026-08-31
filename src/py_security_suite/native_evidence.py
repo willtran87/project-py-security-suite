@@ -50,9 +50,10 @@ def protect_native_report(payload: str, *, adapter: str) -> dict[str, Any]:
 
 def _redact(value: object) -> object:
     if isinstance(value, dict):
+        items = cast(dict[object, object], value).items()
         return {
             str(key): _redact(item)
-            for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))
+            for key, item in sorted(items, key=lambda pair: str(pair[0]))
         }
     if isinstance(value, list):
         return [_redact(item) for item in value]

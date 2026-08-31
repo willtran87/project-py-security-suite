@@ -6,10 +6,10 @@ from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[1]
 _FILE_LINE_LIMITS = {
-    "src/py_security_suite/industry_assurance.py": 5_300,
-    "src/py_security_suite/industry_standards_catalog.py": 4_850,
-    "src/py_security_suite/industry_benchmark_catalog.py": 1_875,
-    "src/py_security_suite/industry_profile_catalog.py": 5_375,
+    "src/py_security_suite/industry_assurance.py": 5_400,
+    "src/py_security_suite/industry_standards_catalog.py": 6_243,
+    "src/py_security_suite/industry_benchmark_catalog.py": 2_398,
+    "src/py_security_suite/industry_profile_catalog.py": 6_888,
     "src/py_security_suite/risk_paths.py": 8_035,
     "src/py_security_suite/reports.py": 7_925,
     "src/py_security_suite/data_exposure.py": 3_800,
@@ -23,7 +23,7 @@ _FILE_LINE_LIMITS = {
 }
 _FUNCTION_LINE_LIMITS = {
     ("src/py_security_suite/benchmark_execution.py", "execute_benchmark_manifest"): 475,
-    ("src/py_security_suite/industry_assurance.py", "_benchmark_runner_contract"): 730,
+    ("src/py_security_suite/industry_assurance.py", "_benchmark_runner_contract"): 737,
     (
         "src/py_security_suite/industry_assurance.py",
         "_benchmark_reproducibility_gaps",

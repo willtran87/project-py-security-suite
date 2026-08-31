@@ -3,7 +3,6 @@ from __future__ import annotations
 import ast
 import base64
 import hashlib
-import importlib.util
 import importlib.metadata
 import json
 
@@ -11,11 +10,13 @@ from .strict_json import loads as strict_json_loads
 import os
 import re
 import sys
+import tempfile
+from contextlib import contextmanager
 from datetime import datetime
 from collections import Counter
 from itertools import pairwise
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 from urllib.parse import urlsplit
 
 from .path_safety import read_regular_file
@@ -35,6 +36,7 @@ from .strict_json import loads as strict_loads
 _MAX_FILE_BYTES = 1024 * 1024
 _MAX_FILES = 50_000
 _MAX_TOTAL_BYTES = 64 * 1024 * 1024
+_PARSER_SNAPSHOT_SUFFIXES = frozenset({".dll", ".dylib", ".pyc", ".pyd", ".pyo", ".so"})
 
 
 def _digest(value: str) -> bool:
@@ -43,25 +45,30 @@ def _digest(value: str) -> bool:
     )
 
 
-_BYTECODE_ANALYZER = r"""
-import dis, json, marshal, sys, types
-data = open(sys.argv[1], "rb").read()
-root = marshal.loads(data[16:])
-if not isinstance(root, types.CodeType): raise ValueError("not a code object")
-seen, edges, stack = set(), set(), [root]
-while stack:
-    code = stack.pop()
-    if id(code) in seen: continue
-    seen.add(id(code))
-    for const in code.co_consts:
-        if isinstance(const, types.CodeType): stack.append(const)
-    for instruction in dis.get_instructions(code):
-        if instruction.opname == "IMPORT_NAME" and isinstance(instruction.argval, str):
-            edges.add((max(1, instruction.starts_line or code.co_firstlineno), "module-import", instruction.argval))
-        elif instruction.opname in {"LOAD_GLOBAL", "LOAD_NAME"} and instruction.argval in {"eval", "exec", "compile", "__import__"}:
-            edges.add((max(1, instruction.starts_line or code.co_firstlineno), "dynamic-dispatch", str(instruction.argval)))
-print(json.dumps(sorted(edges)))
-"""
+@contextmanager
+def _parser_snapshot(payload: bytes, suffix: str) -> Iterator[Path]:
+    """Retain exact bounded parser input outside the mutable target tree."""
+
+    normalized_suffix = suffix.casefold()
+    if normalized_suffix not in _PARSER_SNAPSHOT_SUFFIXES:
+        normalized_suffix = ".bin"
+    with tempfile.TemporaryDirectory(prefix="pysec-parser-input-") as directory:
+        root = Path(directory).resolve()
+        snapshot = root / f"input{normalized_suffix}"
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
+        descriptor = os.open(snapshot, flags, 0o600)
+        try:
+            with os.fdopen(descriptor, "wb") as handle:
+                descriptor = -1
+                handle.write(payload)
+                handle.flush()
+                os.fsync(handle.fileno())
+        finally:
+            if descriptor >= 0:
+                os.close(descriptor)
+        yield snapshot
+
+
 _IGNORED_PARTS = frozenset(
     {".git", ".hg", ".mypy_cache", ".pytest_cache", ".tox", ".venv", "node_modules"}
 )
@@ -149,9 +156,12 @@ _TEXT_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
 
 
 def build_boundary_graph(
-    target: Path, *, require_governed_parsers: bool = False
+    target: Path,
+    *,
+    require_governed_parsers: bool = False,
+    allow_ungoverned_binary_parsers: bool = False,
 ) -> dict[str, Any]:
-    """Build a bounded, language-neutral graph of external trust boundaries."""
+    """Build a bounded graph; hostile binary parsers require an OS sandbox by default."""
     root = target.resolve()
     edges: list[dict[str, Any]] = []
     errors: list[dict[str, Any]] = []
@@ -173,8 +183,8 @@ def build_boundary_graph(
         relative = path.relative_to(root).as_posix()
         try:
             if (
-                require_governed_parsers
-                and kind in {"bytecode", "native-extension"}
+                kind in {"bytecode", "native-extension"}
+                and not allow_ungoverned_binary_parsers
                 and not os.environ.get("PYSEC_PARSER_SANDBOX_PREFIX_JSON", "").strip()
             ):
                 raise ValueError("governed parser sandbox is required")
@@ -1486,16 +1496,28 @@ def _analyze_special_surface(
             text, source, path.suffix.casefold()
         )
     if kind == "bytecode":
-        if len(payload) < 16 or payload[:4] != importlib.util.MAGIC_NUMBER:
-            raise ValueError("Python bytecode magic or header is invalid")
-        result = run_command(
-            [sys.executable, "-I", "-S", "-c", _BYTECODE_ANALYZER, str(path)],
-            cwd=path.parent,
-            timeout_seconds=10,
-            max_output_bytes=1024 * 1024,
-            environment=_parser_environment(),
-        )
-        if result.exit_code != 0 or result.timed_out or result.output_limit_exceeded:
+        worker = Path(__file__).with_name("bytecode_parser_worker.py")
+        with _parser_snapshot(payload, path.suffix) as snapshot:
+            result = run_command(
+                [
+                    sys.executable,
+                    "-I",
+                    str(worker),
+                    str(snapshot),
+                ],
+                cwd=snapshot.parent,
+                timeout_seconds=10,
+                max_output_bytes=1024 * 1024,
+                environment=_parser_environment(),
+            )
+        if (
+            result.exit_code != 0
+            or result.timed_out
+            or result.output_limit_exceeded
+            or result.scratch_limit_exceeded
+            or result.resident_memory_limit_exceeded
+            or result.resource_limit_errors
+        ):
             raise ValueError("Python bytecode semantic disassembly failed")
         decoded = strict_json_loads(result.stdout)
         if not isinstance(decoded, list) or len(decoded) > 10_000:
@@ -1735,17 +1757,20 @@ def _native_imports(path: Path, payload: bytes) -> list[str]:
     ):
         raise ValueError("native extension format is unsupported")
     worker = Path(__file__).with_name("native_parser_worker.py")
-    result = run_command(
-        [sys.executable, "-I", str(worker), str(path)],
-        cwd=path.parent,
-        timeout_seconds=15,
-        max_output_bytes=4 * 1024 * 1024,
-        environment=_parser_environment(),
-    )
+    with _parser_snapshot(payload, path.suffix) as snapshot:
+        result = run_command(
+            [sys.executable, "-I", str(worker), str(snapshot)],
+            cwd=snapshot.parent,
+            timeout_seconds=15,
+            max_output_bytes=4 * 1024 * 1024,
+            environment=_parser_environment(),
+        )
     if (
         result.exit_code != 0
         or result.timed_out
         or result.output_limit_exceeded
+        or result.scratch_limit_exceeded
+        or result.resident_memory_limit_exceeded
         or result.resource_limit_errors
     ):
         raise ValueError("resource-contained native binary parsing failed")
@@ -1763,7 +1788,10 @@ def _native_imports(path: Path, payload: bytes) -> list[str]:
 def _parser_environment() -> CommandEnvironment:
     raw_prefix = os.environ.get("PYSEC_PARSER_SANDBOX_PREFIX_JSON", "").strip()
     if not raw_prefix:
-        return CommandEnvironment(max_scratch_bytes=16 * 1024 * 1024)
+        return CommandEnvironment(
+            max_scratch_bytes=16 * 1024 * 1024,
+            max_resident_memory_bytes=256 * 1024 * 1024,
+        )
     try:
         prefix = strict_json_loads(raw_prefix)
     except json.JSONDecodeError as exc:
@@ -1785,6 +1813,7 @@ def _parser_environment() -> CommandEnvironment:
         .strip()
         .casefold(),
         max_scratch_bytes=16 * 1024 * 1024,
+        max_resident_memory_bytes=256 * 1024 * 1024,
     )
 
 

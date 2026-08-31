@@ -1,6 +1,6 @@
 # Python Security Suite configuration
 
-Last reviewed: 2026-08-30
+Last reviewed: 2026-08-31
 
 ## Loading and protection
 
@@ -146,9 +146,11 @@ flowchart LR
     Domains --> DomainArtifact["domain-assurance.json 1.0<br/>applicability + evidence-bound obligations"]
     Industry --> Stable["Stable governed baselines<br/>MCP/A2A | CSP2/SRI1 | TLP/IEP/VERIS | SESIP/EN 17927"]
     Industry --> Sector["Conditional sector packs<br/>DORA | FFIEC | BSI C5 | FCC Cyber Trust Mark"]
+    Industry --> Validation["Execution-maturity packs<br/>vulnerable apps | statistical fuzzing<br/>SBOM build truth | architecture fitness"]
     Industry --> Watch["Non-normative quarantine<br/>draft CSP3/SRI2/Trusted Types/TR-03183 + retired CAT"]
-    Stable --> IndustryArtifacts["481-reference crosswalk + lifecycle ledger + 147 assurance packs<br/>9 foundational assessments + controls + procedures<br/>182-family / 100-adapter / 11-protocol verified scorecard + OSCAL"]
+    Stable --> IndustryArtifacts["635-reference crosswalk + lifecycle ledger + 215 assurance packs<br/>9 foundational assessments + controls + procedures<br/>262-family / 192-adapter / 11-protocol / 96-semantic-integration scorecard + OSCAL"]
     Sector --> IndustryArtifacts
+    Validation --> IndustryArtifacts
     Watch --> IndustryArtifacts
     HealthPolicy -->|"invalid"| Incomplete["Analysis incomplete"]
     ArchitecturePolicy -->|"invalid"| Incomplete
@@ -166,13 +168,19 @@ artifacts that publish `complete` must report `true`. See
 [Cross-domain assurance](domain-assurance.md).
 
 Use
-[`examples/industry-assurance-policy.example.json`](../examples/industry-assurance-policy.example.json)
+[`examples/industry-assurance-policy-1.3.example.json`](../examples/industry-assurance-policy-1.3.example.json)
 to select enterprise, identity, cloud/zero-trust, cryptography/PQC, resilience,
 privacy, PSIRT, supply-chain, AI, EU, IoT/OT, automotive, medical, federal, and
 other conditional assurance packs. The example includes A2A protocol security,
 SESIP IoT platform evaluation, FIRST TLP/IEP and VERIS information handling,
 CSP2/SRI1 web defense, DORA Level 2 resilience, current FFIEC technology
-handbooks, BSI C5 cloud assurance, and FCC Cyber Trust Mark readiness. Add
+handbooks, BSI C5 cloud assurance, FCC Cyber Trust Mark readiness, vulnerable-
+application/API laboratories, repeated fuzzing, SBOM build truth, architecture
+fitness, temporal prioritization, ransomware recovery, media sanitization, OT
+backup and remote access, IEC 62443 provider evaluation, crisis exercises,
+enterprise ICT risk aggregation, standards-crosswalk semantics, and LNG/EV
+infrastructure resilience. Every destructive, cyber-physical, or licensed
+example is disabled by default and requires an authorized companion lane. Add
 repository-owned control objectives and enable only the pinned benchmark
 families that apply. Production and release scans fail closed when an
 enforced applicable control or procedure lacks complete named evidence, or an

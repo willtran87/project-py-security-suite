@@ -1,0 +1,56 @@
+{
+  "schema_version": "1.0",
+  "minimum_distinct_maintainers": 3,
+  "deployment_branches": ["main"],
+  "environments": [
+    {
+      "name": "release-admission",
+      "minimum_reviewer_principals": 2,
+      "prevent_self_review": true,
+      "require_branch_policy": true,
+      "runner_labels": []
+    },
+    {
+      "name": "release-evidence-source",
+      "minimum_reviewer_principals": 2,
+      "prevent_self_review": true,
+      "require_branch_policy": true,
+      "runner_labels": ["self-hosted", "release-evidence"]
+    },
+    {
+      "name": "production-security-isolation",
+      "minimum_reviewer_principals": 2,
+      "prevent_self_review": true,
+      "require_branch_policy": true,
+      "runner_labels": ["self-hosted", "windows", "x64", "pysec-isolated"]
+    },
+    {
+      "name": "authorized-dynamic-security",
+      "minimum_reviewer_principals": 2,
+      "prevent_self_review": true,
+      "require_branch_policy": true,
+      "runner_labels": ["self-hosted", "linux", "x64", "pysec-dynamic"]
+    },
+    {
+      "name": "independent-release-verification",
+      "minimum_reviewer_principals": 2,
+      "prevent_self_review": true,
+      "require_branch_policy": true,
+      "runner_labels": ["self-hosted", "linux", "x64", "pysec-independent-builder"]
+    },
+    {
+      "name": "production-signing-conformance",
+      "minimum_reviewer_principals": 2,
+      "prevent_self_review": true,
+      "require_branch_policy": true,
+      "runner_labels": ["self-hosted", "linux", "x64", "pysec-signing"]
+    },
+    {
+      "name": "pypi-production",
+      "minimum_reviewer_principals": 2,
+      "prevent_self_review": true,
+      "require_branch_policy": true,
+      "runner_labels": []
+    }
+  ]
+}

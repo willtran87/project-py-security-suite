@@ -1,7 +1,7 @@
 # Python Security Suite design
 
 Status: alpha foundation  
-Last reviewed: 2026-08-30
+Last reviewed: 2026-08-31
 
 ## Purpose
 
@@ -45,8 +45,9 @@ flowchart LR
         Scanners["89 governed adapters<br/>security | quality | testing | policy | architecture | supply chain | artifact | governance"]
         Analyzers["Native contextual analyzers<br/>framework | contract | validation | health | architecture | domain assurance"]
         Reports["Markdown | HTML | SARIF | SonarQube | JSON<br/>SBOM + validation + architecture + domain coverage + Security Passport"]
-        Standards["481 versioned standards references + 147 assurance packs<br/>deterministic catalog export + verified source-manifest compiler<br/>publisher quarantine + signed promotion"]
-        Benchmarks["182 governed benchmark families + 100 maintained adapters<br/>multi-fixture + pinned semantic-oracle admission<br/>AST + lexical + control-flow near-duplicate evidence<br/>exact equal-tail/mean statistics + full SLSA materials"]
+        Standards["635 versioned standards references + 215 assurance packs<br/>deterministic catalog export + verified source-manifest compiler<br/>66-item publisher quarantine + signed promotion"]
+        Benchmarks["262 governed benchmark families + 192 maintained adapters<br/>application/identity/AI/safety/resilience/operations/calibration/repository truth<br/>repeated statistical fuzzing + temporal calibration<br/>exact equal-tail/mean statistics + full SLSA materials"]
+        ExtensionEvidence["96 suite-owned semantic integrations<br/>strict JSON + source/subject binding<br/>ransomware/sanitization/OT/crisis/IEC-provider/risk/crosswalk/LNG-EV oracles<br/>independent replay + domain negative cases"]
         BenchmarkTrust["Root-signed external benchmark trust<br/>lifecycle-aware downstream receipt admission<br/>leased intent/checkpoint recovery<br/>HSM/KMS receipts + trusted-time rotation anchors"]
         AssuranceCase["ISO 15026 + SACM 2.3 assurance case<br/>claims + evidence + defeaters + confidence + review"]
         Priority["CVSS v4 + SSVC<br/>source evidence only"]
@@ -59,7 +60,7 @@ flowchart LR
         Suite --> Analyzers
         Analyzers --> Suite
         Standards --> Suite
-        Benchmarks --> Suite
+        Benchmarks --> ExtensionEvidence --> Suite
         BenchmarkTrust --> Benchmarks
         AssuranceCase --> Suite
         Suite --> Priority
@@ -417,21 +418,24 @@ own toolchain while preserving useful local tamper detection.
 
 ```mermaid
 flowchart LR
-    Change[Source or contract change] --> CI[Protected continuous integration]
+    PullRequest[Pull request] --> CI[Protected continuous integration]
+    MainPush[Push to main] --> CI
     CI --> Tests[Cross-platform tests]
     CI --> Coverage[Branch + changed-line + critical-module coverage]
     CI --> Schema[Schema/runtime + public API compatibility]
+    CI --> Workflow[Digest-verified actionlint + zizmor]
     CI --> Architecture[Dependency graph + file/function/decision ratchets]
     CI --> Performance[Repeated p95 + throughput + memory + growth budgets]
-    Change --> Daily[Daily parser assurance]
-    Daily --> Fuzz[Persistent coverage-guided parser fuzzing]
-    Change --> Weekly[Weekly deep assurance]
+    Schedule[Scheduled assurance] --> Daily[Daily parser assurance]
+    Daily --> Fuzz[Persistent JSON/XML/archive/adapter<br/>bytecode/Wasm/native parser fuzzing]
+    Schedule --> Weekly[Weekly deep assurance]
     Weekly --> Mutation[Security-critical mutation testing]
     Weekly --> Resilience[Timeout + flood + rollback + cleanup drills]
     Weekly --> Providers[Protected live HSM/Vault/KMS conformance]
     Tests --> Gate[Release evidence]
     Coverage --> Gate
     Schema --> Gate
+    Workflow --> Gate
     Architecture --> Gate
     Performance --> Gate
     Mutation --> Gate
@@ -447,7 +451,7 @@ remain separate modules. Shared repository traversal, governance replay,
 atomic publication, process-input policy, and diagnostic redaction are isolated
 behind focused modules. The 12,000-line assurance data block is separated into
 standards, benchmark, and profile catalogs, leaving the evaluation engine near
-5,300 lines. Tach enforces exact imports across 144 production module boundaries.
+5,300 lines. Tach enforces exact imports across 148 production module boundaries.
 A separate strongly-connected-component ratchet permits only one explicitly
 recorded legacy trust/runtime cycle group and rejects any new member, edge
 expansion, or additional cycle. CI also freezes concentration ceilings and rejects
@@ -557,8 +561,11 @@ Every top-level production module has an explicit boundary, root leakage is
 forbidden, and undeclared or unused dependencies fail because exact mode is
 enabled. The configuration/governance and adapter/repository-surface cycles have
 been eliminated; dependency-neutral governance quorum verification has also
-removed the assurance-profile module from the bootstrap cycle. The repository
-currently carries one explicit eight-module
+removed the assurance-profile module from the bootstrap cycle. Attestation
+format parsing now receives its native replay executor through an explicit
+protocol, removing the format parser from command-execution cycle debt while
+retaining fail-closed replay and failure-domain validation. The repository
+currently carries one explicit seven-module
 trust/runtime cycle-debt group. `validate_architecture_cycles.py`
 computes strongly connected components from the synchronized graph and fails on
 any expansion or new cycle; shrinking a group also fails until the baseline is
@@ -574,7 +581,7 @@ flowchart TB
     Integrations --> Services
     Integrations --> Core
     Services --> Core
-    Graph["Tach exact graph<br/>144 boundaries"] --> Debt["SCC debt ratchet<br/>1 frozen group / 8 modules"]
+    Graph["Tach exact graph<br/>146 boundaries"] --> Debt["SCC debt ratchet<br/>1 frozen group / 7 modules"]
     Debt -->|new or expanded cycle| Fail["CI failure"]
     Graph --> Evidence["Schema-valid architecture assurance<br/>edges + SCCs + concentration"]
     Evidence --> Artifact["90-day CI evidence artifact"]
@@ -1166,6 +1173,32 @@ flowchart LR
 ```
 
 See [configuration.md](configuration.md) for the complete supported schema.
+
+## Hostile parser containment
+
+Native binaries and Python bytecode never give parser libraries a mutable path
+inside the target checkout. The suite reads each regular file through the
+bounded path-safety layer, writes the exact accepted bytes to a private
+exclusive snapshot, and invokes a dedicated worker with output, scratch,
+resident-memory, and time limits. Direct boundary-graph use requires a governed
+OS sandbox by default; repository development profiles must opt out explicitly.
+WebAssembly validation remains in-process but uses Wasmtime validation plus
+bounded section, name, import, memory, and start-function parsing. All three
+families have dedicated coverage-guided fuzz targets and retained corpora.
+
+```mermaid
+flowchart LR
+    Target["Untrusted repository file"] --> SafeRead["Race-safe regular-file read<br/>1 MiB input ceiling"]
+    SafeRead --> Snapshot["Private O_EXCL snapshot<br/>exact accepted bytes"]
+    Snapshot --> Sandbox["Digest-pinned OS sandbox<br/>required by safe default"]
+    Sandbox --> Worker["Bytecode or PE/ELF/Mach-O worker<br/>time + output + scratch + 256 MiB RSS"]
+    Worker --> Validate["Strict canonical edge validation"]
+    Validate --> Graph["Boundary graph imports<br/>hardening + dynamic dispatch"]
+    Fuzz["Atheris bytecode/Wasm/native corpora"] --> Worker
+    Fuzz --> Wasm["Wasmtime + bounded Wasm sections"]
+    Wasm --> Graph
+    Worker -->|timeout, crash, malformed, limit| Incomplete["Unsupported / INCOMPLETE"]
+```
 
 ## Security properties
 

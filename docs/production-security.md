@@ -1,6 +1,6 @@
 # Production security gate
 
-Last reviewed: 2026-08-26
+Last reviewed: 2026-08-31
 
 ## Purpose
 
@@ -17,9 +17,12 @@ artifact provenance.
 
 ## Repository continuous verification
 
-The repository runs a connected GitHub validation lane on every push and pull
-request. It complements the isolated production gate without claiming that a
-hosted runner is the production isolation boundary:
+The repository runs connected GitHub validation lanes on every pull request
+and every push to `main`. Restricting branch-push validation to `main` prevents
+same-repository pull requests from publishing duplicate, colliding required
+check contexts; direct feature changes are validated through their pull
+request. These lanes complement the isolated production gate without claiming
+that a hosted runner is the production isolation boundary:
 
 The containment matrix now executes real platform-boundary canaries on all
 three hosted operating systems: a default-deny Bubblewrap mount/PID/IPC/network
@@ -32,13 +35,20 @@ Job Object resource controls remain a separate availability mechanism.
 - the locked test environment runs on Python 3.11 through 3.14 on Linux, with
   Python 3.14 parity lanes on Windows and macOS;
 - the full suite enforces at least 80% combined line/branch coverage, and pull
-  requests enforce at least 90% coverage on changed executable lines;
+  requests enforce at least 90% coverage on changed executable lines; the
+  per-module security ratchet rejects malformed, non-finite, out-of-range, or
+  path-ambiguous coverage evidence, and high-headroom critical modules retain
+  tightened platform-validated regression floors rather than historical
+  minimums;
 - an explicit Ruff baseline covers correctness, async hazards, common bugs,
   broad exception handling, and Bandit-derived security rules;
-- zizmor audits every GitHub workflow with its pedantic ruleset;
+- a digest-verified actionlint binary validates workflow syntax, expressions,
+  and every explicitly declared protected-runner label before zizmor audits
+  the workflows with its pedantic security ruleset;
 - mypy checks production source and the Pages audit hooks, while a separately
-  pinned strict Pyright gate covers the trust, replay, publication,
-  effectiveness, performance, architecture-policy, and API-policy boundaries;
+  pinned strict Pyright gate covers 25 trust, parser, authority, replay,
+  publication, effectiveness, performance, architecture-policy, and API-policy
+  files;
 - `pip-audit` evaluates platform-resolved, hash-pinned exports of both the
   scanner and companion locked dependency graphs on Linux, Windows, and macOS
   with Python 3.11, 3.13, and 3.14, excluding only the unpublished local projects;
@@ -48,7 +58,8 @@ Job Object resource controls remain a separate availability mechanism.
   as required, and uploads separately categorized SARIF;
 - pull-request, main-branch, and daily parser fuzzing exercise a discovered
   matrix covering binary ZIP/TAR structure, defused XML, strict JSON, SARIF,
-  and every evidence adapter with cross-invocation state checks; pull requests
+  Python bytecode, WebAssembly, PE/ELF/Mach-O parsing, and every evidence adapter
+  with cross-invocation state checks; pull requests
   use eight complete adapter shards while main and daily runs retain individual
   adapter campaigns; evolved corpora are retained for 180 days; and
 - weekly deep assurance builds and self-scans the scanner container and
@@ -70,8 +81,9 @@ the locked dependency audit.
 
 ## Protected external controls
 
-Three workflows intentionally remain inert until their fixed GitHub
-Environments, reviewers, runner labels, variables, and secrets are configured:
+Seven workflow files depend on seven fixed GitHub Environments. They remain
+fail-closed until independent reviewers, deployment branch policies, runner
+labels, variables, and secrets are configured:
 
 - `external-security-assurance.yml` requires an organization-hashed isolation
   verifier, a complete native production bundle, a separately governed
@@ -83,6 +95,14 @@ Environments, reviewers, runner labels, variables, and secrets are configured:
   `pysec-independent-builder` runner. It hashes the provider-controlled Python,
   `uv`, and GitHub CLI, verifies the exact upstream run and attestations, then
   requires a third wheel build to match byte-for-byte.
+- `release-evidence-source.yml`, `release-evidence.yml`, and
+  `release-promotion.yml` form a three-stage custody chain across the
+  `release-evidence-source` and `release-admission` environments. Admission
+  starts from the protected `main` verifier, validates producer identity before
+  installing repository code, and uses a bounded standard-library extractor
+  for the digest-verified GitHub artifact.
+- `signing-provider-conformance.yml` requires a protected `pysec-signing`
+  runner and deployment-controlled signing provider identities.
 - `publish-pypi.yml` runs only behind `pypi-production`. It requires separately
   approved wheel/sdist hashes, verifies provenance and archive internals, uses
   PyPI Trusted Publishing, downloads both public files, rechecks their hashes,
@@ -91,6 +111,31 @@ Environments, reviewers, runner labels, variables, and secrets are configured:
 Missing protected configuration is a hard failure. Repository code cannot
 provision an independent provider, approve its own target or holdout corpus, or
 review its own publication; these workflows enforce the handoff contract.
+
+Audit the live control plane using an administrator-authenticated GitHub CLI:
+
+```powershell
+uv run --frozen python scripts/audit_github_assurance_controls.py `
+  --repository OWNER/REPOSITORY `
+  --output .artifacts/governance/github-control-plane-readiness.json
+```
+
+The versioned policy in `security/github-assurance-controls.json` requires at
+least three distinct maintainers, two reviewer principals per protected
+environment, prevention of self-review, deployment branch policies, and an
+available non-busy runner carrying every required label. Any gap produces
+`INCOMPLETE`; the report never converts repository-local configuration into
+independence evidence.
+
+```mermaid
+flowchart LR
+    Policy["Versioned control-plane policy"] --> Audit["Live GitHub readiness audit"]
+    Maintainers["3+ maintainers<br/>author + independent reviewers"] --> Audit
+    Environments["7 protected environments<br/>branch policy + no self-review"] --> Audit
+    Runners["Isolated | dynamic | evidence<br/>independent build | signing"] --> Audit
+    Audit -->|all controls live| Ready["Operationally READY"]
+    Audit -->|missing actor, rule, or runner| Incomplete["INCOMPLETE<br/>release remains blocked"]
+```
 
 ## Release flow
 
@@ -195,6 +240,7 @@ Passport evidence. See [Governed release readiness](release-readiness.md).
 | Final OCI image | Bounded `oci-image` findings and digest evidence | Scan the immutable image archive with staged Syft, Grype, and Trivy databases; never pull during the isolated gate |
 | Repository governance | Validated OpenSSF Scorecard JSON | Generate the JSON in a separately authorized connected lane and bind it to the scanned revision |
 | Runtime behavior | Hypothesis and Schemathesis JUnit plus Atheris, ClusterFuzzLite, Fuzz Introspector, ZAP, Nuclei, self-hosted OAST, RESTler, browser, authorization, protocol contracts, IAST, Falco, RASP, native-sanitizer, MobSF, TLS, and connected secret-verification evidence are normalized; target behavior is deliberately not executed by the scanner | Sandboxed multi-role/state/replay/concurrency abuse cases, fuzz-depth analysis, API/GraphQL state machines, authenticated and out-of-band DAST, non-HTTP fault cases, instrumentation-health, runtime-rule, prevention, mobile, transport, and provider-verification canaries |
+| Industry benchmark execution | Registry-bound scoring for 262 families with 192 maintained adapters, eleven typed protocols, and 96 semantic evidence integrations | Disposable authorized lanes include ransomware/recovery twins, media-sanitization laboratories, OT backup and remote-access twins, blinded IEC 62443 provider and crisis/risk assessors, crosswalk semantic fixtures, LNG/EV infrastructure twins, water/wastewater treatment twins, NG911/P25 interoperability laboratories, multinational GxP record systems, multimodal transit twins, multi-organization incident exercises, gas-SCADA cryptographic laboratories and research-only water OT corpora, plus semiconductor-equipment, pipeline-control, CJIS, Automotive SPICE, process-SIS, BACnet Secure Connect, industrial-robotics and data-centre facility twins; firmware/device-integrity laboratories; Kubernetes admission clusters; payment PIN/POI/HSM/3DS laboratories; regional financial resilience twins; ECSS software projects; secure-sharing calibration; identity/HPC; medical and healthcare operations; physical AI; NSS/DoD authorization packages; zero trust; airborne, maritime and space systems; critical C/C++; confidential-computing attestation; voting; formal methods; empirical calibration; smart contracts; maturity; detection; supply-chain verification; vulnerable applications; fuzzing and architecture mutations. The scanner validates evidence and scorecards but does not execute active targets inside the source-scan boundary. |
 | Design risk | OWASP pytm threats are normalized when a model exists | Human threat-model and architecture review plus time-bounded risk acceptance |
 
 The generated `assurance-case.md` records these boundaries for each run. Its
@@ -381,11 +427,19 @@ ETW evidence) containing process-exec and sink-access observations for every
 trace. Its third failure domain signs a `runtime-kernel-observation` operation
 receipt, and `PYSEC_RUNTIME_KERNEL_AUTHORITY_KEY_SHA256` pins that authority.
 
-Native binary parsing runs in a resource-contained isolated worker, with an
-optional deployment-pinned OS sandbox prefix. PE, ELF, and Mach-O analysis
-retains import/symbol and hardening state; WebAssembly analysis validates
-bounded sections and records import, memory-limit/shared-memory, and start
-function controls. Tree-sitter grammars provide AST-bound import and call
+The governed effectiveness replay client accepts only credential-free HTTPS
+service URLs, sends its bearer token solely as an unredirected authorization
+header, and rejects every redirect so the credential cannot cross origins or
+enter URL, proxy, or redirect logs.
+
+Native binary and Python bytecode parsing runs against an exact private snapshot
+of the already size-bounded bytes rather than reopening a mutable repository
+path. The isolated worker has a 256 MiB resident-memory ceiling, bounded output
+and scratch space, rejects unavailable limit enforcement, and can add a
+deployment-pinned OS sandbox prefix. PE, ELF, and Mach-O analysis retains
+import/symbol and hardening state; WebAssembly analysis validates bounded
+sections and records import, memory-limit/shared-memory, and start-function
+controls. Tree-sitter grammars provide AST-bound import and call
 extraction for supported non-Python source and retain the exact package version
 and parser-module digest. Governed polyglot admission additionally requires
 separately authorized compiler-frontend evidence, bound to each complete

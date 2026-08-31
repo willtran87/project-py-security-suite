@@ -21,11 +21,43 @@ def test_catalog_export_is_complete_deterministic_and_schema_valid() -> None:
     second = export_assurance_catalog()
 
     assert first == second
-    assert first["counts"]["standards"] == 481
-    assert first["counts"]["benchmarks"] == 182
-    assert first["counts"]["adapter_specs"] == 100
-    assert first["counts"]["execution_contracts"] == 100
+    assert first["counts"]["standards"] == 635
+    assert first["counts"]["profiles"] == 215
+    assert first["counts"]["benchmarks"] == 262
+    assert first["counts"]["adapter_specs"] == 192
+    assert first["counts"]["execution_contracts"] == 192
     assert len(first["catalog_sha256"]) == 64
+    components = first["components"]
+    assert {
+        "OIDF-AUTHZEN-AUTHORIZATION-API",
+        "OIDF-OPENID-FEDERATION",
+        "OIDF-OPENID-FEDERATION-CONNECT",
+        "NIST-SP-800-223",
+        "NIST-SP-800-234",
+        "ISO-IEC-24760-1",
+        "ISO-IEC-24760-2",
+        "ISO-IEC-24760-3",
+        "ISO-IEC-TR-5259-6",
+        "AWWA-J100",
+        "NENA-STA-040",
+        "EU-GMP-ANNEX-11",
+        "NIST-IR-8576",
+        "ISO-22320",
+        "NIST-IR-8374-R1",
+        "NIST-SP-800-88-R2",
+        "IEC-TS-62443-6-1",
+        "ISO-22361",
+        "NIST-SP-1347",
+    } <= {item["id"] for item in components["standards"]}
+    assert {
+        "NIST-SP-800-239",
+        "OASIS-OPENEOX-1.0",
+        "OASIS-CSAF-2.1",
+        "NIST-IR-8546",
+        "EU-GMP-ANNEX-11-REVISION",
+        "NIST-SP-800-82-R4",
+        "NIST-SP-1353",
+    } <= {item["id"] for item in components["standards_watchlist"]}
     schema = json.loads(read_bundled_schema("assurance-catalog-export-1.0"))
     Draft202012Validator.check_schema(schema)
     Draft202012Validator(schema).validate(first)
@@ -86,6 +118,70 @@ def test_new_policy_and_preparation_examples_match_their_contracts() -> None:
     Draft202012Validator(
         json.loads(read_bundled_schema("industry-assurance-policy-1.3"))
     ).validate(policy)
+    assert {
+        "autonomous-vulnerability-research",
+        "open-source-security-metadata-graph",
+        "forge-independent-source-integrity",
+        "malicious-package-behavior",
+        "cloud-native-delivery-risk-taxonomies",
+        "build-observed-sbom-assurance",
+        "real-world-vulnerability-generalization",
+        "mobile-risk-taxonomy-assurance",
+        "smart-contract-security-assurance",
+        "cloud-native-lifecycle-control-assurance",
+        "repository-level-vulnerability-context",
+        "embedded-device-threat-assurance",
+        "business-logic-abuse-assurance",
+        "cncf-supply-chain-practices-assurance",
+        "public-vulnerable-application-testing",
+        "statistical-fuzzing-evaluation",
+        "sbom-build-truth-validation",
+        "architecture-fitness-validation",
+        "identity-lifecycle-continuous-access",
+        "workload-identity-federation",
+        "ai-ml-artifact-supply-chain",
+        "automotive-secure-update-protocol",
+        "open-source-criticality-prioritization",
+        "authorization-decision-interoperability",
+        "openid-federation-security",
+        "hpc-ai-infrastructure-security",
+        "identity-management-framework",
+    } <= {item["id"] for item in policy["profiles"]}
+    assert {
+        "oss-crs-crsbench",
+        "openssf-security-insights-conformance",
+        "guac-interoperability",
+        "gittuf-source-policy-conformance",
+        "openssf-package-analysis-malicious-packages",
+        "owasp-kubernetes-top10-conformance",
+        "owasp-cicd-top10-conformance",
+        "sbomit-build-observed-sbom",
+        "primevul-real-world-vulnerability-detection",
+        "diversevul-unseen-project-generalization",
+        "cvefixes-chronological-fix-pair-validation",
+        "owasp-mobile-top10-conformance",
+        "owasp-smart-contract-top10-conformance",
+        "cncf-cloud-native-security-controls-conformance",
+        "reposvul-repository-context-validation",
+        "vuleval-repository-dependency-evaluation",
+        "mitre-emb3d-property-threat-conformance",
+        "owasp-business-logic-abuse-top10-conformance",
+        "cncf-supply-chain-best-practices-v2-conformance",
+        "owasp-api-security-testing-framework",
+        "scim-lifecycle-security-conformance",
+        "openid-shared-signals-conformance",
+        "spiffe-workload-identity-conformance",
+        "openssf-model-signing-conformance",
+        "cyclonedx-mlbom-conformance",
+        "uptane-ota-security-conformance",
+        "darpa-aixcc-autonomous-vulnerability-remediation",
+        "openssf-criticality-score-calibration",
+        "authzen-authorization-api-conformance",
+        "openid-federation-conformance",
+        "nist-hpc-ai-infrastructure-assurance",
+        "iso-24760-identity-management-assurance",
+        "iso-5259-6-data-quality-visualization",
+    } <= {item["id"] for item in policy["benchmarks"]}
     Draft202012Validator(
         json.loads(read_bundled_schema("benchmark-preparation-request-1.0"))
     ).validate(request)

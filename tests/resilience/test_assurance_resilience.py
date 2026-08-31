@@ -36,6 +36,23 @@ def test_signing_bridge_timeout_is_contained() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    ("argv", "timeout_seconds", "maximum_stdout_bytes"),
+    [([], 1.0, 1024), ([sys.executable], 0.0, 1024), ([sys.executable], 1.0, 0)],
+)
+def test_bounded_subprocess_rejects_unsafe_configuration(
+    argv: list[str], timeout_seconds: float, maximum_stdout_bytes: int
+) -> None:
+    with pytest.raises(BoundedSubprocessError, match="configuration is invalid"):
+        run_bounded_subprocess(
+            argv,
+            timeout_seconds=timeout_seconds,
+            maximum_stdout_bytes=maximum_stdout_bytes,
+            maximum_stderr_bytes=1024,
+            environment=_minimal_environment(),
+        )
+
+
 def test_signing_bridge_output_flood_is_contained() -> None:
     with pytest.raises(BoundedSubprocessError, match="output exceeded limit"):
         run_bounded_subprocess(

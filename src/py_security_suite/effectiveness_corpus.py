@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
@@ -30,6 +30,21 @@ _MAX_CORPUS_BYTES = 16 * 1024 * 1024
 _MAX_LABELS = 10_000
 _MAX_MATCHES_PER_LABEL = 20
 _DIGEST_LENGTH = 64
+
+
+class _NoReplayRedirectHandler(HTTPRedirectHandler):
+    """Reject redirects so replay credentials cannot cross request origins."""
+
+    def redirect_request(
+        self,
+        req: Request,
+        fp: Any,
+        code: int,
+        msg: str,
+        headers: Any,
+        newurl: str,
+    ) -> None:
+        return None
 
 
 def evaluate_report_corpus(
@@ -594,16 +609,18 @@ def _consume_remote_effectiveness_replay(
         service_url,
         data=canonical_bytes(request_subject),
         headers={
-            "Authorization": f"Bearer {os.environ[token_env]}",
             "Content-Type": "application/json",
             "User-Agent": "py-security-suite-effectiveness-replay/1",
         },
         method="POST",
     )
+    request.add_unredirected_header("Authorization", f"Bearer {os.environ[token_env]}")
+    opener = build_opener(
+        HTTPSHandler(context=ssl.create_default_context()),
+        _NoReplayRedirectHandler(),
+    )
     try:
-        with urlopen(  # noqa: S310
-            request, timeout=10, context=ssl.create_default_context()
-        ) as response:
+        with opener.open(request, timeout=10) as response:  # noqa: S310
             payload = response.read(64 * 1024 + 1)
     except (HTTPError, URLError, TimeoutError) as exc:
         raise ValueError(
