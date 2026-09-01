@@ -1,7 +1,7 @@
 # Changelog
 
-- Expand industry assurance to 635 versioned references, 215 selectable
-  profiles, 262 benchmark families, 192 maintained adapters, and 96 strict
+- Expand industry assurance to 663 versioned references, 233 selectable
+  profiles, 282 benchmark families, 212 maintained adapters, and 116 strict
   semantic integrations. Add NIST ransomware recovery, NIST/IEEE media
   sanitization, OT backup and remote access, IEC 62443 provider evaluation,
   ISO crisis exercises, enterprise ICT risk aggregation, standards-crosswalk
@@ -26,7 +26,34 @@
   assurance. Calibrate SWaT, WADI, and BATADAL only as research corpora with
   license/source binding, contamination analysis, protected multi-axis
   holdouts, repeated statistics, and explicit non-compliance boundaries;
-  quarantine the draft semiconductor profile and Annex 11 revision. Reconcile
+  add OpenCRE/Gemara/OSCAL semantic interoperability, UK CBEST threat-led
+  assurance, and OCP S.A.F.E./SOLID hardware appraisal with independent replay
+  and bounded claims. Add DOE C2M2 2.1 capability maturity, FINOS Common Cloud
+  Controls, NCSC CRT APC/CRTF product assurance, NIST PRAM/NISTIR 8062 privacy
+  risk assessment, the UK Software Security Code of Practice, and conditional
+  licensed ITIL 4 service-management outcome assurance with five maintained
+  adapters, strict semantic contracts, domain mutations, independent replay,
+  longitudinal reassessment, and explicit non-endorsement and non-certification
+  boundaries; advance the quarantined CSAF 2.1 record to CSD02 without
+  promoting it over CSAF 2.0. Quarantine the draft semiconductor profile and
+  Annex 11 revision. Add separate CIS AWS Foundations 7.0.0, Azure Foundations
+  6.0.0, GCP Foundations 5.0.0 and Docker 1.8.0 conformance contracts; OWASP
+  GenAI Red Teaming Guide campaigns; AI Verify and Project Moonshot governance
+  and technical-test replay; NCSC CHECK engagement assurance; conditional
+  AIUC-1 Q3 2026 agent evaluation; and CSA IoT v2 component-control assurance.
+  Add ETSI EN 304 223 V2.1.1 AI lifecycle cybersecurity, OWASP LLM Top 10
+  2026 and TCASVS 5.0.1 currency, Five Eyes agentic-adoption guidance, NSA MCP
+  design guidance, CSA MAESTRO cross-layer threat modeling, and OWASP FIASSE
+  1.1.0. Add nested evaluator-harness escape, policy/scorer subversion,
+  persistence, covert-exfiltration, shutdown-evasion and cleanup-corruption
+  tests; upgrade MCP identity, session, context, serialization, revocation,
+  propagation and teardown evidence; and evolve requirement coverage to schema
+  1.1 with AISVS plus source-pinned extension catalogs. Quarantine CRA M/606
+  drafts and AIVSS 0.8 without premature conformity or scoring claims.
+  Every addition has a maintained adapter, exact semantic evidence contract,
+  independent replay, negative cases, cleanup/recovery/retest evidence and
+  explicit certification boundaries. Quarantine NCSC CyAS as an MVP and CoSAI
+  MCP Security as a semantic-delta candidate. Reconcile
   all published catalog totals, Mermaid architecture and execution-lane
   diagrams, benchmark tables, authoritative references, watchlist guidance,
   and the policy 1.3 example; documentation tests now bind these surfaces to

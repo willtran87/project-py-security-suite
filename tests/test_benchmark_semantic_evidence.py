@@ -104,6 +104,24 @@ def test_semantic_fingerprint_normalizes_invalid_python_encoding(
         semantic_fingerprint(b"value = 1\n", language="python")
 
 
+def test_semantic_fingerprint_rejects_parser_stack_exhaustion() -> None:
+    minimized_fuzz_payload = (
+        b"N++false+schema_"
+        + (b"{" * 113)
+        + b"version+k"
+        + (b"+" * 13)
+        + (b"{" * 107)
+        + b'version+k+++++++++++++++:"","":[]}]++fal+++t++++n+++++++l'
+        + (b"+" * 9)
+        + b':"","":[]}]++fal+++t++++n+++++++l'
+        + (b"+" * 13)
+        + b"-+++s+n+nl"
+    )
+
+    with pytest.raises(BenchmarkSemanticEvidenceError, match="complexity limit"):
+        semantic_fingerprint(minimized_fuzz_payload, language="python")
+
+
 @pytest.mark.parametrize(
     ("language", "suffix", "payload"),
     [

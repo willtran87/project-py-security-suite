@@ -159,7 +159,7 @@ def _evidence(identifier: str) -> dict[str, Any]:
 def test_sector_depth_integrations_are_registered_and_accept_complete_evidence() -> (
     None
 ):
-    assert len(INDUSTRY_EXTENSION_BENCHMARKS) == 96
+    assert len(INDUSTRY_EXTENSION_BENCHMARKS) == 116
     assert set(CLAIMS) <= INDUSTRY_EXTENSION_BENCHMARKS
     for identifier in CLAIMS:
         document = _evidence(identifier)

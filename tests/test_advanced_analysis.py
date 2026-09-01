@@ -301,6 +301,28 @@ class AdvancedAnalysisTests(unittest.TestCase):
         self.assertEqual(flow["semantic_basis"], "native-source-sink-kinds")
         self.assertNotIn("snippet", flow["steps"][0])
 
+    def test_sarif_rejects_control_characters_in_rule_identity(self) -> None:
+        payload = json.dumps(
+            {
+                "runs": [
+                    {
+                        "tool": {"driver": {}},
+                        "results": [{"ruleId": "\x00tru"}],
+                    }
+                ]
+            }
+        )
+
+        with self.assertRaisesRegex(ValueError, "only printable characters"):
+            parse_sarif_findings(
+                payload,
+                Path.cwd(),
+                tool_name="codeql",
+                default_area="data-flow",
+                default_impact="impact",
+                default_remediation="fix",
+            )
+
     def test_sarif_resolves_cached_thread_flow_locations_fail_closed(self) -> None:
         payload = json.dumps(
             {

@@ -21,11 +21,11 @@ def test_catalog_export_is_complete_deterministic_and_schema_valid() -> None:
     second = export_assurance_catalog()
 
     assert first == second
-    assert first["counts"]["standards"] == 635
-    assert first["counts"]["profiles"] == 215
-    assert first["counts"]["benchmarks"] == 262
-    assert first["counts"]["adapter_specs"] == 192
-    assert first["counts"]["execution_contracts"] == 192
+    assert first["counts"]["standards"] == 663
+    assert first["counts"]["profiles"] == 233
+    assert first["counts"]["benchmarks"] == 282
+    assert first["counts"]["adapter_specs"] == 212
+    assert first["counts"]["execution_contracts"] == 212
     assert len(first["catalog_sha256"]) == 64
     components = first["components"]
     assert {
@@ -48,6 +48,29 @@ def test_catalog_export_is_complete_deterministic_and_schema_valid() -> None:
         "IEC-TS-62443-6-1",
         "ISO-22361",
         "NIST-SP-1347",
+        "OWASP-OPENCRE",
+        "OPENSSF-GEMARA",
+        "UK-CBEST",
+        "OCP-SAFE",
+        "OCP-SOLID",
+        "DOE-C2M2",
+        "FINOS-CCC",
+        "NCSC-CRT-APC",
+        "NCSC-CRTF-SCHEME",
+        "UK-SOFTWARE-SECURITY-CODE-OF-PRACTICE",
+        "NIST-PRAM",
+        "NIST-IR-8062",
+        "ITIL-4",
+        "CIS-AWS-FOUNDATIONS",
+        "CIS-AZURE-FOUNDATIONS",
+        "CIS-GCP-FOUNDATIONS",
+        "CIS-DOCKER",
+        "OWASP-GENAI-RED-TEAMING-GUIDE",
+        "IMDA-AI-VERIFY",
+        "IMDA-PROJECT-MOONSHOT",
+        "NCSC-CHECK",
+        "AIUC-1",
+        "CSA-IOT-SECURITY-CONTROLS-FRAMEWORK",
     } <= {item["id"] for item in components["standards"]}
     assert {
         "NIST-SP-800-239",
@@ -57,6 +80,8 @@ def test_catalog_export_is_complete_deterministic_and_schema_valid() -> None:
         "EU-GMP-ANNEX-11-REVISION",
         "NIST-SP-800-82-R4",
         "NIST-SP-1353",
+        "NCSC-CYAS-MVP",
+        "COSAI-MCP-SECURITY-GUIDANCE",
     } <= {item["id"] for item in components["standards_watchlist"]}
     schema = json.loads(read_bundled_schema("assurance-catalog-export-1.0"))
     Draft202012Validator.check_schema(schema)
@@ -146,6 +171,12 @@ def test_new_policy_and_preparation_examples_match_their_contracts() -> None:
         "openid-federation-security",
         "hpc-ai-infrastructure-security",
         "identity-management-framework",
+        "cis-cloud-container-hardening",
+        "owasp-genai-red-team-assurance",
+        "imda-ai-verify-moonshot-assurance",
+        "ncsc-check-penetration-testing",
+        "aiuc1-agent-assurance",
+        "csa-iot-controls-alignment",
     } <= {item["id"] for item in policy["profiles"]}
     assert {
         "oss-crs-crsbench",
@@ -181,6 +212,15 @@ def test_new_policy_and_preparation_examples_match_their_contracts() -> None:
         "nist-hpc-ai-infrastructure-assurance",
         "iso-24760-identity-management-assurance",
         "iso-5259-6-data-quality-visualization",
+        "cis-aws-foundations-conformance",
+        "cis-azure-foundations-conformance",
+        "cis-gcp-foundations-conformance",
+        "cis-docker-conformance",
+        "owasp-genai-red-team-assurance",
+        "imda-ai-verify-moonshot-assurance",
+        "ncsc-check-engagement-assurance",
+        "aiuc1-agent-assurance",
+        "csa-iot-controls-conformance",
     } <= {item["id"] for item in policy["benchmarks"]}
     Draft202012Validator(
         json.loads(read_bundled_schema("benchmark-preparation-request-1.0"))

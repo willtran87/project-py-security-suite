@@ -5,6 +5,7 @@ import base64
 import gzip
 import io
 import json
+import re
 
 from .strict_json import loads as strict_json_loads
 import os
@@ -48,6 +49,14 @@ def security_requirements_coverage_artifact(
     )
     mobile = "mobsf-summary.json" in artifacts or bool({"kotlin", "swift"} & languages)
     thick_client = bool({"c", "cpp", "csharp", "rust"} & languages) and not mobile
+    ai_system = bool({"ai", "llm", "agentic", "machine-learning"} & languages) or any(
+        name in artifacts
+        for name in (
+            "ai-security.json",
+            "llm-adversarial-plan.json",
+            "adversarial-campaign.json",
+        )
+    )
     records: list[dict[str, Any]] = []
 
     def add(
@@ -122,7 +131,7 @@ def security_requirements_coverage_artifact(
     )
     add(
         "OWASP-TCASVS",
-        "5.0.0",
+        "5.0.1",
         "V4.6.3",
         thick_client,
         sast,
@@ -130,7 +139,7 @@ def security_requirements_coverage_artifact(
     )
     add(
         "OWASP-TCASVS",
-        "5.0.0",
+        "5.0.1",
         "V4.6.5",
         thick_client,
         [
@@ -142,7 +151,7 @@ def security_requirements_coverage_artifact(
     )
     add(
         "OWASP-TCASVS",
-        "5.0.0",
+        "5.0.1",
         "V4.6.6",
         thick_client,
         [
@@ -151,6 +160,42 @@ def security_requirements_coverage_artifact(
             if name in artifacts
         ],
         "mutation-based parser, protocol, and IPC fuzzing",
+    )
+    add(
+        "OWASP-AISVS",
+        "1.0",
+        "2.1.1",
+        ai_system,
+        [
+            name
+            for name in ("llm-adversarial-plan.json", "adversarial-campaign.json")
+            if name in artifacts
+        ],
+        "prompt-injection defense evidence with direct, indirect, multi-turn, encoded, retrieval and tool-mediated negative cases",
+    )
+    add(
+        "OWASP-AISVS",
+        "1.0",
+        "9.3.1",
+        ai_system,
+        [
+            name
+            for name in ("ai-security.json", "architecture-evaluation.json")
+            if name in artifacts
+        ],
+        "least-privilege tool and plugin sandboxing evidence; deployment-effective isolation remains independently attestable",
+    )
+    add(
+        "OWASP-AISVS",
+        "1.0",
+        "9.5.3",
+        ai_system,
+        [
+            name
+            for name in ("ai-security.json", "architecture-evaluation.json")
+            if name in artifacts
+        ],
+        "deterministic application or policy-engine authorization for agent actions rather than model-enforced access control",
     )
     applicable = [record for record in records if record["applicable"]]
     gaps = [record["requirement"] for record in applicable if record["status"] == "gap"]
@@ -175,11 +220,20 @@ def security_requirements_coverage_artifact(
         },
         {
             "standard": "OWASP-TCASVS",
-            "version": "5.0.0",
+            "version": "5.0.1",
             "source": "https://github.com/OWASP/TCASVS/tree/66d534f223c992882f25ac192d10f16f0779cc4a/5.0/en",
             "source_revision": "66d534f223c992882f25ac192d10f16f0779cc4a",
             "catalog_sha256": None,
             "requirements_in_catalog": None,
+            "requirements_mapped": 3,
+        },
+        {
+            "standard": "OWASP-AISVS",
+            "version": "1.0",
+            "source": "https://github.com/OWASP/AISVS/tree/78775233666a2022dcfb82037e5e029116955c00/1.0/en",
+            "source_revision": "78775233666a2022dcfb82037e5e029116955c00",
+            "catalog_sha256": "93d2abf8598c8068f2e83088df255b41ffacdc2d1a767505c20d4ed80a712e12",
+            "requirements_in_catalog": 191,
             "requirements_mapped": 3,
         },
     ]
@@ -192,6 +246,7 @@ def security_requirements_coverage_artifact(
         web = applicability_flags["web_or_api"]
         mobile = applicability_flags["mobile"]
         thick_client = applicability_flags["thick_client"]
+        ai_system = applicability_flags.get("ai_system", False)
         available_evidence = successful_tools | set(artifacts)
         records = []
         for item in policy["requirements"]:
@@ -279,12 +334,13 @@ def security_requirements_coverage_artifact(
     if len(procedure_executions) != len(execution_names):
         raise ValueError("retained requirement procedure execution is missing")
     subject = {
-        "schema_version": "1.0",
+        "schema_version": "1.1",
         "analysis": "versioned-security-requirements-evidence-crosswalk",
         "applicability": {
             "web_or_api": web,
             "mobile": mobile,
             "thick_client": thick_client,
+            "ai_system": ai_system,
         },
         "requirements": records,
         "catalogs": catalogs,
@@ -353,22 +409,29 @@ def _organization_requirements_policy() -> dict[str, Any] | None:
     if (
         not isinstance(value, dict)
         or set(value) != required
-        or value.get("schema_version") != "1.0"
+        or value.get("schema_version") not in {"1.0", "1.1"}
     ):
         raise ValueError("organization requirements policy fields do not match")
+    schema_version = str(value["schema_version"])
     applicability = value.get("applicability")
+    applicability_fields = {
+        "web_or_api",
+        "mobile",
+        "thick_client",
+    }
+    if schema_version == "1.1":
+        applicability_fields.add("ai_system")
     if (
         not isinstance(applicability, dict)
-        or set(applicability)
-        != {
-            "web_or_api",
-            "mobile",
-            "thick_client",
-        }
+        or set(applicability) != applicability_fields
         or any(not isinstance(item, bool) for item in applicability.values())
     ):
         raise ValueError("organization requirements applicability is invalid")
-    catalogs = _policy_catalogs(value.get("catalogs"))
+    catalogs = _policy_catalogs(value.get("catalogs"), schema_version=schema_version)
+    if applicability.get("ai_system") is True and "OWASP-AISVS" not in {
+        str(item["standard"]) for item in catalogs
+    }:
+        raise ValueError("AI-system requirements policy must cover OWASP AISVS")
     requirements = _policy_requirements(value.get("requirements"), catalogs)
     threshold = value.get("minimum_authority_signatures")
     if (
@@ -395,7 +458,9 @@ def _organization_requirements_policy() -> dict[str, Any] | None:
     }
 
 
-def _policy_catalogs(value: object) -> list[dict[str, Any]]:
+def _policy_catalogs(
+    value: object, *, schema_version: str = "1.0"
+) -> list[dict[str, Any]]:
     required = {
         "standard",
         "version",
@@ -404,7 +469,9 @@ def _policy_catalogs(value: object) -> list[dict[str, Any]]:
         "catalog_sha256",
         "requirements_in_catalog",
     }
-    if not isinstance(value, list) or len(value) != 3:
+    if not isinstance(value, list) or not 3 <= len(value) <= (
+        3 if schema_version == "1.0" else 100
+    ):
         raise ValueError("organization requirements catalogs are invalid")
     result: list[dict[str, Any]] = []
     identities: set[tuple[str, str]] = set()
@@ -418,23 +485,30 @@ def _policy_catalogs(value: object) -> list[dict[str, Any]]:
             or isinstance(count, bool)
             or not isinstance(count, int)
             or not 1 <= count <= 10_000
+            or re.fullmatch(r"[A-Z0-9][A-Z0-9.-]{1,99}", identity[0]) is None
         ):
             raise ValueError("organization requirements catalog identity is invalid")
         if (
             not str(item["source"]).startswith("https://")
+            or len(str(item["source_revision"])) != 40
             or not _hex_revision(str(item["source_revision"]))
             or len(str(item["catalog_sha256"])) != 64
+            or not _hex_revision(str(item["catalog_sha256"]))
         ):
             raise ValueError("organization requirements catalog provenance is invalid")
         identities.add(identity)
         result.append(dict(item))
-    if {identity[0] for identity in identities} != {
+    required_standards = {
         "OWASP-ASVS",
         "OWASP-MASVS",
         "OWASP-TCASVS",
-    }:
+    }
+    present_standards = {identity[0] for identity in identities}
+    if not required_standards <= present_standards or (
+        schema_version == "1.0" and present_standards != required_standards
+    ):
         raise ValueError(
-            "organization requirements policy must cover ASVS, MASVS, and TCASVS"
+            "organization requirements policy must cover ASVS, MASVS, and TCASVS; schema 1.1 may add source-pinned verification catalogs"
         )
     return result
 

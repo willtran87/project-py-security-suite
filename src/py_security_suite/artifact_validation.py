@@ -99,7 +99,7 @@ _ARTIFACT_SCHEMAS = {
     "runtime-surface-binding.json": "runtime-surface-binding-1.0.schema.json",
     "runtime-trace-correlation.json": "runtime-trace-correlation-1.0.schema.json",
     "semantic-language-coverage.json": "semantic-language-coverage-1.0.schema.json",
-    "security-requirements-coverage.json": "security-requirements-coverage-1.0.schema.json",
+    "security-requirements-coverage.json": "security-requirements-coverage-1.1.schema.json",
     "security-automation-interoperability.json": "security-automation-interoperability-1.0.schema.json",
     "source-inventory.json": "source-inventory.schema.json",
     "static-architecture.json": "static-architecture-1.4.schema.json",

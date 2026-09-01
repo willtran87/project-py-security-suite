@@ -69,7 +69,25 @@
     {"id": "crisis-leadership-and-exercises", "applicable": false, "procedure_execution": "planned"},
     {"id": "enterprise-ict-risk-portfolio", "applicable": false, "procedure_execution": "planned"},
     {"id": "standards-crosswalk-governance", "applicable": false, "procedure_execution": "planned"},
-    {"id": "lng-and-ev-infrastructure", "applicable": false, "procedure_execution": "planned"}
+    {"id": "lng-and-ev-infrastructure", "applicable": false, "procedure_execution": "planned"},
+    {"id": "control-knowledge-interoperability", "applicable": false, "procedure_execution": "planned"},
+    {"id": "uk-financial-cbest-assurance", "applicable": false, "procedure_execution": "planned"},
+    {"id": "ocp-safe-hardware-firmware-assurance", "applicable": false, "procedure_execution": "planned"},
+    {"id": "c2m2-capability-maturity", "applicable": false, "procedure_execution": "planned"},
+    {"id": "finos-common-cloud-controls", "applicable": false, "procedure_execution": "planned"},
+    {"id": "ncsc-product-cyber-resilience-testing", "applicable": false, "procedure_execution": "planned"},
+    {"id": "nist-pram-privacy-risk-assessment", "applicable": false, "procedure_execution": "planned"},
+    {"id": "itil4-service-management-alignment", "applicable": false, "procedure_execution": "planned"},
+    {"id": "cis-cloud-container-hardening", "applicable": false, "procedure_execution": "planned"},
+    {"id": "owasp-genai-red-team-assurance", "applicable": false, "procedure_execution": "planned"},
+    {"id": "imda-ai-verify-moonshot-assurance", "applicable": false, "procedure_execution": "planned"},
+    {"id": "ncsc-check-penetration-testing", "applicable": false, "procedure_execution": "planned"},
+    {"id": "aiuc1-agent-assurance", "applicable": false, "procedure_execution": "planned"},
+    {"id": "csa-iot-controls-alignment", "applicable": false, "procedure_execution": "planned"},
+    {"id": "etsi-ai-cybersecurity-baseline", "applicable": false, "procedure_execution": "planned"},
+    {"id": "agentic-adoption-and-containment", "applicable": false, "procedure_execution": "planned"},
+    {"id": "mcp-high-assurance-automation", "applicable": false, "procedure_execution": "planned"},
+    {"id": "fiasse-securability-engineering", "applicable": false, "procedure_execution": "planned"}
   ],
   "controls": [],
   "procedures": [],
@@ -762,6 +780,166 @@
       "enabled": false,
       "corpus_sha256": "2323232323232323232323232323232323232323232323232323232323232323",
       "evidence_artifact": "lng-ev-charging-sector-resilience-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "opencre-gemara-control-interoperability",
+      "enabled": false,
+      "corpus_sha256": "2424242424242424242424242424242424242424242424242424242424242424",
+      "evidence_artifact": "opencre-gemara-control-interoperability-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "cbest-threat-led-assurance",
+      "enabled": false,
+      "corpus_sha256": "2525252525252525252525252525252525252525252525252525252525252525",
+      "evidence_artifact": "cbest-threat-led-assurance-score.json",
+      "thresholds": {"minimum_precision": 0.9, "minimum_recall": 0.9, "minimum_f1": 0.9, "maximum_false_positive_rate": 0.1},
+      "adapter_manifest": null
+    },
+    {
+      "id": "ocp-safe-hardware-firmware-assurance",
+      "enabled": false,
+      "corpus_sha256": "2626262626262626262626262626262626262626262626262626262626262626",
+      "evidence_artifact": "ocp-safe-hardware-firmware-assurance-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "doe-c2m2-capability-assessment",
+      "enabled": false,
+      "corpus_sha256": "2727272727272727272727272727272727272727272727272727272727272727",
+      "evidence_artifact": "doe-c2m2-capability-assessment-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "finos-ccc-cloud-control-conformance",
+      "enabled": false,
+      "corpus_sha256": "2828282828282828282828282828282828282828282828282828282828282828",
+      "evidence_artifact": "finos-ccc-cloud-control-conformance-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "ncsc-product-cyber-resilience-testing",
+      "enabled": false,
+      "corpus_sha256": "2929292929292929292929292929292929292929292929292929292929292929",
+      "evidence_artifact": "ncsc-product-cyber-resilience-testing-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "nist-pram-privacy-risk-assessment",
+      "enabled": false,
+      "corpus_sha256": "3030303030303030303030303030303030303030303030303030303030303030",
+      "evidence_artifact": "nist-pram-privacy-risk-assessment-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "itil4-service-management-outcome-assurance",
+      "enabled": false,
+      "corpus_sha256": "3131313131313131313131313131313131313131313131313131313131313131",
+      "evidence_artifact": "itil4-service-management-outcome-assurance-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "cis-aws-foundations-conformance",
+      "enabled": false,
+      "corpus_sha256": "3232323232323232323232323232323232323232323232323232323232323232",
+      "evidence_artifact": "cis-aws-foundations-conformance-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "cis-azure-foundations-conformance",
+      "enabled": false,
+      "corpus_sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+      "evidence_artifact": "cis-azure-foundations-conformance-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "cis-gcp-foundations-conformance",
+      "enabled": false,
+      "corpus_sha256": "3434343434343434343434343434343434343434343434343434343434343434",
+      "evidence_artifact": "cis-gcp-foundations-conformance-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "cis-docker-conformance",
+      "enabled": false,
+      "corpus_sha256": "3535353535353535353535353535353535353535353535353535353535353535",
+      "evidence_artifact": "cis-docker-conformance-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "owasp-genai-red-team-assurance",
+      "enabled": false,
+      "corpus_sha256": "3636363636363636363636363636363636363636363636363636363636363636",
+      "evidence_artifact": "owasp-genai-red-team-assurance-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "imda-ai-verify-moonshot-assurance",
+      "enabled": false,
+      "corpus_sha256": "3737373737373737373737373737373737373737373737373737373737373737",
+      "evidence_artifact": "imda-ai-verify-moonshot-assurance-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "ncsc-check-engagement-assurance",
+      "enabled": false,
+      "corpus_sha256": "3838383838383838383838383838383838383838383838383838383838383838",
+      "evidence_artifact": "ncsc-check-engagement-assurance-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "aiuc1-agent-assurance",
+      "enabled": false,
+      "corpus_sha256": "3939393939393939393939393939393939393939393939393939393939393939",
+      "evidence_artifact": "aiuc1-agent-assurance-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "csa-iot-controls-conformance",
+      "enabled": false,
+      "corpus_sha256": "3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a",
+      "evidence_artifact": "csa-iot-controls-conformance-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "etsi-ai-cybersecurity-lifecycle-conformance",
+      "enabled": false,
+      "corpus_sha256": "3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b",
+      "evidence_artifact": "etsi-ai-cybersecurity-lifecycle-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
+      "adapter_manifest": null
+    },
+    {
+      "id": "agentic-evaluator-containment-assurance",
+      "enabled": false,
+      "corpus_sha256": "3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c",
+      "evidence_artifact": "agentic-evaluator-containment-score.json",
+      "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.95},
+      "adapter_manifest": null
+    },
+    {
+      "id": "fiasse-securability-assurance",
+      "enabled": false,
+      "corpus_sha256": "3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d",
+      "evidence_artifact": "fiasse-securability-score.json",
       "thresholds": {"minimum_outcome_accuracy": 0.95, "minimum_conformance_rate": 0.9},
       "adapter_manifest": null
     }

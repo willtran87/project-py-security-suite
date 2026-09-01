@@ -3,6 +3,11 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any, cast
 
+from .industry_emerging_assurance_catalog import EMERGING_ASSURANCE_EVIDENCE_CONTRACTS
+from .industry_interoperability_sector_catalog import (
+    INTEROPERABILITY_SECTOR_EVIDENCE_CONTRACTS,
+)
+from .industry_maturity_product_catalog import MATURITY_PRODUCT_EVIDENCE_CONTRACTS
 from .industry_resilience_catalog import (
     RESILIENCE_BENCHMARK_IDS,
     RESILIENCE_EVIDENCE_CONTRACTS,
@@ -3060,6 +3065,63 @@ def _resilience_validator(
     return validate
 
 
+def _interoperability_sector_validator(
+    identifier: str,
+) -> Callable[[dict[str, Any], dict[str, Any]], None]:
+    contract = INTEROPERABILITY_SECTOR_EVIDENCE_CONTRACTS[identifier]
+
+    def validate(claims: dict[str, Any], execution: dict[str, Any]) -> None:
+        del execution
+        _validate_strict_domain_claims(
+            claims,
+            scalars=cast(dict[str, str], contract["scalars"]),
+            sets=cast(dict[str, set[str]], contract["sets"]),
+            counts=cast(tuple[str, ...], contract["counts"]),
+            required_true=cast(tuple[str, ...], contract["required_true"]),
+            required_false=cast(tuple[str, ...], contract["required_false"]),
+        )
+
+    return validate
+
+
+def _maturity_product_validator(
+    identifier: str,
+) -> Callable[[dict[str, Any], dict[str, Any]], None]:
+    contract = MATURITY_PRODUCT_EVIDENCE_CONTRACTS[identifier]
+
+    def validate(claims: dict[str, Any], execution: dict[str, Any]) -> None:
+        del execution
+        _validate_strict_domain_claims(
+            claims,
+            scalars=cast(dict[str, str], contract["scalars"]),
+            sets=cast(dict[str, set[str]], contract["sets"]),
+            counts=cast(tuple[str, ...], contract["counts"]),
+            required_true=cast(tuple[str, ...], contract["required_true"]),
+            required_false=cast(tuple[str, ...], contract["required_false"]),
+        )
+
+    return validate
+
+
+def _emerging_assurance_validator(
+    identifier: str,
+) -> Callable[[dict[str, Any], dict[str, Any]], None]:
+    contract = EMERGING_ASSURANCE_EVIDENCE_CONTRACTS[identifier]
+
+    def validate(claims: dict[str, Any], execution: dict[str, Any]) -> None:
+        del execution
+        _validate_strict_domain_claims(
+            claims,
+            scalars=cast(dict[str, str], contract["scalars"]),
+            sets=cast(dict[str, set[str]], contract["sets"]),
+            counts=cast(tuple[str, ...], contract["counts"]),
+            required_true=cast(tuple[str, ...], contract["required_true"]),
+            required_false=cast(tuple[str, ...], contract["required_false"]),
+        )
+
+    return validate
+
+
 _CLAIM_VALIDATORS: dict[str, Callable[[dict[str, Any], dict[str, Any]], None]] = {
     "oss-crs-crsbench": _validate_crsbench,
     "openssf-security-insights-conformance": _validate_security_insights,
@@ -3157,6 +3219,24 @@ _CLAIM_VALIDATORS.update(
         for identifier in RESILIENCE_BENCHMARK_IDS
     }
 )
+_CLAIM_VALIDATORS.update(
+    {
+        identifier: _interoperability_sector_validator(identifier)
+        for identifier in INTEROPERABILITY_SECTOR_EVIDENCE_CONTRACTS
+    }
+)
+_CLAIM_VALIDATORS.update(
+    {
+        identifier: _maturity_product_validator(identifier)
+        for identifier in MATURITY_PRODUCT_EVIDENCE_CONTRACTS
+    }
+)
+_CLAIM_VALIDATORS.update(
+    {
+        identifier: _emerging_assurance_validator(identifier)
+        for identifier in EMERGING_ASSURANCE_EVIDENCE_CONTRACTS
+    }
+)
 
 INDUSTRY_EXTENSION_BENCHMARKS = frozenset(_CLAIM_VALIDATORS)
 REAL_WORLD_VULNERABILITY_BENCHMARKS = frozenset(
@@ -3220,6 +3300,13 @@ DETECTION_EXTENSION_BENCHMARKS = frozenset(
 RESEARCH_CORPUS_EXTENSION_BENCHMARKS = frozenset(
     {"ot-water-research-corpus-calibration"}
 )
+INTEROPERABILITY_SECTOR_EXTENSION_BENCHMARKS = frozenset(
+    INTEROPERABILITY_SECTOR_EVIDENCE_CONTRACTS
+)
+MATURITY_PRODUCT_EXTENSION_BENCHMARKS = frozenset(MATURITY_PRODUCT_EVIDENCE_CONTRACTS)
+EMERGING_ASSURANCE_EXTENSION_BENCHMARKS = frozenset(
+    EMERGING_ASSURANCE_EVIDENCE_CONTRACTS
+)
 OPERATIONAL_GAP_EXTENSION_BENCHMARKS = frozenset(
     {
         "disa-stig-scap-conformance",
@@ -3258,6 +3345,8 @@ OPERATIONAL_GAP_EXTENSION_BENCHMARKS = frozenset(
         "formal-methods-tool-disagreement-assurance",
         "process-supplier-assessor-outcome-calibration",
         "incident-privacy-outcome-exercise-calibration",
+        "cbest-threat-led-assurance",
+        "ocp-safe-hardware-firmware-assurance",
     }
 )
 RESILIENCE_EXTENSION_BENCHMARKS = RESILIENCE_BENCHMARK_IDS
@@ -3405,6 +3494,30 @@ def industry_extension_runner_requirements(identifier: str) -> tuple[str, ...]:
             "temporal-facility-attack-family-clean-and-physics-holdouts",
             "repeated-trial-confidence-generalization-and-drift-report",
             "research-only-no-compliance-safety-or-product-claim-policy",
+        )
+    if identifier in INTEROPERABILITY_SECTOR_EXTENSION_BENCHMARKS:
+        requirements += (
+            "normative-or-policy-pinned-source-and-license-lock",
+            "subject-identity-scope-and-applicability-map",
+            "positive-negative-conflict-and-loss-or-failure-report",
+            "independent-adjudication-remediation-and-replay-ledger",
+            "no-equivalence-certification-supervisory-or-product-claim-policy",
+        )
+    if identifier in MATURITY_PRODUCT_EXTENSION_BENCHMARKS:
+        requirements += (
+            "publisher-version-license-and-source-digest-lock",
+            "subject-scope-applicability-owner-and-responsibility-map",
+            "positive-negative-disagreement-drift-and-change-report",
+            "independent-assessment-adjudication-remediation-and-retest-ledger",
+            "no-endorsement-accreditation-certification-or-legal-compliance-claim-policy",
+        )
+    if identifier in EMERGING_ASSURANCE_EXTENSION_BENCHMARKS:
+        requirements += (
+            "publisher-edition-license-and-source-digest-lock",
+            "subject-profile-scope-applicability-and-authority-map",
+            "positive-negative-manual-disagreement-drift-and-change-report",
+            "independent-replay-remediation-cleanup-restoration-and-retest-ledger",
+            "no-provider-scheme-product-safety-certification-or-compliance-claim-policy",
         )
     if identifier in RESILIENCE_EXTENSION_BENCHMARKS:
         requirements += (

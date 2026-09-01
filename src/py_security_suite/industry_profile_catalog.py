@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from .industry_emerging_assurance_catalog import EMERGING_ASSURANCE_PROFILES
+from .industry_interoperability_sector_catalog import INTEROPERABILITY_SECTOR_PROFILES
+from .industry_maturity_product_catalog import MATURITY_PRODUCT_PROFILES
 from .industry_open_source_catalog import OPEN_SOURCE_PROFILES
 from .industry_resilience_catalog import RESILIENCE_PROFILES
 
@@ -654,7 +657,12 @@ _ASSURANCE_PROFILES.update(
     }
 )
 
-_ASSURANCE_PROFILES.update(RESILIENCE_PROFILES)
+_ASSURANCE_PROFILES.update(
+    RESILIENCE_PROFILES
+    | INTEROPERABILITY_SECTOR_PROFILES
+    | MATURITY_PRODUCT_PROFILES
+    | EMERGING_ASSURANCE_PROFILES
+)
 
 _ASSURANCE_PROFILES.update(
     {

@@ -18,6 +18,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from py_security_suite.models import ToolRun, ToolStatus
 from py_security_suite.artifact_validation import validate_governed_artifacts
 from py_security_suite.requirements_coverage import (
+    _policy_catalogs,
     security_requirements_coverage_artifact,
 )
 from py_security_suite.strict_json import canonical_bytes
@@ -25,6 +26,33 @@ from tests.deployment_authority import authority_environment, operation_receipt
 
 
 class SecurityRequirementsCoverageTests(unittest.TestCase):
+    def test_schema_1_1_catalog_registry_accepts_pinned_aisvs_and_future_catalogs(
+        self,
+    ) -> None:
+        standards = (
+            "OWASP-ASVS",
+            "OWASP-MASVS",
+            "OWASP-TCASVS",
+            "OWASP-AISVS",
+            "ACME-VERIFICATION-STANDARD",
+        )
+        catalogs = [
+            {
+                "standard": standard,
+                "version": "1.0",
+                "source": f"https://example.invalid/{standard}",
+                "source_revision": f"{index:x}" * 40,
+                "catalog_sha256": f"{index:x}" * 64,
+                "requirements_in_catalog": 1,
+            }
+            for index, standard in enumerate(standards, start=1)
+        ]
+        self.assertEqual(
+            len(_policy_catalogs(catalogs, schema_version="1.1")), len(catalogs)
+        )
+        with self.assertRaisesRegex(ValueError, "catalogs are invalid"):
+            _policy_catalogs(catalogs, schema_version="1.0")
+
     def test_exact_versioned_requirements_are_mapped_without_claiming_conformance(
         self,
     ) -> None:
@@ -56,10 +84,24 @@ class SecurityRequirementsCoverageTests(unittest.TestCase):
         identifiers = {item["requirement"] for item in artifact["requirements"]}
         self.assertIn("v5.0.0-1.2.5", identifiers)
         self.assertIn("MASVS-CODE-4", identifiers)
+        self.assertIn("9.3.1", identifiers)
+        self.assertEqual(artifact["schema_version"], "1.1")
+        self.assertFalse(artifact["applicability"]["ai_system"])
+        self.assertEqual(
+            next(
+                item["version"]
+                for item in artifact["catalogs"]
+                if item["standard"] == "OWASP-TCASVS"
+            ),
+            "5.0.1",
+        )
+        self.assertTrue(
+            any(item["standard"] == "OWASP-AISVS" for item in artifact["catalogs"])
+        )
         self.assertTrue(any("not a claim" in item for item in artifact["limitations"]))
         schema = json.loads(
             files("py_security_suite")
-            .joinpath("schemas", "security-requirements-coverage-1.0.schema.json")
+            .joinpath("schemas", "security-requirements-coverage-1.1.schema.json")
             .read_text("utf-8")
         )
         Draft202012Validator(schema).validate(artifact)

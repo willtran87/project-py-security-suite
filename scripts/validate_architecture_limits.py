@@ -6,10 +6,13 @@ from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[1]
 _FILE_LINE_LIMITS = {
-    "src/py_security_suite/industry_assurance.py": 5_400,
-    "src/py_security_suite/industry_standards_catalog.py": 6_243,
-    "src/py_security_suite/industry_benchmark_catalog.py": 2_398,
-    "src/py_security_suite/industry_profile_catalog.py": 6_888,
+    "src/py_security_suite/industry_assurance.py": 5_425,
+    "src/py_security_suite/industry_standards_catalog.py": 6_260,
+    "src/py_security_suite/industry_benchmark_catalog.py": 2_415,
+    "src/py_security_suite/industry_profile_catalog.py": 6_900,
+    "src/py_security_suite/industry_interoperability_sector_catalog.py": 413,
+    "src/py_security_suite/industry_maturity_product_catalog.py": 640,
+    "src/py_security_suite/industry_emerging_assurance_catalog.py": 1_200,
     "src/py_security_suite/risk_paths.py": 8_035,
     "src/py_security_suite/reports.py": 7_925,
     "src/py_security_suite/data_exposure.py": 3_800,

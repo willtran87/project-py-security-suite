@@ -7,6 +7,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
+from . import industry_emerging_assurance_catalog as emerging_assurance
+from . import industry_interoperability_sector_catalog as interoperability_sector
+from . import industry_maturity_product_catalog as maturity_product
 from . import industry_resilience_catalog as resilience_catalog
 from .benchmark_assurance import (
     BenchmarkAssuranceError,
@@ -132,7 +135,7 @@ _INTEROPERABILITY = (
         "1.44.0-policy-pinned",
         ("security-automation-interoperability.json",),
     ),
-)
+) + interoperability_sector.INTEROPERABILITY_FORMATS
 
 
 def _evidence_stage(
@@ -2343,7 +2346,10 @@ def _validate_policy(value: object) -> None:
                 frozenset({*legacy_benchmark_fields, "adapter_manifest"}),
             }
         )
-        if not isinstance(benchmark, dict) or set(benchmark) not in allowed_fields:
+        if not isinstance(benchmark, dict):
+            raise ValueError("industry benchmark fields are invalid")
+        benchmark_fields = frozenset(str(key) for key in benchmark)
+        if benchmark_fields not in allowed_fields:
             raise ValueError("industry benchmark fields are invalid")
         identifier = str(benchmark.get("id") or "")
         digest = str(benchmark.get("corpus_sha256") or "")
@@ -2988,8 +2994,19 @@ def _benchmark_registry(
 
 
 def _benchmark_protocol(identifier: str) -> str:
+    if identifier in emerging_assurance.EMERGING_ASSURANCE_BENCHMARK_PROTOCOLS:
+        return emerging_assurance.EMERGING_ASSURANCE_BENCHMARK_PROTOCOLS[identifier]
     if identifier in resilience_catalog.RESILIENCE_BENCHMARK_PROTOCOLS:
         return resilience_catalog.RESILIENCE_BENCHMARK_PROTOCOLS[identifier]
+    if identifier in maturity_product.MATURITY_PRODUCT_BENCHMARK_PROTOCOLS:
+        return maturity_product.MATURITY_PRODUCT_BENCHMARK_PROTOCOLS[identifier]
+    if (
+        identifier
+        in interoperability_sector.INTEROPERABILITY_SECTOR_BENCHMARK_PROTOCOLS
+    ):
+        return interoperability_sector.INTEROPERABILITY_SECTOR_BENCHMARK_PROTOCOLS[
+            identifier
+        ]
     protocols = {
         "temporal-calibration": {
             "epss-kev-temporal-backtest",
@@ -3476,6 +3493,9 @@ _LABORATORY_QUALIFIED_BENCHMARKS = (
         }
     )
     | resilience_catalog.RESILIENCE_BENCHMARK_IDS
+    | interoperability_sector.INTEROPERABILITY_SECTOR_LABORATORY_BENCHMARKS
+    | maturity_product.MATURITY_PRODUCT_LABORATORY_BENCHMARKS
+    | emerging_assurance.EMERGING_ASSURANCE_LABORATORY_BENCHMARKS
 )
 
 
@@ -3790,11 +3810,11 @@ def _benchmark_runner_contract(benchmark: dict[str, Any]) -> dict[str, Any]:
             "cryptographic-review-residual-risk-and-agility-record",
         ),
         "mcp-client-server-security-conformance": (
-            "mcp-2025-11-25-schema-security-and-feature-digests",
-            "client-server-proxy-transport-and-capability-matrix",
-            "oauth-discovery-resource-scope-token-and-redirect-results",
-            "tool-resource-prompt-elicitation-sampling-and-task-policy-trace",
-            "malformed-drift-confused-deputy-ssrf-injection-replay-and-cleanup-results",
+            "mcp-2025-11-25-schema-owasp-nsa-security-and-feature-digests",
+            "client-server-proxy-auth-server-transport-capability-and-trust-domain-matrix",
+            "principal-session-delegation-oauth-resource-scope-token-redirect-and-revocation-results",
+            "tool-resource-prompt-elicitation-sampling-task-context-and-serialization-policy-trace",
+            "malformed-drift-confused-deputy-ssrf-injection-session-context-propagation-teardown-and-cleanup-results",
         ),
         "aws-fsbp-securityhub-conformance": (
             "fsbp-control-snapshot-and-securityhub-model-digests",
