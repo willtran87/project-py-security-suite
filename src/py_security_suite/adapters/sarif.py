@@ -25,6 +25,7 @@ _MAX_MESSAGE_ARGUMENTS = 100
 _MAX_MESSAGE_ARGUMENT_CHARACTERS = 500
 _MAX_MESSAGE_TEMPLATE_CHARACTERS = 4_000
 _MAX_RESOLVED_MESSAGE_CHARACTERS = 8_000
+_MAX_RULE_ID_CHARACTERS = 1_024
 _MAX_RULE_CONFIGURATION_OVERRIDES = 1_000
 _MAX_ARTIFACT_INDEX_DEPTH = 20
 _MAX_URI_BASE_DEPTH = 20
@@ -604,21 +605,13 @@ def _resolve_rule(
     raw_rule_id = result.get("ruleId")
     if raw_rule_id is None:
         declared_rule_id = ""
-    elif not isinstance(raw_rule_id, str):
-        raise TypeError("SARIF ruleId must be a string")
     else:
-        declared_rule_id = raw_rule_id.strip()
-        if not declared_rule_id:
-            raise ValueError("SARIF ruleId must not be empty")
+        declared_rule_id = _normalized_rule_id(raw_rule_id, label="ruleId")
 
     raw_reference_id = rule_reference.get("id")
     reference_rule_id = ""
     if raw_reference_id is not None:
-        if not isinstance(raw_reference_id, str):
-            raise TypeError("SARIF rule.id must be a string")
-        reference_rule_id = raw_reference_id.strip()
-        if not reference_rule_id:
-            raise ValueError("SARIF rule.id must not be empty")
+        reference_rule_id = _normalized_rule_id(raw_reference_id, label="rule.id")
     if declared_rule_id and reference_rule_id and declared_rule_id != reference_rule_id:
         raise ValueError("SARIF ruleId and rule.id reference different rules")
     declared_rule_id = declared_rule_id or reference_rule_id
@@ -656,9 +649,12 @@ def _resolve_rule(
             )
         indexed_rule = component_rules[rule_index]
         raw_indexed_id = indexed_rule.get("id")
-        if not isinstance(raw_indexed_id, str) or not raw_indexed_id.strip():
+        if raw_indexed_id is None:
             raise ValueError("SARIF rule index references a rule without an id")
-        indexed_rule_id = raw_indexed_id.strip()
+        indexed_rule_id = _normalized_rule_id(
+            raw_indexed_id,
+            label="indexed rule id",
+        )
         if declared_rule_id and not _rule_id_matches(declared_rule_id, indexed_rule_id):
             raise ValueError("SARIF rule id and index reference different rules")
         if reference_guid is not None and _rule_guid(indexed_rule) != reference_guid:
@@ -681,20 +677,25 @@ def _resolve_rule(
             )
         rule = matches[0]
         resolved_id = rule.get("id")
-        if not isinstance(resolved_id, str) or not resolved_id.strip():
+        if resolved_id is None:
             raise ValueError("SARIF rule guid references a rule without an id")
-        resolved_id = resolved_id.strip()
+        resolved_id = _normalized_rule_id(resolved_id, label="resolved rule id")
         if declared_rule_id and not _rule_id_matches(declared_rule_id, resolved_id):
             raise ValueError("SARIF rule id and guid reference different rules")
         rule_id = declared_rule_id or resolved_id
         basis = "rule-guid"
     elif declared_rule_id:
-        matches = [
-            candidate
-            for candidate in component_rules
-            if isinstance(candidate.get("id"), str)
-            and _rule_id_matches(declared_rule_id, str(candidate["id"]).strip())
-        ]
+        matches = []
+        for candidate in component_rules:
+            raw_candidate_id = candidate.get("id")
+            if not isinstance(raw_candidate_id, str) or not raw_candidate_id.strip():
+                continue
+            candidate_id = _normalized_rule_id(
+                raw_candidate_id,
+                label="rule descriptor id",
+            )
+            if _rule_id_matches(declared_rule_id, candidate_id):
+                matches.append(candidate)
         if len(matches) > 1:
             raise ValueError("SARIF rule id is ambiguous in the selected component")
         rule = matches[0] if matches else {}
@@ -835,6 +836,19 @@ def _normalized_guid(value: Any, *, label: str) -> str:
         return str(UUID(value.strip()))
     except (ValueError, AttributeError) as error:
         raise ValueError(f"SARIF {label} must be a valid GUID") from error
+
+
+def _normalized_rule_id(value: Any, *, label: str) -> str:
+    if not isinstance(value, str):
+        raise TypeError(f"SARIF {label} must be a string")
+    normalized = value.strip()
+    if not normalized:
+        raise ValueError(f"SARIF {label} must not be empty")
+    if len(normalized) > _MAX_RULE_ID_CHARACTERS:
+        raise ValueError(f"SARIF {label} exceeds {_MAX_RULE_ID_CHARACTERS} characters")
+    if not value.isprintable():
+        raise ValueError(f"SARIF {label} must contain only printable characters")
+    return normalized
 
 
 def _component_guid(component: dict[str, Any]) -> str | None:
