@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:security-requirements-policy:1.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "applicability", "catalogs", "requirements", "minimum_authority_signatures", "authorities"],
+  "properties": {
+    "schema_version": {"const": "1.1"},
+    "applicability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["web_or_api", "mobile", "thick_client", "ai_system"],
+      "properties": {
+        "web_or_api": {"type": "boolean"},
+        "mobile": {"type": "boolean"},
+        "thick_client": {"type": "boolean"},
+        "ai_system": {"type": "boolean"}
+      }
+    },
+    "catalogs": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 100,
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/catalog"}
+    },
+    "requirements": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 10000,
+      "items": {"$ref": "#/$defs/requirement"}
+    },
+    "minimum_authority_signatures": {"type": "integer", "minimum": 2, "maximum": 16},
+    "authorities": {"type": "array", "minItems": 2, "maxItems": 16, "items": {"type": "object"}}
+  },
+  "$defs": {
+    "standard": {"type": "string", "pattern": "^[A-Z0-9][A-Z0-9.-]{1,99}$"},
+    "catalog": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["standard", "version", "source", "source_revision", "catalog_sha256", "requirements_in_catalog"],
+      "properties": {
+        "standard": {"$ref": "#/$defs/standard"},
+        "version": {"type": "string", "minLength": 1, "maxLength": 30},
+        "source": {"type": "string", "format": "uri", "pattern": "^https://"},
+        "source_revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "catalog_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "requirements_in_catalog": {"type": "integer", "minimum": 1, "maximum": 10000}
+      }
+    },
+    "requirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["standard", "version", "requirement", "applicable", "verification_scope", "evidence"],
+      "properties": {
+        "standard": {"$ref": "#/$defs/standard"},
+        "version": {"type": "string", "minLength": 1, "maxLength": 30},
+        "requirement": {"type": "string", "minLength": 1, "maxLength": 100},
+        "applicable": {"type": "boolean"},
+        "verification_scope": {"type": "string", "minLength": 1, "maxLength": 500},
+        "evidence": {
+          "type": "array",
+          "maxItems": 100,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1, "maxLength": 500}
+        }
+      }
+    }
+  }
+}

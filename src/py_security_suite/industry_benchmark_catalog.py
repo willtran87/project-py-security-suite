@@ -2,6 +2,12 @@ from __future__ import annotations
 
 from typing import Any
 
+from .industry_emerging_assurance_catalog import (
+    EMERGING_ASSURANCE_BENCHMARKS,
+    EMERGING_ASSURANCE_WATCHLIST,
+)
+from .industry_interoperability_sector_catalog import INTEROPERABILITY_SECTOR_BENCHMARKS
+from .industry_maturity_product_catalog import MATURITY_PRODUCT_BENCHMARKS
 from .industry_open_source_catalog import OPEN_SOURCE_BENCHMARKS
 from .industry_resilience_catalog import (
     RESILIENCE_BENCHMARKS,
@@ -629,8 +635,13 @@ _BENCHMARKS += (
     },
 )
 
-_BENCHMARKS += RESILIENCE_BENCHMARKS
-_STANDARDS_WATCHLIST += RESILIENCE_WATCHLIST
+_BENCHMARKS += (
+    INTEROPERABILITY_SECTOR_BENCHMARKS
+    + MATURITY_PRODUCT_BENCHMARKS
+    + EMERGING_ASSURANCE_BENCHMARKS
+    + RESILIENCE_BENCHMARKS
+)
+_STANDARDS_WATCHLIST += RESILIENCE_WATCHLIST + EMERGING_ASSURANCE_WATCHLIST
 
 _BENCHMARKS += (
     {
@@ -2086,9 +2097,9 @@ _STANDARDS_WATCHLIST += (
     {
         "id": "OASIS-CSAF-2.1",
         "status": "committee-specification-draft",
-        "stage": "csd01",
-        "reference": "https://docs.oasis-open.org/csaf/csaf/v2.1/csd01/csaf-v2.1-csd01.html",
-        "reason": "Keep CSAF 2.0 normative while 2.1 remains CSD01; quarantine its schema, publisher, retrieval and converter changes until final publication and governed compatibility testing.",
+        "stage": "csd02-2026-02-25",
+        "reference": "https://docs.oasis-open.org/csaf/csaf/v2.1/csd02/csaf-v2.1-csd02.html",
+        "reason": "Keep CSAF 2.0 normative while 2.1 remains Committee Specification Draft 02; quarantine its extension, schema, publisher, retrieval, validator and converter changes until final publication and governed compatibility testing.",
     },
 )
 

@@ -148,7 +148,7 @@ flowchart LR
     Industry --> Sector["Conditional sector packs<br/>DORA | FFIEC | BSI C5 | FCC Cyber Trust Mark"]
     Industry --> Validation["Execution-maturity packs<br/>vulnerable apps | statistical fuzzing<br/>SBOM build truth | architecture fitness"]
     Industry --> Watch["Non-normative quarantine<br/>draft CSP3/SRI2/Trusted Types/TR-03183 + retired CAT"]
-    Stable --> IndustryArtifacts["635-reference crosswalk + lifecycle ledger + 215 assurance packs<br/>9 foundational assessments + controls + procedures<br/>262-family / 192-adapter / 11-protocol / 96-semantic-integration scorecard + OSCAL"]
+    Stable --> IndustryArtifacts["663-reference crosswalk + lifecycle ledger + 233 assurance packs<br/>9 foundational assessments + controls + procedures<br/>282-family / 212-adapter / 11-protocol / 116-semantic-integration scorecard + OSCAL"]
     Sector --> IndustryArtifacts
     Validation --> IndustryArtifacts
     Watch --> IndustryArtifacts
@@ -1037,9 +1037,12 @@ Required applicable scanners cannot be disabled.
 
 An optional full standards/applicability policy is deployment-owned through
 `PYSEC_REQUIREMENTS_POLICY_PATH` and
-`PYSEC_REQUIREMENTS_POLICY_SHA256`. Export its contract with `pysec schema
-security-requirements-policy-1.0`. It must enumerate every requirement from
-each pinned ASVS, MASVS, and TCASVS catalog and carry at least two approved
+`PYSEC_REQUIREMENTS_POLICY_SHA256`. Export its extensible contract with `pysec
+schema security-requirements-policy-1.1`; frozen policy 1.0 remains accepted.
+It must enumerate every requirement from each pinned ASVS, MASVS, and TCASVS
+catalog, include AISVS whenever `ai_system` is applicable, bind any additional
+verification catalog to an HTTPS source, immutable revision and SHA-256, and
+carry at least two approved
 `security-requirements-applicability` authority signatures. Missing catalog
 items, duplicate decisions, unknown evidence names, or an unverified policy
 keep `security-requirements-coverage.json` incomplete.

@@ -78,10 +78,10 @@ class IndustryAssuranceTests(unittest.TestCase):
             )
         self.assertEqual(errors, [])
         self.assertEqual(
-            artifacts["standards-crosswalk.json"]["catalogs_registered"], 635
+            artifacts["standards-crosswalk.json"]["catalogs_registered"], 663
         )
         self.assertEqual(
-            artifacts["benchmark-registry.json"]["benchmarks_registered"], 262
+            artifacts["benchmark-registry.json"]["benchmarks_registered"], 282
         )
         supported = {
             item["format"]
@@ -101,10 +101,10 @@ class IndustryAssuranceTests(unittest.TestCase):
         )
         self.assertEqual(len(validate_governed_artifacts(artifacts)), 25)
         profiles = artifacts["assurance-profile-registry.json"]
-        self.assertEqual(profiles["profiles_available"], 215)
+        self.assertEqual(profiles["profiles_available"], 233)
         self.assertEqual(profiles["profiles_selected"], 0)
         lifecycle = artifacts["standards-crosswalk.json"]["lifecycle_governance"]
-        self.assertEqual(lifecycle["catalogs_assessed"], 635)
+        self.assertEqual(lifecycle["catalogs_assessed"], 663)
         self.assertEqual(lifecycle["catalogs_complete"], 0)
         self.assertFalse(lifecycle["complete"])
         self.assertTrue(lifecycle["signed_source_snapshot_required"])
@@ -2470,8 +2470,8 @@ class IndustryAssuranceTests(unittest.TestCase):
 
         contract_evidence = {
             "mcp-client-server-security-conformance": {
-                "oauth-discovery-resource-scope-token-and-redirect-results",
-                "malformed-drift-confused-deputy-ssrf-injection-replay-and-cleanup-results",
+                "principal-session-delegation-oauth-resource-scope-token-redirect-and-revocation-results",
+                "malformed-drift-confused-deputy-ssrf-injection-session-context-propagation-teardown-and-cleanup-results",
             },
             "aws-fsbp-securityhub-conformance": {
                 "aws-account-ou-region-resource-and-coverage-inventory",

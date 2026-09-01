@@ -72,9 +72,9 @@ flowchart LR
         ProposalCheck --> Sandbox["Human-approved disposable lane"]
         Sandbox --> AdversarialProof["Deterministic oracle + controls<br/>exact failed-case evidence"]
         AdversarialProof --> Correlate
-        Standards["635 standards references + 215 assurance packs<br/>stable editions + conditional applicability"] --> Industry["Industry evidence synthesis<br/>application | identity | AI/HPC | ransomware | sanitization | OT recovery | crisis | ICT risk | crosswalk semantics<br/>water | NG911/P25 | global GxP | transit | gas SCADA | LNG/EV | semiconductor | pipeline | CJIS<br/>automotive | SIS | buildings | robotics | data centres | healthcare | firmware | Kubernetes | payment<br/>finance | airborne | CCSDS | ECSS | laboratories | maritime | formal methods | OSCAL 1.2.2"]
-        Watch["66 quarantined watch items<br/>drafts, alpha suites, research transitions, retired-item exclusions"] --> Industry
-        Benchmarks["262 benchmark families + 192 maintained adapters + 11 protocols<br/>96 semantic integrations with domain oracles and independent replay<br/>negative cases + mandatory laboratory containment"] --> Industry
+        Standards["663 standards references + 233 assurance packs<br/>stable editions + conditional applicability"] --> Industry["Industry evidence synthesis<br/>ETSI AI lifecycle | OWASP LLM 2026/AISVS | Five Eyes agentic | NSA MCP<br/>MAESTRO | FIASSE | evaluator containment | CIS cloud/Docker | GenAI red team<br/>ransomware | sanitization | OT recovery | LNG/EV | regulated sectors | formal methods"]
+        Watch["71 quarantined watch items<br/>CRA drafts | AIVSS 0.8 | research transitions | retired-item exclusions"] --> Industry
+        Benchmarks["282 benchmark families + 212 maintained adapters + 11 protocols<br/>116 semantic integrations with domain oracles and independent replay<br/>negative cases + mandatory laboratory containment"] --> Industry
         Industry --> Gate
         Validate --> Leverage["Typed evidence graph<br/>controls, taint, artifacts, privacy, trust"]
         Leverage --> Gate["Policy decision"]
@@ -143,7 +143,7 @@ automation contracts.
 
 | Gate | Current enforced scope |
 |---|---|
-| Unit and integration suite | 1,280 passed, 20 platform-limited skips, and 499 subtests in the final retained full-suite run |
+| Unit and integration suite | 1,559 passed, 20 platform-limited skips, and 499 subtests in the final retained full-suite run |
 | Combined statement/branch coverage | 81.65%, with a minimum aggregate floor of 80% plus 47 security-critical module ratchets |
 | Changed-line coverage | 90% minimum in protected CI |
 | Static typing | The complete production, companion, and Pages-audit source set checked by mypy plus a pinned strict Pyright gate over 25 trust, parser, authority, replay, resilience, performance, and policy boundary files |

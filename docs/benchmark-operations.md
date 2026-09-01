@@ -6,8 +6,8 @@ This runbook covers the deployment-owned controls around enhanced benchmark
 execution. Repository policy cannot authorize receipt signers, trusted-time
 authorities, replay state, or security-event anchors.
 
-The maintained execution surface currently contains 262 benchmark families,
-192 adapters, eleven typed scoring protocols, and 96 suite-owned semantic
+The maintained execution surface currently contains 282 benchmark families,
+212 adapters, eleven typed scoring protocols, and 116 suite-owned semantic
 evidence integrations. A registry entry is not evidence that a benchmark ran;
 only a subject-bound, replay-protected scorecard from an authorized lane can
 satisfy an enabled policy threshold.
@@ -28,6 +28,9 @@ flowchart LR
     Lane --> Operations["NSS/DoD + zero trust + airborne/airworthiness + CCSDS space + labs + maritime<br/>authorization, segmentation, service signals, link security, proficiency and resilience cases"]
     Lane --> Recovery["Ransomware + sanitization + OT backup/remote access + crisis exercises<br/>recovery, residual-data, assessor-agreement and retest oracles"]
     Lane --> Governance["IEC 62443 provider + ICT risk + crosswalk + LNG/EV<br/>blinded evaluation, aggregation, mapping and cyber-physical oracles"]
+    Lane --> MaturityProduct["C2M2 + FINOS CCC + NCSC CRT + PRAM + ITIL 4<br/>maturity, cloud, product, privacy and service outcome oracles"]
+    Lane --> CurrentStandards["CIS AWS/Azure/GCP/Docker + OWASP GenAI<br/>AI Verify/Moonshot + CHECK + AIUC-1 + CSA IoT"]
+    Lane --> InteropSector["OpenCRE/Gemara/OSCAL + CBEST + OCP S.A.F.E.<br/>semantic roundtrip, authorized threat-led and hardware-lab oracles"]
     Lane --> Specialized["C/C++ + formal tools + confidential compute + VVSG + smart contracts<br/>licensed rules, witnesses, attestation, assertions and stateful exploits"]
     Lane --> Calibration["CWE/EPSS/KEV + process/supplier + incident/privacy<br/>time/project holdouts + assessor and outcome calibration"]
     Lane --> Artifact["OMS / ML-BOM / Uptane / AIxCC<br/>signed artifacts + simulated fleet/corpus"]
@@ -40,6 +43,8 @@ flowchart LR
     Operations --> Normalize
     Recovery --> Normalize
     Governance --> Normalize
+    CurrentStandards --> Normalize
+    InteropSector --> Normalize
     Calibration --> Normalize
     Artifact --> Normalize
     Normalize --> Semantic["Semantic evidence gate<br/>source + subject digests<br/>negative cases + independent replay"]
@@ -54,6 +59,13 @@ flowchart LR
 | SBOM and SCA build truth | Declared, resolver, build, installed-artifact, and container-layer observations across at least three ecosystems, including known-unknown and false-advisory controls | Reports component, relationship, field, and advisory accuracy separately |
 | Architecture fitness | Approved rules, history, ownership, clean baselines, blinded labels, and exact cycle, layering, unstable-dependency, change-coupling, ownership-concentration, and drift mutations | Measures the pinned architecture rules and mutation set, not general design quality |
 | Regulated operational assurance | Applicability and authority record, controlled or licensed source digest, synthetic system/organization boundary, adverse operational cases, qualified independent review, recovery proof and immutable audit trail | Never grants an NSS authorization, accreditation, certification credit, regulatory compliance, government endorsement, flag/class approval or product listing |
+| CIS cloud and Docker conformance | Exact benchmark edition and profile, complete subject inventory and shared responsibility, recommendation identities, automated/manual/scored semantics, native-independent reconciliation, exception expiry, drift, authorized remediation/rollback, cleanup and rescan | Read-only production evidence and disposable remediation targets only; unknown or not-applicable is never a pass and no CIS certification is issued |
+| GenAI red-team and AI evaluation | OWASP campaign authority and threat model; AI Verify/Moonshot or AIUC-1 edition, capability and principle applicability; pinned prompts, datasets, seeds, metrics and scorers; state/tool transcripts, clean controls, protected strata, stochastic repetitions, remediation and change retest | Inert tools, synthetic secrets and bounded cost in no-egress laboratories; no OWASP/IMDA/AIUC certification, universal safety or complete attack-coverage claim |
+| NCSC CHECK engagement | Signed current provider/team registry and credential status, customer authority, system/threat/technology/test scope, methods, evidence custody, safety stops, cleanup, reporting, remediation and independent retest | Production testing requires explicit customer authority; suite readiness never implies CHECK provider status, government acceptance or NCSC approval |
+| CSA IoT component assurance | Framework/control digest, device/gateway/network/cloud/mobile/operator map, data flows, allocation and shared responsibility, credential/network/update/supplier/data faults, safe degradation, recovery, residue and lifecycle retest | Representative no-egress laboratory with no physical process actuation; a crosswalk or score is not CSA or product certification |
+| Control-knowledge interoperability | Immutable OpenCRE graph, Gemara and OSCAL schemas, source/license digests, identifier and relationship provenance, positive/negative/conflicting mappings, explicit semantic-loss report, drift replay and independent adjudication | Unreviewed, ambiguous, lossy or contradictory mappings remain quarantined and never become silent standards equivalence |
+| UK CBEST | Entity and important-service scope, legal authority, threat-intelligence and red-team providers, test manager and control group, approved external/insider/supply-chain scenarios, kill switches, detection/response timeline, restoration, remediation and retest | Production activity requires separate explicit authority; a benchmark result is not CBEST completion, supervisory approval or regulatory compliance |
+| OCP S.A.F.E. hardware and firmware | Exact product/source/build/firmware identity, reviewer competence and independence, secure boot/update/rollback, debug and physical surfaces, supply chain, signed-image/tamper/fault/recovery cases, report provenance and retest | Residue-controlled laboratory with synthetic keys and sacrificial devices only; no production fleet mutation, OCP recognition, certification or vulnerability-free claim |
 | Federal configuration conformance | Quarterly STIG/SRG/SCAP release and delta digest, asset/CPE and profile applicability, XCCDF/OVAL engine lock, blinded automated/manual decisions, exceptions and POA&M, laboratory remediation/rollback, rescan and drift history | Production snapshots are immutable and read-only; remediation occurs only on representative targets and does not establish system authorization or compliance |
 | OT patch lifecycle | Licensed IEC 62443-2-3 criteria, signed advisory and firmware identity, safety/availability review, qualification, maintenance window, safe state, partial failure, rollback, compensating-control expiry, restoration and outcome history | Inert IACS digital twin or representative laboratory only; no production process actuation or IEC certification claim |
 | Recovery, sanitization, and crisis assurance | Pinned NIST/ISO/IEC/IEEE editions, asset and dependency scope, protected positive/negative cases, independent residual-data or recovery verification, blinded assessor decisions where applicable, corrective owners, retest, cleanup and immutable ledgers | Uses synthetic data and inert or disposable systems; does not destroy production media, deploy ransomware, operate a live emergency, modify production OT, or issue certification/compliance claims |

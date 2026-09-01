@@ -4,6 +4,11 @@ from typing import Any
 
 import hashlib
 
+from .industry_emerging_assurance_catalog import EMERGING_ASSURANCE_ADAPTER_SPECS
+from .industry_interoperability_sector_catalog import (
+    INTEROPERABILITY_SECTOR_ADAPTER_SPECS,
+)
+from .industry_maturity_product_catalog import MATURITY_PRODUCT_ADAPTER_SPECS
 from .industry_resilience_catalog import RESILIENCE_ADAPTER_SPECS
 from .strict_json import canonical_bytes
 
@@ -792,20 +797,20 @@ BUILTIN_ADAPTER_SPECS: tuple[dict[str, Any], ...] = (
     {
         "benchmark_id": "mcp-client-server-security-conformance",
         "protocol": "conformance",
-        "upstream": "https://modelcontextprotocol.io/specification/2025-11-25/ and https://cheatsheetseries.owasp.org/cheatsheets/MCP_Security_Cheat_Sheet.html",
+        "upstream": "https://modelcontextprotocol.io/specification/2025-11-25/ with OWASP MCP Security Cheat Sheet and NSA MCP Security Design Considerations dated 2026-05-20",
         "acquisition": {
             **_COMMON,
-            "license": "MCP-specification-schema-OWASP-guidance-and-fixture-specific",
+            "license": "MCP-specification-schema-OWASP-NSA-guidance-and-fixture-specific",
         },
-        "normalizer": "mcp-message-capability-auth-task-tool-security-conformance-v1",
+        "normalizer": "mcp-message-identity-context-capability-auth-task-tool-lifecycle-conformance-v2",
         "required_inputs": [
-            "mcp-2025-11-25-schema-and-security-requirement-manifest",
-            "client-server-proxy-transport-and-capability-matrix",
-            "oauth-discovery-resource-scope-token-and-redirect-oracles",
-            "tool-resource-prompt-elicitation-sampling-and-task-policy",
-            "malformed-drift-confused-deputy-ssrf-injection-replay-and-isolation-cases",
+            "mcp-2025-11-25-schema-owasp-and-nsa-security-source-manifest",
+            "client-server-proxy-auth-server-transport-capability-and-trust-domain-matrix",
+            "principal-session-delegation-oauth-resource-scope-token-redirect-and-revocation-oracles",
+            "tool-resource-prompt-elicitation-sampling-task-context-and-serialization-policy",
+            "malformed-drift-confused-deputy-ssrf-injection-session-context-propagation-teardown-and-isolation-cases",
         ],
-        "isolation": "no-egress disposable MCP laboratory with synthetic authorization servers identities tokens resources prompts tools tasks and secrets, loopback or target-only transports, deny-by-default tool authority, bounded messages content steps time and spend, per-case reset, kill switch, and signed cleanup destruction receipt",
+        "isolation": "no-egress disposable MCP laboratory with synthetic authorization servers identities sessions tokens resources prompts tools tasks contexts and secrets, separated client server proxy and trust domains, loopback or target-only transports, deny-by-default tool authority, bounded messages content steps time and spend, out-of-band kill switch, per-case immutable reset, context and token residue scan, and signed cleanup destruction receipt",
     },
     {
         "benchmark_id": "aws-fsbp-securityhub-conformance",
@@ -3006,6 +3011,11 @@ BUILTIN_ADAPTER_SPECS += (
 
 
 BUILTIN_ADAPTER_SPECS += RESILIENCE_ADAPTER_SPECS
+BUILTIN_ADAPTER_SPECS += (
+    INTEROPERABILITY_SECTOR_ADAPTER_SPECS
+    + MATURITY_PRODUCT_ADAPTER_SPECS
+    + EMERGING_ASSURANCE_ADAPTER_SPECS
+)
 
 
 def _validate_builtin_adapter_specs(

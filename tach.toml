@@ -79,7 +79,7 @@ depends_on = ["py_security_suite.strict_json"]
 
 [[modules]]
 path = "py_security_suite.benchmark_adapters"
-depends_on = ["py_security_suite.strict_json", "py_security_suite.industry_assurance", "py_security_suite.industry_resilience_catalog"]
+depends_on = ["py_security_suite.strict_json", "py_security_suite.industry_assurance", "py_security_suite.industry_resilience_catalog", "py_security_suite.industry_interoperability_sector_catalog", "py_security_suite.industry_maturity_product_catalog", "py_security_suite.industry_emerging_assurance_catalog"]
 
 [[modules]]
 path = "py_security_suite.benchmark_assurance"
@@ -319,11 +319,11 @@ depends_on = ["py_security_suite.models"]
 
 [[modules]]
 path = "py_security_suite.industry_assurance"
-depends_on = ["py_security_suite.path_safety", "py_security_suite.industry_receipt_trust", "py_security_suite.prioritization", "py_security_suite.benchmark_assurance", "py_security_suite.benchmark_protocols", "py_security_suite.industry_benchmark_scoring", "py_security_suite.strict_json", "py_security_suite.industry_standards_catalog", "py_security_suite.industry_benchmark_catalog", "py_security_suite.industry_profile_catalog", "py_security_suite.industry_extension_evidence", "py_security_suite.industry_resilience_catalog"]
+depends_on = ["py_security_suite.path_safety", "py_security_suite.industry_receipt_trust", "py_security_suite.prioritization", "py_security_suite.benchmark_assurance", "py_security_suite.benchmark_protocols", "py_security_suite.industry_benchmark_scoring", "py_security_suite.strict_json", "py_security_suite.industry_standards_catalog", "py_security_suite.industry_benchmark_catalog", "py_security_suite.industry_profile_catalog", "py_security_suite.industry_extension_evidence", "py_security_suite.industry_resilience_catalog", "py_security_suite.industry_interoperability_sector_catalog", "py_security_suite.industry_maturity_product_catalog", "py_security_suite.industry_emerging_assurance_catalog"]
 
 [[modules]]
 path = "py_security_suite.industry_benchmark_catalog"
-depends_on = ["py_security_suite.industry_open_source_catalog", "py_security_suite.industry_resilience_catalog"]
+depends_on = ["py_security_suite.industry_open_source_catalog", "py_security_suite.industry_resilience_catalog", "py_security_suite.industry_interoperability_sector_catalog", "py_security_suite.industry_maturity_product_catalog", "py_security_suite.industry_emerging_assurance_catalog"]
 
 [[modules]]
 path = "py_security_suite.industry_benchmark_scoring"
@@ -331,11 +331,23 @@ depends_on = []
 
 [[modules]]
 path = "py_security_suite.industry_profile_catalog"
-depends_on = ["py_security_suite.industry_open_source_catalog", "py_security_suite.industry_resilience_catalog"]
+depends_on = ["py_security_suite.industry_open_source_catalog", "py_security_suite.industry_resilience_catalog", "py_security_suite.industry_interoperability_sector_catalog", "py_security_suite.industry_maturity_product_catalog", "py_security_suite.industry_emerging_assurance_catalog"]
 
 [[modules]]
 path = "py_security_suite.industry_extension_evidence"
-depends_on = ["py_security_suite.strict_json", "py_security_suite.industry_resilience_catalog"]
+depends_on = ["py_security_suite.strict_json", "py_security_suite.industry_resilience_catalog", "py_security_suite.industry_interoperability_sector_catalog", "py_security_suite.industry_maturity_product_catalog", "py_security_suite.industry_emerging_assurance_catalog"]
+
+[[modules]]
+path = "py_security_suite.industry_emerging_assurance_catalog"
+depends_on = []
+
+[[modules]]
+path = "py_security_suite.industry_interoperability_sector_catalog"
+depends_on = []
+
+[[modules]]
+path = "py_security_suite.industry_maturity_product_catalog"
+depends_on = []
 
 [[modules]]
 path = "py_security_suite.industry_open_source_catalog"
@@ -351,7 +363,7 @@ depends_on = ["py_security_suite.benchmark_assurance"]
 
 [[modules]]
 path = "py_security_suite.industry_standards_catalog"
-depends_on = ["py_security_suite.industry_open_source_catalog", "py_security_suite.industry_resilience_catalog"]
+depends_on = ["py_security_suite.industry_open_source_catalog", "py_security_suite.industry_resilience_catalog", "py_security_suite.industry_interoperability_sector_catalog", "py_security_suite.industry_maturity_product_catalog", "py_security_suite.industry_emerging_assurance_catalog"]
 
 [[modules]]
 path = "py_security_suite.inventory"

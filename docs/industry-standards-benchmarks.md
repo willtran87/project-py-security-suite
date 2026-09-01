@@ -17,14 +17,19 @@ proof that an application is vulnerability-free.
 
 ## Coverage
 
-`standards-crosswalk.json` registers 635 version-explicit references:
+`standards-crosswalk.json` registers 663 version-explicit references:
 
-- verification and test methods: OWASP ASVS 5.0, MASVS 2.1, TCASVS 5.0, WSTG
+- verification and test methods: OWASP ASVS 5.0, MASVS 2.1, TCASVS 5.0.1, WSTG
   4.2, MASTG 2.0, SCVS 1.0, and AITG 1.0;
 - lifecycle, controls, assessment, and governance: NIST SSDF 1.1, CSF 2.0,
   SP 800-53 release 5.2, SP 800-53A release 5.2, SP 800-115, SP 800-161r1,
   OWASP SAMM 2.1, OpenSSF OSPS Baseline 2026.08.28, CIS Controls 8.1, CIS Benchmarks,
   NIST SCAP 1.4, and CSA CCM 4.1;
+- configuration, adversarial and AI assurance: CIS AWS Foundations 7.0.0,
+  Azure Foundations 6.0.0, GCP Foundations 5.0.0 and Docker 1.8.0; OWASP
+  GenAI Red Teaming Guide 1.0; policy-pinned AI Verify and Project Moonshot;
+  NCSC CHECK 1.1; conditional AIUC-1 Q3 2026; and CSA IoT Security Controls
+  Framework 2.0;
 - weaknesses, attacks, defenses, and prioritization: CWE Top 25, OWASP Top 10,
   OWASP API Top 10, CAPEC, MITRE ATT&CK, MITRE ATLAS, MITRE D3FEND, FIRST
   CVSS 4.0, and CISA SSVC;
@@ -42,6 +47,19 @@ proof that an application is vulnerability-free.
   Analysis, OWASP Kubernetes Top 10 2025, OWASP CI/CD Top 10 v1, and SBOMit
   build-observed dependency attestations. Pre-final project surfaces remain
   policy-pinned and cannot be presented as normative certification criteria;
+- control-knowledge and sector assurance: policy-pinned OWASP OpenCRE and
+  OpenSSF Gemara joined to OSCAL 1.2.2 for provenance-preserving control and
+  evidence interchange; the Bank of England CBEST Implementation Guide 2024
+  for conditional UK financial threat-led testing; and OCP S.A.F.E. plus
+  OCP SOLID 1.0 for independent hardware, firmware, source, physical-interface,
+  supply-chain and recovery appraisal;
+- capability, cloud, product, privacy, and service assurance: DOE C2M2 2.1;
+  FINOS Common Cloud Controls Core v2025.10; NCSC CRT Assurance Principles and
+  Claims 1.0 and CRTF Scheme Standard 1.1; the UK Software Security Code of
+  Practice 1.0; NIST PRAM with final NISTIR 8062; and a policy-pinned,
+  organization-licensed ITIL 4 criteria snapshot. Each remains subject to its
+  publisher, license, applicability, assessment-authority, and certification
+  boundaries;
 - specialized application and cloud-native assurance: OWASP Mobile Top 10
   2024, OWASP Smart Contract Top 10 2026, and the policy-pinned CNCF Cloud
   Native Security Controls Catalog with its NIST SP 800-53 Rev. 5 mapping;
@@ -250,6 +268,10 @@ proof that an application is vulnerability-free.
 - AI application verification, quality, use cases, and ethical engineering:
   OWASP AISVS 1.0, ISO/IEC TS 25058:2024, ISO/IEC TR 24030:2024 and
   27563:2023, and IEEE 7000/7001/7002/7003/7009;
+- current AI and agentic cybersecurity engineering: ETSI EN 304 223 V2.1.1,
+  OWASP LLM Top 10 2026, Five Eyes Careful Adoption of Agentic AI Services,
+  NSA MCP Security Design Considerations, policy-pinned CSA MAESTRO, and OWASP
+  FIASSE 1.1.0, with guidance and certification boundaries kept distinct;
 - product certification and federal procurement assurance: the EUCC scheme
   with its 2025 amendment and the policy-pinned CISA Secure Software
   Development Attestation common form;
@@ -354,6 +376,11 @@ ISO/IEC 42007 and NIST IR 8596 remain draft AI conformity and Cyber AI Profile
 inputs, and the next ISO/IEC TR 24030 edition remains a new project. MLCommons
 AILuminate Agentic and Multimodal remain non-normative watch items until each
 has an immutable released corpus, evaluator, scoring method, and split contract.
+The EU CRA M/606 program and its 17 ETSI vertical public-enquiry drafts are
+tracked without presumption-of-conformity claims until applicable standards are
+final, published, cited in the OJEU, source-pinned, and promoted by signed
+semantic review. OWASP AIVSS 0.8 remains experimental and cannot replace CVSS
+or SSVC, drive automatic risk acceptance, or become a release gate.
 The MCP 2026 release candidate, MCSB v2 preview, W3C VC Data Model 2.1,
 OpenID4VP 1.1, VDA ISA 2027, next ISO/IEC 27003 edition,
 ISO 22316 revision, CSP Level 3, Subresource Integrity 2, Trusted Types, and
@@ -375,10 +402,15 @@ baseline. OWASP Benchmark for Python 0.1 is retained as a research preview;
 the maintained OWASP Benchmark contract remains pinned to the mature Java 1.2
 corpus until Python has a stable oracle, release, and compatibility contract.
 NIST SP 800-239 remains an Initial Public Draft, while final SP 800-223 and
-SP 800-234 are normative. OpenEoX Core Schema 1.0 and CSAF 2.1 remain OASIS
-Committee Specification Draft 01 work products; the suite keeps CSAF 2.0 and
+SP 800-234 are normative. OpenEoX Core Schema 1.0 remains CSD01 and CSAF 2.1
+remains an OASIS Committee Specification Draft 02 work product; the suite keeps CSAF 2.0 and
 existing lifecycle controls normative until final publication, compatibility
 testing, licensed review where applicable, and human promotion.
+NCSC CyAS remains an in-development MVP and CoSAI MCP Security remains a
+semantic-delta crosswalk candidate. Neither can contribute to normative
+assurance or silently duplicate the maintained CHECK, CBEST, TIBER-EU, MCP or
+GenAI red-team profiles until publisher maturity, distinct testable criteria
+and governed human promotion are demonstrated.
 
 Standards lifecycle governance is fail closed. Optional
 `standards-lifecycle-evidence.json` input must provide, for every promoted
@@ -399,7 +431,7 @@ benchmark thresholds. Frozen 1.0 through 1.2 policies remain readable.
 The strict parser accepts only known standard identifiers, unique identities,
 bounded text and collections, and safe report-local JSON artifact names.
 
-`assurance-profile-registry.json` exposes 215 built-in packs:
+`assurance-profile-registry.json` exposes 233 built-in packs:
 
 | Pack | Coverage |
 |---|---|
@@ -412,6 +444,24 @@ bounded text and collections, and safe report-local JSON artifact names.
 | `payment-software` | PCI DSS and PCI Secure Software |
 | `federal-cui` | NIST SP 800-171 and assessment procedures |
 | `service-organization` | SOC 2 TSC and NIST CSF evidence surfaces |
+| `control-knowledge-interoperability` | Immutable OpenCRE graph and Gemara/OSCAL schema identity, mapping provenance, conflict quarantine, semantic loss reports and independently adjudicated round trips |
+| `uk-financial-cbest-assurance` | CBEST entity and important-service scope, threat intelligence, qualified providers, control-group safety, detection/response timelines, remediation, retest and no-supervisory-approval boundaries |
+| `ocp-safe-hardware-firmware-assurance` | OCP S.A.F.E./SOLID source, firmware, hardware, debug, physical-interface, secure-update, supply-chain, laboratory independence, report provenance and recovery evidence |
+| `c2m2-capability-maturity` | C2M2 2.1 IT/OT domains, objectives, practices, maturity indicators, evidence, disagreement, prioritized investment, outcomes and longitudinal reassessment |
+| `finos-common-cloud-controls` | Release-pinned FINOS CCC capabilities, threats, controls and assessment requirements across providers with responsibility, OSCAL, drift and semantic-loss evidence |
+| `ncsc-product-cyber-resilience-testing` | CRT principle-claim-argument-evidence chains, public-interface adverse cases, essential behavior, recovery and qualified independent-facility boundaries |
+| `nist-pram-privacy-risk-assessment` | Data actions, problematic data actions, individual impacts, populations, likelihood, uncertainty, prioritization, engineering responses and reassessment |
+| `itil4-service-management-alignment` | Licensed ITIL 4 service-value and practice criteria joined to ISO 20000/27013 change, incident, problem, supplier, continuity and improvement outcomes |
+| `cis-cloud-container-hardening` | Separate AWS 7.0.0, Azure 6.0.0, GCP 5.0.0 and Docker 1.8.0 profile, recommendation, automated/manual, applicability, exception, drift, remediation and rescan evidence |
+| `owasp-genai-red-team-assurance` | Threat-led model, implementation, infrastructure and runtime campaigns with multi-turn/indirect/tool/memory attacks, clean controls, utility retention, restoration and family-level retest |
+| `imda-ai-verify-moonshot-assurance` | Eleven AI Verify governance principles plus Moonshot recipe, dataset, metric, seed, scorer, stochastic, protected-strata, contamination and replay evidence |
+| `ncsc-check-penetration-testing` | Current provider/team registry and credential validation, customer authority, engagement methodology, evidence custody, safety, cleanup, remediation and retest for UK government/CNI use |
+| `aiuc1-agent-assurance` | Q3 2026 agent capability applicability, data/privacy, security, safety, reliability, accountability and society controls with recurring independent technical evaluation and issuer-only certification boundary |
+| `csa-iot-controls-alignment` | IoT device, gateway, network, cloud, mobile and operator control allocation with data-flow, lifecycle, supplier, update, degraded-operation, recovery and crosswalk semantics |
+| `etsi-ai-cybersecurity-baseline` | EN 304 223 stakeholder, supplier, asset, threat, requirement and evidence trace across design, development, deployment, maintenance and end of life |
+| `agentic-adoption-and-containment` | Five Eyes incremental autonomy and privilege guidance plus MAESTRO cross-layer threat paths and explicit harness escape, subversion, persistence, covert-channel, shutdown and cleanup attacks |
+| `mcp-high-assurance-automation` | NSA-informed MCP principal/session/delegation identity, context separation, serialization, revocation, task propagation, teardown and lifecycle monitoring |
+| `fiasse-securability-engineering` | FIASSE canonical parsing, isolated integrity, intentional request surfaces, transparency and evidence-bound merge review with non-normative SSEM scoring |
 | `identity-protocol-security` | Digital identity, OAuth BCP, WebAuthn, and FAPI conformance |
 | `authorization-decision-interoperability` | AuthZEN 1.0 PDP/PEP decision, metadata, capability, cache, batch, outage, confusion, draft-exclusion, and no-certification controls |
 | `openid-federation-security` | Federation 1.1 entity statements, trust paths, metadata policies, OIDC binding, rollover, expiry, adversarial chains, and explicit early-suite status |
@@ -721,7 +771,7 @@ complete decision tree or outcome.
 
 ## Benchmark registry
 
-`benchmark-registry.json` includes 202 families:
+`benchmark-registry.json` includes 282 families:
 
 | Family | Purpose | Execution lane |
 |---|---|---|
@@ -749,6 +799,26 @@ complete decision tree or outcome.
 | W3C Web Platform Tests | WebAuthn browser and relying-party behavior | Disposable companion |
 | MITRE attack emulation | Contained ATT&CK-aligned defensive validation | Disposable companion |
 | OpenSSF Scorecard | Repository security-posture checks | Disposable companion |
+| CIS AWS Foundations 7.0.0 | Level 1/2 recommendation, automated/manual, applicability, exception, drift, remediation and rescan conformance | Read-only AWS assessment plus disposable accounts |
+| CIS Azure Foundations 6.0.0 | Level profile, recommendation, tenant/subscription/resource, manual-check, exemption, drift and rescan conformance | Read-only Azure assessment plus disposable subscriptions |
+| CIS GCP Foundations 5.0.0 | Level profile, organization/folder/project/resource, manual-check, exception, drift and rescan conformance | Read-only GCP assessment plus disposable projects |
+| CIS Docker 1.8.0 | Host, daemon, files, images/build, container runtime and orchestration recommendation conformance | No-egress disposable Docker hosts |
+| OWASP GenAI Red Teaming Guide | Model, implementation, infrastructure and runtime campaign conformance with state/tool transcripts, clean controls, utility and remediation replay | No-egress inert-tool AI red-team laboratory |
+| AI Verify and Project Moonshot | Governance process checks and reproducible technical tests across traditional and generative AI, protected strata, stochastic variance and scorer attacks | Isolated AI evaluation laboratory |
+| NCSC CHECK engagement assurance | Provider/team qualification, authority, scope, method, evidence, reporting, cleanup, remediation and retest | Authorized CHECK engagement or isolated representative laboratory |
+| AIUC-1 agent assurance | Q3 2026 capability-specific technical, legal and operational evidence plus recurring independent evals and change retest | No-egress inert-tool agent laboratory |
+| CSA IoT controls conformance | Component control allocation, lifecycle, fault/attack, safe degradation, recovery, residue and crosswalk preservation | Representative no-egress IoT laboratory |
+| ETSI EN 304 223 AI lifecycle conformance | Requirement applicability and evidence across five lifecycle stages with poisoning, substitution, privilege, monitoring, update, recovery and retirement cases | No-egress representative AI lifecycle laboratory; no certification claim |
+| Agentic evaluator containment | Harness escape, policy/scorer subversion, privilege escalation, cross-agent compromise, persistence, covert exfiltration, shutdown evasion and cleanup corruption | Nested no-egress evaluator with an inaccessible outer boundary, out-of-band kill switch, immutable reset and residue scan |
+| FIASSE securability assurance | Canonicalization, authoritative-state substitution, request-surface expansion, observability loss, merge-review and override-expiry mutations | Read-only source and architecture workspace; SSEM beta scores remain non-normative |
+| `opencre-gemara-control-interoperability` | OpenCRE/Gemara/OSCAL identifier integrity, mapping provenance, conflict and cycle quarantine, semantic-loss reporting, drift and round-trip equivalence | Read-only no-egress mapping workspace with immutable snapshots and protected semantic oracles |
+| `cbest-threat-led-assurance` | UK financial threat intelligence, external/insider/supply-chain scenarios, production safety, detection/response timelines, restoration, remediation and closure | Separately authorized production-safe engagement or no-egress financial-service twin; no regulator connectivity or supervisory claim |
+| `ocp-safe-hardware-firmware-assurance` | Independent source, immutable/mutable firmware, secure boot/update, rollback, debug, physical-interface, supply-chain, tamper, fault and recovery appraisal | Residue-controlled no-egress hardware laboratory using synthetic keys and production-equivalent sacrificial devices; no OCP recognition claim |
+| `doe-c2m2-capability-assessment` | C2M2 practice evidence, IT/OT scope, rating agreement, maturity-inflation challenges, risk-based investment and longitudinal outcomes | Access-controlled evidence workspace with blinded assessors and no DOE endorsement or certification claim |
+| `finos-ccc-cloud-control-conformance` | FINOS CCC capability-threat-control-assessment links, cross-cloud applicability, responsibility, OSCAL semantics, native findings and drift | Read-only evidence plane plus disposable synthetic cloud fixtures; no FINOS, provider or regulatory certification claim |
+| `ncsc-product-cyber-resilience-testing` | NCSC CRT principles, claims, arguments, evidence, public-interface attacks, essential behavior, residual risk, recovery and retest | NCSC-approved facility for scheme claims or a no-egress product lab that cannot claim NCSC approval |
+| `nist-pram-privacy-risk-assessment` | PRAM data actions, problematic actions, individual impacts, likelihood, uncertainty, vulnerable populations, response effectiveness and reassessment | No-egress synthetic/deidentified privacy workspace with no legal-compliance or zero-risk claim |
+| `itil4-service-management-outcome-assurance` | Licensed service-value, change, release, incident, problem, supplier, continuity, security and improvement outcome evidence | Licensed access-controlled workspace using deidentified records and synthetic faults; no PeopleCert or practitioner certification claim |
 | Polyglot CVE pairs | Time-split vulnerable and patched revisions across eight language families | Disposable companion |
 | Artifact interoperability | Semantic SARIF, SPDX, CycloneDX, and OSCAL conformance | Disposable companion |
 | Scanner scale and determinism | Wall time, peak memory, and repeatable results | Disposable companion |
@@ -872,7 +942,7 @@ complete decision tree or outcome.
 | MLCommons AILuminate Safety | Versioned safety standard, locale, hazards, public/private split, evaluator calibration, grading, contamination, utility, and uncertainty | No-egress disposable model worker |
 | MLCommons AILuminate Jailbreak | Versioned attack/baseline corpus, protected split, evaluator calibration, naive-versus-attack grading, variance, utility, and contamination | No-egress disposable model worker |
 | Privacy engineering/PET conformance | Privacy model and attacker boundary plus ZKP statement/setup/parameter binding, malformed/replay/linkability/composition/differential cases, and cryptographic review | Disposable cryptographic privacy laboratory |
-| MCP client/server security conformance | Schema, lifecycle, capability, transport, OAuth discovery, audience, scopes, redirects, tasks, tools, resources, prompts, sampling, injection, SSRF, confused-deputy, replay, and cleanup cases | No-egress disposable MCP laboratory |
+| MCP client/server security conformance | MCP 2025-11-25 plus OWASP and NSA guidance covering principal/session/delegation identity, trust domains, context, serialization, revocation, task propagation, injection, SSRF, confused deputy, teardown and residue | No-egress disposable MCP laboratory with separated roles and out-of-band shutdown |
 | AWS FSBP/Security Hub conformance | Account/OU/region/resource coverage, controls, findings, suppressions, expiry, drift, remediation, CloudTrail, cleanup, and rescan | Read-only AWS assessment plus disposable test accounts |
 | Microsoft MCSB/Defender conformance | Tenant/subscription/resource coverage, v1 baselines, Defender findings, exemptions, preview separation, drift, remediation, activity log, cleanup, and rescan | Read-only Azure assessment plus disposable subscriptions |
 | GCP Enterprise Foundations conformance | Organization hierarchy, identities, policies, networks, logging, keys, secrets, SCC, Terraform drift, deviations, cleanup, and rescan | Read-only GCP assessment plus disposable projects |
@@ -981,10 +1051,12 @@ complete decision tree or outcome.
 | Gas-SCADA cryptographic assurance | Endpoint/channel/key binding, forgery, replay, reorder, delay, downgrade, rollover, clock and partition cases plus manual control and recovery | Inert gas pipeline and protocol twin with independent safety and cryptographic observers |
 | Water OT research-corpus calibration | License/source binding, duplicate and contamination audit, temporal/facility/attack/clean/physics holdouts, label quality, detection latency, false positives and generalization | Protected no-egress SWaT/WADI/BATADAL research evaluation; never a compliance, product or operational-safety claim |
 
-The maintained 192-adapter catalog in `py_security_suite.benchmark_adapters`
+The maintained 212-adapter catalog in `py_security_suite.benchmark_adapters`
 defines acquisition, license, input, normalizer, positive/negative control, and
 isolation requirements for CFReDS/CFTT, ACT Rules, DroidBench, Ghera,
 SecBench.js, Chaos Mesh/Litmus, Sonobuoy, CIS-CAT/SCAP, Wycheproof, TIBER-EU,
+OpenCRE/Gemara/OSCAL, CBEST, OCP S.A.F.E./SOLID,
+DOE C2M2, FINOS CCC, NCSC CRT/CRTF, NIST PRAM, licensed ITIL 4,
 NIST Dioptra, ransomware resilience, media sanitization, OT backup and remote
 access, IEC 62443 provider evaluation, crisis exercises, enterprise ICT risk,
 crosswalk semantics, LNG/EV resilience, firmware/device provenance and TPM resilience, Kubernetes Pod
@@ -1000,7 +1072,7 @@ and PAD, integrated service/security management, interlaboratory proficiency,
 HarmBench, AgentHarm Inspect Evals, garak, OWASP Cornucopia, Microsoft PyRIT,
 OWASP AISVS, EUCC, CISA secure-software attestation, NIST CSF profile
 reassessment, and separate MLCommons AILuminate Safety and Jailbreak contracts.
-The 96 suite-owned semantic integrations add a strict evidence
+The 116 suite-owned semantic integrations add a strict evidence
 envelope: bounded duplicate-key-safe JSON, exact fields, lowercase SHA-256
 source and subject binding, isolated execution and network policy, verified
 producer signature and independent replay, at least two detected negative
@@ -1010,8 +1082,16 @@ analysis, training-overlap assessment, project and chronological split
 manifests, sampled fix replay, CWE-stratified metrics, and confidence bounds. A
 generic successful exit or an upstream-generated score cannot satisfy this
 boundary.
-The ransomware, sanitization, OT recovery, provider-evaluation, crisis,
-enterprise-risk, crosswalk and LNG/EV integrations enforce recovery order,
+The CIS cloud/Docker, OWASP GenAI red-team, AI Verify/Moonshot, NCSC CHECK,
+AIUC-1 and CSA IoT integrations enforce exact edition/profile, authorization,
+manual-check, component/capability, test, exception, cleanup, restoration,
+retest and issuer-bound claim semantics. The C2M2, FINOS CCC, NCSC CRT, PRAM
+and ITIL 4 integrations enforce exact
+model/catalog/criteria identity, applicability, ownership, source and subject
+binding, assessor disagreement, negative cases, remediation and reassessment;
+they cannot imply publisher endorsement, legal compliance, accreditation or
+certification. The OpenCRE/Gemara, CBEST, OCP S.A.F.E., ransomware, sanitization, OT recovery,
+provider-evaluation, crisis, enterprise-risk, crosswalk and LNG/EV integrations enforce recovery order,
 residual-data verification, assessor agreement, strategic decisions, portfolio
 aggregation, directional mapping semantics, CSF-version boundaries and retest.
 The water, public-safety communications, global GxP, transit, emergency
@@ -1361,13 +1441,13 @@ flowchart TB
     ManifestBuilder --> Monitor
     Publisher["Allowlisted HTTPS publisher sources"] --> Monitor["standards-monitor<br/>bounded retrieval + quarantine + JSON/XML/HTML/PDF/text diff"]
     Monitor --> Review["Normative and lifecycle classification<br/>impact map + named human approval"]
-    Review --> Catalog["635 pinned standards and taxonomies"]
+    Review --> Catalog["663 pinned standards and taxonomies"]
     Catalog --> Crosswalk["standards-crosswalk.json + lifecycle ledger + watchlist"]
     Stable["Stable technical baselines<br/>VC/OpenID/FAPI | SCuBA/Kubernetes | LINDDUN/C2PA"] --> Review
     Evaluation["Evaluation and certification inputs<br/>SESIP/EUCC | NESAS/SCAS"] --> Review
     Sector["Conditional sector baselines<br/>DORA/FFIEC/C5/FCC | TISAX/PCI"] --> Review
-    Drafts["66 non-normative watch items<br/>standards drafts + candidates + research previews<br/>retired FFIEC CAT excluded"] --> Monitor
-    Packs["215 assurance packs"] --> ProfileRegistry["assurance-profile-registry.json"]
+    Drafts["71 non-normative watch items<br/>CRA drafts + AIVSS 0.8 + research previews<br/>CyAS MVP + CoSAI MCP candidate + retired FFIEC CAT"] --> Monitor
+    Packs["233 assurance packs"] --> ProfileRegistry["assurance-profile-registry.json"]
     Policy["Policy 1.3: packs + controls + procedures<br/>protocol-specific thresholds"] --> Control["control-assessment.json"]
     ProfileRegistry --> Control
     Policy --> Procedure["procedure-assessment.json"]
@@ -1388,7 +1468,7 @@ flowchart TB
     FuzzLabs["FuzzBench 20x + Magma 10x + ClusterFuzzLite 3x<br/>matched resources + raw trials + crash replay"] --> Corpus
     TruthOracles["SBOM build truth + architecture fitness<br/>temporal EPSS/KEV snapshots"] --> Corpus
     Compiler --> InputGate["Structural input gate<br/>strict JSON + safe ZIP/TAR + size/ratio bounds"]
-    InputGate --> Adapter["192 maintained adapters<br/>verified subject evidence + 11 protocol scorers"]
+    InputGate --> Adapter["212 maintained adapters<br/>verified subject evidence + 11 protocol scorers"]
     Acceptance["Independent acceptance authority<br/>criteria + thresholds + pre-registration"] --> Adapter
     Conformance["Independent adapter authority<br/>golden + malformed + inversion + determinism"] --> Adapter
     RuntimeObserver["Independent runtime observer<br/>OCI + network + resources + repetitions + holdout"] --> Lane
@@ -1396,8 +1476,8 @@ flowchart TB
     Adapter --> Lane["Authorized disposable benchmark lane<br/>synthetic agents/origins/incidents/entities/devices"]
     Qualification["Native digest-only OCI isolation<br/>read-only + no capabilities/network + resource limits<br/>signed SBOM/SLSA evidence"] --> Lane
     Target["Pinned benchmark target"] --> Lane
-    Lane --> ExtensionGate["96 suite-owned semantic integrations<br/>source + subject digests | independent replay<br/>domain claims + at least 2 negative cases"]
-    DomainOracle["Ransomware/sanitization/OT/crisis/provider/risk/crosswalk/LNG-EV<br/>water/NG911/P25/GxP/transit/gas-SCADA + research holdouts"] --> ExtensionGate
+    Lane --> ExtensionGate["116 suite-owned semantic integrations<br/>source + subject digests | independent replay<br/>domain claims + at least 2 negative cases"]
+    DomainOracle["CIS cloud/Docker | GenAI red team | AI Verify | CHECK | AIUC-1 | CSA IoT<br/>C2M2/FINOS CCC/NCSC CRT/PRAM/ITIL 4<br/>resilience/industrial/public-safety/research holdouts"] --> ExtensionGate
     ExtensionGate --> Replay["Deployment SQLite replay ledger<br/>outside workspace + atomic nonce uniqueness"]
     Lane --> Integrity["Post-run immutable-input rehash<br/>manifest + evidence + corpus + executables"]
     Integrity --> Report
@@ -1459,7 +1539,17 @@ applicable pack, evidence, procedures, authority, and benchmark thresholds pass.
 | SAST/DAST methodology | 9/10 | Static, dynamic, API, mobile, and authorized adversarial lanes |
 | Software supply chain | 9/10 | SLSA/OpenChain/SPDX profile plus provenance, SBOM, signing, release evidence, and product/version-bound federal producer attestation with authorized-signatory and exception validation |
 | Benchmark methodology | 9/10 | Eleven scoring protocols, typed metrics, independently signed acceptance criteria, strata, power/leakage/duplicate/holdout checks, conservative Wilson decisions, replay protection, and deltas |
-| Benchmark execution governance | 9/10 | 262 task contracts plus explicit authorization, default registry enforcement, structural corpus validation, deployment-owned active-key admission with four-signer/two-organization separation, subject/cross-bound Ed25519 evidence, durable external SQLite replay receipts, strict claim schemas, independently replayed conformance/runtime/SBOM/SLSA/cleanup documents, post-run immutable-input verification, eleven protocol-specific scorers, 192 maintained adapters, digest-pinned argv-only stages and OCI runtime, read-only-workspace OCI execution, contamination checks, negative controls, and conditional laboratory qualification |
+| Benchmark execution governance | 9/10 | 282 task contracts plus explicit authorization, default registry enforcement, structural corpus validation, deployment-owned active-key admission with four-signer/two-organization separation, subject/cross-bound Ed25519 evidence, durable external SQLite replay receipts, strict claim schemas, independently replayed conformance/runtime/SBOM/SLSA/cleanup documents, post-run immutable-input verification, eleven protocol-specific scorers, 212 maintained adapters, digest-pinned argv-only stages and OCI runtime, read-only-workspace OCI execution, contamination checks, negative controls, and conditional laboratory qualification |
+| CIS cloud and container configuration | 9/10 | Separate AWS 7.0.0, Azure 6.0.0, GCP 5.0.0 and Docker 1.8.0 edition/profile/recommendation identities, automated/manual semantics, inventory and responsibility scope, exceptions, drift, remediation, rollback, cleanup, independent replay and rescans without CIS certification claims |
+| GenAI adversarial testing methodology | 9/10 | OWASP model, implementation, infrastructure and runtime campaigns with preregistered authority, multi-turn and indirect attacks, inert tools, state/scorer transcripts, clean controls, utility retention, restoration, remediation and attack-family retest |
+| AI governance and agent evaluation | 9/10 conditional | AI Verify/Moonshot principle and technical-test evidence plus conditional AIUC-1 Q3 2026 capability applicability, recurring independent evals, change retest, uncertainty and publisher-only certification boundaries |
+| UK penetration-testing assurance | 9/10 conditional | NCSC CHECK 1.1 provider/team registry and credential validity, customer authority, methodology, evidence custody, safety, reporting, cleanup, remediation and independent retest without inferred provider status or government acceptance |
+| IoT component control assurance | 9/10 conditional | CSA IoT v2 device/gateway/network/cloud/mobile/operator allocation, data-flow and lifecycle trace, supplier/update/degraded-operation/recovery cases, semantic crosswalks and no product-certification boundary |
+| Cybersecurity capability maturity | 9/10 | C2M2 2.1 IT/OT scope, all ten domains, practice-level evidence, maturity-indicator challenges, blinded assessor disagreement, risk-based investment, improvement ownership, longitudinal outcomes and explicit no-endorsement boundaries |
+| Financial cloud control engineering | 9/10 conditional | FINOS CCC Core v2025.10 and service-catalog identity, capability-threat-control-assessment trace, cross-provider responsibility, OSCAL round trips, native finding reconciliation, configuration drift, semantic-loss reports and no-certification boundaries |
+| Connected-product resilience testing | 9/10 conditional | NCSC CRT APC 1.0 and CRTF 1.1 principle-claim-argument-evidence chains, public-interface attacks, essential behavior, known-good recovery, evaluator independence, report provenance and NCSC approval boundaries |
+| Privacy-risk assessment methodology | 9/10 | NIST PRAM and NISTIR 8062 data-action, problematic-action, individual-impact, population, likelihood, uncertainty, response-effectiveness and changed-context evidence with independent scoring and no legal-compliance claim |
+| Service-management outcome alignment | 9/10 conditional | Licensed ITIL 4 criteria joined to ISO 20000/27013 service-value, change, release, incident, problem, supplier, continuity, security, restoration, recurrence and improvement outcomes without PeopleCert or practitioner certification claims |
 | Semiconductor equipment cybersecurity | 9/10 conditional | SEMI E187/E188/E191 hardening, malware-free integration, status semantics, supplier/service custody, adverse cases, restoration and no-conformity boundaries |
 | Pipeline control-system cybersecurity | 9/10 conditional | API 1164 third-edition essential functions, zones/conduits, remote access, safety invariants, attack replay, manual operation and reconciled recovery in an inert twin |
 | GxP computerized-system data integrity | 9/10 conditional | Current 21 CFR Part 11 plus licensed GAMP 5 validation, audit trails, signatures, copies, retention, migration, recovery and no-regulatory-claim boundaries |
@@ -1503,7 +1593,7 @@ applicable pack, evidence, procedures, authority, and benchmark thresholds pass.
 | Vulnerability, CSIRT, and PSIRT lifecycle | 9/10 | FIRST service catalogs and PSIRT maturity plus disclosure, handling, outcomes, exercises, blinded assessment, improvement, and reassessment controls |
 | Privacy engineering | 9/10 | ISO 27701/NIST Privacy plus ISO/IEC 27561 operationalisation, TS 27564 model validation, 27565 ZKP guidance, adversarial PET cases, data exposure, and risk-path evidence |
 | Conditional regulatory readiness | 9/10 | CRA, EUCC, DORA technical acts, FFIEC handbooks, BSI C5, FCC labeling, PCI, CUI, federal software producer attestation, and service-organization packs with explicit applicability, scope, authority, expiry, and claim boundaries |
-| Identity, MCP, A2A, and protocol security | 9/10 | ISO/IEC 24760 identity architecture and lifecycle, AuthZEN PDP/PEP interoperability, OpenID Federation trust chains and policies, NIST digital identity, OAuth BCP, WebAuthn, FAPI, stable MCP schema/auth/task/tool conformance, and A2A authorization with confused-deputy, SSRF, cross-tenant, downgrade, replay, and cleanup cases |
+| Identity, MCP, A2A, and protocol security | 9/10 | ISO/IEC 24760 identity architecture and lifecycle, AuthZEN PDP/PEP interoperability, OpenID Federation trust chains and policies, NIST digital identity, OAuth BCP, WebAuthn, FAPI, stable MCP plus OWASP/NSA principal-session-delegation, context, serialization, revocation, propagation, teardown and residue conformance, and A2A authorization with confused-deputy, SSRF, cross-tenant, downgrade, replay, and cleanup cases |
 | Web runtime defense | 9/10 | CSP2 and SRI1 policy/integrity behavior across nonce, hash, source, redirect, CORS, CDN substitution, reporting, fallback, multiple policies, and digest-pinned browser engines |
 | Financial technology assurance | 9/10 conditional | DORA Level 2 ICT-risk, incident, provider-register, reporting, and TLPT evidence plus current FFIEC DAM/AIO/Information Security handbook assessment with legal scope, qualified testers, blinded examiners, and retired-CAT exclusion |
 | Cloud-service attestation precision | 9/10 conditional | BSI C5 service/control/customer-responsibility evidence, independent practitioner decisions, report validity, and explicit attestation-versus-certification boundaries |
@@ -1517,11 +1607,16 @@ applicable pack, evidence, procedures, authority, and benchmark thresholds pass.
 | Automotive | 9/10 | ISO/SAE lifecycle, ISO 24089 update engineering, UNECE management/update controls, and qualified negative-case testing |
 | Medical devices | 9/10 | IEC lifecycle plus SW96 risk management, IEC 80001-1 connected-health responsibility, IEC 60601-4-5 capability levels, IMDRF lifecycle/legacy/SBOM guidance, patient-safety oracles and synthetic adverse testing |
 | Federal cloud and defense | 9/10 | FedRAMP OSCAL, CMMC and CUI plus CNSSI 1253 Revision 5 NSS categorization/baselines/overlays and DoDI 8500.01/8510.01 RMF, authorization, POA&M and monitoring evidence |
-| AI security | 9/10 | OWASP AISVS Level 1-3, AI SSDF, AI RMF, AITG, ATLAS, bounded tool/data/memory authority, mutation testing, and stochastic agentic benchmark coverage |
+| AI security | 9/10 | ETSI EN 304 223 lifecycle baseline, OWASP AISVS Level 1-3 and LLM Top 10 2026, AI SSDF, AI RMF, AITG, ATLAS, Five Eyes incremental autonomy, MAESTRO cross-layer paths, bounded tool/data/memory authority, mutation testing, and stochastic agentic benchmark coverage |
+| Agentic evaluator containment | 9/10 conditional | Nested inaccessible outer enforcement, no egress, synthetic identities/secrets/tools, harness escape, policy and scorer subversion, escalation, persistence, covert channels, shutdown evasion, cleanup corruption, immutable reset, residue scan, independent replay and bounded safety claims |
+| Software securability engineering | 9/10 | FIASSE 1.1.0 isolated integrity, canonical parsing, intentional request surfaces, transparency, actionable merge reports, accountable expiring overrides, negative mutations, independent reassessment and explicit non-normative SSEM score boundaries |
 | Architecture and code quality | 9/10 | Policy enforcement, history, labeled holdout, and structural evidence |
 | Interoperability and audit evidence | 9/10 | SARIF, SBOM/VEX, SCAP, OSCAL, STIX/TAXII, CACAO/OpenC2/OCSF, SCITT, API contracts, OpenTelemetry, signed evidence, and fail-closed protocol evidence |
 | Systems security engineering and risk measurement | 9/10 | Trustworthy-systems, cyber-resiliency, RMF, NIST SP 800-30/39 multi-tier risk, ISO/IEC/IEEE 16085 lifecycle risk, and measurement controls with traceable review evidence |
 | Security-data interoperability | 9/10 | Explicit SARIF, CSAF, STIX/TAXII, OpenVEX, OSCAL, and CycloneDX contracts plus official-schema benchmark handoff |
+| Control-knowledge interoperability | 9/10 | Policy-pinned OpenCRE graph and Gemara schemas joined to OSCAL 1.2.2 with source and license digests, identifier integrity, directional mapping provenance, conflict/cycle quarantine, explicit semantic-loss reports, independently adjudicated round trips and no-unreviewed-equivalence boundaries |
+| UK financial threat-led assurance | 9/10 conditional | CBEST 2024 scope, authority, threat intelligence, provider/test-manager/control-group governance, external/insider/supply-chain scenarios, production safety, detection/response timelines, restoration, remediation, retest, closure and no-supervisory-approval boundaries |
+| Independent hardware and firmware appraisal | 9/10 conditional | OCP S.A.F.E./SOLID product/source/build/firmware binding, reviewer competence and independence, secure boot/update/rollback, debug and physical surfaces, supply chain, fault/tamper/recovery replay, report provenance, remediation and no-recognition/certification boundaries |
 | Product certification readiness | 9/10 | Common Criteria, EUCC, and SESIP/EN 17927 scheme pinning, accredited or qualified laboratory/certification authority, target/product/component/certificate identity, assurance continuity, vulnerability handling, public status, and negative-claim validation |
 | Detection engineering and threat intelligence | 9/10 | Sigma, ATT&CK, STIX/TAXII, FIRST TLP/IEP handling, VERIS classification/deidentification, and authorized Atomic Red Team validation contracts |
 | Language-specific secure coding | 9/10 | CERT C/C++/Java plus licensed MISRA C:2023 and C++:2023 rule digests, multi-compiler/target matrices, positive/negative/ambiguous cases, sanitizer corroboration, deviations and independent adjudication |
@@ -1712,6 +1807,17 @@ quality-governance, AI, and architecture additions use
 [COBIT](https://www.isaca.org/resources/cobit), and policy-pinned Open Group
 TOGAF, ArchiMate, and Open FAIR sources. Licensed content is never vendored;
 adopters must supply approved requirement and interpretation digests.
+Control-knowledge and independent sector assurance use
+[OWASP OpenCRE](https://github.com/OWASP/OpenCRE),
+[OpenSSF Gemara](https://github.com/gemaraproj/gemara),
+[NIST OSCAL 1.2.2](https://github.com/usnistgov/OSCAL/releases/tag/v1.2.2),
+[Bank of England CBEST](https://www.bankofengland.co.uk/financial-stability/operational-resilience-of-the-financial-sector/cbest-threat-intelligence-led-assessments-implementation-guide),
+[OCP S.A.F.E.](https://github.com/opencomputeproject/OCP-Security-SAFE), and
+[OCP SOLID](https://github.com/opencomputeproject/OCP-Security-SOLID/blob/main/requirements.md).
+Every external graph, schema, guide, product revision, provider scope and
+laboratory record is digest-pinned; the suite does not confer mapping
+equivalence, CBEST completion, supervisory approval, OCP recognition or product
+certification.
 The latest assurance tranche uses
 [OWASP AISVS 1.0](https://owasp.org/www-project-artificial-intelligence-security-verification-standard-aisvs-docs/),
 [ISO/IEC TS 25058](https://www.iso.org/standard/82570.html),
@@ -1759,6 +1865,21 @@ payment tranche uses official
 [ENX TISAX downloads](https://enx.com/en-us/TISAX/downloads/),
 [C2PA specifications](https://spec.c2pa.org/specifications/), and
 [PCI Security Standards](https://www.pcisecuritystandards.org/standards/).
+
+The maturity, cloud, product, privacy, and service tranche is source-pinned to
+[DOE C2M2 2.1](https://www.energy.gov/ceser/cybersecurity-capability-maturity-model-c2m2),
+[FINOS Common Cloud Controls](https://ccc.finos.org/),
+[FINOS CCC Core](https://ccc.finos.org/catalogs/core/core/),
+[NCSC Cyber Resilience Test Facilities](https://www.ncsc.gov.uk/schemes/cyber-resilience-test-facilities/introduction),
+[NCSC CRTF documents](https://www.ncsc.gov.uk/schemes/cyber-resilience-test-facilities/documents),
+[UK Software Security Code of Practice](https://www.gov.uk/government/publications/software-security-code-of-practice),
+[NIST PRAM](https://www.nist.gov/privacy-framework/nist-pram),
+[NISTIR 8062](https://csrc.nist.gov/pubs/ir/8062/final), and
+[ITIL 4](https://www.peoplecert.org/Organizations/Certifications/ITIL-Corporate-Framework).
+ITIL execution requires organization-licensed criteria; the repository stores
+only identifiers, control intent, source and license digests, evidence contracts,
+and claim boundaries. NCSC approval, FINOS or DOE endorsement, PeopleCert
+certification, and legal privacy compliance remain external decisions.
 
 The operational-depth tranche is source-pinned to the
 [NSA Zero Trust Implementation Guidelines](https://www.nsa.gov/Cybersecurity/ZIG/),
@@ -1810,6 +1931,20 @@ CNSSI 1253 Revision 5 remains `policy-pinned` because organizations must obtain
 and govern the authoritative controlled-source edition and overlays; the suite
 does not redistribute its contents or infer government authorization.
 
+The cloud, adversarial, AI and IoT tranche is source-pinned to the
+[CIS benchmark catalog](https://www.cisecurity.org/cis-benchmarks),
+[OWASP GenAI Red Teaming Guide](https://genai.owasp.org/resource/genai-red-teaming-guide/),
+[IMDA AI Verify](https://www.imda.gov.sg/about-imda/research-and-statistics/sgdigital/tech-pillars/artificial-intelligence),
+[AI Verify Foundation Project Moonshot](https://github.com/aiverify-foundation/moonshot),
+[NCSC CHECK scheme](https://www.ncsc.gov.uk/schemes/check/introduction),
+[AIUC-1](https://www.aiuc-1.com/), and the
+[CSA IoT Security Controls Framework](https://cloudsecurityalliance.org/artifacts/iot-security-controls-framework).
+CIS content remains subject to its terms and is represented only through
+versioned identifiers and organization-authorized criteria digests. AIUC-1 is
+conditional and issuer-bound; suite evidence cannot issue its certificate.
+Project Moonshot output and all other framework results are engineering
+evidence, not legal conformity, product safety, provider status or certification.
+
 ISO/IEC 27090, ISO/IEC 27091, NIST Privacy Framework 1.1, ISO/IEC 42119 parts 3, 7, and 8,
 the next ISO 31000 and ISO/IEC/IEEE 15026-4 editions, IEEE P1012, TCG DICE
 1.3, ISO/IEC/IEEE 29119-14, ISO/IEC 42105, ISO/IEC 24970, ISO/IEC 42007,
@@ -1817,9 +1952,9 @@ NIST IR 8596, the next ISO/IEC TR 24030 edition, unreleased AILuminate
 Agentic/Multimodal contracts, release-ambiguous OWASP ISVS, W3C CSP Level 3,
 SRI 2, Trusted Types, the OWASP Client-Side Top 10 candidates, VulnGym,
 SecVulEval, W3C VC Data Model 2.1, OpenID4VP 1.1, NIST SP 800-239,
-OpenEoX 1.0 CSD01, CSAF 2.1 CSD01, VDA ISA 2027, and draft BSI TR-03183
+OpenEoX 1.0 CSD01, CSAF 2.1 CSD02, VDA ISA 2027, and draft BSI TR-03183
 Parts 1 and 3, plus NIST SP 800-82 Rev. 4, NIST IR 8183 Rev. 2, NIST SP 1353,
-and NIST IR 8613 remain
+NIST IR 8613, the NCSC CyAS MVP, and CoSAI MCP Security guidance remain
 publication watch items. The registry
 intentionally avoids a normative claim until the responsible publisher exposes
 a stable final edition and the organization pins its version, source digest,

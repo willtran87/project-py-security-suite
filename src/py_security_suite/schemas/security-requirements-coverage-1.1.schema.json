@@ -1,0 +1,199 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-py-security-suite:schema:security-requirements-coverage:1.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "analysis",
+    "applicability",
+    "applicability_decision",
+    "catalogs",
+    "requirements",
+    "applicable_requirements",
+    "evidenced_requirements",
+    "gaps",
+    "automation_complete",
+    "full_catalog_coverage",
+    "evidence_policy",
+    "evidence_policy_authority_receipt",
+    "procedure_executions",
+    "complete",
+    "limitations",
+    "crosswalk_sha256"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.1"},
+    "analysis": {"const": "versioned-security-requirements-evidence-crosswalk"},
+    "applicability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["web_or_api", "mobile", "thick_client", "ai_system"],
+      "properties": {
+        "web_or_api": {"type": "boolean"},
+        "mobile": {"type": "boolean"},
+        "thick_client": {"type": "boolean"},
+        "ai_system": {"type": "boolean"}
+      }
+    },
+    "applicability_decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["basis", "organization_approved", "requires_owner_review"],
+      "properties": {
+        "basis": {"type": "string", "minLength": 1, "maxLength": 200},
+        "organization_approved": {"type": "boolean"},
+        "requires_owner_review": {"type": "boolean"}
+      }
+    },
+    "catalogs": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 100,
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/catalog"}
+    },
+    "requirements": {
+      "type": "array",
+      "maxItems": 10000,
+      "items": {"$ref": "#/$defs/requirement"}
+    },
+    "applicable_requirements": {"type": "integer", "minimum": 0},
+    "evidenced_requirements": {"type": "integer", "minimum": 0},
+    "gaps": {
+      "type": "array",
+      "maxItems": 10000,
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1, "maxLength": 100}
+    },
+    "automation_complete": {"type": "boolean"},
+    "full_catalog_coverage": {"type": "boolean"},
+    "evidence_policy": {"type": ["object", "null"]},
+    "evidence_policy_authority_receipt": {"type": ["object", "null"]},
+    "procedure_executions": {
+      "type": "object",
+      "maxProperties": 10000,
+      "additionalProperties": {"type": "object"}
+    },
+    "complete": {"type": "boolean"},
+    "limitations": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 20,
+      "items": {"type": "string", "minLength": 1, "maxLength": 1000}
+    },
+    "crosswalk_sha256": {"$ref": "#/$defs/digest"}
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "standard": {
+      "type": "string",
+      "pattern": "^[A-Z0-9][A-Z0-9.-]{1,99}$"
+    },
+    "catalog": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "standard",
+        "version",
+        "source",
+        "source_revision",
+        "catalog_sha256",
+        "requirements_in_catalog",
+        "requirements_mapped"
+      ],
+      "properties": {
+        "standard": {"$ref": "#/$defs/standard"},
+        "version": {"type": "string", "minLength": 1, "maxLength": 30},
+        "source": {"type": "string", "format": "uri", "pattern": "^https://"},
+        "source_revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "catalog_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+        "requirements_in_catalog": {"type": ["integer", "null"], "minimum": 1},
+        "requirements_mapped": {"type": "integer", "minimum": 0}
+      }
+    },
+    "requirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "standard",
+        "version",
+        "requirement",
+        "applicable",
+        "status",
+        "verification_scope",
+        "evidence",
+        "assessment"
+      ],
+      "properties": {
+        "standard": {"$ref": "#/$defs/standard"},
+        "version": {"type": "string", "minLength": 1, "maxLength": 30},
+        "requirement": {"type": "string", "minLength": 1, "maxLength": 100},
+        "applicable": {"type": "boolean"},
+        "status": {"enum": ["evidence-collected", "gap", "not-applicable", "passed", "failed", "not-tested"]},
+        "verification_scope": {"type": "string", "minLength": 1, "maxLength": 500},
+        "evidence": {
+          "type": "array",
+          "maxItems": 100,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1, "maxLength": 500}
+        },
+        "assessment": {"anyOf": [{"type": "null"}, {"$ref": "#/$defs/assessment"}]}
+      }
+    },
+    "assessment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["result", "method", "procedure_id", "assessor", "assessed_at", "assertions", "status"],
+      "properties": {
+        "result": {"enum": ["pass", "fail", "not-tested", "not-applicable"]},
+        "method": {"type": "string", "minLength": 1, "maxLength": 200},
+        "procedure_id": {"const": "artifact-value-replay-v1"},
+        "assessor": {"type": "string", "minLength": 1, "maxLength": 200},
+        "assessed_at": {"type": "string", "format": "date-time"},
+        "status": {"enum": ["passed", "failed", "not-tested", "not-applicable"]},
+        "assertions": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {"$ref": "#/$defs/assertion"}
+        }
+      }
+    },
+    "assertion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact",
+        "sha256",
+        "pointer",
+        "operator",
+        "expected",
+        "polarity",
+        "observed_at",
+        "producer_sha256",
+        "execution_artifact",
+        "execution_sha256",
+        "fixture_sha256",
+        "mutation_sha256",
+        "command_sha256",
+        "exit_code"
+      ],
+      "properties": {
+        "artifact": {"type": "string", "minLength": 1, "maxLength": 500},
+        "sha256": {"$ref": "#/$defs/digest"},
+        "pointer": {"type": "string", "pattern": "^/", "maxLength": 1000},
+        "operator": {"enum": ["equals", "not-equals", "gte", "lte", "exists"]},
+        "expected": {"type": ["string", "number", "integer", "boolean", "null"]},
+        "polarity": {"enum": ["positive", "negative-control"]},
+        "observed_at": {"type": "string", "format": "date-time"},
+        "producer_sha256": {"$ref": "#/$defs/digest"},
+        "execution_artifact": {"type": "string", "minLength": 1, "maxLength": 500},
+        "execution_sha256": {"$ref": "#/$defs/digest"},
+        "fixture_sha256": {"$ref": "#/$defs/digest"},
+        "mutation_sha256": {"$ref": "#/$defs/digest"},
+        "command_sha256": {"$ref": "#/$defs/digest"},
+        "exit_code": {"type": "integer", "minimum": -255, "maximum": 255}
+      }
+    }
+  }
+}

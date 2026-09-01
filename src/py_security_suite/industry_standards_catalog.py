@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from .industry_emerging_assurance_catalog import EMERGING_ASSURANCE_STANDARDS
+from .industry_interoperability_sector_catalog import INTEROPERABILITY_SECTOR_STANDARDS
+from .industry_maturity_product_catalog import MATURITY_PRODUCT_STANDARDS
 from .industry_open_source_catalog import OPEN_SOURCE_STANDARDS
 from .industry_resilience_catalog import RESILIENCE_STANDARDS
 
@@ -22,7 +25,7 @@ _STANDARDS: tuple[dict[str, Any], ...] = (
     },
     {
         "id": "OWASP-TCASVS",
-        "version": "5.0.0",
+        "version": "5.0.1",
         "kind": "verification",
         "reference": "https://github.com/OWASP/TCASVS",
         "evidence": ["security-requirements-coverage.json"],
@@ -211,10 +214,15 @@ _STANDARDS: tuple[dict[str, Any], ...] = (
     },
     {
         "id": "OWASP-LLM-TOP-10",
-        "version": "2025",
+        "version": "2026",
         "kind": "ai-risk-taxonomy",
-        "reference": "https://genai.owasp.org/llm-top-10/",
+        "reference": "https://genai.owasp.org/resource/owasp-genai-llm-top-10-2026/",
         "evidence": ["llm-adversarial-plan.json"],
+        "lifecycle": {
+            "edition_status": "final",
+            "published": "2026-08-03",
+            "observed_at": "2026-08-31",
+        },
     },
     {
         "id": "NIST-AI-RMF",
@@ -447,7 +455,12 @@ _STANDARDS: tuple[dict[str, Any], ...] = (
     },
 )
 
-_STANDARDS += OPEN_SOURCE_STANDARDS
+_STANDARDS += (
+    INTEROPERABILITY_SECTOR_STANDARDS
+    + MATURITY_PRODUCT_STANDARDS
+    + EMERGING_ASSURANCE_STANDARDS
+    + OPEN_SOURCE_STANDARDS
+)
 
 _STANDARDS += (
     {

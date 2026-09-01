@@ -18,7 +18,7 @@ from py_security_suite.industry_assurance import (
 def test_maintained_adapter_specs_are_registered_and_protocol_aligned() -> None:
     registered = {item["id"] for item in _BENCHMARKS}
     identifiers = [item["benchmark_id"] for item in BUILTIN_ADAPTER_SPECS]
-    assert len(identifiers) == 192
+    assert len(identifiers) == 212
     assert len(identifiers) == len(set(identifiers))
     assert set(identifiers) <= registered
     for item in BUILTIN_ADAPTER_SPECS:
@@ -276,6 +276,9 @@ def test_protocol_cloud_response_memory_and_resilience_adapters_fail_closed() ->
     assert "synthetic authorization servers" in mcp["isolation"]
     assert "deny-by-default tool authority" in mcp["isolation"]
     assert "confused-deputy" in " ".join(mcp["required_inputs"])
+    assert "session" in " ".join(mcp["required_inputs"])
+    assert "serialization" in " ".join(mcp["required_inputs"])
+    assert "residue scan" in mcp["isolation"]
 
     for identifier, provider, boundary in (
         ("aws-fsbp-securityhub-conformance", "AWS", "CloudTrail"),
