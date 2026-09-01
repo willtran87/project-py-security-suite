@@ -259,6 +259,126 @@ def _host_ipv4_address() -> str | None:
     return None
 
 
+def _platform_policy_observations(
+    parsed_value: dict[str, object] | None,
+    config: IsolationConfig,
+    platform: str,
+) -> dict[str, object]:
+    if parsed_value is not None and parsed_value.get("linux_policy_tested") is True:
+        return {
+            "platform": "linux",
+            "process_id": parsed_value["process_id"],
+            "kernel_identity_sha256": parsed_value["kernel_identity_sha256"],
+            "no_new_privileges": parsed_value["linux_no_new_privileges"] is True,
+            "capabilities_dropped": parsed_value["linux_capabilities_dropped"] is True,
+            "seccomp_mode": parsed_value["linux_seccomp_mode"],
+            "seccomp_active": parsed_value["linux_seccomp_mode"] in {1, 2},
+            "seccomp_filters": parsed_value["linux_seccomp_filters"],
+            "seccomp_policy_sha256": os.environ.get("PYSEC_SECCOMP_POLICY_SHA256", "")
+            .strip()
+            .casefold(),
+        }
+    if parsed_value is not None and parsed_value.get("windows_policy_tested") is True:
+        return {
+            "platform": "windows",
+            "process_id": parsed_value["process_id"],
+            "kernel_identity_sha256": parsed_value["kernel_identity_sha256"],
+            "dep_enabled": parsed_value["windows_dep_enabled"] is True,
+            "aslr_enabled": parsed_value["windows_aslr_enabled"] is True,
+            "dynamic_code_prohibited": parsed_value["windows_dynamic_code_prohibited"]
+            is True,
+            "child_processes_prohibited": parsed_value[
+                "windows_child_processes_prohibited"
+            ]
+            is True,
+        }
+    if platform == "darwin" and parsed_value is not None:
+        return {
+            "platform": "macos",
+            "process_id": parsed_value["process_id"],
+            "kernel_identity_sha256": parsed_value["kernel_identity_sha256"],
+            "sandbox_profile_sha256": hashlib.sha256(
+                canonical_bytes(
+                    {
+                        "sandbox_executable_sha256": config.sandbox_executable_sha256,
+                        "sandbox_runtime_closure_sha256": config.sandbox_runtime_closure_sha256,
+                        "sandbox_arguments": list(config.sandbox_arguments),
+                    }
+                )
+            ).hexdigest()
+            if config.sandbox_executable_sha256
+            and config.sandbox_runtime_closure_sha256
+            and config.sandbox_arguments
+            else "",
+        }
+    return {
+        "platform": (
+            "windows"
+            if platform == "win32"
+            else "macos"
+            if platform == "darwin"
+            else platform
+        ),
+        "policy_introspection_available": False,
+    }
+
+
+def _apply_platform_policy_capabilities(
+    capabilities: dict[str, bool], policy_observations: dict[str, object]
+) -> None:
+    platform = policy_observations.get("platform")
+    introspected = (
+        policy_observations.get("policy_introspection_available") is not False
+    )
+    if platform == "linux":
+        if not introspected:
+            capabilities.update(
+                {
+                    "linux-no-new-privileges": False,
+                    "linux-capabilities-dropped": False,
+                    "linux-seccomp-filter-enforced": False,
+                    "linux-seccomp-policy-bound": False,
+                }
+            )
+            return
+        seccomp_filters = policy_observations.get("seccomp_filters")
+        capabilities["linux-no-new-privileges"] = (
+            policy_observations.get("no_new_privileges") is True
+        )
+        capabilities["linux-capabilities-dropped"] = (
+            policy_observations.get("capabilities_dropped") is True
+        )
+        capabilities["linux-seccomp-filter-enforced"] = (
+            policy_observations.get("seccomp_mode") == 2
+            and isinstance(seccomp_filters, int)
+            and not isinstance(seccomp_filters, bool)
+            and seccomp_filters >= 1
+        )
+        seccomp_policy = str(policy_observations.get("seccomp_policy_sha256") or "")
+        capabilities["linux-seccomp-policy-bound"] = len(seccomp_policy) == 64 and all(
+            character in "0123456789abcdef" for character in seccomp_policy
+        )
+    elif platform == "windows":
+        capabilities["windows-dep-enabled"] = (
+            introspected and policy_observations.get("dep_enabled") is True
+        )
+        capabilities["windows-aslr-enabled"] = (
+            introspected and policy_observations.get("aslr_enabled") is True
+        )
+        capabilities["windows-dynamic-code-prohibited"] = (
+            introspected and policy_observations.get("dynamic_code_prohibited") is True
+        )
+        capabilities["windows-child-processes-prohibited"] = (
+            introspected
+            and policy_observations.get("child_processes_prohibited") is True
+        )
+    elif platform == "macos":
+        capabilities["macos-sandbox-profile-bound"] = (
+            introspected
+            and len(str(policy_observations.get("sandbox_profile_sha256") or "")) == 64
+        )
+
+
 def probe_isolation_boundary(
     target: Path,
     config: IsolationConfig,
@@ -323,12 +443,13 @@ def probe_isolation_boundary(
                 host_udp.close()
             host_tcp = None
             host_udp = None
-    if hasattr(socket, "AF_UNIX"):
+    af_unix = getattr(socket, "AF_UNIX", None)
+    if isinstance(af_unix, int):
         unix_path = str(
             Path(tempfile.gettempdir()) / f"pysec-probe-{uuid.uuid4().hex}.sock"
         )
         try:
-            unix_listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            unix_listener = socket.socket(af_unix, socket.SOCK_STREAM)
             unix_listener.bind(unix_path)
             unix_listener.listen(1)
         except OSError:
@@ -422,6 +543,7 @@ def probe_isolation_boundary(
                     pass
     capabilities: dict[str, bool] = {}
     parse_error = ""
+    parsed_value: dict[str, object] | None = None
     try:
         value = strict_loads(execution.stdout)
         expected = {
@@ -472,6 +594,7 @@ def probe_isolation_boundary(
             )
         ):
             raise ValueError("probe output fields do not match")
+        parsed_value = value
         capabilities = {
             "network-tcp4-denied": value["tcp4_denied"] is True,
             "network-udp4-denied": value["udp4_denied"] is True,
@@ -503,109 +626,10 @@ def probe_isolation_boundary(
         }
     except (TypeError, ValueError) as exc:
         parse_error = str(exc)
-    policy_observations = (
-        {
-            "platform": "linux",
-            "process_id": value["process_id"],
-            "kernel_identity_sha256": value["kernel_identity_sha256"],
-            "no_new_privileges": value["linux_no_new_privileges"] is True,
-            "capabilities_dropped": value["linux_capabilities_dropped"] is True,
-            "seccomp_mode": value["linux_seccomp_mode"],
-            "seccomp_active": value["linux_seccomp_mode"] in {1, 2},
-            "seccomp_filters": value["linux_seccomp_filters"],
-            "seccomp_policy_sha256": os.environ.get("PYSEC_SECCOMP_POLICY_SHA256", "")
-            .strip()
-            .casefold(),
-        }
-        if isinstance(locals().get("value"), dict)
-        and value.get("linux_policy_tested") is True
-        else {
-            "platform": "windows",
-            "process_id": value["process_id"],
-            "kernel_identity_sha256": value["kernel_identity_sha256"],
-            "dep_enabled": value["windows_dep_enabled"] is True,
-            "aslr_enabled": value["windows_aslr_enabled"] is True,
-            "dynamic_code_prohibited": value["windows_dynamic_code_prohibited"] is True,
-            "child_processes_prohibited": value["windows_child_processes_prohibited"]
-            is True,
-        }
-        if isinstance(locals().get("value"), dict)
-        and value.get("windows_policy_tested") is True
-        else {
-            "platform": "macos",
-            "process_id": value["process_id"],
-            "kernel_identity_sha256": value["kernel_identity_sha256"],
-            "sandbox_profile_sha256": hashlib.sha256(
-                canonical_bytes(
-                    {
-                        "sandbox_executable_sha256": config.sandbox_executable_sha256,
-                        "sandbox_runtime_closure_sha256": config.sandbox_runtime_closure_sha256,
-                        "sandbox_arguments": list(config.sandbox_arguments),
-                    }
-                )
-            ).hexdigest()
-            if config.sandbox_executable_sha256
-            and config.sandbox_runtime_closure_sha256
-            and config.sandbox_arguments
-            else "",
-        }
-        if sys.platform == "darwin"
-        else {
-            "platform": "windows" if sys.platform == "win32" else sys.platform,
-            "policy_introspection_available": False,
-        }
+    policy_observations = _platform_policy_observations(
+        parsed_value, config, sys.platform
     )
-    if policy_observations.get("platform") == "linux":
-        if policy_observations.get("policy_introspection_available") is False:
-            capabilities.update(
-                {
-                    "linux-no-new-privileges": False,
-                    "linux-capabilities-dropped": False,
-                    "linux-seccomp-filter-enforced": False,
-                    "linux-seccomp-policy-bound": False,
-                }
-            )
-        else:
-            seccomp_filters = policy_observations.get("seccomp_filters")
-            capabilities["linux-no-new-privileges"] = (
-                policy_observations.get("no_new_privileges") is True
-            )
-            capabilities["linux-capabilities-dropped"] = (
-                policy_observations.get("capabilities_dropped") is True
-            )
-            capabilities["linux-seccomp-filter-enforced"] = (
-                policy_observations.get("seccomp_mode") == 2
-                and isinstance(seccomp_filters, int)
-                and not isinstance(seccomp_filters, bool)
-                and seccomp_filters >= 1
-            )
-            seccomp_policy = str(policy_observations.get("seccomp_policy_sha256") or "")
-            capabilities["linux-seccomp-policy-bound"] = len(
-                seccomp_policy
-            ) == 64 and all(
-                character in "0123456789abcdef" for character in seccomp_policy
-            )
-    elif policy_observations.get("platform") == "windows":
-        introspected = (
-            policy_observations.get("policy_introspection_available") is not False
-        )
-        capabilities["windows-dep-enabled"] = (
-            introspected and policy_observations.get("dep_enabled") is True
-        )
-        capabilities["windows-aslr-enabled"] = (
-            introspected and policy_observations.get("aslr_enabled") is True
-        )
-        capabilities["windows-dynamic-code-prohibited"] = (
-            introspected and policy_observations.get("dynamic_code_prohibited") is True
-        )
-        capabilities["windows-child-processes-prohibited"] = (
-            introspected
-            and policy_observations.get("child_processes_prohibited") is True
-        )
-    elif policy_observations.get("platform") == "macos":
-        capabilities["macos-sandbox-profile-bound"] = (
-            len(str(policy_observations["sandbox_profile_sha256"])) == 64
-        )
+    _apply_platform_policy_capabilities(capabilities, policy_observations)
     if policy_observations.get("platform") in {"linux", "macos"} and (
         policy_observations.get("policy_introspection_available") is not False
     ):

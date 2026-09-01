@@ -1234,7 +1234,7 @@ def _merge_entrypoints(values: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if existing is None:
             merged[key] = {
                 **value,
-                "evidence": sorted(set(str(item) for item in value["evidence"])),
+                "evidence": sorted({str(item) for item in value["evidence"]}),
             }
             continue
         existing["evidence"] = sorted(

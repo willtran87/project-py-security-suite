@@ -275,8 +275,10 @@ def _validate_policy(value: object) -> None:
         ):
             raise ValueError(f"invalid LLM adversarial policy limit: {field}")
     roots = value.get("allowed_test_roots")
-    if roots != ["generated-tests"] or not all(
-        _safe_relative_root(item) for item in roots
+    if (
+        not isinstance(roots, list)
+        or roots != ["generated-tests"]
+        or not all(_safe_relative_root(item) for item in roots)
     ):
         raise ValueError("invalid generated-test roots")
 

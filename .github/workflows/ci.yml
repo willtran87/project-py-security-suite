@@ -356,6 +356,12 @@ jobs:
             -o .artifacts/test-assurance/coverage.xml
           uv run --frozen coverage json \
             -o .artifacts/test-assurance/coverage.json
+          uv run --frozen python scripts/generate_ci_assurance_metrics.py \
+            --coverage .artifacts/test-assurance/coverage.json \
+            --junit .artifacts/test-assurance/junit.xml \
+            --source-revision "$GITHUB_SHA" \
+            --json-output .artifacts/test-assurance/assurance-metrics.json \
+            --markdown-output .artifacts/test-assurance/assurance-metrics.md
           uv run --frozen coverage report --fail-under=80
           uv run --frozen python scripts/validate_security_critical_coverage.py \
             .artifacts/test-assurance/coverage.json
@@ -399,6 +405,15 @@ jobs:
         run: uv run --frozen ruff format --check .
       - name: Lint
         run: uv run --frozen ruff check .
+      - name: Verify scanner dependency lock export
+        run: |
+          mkdir -p .artifacts/scanner-lock
+          uv export --frozen --project containers/scanner --no-emit-project \
+            --no-emit-local --no-header --no-annotate \
+            --output-file .artifacts/scanner-lock/requirements.lock
+          diff --strip-trailing-cr \
+            containers/scanner/requirements.lock \
+            .artifacts/scanner-lock/requirements.lock
       - name: Validate benchmark schema/runtime consistency
         run: uv run --frozen python scripts/validate_benchmark_schema_consistency.py
       - name: Enforce public CLI and schema compatibility
@@ -450,6 +465,9 @@ jobs:
           scripts/mkdocs_hooks.py scripts/validate-checkpoint-authority.py
           scripts/validate_benchmark_schema_consistency.py
           scripts/validate_security_critical_coverage.py
+          scripts/generate_ci_assurance_metrics.py
+          scripts/prepare_scanner_database.py
+          scripts/run_mutation_assurance.py
           scripts/validate_performance_budgets.py
           scripts/validate_public_api.py
           scripts/validate_live_assurance_policy.py

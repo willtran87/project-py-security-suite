@@ -711,7 +711,7 @@ def _source_dependency_relationships(
     if not packages_by_ref:
         return {}, {}, True, False
     adjacency: dict[str, set[str]] = defaultdict(set)
-    incoming: dict[str, int] = {reference: 0 for reference in packages_by_ref}
+    incoming: dict[str, int] = dict.fromkeys(packages_by_ref, 0)
     for item in raw_dependencies:
         if not isinstance(item, dict) or not isinstance(item.get("ref"), str):
             continue

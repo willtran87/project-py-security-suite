@@ -552,7 +552,7 @@ def _policy_requirements(
             raise ValueError("organization requirement decision is invalid")
         identities.add(identity)
         result.append(dict(item))
-    observed_counts: dict[tuple[str, str], int] = {key: 0 for key in catalog_counts}
+    observed_counts: dict[tuple[str, str], int] = dict.fromkeys(catalog_counts, 0)
     for standard, version, _requirement in identities:
         observed_counts[(standard, version)] += 1
     if observed_counts != catalog_counts:
@@ -1178,6 +1178,10 @@ def _verify_procedure_execution(
         raise ValueError("requirement execution receipt does not bracket execution")
 
 
+def _manifest_item_name(value: object) -> str:
+    return str(value.get("name", "")) if isinstance(value, dict) else ""
+
+
 def _procedure_manifests_valid(execution: dict[str, Any]) -> bool:
     environment = execution.get("environment")
     runtime = execution.get("runtime_manifest")
@@ -1186,8 +1190,7 @@ def _procedure_manifests_valid(execution: dict[str, Any]) -> bool:
     if (
         not isinstance(environment, list)
         or any(not isinstance(item, dict) for item in environment)
-        or environment
-        != sorted(environment, key=lambda item: str(item.get("name", "")))
+        or environment != sorted(environment, key=_manifest_item_name)
         or not isinstance(runtime, dict)
         or set(runtime)
         != {
@@ -1218,7 +1221,7 @@ def _procedure_manifests_valid(execution: dict[str, Any]) -> bool:
         or (runtime["kind"] == "native" and runtime["image_digest"] != "")
         or not isinstance(assets, list)
         or any(not isinstance(item, dict) for item in assets)
-        or assets != sorted(assets, key=lambda item: str(item.get("name", "")))
+        or assets != sorted(assets, key=_manifest_item_name)
         or not isinstance(sandbox, dict)
         or sandbox
         != {

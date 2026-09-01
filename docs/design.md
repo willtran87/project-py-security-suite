@@ -429,7 +429,7 @@ flowchart LR
     Schedule[Scheduled assurance] --> Daily[Daily parser assurance]
     Daily --> Fuzz[Persistent JSON/XML/archive/adapter<br/>bytecode/Wasm/native parser fuzzing]
     Schedule --> Weekly[Weekly deep assurance]
-    Weekly --> Mutation[Security-critical mutation testing]
+    Weekly --> Mutation[45-module security-critical mutation testing<br/>fork-safe native crypto preload + self-check]
     Weekly --> Resilience[Timeout + flood + rollback + cleanup drills]
     Weekly --> Providers[Protected live HSM/Vault/KMS conformance]
     Tests --> Gate[Release evidence]
@@ -451,7 +451,7 @@ remain separate modules. Shared repository traversal, governance replay,
 atomic publication, process-input policy, and diagnostic redaction are isolated
 behind focused modules. The 12,000-line assurance data block is separated into
 standards, benchmark, and profile catalogs, leaving the evaluation engine near
-5,300 lines. Tach enforces exact imports across 148 production module boundaries.
+5,300 lines. Tach enforces exact imports across 152 production module boundaries.
 A separate strongly-connected-component ratchet permits only one explicitly
 recorded legacy trust/runtime cycle group and rejects any new member, edge
 expansion, or additional cycle. CI also freezes concentration ceilings and rejects
@@ -1277,7 +1277,12 @@ flowchart LR
 - A project without resolved dependency versions limits OSV evidence.
 - The current native bundle is Windows x86-64 only.
 
-## Verified implementation state
+## Archived verified implementation state
+
+The figures below describe the retained 2026-08-10 native self-scan, not the
+current checkout. Current coverage and test counts are generated directly from
+the coverage.py JSON and JUnit XML into revision-bound `assurance-metrics.json`
+and `assurance-metrics.md` files in every `test-assurance-*` CI artifact.
 
 The native Windows self-scan process verifies:
 
@@ -1323,6 +1328,34 @@ The native Windows self-scan process verifies:
   isolation authority attests the exact run, the scanner identities are
   independently approved, and a controlled signing lane supplies bundles for
   both exact artifact digests.
+
+### Scanner database preparation boundary
+
+```mermaid
+flowchart LR
+    Publisher["Authorized OSV HTTPS publisher"] --> Prepare["Bounded connected acquisition"]
+    Prepare --> Seal["SHA-256 + size + source receipt"]
+    Seal --> Context["Named BuildKit input context"]
+    Context --> Build["Pinned scanner image build"]
+    Build --> Verify["Image re-verifies exact snapshot digest"]
+    Build --> SBOM["Embedded deterministic CycloneDX 1.6 SBOM"]
+    Verify --> Receipt["Image ID + input + SBOM evidence receipt"]
+    SBOM --> Receipt
+    Receipt --> Attest["GitHub build provenance attestation"]
+    Verify --> Offline["No-network production scan"]
+```
+
+The Docker build cannot fetch the mutable advisory URL. The connected lane
+downloads once into a fresh directory, enforces host, redirect and byte limits,
+flushes the exact bytes, and emits a receipt. The build script independently
+rehashes those bytes before exposing the directory as the narrowly scoped
+`osv_database` BuildKit context. Scanner-only dependencies are resolved in a
+dedicated uv project so their resolver constraints cannot silently perturb the
+application lock. The image embeds a deterministic Python CycloneDX 1.6 SBOM;
+the build wrapper extracts and hashes it, binds it to the local image
+configuration identity and OSV input, and CI retains and attests that evidence.
+The receipt states its boundary explicitly because a registry manifest digest
+does not exist until publication.
 
 ## Expanded implementation state
 

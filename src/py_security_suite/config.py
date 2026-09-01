@@ -2460,8 +2460,7 @@ def _load_config_active(
                 )
                 tool.asset_digests_organization_approved = all(
                     path is None
-                    or bool(approved)
-                    and str(approved).casefold() == configured
+                    or (bool(approved) and str(approved).casefold() == configured)
                     for path, configured, approved in configured_assets
                 )
     if isinstance(organization_isolation, Mapping):

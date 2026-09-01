@@ -14,8 +14,17 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  deep-assurance:
+    name: Fresh deep assurance for release source
+    uses: ./.github/workflows/deep-assurance.yml
+    permissions:
+      contents: read
+      id-token: write # Exchange the release workflow identity for provenance signing.
+      attestations: write # Publish provenance for scanner evidence before release builds.
+
   independent-build:
     name: Independent builder ${{ matrix.builder }}
+    needs: deep-assurance
     strategy:
       fail-fast: false
       matrix:

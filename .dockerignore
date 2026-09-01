@@ -1,0 +1,9 @@
+*
+!README.md
+!pyproject.toml
+!src/
+!src/**
+!containers/
+!containers/scanner/
+!containers/scanner/Dockerfile
+!containers/scanner/pysec.toml

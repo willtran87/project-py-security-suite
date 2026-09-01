@@ -767,17 +767,9 @@ def _scan_sealed_project(
     )
     finished_at = utc_now()
     duration = round(time.monotonic() - started_clock, 3)
-    counts = {
-        severity: 0
-        for severity in (
-            "critical",
-            "high",
-            "medium",
-            "low",
-            "informational",
-            "unknown",
-        )
-    }
+    counts: dict[str, int] = dict.fromkeys(
+        ("critical", "high", "medium", "low", "informational", "unknown"), 0
+    )
     for finding in findings:
         counts[finding.severity.value] += 1
 

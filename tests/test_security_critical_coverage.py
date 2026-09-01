@@ -25,6 +25,16 @@ def test_high_assurance_floors_cannot_silently_regress() -> None:
         "src/py_security_suite/industry_benchmark_scoring.py": 96.0,
         "src/py_security_suite/industry_receipt_trust.py": 93.0,
         "src/py_security_suite/native_parser_worker.py": 98.0,
+        "src/py_security_suite/standards_monitor.py": 52.0,
+        "src/py_security_suite/native_evidence.py": 57.0,
+        "src/py_security_suite/evidence_ingest.py": 59.0,
+        "src/py_security_suite/inventory.py": 59.0,
+        "src/py_security_suite/boundary_graph.py": 65.0,
+        "src/py_security_suite/benchmark_execution.py": 66.0,
+        "src/py_security_suite/execution.py": 72.0,
+        "src/py_security_suite/isolation_probe.py": 59.0,
+        "src/py_security_suite/operation_receipt.py": 77.0,
+        "src/py_security_suite/trusted_observation.py": 71.0,
     }
 
     for name, floor in expected.items():

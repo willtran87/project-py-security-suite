@@ -251,12 +251,10 @@ def _bind_evidence(
     sidecars = [_binding_path(path) for path in resolved_paths]
     digest, files, total_bytes = source_snapshot(
         source_root.resolve(),
-        excluded_paths=tuple(
-            [
-                *resolved_paths,
-                *sidecars,
-                *([external_envelope_dir.resolve()] if external_envelope_dir else []),
-            ]
+        excluded_paths=(
+            *resolved_paths,
+            *sidecars,
+            *([external_envelope_dir.resolve()] if external_envelope_dir else []),
         ),
     )
     bindings: list[dict[str, Any]] = []

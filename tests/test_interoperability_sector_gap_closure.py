@@ -33,9 +33,9 @@ def _claims(identifier: str) -> dict[str, object]:
     contract = INTEROPERABILITY_SECTOR_EVIDENCE_CONTRACTS[identifier]
     claims: dict[str, object] = dict(contract["scalars"])
     claims.update({name: sorted(values) for name, values in contract["sets"].items()})
-    claims.update({name: 3 for name in contract["counts"]})
-    claims.update({name: True for name in contract["required_true"]})
-    claims.update({name: False for name in contract["required_false"]})
+    claims.update(dict.fromkeys(contract["counts"], 3))
+    claims.update(dict.fromkeys(contract["required_true"], True))
+    claims.update(dict.fromkeys(contract["required_false"], False))
     return claims
 
 

@@ -1,5 +1,28 @@
 # Changelog
 
+- Make scheduled deep assurance reproducible and actionable: acquire the mutable
+  OSV publisher snapshot in a bounded connected preparation step, seal its exact
+  bytes and provenance, independently rehash it before exposing a narrow named
+  BuildKit context, and prevent the Docker build from resolving the database
+  URL. Restore mutation testing's companion imports, add an aggregate deep gate,
+  broaden parser fuzzing, strict typing and comprehension linting, enforce
+  repository-wide concentration-debt discovery, raise critical coverage
+  ratchets, and generate revision-bound coverage/test metrics instead of
+  presenting historical documentation figures as current. Restore the scanner
+  container's CLI runtime, pin its Docker frontend and base image by digest,
+  isolate scanner resolution from the product lock, install its complete Python
+  dependency closure from a hash-locked export, embed and retain a deterministic
+  CycloneDX 1.6 Python SBOM, bind it to image/input evidence, attest trusted
+  builds, and make fresh deep assurance a pull-request and release precondition.
+  Expand mutation scope across isolation, execution policy, trust observation,
+  failure-domain, receipt and release-readiness controls. Fix malformed macOS
+  isolation evidence so it fails closed without reading unvalidated state, and
+  express the timestamp-certificate validity predicate in a mutation-compatible
+  form so the deep-assurance gate can generate its complete mutant catalog.
+  Align mutation CI with Python 3.13 and preload/self-check fork-sensitive native
+  cryptography types before Mutmut creates workers, preventing false baseline
+  failures without excluding security tests.
+
 - Expand industry assurance to 663 versioned references, 233 selectable
   profiles, 282 benchmark families, 212 maintained adapters, and 116 strict
   semantic integrations. Add NIST ransomware recovery, NIST/IEEE media

@@ -122,20 +122,20 @@ def semantic_language_coverage_artifact(
                 ),
                 "source_files_sha256": (
                     expected_digest
-                    if compiler_semantic or native and not row_complete
+                    if compiler_semantic or (native and not row_complete)
                     else str((row or {}).get("source_files_sha256") or "")
                 ),
                 "files_discovered": discovered[language],
                 "files_analyzed": (
                     discovered[language]
-                    if compiler_semantic or native and not row_complete
+                    if compiler_semantic or (native and not row_complete)
                     else int((row or {}).get("files_analyzed") or 0)
                 ),
                 "exclusions": []
-                if compiler_semantic or native and not row_complete
+                if compiler_semantic or (native and not row_complete)
                 else list(exclusions or []),
                 "files": list(expected_files or [])
-                if compiler_semantic or native and not row_complete
+                if compiler_semantic or (native and not row_complete)
                 else list(reported_files or []),
                 "analysis_modes": (
                     list((compiler_frontend or {}).get("analysis_modes") or [])

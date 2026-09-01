@@ -472,6 +472,7 @@ def _validation_owner_delta(
 
 
 def _tool_run_snapshots(tools: list[object]) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = [item for item in tools if isinstance(item, dict)]
     return [
         {
             "tool": str(value.get("tool") or "unknown"),
@@ -480,16 +481,13 @@ def _tool_run_snapshots(tools: list[object]) -> list[dict[str, Any]]:
             "version": str(value.get("version") or "unknown"),
             "duration_seconds": round(float(value.get("duration_seconds") or 0.0), 3),
         }
-        for value in sorted(
-            (item for item in tools if isinstance(item, dict)),
-            key=lambda item: str(item.get("tool") or ""),
-        )
+        for value in sorted(records, key=lambda item: str(item.get("tool") or ""))
     ]
 
 
 def _comparison(first: dict[str, Any], last: dict[str, Any]) -> dict[str, Any]:
-    first_ids = set(str(value) for value in first["finding_ids"])
-    last_ids = set(str(value) for value in last["finding_ids"])
+    first_ids = {str(value) for value in first["finding_ids"]}
+    last_ids = {str(value) for value in last["finding_ids"]}
     first_validation = {
         str(value["id"]): value for value in first["validation_subjects"]
     }
