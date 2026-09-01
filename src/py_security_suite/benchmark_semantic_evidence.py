@@ -295,10 +295,19 @@ def _shape_shingles(shape: list[str]) -> frozenset[str]:
 def _python_shape(payload: bytes) -> list[str]:
     try:
         text = payload.decode("utf-8")
-        tree = ast.parse(text)
-    except (SyntaxError, UnicodeDecodeError) as exc:
+    except UnicodeDecodeError as exc:
         raise BenchmarkSemanticEvidenceError(
             "python semantic artifact cannot be parsed"
+        ) from exc
+    try:
+        tree = ast.parse(text)
+    except SyntaxError as exc:
+        raise BenchmarkSemanticEvidenceError(
+            "python semantic artifact cannot be parsed"
+        ) from exc
+    except (MemoryError, RecursionError) as exc:
+        raise BenchmarkSemanticEvidenceError(
+            "python semantic artifact exceeds the parser complexity limit"
         ) from exc
     shape: list[str] = ["profile:structural-lexical-control-v1"]
     stack: list[tuple[str, object]] = [("node", tree)]
