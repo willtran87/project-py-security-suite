@@ -15,7 +15,8 @@ import time
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import IO, Iterator, Mapping
+from typing import IO
+from collections.abc import Iterator, Mapping
 
 from .path_safety import read_regular_file
 from .execution_policy import validate_governed_command_input

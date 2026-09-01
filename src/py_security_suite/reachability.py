@@ -1463,10 +1463,8 @@ def _framework_decorator(decorators: list[ast.expr], record: ModuleRecord) -> bo
         parts = name.split(".")
         if not parts or parts[-1] not in _FRAMEWORK_DECORATORS | {"listens_for"}:
             continue
-        if (
-            len(parts) == 1
-            and parts[0] in record.framework_symbols
-            or len(parts) > 1
+        if (len(parts) == 1 and parts[0] in record.framework_symbols) or (
+            len(parts) > 1
             and parts[0] in record.framework_receivers | record.framework_symbols
         ):
             return True

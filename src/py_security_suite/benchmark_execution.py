@@ -10,7 +10,8 @@ import time
 from datetime import UTC, datetime
 from functools import lru_cache, wraps
 from pathlib import Path
-from typing import Any, Callable, ParamSpec, TypeVar, cast
+from typing import Any, ParamSpec, TypeVar, cast
+from collections.abc import Callable
 
 import psutil
 from cryptography.exceptions import InvalidSignature
@@ -269,10 +270,8 @@ def execute_benchmark_manifest(
     subject_sha256 = _benchmark_subject_sha256(manifest, corpus_sha256)
     if _is_enhanced_manifest(manifest):
         if (
-            receipt_signing_key is None
-            and receipt_signing_provider is None
-            or trust_policy is None
-        ):
+            receipt_signing_key is None and receipt_signing_provider is None
+        ) or trust_policy is None:
             raise BenchmarkExecutionError(
                 "deployment receipt signing configuration is unavailable"
             )
@@ -573,10 +572,8 @@ def execute_benchmark_manifest(
     tracker.advance(BenchmarkExecutionPhase.RECEIPT_ASSEMBLED)
     if _is_enhanced_manifest(manifest):
         if (
-            receipt_signing_key is None
-            and receipt_signing_provider is None
-            or trust_policy is None
-        ):
+            receipt_signing_key is None and receipt_signing_provider is None
+        ) or trust_policy is None:
             raise BenchmarkExecutionError(
                 "deployment receipt signing configuration is unavailable"
             )

@@ -471,11 +471,11 @@ def _content_schemas(body: dict[str, Any]) -> list[tuple[str, object]]:
     content = body.get("content")
     if not isinstance(content, dict):
         return []
-    return [
-        (str(media_type), value.get("schema"))
-        for media_type, value in content.items()
-        if isinstance(value, dict)
-    ][:100]
+    schemas: list[tuple[str, object]] = []
+    for media_type, value in content.items():
+        if isinstance(value, dict):
+            schemas.append((str(media_type), value.get("schema")))
+    return schemas[:100]
 
 
 def _resolve_schema(value: object, document: dict[str, Any]) -> object:

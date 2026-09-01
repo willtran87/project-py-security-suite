@@ -138,6 +138,18 @@ def test_hostile_binary_targets_have_deterministic_production_oracles(
         module._inspect_native_binary(seed.read_bytes())
 
 
+def test_standards_manifest_seed_reaches_the_production_validator(
+    tmp_path: Path,
+) -> None:
+    module = _script()
+    corpus = tmp_path / "standards"
+
+    module._seed_target_corpus("standards-manifest", corpus)
+    document = json.loads((corpus / "minimal.json").read_text())
+
+    module._validate_manifest(document)
+
+
 def test_bytecode_fuzz_oracle_uses_resource_contained_production_boundary(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

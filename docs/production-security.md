@@ -63,7 +63,11 @@ Job Object resource controls remain a separate availability mechanism.
   use eight complete adapter shards while main and daily runs retain individual
   adapter campaigns; evolved corpora are retained for 180 days; and
 - weekly deep assurance builds and self-scans the scanner container and
-  mutation-tests security-critical archive, path, artifact, and JSON code.
+  mutation-tests 45 security-critical archive, path, artifact, isolation,
+  receipt, policy, release, and trust modules on Python 3.13. The mutation
+  launcher preloads and self-checks fork-sensitive native cryptography types in
+  Mutmut's parent before it creates workers; this prevents false baseline
+  failures without deselecting security tests.
 
 Secret-bearing findings cross an additional fail-closed boundary before
 correlation or derived analysis: scanner-controlled titles, descriptions,
@@ -192,6 +196,21 @@ being silently omitted. Scanner rules and offline databases are independently
 digest-sealed before and after execution. The original checkout is rehashed
 afterward. Any race or mutation makes the result
 `INCOMPLETE`; analyzers never combine pre-change and post-change files.
+
+The scheduled deep-assurance workflow acquires the OSV PyPI snapshot outside
+the Docker build, constrains the publisher host and response size, records its
+source, timestamp, size and SHA-256, and passes only the sealed directory as a
+named BuildKit context. Scanner dependencies have an independent uv lock and
+hash export, preventing scanner resolver constraints from changing the product
+environment. The built image contains a deterministic CycloneDX 1.6 Python
+SBOM. CI extracts it without network access, binds its digest to the local image
+configuration ID and OSV input in a retained receipt, and produces GitHub build
+provenance attestations on trusted non-PR runs. Its aggregate `Deep assurance
+required gate` succeeds only when both the production self-scan and expanded
+security-critical mutation jobs pass. Deep assurance runs on relevant pull
+requests, weekly, manually, and as a required reusable release precondition.
+This aggregate check is the stable status to protect when repository policy
+promotes deep assurance to a required branch gate.
 
 After the approved build has produced `dist/`, run the `release` profile
 against the same immutable checkout. Stage each PyPI Integrity API provenance

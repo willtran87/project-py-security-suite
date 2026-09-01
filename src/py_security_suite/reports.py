@@ -852,7 +852,7 @@ def _render_data_exposure_summary(value: dict[str, Any] | None) -> list[str]:
     summary = value["summary"]
     assessments = value.get("finding_assessments", [])
     surfaces = value.get("sink_surfaces", [])
-    production_surfaces = (
+    production_surfaces: list[dict[str, Any]] = (
         [
             item
             for item in surfaces
@@ -5200,9 +5200,14 @@ def _sarif_code_flow_summary(value: list[Any]) -> list[dict[str, Any]]:
             else "unclassified-code-flow"
         )
         raw_counts = flow.get("thread_flow_location_resolution_counts")
-        counts = raw_counts if isinstance(raw_counts, dict) else {}
+        counts: dict[object, object] = (
+            raw_counts if isinstance(raw_counts, dict) else {}
+        )
+        count_items: list[tuple[str, object]] = [
+            (key, count) for key, count in counts.items() if isinstance(key, str)
+        ]
         bounded_counts = sorted(
-            ((key, count) for key, count in counts.items() if isinstance(key, str)),
+            count_items,
             key=lambda item: item[0],
         )[:20]
         summaries.append(
@@ -5381,7 +5386,7 @@ def _area_summary(
         area = finding.area.strip() or "unclassified"
         counts = areas.setdefault(
             area,
-            {name: 0 for name in [*severity_names, "total"]},
+            dict.fromkeys([*severity_names, "total"], 0),
         )
         counts[finding.severity.value] += 1
         counts["total"] += 1
@@ -7664,8 +7669,11 @@ def _threat_intelligence_summary(finding: Finding) -> str:
         values.append("CISA KEV: known exploitation")
     epss = intelligence.get("epss", [])
     if isinstance(epss, list) and epss:
+        epss_records: list[dict[str, Any]] = [
+            value for value in epss if isinstance(value, dict)
+        ]
         highest = max(
-            (value for value in epss if isinstance(value, dict)),
+            epss_records,
             key=lambda value: float(value.get("probability", 0.0)),
             default=None,
         )

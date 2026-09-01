@@ -77,7 +77,11 @@ def test_deep_assurance_executes_self_scan_and_mutation_testing() -> None:
     workflow = _workflow("deep-assurance.yml")
 
     assert "./scripts/run-self-scan.ps1" in workflow
-    assert "uv run --frozen mutmut run" in workflow
+    assert (
+        "uv run --frozen python scripts/run_mutation_assurance.py --max-children 8"
+        in workflow
+    )
+    assert 'uv sync --locked --all-groups --python "3.13"' in workflow
     assert "--suspicious-policy=failure --untested-policy=failure" in workflow
 
 

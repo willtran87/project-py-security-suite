@@ -84,7 +84,6 @@ dev = [
   "tox>=4.30,<5",
   "zizmor>=1.28,<2",
 ]
-
 [project.scripts]
 py-security-suite = "py_security_suite.cli:main"
 pysec = "py_security_suite.cli:main"
@@ -113,7 +112,11 @@ py_security_suite = [
 [tool.pyright]
 include = [
   "src/py_security_suite/atomic_file.py",
+  "src/py_security_suite/application_contracts.py",
   "src/py_security_suite/attestation_formats.py",
+  "src/py_security_suite/benchmark_input_validation.py",
+  "src/py_security_suite/benchmark_semantic_evidence.py",
+  "src/py_security_suite/bounded_subprocess.py",
   "src/py_security_suite/bytecode_analysis.py",
   "src/py_security_suite/bytecode_parser_worker.py",
   "src/py_security_suite/checkpoint_authority.py",
@@ -123,15 +126,29 @@ include = [
   "src/py_security_suite/governance_replay.py",
   "src/py_security_suite/governance_quorum.py",
   "src/py_security_suite/git_replay.py",
+  "src/py_security_suite/failure_domain.py",
   "src/py_security_suite/industry_extension_evidence.py",
+  "src/py_security_suite/industry_assurance.py",
+  "src/py_security_suite/isolation_probe.py",
+  "src/py_security_suite/llm_adversarial.py",
   "src/py_security_suite/native_evidence.py",
+  "src/py_security_suite/operational_trend.py",
+  "src/py_security_suite/orchestrator.py",
   "src/py_security_suite/performance_assurance.py",
+  "src/py_security_suite/path_safety.py",
   "src/py_security_suite/repository_file_policy.py",
+  "src/py_security_suite/reports.py",
+  "src/py_security_suite/requirements_coverage.py",
   "src/py_security_suite/release_readiness.py",
+  "src/py_security_suite/risk_paths.py",
   "src/py_security_suite/standards_monitor.py",
+  "src/py_security_suite/strict_json.py",
   "scripts/audit_github_assurance_controls.py",
   "scripts/extract_github_artifact.py",
   "scripts/generate_architecture_assurance.py",
+  "scripts/generate_ci_assurance_metrics.py",
+  "scripts/prepare_scanner_database.py",
+  "scripts/run_mutation_assurance.py",
   "scripts/validate_architecture_cycles.py",
   "scripts/validate_architecture_limits.py",
   "scripts/validate_live_assurance_policy.py",
@@ -149,7 +166,7 @@ reportUnknownMemberType = false
 reportUnknownVariableType = false
 
 [tool.ruff.lint]
-select = ["ASYNC", "B", "BLE", "E4", "E7", "E9", "F", "S"]
+select = ["ASYNC", "B", "BLE", "C4", "E4", "E7", "E9", "F", "RUF021", "S", "UP035"]
 
 [tool.ruff.lint.per-file-ignores]
 "src/py_security_suite/source_context.py" = ["S105"]
@@ -166,7 +183,11 @@ show_missing = true
 skip_covered = false
 
 [tool.mutmut]
-source_paths = ["src/"]
+source_paths = [
+  "src/",
+  "companion/__init__.py",
+  "companion/strict_json.py",
+]
 only_mutate = [
   "src/py_security_suite/application_contracts.py",
   "src/py_security_suite/artifact_validation.py",
@@ -186,12 +207,16 @@ only_mutate = [
   "src/py_security_suite/benchmark_scoring.py",
   "src/py_security_suite/bounded_subprocess.py",
   "src/py_security_suite/checkpoint_authority.py",
+  "src/py_security_suite/execution_policy.py",
+  "src/py_security_suite/failure_domain.py",
   "src/py_security_suite/git_replay.py",
   "src/py_security_suite/industry_benchmark_scoring.py",
   "src/py_security_suite/industry_extension_evidence.py",
   "src/py_security_suite/industry_receipt_trust.py",
+  "src/py_security_suite/isolation_probe.py",
   "src/py_security_suite/native_parser_worker.py",
   "src/py_security_suite/organization_policy_attestation.py",
+  "src/py_security_suite/operation_receipt.py",
   "src/py_security_suite/capability_manifest.py",
   "src/py_security_suite/code_health.py",
   "src/py_security_suite/confidential_archive.py",
@@ -201,10 +226,12 @@ only_mutate = [
   "src/py_security_suite/path_safety.py",
   "src/py_security_suite/policy.py",
   "src/py_security_suite/risk_acceptance.py",
+  "src/py_security_suite/release_readiness.py",
   "src/py_security_suite/runtime_reachability.py",
   "src/py_security_suite/strict_json.py",
   "src/py_security_suite/trust_attestation.py",
   "src/py_security_suite/trusted_time.py",
+  "src/py_security_suite/trusted_observation.py",
   "src/py_security_suite/standards_monitor.py",
   "src/py_security_suite/static_architecture.py",
 ]
@@ -227,6 +254,7 @@ pytest_add_cli_args_test_selection = [
   "tests/test_git_replay.py",
   "tests/resilience/test_assurance_resilience.py",
   "tests/test_security_trust_closure.py",
+  "tests/test_isolation_probe.py",
   "tests/test_industry_benchmark_scoring.py",
   "tests/test_industry_extension_evidence.py",
   "tests/test_native_parser_worker.py",
@@ -239,6 +267,8 @@ pytest_add_cli_args_test_selection = [
   "tests/test_policy.py",
   "tests/test_risk_acceptance.py",
   "tests/test_reachability.py",
+  "tests/test_release_readiness.py",
+  "tests/test_trusted_observation.py",
 ]
 pytest_add_cli_args = [
   "-p", "no:randomly",

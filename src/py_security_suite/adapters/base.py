@@ -162,7 +162,7 @@ class ScannerAdapter(ABC):
                         self.config.rules_path = copies["rules"]
                     if "database" in copies:
                         self.config.database_path = copies["database"]
-                    self._asset_snapshot_verified = {label: True for label in copies}
+                    self._asset_snapshot_verified = dict.fromkeys(copies, True)
                     return self._run_ready(target, executable)
                 finally:
                     self.config.rules_path = originals["rules"]

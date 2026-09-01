@@ -144,12 +144,12 @@ automation contracts.
 | Gate | Current enforced scope |
 |---|---|
 | Unit and integration suite | 1,559 passed, 20 platform-limited skips, and 499 subtests in the final retained full-suite run |
-| Combined statement/branch coverage | 81.65%, with a minimum aggregate floor of 80% plus 47 security-critical module ratchets |
+| Combined statement/branch coverage | CI enforces an 80% aggregate floor plus 49 security-critical module ratchets; exact revision-bound totals are retained with every assurance run |
 | Changed-line coverage | 90% minimum in protected CI |
-| Static typing | The complete production, companion, and Pages-audit source set checked by mypy plus a pinned strict Pyright gate over 25 trust, parser, authority, replay, resilience, performance, and policy boundary files |
+| Static typing | The complete production, companion, and Pages-audit source set checked by mypy plus a pinned strict Pyright gate over 32 production trust, parser, authority, replay, resilience, performance, reporting, and policy modules and 12 assurance scripts |
 | Schema/runtime consistency | 204 bundled JSON Schemas and 164 runtime exports |
 | Public compatibility | Exhaustive additive baseline across 58 commands, 469 positional/option shape contracts, 164 byte-immutable bundled schemas, three console scripts, and two Python callable signatures |
-| Architecture enforcement | Exact Tach graph across 148 production module boundaries, one frozen seven-module trust/runtime SCC debt group that cannot expand, dependency-inverted attestation parsing, split standards/benchmark/profile/open-source-extension catalogs, isolated bytecode parsing, progressive concentration ceilings, and retained schema-valid architecture evidence |
+| Architecture enforcement | Exact Tach graph across 152 production module boundaries, one frozen seven-module trust/runtime SCC debt group that cannot expand, dependency-inverted attestation parsing, split standards/benchmark/profile/open-source-extension catalogs, isolated bytecode parsing, progressive concentration ceilings, and retained schema-valid architecture evidence |
 | Reference performance | Five-repetition p95 suite for 10,000-case strict JSON/scoring, canonical serialization, the complete schema catalog, production-source inventory, and full production AST parsing, plus an isolated real code-health/static-architecture repository pipeline with child-process memory and latency budgets |
 | Mandatory live assurance | Required Docker/rootless-Podman OCI, Linux/macOS/Windows containment, PostgreSQL/Kafka, and authenticated Chromium/Firefox/WebKit CI lanes; browser policy is AST-verified and every required engine/role case must pass in retained JUnit evidence |
 | Scheduled depth | Daily JSON/XML/archive/SARIF/adapter plus Python-bytecode, WebAssembly, and PE/ELF/Mach-O parser fuzzing; weekly mutation, descendant-process resilience, CodeQL, and protected signing-provider conformance |
@@ -182,9 +182,9 @@ self-scan to establish a new baseline.
 | Reachability graph | Schema 1.2; per-island confidence and explained edges |
 | Reachability states | 1,350 executable; 123 load-only; 0 disconnected; 0 reportable islands |
 | Runtime corroboration | Refreshed branch-aware coverage from every unit/property test; static states are not reclassified by runtime evidence |
-| Retained test run | 1,061 collected: 1,043 passed and 18 platform-limited skips; 494 subtests passed |
+| Retained test run | Revision-bound counts are generated from the current JUnit artifact as `assurance-metrics.json` and `assurance-metrics.md`; historical counts are never presented as current checkout state |
 | Repository automation | Locked tests on Python 3.11–3.14 with 3.14 Windows/macOS parity; enforced branch and diff coverage, security/correctness lint, mutation assurance, pedantic workflow audit, mypy, strict dependency audit, polyglot CodeQL `security-extended`, and audited Pages deployment |
-| Combined line and branch coverage | 90.07% across 13,486 statements and 4,558 branches; 92.98% statement and 81.48% branch coverage |
+| Combined line and branch coverage | CI enforces at least 80% combined coverage and emits exact revision-bound totals in the retained `test-assurance-*` artifact; pull requests additionally require at least 90% changed-line coverage |
 | Changed-line coverage | Recomputed on every scan; uncovered changed executable lines remain explicit in `diff-coverage.json` |
 | Operational portfolio | Execution A; observed risk D; evidence F; the stale Grype database remains an explicit supply-chain evidence gap |
 | Labeled self-scan smoke benchmark | PASS; 1 TP, 1 TN, 0 FP, 0 FN; explicitly non-governed and insufficient for production |

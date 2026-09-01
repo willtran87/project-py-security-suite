@@ -115,7 +115,7 @@ def _issues(document: dict[str, Any]) -> list[tuple[str, dict[str, str]]]:
         value = non_compliant.get(key, [])
         if isinstance(value, dict):
             value = [
-                dict(path=str(path), message=str(message))
+                {"path": str(path), "message": str(message)}
                 for path, message in value.items()
             ]
         if not isinstance(value, list):

@@ -72,7 +72,7 @@ class DoctorTests(unittest.TestCase):
             with (
                 patch.dict(
                     "py_security_suite.doctor.ADAPTER_TYPES",
-                    {name: _ReadyAdapter for name in config.selected_tools},
+                    dict.fromkeys(config.selected_tools, _ReadyAdapter),
                     clear=True,
                 ),
                 patch("py_security_suite.doctor.enrich_findings") as intelligence,
@@ -104,7 +104,7 @@ class DoctorTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             target = Path(directory)
             config = load_config(profile_override="standard")
-            adapters = {name: _ReadyAdapter for name in config.selected_tools}
+            adapters = dict.fromkeys(config.selected_tools, _ReadyAdapter)
             adapters["semgrep"] = _UnavailableAdapter
             with (
                 patch.dict(
@@ -145,7 +145,7 @@ class DoctorTests(unittest.TestCase):
             target = Path(directory)
             config = load_config(profile_override="standard")
             config.policy.required_scanners = ("bandit", "detect-secrets")
-            adapters = {name: _ReadyAdapter for name in config.selected_tools}
+            adapters = dict.fromkeys(config.selected_tools, _ReadyAdapter)
             adapters["semgrep"] = _UnavailableAdapter
             with (
                 patch.dict(
@@ -217,7 +217,7 @@ class DoctorTests(unittest.TestCase):
             with (
                 patch.dict(
                     "py_security_suite.doctor.ADAPTER_TYPES",
-                    {name: _EvidenceAdapter for name in config.selected_tools},
+                    dict.fromkeys(config.selected_tools, _EvidenceAdapter),
                     clear=True,
                 ),
                 patch("py_security_suite.doctor.enrich_findings") as intelligence,

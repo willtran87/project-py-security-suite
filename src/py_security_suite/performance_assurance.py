@@ -11,7 +11,8 @@ import time
 import tracemalloc
 from importlib.resources import files
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
+from collections.abc import Callable
 
 from jsonschema.validators import validator_for  # type: ignore[import-untyped]
 import psutil

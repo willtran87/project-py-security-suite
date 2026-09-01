@@ -74,9 +74,9 @@ def _claims(identifier: str) -> dict[str, Any]:
     return {
         **contract["scalars"],
         **{name: sorted(values) for name, values in contract["sets"].items()},
-        **{name: 3 for name in contract["counts"]},
-        **{name: True for name in contract["required_true"]},
-        **{name: False for name in contract["required_false"]},
+        **dict.fromkeys(contract["counts"], 3),
+        **dict.fromkeys(contract["required_true"], True),
+        **dict.fromkeys(contract["required_false"], False),
     }
 
 

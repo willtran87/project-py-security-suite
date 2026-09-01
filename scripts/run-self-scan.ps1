@@ -10,6 +10,20 @@ $artifactRoot = Join-Path $workspace ".artifacts"
 New-Item -ItemType Directory -Path $artifactRoot -Force | Out-Null
 $artifactRoot = (Resolve-Path -LiteralPath $artifactRoot).Path
 
+$runtimeIdentityArguments = @()
+if ($IsLinux -or $IsMacOS) {
+    $runtimeUid = (& id -u).Trim()
+    $runtimeGid = (& id -g).Trim()
+    if ($runtimeUid -notmatch "^[0-9]+$" -or $runtimeGid -notmatch "^[0-9]+$") {
+        throw "Unable to resolve the invoking Unix identity"
+    }
+    $runtimeIdentityArguments = @(
+        "--user", "${runtimeUid}:${runtimeGid}",
+        "--env", "HOME=/tmp",
+        "--env", "XDG_CACHE_HOME=/tmp/.cache"
+    )
+}
+
 docker run `
     --rm `
     --network none `
@@ -22,6 +36,7 @@ docker run `
     --tmpfs /tmp:rw,noexec,nosuid,size=512m `
     --mount "type=bind,source=$workspace,target=/workspace,readonly" `
     --mount "type=bind,source=$artifactRoot,target=/out" `
+    @runtimeIdentityArguments `
     --env PYTHONDONTWRITEBYTECODE=1 `
     $Image `
     scan /workspace `

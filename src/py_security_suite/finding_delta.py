@@ -391,7 +391,7 @@ def _baseline_compatibility(
     if current_tools:
         if not isinstance(baseline_tools, list) or not baseline_tools:
             reasons.append("baseline does not declare its selected tool set")
-        elif set(str(value) for value in baseline_tools) != set(current_tools):
+        elif {str(value) for value in baseline_tools} != set(current_tools):
             reasons.append("baseline selected tool set does not match the current scan")
     return not reasons, reasons
 

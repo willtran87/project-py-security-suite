@@ -4504,8 +4504,12 @@ def _attach_route_ownership(
         for _identifier, record in sorted(boundary_index.items())
     ]
     evidence_available = bool(rules)
-    unowned = (
-        sorted(record["path"] for record in file_records if not record["owners"])
+    unowned: list[str] = (
+        sorted(
+            _path(record.get("path"))
+            for record in file_records
+            if not record.get("owners")
+        )
         if evidence_available
         else []
     )

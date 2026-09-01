@@ -168,11 +168,10 @@ def _verify_single_rfc3161(
         raise ValueError(
             "timestamp signer certificate is not authorized for timestamping"
         )
-    if (
-        not certificate.not_valid_before_utc
-        <= issued_at
-        <= certificate.not_valid_after_utc
-    ):
+    certificate_valid_at_issuance = (
+        certificate.not_valid_before_utc <= issued_at <= certificate.not_valid_after_utc
+    )
+    if not certificate_valid_at_issuance:
         raise ValueError("timestamp signer certificate was not valid at issuance")
     trust_sha256 = ""
     revocation_sha256 = ""

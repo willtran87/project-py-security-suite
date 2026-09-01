@@ -89,12 +89,14 @@ def verify_registered_failure_domain(
         document = _verify_fresh_registry(document)
     elif fresh_required:
         raise ValueError("a fresh threshold-signed failure-domain registry is required")
+    generation = document.get("generation") if isinstance(document, dict) else None
     if (
         not isinstance(document, dict)
         or set(document) != {"schema_version", "generation", "authorities"}
         or document.get("schema_version") != "1.0"
-        or not isinstance(document.get("generation"), int)
-        or document["generation"] < 1
+        or isinstance(generation, bool)
+        or not isinstance(generation, int)
+        or generation < 1
         or not isinstance(document.get("authorities"), list)
     ):
         raise ValueError("failure-domain registry is invalid")

@@ -10,12 +10,61 @@ import pytest
 from py_security_suite.config import IsolationConfig
 from py_security_suite.execution import RawExecution
 from py_security_suite.isolation_probe import (
+    _apply_platform_policy_capabilities,
     _host_ipv4_address,
+    _platform_policy_observations,
     probe_isolation_boundary,
 )
 
 
 class IsolationProbeTests(unittest.TestCase):
+    def test_linux_policy_interpretation_requires_bound_seccomp_controls(self) -> None:
+        parsed: dict[str, object] = {
+            "process_id": 123,
+            "kernel_identity_sha256": "a" * 64,
+            "linux_policy_tested": True,
+            "linux_no_new_privileges": True,
+            "linux_capabilities_dropped": True,
+            "linux_seccomp_mode": 2,
+            "linux_seccomp_filters": 1,
+        }
+        with patch.dict(
+            "py_security_suite.isolation_probe.os.environ",
+            {"PYSEC_SECCOMP_POLICY_SHA256": "b" * 64},
+            clear=False,
+        ):
+            observations = _platform_policy_observations(
+                parsed, IsolationConfig(), "linux"
+            )
+        capabilities: dict[str, bool] = {}
+        _apply_platform_policy_capabilities(capabilities, observations)
+
+        self.assertTrue(all(capabilities.values()))
+        self.assertEqual(observations["seccomp_mode"], 2)
+
+    def test_macos_policy_interpretation_binds_the_complete_launcher_contract(
+        self,
+    ) -> None:
+        parsed: dict[str, object] = {
+            "process_id": 123,
+            "kernel_identity_sha256": "a" * 64,
+            "linux_policy_tested": False,
+            "windows_policy_tested": False,
+        }
+        config = IsolationConfig(
+            sandbox_executable="sandbox-exec",
+            sandbox_executable_sha256="b" * 64,
+            sandbox_runtime_closure_sha256="c" * 64,
+            sandbox_arguments=("-f", "profile.sb"),
+        )
+        observations = _platform_policy_observations(parsed, config, "darwin")
+        capabilities: dict[str, bool] = {}
+        _apply_platform_policy_capabilities(capabilities, observations)
+
+        self.assertEqual(observations["platform"], "macos")
+        self.assertEqual(len(str(observations["sandbox_profile_sha256"])), 64)
+        self.assertTrue(capabilities["macos-sandbox-profile-bound"])
+
     def test_host_interface_selection_rejects_unsafe_ipv4_addresses(self) -> None:
         addresses = [
             (2, 1, 6, "", ("0.0.0.0", 0)),  # noqa: S104 - rejection fixture
@@ -136,6 +185,43 @@ class IsolationProbeTests(unittest.TestCase):
         self.assertFalse(artifact["complete"])
         self.assertNotEqual(errors, [])
         self.assertFalse(artifact["capabilities"]["linux-no-new-privileges"])
+
+    @pytest.mark.enable_socket
+    def test_malformed_probe_output_fails_closed_before_policy_interpretation(
+        self,
+    ) -> None:
+        execution = RawExecution(
+            command=["probe"],
+            exit_code=0,
+            stdout="not-json",
+            stderr="",
+            duration_seconds=0.1,
+            resource_limits_enforced=(
+                "bounded-output-pipes",
+                "bounded-private-scratch",
+            ),
+        )
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch(
+                "py_security_suite.isolation_probe.run_command", return_value=execution
+            ),
+            patch("py_security_suite.isolation_probe.sys.platform", "darwin"),
+        ):
+            artifact, errors = probe_isolation_boundary(
+                Path(directory), IsolationConfig(), required=True
+            )
+
+        self.assertFalse(artifact["complete"])
+        self.assertNotEqual(errors, [])
+        self.assertEqual(
+            artifact["policy_observations"],
+            {"platform": "macos", "policy_introspection_available": False},
+        )
+        self.assertEqual(
+            artifact["capabilities"], {"macos-sandbox-profile-bound": False}
+        )
+        self.assertIsInstance(artifact["error"], str)
 
     def test_optional_probe_does_not_make_standard_scan_incomplete(self) -> None:
         artifact, errors = probe_isolation_boundary(

@@ -90,7 +90,7 @@ def policy_failures(
                 failures.append(f"{job_name} {dimension} policy is invalid")
                 continue
             observed_matrix = _matrix_values(job, dimension)
-            missing = sorted(set(str(item) for item in expected) - observed_matrix)
+            missing = sorted({str(item) for item in expected} - observed_matrix)
             if missing:
                 failures.append(
                     f"{job_name} omits required {dimension} values: "

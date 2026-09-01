@@ -57,6 +57,10 @@ with atheris.instrument_imports() if atheris is not None else nullcontext():
     from py_security_suite.models import Finding, json_ready
     from py_security_suite.strict_json import canonical_bytes
     from py_security_suite.strict_json import loads as strict_loads
+    from py_security_suite.standards_monitor import (
+        StandardsMonitorError,
+        _validate_manifest,
+    )
 
 
 def _instrument_fuzz_function(function: Any) -> Any:
@@ -170,6 +174,17 @@ def test_one_input(data: bytes) -> None:
                 semantic_oracle_sha256="c" * 64,
             )
         except (BenchmarkAdapterConformanceError, TypeError, ValueError):
+            pass
+        return
+    if _TARGET_NAME == "standards-manifest":
+        try:
+            parsed = strict_loads(payload)
+            _validate_manifest(parsed)
+            if canonical_bytes(
+                strict_loads(canonical_bytes(parsed))
+            ) != canonical_bytes(parsed):
+                raise RuntimeError("standards manifest canonicalization is unstable")
+        except (StandardsMonitorError, TypeError, ValueError):
             pass
         return
     if _TARGET_NAME == "python-bytecode":
@@ -553,6 +568,34 @@ def _seed_target_corpus(target: str, destination: Path) -> None:
             ),
             encoding="utf-8",
         )
+    elif target == "standards-manifest":
+        (destination / "minimal.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": "1.0",
+                    "allowed_hosts": ["standards.example"],
+                    "sources": [
+                        {
+                            "id": "EXAMPLE-1",
+                            "publisher": "Example publisher",
+                            "url": "https://standards.example/example.json",
+                            "baseline_version": "1.0",
+                            "baseline_sha256": "0" * 64,
+                            "maximum_bytes": 1024,
+                            "baseline_path": "baselines/example.json",
+                            "media_type": "application/json",
+                            "impact": {
+                                "profiles": ["example-profile"],
+                                "controls": ["example-control"],
+                                "benchmarks": ["example-benchmark"],
+                            },
+                        }
+                    ],
+                },
+                sort_keys=True,
+            ),
+            encoding="utf-8",
+        )
     elif target == "python-bytecode":
         code = compile("import json\neval('1')\n", "fuzz_seed.py", "exec")
         (destination / "valid.pyc").write_bytes(
@@ -636,6 +679,12 @@ def main() -> None:
                 "coverage_floor": 12,
             },
             {
+                "target": "standards-manifest",
+                "artifact": "standards-manifest",
+                "seconds": 420,
+                "coverage_floor": 12,
+            },
+            {
                 "target": "python-bytecode",
                 "artifact": "python-bytecode",
                 "seconds": 420,
@@ -705,6 +754,7 @@ def main() -> None:
         "benchmark-authority-entry",
         "benchmark-security-event",
         "benchmark-adapter-conformance",
+        "standards-manifest",
         "python-bytecode",
         "webassembly",
         "native-binary",

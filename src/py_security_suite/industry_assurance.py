@@ -1326,7 +1326,7 @@ def _assurance_case_assessment(artifacts: dict[str, Any]) -> dict[str, Any]:
         gaps.append(
             f"orphaned evidence is not cited by the assurance case: {identifier}"
         )
-    indegree = {identifier: 0 for identifier in claim_ids}
+    indegree = dict.fromkeys(claim_ids, 0)
     for targets in support_graph.values():
         for target in targets:
             indegree[target] += 1

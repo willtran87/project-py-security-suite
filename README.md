@@ -25,7 +25,7 @@ creates a GitHub-friendly report artifact.
 | Advisory fusion | Package-scoped CVE/GHSA/PYSEC/OSV alias clustering across source and artifact scanners, with distinct-risk/observation counts plus CycloneDX introducing-root paths, pipdeptree environment health, Graphify imports, reachability/runtime state, and deptry-use context |
 | Data exposure | CWE-grounded flows into logs, telemetry, URL queries, client errors, runtime-state dumps, and process streams; monorepo SDK/configuration inventory; owner-, graph-, change-risk-, runtime-, test-, and SDK-package-aware disclosure triage |
 | Runtime | Python 3.11+; scanners are installed separately from approved offline bundles |
-| Suite assurance | Exact 149-boundary dependency graph with one frozen seven-module bootstrap SCC; mypy plus a pinned strict Pyright gate over 26 trust-boundary files; 47 security-critical coverage ratchets; six performance workloads including the real code-health/static-architecture pipeline; AST-verified live-test policy plus complete JUnit engine/role matrix evidence; and aggregate-only governed effectiveness statistics that preserve holdout secrecy while supporting release thresholds |
+| Suite assurance | Exact 152-boundary dependency graph with one frozen seven-module bootstrap SCC; mypy plus a pinned strict Pyright gate over 32 production trust-boundary modules and 12 assurance scripts; 49 security-critical coverage ratchets; six performance workloads including the real code-health/static-architecture pipeline; AST-verified live-test policy plus complete JUnit engine/role matrix evidence; and aggregate-only governed effectiveness statistics that preserve holdout secrecy while supporting release thresholds |
 
 Key trust properties:
 
@@ -738,15 +738,31 @@ configuration is rejected when it weakens protected organization settings.
 ## Reproducible scanner container
 
 The connected update/build lane is represented by
-`containers/scanner/Dockerfile`. It pins the four top-level scanner versions,
-verifies the OSV-Scanner release and PyPI advisory snapshot checksums, embeds
-the orchestrator and local Semgrep rules, preloads the PyPI OSV database, and
-records installed Python packages and database digests inside the image.
+`containers/scanner/Dockerfile`. It pins the Docker frontend and base image by
+digest, resolves scanner-only dependencies in the dedicated
+`containers/scanner/pyproject.toml` and `containers/scanner/uv.lock`, installs
+that full runtime/scanner closure from the hash-locked
+`containers/scanner/requirements.lock`, verifies the OSV-Scanner release,
+consumes one separately acquired and sealed PyPI advisory snapshot through a
+named BuildKit context, embeds the orchestrator and local Semgrep rules, and
+records installed Python packages and database digests inside the image. This
+keeps Semgrep's dependency graph out of the application's root lock. The
+mutable publisher URL is never resolved inside the Docker build.
 
 ```powershell
-.\scripts\build-scanner-image.ps1
+python -I .\scripts\prepare_scanner_database.py `
+  --output .artifacts\scanner-inputs\osv-pypi
+.\scripts\build-scanner-image.ps1 `
+  -OsvDatabaseDirectory .artifacts\scanner-inputs\osv-pypi `
+  -EvidenceDirectory .artifacts\scanner-image
 .\scripts\run-self-scan.ps1
 ```
+
+The optional evidence directory contains the image configuration ID, sealed
+OSV snapshot digest, and the SHA-256 of an embedded deterministic CycloneDX 1.6
+Python SBOM. Deep assurance retains both files and issues GitHub build
+provenance attestations outside pull-request contexts. The receipt deliberately
+does not claim a registry manifest digest before the image is published.
 
 The scan command runs the resulting image with no network, a read-only source
 mount, no Linux capabilities, `no-new-privileges`, and only `.artifacts` mounted
