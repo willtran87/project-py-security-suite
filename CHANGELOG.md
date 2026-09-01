@@ -21,7 +21,9 @@
   form so the deep-assurance gate can generate its complete mutant catalog.
   Align mutation CI with Python 3.13 and preload/self-check fork-sensitive native
   cryptography types before Mutmut creates workers, preventing false baseline
-  failures without excluding security tests.
+  failures without excluding security tests. Preserve non-root host ownership for
+  Unix self-scan output mounts so the hardened scanner can write retained reports,
+  and align deep-assurance retention with the repository's 90-day policy.
 
 - Expand industry assurance to 663 versioned references, 233 selectable
   profiles, 282 benchmark families, 212 maintained adapters, and 116 strict

@@ -72,7 +72,7 @@ jobs:
           name: deep-self-scan-${{ github.sha }}
           path: .artifacts/deep-self-scan
           if-no-files-found: error
-          retention-days: 180
+          retention-days: 90
       - name: Retain the sealed scanner input receipt
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -82,7 +82,7 @@ jobs:
             .artifacts/deep-self-scan-inputs/osv-pypi/metadata.json
             .artifacts/deep-self-scan-inputs/osv-pypi/osv-pypi-all.zip.sha256
           if-no-files-found: error
-          retention-days: 180
+          retention-days: 90
       - name: Retain scanner image identity and SBOM evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -90,7 +90,7 @@ jobs:
           name: deep-self-scan-image-${{ github.sha }}
           path: .artifacts/deep-self-scan-image
           if-no-files-found: error
-          retention-days: 180
+          retention-days: 90
 
   mutation-assurance:
     name: Security-critical mutation testing
@@ -127,7 +127,7 @@ jobs:
             .artifacts/mutation
             mutants/mutmut-stats.json
           if-no-files-found: warn
-          retention-days: 180
+          retention-days: 90
 
   required-gate:
     name: Deep assurance required gate

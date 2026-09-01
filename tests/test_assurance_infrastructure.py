@@ -23,6 +23,7 @@ def test_deep_assurance_uses_sealed_database_input_and_aggregate_gate() -> None:
     assert "pull_request:" in workflow
     assert "Attest the exact scanner image evidence" in workflow
     assert "deep-self-scan-image-${{ github.sha }}" in workflow
+    assert "retention-days: 180" not in workflow
     release_workflow = (_ROOT / ".github/workflows/release-assurance.yml").read_text(
         encoding="utf-8"
     )
@@ -69,6 +70,17 @@ def test_scanner_build_cannot_resolve_the_mutable_database_url() -> None:
     assert "scanner-image-evidence.json" in build_script
     assert "python-sbom.cdx.json" in build_script
     assert "python_sbom_sha256" in build_script
+
+
+def test_self_scan_preserves_non_root_host_output_ownership_on_unix() -> None:
+    launcher = (_ROOT / "scripts/run-self-scan.ps1").read_text(encoding="utf-8")
+
+    assert "$IsLinux -or $IsMacOS" in launcher
+    assert "(& id -u).Trim()" in launcher
+    assert "(& id -g).Trim()" in launcher
+    assert '"--user", "${runtimeUid}:${runtimeGid}"' in launcher
+    assert '"HOME=/tmp"' in launcher
+    assert '"XDG_CACHE_HOME=/tmp/.cache"' in launcher
 
 
 def test_mutation_assurance_copies_only_required_companion_support_code() -> None:
