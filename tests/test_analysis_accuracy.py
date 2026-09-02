@@ -42,11 +42,20 @@ def test_framework_import_without_manifest_is_fail_visible(tmp_path: Path) -> No
 
 
 def test_repository_framework_models_are_digest_bound_and_canary_qualified() -> None:
-    # Mutation runners copy the test module under a synthetic source tree while
-    # retaining the repository as the working directory. Resolve governed model
-    # subjects from that stable execution boundary, not from ``__file__``.
-    repository = Path.cwd().resolve()
-    assert (repository / ".pysec-models.json").is_file()
+    # Mutation runners copy the test module and execute from a synthetic
+    # ``mutants`` directory. Find the governed project boundary from the current
+    # execution tree instead of coupling this test to either ``__file__`` or an
+    # assumed working directory.
+    working_directory = Path.cwd().resolve()
+    repository = next(
+        (
+            candidate
+            for candidate in (working_directory, *working_directory.parents)
+            if (candidate / ".pysec-models.json").is_file()
+        ),
+        None,
+    )
+    assert repository is not None, "unable to locate the governed model manifest"
     grpc = _finding("semgrep")
     grpc.finding_id = "grpc-canary"
     grpc.sources[0].rule_id = "python.grpc-insecure-channel"
