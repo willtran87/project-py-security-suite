@@ -327,7 +327,7 @@ class CompanionAuthorizationSecurityTests(unittest.TestCase):
     def test_contract_rejects_external_or_credential_bearing_targets(self) -> None:
         for value in (
             "https://example.com/",
-            "http://user:password@localhost/",
+            "http://user:password@localhost/",  # pragma: allowlist secret
             "file:///tmp/app",
         ):
             with self.subTest(value=value), self.assertRaises(ValueError):

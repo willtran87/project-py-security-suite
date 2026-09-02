@@ -24,6 +24,7 @@ from py_security_suite.benchmark_execution import (
     _validate_attestation_document,
     _runtime_input_integrity_gaps,
     _trusted_attestation_time,
+    _validate_oci,
     execute_benchmark_manifest,
 )
 from py_security_suite.benchmark_adapters import benchmark_execution_contracts
@@ -1799,8 +1800,39 @@ def test_builds_hardened_digest_only_oci_command(tmp_path: Path) -> None:
     assert f"--volume={tmp_path}:/workspace:ro" in argv
     assert f"--volume={tmp_path / '.pysec-output'}:/workspace/.pysec-output:rw" in argv
     assert "--env=BENCHMARK_SEED" in argv
-    assert "--env=PYSEC_BENCHMARK_WORKSPACE=/workspace" in argv
+    workspace_environment = (
+        "--env=PYSEC_BENCHMARK_WORKSPACE=/workspace"  # pragma: allowlist secret
+    )
+    assert workspace_environment in argv
     assert argv[-2] == "/pysec/stage-executable"
+
+
+def test_validates_enhanced_oci_contract_and_rejects_unpinned_runtime(
+    tmp_path: Path,
+) -> None:
+    oci = {
+        "runtime": str((tmp_path / "docker").resolve()),
+        "runtime_sha256": "1" * 64,
+        "runtime_name": "docker",
+        "runtime_version": "27.0.0",
+        "runtime_capabilities_sha256": "2" * 64,
+        "runtime_trust_sha256": "3" * 64,
+        "image": "registry.example/adapter@sha256:" + "4" * 64,
+        "memory_bytes": 512 * 1024 * 1024,
+        "cpu_count": 2,
+        "pids_limit": 128,
+        "seccomp_profile": None,
+        "seccomp_profile_sha256": None,
+        "apparmor_profile": "pysec-benchmark",
+        "maximum_output_bytes": 512 * 1024 * 1024,
+        "maximum_output_files": 10_000,
+    }
+
+    _validate_oci(oci, enhanced=True)
+
+    unpinned = {**oci, "runtime": "docker"}
+    with pytest.raises(BenchmarkExecutionError, match="absolute path"):
+        _validate_oci(unpinned, enhanced=True)
 
 
 def test_actively_verifies_and_pins_oci_runtime_capabilities(tmp_path: Path) -> None:

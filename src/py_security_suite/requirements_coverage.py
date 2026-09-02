@@ -204,8 +204,8 @@ def security_requirements_coverage_artifact(
             "standard": "OWASP-ASVS",
             "version": "5.0.0",
             "source": "https://github.com/OWASP/ASVS/tree/936f29673daa69fe90e6fa706011f89aef201988/5.0/en",
-            "source_revision": "936f29673daa69fe90e6fa706011f89aef201988",
-            "catalog_sha256": "5cbaa260b0f6386096a2ba5e066c1843efc32abb2c4e1f52609cacd7c6d219da",
+            "source_revision": "936f29673daa69fe90e6fa706011f89aef201988",  # pragma: allowlist secret
+            "catalog_sha256": "5cbaa260b0f6386096a2ba5e066c1843efc32abb2c4e1f52609cacd7c6d219da",  # pragma: allowlist secret
             "requirements_in_catalog": 345,
             "requirements_mapped": 1,
         },
@@ -213,8 +213,8 @@ def security_requirements_coverage_artifact(
             "standard": "OWASP-MASVS",
             "version": "2.1.0",
             "source": "https://github.com/OWASP/masvs/tree/8e133d09f4140518ed04cc254b18be9ff4990ffc/controls",
-            "source_revision": "8e133d09f4140518ed04cc254b18be9ff4990ffc",
-            "catalog_sha256": "f5b769e80fcdd0bdb431d907fd4787684f521efb7a488d4abd0751d8194bc4be",
+            "source_revision": "8e133d09f4140518ed04cc254b18be9ff4990ffc",  # pragma: allowlist secret
+            "catalog_sha256": "f5b769e80fcdd0bdb431d907fd4787684f521efb7a488d4abd0751d8194bc4be",  # pragma: allowlist secret
             "requirements_in_catalog": None,
             "requirements_mapped": 2,
         },
@@ -222,7 +222,7 @@ def security_requirements_coverage_artifact(
             "standard": "OWASP-TCASVS",
             "version": "5.0.1",
             "source": "https://github.com/OWASP/TCASVS/tree/66d534f223c992882f25ac192d10f16f0779cc4a/5.0/en",
-            "source_revision": "66d534f223c992882f25ac192d10f16f0779cc4a",
+            "source_revision": "66d534f223c992882f25ac192d10f16f0779cc4a",  # pragma: allowlist secret
             "catalog_sha256": None,
             "requirements_in_catalog": None,
             "requirements_mapped": 3,
@@ -231,8 +231,8 @@ def security_requirements_coverage_artifact(
             "standard": "OWASP-AISVS",
             "version": "1.0",
             "source": "https://github.com/OWASP/AISVS/tree/78775233666a2022dcfb82037e5e029116955c00/1.0/en",
-            "source_revision": "78775233666a2022dcfb82037e5e029116955c00",
-            "catalog_sha256": "93d2abf8598c8068f2e83088df255b41ffacdc2d1a767505c20d4ed80a712e12",
+            "source_revision": "78775233666a2022dcfb82037e5e029116955c00",  # pragma: allowlist secret
+            "catalog_sha256": "93d2abf8598c8068f2e83088df255b41ffacdc2d1a767505c20d4ed80a712e12",  # pragma: allowlist secret
             "requirements_in_catalog": 191,
             "requirements_mapped": 3,
         },
@@ -1742,9 +1742,9 @@ def _replay_assertion(assertion: dict[str, Any], artifacts: dict[str, Any]) -> b
     if not found:
         return False
     if operator == "equals":
-        return observed == expected
+        return bool(observed == expected)
     if operator == "not-equals":
-        return observed != expected
+        return bool(observed != expected)
     if (
         isinstance(observed, bool)
         or isinstance(expected, bool)
@@ -1752,7 +1752,7 @@ def _replay_assertion(assertion: dict[str, Any], artifacts: dict[str, Any]) -> b
         or not isinstance(expected, (int, float))
     ):
         return False
-    return observed >= expected if operator == "gte" else observed <= expected
+    return bool(observed >= expected if operator == "gte" else observed <= expected)
 
 
 def _json_pointer(value: object, pointer: str) -> tuple[bool, object]:

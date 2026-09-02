@@ -64,7 +64,7 @@ def canonical_bytes(value: object) -> bytes:
 
     _validate_shape(value)
     try:
-        return rfc8785.dumps(cast(Any, value))
+        return bytes(rfc8785.dumps(cast(Any, value)))
     except rfc8785.CanonicalizationError as exc:
         raise ValueError("value cannot be represented as RFC 8785 JSON") from exc
 

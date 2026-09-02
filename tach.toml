@@ -42,6 +42,10 @@ path = "py_security_suite.architecture_history"
 depends_on = ["py_security_suite.models", "py_security_suite.execution"]
 
 [[modules]]
+path = "py_security_suite.artifact_contracts"
+depends_on = []
+
+[[modules]]
 path = "py_security_suite.artifact_validation"
 depends_on = ["py_security_suite.operation_receipt", "py_security_suite.deployment_receipt", "py_security_suite.requirements_coverage", "py_security_suite.runtime_trace", "py_security_suite.strict_json", "py_security_suite.pinned_command", "py_security_suite.native_evidence", "py_security_suite.boundary_graph", "py_security_suite.inventory", "py_security_suite.failure_domain", "py_security_suite.checkpoint_authority"]
 
@@ -291,7 +295,7 @@ depends_on = ["py_security_suite.models", "py_security_suite.strict_json"]
 
 [[modules]]
 path = "py_security_suite.framework_coverage"
-depends_on = ["py_security_suite.strict_json", "py_security_suite.path_safety", "py_security_suite.models"]
+depends_on = ["py_security_suite.artifact_contracts", "py_security_suite.strict_json", "py_security_suite.path_safety", "py_security_suite.models"]
 
 [[modules]]
 path = "py_security_suite.git_replay"
@@ -394,6 +398,10 @@ path = "py_security_suite.native_parser_worker"
 depends_on = ["py_security_suite.path_safety", "py_security_suite.boundary_graph"]
 
 [[modules]]
+path = "py_security_suite.polyglot_parser_worker"
+depends_on = ["py_security_suite.path_safety", "py_security_suite.boundary_graph"]
+
+[[modules]]
 path = "py_security_suite.operation_receipt"
 depends_on = ["py_security_suite.strict_json", "py_security_suite.trusted_observation"]
 
@@ -403,7 +411,7 @@ depends_on = ["py_security_suite.strict_json", "py_security_suite.passport", "py
 
 [[modules]]
 path = "py_security_suite.orchestrator"
-depends_on = ["py_security_suite.framework_coverage", "py_security_suite.effectiveness", "py_security_suite.runtime_surface", "py_security_suite.structural_synthesis", "py_security_suite.capability_manifest", "py_security_suite.requirements_coverage", "py_security_suite.reports", "py_security_suite.semantic_coverage", "py_security_suite.version", "py_security_suite.static_architecture", "py_security_suite.trust_catalog", "py_security_suite.risk_paths", "py_security_suite.application_contracts", "py_security_suite.risk_intelligence", "py_security_suite.adapters", "py_security_suite.dependency_surface", "py_security_suite.isolation_probe", "py_security_suite.trust_policy", "py_security_suite.governance", "py_security_suite.runtime_reachability", "py_security_suite.config", "py_security_suite.data_exposure", "py_security_suite.inventory", "py_security_suite.code_health", "py_security_suite.industry_assurance", "py_security_suite.source_context", "py_security_suite.architecture_history", "py_security_suite.advanced_analysis", "py_security_suite.finding_delta", "py_security_suite.evidence_fusion", "py_security_suite.policy", "py_security_suite.runtime_trace", "py_security_suite.graph_analysis", "py_security_suite.models", "py_security_suite.strict_json", "py_security_suite.trust_attestation", "py_security_suite.correlation", "py_security_suite.path_safety", "py_security_suite.industry_receipt_trust", "py_security_suite.finding_validation", "py_security_suite.domain_assurance", "py_security_suite.execution", "py_security_suite.llm_adversarial", "py_security_suite.portfolio_health", "py_security_suite.failure_domain", "py_security_suite.admission", "py_security_suite.boundary_graph", "py_security_suite.closure_plan"]
+depends_on = ["py_security_suite.source_assurance", "py_security_suite.effectiveness", "py_security_suite.runtime_surface", "py_security_suite.structural_synthesis", "py_security_suite.capability_manifest", "py_security_suite.requirements_coverage", "py_security_suite.reports", "py_security_suite.semantic_coverage", "py_security_suite.version", "py_security_suite.trust_catalog", "py_security_suite.risk_paths", "py_security_suite.risk_intelligence", "py_security_suite.adapters", "py_security_suite.dependency_surface", "py_security_suite.isolation_probe", "py_security_suite.trust_policy", "py_security_suite.governance", "py_security_suite.runtime_reachability", "py_security_suite.config", "py_security_suite.data_exposure", "py_security_suite.inventory", "py_security_suite.industry_assurance", "py_security_suite.source_context", "py_security_suite.advanced_analysis", "py_security_suite.finding_delta", "py_security_suite.evidence_fusion", "py_security_suite.policy", "py_security_suite.runtime_trace", "py_security_suite.graph_analysis", "py_security_suite.models", "py_security_suite.strict_json", "py_security_suite.trust_attestation", "py_security_suite.correlation", "py_security_suite.path_safety", "py_security_suite.industry_receipt_trust", "py_security_suite.finding_validation", "py_security_suite.domain_assurance", "py_security_suite.execution", "py_security_suite.llm_adversarial", "py_security_suite.portfolio_health", "py_security_suite.failure_domain", "py_security_suite.admission", "py_security_suite.boundary_graph", "py_security_suite.closure_plan"]
 
 [[modules]]
 path = "py_security_suite.organization_policy_attestation"
@@ -548,6 +556,10 @@ depends_on = []
 [[modules]]
 path = "py_security_suite.semantic_coverage"
 depends_on = ["py_security_suite.strict_json", "py_security_suite.version"]
+
+[[modules]]
+path = "py_security_suite.source_assurance"
+depends_on = ["py_security_suite.application_contracts", "py_security_suite.architecture_history", "py_security_suite.code_health", "py_security_suite.framework_coverage", "py_security_suite.models", "py_security_suite.static_architecture"]
 
 [[modules]]
 path = "py_security_suite.source_context"

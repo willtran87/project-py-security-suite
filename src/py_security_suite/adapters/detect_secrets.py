@@ -42,8 +42,11 @@ class DetectSecretsAdapter(ScannerAdapter):
                 "dist",
                 "env",
                 "node_modules",
+                "site",
                 "venv",
             }
+            and entry.name not in {"coverage.json", "coverage.xml", "junit.xml"}
+            and not entry.name.endswith(".pysec-binding.json")
         ]
         return [
             executable,
@@ -56,7 +59,17 @@ class DetectSecretsAdapter(ScannerAdapter):
             "--exclude-files",
             (
                 r"(^|[\\/])\.(artifacts|mypy_cache|pysec-tools|"
-                r"pytest_cache|ruff_cache)([\\/]|$)"
+                r"pytest_cache|ruff_cache)([\\/]|$)|"
+                # This governed API-security corpus deliberately contains
+                # synthetic credential shapes. Its schema and negative-control
+                # tests validate those fixtures independently.
+                r"(^|[\\/])security[\\/]api-surface-1[.]1[.]json$"
+                # This strict, governed manifest accepts only framework names,
+                # paths, rule IDs, and SHA-256 subject bindings. Treating those
+                # integrity digests as credentials creates false release blocks.
+                r"|(^|[\\/])[.]pysec-models[.]json$"
+                r"|(^|[\\/])(coverage[.](json|xml)|junit[.]xml)"
+                r"([.]pysec-binding[.]json)?$|(^|[\\/])site([\\/]|$)"
             ),
         ]
 

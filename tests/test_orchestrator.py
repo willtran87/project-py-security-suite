@@ -25,6 +25,7 @@ from py_security_suite.models import (
     ToolStatus,
 )
 from py_security_suite.orchestrator import (
+    _STRUCTURAL_QUALITY_PROFILES,
     _runtime_evidence_paths,
     resolve_asset_paths,
     scan_project,
@@ -135,6 +136,9 @@ class MutatingSecrets(FakeSecrets):
 
 
 class OrchestratorTests(unittest.TestCase):
+    def test_standard_profile_includes_structural_quality_evidence(self) -> None:
+        self.assertIn("standard", _STRUCTURAL_QUALITY_PROFILES)
+
     def test_report_order_uses_derived_priority(self) -> None:
         def finding(
             finding_id: str,

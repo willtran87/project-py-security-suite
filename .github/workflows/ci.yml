@@ -112,7 +112,7 @@ jobs:
         run: uv sync --project companion --locked --all-groups --python "3.13"
       - name: Start TLS and SCRAM protected PostgreSQL
         shell: bash
-        run: |
+        run: | # pragma: allowlist secret -- keys are generated ephemerally below
           set -euo pipefail
           certs="$RUNNER_TEMP/pysec-postgres-certs"
           mkdir -p "$certs"
@@ -217,13 +217,13 @@ jobs:
       - name: Exercise live service semantics
         env:
           PYSEC_RUN_SERVICE_INTEGRATION: "1"
-          PYSEC_TEST_POSTGRES_DSN: "postgresql://postgres:pysec-integration-only@localhost:5432/postgres?sslmode=verify-full&channel_binding=require&sslrootcert=${{ runner.temp }}/pysec-postgres-certs/ca.crt"
+          PYSEC_TEST_POSTGRES_DSN: "postgresql://postgres:pysec-integration-only@localhost:5432/postgres?sslmode=verify-full&channel_binding=require&sslrootcert=${{ runner.temp }}/pysec-postgres-certs/ca.crt" # pragma: allowlist secret
           PYSEC_TEST_KAFKA_SERVERS: 127.0.0.1:9092
           PYSEC_TEST_KAFKA_CA: ${{ runner.temp }}/pysec-kafka-certs/ca.crt
           PYSEC_TEST_KAFKA_USER: pysec-test
-          PYSEC_TEST_KAFKA_PASSWORD: pysec-test-integration
+          PYSEC_TEST_KAFKA_PASSWORD: pysec-test-integration # pragma: allowlist secret
           PYSEC_TEST_KAFKA_RESTRICTED_USER: pysec-restricted
-          PYSEC_TEST_KAFKA_RESTRICTED_PASSWORD: pysec-restricted-integration
+          PYSEC_TEST_KAFKA_RESTRICTED_PASSWORD: pysec-restricted-integration # pragma: allowlist secret
         run: >-
           uv run --project companion --frozen pytest -q
           tests/integration/test_services_live.py
@@ -436,7 +436,7 @@ jobs:
         shell: bash
         env:
           ACTIONLINT_VERSION: "1.7.12"
-          ACTIONLINT_LINUX_AMD64_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+          ACTIONLINT_LINUX_AMD64_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8 # pragma: allowlist secret
         run: |
           set -euo pipefail
           archive="$RUNNER_TEMP/actionlint.tar.gz"
@@ -470,10 +470,22 @@ jobs:
           scripts/run_mutation_assurance.py
           scripts/validate_performance_budgets.py
           scripts/validate_public_api.py
+          scripts/validate_documentation_metrics.py
+          scripts/validate_mutation_assurance.py
+          scripts/validate_version_consistency.py
           scripts/validate_live_assurance_policy.py
           scripts/validate_live_test_results.py
           scripts/validate-native-attestation-fixtures.py
           scripts/verify_release_independent.py
+      - name: Enforce the strict primary type-contract surface
+        run: >-
+          uv run --frozen mypy
+          --config-file src/py_security_suite/rules/mypy.ini
+          src
+      - name: Require one authoritative package version
+        run: |
+          uv run --frozen python scripts/validate_version_consistency.py
+          uv run --frozen python -m scripts.validate_documentation_metrics
       - name: Enforce the strict secondary type-contract surface
         run: uv run --frozen pyright
       - name: Retain performance assurance evidence

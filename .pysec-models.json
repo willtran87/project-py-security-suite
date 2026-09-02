@@ -1,0 +1,31 @@
+{
+  "schema_version": "1.1",
+  "models": [
+    {
+      "framework": "grpc",
+      "engine": "semgrep",
+      "model_path": "src/py_security_suite/rules/python-security.yml",
+      "model_sha256": "4433a8ca487901f6f5f614f8e3bb26b3c6ceda067bcd58a89c320e8005cc60c9",
+      "positive_canary_path": "security/framework-canaries/grpc-positive.py",
+      "positive_canary_sha256": "9e6b69445b0a677501f68954cc338017600d54b4705ed5f43956eb1ccee6b0bb",
+      "negative_canary_path": "security/framework-canaries/grpc-negative.py",
+      "negative_canary_sha256": "0c4cb9f717ecc6b7a4f86b6fbcdfad6dc510fad0d719463c72da6ab50017564b",
+      "expected_rule_ids": [
+        "python.grpc-insecure-channel"
+      ]
+    },
+    {
+      "framework": "psycopg",
+      "engine": "semgrep",
+      "model_path": "src/py_security_suite/rules/python-security.yml",
+      "model_sha256": "4433a8ca487901f6f5f614f8e3bb26b3c6ceda067bcd58a89c320e8005cc60c9",
+      "positive_canary_path": "security/framework-canaries/psycopg-positive.py",
+      "positive_canary_sha256": "c55feef60d851c0e2983b3b278003b80377046aaf9e09c5901ac93a1554b1c2a",
+      "negative_canary_path": "security/framework-canaries/psycopg-negative.py",
+      "negative_canary_sha256": "1d42e106f84161ea32d0bbb5bc0d38c0bb5525fe3c663fca7babcb8cf746834d",
+      "expected_rule_ids": [
+        "python.psycopg-sql-composition"
+      ]
+    }
+  ]
+}

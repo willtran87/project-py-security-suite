@@ -68,6 +68,18 @@ def test_atomic_write_syncs_file_and_parent_on_posix(tmp_path: Path) -> None:
     held.replace.assert_called_once()
 
 
+def test_atomic_write_portable_mode_skips_posix_chmod(tmp_path: Path) -> None:
+    destination = tmp_path / "portable-state"
+    with (
+        patch("py_security_suite.atomic_file._POSIX_DURABILITY", False),
+        patch("py_security_suite.atomic_file.os.chmod") as chmod,
+    ):
+        atomic_write_bytes(destination, b"portable", label="portable state")
+
+    assert destination.read_bytes() == b"portable"
+    chmod.assert_not_called()
+
+
 def test_held_parent_syncs_directory_metadata_on_posix(tmp_path: Path) -> None:
     held = HeldParentDirectory(tmp_path, 41)
     with (

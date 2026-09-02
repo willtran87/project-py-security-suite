@@ -18,7 +18,7 @@ def test_deep_assurance_uses_sealed_database_input_and_aggregate_gate() -> None:
     assert prepare < build < scan
     assert "-OsvDatabaseDirectory .artifacts/deep-self-scan-inputs/osv-pypi" in workflow
     assert "name: Deep assurance required gate" in workflow
-    assert "needs: [end-to-end-self-scan, mutation-assurance]" in workflow
+    assert "needs: [end-to-end-self-scan, mutation-aggregate]" in workflow
     assert 'all(.[]; .result == "success")' in workflow
     assert "pull_request:" in workflow
     assert "Attest the exact scanner image evidence" in workflow
@@ -70,6 +70,10 @@ def test_scanner_build_cannot_resolve_the_mutable_database_url() -> None:
     assert "scanner-image-evidence.json" in build_script
     assert "python-sbom.cdx.json" in build_script
     assert "python_sbom_sha256" in build_script
+    assert "target.chmod(0o444)" in dockerfile
+    assert "chmod 0444 /opt/osv-db/osv-scanner/PyPI/all.zip" in dockerfile
+    assert "--user 42424:42424" in build_script
+    assert "arbitrary-uid-assets-readable" in build_script
 
 
 def test_self_scan_preserves_non_root_host_output_ownership_on_unix() -> None:
@@ -107,11 +111,28 @@ def test_mutation_assurance_preloads_fork_sensitive_native_crypto() -> None:
     )
     launcher = (_ROOT / "scripts/run_mutation_assurance.py").read_text(encoding="utf-8")
 
-    assert "scripts/run_mutation_assurance.py --max-children 8" in workflow
+    assert "MUTATION_SHARD: ${{ matrix.shard }}" in workflow
+    assert '--shard-index "$MUTATION_SHARD" --shard-count 6' in workflow
+    assert "scripts/validate_mutation_assurance.py" in workflow
+    assert "--minimum-score 70" in workflow
+    assert "mutmut export-cicd-stats" in workflow
+    assert "mutmut junitxml" not in workflow
+    assert "name: Mutation assurance aggregate" in workflow
+    assert 'if [[ "${#stats[@]}" -ne 6 ]]' in workflow
+    assert "shard: [0, 1, 2, 3, 4, 5]" in workflow
     assert 'uv sync --locked --all-groups --python "3.13"' in workflow
     assert "preload_fork_sensitive_crypto_runtime()" in launcher
     assert "serialization.load_pem_private_key" in launcher
     assert "x509.NameAttribute" in launcher
+
+
+def test_deep_assurance_cancels_only_superseded_pull_request_runs() -> None:
+    workflow = (_ROOT / ".github/workflows/deep-assurance.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "cancel-in-progress: ${{ github.event_name == 'pull_request' }}" in workflow
+    assert "github.event.pull_request.number || github.ref" in workflow
 
 
 def test_ci_rejects_a_stale_scanner_dependency_export() -> None:
@@ -143,3 +164,6 @@ def test_strict_type_and_lint_surfaces_are_ratchet_expanded() -> None:
         "src/py_security_suite/reports.py",
         "src/py_security_suite/strict_json.py",
     } <= strict_files
+    workflow = (_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    assert "Enforce the strict primary type-contract surface" in workflow
+    assert "--config-file src/py_security_suite/rules/mypy.ini" in workflow
