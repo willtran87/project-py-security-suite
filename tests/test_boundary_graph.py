@@ -294,6 +294,28 @@ class BoundaryGraphTests(unittest.TestCase):
         self.assertEqual(edges, [])
         self.assertEqual(error, "tree-sitter-javascript-worker-failed")
 
+    def test_polyglot_worker_rejects_malformed_output_contracts(self) -> None:
+        outputs = (
+            "not-json",
+            '{"edges":[],"error":1}',
+            '{"edges":[{"source":"wrong"}],"error":null}',
+        )
+        with patch(
+            "py_security_suite.boundary_graph.run_command",
+            side_effect=[self._parser_result(value) for value in outputs],
+        ):
+            results = [
+                _polyglot_semantic_edges(
+                    b"fetch('https://example.test')", "client.js", "javascript"
+                )
+                for _ in outputs
+            ]
+
+        self.assertEqual(
+            results,
+            [([], "tree-sitter-javascript-worker-output-invalid")] * len(outputs),
+        )
+
     def test_polyglot_worker_native_contract_extracts_bounded_edges(self) -> None:
         # Exercise the native implementation on one small grammar in-process;
         # production aggregation remains isolated in a per-file worker.

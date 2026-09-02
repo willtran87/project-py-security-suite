@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 from pathlib import Path
@@ -25,7 +26,7 @@ from py_security_suite.models import (
     ValidationStatus,
 )
 from py_security_suite.strict_json import canonical_bytes
-from py_security_suite.static_architecture import analyze_static_architecture
+from py_security_suite.static_architecture import _imports, analyze_static_architecture
 
 
 def test_framework_import_without_manifest_is_fail_visible(tmp_path: Path) -> None:
@@ -1323,6 +1324,12 @@ def test_static_architecture_resolves_relative_submodule_import_precisely(
     assert not any(
         finding.classifications == ["ARCH-POLICY-VIOLATION"] for finding in findings
     )
+
+
+def test_static_architecture_resolves_relative_star_import_to_base_module() -> None:
+    tree = ast.parse("from .helper import *\n")
+
+    assert _imports("sample.feature", False, tree) == {"sample.helper"}
 
 
 def test_application_contracts_emit_argv_safe_execution_handoff(
