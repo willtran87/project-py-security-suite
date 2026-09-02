@@ -6,7 +6,10 @@ from xml.etree import ElementTree
 
 import pytest
 
-from scripts.run_mutation_assurance import select_mutation_shard
+from scripts.run_mutation_assurance import (
+    mutation_workload_weights,
+    select_mutation_shard,
+)
 from scripts.validate_mutation_assurance import (
     MutationEvidenceError,
     aggregate_mutation_stats,
@@ -45,6 +48,44 @@ def test_mutation_shards_are_deterministic_complete_and_disjoint() -> None:
     assert shards[0] == select_mutation_shard(
         list(reversed(candidates)), shard_index=0, shard_count=6
     )
+
+
+def test_mutation_shards_balance_weighted_workloads() -> None:
+    candidates = ["large-a.py", "large-b.py", "small-a.py", "small-b.py"]
+    weights = {
+        "large-a.py": 100,
+        "large-b.py": 100,
+        "small-a.py": 1,
+        "small-b.py": 1,
+    }
+    shards = [
+        select_mutation_shard(
+            candidates,
+            shard_index=index,
+            shard_count=2,
+            weights=weights,
+        )
+        for index in range(2)
+    ]
+
+    loads = [sum(weights[item] for item in shard) for shard in shards]
+    assert sorted(item for shard in shards for item in shard) == sorted(candidates)
+    assert loads == [101, 101]
+
+
+def test_mutation_shard_weights_validate_and_measure_sources(tmp_path: Path) -> None:
+    empty = tmp_path / "empty.py"
+    populated = tmp_path / "populated.py"
+    empty.write_bytes(b"")
+    populated.write_bytes(b"value = 1\n")
+
+    weights = mutation_workload_weights([str(empty), str(populated)])
+
+    assert weights == {str(empty): 1, str(populated): 10}
+    with pytest.raises(ValueError, match="positive integers"):
+        select_mutation_shard(
+            [str(empty)], shard_index=0, shard_count=1, weights={str(empty): 0}
+        )
 
 
 @pytest.mark.parametrize(
