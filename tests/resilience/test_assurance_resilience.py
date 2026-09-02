@@ -56,6 +56,23 @@ def test_bounded_subprocess_rejects_unsafe_configuration(
         )
 
 
+def test_bounded_subprocess_wraps_spawn_failure() -> None:
+    with (
+        patch(
+            "py_security_suite.bounded_subprocess.subprocess.Popen",
+            side_effect=OSError("executable unavailable"),
+        ),
+        pytest.raises(BoundedSubprocessError, match="could not be started"),
+    ):
+        run_bounded_subprocess(
+            ["missing-executable"],
+            timeout_seconds=1.0,
+            maximum_stdout_bytes=1024,
+            maximum_stderr_bytes=1024,
+            environment={},
+        )
+
+
 def test_signing_bridge_output_flood_is_contained() -> None:
     with pytest.raises(BoundedSubprocessError, match="output exceeded limit"):
         run_bounded_subprocess(
