@@ -34,7 +34,10 @@ def documentation_metric_failures() -> list[str]:
         len(_FUNCTION_LINE_LIMITS),
         len(_FUNCTION_DECISION_LIMITS),
     )
-    if architecture is None or tuple(map(int, architecture.groups())) != expected_architecture:
+    if (
+        architecture is None
+        or tuple(map(int, architecture.groups())) != expected_architecture
+    ):
         failures.append(
             "design architecture marker does not match enforced concentration budgets"
         )
@@ -54,8 +57,13 @@ def documentation_metric_failures() -> list[str]:
         index,
     )
     expected_schema = (schemas, len(BUNDLED_SCHEMA_RESOURCES), stable_count)
-    if schema_marker is None or tuple(map(int, schema_marker.groups())) != expected_schema:
-        failures.append("index schema marker does not match runtime and compatibility data")
+    if (
+        schema_marker is None
+        or tuple(map(int, schema_marker.groups())) != expected_schema
+    ):
+        failures.append(
+            "index schema marker does not match runtime and compatibility data"
+        )
     for stale in ("1,559 passed", "204 bundled JSON Schemas"):
         if stale in index:
             failures.append(f"index retains stale metric {stale!r}")
@@ -69,7 +77,9 @@ def main() -> int:
         print(f"documentation metrics failed: {error}", file=sys.stderr)
         return 1
     if failures:
-        print("documentation metrics failed:\n- " + "\n- ".join(failures), file=sys.stderr)
+        print(
+            "documentation metrics failed:\n- " + "\n- ".join(failures), file=sys.stderr
+        )
         return 1
     print("documentation metrics match enforced repository contracts")
     return 0

@@ -111,7 +111,7 @@ def test_mutation_assurance_preloads_fork_sensitive_native_crypto() -> None:
     )
     launcher = (_ROOT / "scripts/run_mutation_assurance.py").read_text(encoding="utf-8")
 
-    assert 'MUTATION_SHARD: ${{ matrix.shard }}' in workflow
+    assert "MUTATION_SHARD: ${{ matrix.shard }}" in workflow
     assert '--shard-index "$MUTATION_SHARD" --shard-count 6' in workflow
     assert "scripts/validate_mutation_assurance.py" in workflow
     assert "--minimum-score 70" in workflow

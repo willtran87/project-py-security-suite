@@ -1799,7 +1799,9 @@ def test_builds_hardened_digest_only_oci_command(tmp_path: Path) -> None:
     assert f"--volume={tmp_path}:/workspace:ro" in argv
     assert f"--volume={tmp_path / '.pysec-output'}:/workspace/.pysec-output:rw" in argv
     assert "--env=BENCHMARK_SEED" in argv
-    workspace_environment = "--env=PYSEC_BENCHMARK_WORKSPACE=/workspace"  # pragma: allowlist secret
+    workspace_environment = (
+        "--env=PYSEC_BENCHMARK_WORKSPACE=/workspace"  # pragma: allowlist secret
+    )
     assert workspace_environment in argv
     assert argv[-2] == "/pysec/stage-executable"
 

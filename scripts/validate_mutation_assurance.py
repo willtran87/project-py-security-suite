@@ -39,7 +39,9 @@ def load_mutation_stats(path: Path) -> dict[str, int | bool]:
         raw = path.read_text(encoding="utf-8")
         document = json.loads(raw, object_pairs_hook=_unique_object)
     except (OSError, UnicodeError, json.JSONDecodeError) as error:
-        raise MutationEvidenceError(f"cannot read mutation evidence: {error}") from error
+        raise MutationEvidenceError(
+            f"cannot read mutation evidence: {error}"
+        ) from error
     if not isinstance(document, dict):
         raise MutationEvidenceError("mutation evidence must be an object")
     normalized: dict[str, int | bool] = {}
@@ -58,7 +60,9 @@ def load_mutation_stats(path: Path) -> dict[str, int | bool]:
         raise MutationEvidenceError(
             "check_was_interrupted_by_user must be a boolean or zero/one"
         )
-    accounted = sum(int(normalized[field]) for field in _COUNT_FIELDS if field != "total")
+    accounted = sum(
+        int(normalized[field]) for field in _COUNT_FIELDS if field != "total"
+    )
     # Mutmut includes type-checker kills in total but omits that count from its
     # CI/CD JSON schema. A completed run can recover the count exactly as the
     # non-negative remainder; interrupted runs are rejected by policy below.
@@ -75,7 +79,14 @@ def mutation_score(stats: dict[str, int | bool]) -> float:
     inferred_type_checker_kills = int(stats.get("inferred_type_checker_kills", 0))
     assessed = inferred_type_checker_kills + sum(
         int(stats[field])
-        for field in ("killed", "survived", "no_tests", "suspicious", "timeout", "segfault")
+        for field in (
+            "killed",
+            "survived",
+            "no_tests",
+            "suspicious",
+            "timeout",
+            "segfault",
+        )
     )
     if assessed < 1:
         raise MutationEvidenceError("mutation evidence contains no assessed mutants")

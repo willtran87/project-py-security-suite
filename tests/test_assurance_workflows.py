@@ -76,7 +76,7 @@ def test_deep_assurance_executes_self_scan_and_mutation_testing() -> None:
 
     assert "./scripts/run-self-scan.ps1" in workflow
     assert "uv run --frozen python scripts/run_mutation_assurance.py" in workflow
-    assert 'MUTATION_SHARD: ${{ matrix.shard }}' in workflow
+    assert "MUTATION_SHARD: ${{ matrix.shard }}" in workflow
     assert '--shard-index "$MUTATION_SHARD" --shard-count 6' in workflow
     assert "scripts/validate_mutation_assurance.py" in workflow
     assert 'uv sync --locked --all-groups --python "3.13"' in workflow

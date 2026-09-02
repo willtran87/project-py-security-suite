@@ -19,8 +19,7 @@ def test_architecture_assurance_matches_enforced_ratchets() -> None:
         for item in result["concentration"]["files"]
     )
     assert all(
-        item["maximum_lines"] is None
-        or item["observed_lines"] == item["maximum_lines"]
+        item["maximum_lines"] is None or item["observed_lines"] == item["maximum_lines"]
         for item in result["concentration"]["functions"]
     )
     assert all(

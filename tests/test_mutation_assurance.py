@@ -52,7 +52,9 @@ def test_mutation_shards_are_deterministic_complete_and_disjoint() -> None:
         ({"check_was_interrupted_by_user": True}, "interrupted"),
     ],
 )
-def test_mutation_gate_fails_closed(overrides: dict[str, int | bool], message: str) -> None:
+def test_mutation_gate_fails_closed(
+    overrides: dict[str, int | bool], message: str
+) -> None:
     score, failures = assurance_failures(_stats(**overrides), minimum_score=70)
 
     assert score >= 0

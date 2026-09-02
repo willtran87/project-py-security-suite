@@ -168,9 +168,10 @@ def _discover_frameworks(
     files_analyzed = 0
     for path in sorted(target.rglob("*.py")):
         relative = path.relative_to(target)
-        if any(part in _SKIP for part in relative.parts) or relative.parts[
-            : len(_CANARY_ROOT)
-        ] == _CANARY_ROOT:
+        if (
+            any(part in _SKIP for part in relative.parts)
+            or relative.parts[: len(_CANARY_ROOT)] == _CANARY_ROOT
+        ):
             continue
         if files_analyzed >= _MAX_FILES:
             errors.append(f"framework discovery exceeded {_MAX_FILES} Python files")
@@ -295,9 +296,7 @@ def _load_models(
     return models, errors[:100], True
 
 
-def _canary_outcomes(
-    model: FrameworkModel, findings: list[Finding]
-) -> FrameworkModel:
+def _canary_outcomes(model: FrameworkModel, findings: list[Finding]) -> FrameworkModel:
     engine = str(model["engine"])
     expected = {str(value) for value in model.get("expected_rule_ids", [])}
     positive_path = str(model["positive_canary_path"])

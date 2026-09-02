@@ -47,7 +47,9 @@ def consistency_failures() -> list[str]:
         "version"
     ) != {"attr": "py_security_suite.version.__version__"}:
         failures.append("setuptools must resolve version from version.__version__")
-    prohibited = re.compile(rf"py-security-suite(?:-scanners)?(?::|==){re.escape(version)}")
+    prohibited = re.compile(
+        rf"py-security-suite(?:-scanners)?(?::|==){re.escape(version)}"
+    )
     for relative in (
         "scripts/build-scanner-image.ps1",
         "scripts/run-self-scan.ps1",
@@ -65,7 +67,9 @@ def main() -> int:
         print(f"version consistency failed: {error}", file=sys.stderr)
         return 1
     if failures:
-        print("version consistency failed:\n- " + "\n- ".join(failures), file=sys.stderr)
+        print(
+            "version consistency failed:\n- " + "\n- ".join(failures), file=sys.stderr
+        )
         return 1
     print(f"version consistency passed for {authoritative_version()}")
     return 0

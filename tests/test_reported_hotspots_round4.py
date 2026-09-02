@@ -216,7 +216,9 @@ class SarifNormalizationContractTests(unittest.TestCase):
         self.assertEqual(_uri_path("src/example%20file.py"), "src/example file.py")
         self.assertEqual(_uri_path("file:///C:/repo/app.py"), "C:/repo/app.py")
         self.assertEqual(_uri_path("C:/repo/app.py"), "C:/repo/app.py")
-        external_uri = "https://user:secret@example.test/app.py"  # pragma: allowlist secret
+        external_uri = (
+            "https://user:secret@example.test/app.py"  # pragma: allowlist secret
+        )
         self.assertEqual(_uri_path(external_uri), "<external-artifact>")
         self.assertIsNone(sarif_integer([]))
         self.assertIsNone(sarif_safe_uri("relative"))
