@@ -57,6 +57,7 @@ _SKIP = frozenset(
         ".venv",
         "build",
         "dist",
+        "mutants",
         "node_modules",
         "tests",
     }

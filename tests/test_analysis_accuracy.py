@@ -31,12 +31,16 @@ from py_security_suite.static_architecture import analyze_static_architecture
 def test_framework_import_without_manifest_is_fail_visible(tmp_path: Path) -> None:
     source = tmp_path / "app.py"
     source.write_text("from fastapi import FastAPI\n", encoding="utf-8")
+    generated = tmp_path / "mutants" / "generated.py"
+    generated.parent.mkdir()
+    generated.write_text("from flask import Flask\n", encoding="utf-8")
 
     findings, artifact = framework_model_coverage(
         tmp_path, [_run("semgrep", ToolStatus.COMPLETED)], []
     )
 
     assert artifact["frameworks_detected"] == 1
+    assert artifact["frameworks"][0]["framework"] == "fastapi"
     assert artifact["complete"] is False
     assert findings[0].sources[0].tool == "framework-model-coverage"
 
@@ -79,6 +83,11 @@ def test_repository_framework_models_are_digest_bound_and_canary_qualified() -> 
     assert artifact["complete"] is True
     assert artifact["frameworks_detected"] == 2
     assert artifact["frameworks_modeled"] == 2
+    assert all(
+        not item["path"].startswith("mutants/")
+        for record in artifact["frameworks"]
+        for item in record["imports"]
+    )
     assert artifact["qualified_canary_finding_ids"] == [
         "grpc-canary",
         "psycopg-canary",
