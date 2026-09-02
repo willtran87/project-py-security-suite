@@ -15,8 +15,18 @@ def test_architecture_assurance_matches_enforced_ratchets() -> None:
     assert result["concentration"]["files"]
     assert result["concentration"]["functions"]
     assert all(
-        item["observed_lines"] <= item["maximum_lines"]
+        item["observed_lines"] == item["maximum_lines"]
         for item in result["concentration"]["files"]
+    )
+    assert all(
+        item["maximum_lines"] is None
+        or item["observed_lines"] == item["maximum_lines"]
+        for item in result["concentration"]["functions"]
+    )
+    assert all(
+        item["maximum_decisions"] is None
+        or item["observed_decisions"] == item["maximum_decisions"]
+        for item in result["concentration"]["functions"]
     )
     Draft202012Validator(
         json.loads(read_bundled_schema("architecture-assurance-1.0"))

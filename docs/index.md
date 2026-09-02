@@ -137,19 +137,21 @@ static-architecture, and bounded architecture-history evidence.
 
 ## Current repository assurance gates
 
-These are source-revision gates verified on 2026-08-30. Unlike the retained
+These are source-revision gates verified by the current protected workflow.
+Unlike the retained
 self-scan evidence below, they describe the current checkout and its protected
 automation contracts.
 
 | Gate | Current enforced scope |
 |---|---|
-| Unit and integration suite | 1,559 passed, 20 platform-limited skips, and 499 subtests in the final retained full-suite run |
-| Combined statement/branch coverage | CI enforces an 80% aggregate floor plus 49 security-critical module ratchets; exact revision-bound totals are retained with every assurance run |
+| Unit and integration suite | Exact pass, skip, subtest, and failure counts are generated from the revision-bound JUnit artifact in every protected run; historical counts are never presented as current |
+| Combined statement/branch coverage | CI enforces an 80% aggregate floor plus 50 security-critical module ratchets; exact revision-bound totals are retained with every assurance run |
 | Changed-line coverage | 90% minimum in protected CI |
-| Static typing | The complete production, companion, and Pages-audit source set checked by mypy plus a pinned strict Pyright gate over 32 production trust, parser, authority, replay, resilience, performance, reporting, and policy modules and 12 assurance scripts |
-| Schema/runtime consistency | 204 bundled JSON Schemas and 164 runtime exports |
+| Static typing | The complete production, companion, and Pages-audit source set checked by mypy, a strict Mypy contract over all 205 production modules, plus a pinned strict Pyright gate over 36 production trust, parser, authority, replay, resilience, performance, reporting, source-assurance, framework-model, and policy modules and 12 assurance scripts |
+<!-- pysec-schema-metrics files=206 runtime_exports=165 stable_contracts=164 -->
+| Schema/runtime consistency | 206 bundled JSON Schema files, 165 runtime exports, and 164 immutable compatibility-baseline contracts |
 | Public compatibility | Exhaustive additive baseline across 58 commands, 469 positional/option shape contracts, 164 byte-immutable bundled schemas, three console scripts, and two Python callable signatures |
-| Architecture enforcement | Exact Tach graph across 152 production module boundaries, one frozen seven-module trust/runtime SCC debt group that cannot expand, dependency-inverted attestation parsing, split standards/benchmark/profile/open-source-extension catalogs, isolated bytecode parsing, progressive concentration ceilings, and retained schema-valid architecture evidence |
+| Architecture enforcement | Exact Tach graph across 155 production module boundaries, one frozen seven-module trust/runtime SCC debt group that cannot expand, dependency-inverted attestation parsing, split standards/benchmark/profile/open-source-extension catalogs, isolated bytecode and native polyglot parsing, zero-slack concentration ceilings that tighten with every reduction, and retained schema-valid architecture evidence |
 | Reference performance | Five-repetition p95 suite for 10,000-case strict JSON/scoring, canonical serialization, the complete schema catalog, production-source inventory, and full production AST parsing, plus an isolated real code-health/static-architecture repository pipeline with child-process memory and latency budgets |
 | Mandatory live assurance | Required Docker/rootless-Podman OCI, Linux/macOS/Windows containment, PostgreSQL/Kafka, and authenticated Chromium/Firefox/WebKit CI lanes; browser policy is AST-verified and every required engine/role case must pass in retained JUnit evidence |
 | Scheduled depth | Daily JSON/XML/archive/SARIF/adapter plus Python-bytecode, WebAssembly, and PE/ELF/Mach-O parser fuzzing; weekly mutation, descendant-process resilience, CodeQL, and protected signing-provider conformance |
@@ -245,7 +247,7 @@ and zero findings on the safe negative control.
 
 | Group | Versions |
 |---|---|
-| Core security | Bandit 1.9.4; Semgrep 1.170.0; detect-secrets package 1.5.0; OSV-Scanner 2.3.8 |
+| Core security | Bandit 1.9.4; Semgrep 1.175.0; detect-secrets package 1.5.0; OSV-Scanner 2.3.8 |
 | Python quality | Ruff 0.15.22; Pylint 4.0.6; mypy 2.1.0; Pyright 1.1.411; Vulture 2.16; Radon 6.0.1; Tach 0.35.0 |
 | Dependency and test evidence | deptry 0.24.0; diff-cover 10.2.0; CycloneDX Python 7.3.0 |
 | Delivery | actionlint 1.7.12; Hadolint 2.14.0; Checkov 3.2.494; PSScriptAnalyzer 1.25.0 |

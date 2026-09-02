@@ -46,7 +46,7 @@ Job Object resource controls remain a separate availability mechanism.
   and every explicitly declared protected-runner label before zizmor audits
   the workflows with its pedantic security ruleset;
 - mypy checks production source and the Pages audit hooks, while a separately
-  pinned strict Pyright gate covers 25 trust, parser, authority, replay,
+  pinned strict Pyright gate covers 36 trust, parser, authority, replay,
   publication, effectiveness, performance, architecture-policy, and API-policy
   files;
 - `pip-audit` evaluates platform-resolved, hash-pinned exports of both the

@@ -18,7 +18,11 @@ from py_security_suite.boundary_graph import (
     _compiler_semantic_differential,
     _native_imports,
     _parser_environment,
+    _polyglot_semantic_edges,
     build_boundary_graph,
+)
+from py_security_suite.polyglot_parser_worker import (
+    _polyglot_semantic_edges_in_process,
 )
 from py_security_suite.strict_json import canonical_bytes
 from tests.deployment_authority import authority_environment, operation_receipt
@@ -139,7 +143,7 @@ class BoundaryGraphTests(unittest.TestCase):
     def test_bytecode_parser_contains_adversarial_allocation_payload(self) -> None:
         payload = base64.b64decode(
             "8w0NCgAAAHt1iigoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgA"
-            "IABnASlmZWF0ZWEoKCh0e3JlcwPpAAROZCgodQ=="
+            "IABnASlmZWF0ZWEoKCh0e3JlcwPpAAROZCgodQ=="  # pragma: allowlist secret
         )
         payload = importlib.util.MAGIC_NUMBER + payload[4:]
 
@@ -277,6 +281,39 @@ class BoundaryGraphTests(unittest.TestCase):
             artifact["errors"][0]["reason"],
             "tree-sitter-typescript-syntax-error",
         )
+
+    def test_polyglot_native_crash_is_contained_as_incomplete_evidence(self) -> None:
+        with patch(
+            "py_security_suite.boundary_graph.run_command",
+            return_value=self._parser_result(exit_code=139),
+        ):
+            edges, error = _polyglot_semantic_edges(
+                b"fetch('https://example.test')", "client.js", "javascript"
+            )
+
+        self.assertEqual(edges, [])
+        self.assertEqual(error, "tree-sitter-javascript-worker-failed")
+
+    def test_polyglot_worker_native_contract_extracts_bounded_edges(self) -> None:
+        # Exercise the native implementation on one small grammar in-process;
+        # production aggregation remains isolated in a per-file worker.
+        edges, error = _polyglot_semantic_edges_in_process(
+            b"import bridge from './bridge';\nfetch('https://example.test/v1');\n",
+            "client.js",
+            "javascript",
+        )
+
+        self.assertIsNone(error)
+        self.assertIn("module-import", {edge["kind"] for edge in edges})
+        self.assertIn("network-endpoint", {edge["kind"] for edge in edges})
+
+    def test_polyglot_worker_native_contract_reports_missing_grammar(self) -> None:
+        edges, error = _polyglot_semantic_edges_in_process(
+            b"content", "client.unknown", "unavailable_language"
+        )
+
+        self.assertEqual(edges, [])
+        self.assertEqual(error, "tree-sitter-unavailable_language-parser-error")
 
     def test_unifies_python_javascript_and_native_boundaries(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

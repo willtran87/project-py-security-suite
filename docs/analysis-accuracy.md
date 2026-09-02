@@ -162,7 +162,11 @@ declares the expected native rule IDs.
 }
 ```
 
-Production and release remain incomplete when a detected framework lacks this
+The repository ships digest-bound Semgrep models for its own gRPC transport and
+Psycopg query boundaries under `security/framework-canaries/`. Each model uses a
+stable `pysec_rule_id` metadata value so a temporary or installed rules path
+cannot change the evidence identity. Production and release remain incomplete
+when a detected framework lacks this
 evidence. Every expected rule must match the positive canary and must not match
 the negative canary. Qualified positive-canary observations are retained in the
 coverage artifact and excluded from real project findings. Verified execution
@@ -289,7 +293,7 @@ These are prioritization signals. Co-change can reflect an intentional release
 unit, and a complex function can be correct. Closure requires an owner to refactor,
 document the boundary, or retain a reviewed exception with appropriate tests.
 
-These analyzers run only for `audit`, `quality`, `repo`, `comprehensive`,
+These analyzers run for `standard`, `audit`, `quality`, `repo`, `comprehensive`,
 `production`, and `release`. Framework coverage, application-contract analysis,
 finding validation, and the capability manifest are emitted for every profile.
 
@@ -300,5 +304,7 @@ portfolio from the selected profile, applicable controls, completed controls,
 and execution gaps. The opt-in `audit` profile provides broad source security,
 quality, typing, architecture, reachability, and repository-health analysis
 without requiring target-executing runtime or release producers. The example
-configuration selects this profile; `quick` and `standard` remain stable for
-existing users.
+configuration selects this profile. `quick` remains the lightweight compatibility
+profile; `standard` now also emits the bounded native code-health, static-
+architecture, architecture-history, and structural-synthesis evidence needed for
+an actionable default assessment.

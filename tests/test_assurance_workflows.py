@@ -54,10 +54,8 @@ def test_ci_enforces_digest_verified_actionlint() -> None:
     )
 
     assert 'ACTIONLINT_VERSION: "1.7.12"' in workflow
-    assert (
-        "ACTIONLINT_LINUX_AMD64_SHA256: "
-        "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8" in workflow
-    )
+    actionlint_digest = "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"  # pragma: allowlist secret
+    assert f"ACTIONLINT_LINUX_AMD64_SHA256: {actionlint_digest}" in workflow
     assert "sha256sum --check --strict" in workflow
     assert "actionlint -no-color" in workflow
     assert '[string]$ActionlintVersion = "1.7.12"' in native_bundle
@@ -77,10 +75,10 @@ def test_deep_assurance_executes_self_scan_and_mutation_testing() -> None:
     workflow = _workflow("deep-assurance.yml")
 
     assert "./scripts/run-self-scan.ps1" in workflow
-    assert (
-        "uv run --frozen python scripts/run_mutation_assurance.py --max-children 8"
-        in workflow
-    )
+    assert "uv run --frozen python scripts/run_mutation_assurance.py" in workflow
+    assert 'MUTATION_SHARD: ${{ matrix.shard }}' in workflow
+    assert '--shard-index "$MUTATION_SHARD" --shard-count 6' in workflow
+    assert "scripts/validate_mutation_assurance.py" in workflow
     assert 'uv sync --locked --all-groups --python "3.13"' in workflow
     assert "--suspicious-policy=failure --untested-policy=failure" in workflow
 

@@ -123,18 +123,19 @@ stateDiagram-v2
 
 ```mermaid
 flowchart TB
-    Source["Sealed source snapshot"] --> Frameworks["Framework model coverage<br/>models + positive/negative canaries"]
-    Source --> Contracts["Application contracts<br/>code/OpenAPI/auth + exact advisory calls"]
+    Source["Sealed source snapshot"] --> SourceAssurance["Idempotent source-assurance stage<br/>populate missing artifacts + preserve release gates"]
+    SourceAssurance --> Frameworks["Framework model coverage<br/>models + positive/negative canaries"]
+    SourceAssurance --> Contracts["Application contracts<br/>code/OpenAPI/auth + exact advisory calls"]
     OpenAPI["OpenAPI + approved baseline"] --> Contracts
     ContractPolicy["Declared endpoint/test obligations"] --> Contracts
     Contracts --> Scenarios["Actionable scenarios<br/>actor + oracle + subject + repeat"]
     Scenarios --> CapabilityRoute{"Consumer capability"}
     CapabilityRoute --> AuthTasks["Authorization tasks<br/>allow | deny | tenant | replay"]
     CapabilityRoute --> PropertyTasks["Property tasks<br/>Schemathesis | Hypothesis"]
-    Source --> Health["Code health<br/>complexity + async/exception/state risks + clones"]
+    SourceAssurance --> Health["Code health<br/>complexity + async/exception/state risks + clones"]
     HealthPolicy["Code-health threshold policy"] --> Health
     Health --> RankedHealth["Ranked bounded detail + root-cause review queue<br/>family + symbol + symptoms + priority"]
-    Source --> Architecture["Static architecture<br/>module/symbol calls + unified entry points + dynamic imports + policy"]
+    SourceAssurance --> Architecture["Static architecture<br/>module/symbol calls + unified entry points + dynamic imports + policy"]
     Reachability["Semantic reachability<br/>typed receivers + framework dispatch"] --> Architecture
     NativePolicy["Native architecture policy"] --> PolicySelect{"Native present?"}
     TachPolicy["Tach fallback policy"] --> PolicySelect
@@ -158,7 +159,8 @@ flowchart TB
     DomainPolicy["Domain obligations<br/>owner + subjects + requirements"] --> Domains
     ToolEvidence --> Domains
     Domains --> DomainStatus["Source/artifact/test-bound<br/>coverage + policy gaps"]
-    History["Bounded sealed Git history"] --> Temporal["Architecture history<br/>co-change + finding hotspots"]
+    History["Bounded sealed Git history"] --> SourceAssurance
+    SourceAssurance --> Temporal["Architecture history<br/>co-change + finding hotspots"]
     ToolEvidence["Normalized scanner evidence"] --> Correlate["Conservative finding correlation<br/>semantic anchor | flow sink | location"]
     Frameworks --> Correlate
     Contracts --> Correlate
@@ -451,17 +453,29 @@ remain separate modules. Shared repository traversal, governance replay,
 atomic publication, process-input policy, and diagnostic redaction are isolated
 behind focused modules. The 12,000-line assurance data block is separated into
 standards, benchmark, and profile catalogs, leaving the evaluation engine near
-5,300 lines. Tach enforces exact imports across 152 production module boundaries.
+5,300 lines. Tach enforces exact imports across 155 production module boundaries.
 A separate strongly-connected-component ratchet permits only one explicitly
 recorded legacy trust/runtime cycle group and rejects any new member, edge
-expansion, or additional cycle. CI also freezes concentration ceilings and rejects
+expansion, or additional cycle. CI uses zero-slack concentration ceilings: growth
+fails, and a reduction also fails until its file, function, or decision ceiling is
+tightened in the same change. This makes every improvement permanent and rejects
 accidental file, function, or decision growth while later extractions can lower
 each ceiling without weakening behavior.
 
+The sealed-project orchestrator delegates framework-model qualification,
+application-contract reconciliation, code-health analysis, static architecture,
+and architecture history to one idempotent `source_assurance` stage. The stage
+populates only missing artifacts, removes only canary findings proven by the
+digest-bound model contract, and returns explicit production/release gate errors.
+This removes duplicated fallback orchestration while preserving source-only
+analysis when external scanner execution is unavailable.
+
+<!-- pysec-architecture-metrics files=22 function_lengths=23 decision_budgets=14 -->
 The continuous gate currently protects 58 commands, 469 positional/option
 contracts, 164 immutable versioned schema contracts, three console-script
 targets, and two Python callable signatures; enforces concentration
-ceilings across 14 files, 13 functions, and 6 decision-node budgets; and repeats
+ceilings across 22 files, 23 function-length budgets, and 14 decision-node
+budgets; and repeats
 five representative workloads five times plus one isolated full-repository
 analysis pipeline. The workload suite covers 10,000-case
 strict JSON/classification scoring, canonical evidence serialization, and the
@@ -581,7 +595,7 @@ flowchart TB
     Integrations --> Services
     Integrations --> Core
     Services --> Core
-    Graph["Tach exact graph<br/>146 boundaries"] --> Debt["SCC debt ratchet<br/>1 frozen group / 7 modules"]
+    Graph["Tach exact graph<br/>155 boundaries"] --> Debt["SCC debt ratchet<br/>1 frozen group / 7 modules"]
     Debt -->|new or expanded cycle| Fail["CI failure"]
     Graph --> Evidence["Schema-valid architecture assurance<br/>edges + SCCs + concentration"]
     Evidence --> Artifact["90-day CI evidence artifact"]
@@ -854,7 +868,8 @@ sequenceDiagram
 
 ## Scanner portfolio
 
-The original quick and standard profiles remain stable. Opt-in profiles layer
+The quick profile remains lightweight, while standard includes bounded native
+code-health and architecture evidence. Opt-in profiles layer
 additional perspectives:
 
 | Layer | Tools | Contribution |
@@ -1191,9 +1206,10 @@ flowchart LR
     Target["Untrusted repository file"] --> SafeRead["Race-safe regular-file read<br/>1 MiB input ceiling"]
     SafeRead --> Snapshot["Private O_EXCL snapshot<br/>exact accepted bytes"]
     Snapshot --> Sandbox["Digest-pinned OS sandbox<br/>required by safe default"]
-    Sandbox --> Worker["Bytecode or PE/ELF/Mach-O worker<br/>time + output + scratch + 256 MiB RSS"]
+    Sandbox --> Worker["Bytecode, PE/ELF/Mach-O, or tree-sitter worker<br/>time + output + scratch + 256 MiB RSS"]
     Worker --> Validate["Strict canonical edge validation"]
     Validate --> Graph["Boundary graph imports<br/>hardening + dynamic dispatch"]
+    Polyglot["Python/JS/TS/Java/C/C++ semantic imports"] --> Worker
     Fuzz["Atheris bytecode/Wasm/native corpora"] --> Worker
     Fuzz --> Wasm["Wasmtime + bounded Wasm sections"]
     Wasm --> Graph

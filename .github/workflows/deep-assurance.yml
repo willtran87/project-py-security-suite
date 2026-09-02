@@ -19,8 +19,10 @@ permissions:
   contents: read
 
 concurrency:
-  group: deep-assurance-${{ github.ref }}
-  cancel-in-progress: false
+  group: deep-assurance-${{ github.event.pull_request.number || github.ref }}
+  # Superseded PR evidence has no admission value. Scheduled and main-branch
+  # evidence remains non-cancellable so retained assurance cannot be truncated.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   end-to-end-self-scan:
@@ -93,9 +95,13 @@ jobs:
           retention-days: 90
 
   mutation-assurance:
-    name: Security-critical mutation testing
+    name: Security-critical mutation testing (zero-based shard ${{ matrix.shard }}/6)
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5]
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -109,23 +115,33 @@ jobs:
           cache-dependency-glob: uv.lock
       - name: Install the locked mutation environment
         run: uv sync --locked --all-groups --python "3.13"
-      - name: Require every covered security-critical mutant to be killed
+      - name: Run the bounded security-critical mutation shard
         shell: bash
+        env:
+          MUTATION_SHARD: ${{ matrix.shard }}
         run: |
           set -euo pipefail
-          uv run --frozen python scripts/run_mutation_assurance.py --max-children 8
-          mkdir -p .artifacts/mutation
+          uv run --frozen python scripts/run_mutation_assurance.py \
+            --shard-index "$MUTATION_SHARD" --shard-count 6 \
+            --max-children 8
+          mkdir -p ".artifacts/mutation/shard-$MUTATION_SHARD"
           uv run --frozen mutmut junitxml \
             --suspicious-policy=failure --untested-policy=failure \
-            > .artifacts/mutation/mutmut.xml
+            > ".artifacts/mutation/shard-$MUTATION_SHARD/mutmut.xml"
+          uv run --frozen python scripts/validate_mutation_assurance.py \
+            --stats mutants/mutmut-cicd-stats.json \
+            --minimum-score 70 \
+            --shard "$MUTATION_SHARD" \
+            --output ".artifacts/mutation/shard-$MUTATION_SHARD/assurance.json"
       - name: Retain mutation evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: mutation-assurance-${{ github.sha }}
+          name: mutation-assurance-${{ github.sha }}-shard-${{ matrix.shard }}
           path: |
-            .artifacts/mutation
+            .artifacts/mutation/shard-${{ matrix.shard }}
             mutants/mutmut-stats.json
+            mutants/mutmut-cicd-stats.json
           if-no-files-found: warn
           retention-days: 90
 

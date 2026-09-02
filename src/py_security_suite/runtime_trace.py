@@ -6,7 +6,7 @@ import os
 import json
 
 from .strict_json import loads as strict_json_loads
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -966,9 +966,7 @@ def _digest(value: str) -> bool:
     )
 
 
-def _timestamp(value: str, label: str):
-    from datetime import UTC, datetime
-
+def _timestamp(value: str, label: str) -> datetime:
     try:
         parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError as exc:

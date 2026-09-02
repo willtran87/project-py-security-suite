@@ -49,10 +49,10 @@ class SourceContextTests(unittest.TestCase):
         self.assertFalse(is_secret_bearing_scan(area="injection", tool_name="codeql"))
 
     def test_scanner_text_redacts_credentials_without_losing_context(self) -> None:
-        jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyMTIzIn0.signaturevalue"
+        jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyMTIzIn0.signaturevalue"  # pragma: allowlist secret
         value = (
             "source Authorization: Bearer bearer_secret; "
-            "url=postgresql://user:password@example.test/database; "
+            "url=postgresql://user:password@example.test/database; "  # pragma: allowlist secret
             f"token={jwt}; sink"
         )
 
@@ -66,7 +66,7 @@ class SourceContextTests(unittest.TestCase):
         self.assertGreaterEqual(redacted.count("<redacted>"), 3)
 
     def test_secret_scanner_text_is_fail_closed(self) -> None:
-        secret = "unstructured-value-that-patterns-cannot-classify"
+        secret = "unstructured-value-that-patterns-cannot-classify"  # pragma: allowlist secret
 
         redacted = redact_sensitive_text(secret, secret_bearing=True)
 
@@ -95,8 +95,8 @@ class SourceContextTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             target = Path(directory)
             (target / "settings.py").write_text(
-                'password = "a secret with spaces"  # owner note\n'
-                "config['api_key'] = 'quoted-value'\n"
+                'password = "a secret with spaces"  # owner note\n'  # pragma: allowlist secret
+                "config['api_key'] = 'quoted-value'\n"  # pragma: allowlist secret
                 'payload = {"private-key": "json-value", "safe": 1}\n'
                 "token: unquoted yaml value # deployment note\n"
                 "if token == expected_token:\n"

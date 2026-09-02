@@ -15,10 +15,8 @@ from typing import Any
 from .version import __version__
 from .adapters import ADAPTER_TYPES
 from .adapters.base import AdapterResult, ScannerAdapter
-from .application_contracts import analyze_application_contracts
 from .config import SuiteConfig
 from .closure_plan import closure_plan_artifact
-from .code_health import analyze_code_health
 from .correlation import correlate_findings
 from .data_exposure import apply_data_exposure_fusion, build_data_exposure_synthesis
 from .dependency_surface import dependency_surface_artifact
@@ -26,7 +24,6 @@ from .domain_assurance import analyze_domain_assurance
 from .llm_adversarial import build_llm_adversarial_plan
 from .finding_delta import apply_finding_delta
 from .finding_validation import apply_finding_validation
-from .framework_coverage import framework_model_coverage
 from .governance import (
     validate_intelligence_approval,
     validate_isolation_evidence,
@@ -56,7 +53,6 @@ from .models import (
 from .policy import evaluate_policy
 from .admission import admission_decisions
 from .advanced_analysis import build_advanced_analysis
-from .architecture_history import architecture_history
 from .boundary_graph import build_boundary_graph
 from .capability_manifest import capability_manifest
 from .portfolio_health import portfolio_health_artifact
@@ -68,17 +64,15 @@ from .runtime_reachability import apply_runtime_trace_observations
 from .runtime_surface import runtime_surface_binding_artifact
 from .source_context import attach_source_context, sanitize_secret_findings
 from .semantic_coverage import semantic_language_coverage_artifact
+from .source_assurance import STRUCTURAL_QUALITY_PROFILES, apply_source_assurance
 from .requirements_coverage import security_requirements_coverage_artifact
 from .structural_synthesis import build_structural_synthesis
-from .static_architecture import analyze_static_architecture
 from .trust_catalog import apply_trust_catalog
 from .trust_policy import activated_trust_environment, snapshot_trust_policy
 from .trust_attestation import validate_trust_policy_attestation
 
 
-_STRUCTURAL_QUALITY_PROFILES = frozenset(
-    {"audit", "quality", "repo", "comprehensive", "production", "release"}
-)
+_STRUCTURAL_QUALITY_PROFILES = STRUCTURAL_QUALITY_PROFILES
 
 
 def scan_project(
@@ -351,62 +345,15 @@ def _scan_sealed_project(
             context_errors.append(
                 "authenticated Python runtime traces could not be mapped back to exact reachability nodes"
             )
-        framework_findings, framework_coverage = framework_model_coverage(
-            scan_target, tool_runs, findings
+        context_errors.extend(
+            apply_source_assurance(
+                target=scan_target,
+                profile=config.profile,
+                findings=findings,
+                tool_runs=tool_runs,
+                artifacts=derived_artifacts,
+            )
         )
-        qualified_canary_ids = set(framework_coverage["qualified_canary_finding_ids"])
-        findings[:] = [
-            finding
-            for finding in findings
-            if finding.finding_id not in qualified_canary_ids
-        ]
-        findings.extend(framework_findings)
-        derived_artifacts["framework-model-coverage.json"] = framework_coverage
-        if (
-            config.profile in {"production", "release"}
-            and not framework_coverage["complete"]
-            and (
-                framework_coverage["frameworks_detected"]
-                or framework_coverage["parse_errors"]
-            )
-        ):
-            context_errors.append(
-                "detected Python frameworks lack digest-bound semantic models, positive/negative canaries, or a completed model engine"
-            )
-        contract_findings, contract_artifact = analyze_application_contracts(
-            scan_target, derived_artifacts
-        )
-        findings.extend(contract_findings)
-        derived_artifacts["application-contract-analysis.json"] = contract_artifact
-        if (
-            config.profile in {"production", "release"}
-            and not contract_artifact["complete"]
-            and (
-                contract_artifact["contract_present"]
-                or contract_artifact["openapi"]["current_path"]
-            )
-        ):
-            context_errors.append(
-                "application contracts contain API drift, missing authorization test evidence, vulnerable-function calls, or analysis errors"
-            )
-        if config.profile in _STRUCTURAL_QUALITY_PROFILES:
-            code_health_findings, code_health_artifact = analyze_code_health(
-                scan_target
-            )
-            findings.extend(code_health_findings)
-            derived_artifacts["code-health.json"] = code_health_artifact
-            static_architecture_findings, static_architecture_artifact = (
-                analyze_static_architecture(
-                    scan_target, derived_artifacts.get("reachability.json")
-                )
-            )
-            findings.extend(static_architecture_findings)
-            derived_artifacts["static-architecture.json"] = static_architecture_artifact
-            architecture_findings, architecture_artifact = architecture_history(
-                scan_target, findings
-            )
-            findings.extend(architecture_findings)
-            derived_artifacts["architecture-history.json"] = architecture_artifact
         domain_findings, domain_artifact = analyze_domain_assurance(
             scan_target, derived_artifacts
         )
@@ -502,51 +449,15 @@ def _scan_sealed_project(
         config.profile, tool_runs
     )
 
-    if "framework-model-coverage.json" not in derived_artifacts:
-        framework_findings, framework_coverage = framework_model_coverage(
-            scan_target, tool_runs, findings
+    context_errors.extend(
+        apply_source_assurance(
+            target=scan_target,
+            profile=config.profile,
+            findings=findings,
+            tool_runs=tool_runs,
+            artifacts=derived_artifacts,
         )
-        qualified_canary_ids = set(framework_coverage["qualified_canary_finding_ids"])
-        findings[:] = [
-            finding
-            for finding in findings
-            if finding.finding_id not in qualified_canary_ids
-        ]
-        findings.extend(framework_findings)
-        derived_artifacts["framework-model-coverage.json"] = framework_coverage
-    if "application-contract-analysis.json" not in derived_artifacts:
-        contract_findings, contract_artifact = analyze_application_contracts(
-            scan_target, derived_artifacts
-        )
-        findings.extend(contract_findings)
-        derived_artifacts["application-contract-analysis.json"] = contract_artifact
-    if (
-        config.profile in _STRUCTURAL_QUALITY_PROFILES
-        and "code-health.json" not in derived_artifacts
-    ):
-        code_health_findings, code_health_artifact = analyze_code_health(scan_target)
-        findings.extend(code_health_findings)
-        derived_artifacts["code-health.json"] = code_health_artifact
-    if (
-        config.profile in _STRUCTURAL_QUALITY_PROFILES
-        and "static-architecture.json" not in derived_artifacts
-    ):
-        static_architecture_findings, static_architecture_artifact = (
-            analyze_static_architecture(
-                scan_target, derived_artifacts.get("reachability.json")
-            )
-        )
-        findings.extend(static_architecture_findings)
-        derived_artifacts["static-architecture.json"] = static_architecture_artifact
-    if (
-        config.profile in _STRUCTURAL_QUALITY_PROFILES
-        and "architecture-history.json" not in derived_artifacts
-    ):
-        architecture_findings, architecture_artifact = architecture_history(
-            scan_target, findings
-        )
-        findings.extend(architecture_findings)
-        derived_artifacts["architecture-history.json"] = architecture_artifact
+    )
     if "domain-assurance.json" not in derived_artifacts:
         domain_findings, domain_artifact = analyze_domain_assurance(
             scan_target, derived_artifacts

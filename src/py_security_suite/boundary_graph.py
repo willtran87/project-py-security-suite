@@ -1384,74 +1384,60 @@ def _text_edges(text: str, source: str, language: str) -> list[dict[str, Any]]:
 def _polyglot_semantic_edges(
     payload: bytes, source: str, language: str
 ) -> tuple[list[dict[str, Any]], str | None]:
-    """Parse supported non-Python languages before extracting boundary nodes."""
+    """Parse one non-Python file behind a resource-contained native boundary."""
 
-    from tree_sitter import Language, Parser
-
-    module_name = {"csharp": "c_sharp"}.get(language, language)
-    function_name = (
-        "language_tsx"
-        if source.casefold().endswith(".tsx")
-        else "language_typescript"
-        if language == "typescript"
-        else "language_php"
-        if language == "php"
-        else "language"
-    )
+    worker = Path(__file__).with_name("polyglot_parser_worker.py")
+    with _parser_snapshot(payload, Path(source).suffix) as snapshot:
+        result = run_command(
+            [sys.executable, "-I", str(worker), str(snapshot), source, language],
+            cwd=snapshot.parent,
+            timeout_seconds=15,
+            max_output_bytes=4 * 1024 * 1024,
+            environment=_parser_environment(),
+        )
+    if (
+        result.exit_code != 0
+        or result.timed_out
+        or result.output_limit_exceeded
+        or result.scratch_limit_exceeded
+        or result.resident_memory_limit_exceeded
+        or result.resource_limit_errors
+    ):
+        return [], f"tree-sitter-{language}-worker-failed"
     try:
-        grammar = importlib.import_module(f"tree_sitter_{module_name}")
-        factory = getattr(grammar, function_name)
-        tree = Parser(Language(factory())).parse(payload)
-    except (AttributeError, ImportError, LookupError, TypeError, ValueError):
-        return [], f"tree-sitter-{language}-parser-error"
-    if tree.root_node.has_error:
-        return [], f"tree-sitter-{language}-syntax-error"
-    import_nodes = {
-        "import_declaration",
-        "import_statement",
-        "include_directive",
-        "namespace_use_declaration",
-        "preproc_include",
-        "require_expression",
-        "use_declaration",
-        "using_directive",
-    }
-    call_nodes = {
-        "call_expression",
-        "function_call_expression",
-        "invocation_expression",
-        "method_invocation",
-    }
+        value = strict_json_loads(result.stdout)
+    except (UnicodeError, json.JSONDecodeError):
+        return [], f"tree-sitter-{language}-worker-output-invalid"
+    if (
+        not isinstance(value, dict)
+        or set(value) != {"edges", "error"}
+        or not isinstance(value["edges"], list)
+        or len(value["edges"]) > 100_000
+        or (value["error"] is not None and not isinstance(value["error"], str))
+    ):
+        return [], f"tree-sitter-{language}-worker-output-invalid"
     edges: list[dict[str, Any]] = []
-    stack = [tree.root_node]
-    visited = 0
-    while stack:
-        node = stack.pop()
-        visited += 1
-        if visited > 2_000_000:
-            return [], f"tree-sitter-{language}-node-limit"
-        if node.type in import_nodes | call_nodes:
-            snippet = payload[node.start_byte : node.end_byte].decode(
-                "utf-8", errors="replace"
+    for item in value["edges"]:
+        if (
+            not isinstance(item, dict)
+            or set(item) != {"source", "line", "kind", "target", "language"}
+            or item["source"] != source
+            or item["language"] != language
+            or isinstance(item["line"], bool)
+            or not isinstance(item["line"], int)
+            or not all(isinstance(item[key], str) for key in ("kind", "target"))
+        ):
+            return [], f"tree-sitter-{language}-worker-output-invalid"
+        edges.append(
+            _edge(
+                source,
+                item["line"],
+                item["kind"],
+                item["target"],
+                language,
             )
-            extracted = _text_edges(snippet, source, language)
-            for edge in extracted:
-                edge["line"] = node.start_point.row + int(edge["line"])
-            edges.extend(extracted)
-            if node.type in import_nodes and not extracted:
-                target = " ".join(snippet.split())[:500]
-                if target:
-                    edges.append(
-                        _edge(
-                            source,
-                            node.start_point.row + 1,
-                            "module-import",
-                            target,
-                            language,
-                        )
-                    )
-        stack.extend(reversed(node.children))
-    return edges, None
+        )
+    return edges, value["error"]
 
 
 def _analyze_special_surface(
@@ -1969,12 +1955,23 @@ def _literal_argument(node: ast.Call) -> str:
 def _edge(
     source: str, line: int, kind: str, target: str, language: str
 ) -> dict[str, Any]:
+    # Some tree-sitter wheels expose integer/string-compatible extension values
+    # whose CPython type metadata is not safe to retain beyond the native parse
+    # tree. Materialize exact builtins before the tree is released or values are
+    # hashed during graph deduplication.
+    normalized_source = str(source)
+    normalized_line = int(line)
+    normalized_kind = str(kind)
+    normalized_target = str(target)
+    normalized_language = str(language)
+    if not normalized_source or normalized_line < 1 or not normalized_kind:
+        raise ValueError("boundary edge identity is invalid")
     return {
-        "source": source,
-        "line": line,
-        "kind": kind,
-        "target": target[:500],
-        "language": language,
+        "source": normalized_source,
+        "line": normalized_line,
+        "kind": normalized_kind,
+        "target": normalized_target[:500],
+        "language": normalized_language,
     }
 
 

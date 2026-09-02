@@ -1,11 +1,19 @@
 [CmdletBinding()]
 param(
-    [string]$Image = "py-security-suite-scanners:0.1.0",
+    [string]$Image = "",
     [string]$ReportName = "self-scan"
 )
 
 $ErrorActionPreference = "Stop"
 $workspace = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path
+$versionLine = Select-String -LiteralPath (Join-Path $workspace "src\py_security_suite\version.py") `
+    -Pattern '^__version__ = "([0-9A-Za-z.+!-]+)"$'
+if ($versionLine.Matches.Count -ne 1) {
+    throw "Package version authority is invalid"
+}
+if (-not $Image) {
+    $Image = "py-security-suite-scanners:$($versionLine.Matches[0].Groups[1].Value)"
+}
 $artifactRoot = Join-Path $workspace ".artifacts"
 New-Item -ItemType Directory -Path $artifactRoot -Force | Out-Null
 $artifactRoot = (Resolve-Path -LiteralPath $artifactRoot).Path

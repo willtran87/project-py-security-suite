@@ -11,8 +11,10 @@ _SECRET_TOOLS = {"detect-secrets", "gitleaks", "trufflehog"}
 _REDACTED_SOURCE = "<redacted: secret-bearing source is not embedded in reports>"
 _REDACTED_SCANNER_TEXT = "<redacted: sensitive scanner text is not retained>"
 _REDACTED_VALUE = "<redacted>"
-_SECRET_TITLE = "Redacted credential candidate"
-_SECRET_IMPACT = "A real credential could permit unauthorized access."
+_SECRET_TITLE = "Redacted credential candidate"  # pragma: allowlist secret
+_SECRET_IMPACT = (
+    "A real credential could permit unauthorized access."  # pragma: allowlist secret
+)
 _SECRET_REMEDIATION = (
     "Validate in the protected workspace without copying the value; revoke, rotate, "
     "and remove it from maintained source and applicable history if it is real."

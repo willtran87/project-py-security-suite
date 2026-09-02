@@ -84,6 +84,54 @@ class AdapterParserTests(unittest.TestCase):
         self.assertEqual(finding.area, "injection")
         self.assertEqual(finding.severity, Severity.HIGH)
 
+    def test_semgrep_prefers_valid_governed_rule_id_over_config_path(self) -> None:
+        payload = json.dumps(
+            {
+                "results": [
+                    {
+                        "check_id": "tmp.governed.rules.python.grpc-insecure-channel",
+                        "path": "app.py",
+                        "start": {"line": 4},
+                        "end": {"line": 4},
+                        "extra": {
+                            "message": "Avoid an unauthenticated channel",
+                            "severity": "ERROR",
+                            "metadata": {
+                                "pysec_rule_id": "python.grpc-insecure-channel",
+                                "confidence": "HIGH",
+                            },
+                        },
+                    }
+                ]
+            }
+        )
+
+        finding = SemgrepAdapter(ToolConfig(), 4096).parse(payload, self.target)[0]
+
+        self.assertEqual(finding.sources[0].rule_id, "python.grpc-insecure-channel")
+        self.assertEqual(
+            finding.citations[0].identifier, "python.grpc-insecure-channel"
+        )
+
+    def test_semgrep_rejects_governed_rule_id_collisions(self) -> None:
+        result = {
+            "path": "app.py",
+            "start": {"line": 4},
+            "end": {"line": 4},
+            "extra": {
+                "message": "fixture",
+                "severity": "ERROR",
+                "metadata": {"pysec_rule_id": "python.governed-rule"},
+            },
+        }
+        first = dict(result, check_id="rules.one")
+        second = dict(result, check_id="rules.two")
+
+        with self.assertRaisesRegex(ValueError, "multiple native origins"):
+            SemgrepAdapter(ToolConfig(), 4096).parse(
+                json.dumps({"results": [first, second]}), self.target
+            )
+
     def test_detect_secrets_never_retains_secret_hash(self) -> None:
         payload = json.dumps(
             {
@@ -164,7 +212,7 @@ class AdapterParserTests(unittest.TestCase):
                                                         "events": [
                                                             {"introduced": "0"},
                                                             {
-                                                                "fixed": "c45d7c49ea75133e"
+                                                                "fixed": "c45d7c49ea75133e"  # pragma: allowlist secret
                                                             },
                                                         ],
                                                     },

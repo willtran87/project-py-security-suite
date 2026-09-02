@@ -22,7 +22,7 @@ class CompanionBrowserSecurityTests(unittest.TestCase):
         for value in (
             "https://example.com/",
             "file:///tmp/app",
-            "http://user:password@localhost/",
+            "http://user:password@localhost/",  # pragma: allowlist secret
             "http://localhost/#fragment",
         ):
             with self.subTest(value=value):

@@ -3,8 +3,14 @@ from __future__ import annotations
 import ast
 import hashlib
 from pathlib import Path
-from typing import Any
+from typing import cast
 
+from .artifact_contracts import (
+    FrameworkCoverageArtifact,
+    FrameworkImport,
+    FrameworkModel,
+    FrameworkRecord,
+)
 from .models import (
     Citation,
     Confidence,
@@ -55,15 +61,16 @@ _SKIP = frozenset(
         "tests",
     }
 )
+_CANARY_ROOT = ("security", "framework-canaries")
 
 
 def framework_model_coverage(
     target: Path, tool_runs: list[ToolRun], scanner_findings: list[Finding]
-) -> tuple[list[Finding], dict[str, Any]]:
+) -> tuple[list[Finding], FrameworkCoverageArtifact]:
     observations, parse_errors, parse_errors_omitted = _discover_frameworks(target)
     completed = {run.tool for run in tool_runs if run.status is ToolStatus.COMPLETED}
     models, manifest_errors, manifest_present = _load_models(target)
-    records: list[dict[str, Any]] = []
+    records: list[FrameworkRecord] = []
     gap_findings: list[Finding] = []
     qualified_bindings: set[tuple[str, str, str]] = set()
     for framework, locations in sorted(observations.items()):
@@ -95,15 +102,15 @@ def framework_model_coverage(
         if candidates and not engines:
             gaps.append("no declared model engine completed this scan")
         complete = bool(engines) and not gaps
-        record = {
-            "framework": framework,
-            "category": _FRAMEWORKS[framework][0],
-            "imports": locations,
-            "declared_models": candidates,
-            "completed_model_engines": engines,
-            "complete": complete,
-            "gaps": gaps,
-        }
+        record = FrameworkRecord(
+            framework=framework,
+            category=_FRAMEWORKS[framework][0],
+            imports=locations,
+            declared_models=candidates,
+            completed_model_engines=engines,
+            complete=complete,
+            gaps=gaps,
+        )
         records.append(record)
         if not complete:
             gap_findings.append(_model_gap_finding(record))
@@ -117,26 +124,26 @@ def framework_model_coverage(
         for finding in scanner_findings
         if _is_qualified_canary_finding(finding, qualified_bindings)
     )
-    return gap_findings, {
-        "schema_version": "1.0",
-        "analysis": "framework-specific-semantic-model-coverage",
-        "manifest_path": ".pysec-models.json" if manifest_present else None,
-        "manifest_present": manifest_present,
-        "frameworks_detected": len(records),
-        "frameworks_modeled": sum(record["complete"] for record in records),
-        "complete": complete,
-        "frameworks": records,
-        "parse_errors": parse_errors,
-        "parse_errors_omitted": parse_errors_omitted,
-        "manifest_errors": manifest_errors,
-        "qualified_canary_finding_ids": qualified_canary_finding_ids,
-        "claim_boundary": (
+    return gap_findings, FrameworkCoverageArtifact(
+        schema_version="1.0",
+        analysis="framework-specific-semantic-model-coverage",
+        manifest_path=".pysec-models.json" if manifest_present else None,
+        manifest_present=manifest_present,
+        frameworks_detected=len(records),
+        frameworks_modeled=sum(record["complete"] for record in records),
+        complete=complete,
+        frameworks=records,
+        parse_errors=parse_errors,
+        parse_errors_omitted=parse_errors_omitted,
+        manifest_errors=manifest_errors,
+        qualified_canary_finding_ids=qualified_canary_finding_ids,
+        claim_boundary=(
             "A complete record proves that a digest-bound model was declared, its engine "
             "completed, every expected rule matched the positive canary, and no expected "
             "rule matched the negative canary. It does not prove that every application "
             "wrapper or runtime dispatch path is modeled."
         ),
-    }
+    )
 
 
 def _is_qualified_canary_finding(
@@ -155,13 +162,15 @@ def _is_qualified_canary_finding(
 
 def _discover_frameworks(
     target: Path,
-) -> tuple[dict[str, list[dict[str, Any]]], list[str], int]:
-    observations: dict[str, list[dict[str, Any]]] = {}
+) -> tuple[dict[str, list[FrameworkImport]], list[str], int]:
+    observations: dict[str, list[FrameworkImport]] = {}
     errors: list[str] = []
     files_analyzed = 0
     for path in sorted(target.rglob("*.py")):
         relative = path.relative_to(target)
-        if any(part in _SKIP for part in relative.parts):
+        if any(part in _SKIP for part in relative.parts) or relative.parts[
+            : len(_CANARY_ROOT)
+        ] == _CANARY_ROOT:
             continue
         if files_analyzed >= _MAX_FILES:
             errors.append(f"framework discovery exceeded {_MAX_FILES} Python files")
@@ -187,10 +196,10 @@ def _discover_frameworks(
             for name in names:
                 if name not in _FRAMEWORKS:
                     continue
-                item = {
-                    "path": relative.as_posix(),
-                    "line": int(getattr(node, "lineno", 1)),
-                }
+                item = FrameworkImport(
+                    path=relative.as_posix(),
+                    line=int(getattr(node, "lineno", 1)),
+                )
                 bucket = observations.setdefault(name, [])
                 if item not in bucket and len(bucket) < 100:
                     bucket.append(item)
@@ -199,7 +208,7 @@ def _discover_frameworks(
 
 def _load_models(
     target: Path,
-) -> tuple[list[dict[str, Any]], list[str], bool]:
+) -> tuple[list[FrameworkModel], list[str], bool]:
     path = target / ".pysec-models.json"
     if not path.is_file():
         return [], [], False
@@ -219,7 +228,7 @@ def _load_models(
         or len(document["models"]) > 1000
     ):
         return [], ["manifest fields do not match schema 1.0"], True
-    models: list[dict[str, Any]] = []
+    models: list[FrameworkModel] = []
     identities: set[tuple[str, str, str]] = set()
     base_required = {
         "framework",
@@ -267,26 +276,28 @@ def _load_models(
             )
         )
         models.append(
-            {
-                "framework": framework,
-                "engine": engine,
-                "model_path": str(raw["model_path"]),
-                "model_sha256": str(raw["model_sha256"]).casefold(),
-                "positive_canary_path": str(raw["positive_canary_path"]),
-                "positive_canary_sha256": str(raw["positive_canary_sha256"]).casefold(),
-                "negative_canary_path": str(raw["negative_canary_path"]),
-                "negative_canary_sha256": str(raw["negative_canary_sha256"]).casefold(),
-                "expected_rule_ids": sorted(expected_rule_ids),
-                "verified": verified,
-                "canary_execution_verified": False,
-                "positive_matches": [],
-                "negative_matches": [],
-            }
+            FrameworkModel(
+                framework=framework,
+                engine=engine,
+                model_path=str(raw["model_path"]),
+                model_sha256=str(raw["model_sha256"]).casefold(),
+                positive_canary_path=str(raw["positive_canary_path"]),
+                positive_canary_sha256=str(raw["positive_canary_sha256"]).casefold(),
+                negative_canary_path=str(raw["negative_canary_path"]),
+                negative_canary_sha256=str(raw["negative_canary_sha256"]).casefold(),
+                expected_rule_ids=sorted(cast(list[str], expected_rule_ids)),
+                verified=verified,
+                canary_execution_verified=False,
+                positive_matches=[],
+                negative_matches=[],
+            )
         )
     return models, errors[:100], True
 
 
-def _canary_outcomes(model: dict[str, Any], findings: list[Finding]) -> dict[str, Any]:
+def _canary_outcomes(
+    model: FrameworkModel, findings: list[Finding]
+) -> FrameworkModel:
     engine = str(model["engine"])
     expected = {str(value) for value in model.get("expected_rule_ids", [])}
     positive_path = str(model["positive_canary_path"])
@@ -309,13 +320,15 @@ def _canary_outcomes(model: dict[str, Any], findings: list[Finding]) -> dict[str
             if source.tool == engine and source.rule_id in expected
         }
     )
-    return {
-        "positive_matches": positive,
-        "negative_matches": negative,
-        "canary_execution_verified": bool(expected)
+    updated = dict(model)
+    updated.update(
+        positive_matches=positive,
+        negative_matches=negative,
+        canary_execution_verified=bool(expected)
         and set(positive) == expected
         and not negative,
-    }
+    )
+    return cast(FrameworkModel, updated)
 
 
 def _verify_subject(target: Path, relative: str, expected: str) -> bool:
@@ -340,7 +353,7 @@ def _verify_subject(target: Path, relative: str, expected: str) -> bool:
     return hashlib.sha256(payload).hexdigest() == expected.casefold()
 
 
-def _model_gap_finding(record: dict[str, Any]) -> Finding:
+def _model_gap_finding(record: FrameworkRecord) -> Finding:
     first = record["imports"][0]
     framework = str(record["framework"])
     rule_id = f"FRAMEWORK-MODEL-{framework.upper().replace('_', '-')}"

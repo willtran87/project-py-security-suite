@@ -41,6 +41,37 @@ def test_framework_import_without_manifest_is_fail_visible(tmp_path: Path) -> No
     assert findings[0].sources[0].tool == "framework-model-coverage"
 
 
+def test_repository_framework_models_are_digest_bound_and_canary_qualified() -> None:
+    repository = Path(__file__).resolve().parents[1]
+    grpc = _finding("semgrep")
+    grpc.finding_id = "grpc-canary"
+    grpc.sources[0].rule_id = "python.grpc-insecure-channel"
+    grpc.locations = [
+        Location(path="security/framework-canaries/grpc-positive.py", start_line=8)
+    ]
+    psycopg = _finding("semgrep")
+    psycopg.finding_id = "psycopg-canary"
+    psycopg.sources[0].rule_id = "python.psycopg-sql-composition"
+    psycopg.locations = [
+        Location(path="security/framework-canaries/psycopg-positive.py", start_line=8)
+    ]
+
+    findings, artifact = framework_model_coverage(
+        repository,
+        [_run("semgrep", ToolStatus.COMPLETED)],
+        [grpc, psycopg],
+    )
+
+    assert findings == []
+    assert artifact["complete"] is True
+    assert artifact["frameworks_detected"] == 2
+    assert artifact["frameworks_modeled"] == 2
+    assert artifact["qualified_canary_finding_ids"] == [
+        "grpc-canary",
+        "psycopg-canary",
+    ]
+
+
 def test_framework_manifest_requires_bound_canaries_and_completed_engine(
     tmp_path: Path,
 ) -> None:

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "py-security-suite"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Offline-first security scanner orchestration and reporting for Python projects"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -65,6 +65,7 @@ dev = [
   "hypothesis-jsonschema>=0.23,<0.24",
   "mypy>=1.17,<3",
   "mutmut>=3.7,<4",
+  "packaging>=24,<27",
   "pip-audit>=2.9,<3",
   "pyfakefs>=5.9,<7",
   "pytest>=8.4,<10",
@@ -93,6 +94,9 @@ pysec-evidence = "py_security_suite.evidence_ingest:main"
 package-dir = { "" = "src" }
 include-package-data = true
 
+[tool.setuptools.dynamic]
+version = { attr = "py_security_suite.version.__version__" }
+
 [tool.setuptools.packages.find]
 where = ["src"]
 
@@ -111,6 +115,7 @@ py_security_suite = [
 
 [tool.pyright]
 include = [
+  "src/py_security_suite/artifact_contracts.py",
   "src/py_security_suite/atomic_file.py",
   "src/py_security_suite/application_contracts.py",
   "src/py_security_suite/attestation_formats.py",
@@ -127,6 +132,7 @@ include = [
   "src/py_security_suite/governance_quorum.py",
   "src/py_security_suite/git_replay.py",
   "src/py_security_suite/failure_domain.py",
+  "src/py_security_suite/framework_coverage.py",
   "src/py_security_suite/industry_extension_evidence.py",
   "src/py_security_suite/industry_assurance.py",
   "src/py_security_suite/isolation_probe.py",
@@ -135,6 +141,7 @@ include = [
   "src/py_security_suite/operational_trend.py",
   "src/py_security_suite/orchestrator.py",
   "src/py_security_suite/performance_assurance.py",
+  "src/py_security_suite/polyglot_parser_worker.py",
   "src/py_security_suite/path_safety.py",
   "src/py_security_suite/repository_file_policy.py",
   "src/py_security_suite/reports.py",
@@ -142,6 +149,7 @@ include = [
   "src/py_security_suite/release_readiness.py",
   "src/py_security_suite/risk_paths.py",
   "src/py_security_suite/standards_monitor.py",
+  "src/py_security_suite/source_assurance.py",
   "src/py_security_suite/strict_json.py",
   "scripts/audit_github_assurance_controls.py",
   "scripts/extract_github_artifact.py",

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 from collections.abc import Sequence
 
 from cryptography import x509
@@ -49,18 +50,55 @@ def preload_fork_sensitive_crypto_runtime() -> None:
         raise RuntimeError("cryptography X.509 preload self-check failed")
 
 
+def select_mutation_shard(
+    candidates: Sequence[str], *, shard_index: int, shard_count: int
+) -> list[str]:
+    """Return one deterministic, complete partition of the mutation surface."""
+
+    if shard_count < 1:
+        raise ValueError("mutation shard count must be positive")
+    if not 0 <= shard_index < shard_count:
+        raise ValueError("mutation shard index must be within the shard count")
+    ordered = sorted(dict.fromkeys(candidates))
+    if not ordered:
+        raise ValueError("mutation assurance has no configured source modules")
+    selected = ordered[shard_index::shard_count]
+    if not selected:
+        raise ValueError("mutation shard is empty; reduce the shard count")
+    return selected
+
+
 def main(argv: Sequence[str] | None = None) -> None:
     """Run Mutmut after initializing fork-sensitive native dependencies."""
+
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--shard-index", type=int)
+    parser.add_argument("--shard-count", type=int)
+    options, mutmut_arguments = parser.parse_known_args(argv)
+    if (options.shard_index is None) != (options.shard_count is None):
+        parser.error("--shard-index and --shard-count must be supplied together")
 
     preload_fork_sensitive_crypto_runtime()
 
     # Importing Mutmut is intentionally delayed: its module selects the fork
     # multiprocessing context at import time and exits on unsupported hosts.
     from mutmut.__main__ import cli
+    from mutmut.configuration import Config
 
-    arguments = list(argv) if argv is not None else None
+    if options.shard_index is not None and options.shard_count is not None:
+        config = Config.get()
+        config.only_mutate = select_mutation_shard(
+            config.only_mutate,
+            shard_index=options.shard_index,
+            shard_count=options.shard_count,
+        )
+        print(
+            f"Mutation shard {options.shard_index + 1}/{options.shard_count}: "
+            f"{len(config.only_mutate)} modules"
+        )
+
     cli(
-        args=["run", *(arguments or [])],
+        args=["run", *mutmut_arguments],
         prog_name="pysec-mutation-assurance",
         standalone_mode=True,
     )

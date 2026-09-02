@@ -1,4 +1,36 @@
 rules:
+  - id: python.grpc-insecure-channel
+    languages: [python]
+    message: gRPC insecure_channel provides neither transport encryption nor peer authentication.
+    severity: ERROR
+    metadata:
+      cwe: ["CWE-319: Cleartext Transmission of Sensitive Information"]
+      category: rpc-security
+      confidence: HIGH
+      pysec_rule_id: python.grpc-insecure-channel
+      impact: RPC metadata and message content can be observed or modified, and the client cannot authenticate the server.
+      remediation: Use grpc.secure_channel with organization-approved TLS credentials and verify the expected server identity.
+      source: https://grpc.io/docs/guides/auth/
+    pattern: grpc.insecure_channel(...)
+
+  - id: python.psycopg-sql-composition
+    languages: [python]
+    message: SQL text is dynamically composed before Psycopg execution.
+    severity: ERROR
+    metadata:
+      cwe: ["CWE-89: Improper Neutralization of Special Elements used in an SQL Command"]
+      category: database-security
+      confidence: HIGH
+      pysec_rule_id: python.psycopg-sql-composition
+      impact: Attacker-controlled values can alter the intended SQL statement and read or modify data outside the authorized operation.
+      remediation: Pass values as execute parameters and use psycopg.sql.Identifier or psycopg.sql.SQL only for allowlisted structural identifiers.
+      source: https://www.psycopg.org/psycopg3/docs/basic/params.html
+    pattern-either:
+      - pattern: $CURSOR.execute($QUERY % $VALUES, ...)
+      - pattern: $CURSOR.execute($QUERY.format(...), ...)
+      - pattern: $CURSOR.execute(f"...{$VALUE}...", ...)
+      - pattern: $CURSOR.execute(f'...{$VALUE}...', ...)
+
   - id: python.subprocess-shell-true
     languages: [python]
     message: Avoid shell=True with subprocess APIs; pass an argument vector instead.

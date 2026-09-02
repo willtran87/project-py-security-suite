@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 from pathlib import Path
+import re
 from typing import Any
 
 from ..execution import CommandEnvironment
@@ -78,6 +79,7 @@ class SemgrepAdapter(ScannerAdapter):
         if not isinstance(results, list):
             raise TypeError("results must be a list")
         findings: list[Finding] = []
+        governed_origins: dict[str, str] = {}
         for result in results:
             if not isinstance(result, dict):
                 raise TypeError("Semgrep result must be an object")
@@ -91,7 +93,13 @@ class SemgrepAdapter(ScannerAdapter):
             start = result.get("start") or {}
             end = result.get("end") or {}
             line = _line(start)
-            rule_id = str(result.get("check_id") or "semgrep.unknown")
+            rule_id = _stable_rule_id(result, metadata)
+            native_rule_id = str(result.get("check_id") or "semgrep.unknown")
+            previous_origin = governed_origins.setdefault(rule_id, native_rule_id)
+            if previous_origin != native_rule_id:
+                raise ValueError(
+                    f"Semgrep governed rule ID {rule_id!r} has multiple native origins"
+                )
             title = str(extra.get("message") or rule_id)
             finding_id, fingerprint = finding_identity(
                 tool=self.name,
@@ -164,3 +172,14 @@ def _classifications(metadata: dict[str, Any]) -> list[str]:
 def _safe_uri(value: Any) -> str | None:
     text = str(value or "")
     return text if text.startswith(("https://", "http://")) else None
+
+
+_RULE_ID = re.compile(r"^[a-z0-9][a-z0-9._-]{2,127}$")
+
+
+def _stable_rule_id(result: dict[str, Any], metadata: dict[str, Any]) -> str:
+    """Prefer an author-governed ID over Semgrep's config-path-qualified ID."""
+    governed = metadata.get("pysec_rule_id")
+    if isinstance(governed, str) and _RULE_ID.fullmatch(governed):
+        return governed
+    return str(result.get("check_id") or "semgrep.unknown")
