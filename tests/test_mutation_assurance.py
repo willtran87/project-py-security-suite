@@ -53,7 +53,11 @@ def test_mutation_shards_are_deterministic_complete_and_disjoint() -> None:
         ({"killed": 69, "survived": 31}, "below 70.00%"),
         (
             {"killed": 79, "survived": 18, "timeout": 3},
-            "timeout mutants exceeded",
+            "timeout and crash mutants exceeded",
+        ),
+        (
+            {"killed": 79, "survived": 18, "segfault": 3},
+            "timeout and crash mutants exceeded",
         ),
         ({"check_was_interrupted_by_user": True}, "interrupted"),
     ],
@@ -90,6 +94,15 @@ def test_mutation_score_accepts_type_checker_only_kills() -> None:
 
 def test_mutation_gate_counts_one_bounded_timeout_as_detected() -> None:
     stats = _stats(killed=79, survived=20, timeout=1, total=100)
+
+    score, failures = assurance_failures(stats, minimum_score=70)
+
+    assert score == 80.0
+    assert failures == []
+
+
+def test_mutation_gate_counts_one_bounded_crash_as_detected() -> None:
+    stats = _stats(killed=79, survived=20, segfault=1, total=100)
 
     score, failures = assurance_failures(stats, minimum_score=70)
 
