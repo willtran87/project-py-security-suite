@@ -80,7 +80,9 @@ def test_deep_assurance_executes_self_scan_and_mutation_testing() -> None:
     assert '--shard-index "$MUTATION_SHARD" --shard-count 6' in workflow
     assert "scripts/validate_mutation_assurance.py" in workflow
     assert 'uv sync --locked --all-groups --python "3.13"' in workflow
-    assert "--suspicious-policy=failure --untested-policy=failure" in workflow
+    assert "mutmut export-cicd-stats" in workflow
+    assert "--minimum-score 0" in workflow
+    assert "--minimum-score 70" in workflow
 
 
 def test_fuzz_workflow_extracts_missing_coverage_without_shell_short_circuit() -> None:

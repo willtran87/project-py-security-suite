@@ -2,15 +2,18 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from xml.etree import ElementTree
 
 import pytest
 
 from scripts.run_mutation_assurance import select_mutation_shard
 from scripts.validate_mutation_assurance import (
     MutationEvidenceError,
+    aggregate_mutation_stats,
     assurance_failures,
     load_mutation_stats,
     mutation_score,
+    write_junit_evidence,
 )
 
 
@@ -80,3 +83,32 @@ def test_mutation_score_accepts_type_checker_only_kills() -> None:
     stats["inferred_type_checker_kills"] = 3
 
     assert mutation_score(stats) == 100.0
+
+
+def test_mutation_shards_are_aggregated_and_emit_junit(tmp_path: Path) -> None:
+    paths: list[Path] = []
+    for index, stats in enumerate((_stats(killed=69, survived=31), _stats())):
+        path = tmp_path / f"shard-{index}.json"
+        path.write_text(json.dumps(stats), encoding="utf-8")
+        paths.append(path)
+
+    aggregate = aggregate_mutation_stats(paths)
+    score, failures = assurance_failures(aggregate, minimum_score=70)
+    document = {
+        "shard": "aggregate-2",
+        "minimum_score": 70,
+        "mutation_score": score,
+        "passed": not failures,
+        "failures": failures,
+        "counts": aggregate,
+    }
+    junit = tmp_path / "mutation.xml"
+    write_junit_evidence(junit, document)
+    suite = ElementTree.parse(junit).getroot()  # noqa: S314 - parses local generated evidence
+
+    assert aggregate["total"] == 200
+    assert score == 74.5
+    assert failures == []
+    assert suite.attrib["tests"] == "1"
+    assert suite.attrib["failures"] == "0"
+    assert suite.find("./testcase") is not None

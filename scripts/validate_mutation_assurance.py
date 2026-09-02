@@ -7,6 +7,7 @@ import json
 import math
 from pathlib import Path
 from typing import Any
+from xml.etree import ElementTree
 
 
 _COUNT_FIELDS = (
@@ -93,6 +94,24 @@ def mutation_score(stats: dict[str, int | bool]) -> float:
     return 100.0 * (int(stats["killed"]) + inferred_type_checker_kills) / assessed
 
 
+def aggregate_mutation_stats(paths: list[Path]) -> dict[str, int | bool]:
+    """Combine disjoint mutation shards before applying the score ratchet."""
+
+    if not paths:
+        raise MutationEvidenceError("mutation evidence contains no shard inputs")
+    shards = [load_mutation_stats(path) for path in paths]
+    aggregate: dict[str, int | bool] = {
+        field: sum(int(shard[field]) for shard in shards) for field in _COUNT_FIELDS
+    }
+    aggregate["check_was_interrupted_by_user"] = any(
+        bool(shard["check_was_interrupted_by_user"]) for shard in shards
+    )
+    aggregate["inferred_type_checker_kills"] = sum(
+        int(shard["inferred_type_checker_kills"]) for shard in shards
+    )
+    return aggregate
+
+
 def assurance_failures(
     stats: dict[str, int | bool], *, minimum_score: float
 ) -> tuple[float, list[str]]:
@@ -110,15 +129,64 @@ def assurance_failures(
     return score, failures
 
 
+def write_junit_evidence(path: Path, document: dict[str, Any]) -> None:
+    """Emit one standards-compatible test case for the mutation admission gate."""
+
+    failures = [str(item) for item in document["failures"]]
+    suite = ElementTree.Element(
+        "testsuite",
+        {
+            "name": "mutation-assurance",
+            "tests": "1",
+            "failures": str(int(bool(failures))),
+            "errors": "0",
+            "skipped": "0",
+            "time": "0",
+        },
+    )
+    properties = ElementTree.SubElement(suite, "properties")
+    for name, value in (
+        ("shard", document["shard"]),
+        ("minimum_score", document["minimum_score"]),
+        ("mutation_score", document["mutation_score"]),
+        ("total", document["counts"]["total"]),
+        ("killed", document["counts"]["killed"]),
+        ("survived", document["counts"]["survived"]),
+    ):
+        ElementTree.SubElement(
+            properties, "property", {"name": str(name), "value": str(value)}
+        )
+    case = ElementTree.SubElement(
+        suite,
+        "testcase",
+        {
+            "classname": "py_security_suite.mutation",
+            "name": str(document["shard"]),
+            "time": "0",
+        },
+    )
+    if failures:
+        failure = ElementTree.SubElement(
+            case,
+            "failure",
+            {"message": "mutation assurance policy failed"},
+        )
+        failure.text = "\n".join(failures)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    ElementTree.indent(suite)
+    ElementTree.ElementTree(suite).write(path, encoding="utf-8", xml_declaration=True)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--stats", type=Path, required=True)
+    parser.add_argument("--stats", type=Path, action="append", required=True)
     parser.add_argument("--minimum-score", type=float, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--junit-output", type=Path)
     parser.add_argument("--shard", required=True)
     arguments = parser.parse_args()
     try:
-        stats = load_mutation_stats(arguments.stats)
+        stats = aggregate_mutation_stats(arguments.stats)
         score, failures = assurance_failures(
             stats, minimum_score=arguments.minimum_score
         )
@@ -133,11 +201,14 @@ def main() -> int:
         "passed": not failures,
         "failures": failures,
         "counts": stats,
+        "inputs": [path.as_posix() for path in arguments.stats],
     }
     arguments.output.parent.mkdir(parents=True, exist_ok=True)
     arguments.output.write_text(
         json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
+    if arguments.junit_output is not None:
+        write_junit_evidence(arguments.junit_output, document)
     if failures:
         print("mutation assurance failed:\n- " + "\n- ".join(failures))
         return 1

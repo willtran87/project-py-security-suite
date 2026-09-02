@@ -18,7 +18,7 @@ def test_deep_assurance_uses_sealed_database_input_and_aggregate_gate() -> None:
     assert prepare < build < scan
     assert "-OsvDatabaseDirectory .artifacts/deep-self-scan-inputs/osv-pypi" in workflow
     assert "name: Deep assurance required gate" in workflow
-    assert "needs: [end-to-end-self-scan, mutation-assurance]" in workflow
+    assert "needs: [end-to-end-self-scan, mutation-aggregate]" in workflow
     assert 'all(.[]; .result == "success")' in workflow
     assert "pull_request:" in workflow
     assert "Attest the exact scanner image evidence" in workflow
@@ -115,6 +115,10 @@ def test_mutation_assurance_preloads_fork_sensitive_native_crypto() -> None:
     assert '--shard-index "$MUTATION_SHARD" --shard-count 6' in workflow
     assert "scripts/validate_mutation_assurance.py" in workflow
     assert "--minimum-score 70" in workflow
+    assert "mutmut export-cicd-stats" in workflow
+    assert "mutmut junitxml" not in workflow
+    assert "name: Mutation assurance aggregate" in workflow
+    assert 'if [[ "${#stats[@]}" -ne 6 ]]' in workflow
     assert "shard: [0, 1, 2, 3, 4, 5]" in workflow
     assert 'uv sync --locked --all-groups --python "3.13"' in workflow
     assert "preload_fork_sensitive_crypto_runtime()" in launcher
