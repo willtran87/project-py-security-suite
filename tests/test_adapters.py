@@ -171,6 +171,8 @@ class AdapterParserTests(unittest.TestCase):
 
         self.assertIsNotNone(re.search(pattern, ".artifacts/report.json"))
         self.assertIsNotNone(re.search(pattern, r".pysec-tools\Scripts\tool.exe"))
+        self.assertIsNotNone(re.search(pattern, ".pysec-models.json"))
+        self.assertIsNone(re.search(pattern, "repo.pysec-models.json"))
 
     def test_osv_v2_json_is_normalized(self) -> None:
         payload = json.dumps(

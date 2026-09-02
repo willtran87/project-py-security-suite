@@ -1298,6 +1298,33 @@ def test_static_architecture_unifies_packaging_main_and_tach_policy(
     validate_governed_artifacts({"static-architecture.json": artifact})
 
 
+def test_static_architecture_resolves_relative_submodule_import_precisely(
+    tmp_path: Path,
+) -> None:
+    package = tmp_path / "src" / "sample"
+    package.mkdir(parents=True)
+    (package / "__init__.py").write_text("", encoding="utf-8")
+    (package / "helper.py").write_text("VALUE = 1\n", encoding="utf-8")
+    (package / "feature.py").write_text(
+        "from . import helper\nVALUE = helper.VALUE\n", encoding="utf-8"
+    )
+    (tmp_path / "tach.toml").write_text(
+        'source_roots = ["src"]\nroot_module = "forbid"\n'
+        "forbid_circular_dependencies = true\n"
+        '[[modules]]\npath = "sample.feature"\n'
+        'depends_on = ["sample.helper"]\n'
+        '[[modules]]\npath = "sample.helper"\ndepends_on = []\n',
+        encoding="utf-8",
+    )
+
+    findings, artifact = analyze_static_architecture(tmp_path)
+
+    assert artifact["policy_violations"] == []
+    assert not any(
+        finding.classifications == ["ARCH-POLICY-VIOLATION"] for finding in findings
+    )
+
+
 def test_application_contracts_emit_argv_safe_execution_handoff(
     tmp_path: Path,
 ) -> None:

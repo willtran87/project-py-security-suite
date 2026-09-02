@@ -64,6 +64,10 @@ class DetectSecretsAdapter(ScannerAdapter):
                 # synthetic credential shapes. Its schema and negative-control
                 # tests validate those fixtures independently.
                 r"(^|[\\/])security[\\/]api-surface-1[.]1[.]json$"
+                # This strict, governed manifest accepts only framework names,
+                # paths, rule IDs, and SHA-256 subject bindings. Treating those
+                # integrity digests as credentials creates false release blocks.
+                r"|(^|[\\/])[.]pysec-models[.]json$"
                 r"|(^|[\\/])(coverage[.](json|xml)|junit[.]xml)"
                 r"([.]pysec-binding[.]json)?$|(^|[\\/])site([\\/]|$)"
             ),
