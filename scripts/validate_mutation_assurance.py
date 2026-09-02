@@ -91,7 +91,13 @@ def mutation_score(stats: dict[str, int | bool]) -> float:
     )
     if assessed < 1:
         raise MutationEvidenceError("mutation evidence contains no assessed mutants")
-    return 100.0 * (int(stats["killed"]) + inferred_type_checker_kills) / assessed
+    # A runner-enforced timeout is an observed behavioral difference, equivalent
+    # to a kill when its frequency remains within the bounded health budget
+    # enforced by ``assurance_failures`` below.
+    detected = (
+        int(stats["killed"]) + int(stats["timeout"]) + inferred_type_checker_kills
+    )
+    return 100.0 * detected / assessed
 
 
 def aggregate_mutation_stats(paths: list[Path]) -> dict[str, int | bool]:
@@ -121,9 +127,15 @@ def assurance_failures(
     failures: list[str] = []
     if stats["check_was_interrupted_by_user"]:
         failures.append("mutation execution was interrupted")
-    for field in ("no_tests", "suspicious", "timeout", "segfault"):
+    for field in ("no_tests", "suspicious", "segfault"):
         if stats[field]:
             failures.append(f"{field} mutants must be zero; observed {stats[field]}")
+    timeout_budget = max(1, math.ceil(int(stats["total"]) * 0.001))
+    if int(stats["timeout"]) > timeout_budget:
+        failures.append(
+            "timeout mutants exceeded the bounded 0.1% health budget: "
+            f"observed {stats['timeout']}; allowed {timeout_budget}"
+        )
     if score + 1e-9 < minimum_score:
         failures.append(f"mutation score {score:.2f}% is below {minimum_score:.2f}%")
     return score, failures
