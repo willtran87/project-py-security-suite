@@ -4,6 +4,7 @@ import re
 from pathlib import Path
 
 from .models import Finding, Location
+from .source_index import source_analysis_session, source_lines
 
 
 _SECRET_AREAS = {"secrets", "secrets-history"}
@@ -89,27 +90,28 @@ def attach_source_context(
 ) -> None:
     """Attach bounded, sanitized source excerpts without leaving the target."""
     resolved_target = target.resolve()
-    for finding in findings:
-        secret_finding = _is_secret_finding(finding)
-        for location in finding.locations:
-            if location.start_line is None or location.start_line < 1:
-                continue
-            source_path = _safe_source_path(resolved_target, location.path)
-            if source_path is None:
-                continue
-            if secret_finding:
-                location.snippet = _REDACTED_SOURCE
-                location.snippet_start_line = location.start_line
-                location.snippet_redacted = True
-                continue
-            excerpt = _read_excerpt(
-                source_path,
-                location,
-                context_lines=context_lines,
-                maximum_line_characters=maximum_line_characters,
-            )
-            if excerpt is not None:
-                location.snippet, location.snippet_start_line = excerpt
+    with source_analysis_session(resolved_target):
+        for finding in findings:
+            secret_finding = _is_secret_finding(finding)
+            for location in finding.locations:
+                if location.start_line is None or location.start_line < 1:
+                    continue
+                source_path = _safe_source_path(resolved_target, location.path)
+                if source_path is None:
+                    continue
+                if secret_finding:
+                    location.snippet = _REDACTED_SOURCE
+                    location.snippet_start_line = location.start_line
+                    location.snippet_redacted = True
+                    continue
+                excerpt = _read_excerpt(
+                    source_path,
+                    location,
+                    context_lines=context_lines,
+                    maximum_line_characters=maximum_line_characters,
+                )
+                if excerpt is not None:
+                    location.snippet, location.snippet_start_line = excerpt
 
 
 def redact_sensitive_snippets(findings: list[Finding]) -> None:
@@ -230,23 +232,21 @@ def _read_excerpt(
     start_line = location.start_line
     if start_line is None:
         return None
-    end_line = max(start_line, location.end_line or start_line)
-    excerpt_start = max(1, start_line - context_lines)
-    excerpt_end = end_line + context_lines
-    selected: list[str] = []
+    # Scanner-provided end lines cannot expand an excerpt without bound.
+    before = min(max(context_lines, 0), 10)
+    excerpt_start = max(1, start_line - before)
+    excerpt_end = min(
+        max(start_line, location.end_line or start_line) + before, excerpt_start + 49
+    )
     try:
-        with path.open("r", encoding="utf-8", errors="replace") as handle:
-            for number, value in enumerate(handle, start=1):
-                if number > excerpt_end:
-                    break
-                if number >= excerpt_start:
-                    line = value.rstrip("\r\n")
-                    line = _SECRET_ASSIGNMENT.sub(rf"\g<prefix>{_REDACTED_VALUE}", line)
-                    if len(line) > maximum_line_characters:
-                        line = line[:maximum_line_characters] + "…"
-                    selected.append(line)
+        lines = source_lines(path)
     except OSError:
         return None
-    if not selected or start_line >= excerpt_start + len(selected):
+    if lines is None or start_line > len(lines):
         return None
+    maximum = min(max(maximum_line_characters, 1), 500)
+    selected = []
+    for value in lines[excerpt_start - 1 : excerpt_end]:
+        line = _SECRET_ASSIGNMENT.sub(rf"\g<prefix>{_REDACTED_VALUE}", value)
+        selected.append(line[:maximum] + "\u2026" if len(line) > maximum else line)
     return "\n".join(selected), excerpt_start

@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-import json
 import os
-import shutil
+import math
 import tempfile
 import time
+from dataclasses import asdict
 from pathlib import Path
+from collections.abc import Callable
 
 from ..config import ToolConfig
 from ..execution import (
@@ -15,11 +16,22 @@ from ..execution import (
     run_command,
     sanitize_diagnostic,
     sha256_file,
+    sealed_governed_assets,
 )
+from ..path_safety import read_regular_file
+from ..scan_control import stop_reason, ScanInterrupted
 from ..models import Finding, ToolRun, ToolStatus
 from .base import AdapterResult, ScannerAdapter
 from .sarif import parse_sarif_findings
 from .staging import maintained_files
+from .coverage import reconcile_codeql_coverage
+from .constant_sinks import annotate_constant_sinks
+from .codeql_refinement import refine_native_results
+from .codeql_queries import (
+    locked_pack_paths,
+    run_with_cache,
+    supplemental_queries,
+)
 
 _MIRROR_SKIP_DIRECTORIES = {
     ".artifacts",
@@ -44,6 +56,8 @@ class CodeQlAdapter(ScannerAdapter):
 
     def __init__(self, config: ToolConfig, max_output_bytes: int) -> None:
         super().__init__(config, max_output_bytes)
+        self._retained_findings: list[Finding] = []
+        self._deadline: float | None = None
         self._auxiliary_path: Path | None = None
         self._auxiliary_sha256: str | None = None
         self._auxiliary_integrity_verified: bool | None = None
@@ -83,35 +97,34 @@ class CodeQlAdapter(ScannerAdapter):
         pack = resolved_home / ".codeql" / "packages" / "codeql" / "python-queries"
         if not pack.is_dir():
             return f"approved CodeQL Python query pack is missing: {pack}"
+        if self.config.rules_path is not None:
+            try:
+                locked_pack_paths(self.config.rules_path, resolved_home)
+            except (OSError, TypeError, ValueError):
+                return "supplemental CodeQL query libraries are missing; stage the bundled query lock into database_path"
         return None
 
     def environment(self) -> CommandEnvironment:
-        home = self.config.database_path
-        codeql = (
-            str(self._auxiliary_path)
-            if self._auxiliary_path is not None
-            else resolve_executable(self.config.auxiliary_executable or "codeql")
+        # Helpers enter PATH only through the supervisor's digest-checked API.
+        helpers = (
+            ((str(self._auxiliary_path), self._auxiliary_sha256),)
+            if self._auxiliary_path is not None and self._auxiliary_sha256 is not None
+            else ()
         )
-        extra: dict[str, str] = {
-            "RCQL_DOWNLOAD_RETRY_ATTEMPTS": "1",
-            "RCQL_DOWNLOAD_TIMEOUT_SECONDS": "1",
-        }
-        if home is not None:
-            resolved = str(home.expanduser().resolve())
-            extra["HOME"] = resolved
-            extra["USERPROFILE"] = resolved
-        if codeql is not None:
-            existing = os.environ.get("PATH", "")
-            extra["PATH"] = os.pathsep.join((str(Path(codeql).parent), existing))
-        return CommandEnvironment(extra=extra)
+        return CommandEnvironment(
+            auxiliary_executables=helpers,
+            extra={
+                "RCQL_DOWNLOAD_RETRY_ATTEMPTS": "1",
+                "RCQL_DOWNLOAD_TIMEOUT_SECONDS": "1",
+            },
+        )
 
     def build_command(self, executable: str, target: Path) -> list[str]:
         return [
             executable,
             "--lang",
             "python",
-            "--config",
-            "",
+            "--config=",
             "--quiet",
         ]
 
@@ -120,6 +133,7 @@ class CodeQlAdapter(ScannerAdapter):
             payload,
             target,
             tool_name=self.name,
+            generated_source_root=target,
             default_area="data-flow",
             default_impact=(
                 "CodeQL identified a semantic or data-flow path that can expose "
@@ -142,7 +156,7 @@ class CodeQlAdapter(ScannerAdapter):
         execution = run_command(
             [codeql, "version"],
             cwd=target,
-            timeout_seconds=min(self.config.timeout_seconds, 10),
+            timeout_seconds=min(self._remaining_seconds(), 10),
             max_output_bytes=2048,
             environment=self.environment(),
         )
@@ -152,7 +166,46 @@ class CodeQlAdapter(ScannerAdapter):
         first_line = value.splitlines()[0] if value else "unknown"
         return f"run-codeql; {sanitize_diagnostic(first_line, maximum=160)}"
 
+    def _asset_check(self) -> None:
+        self._remaining_seconds()
+
+    def _remaining_seconds(self) -> int:
+        if stop_reason():
+            raise ScanInterrupted(stop_reason())
+        remaining = (
+            (self._deadline - time.monotonic())
+            if self._deadline is not None
+            else self.config.timeout_seconds
+        )
+        if remaining <= 0:
+            raise TimeoutError("CodeQL scan deadline exhausted")
+        return max(1, math.ceil(remaining))
+
     def run(self, target: Path) -> AdapterResult:
+        started = time.monotonic()
+        self._retained_findings = []
+        self._deadline = started + self.config.timeout_seconds
+        try:
+            return self._run(target, started)
+        except TimeoutError:
+            run = ToolRun(
+                tool=self.name,
+                status=ToolStatus.TIMED_OUT,
+                command=[self.config.executable],
+                duration_seconds=round(time.monotonic() - started, 3),
+                error="CodeQL scan deadline exhausted during preparation or execution",
+                finding_count=len(self._retained_findings),
+            )
+            return AdapterResult(
+                self._retained_findings,
+                run,
+                {**self._diagnostic(run, None), "failure_category": "wall-clock"},
+            )
+        finally:
+            self._deadline = None
+            self._retained_findings = []
+
+    def _run(self, target: Path, started: float) -> AdapterResult:
         not_applicable = self.not_applicable_reason(target)
         if not_applicable:
             tool_run = ToolRun(
@@ -164,7 +217,7 @@ class CodeQlAdapter(ScannerAdapter):
                 applicable=False,
             )
             return AdapterResult([], tool_run, self._diagnostic(tool_run, None))
-        prerequisite = self.prerequisite_error()
+        prerequisite = self.prerequisite_error() or self._prepare_assets()
         executable, integrity_error = self._prepare_executable()
         if prerequisite or integrity_error or executable is None:
             tool_run = ToolRun(
@@ -180,21 +233,51 @@ class CodeQlAdapter(ScannerAdapter):
             )
             return AdapterResult([], tool_run, self._diagnostic(tool_run, None))
 
+        self._remaining_seconds()
         version = self._detect_version(executable, target)
-        started = time.monotonic()
-        with tempfile.TemporaryDirectory(
-            prefix="pysec-run-codeql-", ignore_cleanup_errors=True
-        ) as directory:
-            mirror = Path(directory) / "target"
-            _copy_target(target, mirror)
-            command = self.build_command(executable, mirror)
-            execution = run_command(
-                command,
-                cwd=mirror,
-                timeout_seconds=self.config.timeout_seconds,
-                max_output_bytes=self.max_output_bytes,
-                environment=self.environment(),
+        expected_files = tuple(
+            path.relative_to(target).as_posix()
+            for path in maintained_files(target, frozenset({".py"}))
+        )
+        supplemental_error = None
+        native_refinement: dict[str, object] = {}
+        assets = {
+            label: path
+            for label, path in (
+                ("database", self.config.database_path),
+                ("rules", self.config.rules_path),
             )
+            if path is not None
+        }
+        with (
+            tempfile.TemporaryDirectory(
+                prefix="pysec-run-codeql-", ignore_cleanup_errors=True
+            ) as directory,
+            sealed_governed_assets(
+                assets, self._asset_digests, check=self._remaining_seconds
+            ) as copies,
+        ):
+            self._asset_snapshot_verified = dict.fromkeys(copies, True)
+            mirror = Path(directory) / "target"
+            _copy_target(target, mirror, check=self._remaining_seconds)
+            command = self.build_command(executable, mirror)
+            if self.config.database_path is not None:
+                execution = run_with_cache(
+                    command,
+                    home=copies["database"],
+                    target=mirror,
+                    timeout_seconds=self._remaining_seconds(),
+                    max_output_bytes=self.max_output_bytes,
+                    environment=self.environment(),
+                )
+            else:
+                execution = run_command(
+                    command,
+                    cwd=mirror,
+                    timeout_seconds=self._remaining_seconds(),
+                    max_output_bytes=self.max_output_bytes,
+                    environment=self.environment(),
+                )
             changed_error = self._executable_changed_error()
             auxiliary_changed_error = self._auxiliary_changed_error()
             if changed_error or auxiliary_changed_error:
@@ -210,7 +293,14 @@ class CodeQlAdapter(ScannerAdapter):
                 return AdapterResult(
                     [], tool_run, self._diagnostic(tool_run, execution)
                 )
-            if execution.timed_out or execution.exit_code not in {0, 1}:
+            if (
+                execution.timed_out
+                or execution.stop_reason
+                or execution.output_limit_exceeded
+                or execution.scratch_limit_exceeded
+                or execution.resident_memory_limit_exceeded
+                or execution.exit_code not in {0, 1}
+            ):
                 return self._failure(execution, version, started)
             sarif_files = sorted(
                 (mirror / ".codeql" / "reports").glob("python-*.sarif")
@@ -228,24 +318,22 @@ class CodeQlAdapter(ScannerAdapter):
                 return AdapterResult(
                     [], tool_run, self._diagnostic(tool_run, execution)
                 )
-            data = sarif_files[0].read_bytes()
-            if len(data) > self.max_output_bytes:
-                tool_run = ToolRun(
-                    tool=self.name,
-                    status=ToolStatus.PARSE_ERROR,
-                    command=command,
-                    duration_seconds=round(time.monotonic() - started, 3),
-                    version=version,
-                    exit_code=execution.exit_code,
-                    error="CodeQL SARIF exceeded execution.max_output_bytes",
-                    stdout_truncated=True,
-                )
-                return AdapterResult(
-                    [], tool_run, self._diagnostic(tool_run, execution)
-                )
             try:
+                _, data = read_regular_file(
+                    sarif_files[0],
+                    "CodeQL SARIF",
+                    maximum_bytes=self.max_output_bytes,
+                    boundary=mirror,
+                )
+                self._remaining_seconds()
                 findings = self.parse(data.decode("utf-8"), mirror)
-            except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+                self._retained_findings = findings
+                coverage = reconcile_codeql_coverage(
+                    data.decode("utf-8"), mirror, expected_files
+                )
+            except (KeyError, OSError, TypeError, ValueError) as exc:
+                if isinstance(exc, TimeoutError):
+                    raise
                 tool_run = ToolRun(
                     tool=self.name,
                     status=ToolStatus.PARSE_ERROR,
@@ -259,20 +347,73 @@ class CodeQlAdapter(ScannerAdapter):
                     [], tool_run, self._diagnostic(tool_run, execution)
                 )
 
+            if self.config.rules_path is not None:
+                try:
+                    extra = supplemental_queries(
+                        cli=str(self._auxiliary_path),
+                        target=mirror,
+                        home=copies.get("database", mirror),
+                        rules=copies["rules"],
+                        already_sealed=True,
+                        rules_digest=self._asset_digests["rules"],
+                        environment=self.environment(),
+                        timeout_seconds=self._remaining_seconds(),
+                        max_output_bytes=self.max_output_bytes,
+                    )
+                    supplemental_error = (
+                        self._asset_changed_error() or self._auxiliary_changed_error()
+                    )
+                    refined, extra, native_refinement = refine_native_results(
+                        data.decode("utf-8"),
+                        extra,
+                        eligible=not supplemental_error
+                        and coverage["state"] == "complete",
+                        normalize=lambda payload: [
+                            asdict(finding) for finding in self.parse(payload, mirror)
+                        ],
+                    )
+                    # Commit only after both documents parse. On any failure the
+                    # original native findings remain available to the caller.
+                    refined_findings = self.parse(refined, mirror) + self.parse(
+                        extra, mirror
+                    )
+                    findings = refined_findings
+                except TimeoutError:
+                    raise
+                except (OSError, TypeError, ValueError):
+                    supplemental_error = "supplemental CodeQL analysis incomplete; primary findings retained"
+
+            findings, constant_reviews = annotate_constant_sinks(
+                findings, mirror, check=self._remaining_seconds
+            )
+
         for finding in findings:
             for source in finding.sources:
                 source.version = version
         tool_run = ToolRun(
             tool=self.name,
-            status=ToolStatus.COMPLETED,
+            status=ToolStatus.FAILED
+            if supplemental_error
+            else ToolStatus.COMPLETED
+            if coverage["state"] == "complete"
+            else ToolStatus.PARSE_ERROR,
             command=command,
             duration_seconds=round(time.monotonic() - started, 3),
             version=version,
             exit_code=execution.exit_code,
             finding_count=len(findings),
+            error=supplemental_error
+            or (
+                "CodeQL extraction coverage is incomplete or unknown; findings retained"
+                if coverage["state"] != "complete"
+                else None
+            ),
         )
         diagnostic = self._diagnostic(tool_run, execution)
         diagnostic["runner"] = "run-codeql"
+        diagnostic["analysis_coverage"] = coverage
+        diagnostic["constant_sink_reviews"] = constant_reviews
+        diagnostic["native_flow_refinement"] = native_refinement
         diagnostic["target_mirrored"] = True
         diagnostic["repository_codeql_config_used"] = False
         diagnostic["auto_download_allowed"] = False
@@ -329,10 +470,29 @@ class CodeQlAdapter(ScannerAdapter):
             stdout_truncated=execution.stdout_truncated,
             stderr_truncated=execution.stderr_truncated,
         )
-        return AdapterResult([], tool_run, self._diagnostic(tool_run, execution))
+        reason = (
+            "wall-clock"
+            if execution.timed_out
+            else "memory"
+            if execution.resident_memory_limit_exceeded
+            else "output"
+            if execution.output_limit_exceeded
+            else "scratch"
+            if execution.scratch_limit_exceeded
+            else "native-quota"
+            if execution.exit_code == 0xC0000044
+            else "process-exit"
+        )
+        return AdapterResult(
+            [],
+            tool_run,
+            {**self._diagnostic(tool_run, execution), "failure_category": reason},
+        )
 
 
-def _copy_target(source: Path, destination: Path) -> None:
+def _copy_target(
+    source: Path, destination: Path, *, check: Callable[[], object] | None = None
+) -> None:
     destination.mkdir(parents=True)
     for root, directories, filenames in os.walk(source, followlinks=False):
         root_path = Path(root)
@@ -351,7 +511,15 @@ def _copy_target(source: Path, destination: Path) -> None:
         output_root = destination / relative_root
         output_root.mkdir(parents=True, exist_ok=True)
         for filename in filenames:
+            if check:
+                check()
             source_file = root_path / filename
             if source_file.is_symlink():
                 continue
-            shutil.copy2(source_file, output_root / filename)
+            _, payload = read_regular_file(
+                source_file,
+                "CodeQL source",
+                maximum_bytes=64 * 1024**2,
+                boundary=source,
+            )
+            (output_root / filename).write_bytes(payload)

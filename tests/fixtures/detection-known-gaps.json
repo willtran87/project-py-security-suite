@@ -1,0 +1,161 @@
+{
+  "schema_version": "1.0",
+  "scope": "Known upstream CodeQL mutation-flow misses. Unsafe labels are preserved. These are precision-proof rejection controls, not successful detections.",
+  "cases": [
+    {
+      "id": "codeql-ldap-list-alias-mutation",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom helper import make_connection\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    other=lst\n    other[0]=value\n    bar=lst[0]\n    conn=make_connection()\n    conn.search(\"base\", \"(uid=\"+bar+\")\")\n    return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      }
+    },
+    {
+      "id": "codeql-ldap-list-subscript-write",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom helper import make_connection\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    lst[0]=value\n    bar=lst[0]\n    conn=make_connection()\n    conn.search(\"base\", \"(uid=\"+bar+\")\")\n    return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      }
+    },
+    {
+      "id": "codeql-ldap-list-extend",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom helper import make_connection\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    lst.extend([value])\n    bar=lst[1]\n    conn=make_connection()\n    conn.search(\"base\", \"(uid=\"+bar+\")\")\n    return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      }
+    },
+    {
+      "id": "codeql-ldap-list-insert",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom helper import make_connection\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    lst.insert(0,value)\n    bar=lst[0]\n    conn=make_connection()\n    conn.search(\"base\", \"(uid=\"+bar+\")\")\n    return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      }
+    },
+    {
+      "id": "codeql-ldap-list-closure-mutation",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom helper import make_connection\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    def change():\n        lst[0]=value\n    change()\n    bar=lst[0]\n    conn=make_connection()\n    conn.search(\"base\", \"(uid=\"+bar+\")\")\n    return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      }
+    },
+    {
+      "id": "codeql-values-path-list-alias-mutation",
+      "engine": "codeql",
+      "rule_id": "py/path-injection",
+      "category": "CWE-22",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    other=lst\n    other[0]=value\n    bar=lst[0]\n    return open(bar).read()\n"
+      }
+    },
+    {
+      "id": "codeql-values-xpath-list-alias-mutation",
+      "engine": "codeql",
+      "rule_id": "py/xpath-injection",
+      "category": "CWE-643",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    other=lst\n    other[0]=value\n    bar=lst[0]\n    return str(etree.XPath(bar))\n"
+      }
+    },
+    {
+      "id": "codeql-values-path-list-subscript-write",
+      "engine": "codeql",
+      "rule_id": "py/path-injection",
+      "category": "CWE-22",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    lst[0]=value\n    bar=lst[0]\n    return open(bar).read()\n"
+      }
+    },
+    {
+      "id": "codeql-values-xpath-list-subscript-write",
+      "engine": "codeql",
+      "rule_id": "py/xpath-injection",
+      "category": "CWE-643",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    lst[0]=value\n    bar=lst[0]\n    return str(etree.XPath(bar))\n"
+      }
+    },
+    {
+      "id": "codeql-values-path-list-extend",
+      "engine": "codeql",
+      "rule_id": "py/path-injection",
+      "category": "CWE-22",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    lst.extend([value])\n    bar=lst[1]\n    return open(bar).read()\n"
+      }
+    },
+    {
+      "id": "codeql-values-xpath-list-extend",
+      "engine": "codeql",
+      "rule_id": "py/xpath-injection",
+      "category": "CWE-643",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    lst.extend([value])\n    bar=lst[1]\n    return str(etree.XPath(bar))\n"
+      }
+    },
+    {
+      "id": "codeql-values-path-list-insert",
+      "engine": "codeql",
+      "rule_id": "py/path-injection",
+      "category": "CWE-22",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    lst.insert(0,value)\n    bar=lst[0]\n    return open(bar).read()\n"
+      }
+    },
+    {
+      "id": "codeql-values-xpath-list-insert",
+      "engine": "codeql",
+      "rule_id": "py/xpath-injection",
+      "category": "CWE-643",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    lst.insert(0,value)\n    bar=lst[0]\n    return str(etree.XPath(bar))\n"
+      }
+    },
+    {
+      "id": "codeql-values-path-list-closure-mutation",
+      "engine": "codeql",
+      "rule_id": "py/path-injection",
+      "category": "CWE-22",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    def change():\n        lst[0]=value\n    change()\n    bar=lst[0]\n    return open(bar).read()\n"
+      }
+    },
+    {
+      "id": "codeql-values-xpath-list-closure-mutation",
+      "engine": "codeql",
+      "rule_id": "py/xpath-injection",
+      "category": "CWE-643",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    def change():\n        lst[0]=value\n    change()\n    bar=lst[0]\n    return str(etree.XPath(bar))\n"
+      }
+    }
+  ]
+}

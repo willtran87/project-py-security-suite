@@ -1682,9 +1682,7 @@ def _exclusive_state_lock(path: Path) -> Any:
     lock_path = path.with_name(f".{path.name}.lock")
     handle = lock_path.open("a+b")
     os.chmod(lock_path, 0o600)  # noqa: S103 - private replay checkpoint lock
-    if lock_path.stat().st_size == 0:
-        handle.write(b"0")
-        handle.flush()
+    # Byte-range locks may cover EOF; writing before locking races on Windows.
     deadline = time.monotonic() + 10.0
     acquired = False
     try:

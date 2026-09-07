@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from .source_index import SourceLimitError, parse_python, read_python_source, source_files
+
 import ast
 import json
 import re
@@ -2320,33 +2322,26 @@ def _surface_verification_steps(
 
 
 def _integer_set(value: Any) -> set[int]:
-    if not isinstance(value, list):
-        return set()
     return {
         int(item)
-        for item in value
+        for item in (value if isinstance(value, list) else [])
         if isinstance(item, int) and not isinstance(item, bool) and item > 0
     }
 
 
 def _inventory(target: Path) -> dict[str, Any]:
-    python_files = [
-        path
-        for path in target.rglob("*.py")
-        if not any(part in _SKIP_DIRECTORIES for part in path.relative_to(target).parts)
-        and not path.is_symlink()
-    ]
-    python_files.sort(key=lambda path: path.relative_to(target).as_posix())
+    python_files = [path for path in source_files(target, _SKIP_DIRECTORIES) if path.suffix.casefold() == ".py"]
     selected = python_files[:_MAX_FILES]
     sink_surfaces: list[dict[str, Any]] = []
     sdk_observations: list[dict[str, Any]] = []
-    parse_errors = 0
+    parse_errors = source_omissions = 0
     for path in selected:
         relative = path.relative_to(target).as_posix()
         try:
-            tree = ast.parse(path.read_text(encoding="utf-8-sig"), filename=relative)
-        except (OSError, SyntaxError, UnicodeError):
-            parse_errors += 1
+            tree = parse_python(read_python_source(path, target), relative)
+        except (SourceLimitError, OSError, SyntaxError, UnicodeError) as exc:
+            source_omissions += isinstance(exc, SourceLimitError)
+            parse_errors += not isinstance(exc, SourceLimitError)
             continue
         visitor = _ExposureVisitor(relative)
         visitor.visit(tree)
@@ -2358,8 +2353,8 @@ def _inventory(target: Path) -> dict[str, Any]:
     sink_surfaces.extend(configuration_surfaces)
     sdk_observations.extend(_declared_sdk_observations(target))
     return {
-        "files_analyzed": len(selected),
-        "files_omitted": max(0, len(python_files) - _MAX_FILES),
+        "files_analyzed": len(selected) - source_omissions - parse_errors,
+        "files_omitted": max(0, len(python_files) - _MAX_FILES) + source_omissions,
         "configuration_files_omitted": configuration_files_omitted,
         "parse_errors": parse_errors,
         "sink_surfaces": _deduplicate(sink_surfaces),

@@ -15,6 +15,8 @@ from jsonschema import Draft202012Validator, FormatChecker  # type: ignore[impor
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
+from .artifact_schema_catalog import _ARTIFACT_SCHEMAS as _ARTIFACT_SCHEMAS, artifact_schema_name
+from .dependency_surface import validate_dependency_accounting
 from .strict_json import loads as strict_loads
 from .strict_json import canonical_bytes
 from .deployment_receipt import verify_portable_receipt
@@ -23,97 +25,14 @@ from .checkpoint_authority import publish_checkpoint, verify_retained_checkpoint
 from .failure_domain import require_independent_failure_domains, verify_failure_domain
 
 
-_ARTIFACT_SCHEMAS = {
-    "admission-decisions.json": "admission-decisions.schema.json",
-    "advanced-analysis.json": "advanced-analysis.schema.json",
-    "application-contract-analysis.json": "application-contract-analysis-1.3.schema.json",
-    "architecture-history.json": "architecture-history-1.0.schema.json",
-    "architecture-evaluation.json": "architecture-evaluation-1.0.schema.json",
-    "artifact-manifest.json": "artifact-manifest.schema.json",
-    "artifact-sbom.cdx.json": "cyclonedx-artifact.schema.json",
-    "assurance-claims.json": "assurance-claims-1.1.schema.json",
-    "assurance-case-assessment.json": "assurance-case-assessment-1.0.schema.json",
-    "threat-model-assessment.json": "threat-model-assessment-1.0.schema.json",
-    "boundary-graph.json": "boundary-graph-1.0.schema.json",
-    "benchmark-delta.json": "benchmark-delta-1.0.schema.json",
-    "benchmark-registry.json": "benchmark-registry-1.0.schema.json",
-    "benchmark-scorecard.json": "benchmark-scorecard-1.0.schema.json",
-    "assurance-profile-registry.json": "assurance-profile-registry-1.0.schema.json",
-    "capability-manifest.json": "capability-manifest-1.0.schema.json",
-    "closure-plan.json": "closure-plan.schema.json",
-    "code-health.json": "code-health-1.4.schema.json",
-    "control-assessment.json": "control-assessment-1.0.schema.json",
-    "procedure-assessment.json": "procedure-assessment-1.0.schema.json",
-    "data-exposure.json": "data-exposure-1.5.schema.json",
-    "dependency-surface.json": "dependency-surface-1.1.schema.json",
-    "domain-assurance.json": "domain-assurance-1.0.schema.json",
-    "deptry-dependencies.json": "deptry-artifact.schema.json",
-    "diff-coverage.json": "diff-coverage-artifact.schema.json",
-    "effectiveness.json": "effectiveness-1.1.schema.json",
-    "external-conformity-assessment.json": "external-conformity-assessment-1.0.schema.json",
-    "evidence-fusion.json": "evidence-fusion.schema.json",
-    "graph-analysis.json": "graph-analysis.schema.json",
-    "graphify.json": "graphify-evidence.schema.json",
-    "git-sizer.json": "git-sizer-artifact.schema.json",
-    "hypothesis-summary.json": "test-summary-artifact.schema.json",
-    "intelligence-approval.json": "intelligence-approval.schema.json",
-    "industry-assurance.json": "industry-assurance-1.0.schema.json",
-    "isolation-attestation.json": "isolation-attestation.schema.json",
-    "isolation-boundary.json": "isolation-boundary-1.0.schema.json",
-    "isolation-probe.json": "isolation-probe-1.0.schema.json",
-    "osv-manifest-receipts.json": "osv-manifest-receipts-1.0.schema.json",
-    "oscal-assessment-plan.json": "oscal-model-1.2.2.schema.json",
-    "oscal-assessment-results.json": "oscal-model-1.2.2.schema.json",
-    "oscal-catalog.json": "oscal-model-1.2.2.schema.json",
-    "oscal-component-definition.json": "oscal-model-1.2.2.schema.json",
-    "oscal-poam.json": "oscal-model-1.2.2.schema.json",
-    "oscal-profile.json": "oscal-model-1.2.2.schema.json",
-    "oscal-system-security-plan.json": "oscal-model-1.2.2.schema.json",
-    "finding-delta.json": "finding-delta-1.1.schema.json",
-    "finding-validation.json": "finding-validation-1.0.schema.json",
-    "framework-model-coverage.json": "framework-model-coverage-1.0.schema.json",
-    "checkov-iac.json": "checkov-artifact.schema.json",
-    "coverage-summary.json": "coverage-artifact.schema.json",
-    "junit-summary.json": "test-summary-artifact.schema.json",
-    "kics-iac.json": "kics-artifact.schema.json",
-    "llm-adversarial-plan.json": "llm-adversarial-plan-1.0.schema.json",
-    "lifecycle-traceability.json": "lifecycle-traceability-1.0.schema.json",
-    "maturity-model-assessment.json": "maturity-model-assessment-1.0.schema.json",
-    "pipdeptree-summary.json": "pipdeptree-artifact.schema.json",
-    "pylint-summary.json": "pylint-artifact.schema.json",
-    "radon-complexity.json": "radon-artifact.schema.json",
-    "reachability.json": "reachability-artifact.schema.json",
-    "reuse-compliance.json": "reuse-artifact.schema.json",
-    "risk-intelligence.json": "risk-intelligence-1.0.schema.json",
-    "sbom.cdx.json": "cyclonedx-artifact.schema.json",
-    "scancode-inventory.json": "scancode-artifact.schema.json",
-    "scanner-trust.json": "scanner-trust-1.0.schema.json",
-    "schemathesis-summary.json": "test-summary-artifact.schema.json",
-    "portfolio-health.json": "portfolio-health-1.1.schema.json",
-    "prioritization-calibration.json": "prioritization-calibration-1.0.schema.json",
-    "process-capability-assessment.json": "process-capability-assessment-1.0.schema.json",
-    "report-security.json": "report-security-1.0.schema.json",
-    "resource-limits.json": "resource-limits-1.0.schema.json",
-    "risk-paths.json": "risk-paths.schema.json",
-    "runtime-closure.json": "runtime-closure-1.0.schema.json",
-    "runtime-surface-binding.json": "runtime-surface-binding-1.0.schema.json",
-    "runtime-trace-correlation.json": "runtime-trace-correlation-1.0.schema.json",
-    "semantic-language-coverage.json": "semantic-language-coverage-1.0.schema.json",
-    "security-requirements-coverage.json": "security-requirements-coverage-1.1.schema.json",
-    "security-automation-interoperability.json": "security-automation-interoperability-1.0.schema.json",
-    "source-inventory.json": "source-inventory.schema.json",
-    "static-architecture.json": "static-architecture-1.4.schema.json",
-    "standards-crosswalk.json": "standards-crosswalk-1.0.schema.json",
-    "standardized-prioritization.json": "standardized-prioritization-1.0.schema.json",
-    "structural-synthesis.json": "structural-synthesis-1.2.schema.json",
-    "trust-policy-attestation.json": "trust-policy-attestation-1.0.schema.json",
-    "trust-policy.json": "trust-policy-1.0.schema.json",
-}
 
 _TYPED_VALIDATORS: dict[str, Callable[[object], None]] = {}
 _OPERATION_STATE_GENESIS_SHA256 = hashlib.sha256(
     b"pysec-operation-receipt-state-genesis-v1"
 ).hexdigest()
+
+
+_TYPED_VALIDATORS["dependency-surface.json"] = validate_dependency_accounting
 
 
 def _typed_validator(
@@ -415,7 +334,7 @@ def validate_governed_artifacts(artifacts: dict[str, Any] | None) -> dict[str, s
     """Validate every artifact with a bundled governed contract before sealing."""
     validated: dict[str, str] = {}
     for name, value in sorted((artifacts or {}).items()):
-        schema_name = _ARTIFACT_SCHEMAS.get(name)
+        schema_name = artifact_schema_name(name, value)
         if schema_name is None and _is_companion_assurance(value):
             schema_name = "companion-assurance-2.0.schema.json"
         if schema_name is None:
@@ -426,18 +345,18 @@ def validate_governed_artifacts(artifacts: dict[str, Any] | None) -> dict[str, s
         schema = strict_loads(raw)
         if not isinstance(schema, dict):
             raise TypeError(f"artifact schema root is invalid: {schema_name}")
-        errors = sorted(
+        error = next(
             Draft202012Validator(schema, format_checker=FormatChecker()).iter_errors(
                 value
             ),
-            key=lambda item: tuple(str(part) for part in item.absolute_path),
+            None,
         )
-        if errors:
-            location = "/".join(str(part) for part in errors[0].absolute_path) or "/"
+        if error is not None:
+            location = "/".join(str(part) for part in error.absolute_schema_path)[:512] or "/"
             raise ValueError(
-                f"derived artifact {name} violates {schema_name} at {location}: "
-                f"{errors[0].message}"
-            )
+                f"derived artifact {name} violates {schema_name} at schema /{location}: "
+                f"failed {error.validator} validation"
+            ) from None
         validator = _TYPED_VALIDATORS.get(name)
         companion = _is_companion_assurance(value)
         if validator is None and not companion and _contains_operation_receipt(value):

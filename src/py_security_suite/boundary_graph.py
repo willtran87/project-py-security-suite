@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from .source_index import SourceLimitError, parse_python
+
 import ast
 import base64
 import hashlib
@@ -1287,9 +1289,11 @@ def _verify_semantic_ledger(
 
 def _python_edges(text: str, source: str) -> tuple[list[dict[str, Any]], str | None]:
     try:
-        tree = ast.parse(text)
+        tree = parse_python(text, source)
     except SyntaxError:
         return [], "python-syntax-error"
+    except SourceLimitError:
+        return [], "python-source-limit-exceeded"
     edges: list[dict[str, Any]] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):

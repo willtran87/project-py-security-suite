@@ -110,11 +110,33 @@ py_security_suite = [
   "rules/*.txt",
   "rules/*.psd1",
   "rules/*.json",
+  "rules/codeql/*.ql",
+  "rules/codeql/*.qll",
+  "rules/codeql/*.yml",
   "schemas/*.json",
 ]
 
 [tool.pyright]
 include = [
+  "src/py_security_suite/source_stream.py",
+  "src/py_security_suite/scan_progress.py",
+  "src/py_security_suite/process_containment.py",
+  "src/py_security_suite/report_cleanup.py",
+  "src/py_security_suite/scan_enrichment.py",
+  "src/py_security_suite/json_stream.py",
+  "src/py_security_suite/report_io.py",
+  "src/py_security_suite/cli_recovery.py",
+  "src/py_security_suite/report_checkpoint.py",
+  "src/py_security_suite/report_references.py",
+  "src/py_security_suite/artifact_schema_catalog.py",
+  "src/py_security_suite/cli_scan.py",
+  "src/py_security_suite/config_numbers.py",
+  "src/py_security_suite/process_memory.py",
+  "src/py_security_suite/scan_artifacts.py",
+  "src/py_security_suite/scan_control.py",
+  "src/py_security_suite/scan_governance.py",
+  "src/py_security_suite/scan_scheduler.py",
+  "src/py_security_suite/source_index.py",
   "src/py_security_suite/artifact_contracts.py",
   "src/py_security_suite/atomic_file.py",
   "src/py_security_suite/application_contracts.py",
@@ -291,6 +313,7 @@ do_not_mutate_patterns = [
 ]
 
 [tool.pytest.ini_options]
+testpaths = ["tests"]
 pythonpath = ["."]
 addopts = [
   "-p", "no:tach",

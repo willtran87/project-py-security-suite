@@ -148,7 +148,7 @@ automation contracts.
 | Combined statement/branch coverage | CI enforces an 80% aggregate floor plus 50 security-critical module ratchets; exact revision-bound totals are retained with every assurance run |
 | Changed-line coverage | 90% minimum in protected CI |
 | Static typing | The complete production, companion, and Pages-audit source set checked by mypy, a strict Mypy contract over all 205 production modules, plus a pinned strict Pyright gate over 36 production trust, parser, authority, replay, resilience, performance, reporting, source-assurance, framework-model, and policy modules and 12 assurance scripts |
-<!-- pysec-schema-metrics files=206 runtime_exports=165 stable_contracts=164 -->
+<!-- pysec-schema-metrics files=207 runtime_exports=166 stable_contracts=164 -->
 | Schema/runtime consistency | 206 bundled JSON Schema files, 165 runtime exports, and 164 immutable compatibility-baseline contracts |
 | Public compatibility | Exhaustive additive baseline across 58 commands, 469 positional/option shape contracts, 164 byte-immutable bundled schemas, three console scripts, and two Python callable signatures |
 | Architecture enforcement | Exact Tach graph across 155 production module boundaries, one frozen seven-module trust/runtime SCC debt group that cannot expand, dependency-inverted attestation parsing, split standards/benchmark/profile/open-source-extension catalogs, isolated bytecode and native polyglot parsing, zero-slack concentration ceilings that tighten with every reduction, and retained schema-valid architecture evidence |

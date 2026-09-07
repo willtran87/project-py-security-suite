@@ -13,12 +13,23 @@ from ..models import (
 )
 from ..strict_json import loads as strict_json_loads
 from .base import ScannerAdapter
+from .coverage import native_coverage, reconcile_coverage
+from .staging import maintained_files
 from .common import map_confidence, map_severity
 
 
 class BanditAdapter(ScannerAdapter):
     name = "bandit"
     accepted_exit_codes = frozenset({0, 1})
+
+    def coverage_inventory(self, target: Path) -> tuple[str, ...]:
+        return tuple(path.relative_to(target.resolve()).as_posix() for path in maintained_files(target, frozenset({".py"})))
+
+    def coverage_assessment(self, payload: str, target: Path, expected: tuple[str, ...]) -> dict[str, object]:
+        return reconcile_coverage(payload, target, expected, semgrep=False)
+
+    def analysis_coverage(self, payload: str) -> dict[str, int]:
+        return native_coverage(payload)
 
     def build_command(self, executable: str, target: Path) -> list[str]:
         excluded_paths = ",".join(

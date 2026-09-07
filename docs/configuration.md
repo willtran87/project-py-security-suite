@@ -2,6 +2,36 @@
 
 Last reviewed: 2026-08-31
 
+## Scan budgets and strict numeric settings
+
+Execution limits use TOML integers. Booleans, quoted numbers, and fractional
+values are rejected rather than coerced. Coverage and age thresholds accept
+finite numeric values; NaN and infinity are invalid.
+
+```toml
+[execution]
+max_workers = 4
+max_output_bytes = 16777216
+max_scan_seconds = 1800
+max_scan_memory_bytes = 8589934592
+```
+
+`max_scan_seconds` defaults to `0` (no aggregate deadline) and accepts values
+through 86400. A repository may shorten an organization-defined deadline but
+cannot disable or extend it. The clock includes source snapshot preparation.
+The deadline requests cooperative shutdown: queued scanners are skipped and
+supervised child processes are terminated. In-process work reaches a safe
+boundary, and integrity checks plus atomic report publication finish afterward.
+This is not a hard operating-system wall-clock limit; use runner quotas for that.
+Completed findings remain in the report and a stopped scan is `INCOMPLETE`.
+
+`max_scan_memory_bytes` defaults to `0` (no aggregate memory watchdog). A
+nonzero value must be at least 64 MiB. It samples the suite process and its
+descendants, so concurrent scanners share this budget. An exceeded budget or
+unavailable accounting requests the same fail-closed shutdown. This sampled
+watchdog complements the existing per-process OS limits; it is not a hard
+allocation ceiling. Repository configuration cannot weaken an organization pin.
+
 ## Loading and protection
 
 Configuration is merged from secure defaults, an optional organization policy,
@@ -530,7 +560,7 @@ require release evidence.
 | `trufflehog` | `trufflehog` | None |
 | `devskim` | `devskim` | Optional `rules_path`; maintained-source mirror |
 | `flawfinder` | `flawfinder` | None; conditional on C/C++ sources |
-| `codeql` | `run-codeql` | `auxiliary_executable` CodeQL CLI and `database_path` isolated home with local packs |
+| `codeql` | `run-codeql` | `auxiliary_executable` CodeQL CLI, `database_path` isolated home with approved query packs and locked libraries, and bundled supplemental `rules_path` |
 | `syft` | `syft` | `artifacts_path` |
 | `grype` | `grype` | `artifacts_path` and required offline `database_path` |
 | `check-wheel-contents` | `check-wheel-contents` | `artifacts_path` |
@@ -1301,3 +1331,43 @@ Expired-report deletion requires `pysec purge-expired-report REPORT
 exact report checksum, sealed deletion deadline, and purge action; the local
 wall clock and legacy signer-only timestamp receipts are not accepted as
 deletion authority.
+
+## Runtime bounds and source reuse
+
+Library calls nested inside `controlled_scan()` enforce both the existing
+control and the scan's configured limits. A child scan cannot extend its
+parent's absolute deadline or weaken its memory budget. Parent cancellation
+propagates to the child, and progress uses the parent event stream.
+
+The bounded subprocess helper monitors timeout, cancellation, and output limits
+while sending input as well as while reading output. A child that stops reading
+stdin cannot postpone its timeout until input delivery finishes.
+
+The shared Python parser admits at most 2 MiB of UTF-8 source per file. Its
+scan-local AST cache has independent limits of 128 entries, 100,000 nodes, and
+8 MiB of accounted tree memory, including attributes, containers, and literal
+payloads. Source excerpts retain their separate 8 MiB budget. Cache admission
+limits do not skip otherwise admissible analysis. Oversized source rejected by
+boundary analysis is reported as an error; data-exposure analysis includes it in
+`limits.files_omitted` and excludes it from `files_analyzed`. These parser/cache
+limits supplement the cooperative process-tree memory budget; they are not an
+OS-enforced bound on every analysis stage's temporary allocations.
+
+Bounded helpers now close an OS process boundary before draining their remaining
+output, even if the direct child exits successfully. Windows uses the same
+kill-on-close Job Object limits as scanner execution, with a trusted launcher
+gated until job assignment completes. POSIX helpers run in a separate session
+whose process group is terminated during cleanup. Process groups are not a
+replacement for the externally governed sandbox against deliberate escape.
+
+Cancellation and memory-limit stops are distinct from timeouts. `RawExecution`
+retains `stop_reason` and a typed `stop_cause`; `timed_out` is reserved for an
+expired tool timeout or scan deadline. Adapter results retain the interruption
+reason and use `failed` for cancellation/memory stops, preserving the existing
+tool-status schema. Completed results stay completed when cancellation arrives
+during later analysis.
+
+Per-tool progress emits its actual result (`completed`, `failed`, `timed_out`,
+`parse_error`, `skipped`, or `unavailable`) after the adapter result is checked.
+Optional enrichment checks for cancellation between analysis stages, then
+continues integrity checks and report finalization with an `INCOMPLETE` outcome.

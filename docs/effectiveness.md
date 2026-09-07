@@ -2,6 +2,89 @@
 
 Last reviewed: 2026-08-30
 
+## Executable detection regression gate
+
+See [professional acceptance](professional-acceptance.md) for the installed-wheel
+CI matrix, external OWASP measurement, per-engine regression baseline, and the
+remaining limits on production effectiveness claims.
+
+`scripts/validate_detection.py` runs real Semgrep and Bandit binaries against
+the developer-labeled cases in `tests/fixtures/detection-regressions.json`.
+It checks request-to-SQL, SSRF, path traversal, and credential logging, including
+Flask, Django, FastAPI, keyword arguments, and async handlers. Each vulnerability
+class has positive and negative controls. The gate requires every expected
+detection, rejects false positives on the negative controls, and retains per-CWE
+precision/recall counts, detector versions, and corpus/rule digests. These small
+regression fixtures do not establish production detection rates.
+
+Semgrep now runs a fixed three attempts by default (`--semgrep-repetitions`,
+bounded to one through five). Every attempt must complete its Python inventory
+and native error checks, and normalized findings and engine versions must agree.
+All attempt summaries remain in `semgrep_stability`, including failures followed
+by successes. Per-case results describe the first attempt; a later success cannot
+replace them or turn the overall gate green. Summary digests include normalized
+classification and severity, not only finding counts. Timing is recorded but does
+not affect the equality check. This is a regression check, not a reliability SLA.
+
+The separate CodeQL gate compiles and runs the bundled global taint query against
+cross-function and cross-file credential flows. Positive findings must retain
+SARIF path traces. Both an identity redactor and a real constant-returning
+redactor are tested. CI requires both lanes through `detection-regressions` and
+retains their JSON results; this gate is included in the existing required gate.
+
+The Semgrep rules no longer trust arbitrary function names containing `sanitize`,
+`redact`, or `allowlist`. A custom helper can therefore produce a candidate finding
+until its behavior is established by deeper analysis or an explicitly reviewed
+model. The built-in `werkzeug.utils.secure_filename` path model is tested against
+a fixed parent-directory example. Parameterized SQL and constant outbound URLs
+with request-derived query parameters are negative controls.
+
+```text
+python scripts/validate_detection.py --semgrep PATH_TO_SEMGREP --bandit PATH_TO_BANDIT --output .artifacts/detection/semgrep.json
+codeql pack ci src/py_security_suite/rules/codeql
+python scripts/validate_detection.py --codeql-only --codeql PATH_TO_CODEQL --output .artifacts/detection/codeql.json
+```
+
+The CodeQL lane was validated with CLI 2.26.4 and the checked-in query dependency
+lock. Package preparation is connected; detection uses the staged libraries.
+For product scans, select a profile containing CodeQL (such as `deep`), stage
+those locked dependencies under `tools.codeql.database_path/.codeql/packages`,
+alongside the approved `codeql/python-queries` pack. The bundled supplemental
+query pack is the default `tools.codeql.rules_path`. Production deployments must
+approve the updated rules and cache digests. Missing supplemental dependencies
+are an explicit readiness failure. A supplemental execution failure retains
+primary CodeQL findings and makes the tool incomplete.
+
+The CodeQL gate also tests native path/XPath flow refinement. A bounded evaluator
+handles pure integer arithmetic and a single comparison in conditional expressions
+whose selected branch is a string literal. Local SSA bindings must be unique,
+defined, non-escaping fast locals without phi inputs. Unsupported operations,
+large intermediates, unknown conditions, and other taint paths retain alerts.
+The supplemental queries compare the original and refined native flows; an
+exclusion requires an explicit result showing no refined flow to any node at
+the same sink coordinates. No absence-of-results heuristic is used.
+
+Live scans require complete extraction, successful invocations, unchanged assets,
+and an exact rule/file/line/column match. The original finding, resolved and
+redacted through the normal parser, and its native comparison record are retained
+in `evidence/codeql.json` under `native_flow_refinement`. Proof and evidence limits
+retain all original alerts when exceeded. Imported SARIF and local AST review
+hints do not authorize this refinement. This narrow model is not a proof about
+arbitrary Python reflection or unmodeled runtime behavior.
+
+Bandit and Semgrep reported native analysis errors also make the tool incomplete
+while preserving valid findings. The gate tests a mixture of malformed source and
+detectable vulnerabilities through the actual Bandit adapter; unit tests cover
+both adapters' partial-result contracts. Counts describe errors reported by the
+engine, not an independent proof that every file was analyzed. Diagnostics retain
+counts rather than raw scanner error contents.
+
+Semgrep dataflow fixpoint timeouts in `time.fixpoint_timeouts` also count as
+analysis failures, even with exit zero and an empty main error list. The
+completion gate rejects those runs, including scans with zero findings. See the
+[current acceptance qualification](professional-acceptance.md#current-qualification-native-dataflow-timeouts)
+for the observed intermittent timeout and the limits on earlier measurements.
+
 The benchmark semantic canonicalizer is regression-calibrated against the
 canonical-digest-pinned multilingual fixture at
 [`tests/fixtures/semantic-calibration-1.1.json`](../tests/fixtures/semantic-calibration-1.1.json).

@@ -28,7 +28,7 @@ def test_deep_assurance_uses_sealed_database_input_and_aggregate_gate() -> None:
         encoding="utf-8"
     )
     assert "uses: ./.github/workflows/deep-assurance.yml" in release_workflow
-    assert "needs: deep-assurance" in release_workflow
+    assert "needs: [deep-assurance, detection-accuracy]" in release_workflow
 
 
 def test_scanner_build_cannot_resolve_the_mutable_database_url() -> None:

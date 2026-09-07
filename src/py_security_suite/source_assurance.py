@@ -9,6 +9,7 @@ from .application_contracts import analyze_application_contracts
 from .architecture_history import architecture_history
 from .code_health import analyze_code_health
 from .framework_coverage import framework_model_coverage
+from .scan_control import analysis_checkpoint
 from .models import Finding, ToolRun
 from .static_architecture import analyze_static_architecture
 
@@ -39,6 +40,7 @@ def apply_source_assurance(
 
     errors: list[str] = []
     if "framework-model-coverage.json" not in artifacts:
+        analysis_checkpoint()
         framework_findings, coverage = framework_model_coverage(
             target, tool_runs, findings
         )
@@ -61,6 +63,7 @@ def apply_source_assurance(
             )
 
     if "application-contract-analysis.json" not in artifacts:
+        analysis_checkpoint()
         contract_findings, contract = analyze_application_contracts(target, artifacts)
         findings.extend(contract_findings)
         artifacts["application-contract-analysis.json"] = contract
@@ -77,16 +80,19 @@ def apply_source_assurance(
     if profile not in STRUCTURAL_QUALITY_PROFILES:
         return errors
     if "code-health.json" not in artifacts:
+        analysis_checkpoint()
         code_findings, code_health = analyze_code_health(target)
         findings.extend(code_findings)
         artifacts["code-health.json"] = code_health
     if "static-architecture.json" not in artifacts:
+        analysis_checkpoint()
         architecture_findings, static_architecture = analyze_static_architecture(
             target, artifacts.get("reachability.json")
         )
         findings.extend(architecture_findings)
         artifacts["static-architecture.json"] = static_architecture
     if "architecture-history.json" not in artifacts:
+        analysis_checkpoint()
         history_findings, history = architecture_history(target, findings)
         findings.extend(history_findings)
         artifacts["architecture-history.json"] = history

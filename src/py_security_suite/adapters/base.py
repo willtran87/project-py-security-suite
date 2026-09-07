@@ -47,6 +47,7 @@ class ScannerReadiness:
 class ScannerAdapter(ABC):
     name: str
     accepted_exit_codes: frozenset[int] = frozenset({0})
+    partial_exit_codes: frozenset[int] = frozenset()
 
     def __init__(self, config: ToolConfig, max_output_bytes: int) -> None:
         self.config = config
@@ -103,6 +104,15 @@ class ScannerAdapter(ABC):
         raise NotImplementedError
 
     def derived_artifacts(self, payload: str, target: Path) -> dict[str, Any]:
+        return {}
+
+    def analysis_coverage(self, payload: str) -> dict[str, int]:
+        return {}
+
+    def coverage_inventory(self, target: Path) -> tuple[str, ...] | None:
+        return None
+
+    def coverage_assessment(self, payload: str, target: Path, expected: tuple[str, ...]) -> dict[str, object]:
         return {}
 
     def result_payload(self, execution: RawExecution) -> str:
@@ -182,6 +192,7 @@ class ScannerAdapter(ABC):
             )
 
     def _run_ready(self, target: Path, executable: str) -> AdapterResult:
+        expected_files = self.coverage_inventory(target)
         command = self.build_command(executable, target)
         version = self._detect_version(executable, target)
         execution = run_command(
@@ -204,11 +215,11 @@ class ScannerAdapter(ABC):
                 tool_run=tool_run,
                 diagnostic=self._diagnostic(tool_run, execution),
             )
-        if execution.timed_out:
+        if execution.timed_out or execution.stop_reason:
             tool_run = self._tool_run(
                 execution,
-                ToolStatus.TIMED_OUT,
-                error=f"timed out after {self.config.timeout_seconds} seconds",
+                ToolStatus.TIMED_OUT if execution.timed_out else ToolStatus.FAILED,
+                error=execution.stop_reason or f"timed out after {self.config.timeout_seconds} seconds",
                 version=version,
             )
             return AdapterResult(
@@ -261,7 +272,7 @@ class ScannerAdapter(ABC):
                 tool_run=tool_run,
                 diagnostic=self._diagnostic(tool_run, execution),
             )
-        if execution.exit_code not in self.accepted_exit_codes:
+        if execution.exit_code not in self.accepted_exit_codes | self.partial_exit_codes:
             tool_run = self._tool_run(
                 execution,
                 ToolStatus.FAILED,
@@ -277,6 +288,8 @@ class ScannerAdapter(ABC):
             payload = self.result_payload(execution)
             findings = self.parse(payload, target)
             artifacts = self.derived_artifacts(payload, target)
+            coverage = self.analysis_coverage(payload)
+            assessment = self.coverage_assessment(payload, target, expected_files) if expected_files is not None else {}
         except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
             tool_run = self._tool_run(
                 execution,
@@ -295,16 +308,18 @@ class ScannerAdapter(ABC):
                 if source.tool == self.name and source.version == "unknown":
                     source.version = version
 
+        partial = any(coverage.values()) or execution.exit_code in self.partial_exit_codes or (bool(assessment) and assessment.get("state") != "complete")
         tool_run = self._tool_run(
             execution,
-            ToolStatus.COMPLETED,
+            ToolStatus.PARSE_ERROR if partial else ToolStatus.COMPLETED,
             finding_count=len(findings),
             version=version,
+            error="scanner analysis incomplete; valid findings retained" if partial else None,
         )
         return AdapterResult(
             findings=findings,
             tool_run=tool_run,
-            diagnostic=self._diagnostic(tool_run, execution),
+            diagnostic={**self._diagnostic(tool_run, execution), "analysis_coverage": {**coverage, **assessment}},
             artifacts=artifacts,
         )
 
@@ -372,6 +387,9 @@ class ScannerAdapter(ABC):
         finding_count: int = 0,
         version: str = "unknown",
     ) -> ToolRun:
+        if execution.stop_reason:
+            status = ToolStatus.TIMED_OUT if execution.timed_out else ToolStatus.FAILED
+            error = execution.stop_reason
         return ToolRun(
             tool=self.name,
             status=status,
@@ -445,6 +463,9 @@ class ScannerAdapter(ABC):
                 )
         return str(path), None
 
+    def _asset_check(self) -> None:
+        return None
+
     def _prepare_assets(self) -> str | None:
         self._asset_digests = {}
         self._asset_unchanged = {}
@@ -463,7 +484,9 @@ class ScannerAdapter(ABC):
             ):
                 return "production scanner asset digests lack organization approval"
             try:
-                observed = governed_asset_sha256(path)
+                observed = governed_asset_sha256(path, check=self._asset_check)
+            except TimeoutError:
+                raise
             except (OSError, TypeError, ValueError) as exc:
                 return f"scanner {label} asset could not be hashed: {exc}"
             self._asset_digests[label] = observed

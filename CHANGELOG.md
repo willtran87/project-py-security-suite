@@ -1,5 +1,113 @@
 # Changelog
 
+- Track LDAP filter injection through source-verified imported connection factories,
+  including module imports outside request handlers. Preserve native source-to-sink
+  paths, filter escaping, receiver identity and upstream finding deduplication.
+- Extend native constant-value proofs to bounded string-match branches and closed
+  local append/pop sequences. Keep unsafe mutation gaps explicit in a separate
+  proof-rejection corpus, and force supplemental query reevaluation to prevent
+  stale cached diagnostics after query changes.
+
+- Extend native CodeQL path/XPath comparisons to direct assignments in provably
+  unreachable `if` branches. Preserve live and uncertain flows, with 20 new
+  detector cases and installed-package controls for complete and partial scans.
+
+- Add bounded LDAP filter detection for directly constructed ldap3 connections
+  and unsafe HTML marking of direct Flask request reads. Include 39 native
+  positive/negative controls and installed-wheel checks for both rules.
+- Fix Semgrep parallelism at two workers across product and qualification scans.
+  Bind repeatability evidence to Python source contents, rules and launcher bytes;
+  retain every attempt and gate the public corpus on three fixed repetitions.
+
+- Refine CodeQL path and XPath conditional-expression flows with explicit native
+  comparisons against the original queries. Require complete analysis and exact
+  source coordinates; retain resolved, redacted original alerts and comparison
+  evidence. Add arithmetic, reassignment, closure, and competing-flow controls.
+
+- Refine Semgrep path analysis for provably unreachable branches and preserve
+  taint through identity/string-conversion list comprehensions. Model simple-name
+  secure-filename arguments without clearing other input uses or nested sinks.
+- Repeat native Semgrep regression scans three times by default, retaining every
+  attempt and failing on incomplete coverage or normalized-finding drift. Extend
+  installed-package checks with safe and vulnerable path-flow controls.
+
+- Treat Semgrep dataflow fixpoint timeouts in profiling metadata as incomplete
+  analysis even when native exit status is zero and the main error list is empty.
+  Retain valid findings, reject malformed timeout metadata, and prevent affected
+  benchmark runs from passing the completion gate.
+
+- Add precise weak-hash detection for hashlib constructors and explicitly
+  insecure cookies on Flask, Django, Starlette, and FastAPI response objects.
+  Track response aliases and reassignment, preserve non-security hash intent,
+  and verify secure alternatives with real detector and installed-package tests.
+- Protect individual previously detected benchmark cases so unchanged aggregate
+  counts cannot conceal lost detections. Keep the independent accuracy policy.
+
+- Require the project accuracy policy before independent release builds, using
+  one reusable benchmark workflow for CI and release assurance.
+- Stabilize all bundled Semgrep rule identities across rule/source relocation,
+  with real-adapter and installed-wheel acceptance checks.
+- Attach bounded constant-argument review evidence to eligible CodeQL path and
+  XPath findings while retaining every native alert and its original severity.
+  Add adversarial regression cases and real XPath acceptance controls.
+
+- Add three-engine Python source-security benchmark measurement with case-level
+  evidence, explicit project accuracy targets, and an enforceable readiness gate.
+  Preserve exact CWE scoring and distinguish regression success from accuracy.
+- Detect request headers/cookies flowing to SQL, paths, and constructed
+  requests/httpx/aiohttp clients, with positive and negative detector regressions.
+- Reconcile CodeQL extraction diagnostics against source inventory, retain
+  findings on partial analysis, and handle large native SARIF with dedicated
+  bounded parsing. Extend installed acceptance to unavailable scanners and
+  CodeQL syntax-error coverage; retain per-scenario timings.
+- Bind omitted native CodeQL source roots to the generated database's mirror,
+  restore finding and trace locations, and canonicalize zero-padded CWE numbers
+  without changing category semantics. Reject unresolved benchmark attribution.
+
+- Add installed-wheel acceptance through the public scan command and report
+  verification, including CodeQL path evidence and partial-result behavior.
+- Reconcile Bandit/Semgrep Python file inventories and expose complete, partial,
+  or unknown analysis coverage without retaining source paths in diagnostics.
+- Share sealed CodeQL dependencies across analysis stages, bound SARIF/source
+  reads, and account for preparation in cooperative scan deadlines.
+- Add a revision- and digest-pinned external OWASP Python benchmark with per-CWE
+  confusion matrices, confidence intervals, and regression ceilings. Public
+  benchmark success does not grant production approval.
+
+- Remove name-based taint sanitizer exemptions and add Flask, Django, and FastAPI
+  request-to-SQL, SSRF, and path-traversal rules. Retain native scanner coverage
+  errors alongside valid findings. Add a locked CodeQL global credential-to-log
+  query, stage approved query caches inside the private runner home, and preserve
+  primary findings if supplemental analysis fails. Require real-detector positive
+  and negative regression gates with per-CWE results and SARIF path evidence.
+
+- Stream source and Git-history snapshot copies in bounded chunks, honor stop
+  requests during initial traversal and hashing, and preserve mandatory final
+  integrity verification. Report only the first schema violation using trusted
+  schema metadata, excluding rejected values and property names. Deliver progress
+  asynchronously with bounded buffering and shutdown so callback failures or
+  slow consumers cannot change scan outcomes.
+
+- Contain bounded-helper descendants through parent exit using gated Windows
+  Job Objects and POSIX process groups. Keep published reports successful when
+  cleanup fails, stream recovery input serialization, and remove duplicate model
+  deep copies. Preserve distinct interruption causes, report actual adapter
+  outcomes and failure durations, and stop optional enrichment between stages.
+
+- Enforce subprocess deadlines during blocked stdin delivery, retain nested
+  scan deadlines and memory limits, and bound shared Python parsing and AST
+  literal storage. Preserve private, checksummed report-input checkpoints on
+  rendering failure and add `pysec recover-report`. Add complete-scan scaling
+  benchmarks with fresh-process samples, stage timings, RSS and artifact-size
+  budgets, cancellation latency, and retained CI results.
+
+- Reject silently coerced numeric configuration, duplicate adapter artifact
+  producers, and incomplete dependency inventories. Add versioned manifest-limit
+  accounting with historical schema support, scan-wide cooperative deadlines,
+  graceful Ctrl+C, and optional secret-free progress events. Reuse bounded
+  snapshot-local ASTs, dependency identities, and source excerpts; extract typed
+  scanner scheduling and replay-governance stages and tighten architecture limits.
+
 - Make scheduled deep assurance reproducible and actionable: acquire the mutable
   OSV publisher snapshot in a bounded connected preparation step, seal its exact
   bytes and provenance, independently rehash it before exposing a narrow named

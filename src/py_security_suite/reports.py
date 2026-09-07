@@ -6,7 +6,6 @@ import json
 import os
 import re
 import csv
-import shutil
 import subprocess  # nosec B404 - fixed Windows ACL utilities only
 import tempfile
 from collections import Counter
@@ -37,100 +36,15 @@ from .path_safety import HeldParentDirectory, hold_parent_directory
 from .prioritization import finding_order_key, finding_priority
 from .portfolio_health import activation_recipe, portfolio_health_artifact
 from .source_context import redact_sensitive_snippets, source_language
+from .report_checkpoint import ReportInputs, load_report_inputs, preserve_report_inputs
+from .report_references import TOOL_REFERENCES as _TOOL_REFERENCES
+from .report_cleanup import cleanup_directory
+from .report_io import write_json as _write_json, write_text as _write_text
 
 
 REPORT_FILES = tuple(REQUIRED_REPORT_ARTIFACTS.values())
 _MAX_REFERENCE_URI = 2048
 _UNSAFE_MARKDOWN_URI_CHARACTERS = frozenset("()<>\\")
-
-_TOOL_REFERENCES = {
-    "bandit": "https://bandit.readthedocs.io/",
-    "semgrep": "https://semgrep.dev/docs/",
-    "detect-secrets": "https://github.com/Yelp/detect-secrets",  # pragma: allowlist secret
-    "osv-scanner": "https://google.github.io/osv-scanner/",
-    "cyclonedx-py": "https://cyclonedx-bom-tool.readthedocs.io/",
-    "ruff": "https://docs.astral.sh/ruff/rules/#flake8-bandit-s",
-    "ruff-quality": "https://docs.astral.sh/ruff/linter/",
-    "ruff-format": "https://docs.astral.sh/ruff/formatter/",
-    "pylint": "https://pylint.readthedocs.io/",
-    "mypy": "https://mypy.readthedocs.io/",
-    "vulture": "https://github.com/jendrikseipp/vulture",
-    "radon": "https://radon.readthedocs.io/",
-    "tach": "https://docs.gauge.sh/",
-    "reachability": (
-        "https://github.com/willtran87/project-py-security-suite/"
-        "blob/main/docs/reachability.md"
-    ),
-    "graphify": "https://graphify.com/docs/cli",
-    "coverage": "https://coverage.readthedocs.io/",
-    "junit": "https://github.com/testmoapp/junitxml",
-    "hypothesis": "https://hypothesis.readthedocs.io/",
-    "schemathesis": "https://schemathesis.readthedocs.io/",
-    "actionlint": "https://github.com/rhysd/actionlint",
-    "hadolint": "https://github.com/hadolint/hadolint",
-    "devskim": "https://github.com/microsoft/DevSkim",
-    "flawfinder": "https://dwheeler.com/flawfinder/",
-    "reuse": "https://reuse.software/",
-    "zizmor": "https://docs.zizmor.sh/",
-    "pysa": "https://pyre-check.org/docs/pysa-basics/",
-    "trivy": "https://trivy.dev/docs/latest/",
-    "guarddog": "https://github.com/DataDog/guarddog",
-    "scancode": "https://scancode-toolkit.readthedocs.io/",
-    "gitleaks": "https://github.com/gitleaks/gitleaks",
-    "trufflehog": "https://trufflesecurity.com/docs/",
-    "codeql": "https://pypi.org/project/run-codeql/",
-    "syft": "https://github.com/anchore/syft",
-    "grype": "https://github.com/anchore/grype",
-    "check-wheel-contents": "https://github.com/jwodder/check-wheel-contents",
-    "twine": "https://twine.readthedocs.io/en/stable/#twine-check",
-    "pypi-attestations": "https://docs.pypi.org/attestations/",
-    "psscriptanalyzer": "https://learn.microsoft.com/powershell/utility-modules/psscriptanalyzer/overview",
-    "shellcheck": "https://github.com/koalaman/shellcheck",
-    "deptry": "https://deptry.com/",
-    "diff-cover": "https://github.com/Bachmann1234/diff-cover",
-    "checkov": "https://www.checkov.io/",
-    "cosign": "https://docs.sigstore.dev/cosign/",
-    "pyright": "https://microsoft.github.io/pyright/",
-    "scorecard": "https://scorecard.dev/",
-    "conftest": "https://www.conftest.dev/",
-    "kics": "https://docs.kics.io/latest/",
-    "pipdeptree": "https://pipdeptree.readthedocs.io/",
-    "git-sizer": "https://github.com/github/git-sizer",
-    "validate-pyproject": "https://validate-pyproject.readthedocs.io/",
-    "vale": "https://vale.sh/",
-    "kube-linter": "https://docs.kubelinter.io/",
-    "crosshair": "https://crosshair.readthedocs.io/",
-    "atheris": "https://github.com/google/atheris",
-    "clusterfuzzlite": "https://google.github.io/clusterfuzzlite/",
-    "mutmut": "https://mutmut.readthedocs.io/",
-    "check-manifest": "https://github.com/mgedmin/check-manifest",
-    "clamav": "https://docs.clamav.net/",
-    "github-attestation": "https://docs.github.com/en/actions/security-guides/using-artifact-attestations-to-establish-provenance-for-builds",
-    "zap": "https://www.zaproxy.org/docs/automate/automation-framework/",
-    "browser-security": "https://www.zaproxy.org/docs/desktop/addons/client-side-integration/",
-    "authorization-security": "https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/",
-    "iast": "https://docs.datadoghq.com/security/code_security/iast/",
-    "falco": "https://falco.org/docs/",
-    "kubescape": "https://kubescape.io/docs/scanning/",
-    "mobsf": "https://mobsf.github.io/docs/",
-    "native-sanitizers": "https://clang.llvm.org/docs/AddressSanitizer.html",
-    "nuclei": "https://docs.projectdiscovery.io/templates/reference/template-signing",
-    "oast": "https://docs.projectdiscovery.io/templates/reference/oob-testing",
-    "restler": "https://github.com/microsoft/restler-fuzzer",
-    "protocol-security": "https://grpc.io/docs/guides/auth/",
-    "fuzz-introspector": "https://google.github.io/oss-fuzz/advanced-topics/fuzz-introspector/",
-    "polyglot": "https://codeql.github.com/docs/codeql-overview/supported-languages-and-frameworks/",
-    "prowler": "https://docs.prowler.com/introduction",
-    "cloud-attack-path": "https://github.com/lyft/cartography",
-    "rasp": "https://coraza.io/docs/",
-    "tls-scan": "https://nabla-c0d3.github.io/sslyze/documentation/",
-    "secret-verification": "https://github.com/trufflesecurity/trufflehog",
-    "pytm": "https://owasp.org/www-project-pytm/",
-    "in-toto": "https://in-toto.io/docs/getting-started/",
-    "oci-image": "https://opencontainers.org/",
-    "reproducible-build": "https://reproducible-builds.org/tools/",
-    "yara": "https://yara.readthedocs.io/",
-}
 
 
 def write_reports(
@@ -153,20 +67,61 @@ def write_reports(
     )
     os.chmod(staging, 0o700)  # noqa: S103 - security artifact directory
     try:
-        _write_report_contents(
-            output=staging,
-            findings=findings,
-            manifest=manifest,
-            diagnostics=diagnostics,
-            include_evidence=include_evidence,
-            derived_artifacts=derived_artifacts,
-        )
-        _harden_report_tree(staging)
-        verify_report(staging)
-        _publish_report(staging, output, replace_existing=replace_existing)
+        with preserve_report_inputs(
+            output,
+            ReportInputs(
+                findings, manifest, diagnostics, include_evidence, derived_artifacts
+            ),
+            _harden_report_tree,
+        ):
+            _render_and_publish(
+                staging,
+                output,
+                findings,
+                manifest,
+                diagnostics,
+                include_evidence,
+                derived_artifacts,
+                replace_existing,
+            )
     finally:
         if staging.exists():
-            shutil.rmtree(staging)
+            cleanup_directory(staging)
+
+
+def _render_and_publish(
+    staging: Path,
+    output: Path,
+    findings: list[Finding],
+    manifest: ScanManifest,
+    diagnostics: dict[str, dict[str, Any]],
+    include_evidence: bool,
+    derived_artifacts: dict[str, Any] | None,
+    replace_existing: bool,
+) -> None:
+    _write_report_contents(
+        output=staging,
+        findings=findings,
+        manifest=manifest,
+        diagnostics=diagnostics,
+        include_evidence=include_evidence,
+        derived_artifacts=derived_artifacts,
+    )
+    _harden_report_tree(staging)
+    verify_report(staging)
+    _publish_report(staging, output, replace_existing=replace_existing)
+
+
+def recover_reports(recovery: Path, output: Path) -> None:
+    inputs = load_report_inputs(recovery)
+    write_reports(
+        output=output,
+        findings=inputs.findings,
+        manifest=inputs.manifest,
+        diagnostics=inputs.diagnostics,
+        include_evidence=inputs.include_evidence,
+        derived_artifacts=inputs.derived_artifacts,
+    )
 
 
 def is_complete_report(output: Path) -> bool:
@@ -195,7 +150,7 @@ def _publish_report(staging: Path, output: Path, *, replace_existing: bool) -> N
                 held_parent=parent,
             )
     finally:
-        lock.rmdir()
+        cleanup_directory(lock, recursive=False)
 
 
 def _publish_report_locked(
@@ -237,7 +192,7 @@ def _publish_report_locked(
         raise
     finally:
         if published and backup.exists():
-            shutil.rmtree(backup)
+            cleanup_directory(backup)
 
 
 def _write_report_contents(
@@ -7244,27 +7199,6 @@ def _classification_uri(value: str) -> str | None:
     if normalized.startswith("CWE-") and normalized[4:].isdigit():
         return f"https://cwe.mitre.org/data/definitions/{normalized[4:]}.html"
     return None
-
-
-def _write_json(path: Path, value: Any) -> None:
-    _write_text(
-        path,
-        json.dumps(json_ready(value), indent=2, sort_keys=True, ensure_ascii=False)
-        + "\n",
-    )
-
-
-def _write_text(path: Path, value: str) -> None:
-    payload = value.replace("\r\n", "\n").replace("\r", "\n").encode("utf-8")
-    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_BINARY", 0)
-    descriptor = os.open(path, flags, 0o600)  # noqa: S103 - private report artifact
-    try:
-        with os.fdopen(descriptor, "wb", closefd=False) as handle:
-            handle.write(payload)
-            handle.flush()
-    finally:
-        os.close(descriptor)
-    os.chmod(path, 0o600)  # noqa: S103 - repair pre-existing staged permissions
 
 
 def _harden_report_tree(output: Path) -> None:

@@ -1,4 +1,56 @@
 rules:
+  - id: python.weak-cryptographic-hash
+    languages: [python]
+    message: MD5 and SHA-1 do not provide collision-resistant cryptographic hashing.
+    severity: WARNING
+    metadata:
+      pysec_rule_id: python.weak-cryptographic-hash
+      cwe: ["CWE-328: Use of Weak Hash"]
+      category: cryptography
+      confidence: HIGH
+      remediation: Use a modern collision-resistant hash for integrity or a dedicated password-hashing algorithm for passwords. Explicit non-security checksums should use usedforsecurity=False.
+      source: https://docs.python.org/3/library/hashlib.html
+    patterns:
+      - pattern-either:
+          - pattern: hashlib.md5(...)
+          - pattern: hashlib.sha1(...)
+          - patterns:
+              - pattern-either:
+                  - pattern: hashlib.new($ALGORITHM, ...)
+                  - pattern: hashlib.new(name=$ALGORITHM, ...)
+              - metavariable-regex:
+                  metavariable: $ALGORITHM
+                  regex: (?i)^['"](?:md[245]|sha-?1)['"]$
+      - pattern-not: hashlib.$FUNCTION(..., usedforsecurity=False, ...)
+
+  - id: python.response-cookie-insecure
+    languages: [python]
+    message: This HTTP response explicitly creates a cookie without the Secure attribute.
+    severity: WARNING
+    metadata:
+      pysec_rule_id: python.response-cookie-insecure
+      cwe: ["CWE-614: Sensitive Cookie in HTTPS Session Without Secure Attribute"]
+      category: transport-security
+      confidence: MEDIUM
+      remediation: Set secure=True for cookies sent over HTTPS, particularly session or authentication cookies. Review cookie sensitivity and the deployment's transport requirements.
+      source: https://flask.palletsprojects.com/en/stable/web-security/
+    mode: taint
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: flask.make_response(...)
+              - pattern: flask.Response(...)
+              - pattern: django.http.HttpResponse(...)
+              - pattern: starlette.responses.Response(...)
+              - pattern: starlette.responses.JSONResponse(...)
+              - pattern: fastapi.responses.Response(...)
+              - pattern: fastapi.responses.JSONResponse(...)
+        exact: true
+    pattern-sinks:
+      - patterns:
+          - pattern: $RESPONSE.set_cookie(..., secure=False, ...)
+          - focus-metavariable: $RESPONSE
+
   - id: python.grpc-insecure-channel
     languages: [python]
     message: gRPC insecure_channel provides neither transport encryption nor peer authentication.
@@ -36,6 +88,7 @@ rules:
     message: Avoid shell=True with subprocess APIs; pass an argument vector instead.
     severity: ERROR
     metadata:
+      pysec_rule_id: python.subprocess-shell-true
       cwe: ["CWE-78: Improper Neutralization of Special Elements used in an OS Command"]
       category: security
       confidence: HIGH
@@ -49,6 +102,7 @@ rules:
     message: Use yaml.safe_load for untrusted YAML input.
     severity: ERROR
     metadata:
+      pysec_rule_id: python.unsafe-yaml-load
       cwe: ["CWE-502: Deserialization of Untrusted Data"]
       category: security
       confidence: HIGH
@@ -59,6 +113,7 @@ rules:
     message: Dynamic code execution can allow attacker-controlled input to run.
     severity: WARNING
     metadata:
+      pysec_rule_id: python.dynamic-code-execution
       cwe: ["CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code"]
       category: security
       confidence: MEDIUM
@@ -72,6 +127,7 @@ rules:
     message: Sensitive data from a credential-bearing source may reach a log sink.
     severity: ERROR
     metadata:
+      pysec_rule_id: python.sensitive-data-to-log
       cwe:
         - "CWE-532: Insertion of Sensitive Information into Log File"
         - "CWE-200: Exposure of Sensitive Information to an Unauthorized Actor"
@@ -120,12 +176,6 @@ rules:
       - pattern: $TO = $FROM
         from: $FROM
         to: $TO
-    pattern-sanitizers:
-      - patterns:
-          - pattern: $SANITIZER(...)
-          - metavariable-regex:
-              metavariable: $SANITIZER
-              regex: (?i).*(?:allowlist|drop_sensitive|minimize|redact|remove_sensitive|sanitize|scrub).*
     pattern-sinks:
       - patterns:
           - pattern-either:
@@ -155,6 +205,7 @@ rules:
     message: Sensitive data from a credential-bearing source may reach telemetry or analytics.
     severity: ERROR
     metadata:
+      pysec_rule_id: python.sensitive-data-to-telemetry
       cwe:
         - "CWE-201: Insertion of Sensitive Information Into Sent Data"
         - "CWE-200: Exposure of Sensitive Information to an Unauthorized Actor"
@@ -203,12 +254,6 @@ rules:
       - pattern: $TO = $FROM
         from: $FROM
         to: $TO
-    pattern-sanitizers:
-      - patterns:
-          - pattern: $SANITIZER(...)
-          - metavariable-regex:
-              metavariable: $SANITIZER
-              regex: (?i).*(?:allowlist|drop_sensitive|minimize|redact|remove_sensitive|sanitize|scrub).*
     pattern-sinks:
       - patterns:
           - pattern-either:
@@ -247,6 +292,7 @@ rules:
     message: A field commonly associated with personal or regulated data may reach a log sink.
     severity: WARNING
     metadata:
+      pysec_rule_id: python.private-data-to-log
       cwe:
         - "CWE-532: Insertion of Sensitive Information into Log File"
         - "CWE-359: Exposure of Private Personal Information to an Unauthorized Actor"
@@ -275,12 +321,6 @@ rules:
       - pattern: $TO = $FROM
         from: $FROM
         to: $TO
-    pattern-sanitizers:
-      - patterns:
-          - pattern: $SANITIZER(...)
-          - metavariable-regex:
-              metavariable: $SANITIZER
-              regex: (?i).*(?:allowlist|drop_sensitive|minimize|redact|remove_sensitive|sanitize|scrub).*
     pattern-sinks:
       - patterns:
           - pattern-either:
@@ -310,6 +350,7 @@ rules:
     message: A field commonly associated with personal or regulated data may reach telemetry or analytics.
     severity: WARNING
     metadata:
+      pysec_rule_id: python.private-data-to-telemetry
       cwe:
         - "CWE-201: Insertion of Sensitive Information Into Sent Data"
         - "CWE-359: Exposure of Private Personal Information to an Unauthorized Actor"
@@ -338,12 +379,6 @@ rules:
       - pattern: $TO = $FROM
         from: $FROM
         to: $TO
-    pattern-sanitizers:
-      - patterns:
-          - pattern: $SANITIZER(...)
-          - metavariable-regex:
-              metavariable: $SANITIZER
-              regex: (?i).*(?:allowlist|drop_sensitive|minimize|redact|remove_sensitive|sanitize|scrub).*
     pattern-sinks:
       - patterns:
           - pattern-either:
@@ -382,6 +417,7 @@ rules:
     message: An HTTP request payload or collection may reach a log sink without an explicit data-minimization boundary.
     severity: WARNING
     metadata:
+      pysec_rule_id: python.request-data-to-log
       cwe:
         - "CWE-532: Insertion of Sensitive Information into Log File"
       category: data-exposure
@@ -408,12 +444,6 @@ rules:
       - pattern: $TO = $FROM
         from: $FROM
         to: $TO
-    pattern-sanitizers:
-      - patterns:
-          - pattern: $SANITIZER(...)
-          - metavariable-regex:
-              metavariable: $SANITIZER
-              regex: (?i).*(?:allowlist|drop_sensitive|minimize|redact|remove_sensitive|sanitize|scrub).*
     pattern-sinks:
       - patterns:
           - pattern-either:
@@ -443,6 +473,7 @@ rules:
     message: An HTTP request payload or collection may reach telemetry, error monitoring, or analytics without an explicit data-minimization boundary.
     severity: WARNING
     metadata:
+      pysec_rule_id: python.request-data-to-telemetry
       cwe:
         - "CWE-201: Insertion of Sensitive Information Into Sent Data"
       category: data-exposure
@@ -469,12 +500,6 @@ rules:
       - pattern: $TO = $FROM
         from: $FROM
         to: $TO
-    pattern-sanitizers:
-      - patterns:
-          - pattern: $SANITIZER(...)
-          - metavariable-regex:
-              metavariable: $SANITIZER
-              regex: (?i).*(?:allowlist|drop_sensitive|minimize|redact|remove_sensitive|sanitize|scrub).*
     pattern-sinks:
       - patterns:
           - pattern-either:
@@ -513,6 +538,7 @@ rules:
     message: Credential-bearing data may be placed in an HTTP URL query string.
     severity: ERROR
     metadata:
+      pysec_rule_id: python.sensitive-data-in-url-query
       cwe:
         - "CWE-598: Use of HTTP Request With Sensitive Query String"
         - "CWE-200: Exposure of Sensitive Information to an Unauthorized Actor"
@@ -561,12 +587,6 @@ rules:
       - pattern: $TO = $FROM
         from: $FROM
         to: $TO
-    pattern-sanitizers:
-      - patterns:
-          - pattern: $SANITIZER(...)
-          - metavariable-regex:
-              metavariable: $SANITIZER
-              regex: (?i).*(?:allowlist|drop_sensitive|minimize|redact|remove_sensitive|sanitize|scrub).*
     pattern-sinks:
       - patterns:
           - pattern-either:
@@ -589,6 +609,7 @@ rules:
     message: A field commonly associated with personal or regulated data may be placed in an HTTP URL query string.
     severity: WARNING
     metadata:
+      pysec_rule_id: python.private-data-in-url-query
       cwe:
         - "CWE-598: Use of HTTP Request With Sensitive Query String"
         - "CWE-359: Exposure of Private Personal Information to an Unauthorized Actor"
@@ -617,12 +638,6 @@ rules:
       - pattern: $TO = $FROM
         from: $FROM
         to: $TO
-    pattern-sanitizers:
-      - patterns:
-          - pattern: $SANITIZER(...)
-          - metavariable-regex:
-              metavariable: $SANITIZER
-              regex: (?i).*(?:allowlist|drop_sensitive|minimize|redact|remove_sensitive|sanitize|scrub).*
     pattern-sinks:
       - patterns:
           - pattern-either:
@@ -644,6 +659,7 @@ rules:
     message: A raw exception is exposed in an HTTP response and may disclose implementation or sensitive details.
     severity: ERROR
     metadata:
+      pysec_rule_id: python.exception-detail-to-http-response
       cwe:
         - "CWE-209: Generation of Error Message Containing Sensitive Information"
       category: data-exposure
@@ -671,6 +687,7 @@ rules:
     message: Sentry automatic PII collection is enabled; verify approval, minimization, and scrubbing controls.
     severity: WARNING
     metadata:
+      pysec_rule_id: python.sentry-default-pii-enabled
       cwe:
         - "CWE-359: Exposure of Private Personal Information to an Unauthorized Actor"
       category: data-exposure
@@ -687,6 +704,7 @@ rules:
     message: A broad runtime-state snapshot may reach a log sink and disclose credentials or private fields.
     severity: WARNING
     metadata:
+      pysec_rule_id: python.runtime-state-to-log
       cwe:
         - "CWE-532: Insertion of Sensitive Information into Log File"
       category: data-exposure
@@ -705,12 +723,6 @@ rules:
       - pattern: $TO = $FROM
         from: $FROM
         to: $TO
-    pattern-sanitizers:
-      - patterns:
-          - pattern: $SANITIZER(...)
-          - metavariable-regex:
-              metavariable: $SANITIZER
-              regex: (?i).*(?:allowlist|drop_sensitive|minimize|redact|remove_sensitive|sanitize|scrub).*
     pattern-sinks:
       - patterns:
           - pattern-either:
@@ -736,6 +748,7 @@ rules:
     message: A broad runtime or environment snapshot may reach telemetry and disclose credentials or private fields.
     severity: WARNING
     metadata:
+      pysec_rule_id: python.runtime-state-to-telemetry
       cwe:
         - "CWE-201: Insertion of Sensitive Information Into Sent Data"
         - "CWE-200: Exposure of Sensitive Information to an Unauthorized Actor"
@@ -755,12 +768,6 @@ rules:
       - pattern: $TO = $FROM
         from: $FROM
         to: $TO
-    pattern-sanitizers:
-      - patterns:
-          - pattern: $SANITIZER(...)
-          - metavariable-regex:
-              metavariable: $SANITIZER
-              regex: (?i).*(?:allowlist|drop_sensitive|minimize|redact|remove_sensitive|sanitize|scrub).*
     pattern-sinks:
       - patterns:
           - pattern-either:
@@ -785,6 +792,7 @@ rules:
     message: Credential-bearing data may be interpolated directly into an outbound URL.
     severity: ERROR
     metadata:
+      pysec_rule_id: python.sensitive-data-in-url
       cwe:
         - "CWE-598: Use of HTTP Request With Sensitive Query String"
         - "CWE-200: Exposure of Sensitive Information to an Unauthorized Actor"
@@ -833,12 +841,6 @@ rules:
       - pattern: $TO = $FROM
         from: $FROM
         to: $TO
-    pattern-sanitizers:
-      - patterns:
-          - pattern: $SANITIZER(...)
-          - metavariable-regex:
-              metavariable: $SANITIZER
-              regex: (?i).*(?:allowlist|drop_sensitive|minimize|redact|remove_sensitive|sanitize|scrub).*
     pattern-sinks:
       - patterns:
           - pattern-either:
@@ -867,6 +869,7 @@ rules:
         - "**/*.yaml"
         - "**/*.yml"
     metadata:
+      pysec_rule_id: config.opentelemetry-genai-content-capture-enabled
       cwe:
         - "CWE-201: Insertion of Sensitive Information Into Sent Data"
         - "CWE-359: Exposure of Private Personal Information to an Unauthorized Actor"
@@ -893,6 +896,7 @@ rules:
         - "**/*.yaml"
         - "**/*.yml"
     metadata:
+      pysec_rule_id: config.opentelemetry-genai-content-capture-invalid-mode
       cwe:
         - "CWE-693: Protection Mechanism Failure"
       category: configuration
@@ -918,6 +922,7 @@ rules:
         - "**/*.yaml"
         - "**/*.yml"
     metadata:
+      pysec_rule_id: config.opentelemetry-broad-http-header-capture
       cwe:
         - "CWE-201: Insertion of Sensitive Information Into Sent Data"
         - "CWE-200: Exposure of Sensitive Information to an Unauthorized Actor"
@@ -927,3 +932,399 @@ rules:
       remediation: Replace wildcard capture with an explicit allowlist, configure sensitive-header sanitization, and verify exported spans with synthetic canary headers.
       source: https://opentelemetry.io/docs/security/handling-sensitive-data/
     pattern-regex: '(?mi)^\x{FEFF}?\s*["'']?OTEL_INSTRUMENTATION_HTTP_CAPTURE_HEADERS_(?:SERVER_REQUEST|SERVER_RESPONSE|CLIENT_REQUEST|CLIENT_RESPONSE)["'']?\s*(?:=|:)\s*["'']?(?:\*|\.\*)["'']?\s*(?:#.*)?$'
+
+  - id: python.request-to-sql
+    languages: [python]
+    mode: taint
+    message: Request-controlled data reaches SQL statement text.
+    severity: ERROR
+    metadata:
+      cwe: [CWE-89]
+      category: injection
+      confidence: HIGH
+      pysec_rule_id: python.request-to-sql
+      impact: Untrusted request data may cross a security boundary into a privileged operation.
+      remediation: Use parameterized SQL; keep request values in the parameter argument, never in SQL text.
+      source: https://cwe.mitre.org/data/definitions/89.html
+    pattern-sources:
+      - pattern-either:
+          - pattern: $REQUEST.args[$KEY]
+          - pattern: $REQUEST.headers[$KEY]
+          - pattern: $REQUEST.headers.get(...)
+          - pattern: $REQUEST.cookies[$KEY]
+          - pattern: $REQUEST.cookies.get(...)
+          - pattern: $REQUEST.COOKIES[$KEY]
+          - pattern: $REQUEST.COOKIES.get(...)
+          - pattern: $REQUEST.META[$KEY]
+          - pattern: $REQUEST.META.get(...)
+          - pattern: $REQUEST.args.get(...)
+          - pattern: $REQUEST.form[$KEY]
+          - pattern: $REQUEST.form.get(...)
+          - pattern: $REQUEST.GET[$KEY]
+          - pattern: $REQUEST.GET.get(...)
+          - pattern: $REQUEST.POST[$KEY]
+          - pattern: $REQUEST.POST.get(...)
+          - pattern: $REQUEST.query_params[$KEY]
+          - pattern: $REQUEST.query_params.get(...)
+          - pattern: $REQUEST.path_params[$KEY]
+          - pattern: $REQUEST.path_params.get(...)
+          - pattern: $REQUEST.get_json(...)
+          - pattern: $REQUEST.json(...)
+          - pattern: $REQUEST.data
+          - pattern: $REQUEST.body
+        exact: true
+      - patterns:
+          - pattern: |
+              @$APP.$METHOD(...)
+              def $FUNC(..., $PARAM: str, ...):
+                ...
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(?:get|post|put|patch|delete|route|api_route)$
+          - focus-metavariable: $PARAM
+        exact: true
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $CURSOR.execute($QUERY, ...)
+              - pattern: $CURSOR.execute(..., query=$QUERY, ...)
+              - pattern: $CURSOR.executemany($QUERY, ...)
+              - pattern: $MODEL.raw($QUERY, ...)
+              - pattern: sqlalchemy.text($QUERY)
+          - focus-metavariable: $QUERY
+
+  - id: python.request-to-ssrf
+    languages: [python]
+    mode: taint
+    message: Request-controlled data reaches an outbound request URL.
+    severity: ERROR
+    metadata:
+      cwe: [CWE-918]
+      category: injection
+      confidence: HIGH
+      pysec_rule_id: python.request-to-ssrf
+      impact: Untrusted request data may cross a security boundary into a privileged operation.
+      remediation: Select destinations from a fixed allowlist; validate resolved addresses and redirects before making requests.
+      source: https://cwe.mitre.org/data/definitions/918.html
+    pattern-sources:
+      - pattern-either:
+          - pattern: $REQUEST.args[$KEY]
+          - pattern: $REQUEST.headers[$KEY]
+          - pattern: $REQUEST.headers.get(...)
+          - pattern: $REQUEST.cookies[$KEY]
+          - pattern: $REQUEST.cookies.get(...)
+          - pattern: $REQUEST.COOKIES[$KEY]
+          - pattern: $REQUEST.COOKIES.get(...)
+          - pattern: $REQUEST.META[$KEY]
+          - pattern: $REQUEST.META.get(...)
+          - pattern: $REQUEST.args.get(...)
+          - pattern: $REQUEST.form[$KEY]
+          - pattern: $REQUEST.form.get(...)
+          - pattern: $REQUEST.GET[$KEY]
+          - pattern: $REQUEST.GET.get(...)
+          - pattern: $REQUEST.POST[$KEY]
+          - pattern: $REQUEST.POST.get(...)
+          - pattern: $REQUEST.query_params[$KEY]
+          - pattern: $REQUEST.query_params.get(...)
+          - pattern: $REQUEST.path_params[$KEY]
+          - pattern: $REQUEST.path_params.get(...)
+          - pattern: $REQUEST.get_json(...)
+          - pattern: $REQUEST.json(...)
+          - pattern: $REQUEST.data
+          - pattern: $REQUEST.body
+        exact: true
+      - patterns:
+          - pattern: |
+              @$APP.$METHOD(...)
+              def $FUNC(..., $PARAM: str, ...):
+                ...
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(?:get|post|put|patch|delete|route|api_route)$
+          - focus-metavariable: $PARAM
+        exact: true
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: requests.$METHOD($URL, ...)
+              - pattern: httpx.$METHOD($URL, ...)
+              - pattern: requests.request($METHOD, $URL, ...)
+              - pattern: httpx.request($METHOD, $URL, ...)
+              - pattern: requests.$METHOD(..., url=$URL, ...)
+              - pattern: httpx.$METHOD(..., url=$URL, ...)
+              - pattern: urllib.request.urlopen($URL, ...)
+              - pattern: urllib.request.Request($URL, ...)
+          - focus-metavariable: $URL
+
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  $CLIENT = requests.Session(...)
+                  ...
+              - pattern-inside: |
+                  with requests.Session(...) as $CLIENT:
+                    ...
+              - pattern-inside: |
+                  async with requests.Session(...) as $CLIENT:
+                    ...
+              - pattern-inside: |
+                  $CLIENT = requests.session(...)
+                  ...
+              - pattern-inside: |
+                  with requests.session(...) as $CLIENT:
+                    ...
+              - pattern-inside: |
+                  async with requests.session(...) as $CLIENT:
+                    ...
+              - pattern-inside: |
+                  $CLIENT = httpx.Client(...)
+                  ...
+              - pattern-inside: |
+                  with httpx.Client(...) as $CLIENT:
+                    ...
+              - pattern-inside: |
+                  async with httpx.Client(...) as $CLIENT:
+                    ...
+              - pattern-inside: |
+                  $CLIENT = httpx.AsyncClient(...)
+                  ...
+              - pattern-inside: |
+                  with httpx.AsyncClient(...) as $CLIENT:
+                    ...
+              - pattern-inside: |
+                  async with httpx.AsyncClient(...) as $CLIENT:
+                    ...
+              - pattern-inside: |
+                  $CLIENT = aiohttp.ClientSession(...)
+                  ...
+              - pattern-inside: |
+                  with aiohttp.ClientSession(...) as $CLIENT:
+                    ...
+              - pattern-inside: |
+                  async with aiohttp.ClientSession(...) as $CLIENT:
+                    ...
+          - pattern-either:
+              - patterns:
+                  - pattern-either:
+                      - pattern: $CLIENT.$METHOD($URL, ...)
+                      - pattern: $CLIENT.$METHOD(..., url=$URL, ...)
+                  - metavariable-regex:
+                      metavariable: $METHOD
+                      regex: ^(?:get|post|put|patch|delete|head|options)$
+              - pattern: $CLIENT.request($METHOD, $URL, ...)
+              - pattern: $CLIENT.request(..., url=$URL, ...)
+          - focus-metavariable: $URL
+
+  - id: python.request-to-path
+    languages: [python]
+    mode: taint
+    message: Request-controlled data reaches a filesystem path.
+    severity: ERROR
+    metadata:
+      cwe: [CWE-22]
+      category: injection
+      confidence: HIGH
+      pysec_rule_id: python.request-to-path
+      impact: Untrusted request data may cross a security boundary into a privileged operation.
+      remediation: Map user choices to fixed paths or validate containment under a trusted directory after normalization.
+      source: https://cwe.mitre.org/data/definitions/22.html
+    pattern-sources:
+      - pattern-either:
+          - pattern: $REQUEST.args[$KEY]
+          - pattern: $REQUEST.headers[$KEY]
+          - pattern: $REQUEST.headers.get(...)
+          - pattern: $REQUEST.cookies[$KEY]
+          - pattern: $REQUEST.cookies.get(...)
+          - pattern: $REQUEST.COOKIES[$KEY]
+          - pattern: $REQUEST.COOKIES.get(...)
+          - pattern: $REQUEST.META[$KEY]
+          - pattern: $REQUEST.META.get(...)
+          - pattern: $REQUEST.args.get(...)
+          - pattern: $REQUEST.form[$KEY]
+          - pattern: $REQUEST.form.get(...)
+          - pattern: $REQUEST.GET[$KEY]
+          - pattern: $REQUEST.GET.get(...)
+          - pattern: $REQUEST.POST[$KEY]
+          - pattern: $REQUEST.POST.get(...)
+          - pattern: $REQUEST.query_params[$KEY]
+          - pattern: $REQUEST.query_params.get(...)
+          - pattern: $REQUEST.path_params[$KEY]
+          - pattern: $REQUEST.path_params.get(...)
+          - pattern: $REQUEST.get_json(...)
+          - pattern: $REQUEST.json(...)
+          - pattern: $REQUEST.data
+          - pattern: $REQUEST.body
+        exact: true
+      - patterns:
+          - pattern: |
+              @$APP.$METHOD(...)
+              def $FUNC(..., $PARAM: str, ...):
+                ...
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(?:get|post|put|patch|delete|route|api_route)$
+          - focus-metavariable: $PARAM
+        exact: true
+    pattern-propagators:
+      # Preserve element flow only for identity and string-conversion list
+      # comprehensions. Constant or sanitized bodies do not match these forms.
+      - pattern: $OUTPUT = [$ITEM for $ITEM in $INPUT]
+        from: $INPUT
+        to: $OUTPUT
+        by-side-effect: true
+      - pattern: $OUTPUT = [str($ITEM) for $ITEM in $INPUT]
+        from: $INPUT
+        to: $OUTPUT
+        by-side-effect: true
+    pattern-sanitizers:
+      # Only exclude the value occurrence in a branch whose condition the
+      # native evaluator proves unreachable. This does not sanitize the
+      # variable elsewhere or trust helper names. Unknown conditions stay tainted.
+      - patterns:
+          - pattern: $YES if $CONDITION else $NO
+          - metavariable-comparison:
+              metavariable: $CONDITION
+              comparison: $CONDITION == True
+          - focus-metavariable: $NO
+        exact: true
+      - patterns:
+          - pattern: $YES if $CONDITION else $NO
+          - metavariable-comparison:
+              metavariable: $CONDITION
+              comparison: $CONDITION == False
+          - focus-metavariable: $YES
+        exact: true
+      - patterns:
+          - pattern: |
+              if $CONDITION:
+                  ...
+              else:
+                  ...
+                  $TARGET = $VALUE
+                  ...
+          - metavariable-comparison:
+              metavariable: $CONDITION
+              comparison: $CONDITION == True
+          - focus-metavariable: $VALUE
+        exact: true
+      - patterns:
+          - pattern: |
+              if $CONDITION:
+                  ...
+                  $TARGET = $VALUE
+                  ...
+          - metavariable-comparison:
+              metavariable: $CONDITION
+              comparison: $CONDITION == False
+          - focus-metavariable: $VALUE
+        exact: true
+      - pattern: werkzeug.utils.secure_filename(...)
+        exact: true
+      - patterns:
+          - pattern: werkzeug.utils.secure_filename($INPUT)
+          - metavariable-regex:
+              metavariable: $INPUT
+              regex: ^[A-Za-z_][A-Za-z0-9_]*$
+        exact: false
+        # A name has no nested operation to hide. Semgrep's non-exact model
+        # clears this argument occurrence as well as the safe return value,
+        # while leaving other uses of the input variable tainted.
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: open($PATH, ...)
+              - pattern: open(..., file=$PATH, ...)
+              - pattern: io.open($PATH, ...)
+              - pattern: flask.send_file($PATH, ...)
+              - pattern: pathlib.Path($PATH).read_text(...)
+              - pattern: pathlib.Path($PATH).read_bytes(...)
+              - pattern: pathlib.Path($PATH).open(...)
+          - focus-metavariable: $PATH
+
+  - id: python.request-to-unsafe-html
+    languages: [python]
+    message: Request-controlled text is explicitly marked safe for HTML rendering.
+    severity: ERROR
+    metadata:
+      pysec_rule_id: python.request-to-unsafe-html
+      cwe: [CWE-79]
+      category: injection
+      confidence: HIGH
+      remediation: Keep untrusted values subject to template autoescaping. Escape HTML text before constructing trusted markup; use a context-specific encoder for JavaScript, CSS, attributes and URLs.
+      source: https://flask.palletsprojects.com/en/stable/web-security/
+    # Direct request reads only. Do not infer unsafe string operations through
+    # Markup values: concatenation and formatting can perform automatic escaping.
+    pattern-either:
+      - pattern: markupsafe.Markup(flask.request.args.get(...))
+      - pattern: markupsafe.Markup(flask.request.args[$KEY])
+      - pattern: markupsafe.Markup(flask.request.form.get(...))
+      - pattern: markupsafe.Markup(flask.request.form[$KEY])
+      - pattern: markupsafe.Markup(flask.request.headers.get(...))
+      - pattern: markupsafe.Markup(flask.request.cookies.get(...))
+      - pattern: django.utils.safestring.mark_safe(flask.request.args.get(...))
+      - pattern: django.utils.safestring.mark_safe(flask.request.args[$KEY])
+      - pattern: django.utils.safestring.mark_safe(flask.request.form.get(...))
+      - pattern: django.utils.safestring.mark_safe(flask.request.form[$KEY])
+      - pattern: django.utils.safestring.mark_safe(flask.request.headers.get(...))
+      - pattern: django.utils.safestring.mark_safe(flask.request.cookies.get(...))
+
+  - id: python.request-to-ldap
+    languages: [python]
+    mode: taint
+    message: Request-controlled data reaches an LDAP search filter.
+    severity: ERROR
+    metadata:
+      pysec_rule_id: python.request-to-ldap
+      cwe: [CWE-90]
+      category: injection
+      confidence: MEDIUM
+      remediation: Escape assertion values with ldap3.utils.conv.escape_filter_chars before constructing the filter. DN escaping and HTML escaping do not protect LDAP filters.
+      source: https://ldap3.readthedocs.io/en/latest/searches.html
+    pattern-sources:
+      - pattern-either:
+          - pattern: flask.request.args.get(...)
+          - pattern: flask.request.args[$KEY]
+          - pattern: flask.request.form.get(...)
+          - pattern: flask.request.form[$KEY]
+          - pattern: flask.request.headers.get(...)
+          - pattern: flask.request.cookies.get(...)
+        exact: true
+      # Enumerate single-argument reads separately so a surrounding request
+      # lookup with a default does not hide an inner request source.
+      - pattern-either:
+          - pattern: flask.request.args.get($KEY)
+          - pattern: flask.request.form.get($KEY)
+          - pattern: flask.request.headers.get($KEY)
+          - pattern: flask.request.cookies.get($KEY)
+        exact: true
+    pattern-sanitizers:
+      - pattern: ldap3.utils.conv.escape_filter_chars(...)
+        exact: true
+      - patterns:
+          - pattern: ldap3.utils.conv.escape_filter_chars($INPUT)
+          - metavariable-regex:
+              metavariable: $INPUT
+              regex: ^[A-Za-z_][A-Za-z0-9_]*$
+        exact: false
+      # A literal-key lookup contains no nested operation to conceal. The
+      # non-exact model clears only this encoder argument occurrence and return.
+      - patterns:
+          - pattern: ldap3.utils.conv.escape_filter_chars($INPUT)
+          - metavariable-regex:
+              metavariable: $INPUT
+              regex: ^[A-Za-z_][A-Za-z0-9_.]*(?:\[\s*(?:"[^"\\]*"|'[^'\\]*')\s*\]|\(\s*(?:"[^"\\]*"|'[^'\\]*')\s*\))$
+        exact: false
+    pattern-sinks:
+      - patterns:
+          - pattern-inside: |
+              $CONNECTION = ldap3.Connection(...)
+              $CONNECTION.search(...)
+          - pattern-either:
+              - pattern: $CONNECTION.search($BASE, $FILTER, ...)
+              - pattern: $CONNECTION.search(..., search_filter=$FILTER, ...)
+          - focus-metavariable: $FILTER
+      - patterns:
+          - pattern-either:
+              - pattern: ldap3.Connection(...).search($BASE, $FILTER, ...)
+              - pattern: ldap3.Connection(...).search(..., search_filter=$FILTER, ...)
+          - focus-metavariable: $FILTER

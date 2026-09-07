@@ -43,6 +43,15 @@ def finding(*, path: str, line: int, area: str = "injection") -> Finding:
 
 
 class SourceContextTests(unittest.TestCase):
+    def test_scanner_end_line_cannot_expand_excerpt_without_bound(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "app.py").write_text("safe = 1\n" * 1000, encoding="utf-8")
+            item = finding(path="app.py", line=1)
+            item.locations[0].end_line = 10**12
+            attach_source_context(root, [item])
+            self.assertEqual(len(item.locations[0].snippet.splitlines()), 50)
+
     def test_secret_lane_classification_is_shared_across_area_and_tool(self) -> None:
         self.assertTrue(is_secret_bearing_scan(area="secrets", tool_name="codeql"))
         self.assertTrue(is_secret_bearing_scan(area="other", tool_name="Gitleaks"))

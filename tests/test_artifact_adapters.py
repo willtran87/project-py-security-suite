@@ -271,7 +271,7 @@ class ArtifactAdapterTests(unittest.TestCase):
             "run-codeql", self.target
         )
         self.assertEqual(command[command.index("--lang") + 1], "python")
-        self.assertEqual(command[command.index("--config") + 1], "")
+        self.assertIn("--config=", command)
         self.assertNotIn("--no-fail", command)
 
 

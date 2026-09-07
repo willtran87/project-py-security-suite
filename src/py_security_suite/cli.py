@@ -11,6 +11,9 @@ from pathlib import Path
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
+from .cli_scan import add_scan_arguments, progress_sink
+from .cli_recovery import add_recovery_commands, recovery_command
+from .scan_control import ScanControl, controlled_scan
 from .version import __version__
 from .adapter_conformance import (
     assess_adapter_conformance,
@@ -155,6 +158,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--version", action="version", version=__version__)
     subparsers = parser.add_subparsers(dest="command", required=True)
+    add_recovery_commands(subparsers)
 
     initialize = subparsers.add_parser(
         "init", help="create a minimal offline-first repository configuration"
@@ -190,55 +194,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="explicitly replace an existing regular configuration file",
     )
 
-    scan = subparsers.add_parser("scan", help="scan a Python project")
-    scan.add_argument("target", type=Path)
-    scan.add_argument(
-        "--output",
-        type=Path,
-        required=True,
-        help="new directory for the complete report artifact",
-    )
-    scan.add_argument(
-        "--config",
-        type=Path,
-        help="repository configuration in TOML format",
-    )
-    scan.add_argument(
-        "--policy",
-        type=Path,
-        help="organization policy in TOML format",
-    )
-    scan.add_argument(
-        "--profile",
-        choices=sorted(PROFILE_TOOLS),
-        help="override the configured scan profile",
-    )
-    scan.add_argument(
-        "--network-isolated",
-        action="store_true",
-        help=(
-            "attest that an external egress-denied boundary is active; this "
-            "flag does not create the sandbox"
-        ),
-    )
-    scan.add_argument(
-        "--diagnostic-without-isolation",
-        action="store_true",
-        help=(
-            "run offline-configured scanners without an external isolation "
-            "attestation; the policy result remains INCOMPLETE"
-        ),
-    )
-    scan.add_argument(
-        "--overwrite",
-        action="store_true",
-        help="replace an existing report directory after safety checks",
-    )
-    scan.add_argument(
-        "--github-summary",
-        action="store_true",
-        help="append summary.md to GITHUB_STEP_SUMMARY after report generation",
-    )
+    add_scan_arguments(subparsers.add_parser("scan", help="scan a Python project"))
 
     encrypt = subparsers.add_parser(
         "encrypt-report", help="encrypt a verified report for X25519 transport"
@@ -264,14 +220,6 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="delete the verified plaintext report after authenticated encryption",
     )
-
-    decrypt = subparsers.add_parser(
-        "decrypt-report", help="decrypt and verify an X25519 report archive"
-    )
-    decrypt.add_argument("encrypted", type=Path)
-    decrypt.add_argument("--output", type=Path, required=True)
-    decrypt.add_argument("--recipient-private-key", type=Path, required=True)
-    decrypt.add_argument("--recipient-private-key-sha256", required=True)
 
     retention = subparsers.add_parser(
         "retention-status", help="verify a report and evaluate its retention deadline"
@@ -1123,6 +1071,7 @@ def main(argv: list[str] | None = None) -> int:
 
 def _dispatch_command(args: argparse.Namespace) -> int:
     handlers = {
+        "recover-report": recovery_command,
         "schema": _schema_command,
         "adapter-check": _adapter_check_command,
         "qualify-bundle": _qualify_bundle_command,
@@ -1589,14 +1538,16 @@ def _scan_command(args: argparse.Namespace) -> int:
         repository_config=args.config,
         profile_override=args.profile,
     )
-    result = scan_project(
-        target=target,
-        output=output,
-        config=config,
-        network_isolation_attested=args.network_isolated,
-        diagnostic_without_isolation=args.diagnostic_without_isolation,
-        replace_existing=args.overwrite,
-    )
+    control = ScanControl(config.execution.max_scan_seconds, progress_sink(args.progress), max_memory_bytes=config.execution.max_scan_memory_bytes)
+    with controlled_scan(control, handle_interrupt=True):
+        result = scan_project(
+            target=target,
+            output=output,
+            config=config,
+            network_isolation_attested=args.network_isolated,
+            diagnostic_without_isolation=args.diagnostic_without_isolation,
+            replace_existing=args.overwrite,
+        )
     if args.github_summary:
         _append_github_summary(output / "summary.md")
     print(
@@ -2735,6 +2686,8 @@ def _emit_cli_error(
     exc: ConfigurationError | OSError | TypeError | ValueError,
 ) -> None:
     message = sanitize_terminal_text(str(exc))
+    if getattr(exc, "__notes__", None):
+        message += "\n" + sanitize_terminal_text("\n".join(exc.__notes__))
     code = (
         "configuration_error"
         if isinstance(exc, ConfigurationError)

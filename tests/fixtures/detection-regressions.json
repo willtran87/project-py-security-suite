@@ -1,0 +1,3144 @@
+{
+  "schema_version": "1.0",
+  "scope": "Developer regression corpus; does not establish production accuracy.",
+  "cases": [
+    {
+      "id": "identity-sanitize",
+      "category": "CWE-532",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "import logging, os\ndef sanitize(value):\n    return value\ndef run():\n    logging.info(\"value=%s\", sanitize(os.getenv(\"AUTH_TOKEN\")))\n"
+      }
+    },
+    {
+      "id": "identity-redact",
+      "category": "CWE-532",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "import logging, os\ndef redact(value):\n    return value\ndef run():\n    logging.info(\"value=%s\", redact(os.getenv(\"AUTH_TOKEN\")))\n"
+      }
+    },
+    {
+      "id": "identity-scrub",
+      "category": "CWE-532",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "import logging, os\ndef scrub(value):\n    return value\ndef run():\n    logging.info(\"value=%s\", scrub(os.getenv(\"AUTH_TOKEN\")))\n"
+      }
+    },
+    {
+      "id": "identity-allowlist_event",
+      "category": "CWE-532",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "import logging, os\ndef allowlist_event(value):\n    return value\ndef run():\n    logging.info(\"value=%s\", allowlist_event(os.getenv(\"AUTH_TOKEN\")))\n"
+      }
+    },
+    {
+      "id": "direct-secret",
+      "category": "CWE-532",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "import logging, os\ndef run():\n    logging.info(\"value=%s\", os.getenv(\"AUTH_TOKEN\"))\n"
+      }
+    },
+    {
+      "id": "constant-log",
+      "category": "CWE-532",
+      "positive": false,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "import logging, os\ndef run():\n    token = os.getenv(\"AUTH_TOKEN\")\n    logging.info(\"credential=[REDACTED]\")\n"
+      }
+    },
+    {
+      "id": "flask-sql",
+      "category": "CWE-89",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import request\nimport sqlite3\ndef handler():\n    cursor = sqlite3.connect(\":memory:\").cursor()\n    cursor.execute(\"SELECT * FROM users WHERE name = \" + request.args.get(\"value\"))\n"
+      }
+    },
+    {
+      "id": "flask-sql-safe",
+      "category": "CWE-89",
+      "positive": false,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import request\nimport sqlite3\ndef handler():\n    cursor = sqlite3.connect(\":memory:\").cursor()\n    cursor.execute(\"SELECT * FROM users WHERE name = ?\", (request.args.get(\"value\"),))\n"
+      }
+    },
+    {
+      "id": "flask-ssrf",
+      "category": "CWE-918",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import request\nimport requests\ndef handler():\n    return requests.get(request.args.get(\"value\"), timeout=5).text\n"
+      }
+    },
+    {
+      "id": "flask-ssrf-safe",
+      "category": "CWE-918",
+      "positive": false,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import request\nimport requests\ndef handler():\n    return requests.get(\"https://example.invalid/search\", params={\"q\": request.args.get(\"value\")}, timeout=5).text\n"
+      }
+    },
+    {
+      "id": "flask-path",
+      "category": "CWE-22",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import request\ndef handler():\n    return open(request.args.get(\"value\")).read()\n"
+      }
+    },
+    {
+      "id": "flask-path-safe",
+      "category": "CWE-22",
+      "positive": false,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import request\nimport os\nfrom werkzeug.utils import secure_filename\ndef handler():\n    return open(os.path.join(\"/srv/data\", secure_filename(request.args.get(\"value\")))).read()\n"
+      }
+    },
+    {
+      "id": "django-sql",
+      "category": "CWE-89",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "import sqlite3\ndef handler(request):\n    cursor = sqlite3.connect(\":memory:\").cursor()\n    cursor.execute(\"SELECT * FROM users WHERE name = \" + request.GET.get(\"value\"))\n"
+      }
+    },
+    {
+      "id": "django-sql-safe",
+      "category": "CWE-89",
+      "positive": false,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "import sqlite3\ndef handler(request):\n    cursor = sqlite3.connect(\":memory:\").cursor()\n    cursor.execute(\"SELECT * FROM users WHERE name = ?\", (request.GET.get(\"value\"),))\n"
+      }
+    },
+    {
+      "id": "django-ssrf",
+      "category": "CWE-918",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "import requests\ndef handler(request):\n    return requests.get(request.GET.get(\"value\"), timeout=5).text\n"
+      }
+    },
+    {
+      "id": "django-ssrf-safe",
+      "category": "CWE-918",
+      "positive": false,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "import requests\ndef handler(request):\n    return requests.get(\"https://example.invalid/search\", params={\"q\": request.GET.get(\"value\")}, timeout=5).text\n"
+      }
+    },
+    {
+      "id": "django-path",
+      "category": "CWE-22",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "def handler(request):\n    return open(request.GET.get(\"value\")).read()\n"
+      }
+    },
+    {
+      "id": "django-path-safe",
+      "category": "CWE-22",
+      "positive": false,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "import os\nfrom werkzeug.utils import secure_filename\ndef handler(request):\n    return open(os.path.join(\"/srv/data\", secure_filename(request.GET.get(\"value\")))).read()\n"
+      }
+    },
+    {
+      "id": "fastapi-sql",
+      "category": "CWE-89",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from fastapi import FastAPI\napp = FastAPI()\nimport sqlite3\n@app.get(\"/inspect\")\ndef handler(value: str):\n    cursor = sqlite3.connect(\":memory:\").cursor()\n    cursor.execute(\"SELECT * FROM users WHERE name = \" + value)\n"
+      }
+    },
+    {
+      "id": "fastapi-sql-safe",
+      "category": "CWE-89",
+      "positive": false,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from fastapi import FastAPI\napp = FastAPI()\nimport sqlite3\n@app.get(\"/inspect\")\ndef handler(value: str):\n    cursor = sqlite3.connect(\":memory:\").cursor()\n    cursor.execute(\"SELECT * FROM users WHERE name = ?\", (value,))\n"
+      }
+    },
+    {
+      "id": "fastapi-ssrf",
+      "category": "CWE-918",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from fastapi import FastAPI\napp = FastAPI()\nimport requests\n@app.get(\"/inspect\")\ndef handler(value: str):\n    return requests.get(value, timeout=5).text\n"
+      }
+    },
+    {
+      "id": "fastapi-ssrf-safe",
+      "category": "CWE-918",
+      "positive": false,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from fastapi import FastAPI\napp = FastAPI()\nimport requests\n@app.get(\"/inspect\")\ndef handler(value: str):\n    return requests.get(\"https://example.invalid/search\", params={\"q\": value}, timeout=5).text\n"
+      }
+    },
+    {
+      "id": "fastapi-path",
+      "category": "CWE-22",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from fastapi import FastAPI\napp = FastAPI()\n@app.get(\"/inspect\")\ndef handler(value: str):\n    return open(value).read()\n"
+      }
+    },
+    {
+      "id": "fastapi-path-safe",
+      "category": "CWE-22",
+      "positive": false,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from fastapi import FastAPI\napp = FastAPI()\nimport os\nfrom werkzeug.utils import secure_filename\n@app.get(\"/inspect\")\ndef handler(value: str):\n    return open(os.path.join(\"/srv/data\", secure_filename(value))).read()\n"
+      }
+    },
+    {
+      "id": "cross-function-secret",
+      "category": "CWE-532",
+      "positive": true,
+      "engine": "codeql",
+      "files": {
+        "app.py": "import logging, os\ndef publish(value):\n    logging.info(\"value=%s\", value)\ndef run():\n    publish(os.getenv(\"AUTH_TOKEN\"))\n"
+      }
+    },
+    {
+      "id": "cross-file-secret",
+      "category": "CWE-532",
+      "positive": true,
+      "engine": "codeql",
+      "files": {
+        "app.py": "import os\nfrom helper import publish\ndef run():\n    publish(os.getenv(\"AUTH_TOKEN\"))\n",
+        "helper.py": "import logging\ndef publish(value):\n    logging.info(\"value=%s\", value)\n"
+      }
+    },
+    {
+      "id": "cross-file-constant",
+      "category": "CWE-532",
+      "positive": false,
+      "engine": "codeql",
+      "files": {
+        "app.py": "import os\nfrom helper import publish\ndef run():\n    publish(os.getenv(\"AUTH_TOKEN\"))\n",
+        "helper.py": "import logging\ndef publish(value):\n    logging.info(\"credential=[REDACTED]\")\n"
+      }
+    },
+    {
+      "id": "real-redactor",
+      "category": "CWE-532",
+      "positive": false,
+      "engine": "codeql",
+      "files": {
+        "app.py": "import logging, os\ndef redact(value):\n    return \"[REDACTED]\"\ndef run():\n    logging.info(\"value=%s\", redact(os.getenv(\"AUTH_TOKEN\")))\n"
+      }
+    },
+    {
+      "id": "cross-function-fake-redactor",
+      "category": "CWE-532",
+      "positive": true,
+      "engine": "codeql",
+      "files": {
+        "app.py": "import logging, os\ndef redact(value):\n    return value\ndef run():\n    logging.info(\"value=%s\", redact(os.getenv(\"AUTH_TOKEN\")))\n"
+      }
+    },
+    {
+      "id": "request-method-ssrf",
+      "category": "CWE-918",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import request\nimport requests\ndef handler():\n    return requests.request(\"GET\", request.args[\"url\"]).text\n"
+      }
+    },
+    {
+      "id": "request-keyword-ssrf",
+      "category": "CWE-918",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import request\nimport httpx\ndef handler():\n    return httpx.get(url=request.args[\"url\"]).text\n"
+      }
+    },
+    {
+      "id": "request-keyword-path",
+      "category": "CWE-22",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import request\ndef handler():\n    return open(file=request.args[\"path\"]).read()\n"
+      }
+    },
+    {
+      "id": "fastapi-async-sql",
+      "category": "CWE-89",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from fastapi import FastAPI\nimport sqlite3\napp=FastAPI()\n@app.get(\"/lookup\")\nasync def handler(value: str):\n    cursor=sqlite3.connect(\":memory:\").cursor()\n    cursor.execute(\"SELECT * FROM users WHERE name = \" + value)\n"
+      }
+    },
+    {
+      "id": "header-sql",
+      "category": "CWE-89",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import request\ndef route(cursor):\n    cursor.execute(\"SELECT * FROM users WHERE name=\" + request.headers[\"X-Name\"])\n"
+      }
+    },
+    {
+      "id": "cookie-sql-parameters",
+      "category": "CWE-89",
+      "positive": false,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import request\ndef route(cursor):\n    cursor.execute(\"SELECT * FROM users WHERE name=?\", (request.cookies.get(\"name\"),))\n"
+      }
+    },
+    {
+      "id": "django-cookie-path",
+      "category": "CWE-22",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "def route(request):\n    return open(request.COOKIES[\"filename\"]).read()\n"
+      }
+    },
+    {
+      "id": "django-meta-url",
+      "category": "CWE-918",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "import requests\ndef route(request):\n    return requests.get(request.META.get(\"HTTP_TARGET\"))\n"
+      }
+    },
+    {
+      "id": "header-fixed-path",
+      "category": "CWE-22",
+      "positive": false,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import request\ndef route():\n    name=request.headers.get(\"X-Name\")\n    return open(\"/srv/static/help.txt\").read()\n"
+      }
+    },
+    {
+      "id": "unrelated-mapping-get",
+      "category": "CWE-918",
+      "positive": false,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import request\ndef route():\n    cache = {}\n    return cache.get(request.args[\"key\"])\n"
+      }
+    },
+    {
+      "id": "session-fixed-url-tainted-header",
+      "category": "CWE-918",
+      "positive": false,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "import requests\nfrom flask import request\ndef route():\n    session=requests.Session()\n    return session.get(\"https://example.test/\", headers={\"X-Name\":request.headers[\"X-Name\"]})\n"
+      }
+    },
+    {
+      "id": "async-client-keyword-url",
+      "category": "CWE-918",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "import httpx\nfrom flask import request\nasync def route():\n    async with httpx.AsyncClient() as client:\n        return await client.get(url=request.cookies[\"target\"])\n"
+      }
+    },
+    {
+      "id": "aiohttp-context-request",
+      "category": "CWE-918",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "import aiohttp\nfrom flask import request\nasync def route():\n    async with aiohttp.ClientSession() as client:\n        return await client.request(\"GET\", request.headers.get(\"X-Target\"))\n"
+      }
+    },
+    {
+      "id": "imported-session-alias",
+      "category": "CWE-918",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from requests import Session as HttpSession\nfrom flask import request\ndef route():\n    session=HttpSession()\n    return session.get(request.cookies.get(\"target\"))\n"
+      }
+    },
+    {
+      "id": "session-request-keyword",
+      "category": "CWE-918",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "import requests\nfrom flask import request\ndef route():\n    session=requests.Session()\n    return session.request(method=\"GET\", url=request.headers.get(\"X-Target\"))\n"
+      }
+    },
+    {
+      "id": "httpx-client-context",
+      "category": "CWE-918",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "import httpx\nfrom flask import request\ndef route():\n    with httpx.Client() as client:\n        return client.post(request.headers.get(\"X-Target\"))\n"
+      }
+    },
+    {
+      "id": "session-header-request",
+      "category": "CWE-918",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "import requests\nfrom flask import request\ndef route():\n    session=requests.Session()\n    return session.request(\"GET\", request.headers[\"X-Target\"])\n"
+      }
+    },
+    {
+      "id": "hash-md5",
+      "category": "CWE-328",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "import hashlib\nhashlib.md5(b\"payload\")\n"
+      }
+    },
+    {
+      "id": "hash-sha1-alias",
+      "category": "CWE-328",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from hashlib import sha1 as digest\ndigest(b\"payload\")\n"
+      }
+    },
+    {
+      "id": "hash-new-md5",
+      "category": "CWE-328",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "import hashlib\nhashlib.new(\"md5\", b\"payload\")\n"
+      }
+    },
+    {
+      "id": "hash-new-keyword",
+      "category": "CWE-328",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "import hashlib\nhashlib.new(name=\"sha1\", data=b\"payload\")\n"
+      }
+    },
+    {
+      "id": "hash-sha256",
+      "category": "CWE-328",
+      "positive": false,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "import hashlib\nhashlib.sha256(b\"payload\")\n"
+      }
+    },
+    {
+      "id": "hash-new-strong",
+      "category": "CWE-328",
+      "positive": false,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "import hashlib\nhashlib.new(\"sha384\", b\"payload\")\n"
+      }
+    },
+    {
+      "id": "hash-nonsecurity",
+      "category": "CWE-328",
+      "positive": false,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "import hashlib\nhashlib.md5(b\"payload\", usedforsecurity=False)\n"
+      }
+    },
+    {
+      "id": "hash-new-nonsecurity",
+      "category": "CWE-328",
+      "positive": false,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "import hashlib\nhashlib.new(\"md5\", b\"payload\", usedforsecurity=False)\n"
+      }
+    },
+    {
+      "id": "hash-unrelated-api",
+      "category": "CWE-328",
+      "positive": false,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "import custom\ncustom.md5(b\"payload\")\n"
+      }
+    },
+    {
+      "id": "cookie-flask-true",
+      "category": "CWE-614",
+      "positive": false,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import make_response\ndef handler():\n    response = make_response(\"body\")\n    response.set_cookie(\"session\", \"value\", secure=True)\n    return response\n"
+      }
+    },
+    {
+      "id": "cookie-flask-false",
+      "category": "CWE-614",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import make_response\ndef handler():\n    response = make_response(\"body\")\n    response.set_cookie(\"session\", \"value\", secure=False)\n    return response\n"
+      }
+    },
+    {
+      "id": "cookie-django-true",
+      "category": "CWE-614",
+      "positive": false,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from django.http import HttpResponse\ndef handler():\n    response = HttpResponse(\"body\")\n    response.set_cookie(\"session\", \"value\", secure=True)\n    return response\n"
+      }
+    },
+    {
+      "id": "cookie-django-false",
+      "category": "CWE-614",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from django.http import HttpResponse\ndef handler():\n    response = HttpResponse(\"body\")\n    response.set_cookie(\"session\", \"value\", secure=False)\n    return response\n"
+      }
+    },
+    {
+      "id": "cookie-starlette-true",
+      "category": "CWE-614",
+      "positive": false,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from starlette.responses import Response\ndef handler():\n    response = Response(\"body\")\n    response.set_cookie(\"session\", \"value\", secure=True)\n    return response\n"
+      }
+    },
+    {
+      "id": "cookie-starlette-false",
+      "category": "CWE-614",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from starlette.responses import Response\ndef handler():\n    response = Response(\"body\")\n    response.set_cookie(\"session\", \"value\", secure=False)\n    return response\n"
+      }
+    },
+    {
+      "id": "cookie-fastapi-true",
+      "category": "CWE-614",
+      "positive": false,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from fastapi.responses import JSONResponse\ndef handler():\n    response = JSONResponse(\"body\")\n    response.set_cookie(\"session\", \"value\", secure=True)\n    return response\n"
+      }
+    },
+    {
+      "id": "cookie-fastapi-false",
+      "category": "CWE-614",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from fastapi.responses import JSONResponse\ndef handler():\n    response = JSONResponse(\"body\")\n    response.set_cookie(\"session\", \"value\", secure=False)\n    return response\n"
+      }
+    },
+    {
+      "id": "cookie-custom-api",
+      "category": "CWE-614",
+      "positive": false,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "def handler(response):\n    response.set_cookie(\"preference\", \"value\", secure=False)\n"
+      }
+    },
+    {
+      "id": "cookie-no-call",
+      "category": "CWE-614",
+      "positive": false,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import make_response\ndef handler():\n    response = make_response(\"body\")\n    return response\n"
+      }
+    },
+    {
+      "id": "cookie-flask-alias",
+      "category": "CWE-614",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import make_response as respond\ndef handler():\n    response = respond(\"body\")\n    response.set_cookie(\"session\", \"value\", secure=False)\n"
+      }
+    },
+    {
+      "id": "cookie-response-rebound",
+      "category": "CWE-614",
+      "positive": false,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import make_response\ndef handler(custom):\n    response = make_response(\"body\")\n    response = custom\n    response.set_cookie(\"session\", \"value\", secure=False)\n"
+      }
+    },
+    {
+      "id": "cookie-response-alias",
+      "category": "CWE-614",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import make_response\ndef handler():\n    response = make_response(\"body\")\n    alias = response\n    alias.set_cookie(\"session\", \"value\", secure=False)\n"
+      }
+    },
+    {
+      "id": "cookie-secure-variable",
+      "category": "CWE-614",
+      "positive": false,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import make_response\ndef handler():\n    response = make_response(\"body\")\n    secure = True\n    response.set_cookie(\"session\", \"value\", secure=secure)\n"
+      }
+    },
+    {
+      "id": "path-ternary-dead-false",
+      "category": "CWE-22",
+      "positive": false,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import request\ndef handler(custom):\n    param = request.args.get(\"path\")\n    value = \"fixed\" if True else param\n    open(value)\n"
+      }
+    },
+    {
+      "id": "path-ternary-live-true",
+      "category": "CWE-22",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import request\ndef handler(custom):\n    param = request.args.get(\"path\")\n    value = param if True else \"fixed\"\n    open(value)\n"
+      }
+    },
+    {
+      "id": "path-ternary-dead-true",
+      "category": "CWE-22",
+      "positive": false,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import request\ndef handler(custom):\n    param = request.args.get(\"path\")\n    value = param if False else \"fixed\"\n    open(value)\n"
+      }
+    },
+    {
+      "id": "path-ternary-live-false",
+      "category": "CWE-22",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import request\ndef handler(custom):\n    param = request.args.get(\"path\")\n    value = \"fixed\" if False else param\n    open(value)\n"
+      }
+    },
+    {
+      "id": "path-ternary-arithmetic-safe",
+      "category": "CWE-22",
+      "positive": false,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import request\ndef handler(custom):\n    param = request.args.get(\"path\")\n    limit = 11\n    value = \"fixed\" if 3 * 7 + limit > 30 else param\n    open(value)\n"
+      }
+    },
+    {
+      "id": "path-ternary-arithmetic-live",
+      "category": "CWE-22",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import request\ndef handler(custom):\n    param = request.args.get(\"path\")\n    limit = 8\n    value = \"fixed\" if 3 * 7 + limit > 30 else param\n    open(value)\n"
+      }
+    },
+    {
+      "id": "path-ternary-both-live",
+      "category": "CWE-22",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import request\ndef handler(custom):\n    param = request.args.get(\"path\")\n    value = param if True else param\n    open(value)\n"
+      }
+    },
+    {
+      "id": "path-ternary-unknown",
+      "category": "CWE-22",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import request\ndef handler(custom):\n    param = request.args.get(\"path\")\n    value = \"fixed\" if custom() else param\n    open(value)\n"
+      }
+    },
+    {
+      "id": "path-ternary-dynamic-condition",
+      "category": "CWE-22",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import request\ndef handler(custom):\n    param = request.args.get(\"path\")\n    condition = True\n    condition = custom()\n    value = \"fixed\" if condition else param\n    open(value)\n"
+      }
+    },
+    {
+      "id": "path-ternary-later-use",
+      "category": "CWE-22",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import request\ndef handler(custom):\n    param = request.args.get(\"path\")\n    value = \"fixed\" if True else param\n    open(param)\n"
+      }
+    },
+    {
+      "id": "path-ternary-reassigned",
+      "category": "CWE-22",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import request\ndef handler(custom):\n    param = request.args.get(\"path\")\n    value = \"fixed\" if True else param\n    value = param\n    open(value)\n"
+      }
+    },
+    {
+      "id": "path-ternary-nested-live",
+      "category": "CWE-22",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import request\ndef handler(custom):\n    param = request.args.get(\"path\")\n    value = (param if custom() else \"fixed\") if True else \"fixed\"\n    open(value)\n"
+      }
+    },
+    {
+      "id": "path-if-dead-else",
+      "category": "CWE-22",
+      "positive": false,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import request\ndef handler(custom):\n    param = request.args.get(\"path\")\n    limit = 11\n    if 3 * 7 + limit > 30:\n        value = \"fixed\"\n    else:\n        value = param\n    open(value)\n"
+      }
+    },
+    {
+      "id": "path-if-live-else",
+      "category": "CWE-22",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import request\ndef handler(custom):\n    param = request.args.get(\"path\")\n    limit = 8\n    if 3 * 7 + limit > 30:\n        value = \"fixed\"\n    else:\n        value = param\n    open(value)\n"
+      }
+    },
+    {
+      "id": "path-if-dead-body",
+      "category": "CWE-22",
+      "positive": false,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import request\ndef handler(custom):\n    param = request.args.get(\"path\")\n    limit = 8\n    if 3 * 7 + limit > 30:\n        value = param\n    else:\n        value = \"fixed\"\n    open(value)\n"
+      }
+    },
+    {
+      "id": "path-if-live-body",
+      "category": "CWE-22",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import request\ndef handler(custom):\n    param = request.args.get(\"path\")\n    limit = 11\n    if 3 * 7 + limit > 30:\n        value = param\n    else:\n        value = \"fixed\"\n    open(value)\n"
+      }
+    },
+    {
+      "id": "path-if-unknown-condition",
+      "category": "CWE-22",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import request\ndef handler(custom):\n    param = request.args.get(\"path\")\n    if custom():\n        value = \"fixed\"\n    else:\n        value = param\n    open(value)\n"
+      }
+    },
+    {
+      "id": "path-if-dynamic-condition",
+      "category": "CWE-22",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import request\ndef handler(custom):\n    param = request.args.get(\"path\")\n    condition = True\n    condition = custom()\n    if condition:\n        value = \"fixed\"\n    else:\n        value = param\n    open(value)\n"
+      }
+    },
+    {
+      "id": "path-if-later-use",
+      "category": "CWE-22",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import request\ndef handler(custom):\n    param = request.args.get(\"path\")\n    if True:\n        value = \"fixed\"\n    else:\n        value = param\n    open(param)\n"
+      }
+    },
+    {
+      "id": "path-if-both-live",
+      "category": "CWE-22",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import request\ndef handler(custom):\n    param = request.args.get(\"path\")\n    if True:\n        value = param\n    else:\n        value = param\n    open(value)\n"
+      }
+    },
+    {
+      "id": "path-if-elif-live",
+      "category": "CWE-22",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import request\ndef handler(custom):\n    param = request.args.get(\"path\")\n    if False:\n        value = param\n    elif custom():\n        value = param\n    else:\n        value = \"fixed\"\n    open(value)\n"
+      }
+    },
+    {
+      "id": "path-if-prior-taint",
+      "category": "CWE-22",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import request\ndef handler(custom):\n    param = request.args.get(\"path\")\n    value = param\n    if False:\n        value = param\n    open(value)\n"
+      }
+    },
+    {
+      "id": "path-if-nested-live",
+      "category": "CWE-22",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import request\ndef handler(custom):\n    param = request.args.get(\"path\")\n    if True:\n        if custom():\n            value = param\n        else:\n            value = \"fixed\"\n    else:\n        value = param\n    open(value)\n"
+      }
+    },
+    {
+      "id": "path-if-comprehension-live",
+      "category": "CWE-22",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import request\ndef handler(custom):\n    param = request.args.get(\"path\")\n    if True:\n        value = param\n    else:\n        value = \"fixed\"\n    values = [str(part) for part in [value]]\n    open(\"\".join(values))\n"
+      }
+    },
+    {
+      "id": "path-comprehension-identity",
+      "category": "CWE-22",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import request\ndef handler(custom):\n    param = request.args.get(\"path\")\n    values = [item for item in [param]]\n    open(\"\".join(values))\n"
+      }
+    },
+    {
+      "id": "path-comprehension-constant-body",
+      "category": "CWE-22",
+      "positive": false,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import request\ndef handler(custom):\n    param = request.args.get(\"path\")\n    values = [\"fixed\" for item in [param]]\n    open(\"\".join(values))\n"
+      }
+    },
+    {
+      "id": "path-comprehension-escaped-body",
+      "category": "CWE-22",
+      "positive": false,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import request\ndef handler(custom):\n    param = request.args.get(\"path\")\n    from werkzeug.utils import secure_filename\n    values = [secure_filename(item) for item in [param]]\n    open(\"\".join(values))\n"
+      }
+    },
+    {
+      "id": "path-comprehension-reassigned",
+      "category": "CWE-22",
+      "positive": false,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import request\ndef handler(custom):\n    param = request.args.get(\"path\")\n    values = [str(item) for item in [param]]\n    values = [\"fixed\"]\n    open(\"\".join(values))\n"
+      }
+    },
+    {
+      "id": "path-comprehension-constant-input",
+      "category": "CWE-22",
+      "positive": false,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import request\ndef handler(custom):\n    param = request.args.get(\"path\")\n    values = [str(item) for item in [\"fixed\"]]\n    open(\"\".join(values))\n"
+      }
+    },
+    {
+      "id": "path-comprehension-sanitized-input",
+      "category": "CWE-22",
+      "positive": false,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import request\ndef handler(custom):\n    param = request.args.get(\"path\")\n    from werkzeug.utils import secure_filename\n    value = secure_filename(param)\n    values = [str(item) for item in [value]]\n    open(\"\".join(values))\n"
+      }
+    },
+    {
+      "id": "path-sanitizer-assigned",
+      "category": "CWE-22",
+      "positive": false,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import request\ndef handler(custom):\n    param = request.args.get(\"path\")\n    from werkzeug.utils import secure_filename\n    value = secure_filename(param)\n    open(value)\n"
+      }
+    },
+    {
+      "id": "path-sanitizer-original-retained",
+      "category": "CWE-22",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import request\ndef handler(custom):\n    param = request.args.get(\"path\")\n    from werkzeug.utils import secure_filename\n    value = secure_filename(param)\n    open(param)\n"
+      }
+    },
+    {
+      "id": "path-sanitizer-alias-retained",
+      "category": "CWE-22",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import request\ndef handler(custom):\n    param = request.args.get(\"path\")\n    from werkzeug.utils import secure_filename\n    alias = param\n    value = secure_filename(param)\n    open(alias)\n"
+      }
+    },
+    {
+      "id": "path-sanitizer-ignored-return",
+      "category": "CWE-22",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import request\ndef handler(custom):\n    param = request.args.get(\"path\")\n    from werkzeug.utils import secure_filename\n    secure_filename(param)\n    open(param)\n"
+      }
+    },
+    {
+      "id": "path-sanitizer-nested-path",
+      "category": "CWE-22",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import request\ndef handler(custom):\n    param = request.args.get(\"path\")\n    from werkzeug.utils import secure_filename\n    value = secure_filename(open(param).read())\n    open(value)\n"
+      }
+    },
+    {
+      "id": "path-sanitizer-clean-reassigned",
+      "category": "CWE-22",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import request\ndef handler(custom):\n    param = request.args.get(\"path\")\n    from werkzeug.utils import secure_filename\n    value = secure_filename(param)\n    value = param\n    open(value)\n"
+      }
+    },
+    {
+      "id": "path-sanitizer-output-alias",
+      "category": "CWE-22",
+      "positive": false,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import request\ndef handler(custom):\n    param = request.args.get(\"path\")\n    from werkzeug.utils import secure_filename\n    value = secure_filename(param)\n    alias = value\n    open(alias)\n"
+      }
+    },
+    {
+      "id": "path-sanitizer-impostor",
+      "category": "CWE-22",
+      "positive": true,
+      "engine": "semgrep",
+      "files": {
+        "app.py": "from flask import request\ndef handler(custom):\n    param = request.args.get(\"path\")\n    def secure_filename(value):\n        return value\n    value = secure_filename(param)\n    open(value)\n"
+      }
+    },
+    {
+      "id": "codeql-choice-path-arithmetic-safe",
+      "engine": "codeql",
+      "category": "CWE-22",
+      "rule_id": "py/path-injection",
+      "positive": false,
+      "require_native_proof": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/example\")\ndef example():\n    value = request.args[\"q\"]\n    num = 106\n    bar = \"fixed\" if 7 * 18 + num > 200 else value\n    return str(open(\"/tmp/\" + bar))\n"
+      }
+    },
+    {
+      "id": "codeql-choice-path-false-safe",
+      "engine": "codeql",
+      "category": "CWE-22",
+      "rule_id": "py/path-injection",
+      "positive": false,
+      "require_native_proof": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/example\")\ndef example():\n    value = request.args[\"q\"]\n    num = 0\n    bar = value if 7 * 18 + num > 200 else \"fixed\"\n    return str(open(\"/tmp/\" + bar))\n"
+      }
+    },
+    {
+      "id": "codeql-choice-path-reassigned",
+      "engine": "codeql",
+      "category": "CWE-22",
+      "rule_id": "py/path-injection",
+      "positive": true,
+      "require_native_proof": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/example\")\ndef example():\n    value = request.args[\"q\"]\n    num = 106\n    num = 0\n    bar = \"fixed\" if 7 * 18 + num > 200 else value\n    return str(open(\"/tmp/\" + bar))\n"
+      }
+    },
+    {
+      "id": "codeql-choice-path-unknown",
+      "engine": "codeql",
+      "category": "CWE-22",
+      "rule_id": "py/path-injection",
+      "positive": true,
+      "require_native_proof": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/example\")\ndef example():\n    value = request.args[\"q\"]\n    num = int(request.args[\"n\"])\n    bar = \"fixed\" if 7 * 18 + num > 200 else value\n    return str(open(\"/tmp/\" + bar))\n"
+      }
+    },
+    {
+      "id": "codeql-choice-path-phi",
+      "engine": "codeql",
+      "category": "CWE-22",
+      "rule_id": "py/path-injection",
+      "positive": true,
+      "require_native_proof": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/example\")\ndef example():\n    value = request.args[\"q\"]\n    num = 106\n    if request.args.get(\"switch\"):\n        num = 0\n    bar = \"fixed\" if 7 * 18 + num > 200 else value\n    return str(open(\"/tmp/\" + bar))\n"
+      }
+    },
+    {
+      "id": "codeql-choice-path-closure",
+      "engine": "codeql",
+      "category": "CWE-22",
+      "rule_id": "py/path-injection",
+      "positive": true,
+      "require_native_proof": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/example\")\ndef example():\n    value = request.args[\"q\"]\n    num = 106\n    def change():\n        nonlocal num\n        num = 0\n    change()\n    bar = \"fixed\" if 7 * 18 + num > 200 else value\n    return str(open(\"/tmp/\" + bar))\n"
+      }
+    },
+    {
+      "id": "codeql-choice-path-overflow",
+      "engine": "codeql",
+      "category": "CWE-22",
+      "rule_id": "py/path-injection",
+      "positive": true,
+      "require_native_proof": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/example\")\ndef example():\n    value = request.args[\"q\"]\n    num = 100000\n    bar = value if num * num > 200 else \"fixed\"\n    return str(open(\"/tmp/\" + bar))\n"
+      }
+    },
+    {
+      "id": "codeql-choice-path-float",
+      "engine": "codeql",
+      "category": "CWE-22",
+      "rule_id": "py/path-injection",
+      "positive": true,
+      "require_native_proof": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/example\")\ndef example():\n    value = request.args[\"q\"]\n    num = 106.0\n    bar = value if num > 100 else \"fixed\"\n    return str(open(\"/tmp/\" + bar))\n"
+      }
+    },
+    {
+      "id": "codeql-choice-path-unsupported-operator",
+      "engine": "codeql",
+      "category": "CWE-22",
+      "rule_id": "py/path-injection",
+      "positive": true,
+      "require_native_proof": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/example\")\ndef example():\n    value = request.args[\"q\"]\n    num = 1\n    bar = value if num is not 2 else \"fixed\"\n    return str(open(\"/tmp/\" + bar))\n"
+      }
+    },
+    {
+      "id": "codeql-choice-path-chained",
+      "engine": "codeql",
+      "category": "CWE-22",
+      "rule_id": "py/path-injection",
+      "positive": true,
+      "require_native_proof": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/example\")\ndef example():\n    value = request.args[\"q\"]\n    num = 1\n    bar = value if 0 < num < 2 else \"fixed\"\n    return str(open(\"/tmp/\" + bar))\n"
+      }
+    },
+    {
+      "id": "codeql-choice-path-extra-flow",
+      "engine": "codeql",
+      "category": "CWE-22",
+      "rule_id": "py/path-injection",
+      "positive": true,
+      "require_native_proof": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/example\")\ndef example():\n    value = request.args[\"q\"]\n    num = 106\n    bar = (\"fixed\" if 7 * 18 + num > 200 else value) + request.args[\"other\"]\n    return str(open(\"/tmp/\" + bar))\n"
+      }
+    },
+    {
+      "id": "codeql-choice-path-impostor",
+      "engine": "codeql",
+      "category": "CWE-22",
+      "rule_id": "py/path-injection",
+      "positive": true,
+      "require_native_proof": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/example\")\ndef example():\n    value = request.args[\"q\"]\n    num = 106\n    bar = value if 7 * 18 + num > 200 else \"fixed\"\n    return str(open(\"/tmp/\" + bar))\n"
+      }
+    },
+    {
+      "id": "codeql-choice-path-tuple-assignment",
+      "engine": "codeql",
+      "category": "CWE-22",
+      "rule_id": "py/path-injection",
+      "positive": true,
+      "require_native_proof": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/example\")\ndef example():\n    value = request.args[\"q\"]\n    num, other = (0, 106)\n    bar = \"fixed\" if num > 100 else value\n    return str(open(\"/tmp/\" + bar))\n"
+      }
+    },
+    {
+      "id": "codeql-choice-path-loop-assignment",
+      "engine": "codeql",
+      "category": "CWE-22",
+      "rule_id": "py/path-injection",
+      "positive": true,
+      "require_native_proof": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/example\")\ndef example():\n    value = request.args[\"q\"]\n    num = 106\n    for num in [0]:\n        pass\n    bar = \"fixed\" if num > 100 else value\n    return str(open(\"/tmp/\" + bar))\n"
+      }
+    },
+    {
+      "id": "codeql-choice-path-walrus",
+      "engine": "codeql",
+      "category": "CWE-22",
+      "rule_id": "py/path-injection",
+      "positive": true,
+      "require_native_proof": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/example\")\ndef example():\n    value = request.args[\"q\"]\n    num = 106\n    bar = \"fixed\" if (num := 0) > 100 else value\n    return str(open(\"/tmp/\" + bar))\n"
+      }
+    },
+    {
+      "id": "codeql-choice-path-alias-safe",
+      "engine": "codeql",
+      "category": "CWE-22",
+      "rule_id": "py/path-injection",
+      "positive": false,
+      "require_native_proof": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/example\")\ndef example():\n    value = request.args[\"q\"]\n    first = 106\n    num = first\n    bar = \"fixed\" if 7 * 18 + num > 200 else value\n    return str(open(\"/tmp/\" + bar))\n"
+      }
+    },
+    {
+      "id": "codeql-choice-path-gt-safe",
+      "engine": "codeql",
+      "category": "CWE-22",
+      "rule_id": "py/path-injection",
+      "positive": false,
+      "require_native_proof": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/example\")\ndef example():\n    value = request.args[\"q\"]\n    num = 106\n    bar = \"fixed\" if 7 * 18 + num > 200 else value\n    return str(open(\"/tmp/\" + bar))\n"
+      }
+    },
+    {
+      "id": "codeql-choice-path-gte-safe",
+      "engine": "codeql",
+      "category": "CWE-22",
+      "rule_id": "py/path-injection",
+      "positive": false,
+      "require_native_proof": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/example\")\ndef example():\n    value = request.args[\"q\"]\n    num = 106\n    bar = \"fixed\" if 7 * 18 + num >= 200 else value\n    return str(open(\"/tmp/\" + bar))\n"
+      }
+    },
+    {
+      "id": "codeql-choice-path-lt-safe",
+      "engine": "codeql",
+      "category": "CWE-22",
+      "rule_id": "py/path-injection",
+      "positive": false,
+      "require_native_proof": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/example\")\ndef example():\n    value = request.args[\"q\"]\n    num = 106\n    bar = value if 7 * 18 + num < 200 else \"fixed\"\n    return str(open(\"/tmp/\" + bar))\n"
+      }
+    },
+    {
+      "id": "codeql-choice-path-lte-safe",
+      "engine": "codeql",
+      "category": "CWE-22",
+      "rule_id": "py/path-injection",
+      "positive": false,
+      "require_native_proof": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/example\")\ndef example():\n    value = request.args[\"q\"]\n    num = 106\n    bar = value if 7 * 18 + num <= 200 else \"fixed\"\n    return str(open(\"/tmp/\" + bar))\n"
+      }
+    },
+    {
+      "id": "codeql-choice-path-eq-safe",
+      "engine": "codeql",
+      "category": "CWE-22",
+      "rule_id": "py/path-injection",
+      "positive": false,
+      "require_native_proof": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/example\")\ndef example():\n    value = request.args[\"q\"]\n    num = 106\n    bar = value if 7 * 18 + num == 200 else \"fixed\"\n    return str(open(\"/tmp/\" + bar))\n"
+      }
+    },
+    {
+      "id": "codeql-choice-path-ne-safe",
+      "engine": "codeql",
+      "category": "CWE-22",
+      "rule_id": "py/path-injection",
+      "positive": false,
+      "require_native_proof": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/example\")\ndef example():\n    value = request.args[\"q\"]\n    num = 106\n    bar = \"fixed\" if 7 * 18 + num != 200 else value\n    return str(open(\"/tmp/\" + bar))\n"
+      }
+    },
+    {
+      "id": "codeql-choice-xpath-arithmetic-safe",
+      "engine": "codeql",
+      "category": "CWE-643",
+      "rule_id": "py/xpath-injection",
+      "positive": false,
+      "require_native_proof": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/example\")\ndef example():\n    value = request.args[\"q\"]\n    num = 106\n    bar = \"fixed\" if 7 * 18 + num > 200 else value\n    return str(etree.XPath(\"/item/\" + bar))\n"
+      }
+    },
+    {
+      "id": "codeql-choice-xpath-false-safe",
+      "engine": "codeql",
+      "category": "CWE-643",
+      "rule_id": "py/xpath-injection",
+      "positive": false,
+      "require_native_proof": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/example\")\ndef example():\n    value = request.args[\"q\"]\n    num = 0\n    bar = value if 7 * 18 + num > 200 else \"fixed\"\n    return str(etree.XPath(\"/item/\" + bar))\n"
+      }
+    },
+    {
+      "id": "codeql-choice-xpath-reassigned",
+      "engine": "codeql",
+      "category": "CWE-643",
+      "rule_id": "py/xpath-injection",
+      "positive": true,
+      "require_native_proof": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/example\")\ndef example():\n    value = request.args[\"q\"]\n    num = 106\n    num = 0\n    bar = \"fixed\" if 7 * 18 + num > 200 else value\n    return str(etree.XPath(\"/item/\" + bar))\n"
+      }
+    },
+    {
+      "id": "codeql-choice-xpath-unknown",
+      "engine": "codeql",
+      "category": "CWE-643",
+      "rule_id": "py/xpath-injection",
+      "positive": true,
+      "require_native_proof": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/example\")\ndef example():\n    value = request.args[\"q\"]\n    num = int(request.args[\"n\"])\n    bar = \"fixed\" if 7 * 18 + num > 200 else value\n    return str(etree.XPath(\"/item/\" + bar))\n"
+      }
+    },
+    {
+      "id": "codeql-choice-xpath-phi",
+      "engine": "codeql",
+      "category": "CWE-643",
+      "rule_id": "py/xpath-injection",
+      "positive": true,
+      "require_native_proof": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/example\")\ndef example():\n    value = request.args[\"q\"]\n    num = 106\n    if request.args.get(\"switch\"):\n        num = 0\n    bar = \"fixed\" if 7 * 18 + num > 200 else value\n    return str(etree.XPath(\"/item/\" + bar))\n"
+      }
+    },
+    {
+      "id": "codeql-choice-xpath-closure",
+      "engine": "codeql",
+      "category": "CWE-643",
+      "rule_id": "py/xpath-injection",
+      "positive": true,
+      "require_native_proof": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/example\")\ndef example():\n    value = request.args[\"q\"]\n    num = 106\n    def change():\n        nonlocal num\n        num = 0\n    change()\n    bar = \"fixed\" if 7 * 18 + num > 200 else value\n    return str(etree.XPath(\"/item/\" + bar))\n"
+      }
+    },
+    {
+      "id": "codeql-choice-xpath-overflow",
+      "engine": "codeql",
+      "category": "CWE-643",
+      "rule_id": "py/xpath-injection",
+      "positive": true,
+      "require_native_proof": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/example\")\ndef example():\n    value = request.args[\"q\"]\n    num = 100000\n    bar = value if num * num > 200 else \"fixed\"\n    return str(etree.XPath(\"/item/\" + bar))\n"
+      }
+    },
+    {
+      "id": "codeql-choice-xpath-float",
+      "engine": "codeql",
+      "category": "CWE-643",
+      "rule_id": "py/xpath-injection",
+      "positive": true,
+      "require_native_proof": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/example\")\ndef example():\n    value = request.args[\"q\"]\n    num = 106.0\n    bar = value if num > 100 else \"fixed\"\n    return str(etree.XPath(\"/item/\" + bar))\n"
+      }
+    },
+    {
+      "id": "codeql-choice-xpath-unsupported-operator",
+      "engine": "codeql",
+      "category": "CWE-643",
+      "rule_id": "py/xpath-injection",
+      "positive": true,
+      "require_native_proof": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/example\")\ndef example():\n    value = request.args[\"q\"]\n    num = 1\n    bar = value if num is not 2 else \"fixed\"\n    return str(etree.XPath(\"/item/\" + bar))\n"
+      }
+    },
+    {
+      "id": "codeql-choice-xpath-chained",
+      "engine": "codeql",
+      "category": "CWE-643",
+      "rule_id": "py/xpath-injection",
+      "positive": true,
+      "require_native_proof": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/example\")\ndef example():\n    value = request.args[\"q\"]\n    num = 1\n    bar = value if 0 < num < 2 else \"fixed\"\n    return str(etree.XPath(\"/item/\" + bar))\n"
+      }
+    },
+    {
+      "id": "codeql-choice-xpath-extra-flow",
+      "engine": "codeql",
+      "category": "CWE-643",
+      "rule_id": "py/xpath-injection",
+      "positive": true,
+      "require_native_proof": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/example\")\ndef example():\n    value = request.args[\"q\"]\n    num = 106\n    bar = (\"fixed\" if 7 * 18 + num > 200 else value) + request.args[\"other\"]\n    return str(etree.XPath(\"/item/\" + bar))\n"
+      }
+    },
+    {
+      "id": "codeql-choice-xpath-impostor",
+      "engine": "codeql",
+      "category": "CWE-643",
+      "rule_id": "py/xpath-injection",
+      "positive": true,
+      "require_native_proof": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/example\")\ndef example():\n    value = request.args[\"q\"]\n    num = 106\n    bar = value if 7 * 18 + num > 200 else \"fixed\"\n    return str(etree.XPath(\"/item/\" + bar))\n"
+      }
+    },
+    {
+      "id": "codeql-choice-xpath-tuple-assignment",
+      "engine": "codeql",
+      "category": "CWE-643",
+      "rule_id": "py/xpath-injection",
+      "positive": true,
+      "require_native_proof": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/example\")\ndef example():\n    value = request.args[\"q\"]\n    num, other = (0, 106)\n    bar = \"fixed\" if num > 100 else value\n    return str(etree.XPath(\"/item/\" + bar))\n"
+      }
+    },
+    {
+      "id": "codeql-choice-xpath-loop-assignment",
+      "engine": "codeql",
+      "category": "CWE-643",
+      "rule_id": "py/xpath-injection",
+      "positive": true,
+      "require_native_proof": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/example\")\ndef example():\n    value = request.args[\"q\"]\n    num = 106\n    for num in [0]:\n        pass\n    bar = \"fixed\" if num > 100 else value\n    return str(etree.XPath(\"/item/\" + bar))\n"
+      }
+    },
+    {
+      "id": "codeql-choice-xpath-walrus",
+      "engine": "codeql",
+      "category": "CWE-643",
+      "rule_id": "py/xpath-injection",
+      "positive": true,
+      "require_native_proof": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/example\")\ndef example():\n    value = request.args[\"q\"]\n    num = 106\n    bar = \"fixed\" if (num := 0) > 100 else value\n    return str(etree.XPath(\"/item/\" + bar))\n"
+      }
+    },
+    {
+      "id": "codeql-choice-xpath-alias-safe",
+      "engine": "codeql",
+      "category": "CWE-643",
+      "rule_id": "py/xpath-injection",
+      "positive": false,
+      "require_native_proof": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/example\")\ndef example():\n    value = request.args[\"q\"]\n    first = 106\n    num = first\n    bar = \"fixed\" if 7 * 18 + num > 200 else value\n    return str(etree.XPath(\"/item/\" + bar))\n"
+      }
+    },
+    {
+      "id": "codeql-choice-xpath-gt-safe",
+      "engine": "codeql",
+      "category": "CWE-643",
+      "rule_id": "py/xpath-injection",
+      "positive": false,
+      "require_native_proof": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/example\")\ndef example():\n    value = request.args[\"q\"]\n    num = 106\n    bar = \"fixed\" if 7 * 18 + num > 200 else value\n    return str(etree.XPath(\"/item/\" + bar))\n"
+      }
+    },
+    {
+      "id": "codeql-choice-xpath-gte-safe",
+      "engine": "codeql",
+      "category": "CWE-643",
+      "rule_id": "py/xpath-injection",
+      "positive": false,
+      "require_native_proof": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/example\")\ndef example():\n    value = request.args[\"q\"]\n    num = 106\n    bar = \"fixed\" if 7 * 18 + num >= 200 else value\n    return str(etree.XPath(\"/item/\" + bar))\n"
+      }
+    },
+    {
+      "id": "codeql-choice-xpath-lt-safe",
+      "engine": "codeql",
+      "category": "CWE-643",
+      "rule_id": "py/xpath-injection",
+      "positive": false,
+      "require_native_proof": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/example\")\ndef example():\n    value = request.args[\"q\"]\n    num = 106\n    bar = value if 7 * 18 + num < 200 else \"fixed\"\n    return str(etree.XPath(\"/item/\" + bar))\n"
+      }
+    },
+    {
+      "id": "codeql-choice-xpath-lte-safe",
+      "engine": "codeql",
+      "category": "CWE-643",
+      "rule_id": "py/xpath-injection",
+      "positive": false,
+      "require_native_proof": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/example\")\ndef example():\n    value = request.args[\"q\"]\n    num = 106\n    bar = value if 7 * 18 + num <= 200 else \"fixed\"\n    return str(etree.XPath(\"/item/\" + bar))\n"
+      }
+    },
+    {
+      "id": "codeql-choice-xpath-eq-safe",
+      "engine": "codeql",
+      "category": "CWE-643",
+      "rule_id": "py/xpath-injection",
+      "positive": false,
+      "require_native_proof": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/example\")\ndef example():\n    value = request.args[\"q\"]\n    num = 106\n    bar = value if 7 * 18 + num == 200 else \"fixed\"\n    return str(etree.XPath(\"/item/\" + bar))\n"
+      }
+    },
+    {
+      "id": "codeql-choice-xpath-ne-safe",
+      "engine": "codeql",
+      "category": "CWE-643",
+      "rule_id": "py/xpath-injection",
+      "positive": false,
+      "require_native_proof": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/example\")\ndef example():\n    value = request.args[\"q\"]\n    num = 106\n    bar = \"fixed\" if 7 * 18 + num != 200 else value\n    return str(etree.XPath(\"/item/\" + bar))\n"
+      }
+    },
+    {
+      "id": "ldap-adjacent-filter",
+      "engine": "semgrep",
+      "category": "CWE-90",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import request\nimport markupsafe, html, ldap3\n\ndef handler():\n    value = request.args.get(\"name\")\n    query = \"(uid=\" + value + \")\"\n    conn = ldap3.Connection(\"host\")\n    conn.search(\"dc=example\", query)\n"
+      }
+    },
+    {
+      "id": "ldap-adjacent-keyword",
+      "engine": "semgrep",
+      "category": "CWE-90",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import request\nimport markupsafe, html, ldap3\n\ndef handler():\n    value = request.args.get(\"name\")\n    conn = ldap3.Connection(\"host\")\n    conn.search(search_base=\"dc=example\", search_filter=value)\n"
+      }
+    },
+    {
+      "id": "ldap-inline-filter",
+      "engine": "semgrep",
+      "category": "CWE-90",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import request\nimport markupsafe, html, ldap3\n\ndef handler():\n    value = request.args.get(\"name\")\n    return ldap3.Connection(\"host\").search(\"dc=example\", value)\n"
+      }
+    },
+    {
+      "id": "ldap-inline-keyword",
+      "engine": "semgrep",
+      "category": "CWE-90",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import request\nimport markupsafe, html, ldap3\n\ndef handler():\n    value = request.args.get(\"name\")\n    return ldap3.Connection(\"host\").search(search_base=\"base\", search_filter=value)\n"
+      }
+    },
+    {
+      "id": "ldap-import-alias",
+      "engine": "semgrep",
+      "category": "CWE-90",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import request\nimport markupsafe, html, ldap3\nfrom ldap3 import Connection\n\ndef handler():\n    value = request.args.get(\"name\")\n    conn = Connection(\"host\")\n    conn.search(\"base\", value)\n"
+      }
+    },
+    {
+      "id": "ldap-filter-escaped",
+      "engine": "semgrep",
+      "category": "CWE-90",
+      "positive": false,
+      "files": {
+        "app.py": "from flask import request\nimport markupsafe, html, ldap3\nfrom ldap3.utils.conv import escape_filter_chars\n\ndef handler():\n    value = request.args.get(\"name\")\n    safe = escape_filter_chars(value)\n    conn = ldap3.Connection(\"host\")\n    conn.search(\"base\", \"(uid=\" + safe + \")\")\n"
+      }
+    },
+    {
+      "id": "ldap-filter-escaped-direct",
+      "engine": "semgrep",
+      "category": "CWE-90",
+      "positive": false,
+      "files": {
+        "app.py": "from flask import request\nimport markupsafe, html, ldap3\nfrom ldap3.utils.conv import escape_filter_chars\n\ndef handler():\n    value = request.args.get(\"name\")\n    conn = ldap3.Connection(\"host\")\n    conn.search(\"base\", escape_filter_chars(value))\n"
+      }
+    },
+    {
+      "id": "ldap-filter-escape-ignored",
+      "engine": "semgrep",
+      "category": "CWE-90",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import request\nimport markupsafe, html, ldap3\nfrom ldap3.utils.conv import escape_filter_chars\n\ndef handler():\n    value = request.args.get(\"name\")\n    escape_filter_chars(value)\n    conn = ldap3.Connection(\"host\")\n    conn.search(\"base\", value)\n"
+      }
+    },
+    {
+      "id": "ldap-filter-dn-escape",
+      "engine": "semgrep",
+      "category": "CWE-90",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import request\nimport markupsafe, html, ldap3\nfrom ldap3.utils.dn import escape_rdn\n\ndef handler():\n    value = request.args.get(\"name\")\n    safe = escape_rdn(value)\n    conn = ldap3.Connection(\"host\")\n    conn.search(\"base\", safe)\n"
+      }
+    },
+    {
+      "id": "ldap-filter-html-escape",
+      "engine": "semgrep",
+      "category": "CWE-90",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import request\nimport markupsafe, html, ldap3\n\ndef handler():\n    value = request.args.get(\"name\")\n    safe = html.escape(value)\n    conn = ldap3.Connection(\"host\")\n    conn.search(\"base\", safe)\n"
+      }
+    },
+    {
+      "id": "ldap-filter-static",
+      "engine": "semgrep",
+      "category": "CWE-90",
+      "positive": false,
+      "files": {
+        "app.py": "from flask import request\nimport markupsafe, html, ldap3\n\ndef handler():\n    value = request.args.get(\"name\")\n    conn = ldap3.Connection(\"host\")\n    conn.search(\"base\", \"(uid=static)\")\n"
+      }
+    },
+    {
+      "id": "ldap-filter-unrelated-search",
+      "engine": "semgrep",
+      "category": "CWE-90",
+      "positive": false,
+      "files": {
+        "app.py": "from flask import request\nimport markupsafe, html, ldap3\n\ndef handler():\n    value = request.args.get(\"name\")\n    conn = object()\n    conn.search(\"base\", value)\n"
+      }
+    },
+    {
+      "id": "ldap-filter-rebound",
+      "engine": "semgrep",
+      "category": "CWE-90",
+      "positive": false,
+      "files": {
+        "app.py": "from flask import request\nimport markupsafe, html, ldap3\n\ndef handler():\n    value = request.args.get(\"name\")\n    conn = ldap3.Connection(\"host\")\n    conn = object()\n    conn.search(\"base\", value)\n"
+      }
+    },
+    {
+      "id": "ldap-filter-tuple-rebound",
+      "engine": "semgrep",
+      "category": "CWE-90",
+      "positive": false,
+      "files": {
+        "app.py": "from flask import request\nimport markupsafe, html, ldap3\n\ndef handler():\n    value = request.args.get(\"name\")\n    conn = ldap3.Connection(\"host\")\n    conn, other = object(), 1\n    conn.search(\"base\", value)\n"
+      }
+    },
+    {
+      "id": "ldap-filter-fake-escape",
+      "engine": "semgrep",
+      "category": "CWE-90",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import request\nimport markupsafe, html, ldap3\ndef escape_filter_chars(value):\n    return value\n\ndef handler():\n    value = request.args.get(\"name\")\n    safe = escape_filter_chars(value)\n    conn = ldap3.Connection(\"host\")\n    conn.search(\"base\", safe)\n"
+      }
+    },
+    {
+      "id": "ldap-filter-retainted",
+      "engine": "semgrep",
+      "category": "CWE-90",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import request\nimport markupsafe, html, ldap3\n\ndef handler():\n    value = request.args.get(\"name\")\n    safe = ldap3.utils.conv.escape_filter_chars(value)\n    conn = ldap3.Connection(\"host\")\n    conn.search(\"base\", safe + value)\n"
+      }
+    },
+    {
+      "id": "html-direct-query-markup",
+      "category": "CWE-79",
+      "engine": "semgrep",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import request\nimport markupsafe, html\n\ndef handler():\n    return markupsafe.Markup(request.args.get(\"html\"))\n"
+      }
+    },
+    {
+      "id": "html-direct-form-markup",
+      "category": "CWE-79",
+      "engine": "semgrep",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import request\nimport markupsafe, html\n\ndef handler():\n    return markupsafe.Markup(request.form[\"html\"])\n"
+      }
+    },
+    {
+      "id": "html-direct-cookie-markup",
+      "category": "CWE-79",
+      "engine": "semgrep",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import request\nimport markupsafe, html\n\ndef handler():\n    return markupsafe.Markup(request.cookies.get(\"html\"))\n"
+      }
+    },
+    {
+      "id": "html-direct-header-markup",
+      "category": "CWE-79",
+      "engine": "semgrep",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import request\nimport markupsafe, html\n\ndef handler():\n    return markupsafe.Markup(request.headers.get(\"x-html\"))\n"
+      }
+    },
+    {
+      "id": "html-direct-import-alias",
+      "category": "CWE-79",
+      "engine": "semgrep",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import request\nimport markupsafe, html\nfrom markupsafe import Markup as Trusted\nfrom flask import request as req\n\ndef handler():\n    return Trusted(req.args[\"html\"])\n"
+      }
+    },
+    {
+      "id": "html-direct-mark-safe",
+      "category": "CWE-79",
+      "engine": "semgrep",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import request\nimport markupsafe, html\nfrom django.utils.safestring import mark_safe\n\ndef handler():\n    return mark_safe(request.args[\"html\"])\n"
+      }
+    },
+    {
+      "id": "html-direct-nested-unsafe",
+      "category": "CWE-79",
+      "engine": "semgrep",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import request\nimport markupsafe, html\n\ndef handler():\n    return markupsafe.escape(markupsafe.Markup(request.args[\"html\"]))\n"
+      }
+    },
+    {
+      "id": "html-direct-escaped",
+      "category": "CWE-79",
+      "engine": "semgrep",
+      "positive": false,
+      "files": {
+        "app.py": "from flask import request\nimport markupsafe, html\n\ndef handler():\n    return markupsafe.Markup(markupsafe.escape(request.args[\"html\"]))\n"
+      }
+    },
+    {
+      "id": "html-direct-html-escaped",
+      "category": "CWE-79",
+      "engine": "semgrep",
+      "positive": false,
+      "files": {
+        "app.py": "from flask import request\nimport markupsafe, html\n\ndef handler():\n    return markupsafe.Markup(html.escape(request.args[\"html\"]))\n"
+      }
+    },
+    {
+      "id": "html-direct-static",
+      "category": "CWE-79",
+      "engine": "semgrep",
+      "positive": false,
+      "files": {
+        "app.py": "from flask import request\nimport markupsafe, html\n\ndef handler():\n    return markupsafe.Markup(\"<b>static</b>\")\n"
+      }
+    },
+    {
+      "id": "html-direct-autoescaped-format",
+      "category": "CWE-79",
+      "engine": "semgrep",
+      "positive": false,
+      "files": {
+        "app.py": "from flask import request\nimport markupsafe, html\n\ndef handler():\n    return markupsafe.Markup(\"<b>{}</b>\").format(request.args[\"html\"])\n"
+      }
+    },
+    {
+      "id": "html-direct-autoescaped-concat",
+      "category": "CWE-79",
+      "engine": "semgrep",
+      "positive": false,
+      "files": {
+        "app.py": "from flask import request\nimport markupsafe, html\n\ndef handler():\n    safe = markupsafe.escape(request.args[\"a\"])\n    return markupsafe.Markup(safe + request.args[\"b\"])\n"
+      }
+    },
+    {
+      "id": "html-direct-autoescaped-percent",
+      "category": "CWE-79",
+      "engine": "semgrep",
+      "positive": false,
+      "files": {
+        "app.py": "from flask import request\nimport markupsafe, html\n\ndef handler():\n    return markupsafe.Markup(\"<b>%s</b>\") % request.args[\"html\"]\n"
+      }
+    },
+    {
+      "id": "html-direct-json-response",
+      "category": "CWE-79",
+      "engine": "semgrep",
+      "positive": false,
+      "files": {
+        "app.py": "from flask import request\nimport markupsafe, html\nfrom flask import jsonify\n\ndef handler():\n    return jsonify(request.args[\"html\"])\n"
+      }
+    },
+    {
+      "id": "html-direct-template",
+      "category": "CWE-79",
+      "engine": "semgrep",
+      "positive": false,
+      "files": {
+        "app.py": "from flask import request\nimport markupsafe, html\nfrom flask import render_template\n\ndef handler():\n    return render_template(\"page.html\", text=request.args[\"html\"])\n"
+      }
+    },
+    {
+      "id": "html-direct-unrelated-markup",
+      "category": "CWE-79",
+      "engine": "semgrep",
+      "positive": false,
+      "files": {
+        "app.py": "from flask import request\nimport markupsafe, html\ndef Markup(value):\n    return value\n\ndef handler():\n    return Markup(request.args[\"html\"])\n"
+      }
+    },
+    {
+      "id": "ldap-filter-source-call-escaped",
+      "engine": "semgrep",
+      "category": "CWE-90",
+      "positive": false,
+      "files": {
+        "app.py": "import ldap3\nfrom flask import request\nfrom ldap3.utils.conv import escape_filter_chars\ndef handler():\n    value = escape_filter_chars(request.args.get(\"name\"))\n    conn = ldap3.Connection(\"host\")\n    conn.search(\"base\", value)\n"
+      }
+    },
+    {
+      "id": "ldap-filter-source-item-escaped",
+      "engine": "semgrep",
+      "category": "CWE-90",
+      "positive": false,
+      "files": {
+        "app.py": "import ldap3\nfrom flask import request\nfrom ldap3.utils.conv import escape_filter_chars\ndef handler():\n    value = escape_filter_chars(request.args[\"name\"])\n    conn = ldap3.Connection(\"host\")\n    conn.search(\"base\", value)\n"
+      }
+    },
+    {
+      "id": "ldap-filter-nested-unsafe",
+      "engine": "semgrep",
+      "category": "CWE-90",
+      "positive": true,
+      "files": {
+        "app.py": "import ldap3\nfrom flask import request\nfrom ldap3.utils.conv import escape_filter_chars\ndef handler():\n    return escape_filter_chars(ldap3.Connection(\"host\").search(\"base\", request.args.get(\"name\")))\n"
+      }
+    },
+    {
+      "id": "ldap-filter-default-nested-unsafe",
+      "engine": "semgrep",
+      "category": "CWE-90",
+      "positive": true,
+      "files": {
+        "app.py": "import ldap3\nfrom flask import request\nfrom ldap3.utils.conv import escape_filter_chars\ndef handler():\n    return escape_filter_chars(request.args.get(\"name\", ldap3.Connection(\"host\").search(\"base\", request.args.get(\"other\"))))\n"
+      }
+    },
+    {
+      "id": "ldap-filter-source-escape-ignored",
+      "engine": "semgrep",
+      "category": "CWE-90",
+      "positive": true,
+      "files": {
+        "app.py": "import ldap3\nfrom flask import request\nfrom ldap3.utils.conv import escape_filter_chars\ndef handler():\n    escape_filter_chars(request.args.get(\"name\"))\n    conn = ldap3.Connection(\"host\")\n    conn.search(\"base\", request.args.get(\"name\"))\n"
+      }
+    },
+    {
+      "id": "ldap-filter-source-escape-retainted",
+      "engine": "semgrep",
+      "category": "CWE-90",
+      "positive": true,
+      "files": {
+        "app.py": "import ldap3\nfrom flask import request\nfrom ldap3.utils.conv import escape_filter_chars\ndef handler():\n    value = escape_filter_chars(request.args.get(\"name\"))\n    value += request.args.get(\"other\")\n    conn = ldap3.Connection(\"host\")\n    conn.search(\"base\", value)\n"
+      }
+    },
+    {
+      "id": "ldap-filter-default-nested-static",
+      "engine": "semgrep",
+      "category": "CWE-90",
+      "positive": false,
+      "files": {
+        "app.py": "import ldap3\nfrom flask import request\nfrom ldap3.utils.conv import escape_filter_chars\ndef handler():\n    return escape_filter_chars(request.args.get(\"name\", ldap3.Connection(\"host\").search(\"base\", \"(uid=static)\")))\n"
+      }
+    },
+    {
+      "id": "codeql-branch-path-dead-else",
+      "category": "CWE-22",
+      "engine": "codeql",
+      "rule_id": "py/path-injection",
+      "positive": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    param = request.args.get(\"input\")\n    num = 86\n    if 7 * 42 - num > 200:\n        bar = \"fixed\"\n    else:\n        bar = param\n    return open(bar).read()\n"
+      },
+      "require_native_proof": true
+    },
+    {
+      "id": "codeql-branch-path-dead-body",
+      "category": "CWE-22",
+      "engine": "codeql",
+      "rule_id": "py/path-injection",
+      "positive": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    param = request.args.get(\"input\")\n    num = 120\n    if 7 * 42 - num > 200:\n        bar = param\n    else:\n        bar = \"fixed\"\n    return open(bar).read()\n"
+      },
+      "require_native_proof": true
+    },
+    {
+      "id": "codeql-branch-path-live-body",
+      "category": "CWE-22",
+      "engine": "codeql",
+      "rule_id": "py/path-injection",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    param = request.args.get(\"input\")\n    num = 86\n    if 7 * 42 - num > 200:\n        bar = param\n    else:\n        bar = \"fixed\"\n    return open(bar).read()\n"
+      }
+    },
+    {
+      "id": "codeql-branch-path-reassigned",
+      "category": "CWE-22",
+      "engine": "codeql",
+      "rule_id": "py/path-injection",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    param = request.args.get(\"input\")\n    num = 86\n    num = 120\n    if 7 * 42 - num > 200:\n        bar = \"fixed\"\n    else:\n        bar = param\n    return open(bar).read()\n"
+      }
+    },
+    {
+      "id": "codeql-branch-path-unknown",
+      "category": "CWE-22",
+      "engine": "codeql",
+      "rule_id": "py/path-injection",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    param = request.args.get(\"input\")\n    num = int(request.args.get(\"number\"))\n    if 7 * 42 - num > 200:\n        bar = \"fixed\"\n    else:\n        bar = param\n    return open(bar).read()\n"
+      }
+    },
+    {
+      "id": "codeql-branch-path-phi",
+      "category": "CWE-22",
+      "engine": "codeql",
+      "rule_id": "py/path-injection",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    param = request.args.get(\"input\")\n    num = 86\n    if request.args.get(\"switch\"):\n        num = 120\n    if 7 * 42 - num > 200:\n        bar = \"fixed\"\n    else:\n        bar = param\n    return open(bar).read()\n"
+      }
+    },
+    {
+      "id": "codeql-branch-path-closure",
+      "category": "CWE-22",
+      "engine": "codeql",
+      "rule_id": "py/path-injection",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    param = request.args.get(\"input\")\n    num = 86\n    def change():\n        nonlocal num\n        num = 120\n    change()\n    if 7 * 42 - num > 200:\n        bar = \"fixed\"\n    else:\n        bar = param\n    return open(bar).read()\n"
+      }
+    },
+    {
+      "id": "codeql-branch-path-retainted",
+      "category": "CWE-22",
+      "engine": "codeql",
+      "rule_id": "py/path-injection",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    param = request.args.get(\"input\")\n    num = 86\n    if 7 * 42 - num > 200:\n        bar = \"fixed\"\n    else:\n        bar = param\n    bar += param\n    return open(bar).read()\n"
+      }
+    },
+    {
+      "id": "codeql-branch-path-unsupported-power",
+      "category": "CWE-22",
+      "engine": "codeql",
+      "rule_id": "py/path-injection",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    param = request.args.get(\"input\")\n    num = 2 ** 8\n    if 7 * 42 - num > 200:\n        bar = \"fixed\"\n    else:\n        bar = param\n    return open(bar).read()\n"
+      }
+    },
+    {
+      "id": "codeql-branch-path-loop-rebind",
+      "category": "CWE-22",
+      "engine": "codeql",
+      "rule_id": "py/path-injection",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    param = request.args.get(\"input\")\n    num = 86\n    for num in [120]:\n        pass\n    if 7 * 42 - num > 200:\n        bar = \"fixed\"\n    else:\n        bar = param\n    return open(bar).read()\n"
+      }
+    },
+    {
+      "id": "codeql-branch-xpath-dead-else",
+      "category": "CWE-643",
+      "engine": "codeql",
+      "rule_id": "py/xpath-injection",
+      "positive": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    param = request.args.get(\"input\")\n    num = 86\n    if 7 * 42 - num > 200:\n        bar = \"fixed\"\n    else:\n        bar = param\n    return str(etree.XPath(bar))\n"
+      },
+      "require_native_proof": true
+    },
+    {
+      "id": "codeql-branch-xpath-dead-body",
+      "category": "CWE-643",
+      "engine": "codeql",
+      "rule_id": "py/xpath-injection",
+      "positive": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    param = request.args.get(\"input\")\n    num = 120\n    if 7 * 42 - num > 200:\n        bar = param\n    else:\n        bar = \"fixed\"\n    return str(etree.XPath(bar))\n"
+      },
+      "require_native_proof": true
+    },
+    {
+      "id": "codeql-branch-xpath-live-body",
+      "category": "CWE-643",
+      "engine": "codeql",
+      "rule_id": "py/xpath-injection",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    param = request.args.get(\"input\")\n    num = 86\n    if 7 * 42 - num > 200:\n        bar = param\n    else:\n        bar = \"fixed\"\n    return str(etree.XPath(bar))\n"
+      }
+    },
+    {
+      "id": "codeql-branch-xpath-reassigned",
+      "category": "CWE-643",
+      "engine": "codeql",
+      "rule_id": "py/xpath-injection",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    param = request.args.get(\"input\")\n    num = 86\n    num = 120\n    if 7 * 42 - num > 200:\n        bar = \"fixed\"\n    else:\n        bar = param\n    return str(etree.XPath(bar))\n"
+      }
+    },
+    {
+      "id": "codeql-branch-xpath-unknown",
+      "category": "CWE-643",
+      "engine": "codeql",
+      "rule_id": "py/xpath-injection",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    param = request.args.get(\"input\")\n    num = int(request.args.get(\"number\"))\n    if 7 * 42 - num > 200:\n        bar = \"fixed\"\n    else:\n        bar = param\n    return str(etree.XPath(bar))\n"
+      }
+    },
+    {
+      "id": "codeql-branch-xpath-phi",
+      "category": "CWE-643",
+      "engine": "codeql",
+      "rule_id": "py/xpath-injection",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    param = request.args.get(\"input\")\n    num = 86\n    if request.args.get(\"switch\"):\n        num = 120\n    if 7 * 42 - num > 200:\n        bar = \"fixed\"\n    else:\n        bar = param\n    return str(etree.XPath(bar))\n"
+      }
+    },
+    {
+      "id": "codeql-branch-xpath-closure",
+      "category": "CWE-643",
+      "engine": "codeql",
+      "rule_id": "py/xpath-injection",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    param = request.args.get(\"input\")\n    num = 86\n    def change():\n        nonlocal num\n        num = 120\n    change()\n    if 7 * 42 - num > 200:\n        bar = \"fixed\"\n    else:\n        bar = param\n    return str(etree.XPath(bar))\n"
+      }
+    },
+    {
+      "id": "codeql-branch-xpath-retainted",
+      "category": "CWE-643",
+      "engine": "codeql",
+      "rule_id": "py/xpath-injection",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    param = request.args.get(\"input\")\n    num = 86\n    if 7 * 42 - num > 200:\n        bar = \"fixed\"\n    else:\n        bar = param\n    bar += param\n    return str(etree.XPath(bar))\n"
+      }
+    },
+    {
+      "id": "codeql-branch-xpath-unsupported-power",
+      "category": "CWE-643",
+      "engine": "codeql",
+      "rule_id": "py/xpath-injection",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    param = request.args.get(\"input\")\n    num = 2 ** 8\n    if 7 * 42 - num > 200:\n        bar = \"fixed\"\n    else:\n        bar = param\n    return str(etree.XPath(bar))\n"
+      }
+    },
+    {
+      "id": "codeql-branch-xpath-loop-rebind",
+      "category": "CWE-643",
+      "engine": "codeql",
+      "rule_id": "py/xpath-injection",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp = Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    param = request.args.get(\"input\")\n    num = 86\n    for num in [120]:\n        pass\n    if 7 * 42 - num > 200:\n        bar = \"fixed\"\n    else:\n        bar = param\n    return str(etree.XPath(bar))\n"
+      }
+    },
+    {
+      "id": "codeql-ldap-imported-factory",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": true,
+      "files": {
+        "app.py": "import html\nfrom flask import Flask, request\nfrom ldap3.utils.conv import escape_filter_chars\nfrom ldap3.utils.dn import escape_rdn\nimport codeql_ldap_imported_factory.helper\nclass unrelated:\n    def search(self, *args):\n        return \"fixed\"\ndef other_factory():\n    codeql_ldap_imported_factory.helper.make_connection()\n    return unrelated()\napp = Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value = request.args.get(\"input\")\n    conn = codeql_ldap_imported_factory.helper.make_connection()\n    conn.search(\"base\", value)\n    return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      },
+      "namespace_package": true,
+      "rule_ids": [
+        "py/ldap-injection",
+        "pysec/ldap-factory-filter-injection"
+      ]
+    },
+    {
+      "id": "codeql-ldap-receiver-alias",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": true,
+      "files": {
+        "app.py": "import html\nfrom flask import Flask, request\nfrom ldap3.utils.conv import escape_filter_chars\nfrom ldap3.utils.dn import escape_rdn\nimport codeql_ldap_receiver_alias.helper\nclass unrelated:\n    def search(self, *args):\n        return \"fixed\"\ndef other_factory():\n    codeql_ldap_receiver_alias.helper.make_connection()\n    return unrelated()\napp = Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value = request.args.get(\"input\")\n    conn = codeql_ldap_receiver_alias.helper.make_connection()\n    alias = conn\n    alias.search(\"base\", value)\n    return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      },
+      "namespace_package": true,
+      "rule_ids": [
+        "py/ldap-injection",
+        "pysec/ldap-factory-filter-injection"
+      ]
+    },
+    {
+      "id": "codeql-ldap-filter-alias",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": true,
+      "files": {
+        "app.py": "import html\nfrom flask import Flask, request\nfrom ldap3.utils.conv import escape_filter_chars\nfrom ldap3.utils.dn import escape_rdn\nimport codeql_ldap_filter_alias.helper\nclass unrelated:\n    def search(self, *args):\n        return \"fixed\"\ndef other_factory():\n    codeql_ldap_filter_alias.helper.make_connection()\n    return unrelated()\napp = Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value = request.args.get(\"input\")\n    conn = codeql_ldap_filter_alias.helper.make_connection()\n    query = \"(uid=\" + value + \")\"\n    conn.search(\"base\", search_filter=query)\n    return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      },
+      "namespace_package": true,
+      "rule_ids": [
+        "py/ldap-injection",
+        "pysec/ldap-factory-filter-injection"
+      ]
+    },
+    {
+      "id": "codeql-ldap-lifecycle",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": true,
+      "files": {
+        "app.py": "import html\nfrom flask import Flask, request\nfrom ldap3.utils.conv import escape_filter_chars\nfrom ldap3.utils.dn import escape_rdn\nimport codeql_ldap_lifecycle.helper\nclass unrelated:\n    def search(self, *args):\n        return \"fixed\"\ndef other_factory():\n    codeql_ldap_lifecycle.helper.make_connection()\n    return unrelated()\napp = Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value = request.args.get(\"input\")\n    conn = codeql_ldap_lifecycle.helper.make_connection()\n    conn.unbind()\n    conn.bind()\n    conn.search(\"base\", value)\n    return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      },
+      "namespace_package": true,
+      "rule_ids": [
+        "py/ldap-injection",
+        "pysec/ldap-factory-filter-injection"
+      ]
+    },
+    {
+      "id": "codeql-ldap-encoded",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": false,
+      "files": {
+        "app.py": "import html\nfrom flask import Flask, request\nfrom ldap3.utils.conv import escape_filter_chars\nfrom ldap3.utils.dn import escape_rdn\nimport codeql_ldap_encoded.helper\nclass unrelated:\n    def search(self, *args):\n        return \"fixed\"\ndef other_factory():\n    codeql_ldap_encoded.helper.make_connection()\n    return unrelated()\napp = Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value = request.args.get(\"input\")\n    safe = escape_filter_chars(value)\n    conn = codeql_ldap_encoded.helper.make_connection()\n    conn.search(\"base\", \"(uid=\" + safe + \")\")\n    return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      },
+      "namespace_package": true,
+      "rule_ids": [
+        "py/ldap-injection",
+        "pysec/ldap-factory-filter-injection"
+      ]
+    },
+    {
+      "id": "codeql-ldap-ignored-encoder",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": true,
+      "files": {
+        "app.py": "import html\nfrom flask import Flask, request\nfrom ldap3.utils.conv import escape_filter_chars\nfrom ldap3.utils.dn import escape_rdn\nimport codeql_ldap_ignored_encoder.helper\nclass unrelated:\n    def search(self, *args):\n        return \"fixed\"\ndef other_factory():\n    codeql_ldap_ignored_encoder.helper.make_connection()\n    return unrelated()\napp = Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value = request.args.get(\"input\")\n    escape_filter_chars(value)\n    conn = codeql_ldap_ignored_encoder.helper.make_connection()\n    conn.search(\"base\", value)\n    return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      },
+      "namespace_package": true,
+      "rule_ids": [
+        "py/ldap-injection",
+        "pysec/ldap-factory-filter-injection"
+      ]
+    },
+    {
+      "id": "codeql-ldap-dn-encoder",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": true,
+      "files": {
+        "app.py": "import html\nfrom flask import Flask, request\nfrom ldap3.utils.conv import escape_filter_chars\nfrom ldap3.utils.dn import escape_rdn\nimport codeql_ldap_dn_encoder.helper\nclass unrelated:\n    def search(self, *args):\n        return \"fixed\"\ndef other_factory():\n    codeql_ldap_dn_encoder.helper.make_connection()\n    return unrelated()\napp = Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value = request.args.get(\"input\")\n    conn = codeql_ldap_dn_encoder.helper.make_connection()\n    conn.search(\"base\", escape_rdn(value))\n    return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      },
+      "namespace_package": true,
+      "rule_ids": [
+        "py/ldap-injection",
+        "pysec/ldap-factory-filter-injection"
+      ]
+    },
+    {
+      "id": "codeql-ldap-html-encoder",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": true,
+      "files": {
+        "app.py": "import html\nfrom flask import Flask, request\nfrom ldap3.utils.conv import escape_filter_chars\nfrom ldap3.utils.dn import escape_rdn\nimport codeql_ldap_html_encoder.helper\nclass unrelated:\n    def search(self, *args):\n        return \"fixed\"\ndef other_factory():\n    codeql_ldap_html_encoder.helper.make_connection()\n    return unrelated()\napp = Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value = request.args.get(\"input\")\n    conn = codeql_ldap_html_encoder.helper.make_connection()\n    conn.search(\"base\", html.escape(value))\n    return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      },
+      "namespace_package": true,
+      "rule_ids": [
+        "py/ldap-injection",
+        "pysec/ldap-factory-filter-injection"
+      ]
+    },
+    {
+      "id": "codeql-ldap-static-filter",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": false,
+      "files": {
+        "app.py": "import html\nfrom flask import Flask, request\nfrom ldap3.utils.conv import escape_filter_chars\nfrom ldap3.utils.dn import escape_rdn\nimport codeql_ldap_static_filter.helper\nclass unrelated:\n    def search(self, *args):\n        return \"fixed\"\ndef other_factory():\n    codeql_ldap_static_filter.helper.make_connection()\n    return unrelated()\napp = Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value = request.args.get(\"input\")\n    conn = codeql_ldap_static_filter.helper.make_connection()\n    conn.search(\"base\", \"(uid=static)\")\n    return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      },
+      "namespace_package": true,
+      "rule_ids": [
+        "py/ldap-injection",
+        "pysec/ldap-factory-filter-injection"
+      ]
+    },
+    {
+      "id": "codeql-ldap-rebound-receiver",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": false,
+      "files": {
+        "app.py": "import html\nfrom flask import Flask, request\nfrom ldap3.utils.conv import escape_filter_chars\nfrom ldap3.utils.dn import escape_rdn\nimport codeql_ldap_rebound_receiver.helper\nclass unrelated:\n    def search(self, *args):\n        return \"fixed\"\ndef other_factory():\n    codeql_ldap_rebound_receiver.helper.make_connection()\n    return unrelated()\napp = Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value = request.args.get(\"input\")\n    conn = codeql_ldap_rebound_receiver.helper.make_connection()\n    conn = unrelated()\n    conn.search(\"base\", value)\n    return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      },
+      "namespace_package": true,
+      "rule_ids": [
+        "py/ldap-injection",
+        "pysec/ldap-factory-filter-injection"
+      ]
+    },
+    {
+      "id": "codeql-ldap-unrelated-receiver",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": false,
+      "files": {
+        "app.py": "import html\nfrom flask import Flask, request\nfrom ldap3.utils.conv import escape_filter_chars\nfrom ldap3.utils.dn import escape_rdn\nimport codeql_ldap_unrelated_receiver.helper\nclass unrelated:\n    def search(self, *args):\n        return \"fixed\"\ndef other_factory():\n    codeql_ldap_unrelated_receiver.helper.make_connection()\n    return unrelated()\napp = Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value = request.args.get(\"input\")\n    conn = unrelated()\n    conn.search(\"base\", value)\n    return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      },
+      "namespace_package": true,
+      "rule_ids": [
+        "py/ldap-injection",
+        "pysec/ldap-factory-filter-injection"
+      ]
+    },
+    {
+      "id": "codeql-ldap-derived-receiver",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": false,
+      "files": {
+        "app.py": "import html\nfrom flask import Flask, request\nfrom ldap3.utils.conv import escape_filter_chars\nfrom ldap3.utils.dn import escape_rdn\nimport codeql_ldap_derived_receiver.helper\nclass unrelated:\n    def search(self, *args):\n        return \"fixed\"\ndef other_factory():\n    codeql_ldap_derived_receiver.helper.make_connection()\n    return unrelated()\napp = Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value = request.args.get(\"input\")\n    conn = str(codeql_ldap_derived_receiver.helper.make_connection())\n    conn.search(\"base\", value)\n    return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      },
+      "namespace_package": true,
+      "rule_ids": [
+        "py/ldap-injection",
+        "pysec/ldap-factory-filter-injection"
+      ]
+    },
+    {
+      "id": "codeql-ldap-safe-factory",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": false,
+      "files": {
+        "app.py": "import html\nfrom flask import Flask, request\nfrom ldap3.utils.conv import escape_filter_chars\nfrom ldap3.utils.dn import escape_rdn\nimport codeql_ldap_safe_factory.helper\nclass unrelated:\n    def search(self, *args):\n        return \"fixed\"\ndef other_factory():\n    codeql_ldap_safe_factory.helper.make_connection()\n    return unrelated()\napp = Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value = request.args.get(\"input\")\n    conn = other_factory()\n    conn.search(\"base\", value)\n    return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      },
+      "namespace_package": true,
+      "rule_ids": [
+        "py/ldap-injection",
+        "pysec/ldap-factory-filter-injection"
+      ]
+    },
+    {
+      "id": "codeql-ldap-dead-filter-else",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": false,
+      "files": {
+        "app.py": "import html\nfrom flask import Flask, request\nfrom ldap3.utils.conv import escape_filter_chars\nfrom ldap3.utils.dn import escape_rdn\nimport codeql_ldap_dead_filter_else.helper\nclass unrelated:\n    def search(self, *args):\n        return \"fixed\"\ndef other_factory():\n    codeql_ldap_dead_filter_else.helper.make_connection()\n    return unrelated()\napp = Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value = request.args.get(\"input\")\n    conn = codeql_ldap_dead_filter_else.helper.make_connection()\n    num = 86\n    if 7 * 42 - num > 200:\n        query = \"fixed\"\n    else:\n        query = value\n    conn.search(\"base\", query)\n    return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      },
+      "namespace_package": true,
+      "rule_ids": [
+        "py/ldap-injection",
+        "pysec/ldap-factory-filter-injection"
+      ]
+    },
+    {
+      "id": "codeql-ldap-retainted-filter",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": true,
+      "files": {
+        "app.py": "import html\nfrom flask import Flask, request\nfrom ldap3.utils.conv import escape_filter_chars\nfrom ldap3.utils.dn import escape_rdn\nimport codeql_ldap_retainted_filter.helper\nclass unrelated:\n    def search(self, *args):\n        return \"fixed\"\ndef other_factory():\n    codeql_ldap_retainted_filter.helper.make_connection()\n    return unrelated()\napp = Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value = request.args.get(\"input\")\n    conn = codeql_ldap_retainted_filter.helper.make_connection()\n    query = escape_filter_chars(value)\n    query += value\n    conn.search(\"base\", query)\n    return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      },
+      "namespace_package": true,
+      "rule_ids": [
+        "py/ldap-injection",
+        "pysec/ldap-factory-filter-injection"
+      ]
+    },
+    {
+      "id": "codeql-ldap-match-safe",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nimport codeql_ldap_match_safe.helper\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    choice=\"ABC\"[1]\n    match choice:\n        case \"A\":\n            bar=value\n        case \"B\":\n            bar=\"fixed\"\n        case \"C\" | \"D\":\n            bar=value\n        case _:\n            bar=\"fixed\"\n    conn=codeql_ldap_match_safe.helper.make_connection()\n    conn.search(\"base\", \"(uid=\"+bar+\")\")\n    return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      },
+      "namespace_package": true,
+      "rule_ids": [
+        "py/ldap-injection",
+        "pysec/ldap-factory-filter-injection"
+      ]
+    },
+    {
+      "id": "codeql-ldap-match-live",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nimport codeql_ldap_match_live.helper\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    choice=\"ABC\"[0]\n    match choice:\n        case \"A\":\n            bar=value\n        case \"B\":\n            bar=\"fixed\"\n        case \"C\" | \"D\":\n            bar=value\n        case _:\n            bar=\"fixed\"\n    conn=codeql_ldap_match_live.helper.make_connection()\n    conn.search(\"base\", \"(uid=\"+bar+\")\")\n    return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      },
+      "namespace_package": true,
+      "rule_ids": [
+        "py/ldap-injection",
+        "pysec/ldap-factory-filter-injection"
+      ]
+    },
+    {
+      "id": "codeql-ldap-match-unknown",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nimport codeql_ldap_match_unknown.helper\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    choice=request.args.get(\"choice\")\n    match choice:\n        case \"A\":\n            bar=value\n        case \"B\":\n            bar=\"fixed\"\n        case \"C\" | \"D\":\n            bar=value\n        case _:\n            bar=\"fixed\"\n    conn=codeql_ldap_match_unknown.helper.make_connection()\n    conn.search(\"base\", \"(uid=\"+bar+\")\")\n    return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      },
+      "namespace_package": true,
+      "rule_ids": [
+        "py/ldap-injection",
+        "pysec/ldap-factory-filter-injection"
+      ]
+    },
+    {
+      "id": "codeql-ldap-match-reassigned",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nimport codeql_ldap_match_reassigned.helper\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    choice=\"B\"\n    choice=\"A\"\n    match choice:\n        case \"A\":\n            bar=value\n        case \"B\":\n            bar=\"fixed\"\n        case \"C\" | \"D\":\n            bar=value\n        case _:\n            bar=\"fixed\"\n    conn=codeql_ldap_match_reassigned.helper.make_connection()\n    conn.search(\"base\", \"(uid=\"+bar+\")\")\n    return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      },
+      "namespace_package": true,
+      "rule_ids": [
+        "py/ldap-injection",
+        "pysec/ldap-factory-filter-injection"
+      ]
+    },
+    {
+      "id": "codeql-ldap-match-phi",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nimport codeql_ldap_match_phi.helper\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    choice=\"B\"\n    if request.args.get(\"switch\"):\n        choice=\"A\"\n    match choice:\n        case \"A\":\n            bar=value\n        case \"B\":\n            bar=\"fixed\"\n        case \"C\" | \"D\":\n            bar=value\n        case _:\n            bar=\"fixed\"\n    conn=codeql_ldap_match_phi.helper.make_connection()\n    conn.search(\"base\", \"(uid=\"+bar+\")\")\n    return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      },
+      "namespace_package": true,
+      "rule_ids": [
+        "py/ldap-injection",
+        "pysec/ldap-factory-filter-injection"
+      ]
+    },
+    {
+      "id": "codeql-ldap-match-closure",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nimport codeql_ldap_match_closure.helper\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    choice=\"B\"\n    def change():\n        nonlocal choice\n        choice=\"A\"\n    change()\n    match choice:\n        case \"A\":\n            bar=value\n        case \"B\":\n            bar=\"fixed\"\n        case \"C\" | \"D\":\n            bar=value\n        case _:\n            bar=\"fixed\"\n    conn=codeql_ldap_match_closure.helper.make_connection()\n    conn.search(\"base\", \"(uid=\"+bar+\")\")\n    return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      },
+      "namespace_package": true,
+      "rule_ids": [
+        "py/ldap-injection",
+        "pysec/ldap-factory-filter-injection"
+      ]
+    },
+    {
+      "id": "codeql-ldap-match-unicode-live",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nimport codeql_ldap_match_unicode_live.helper\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    choice=\"\ud83d\ude00A\"[1]\n    match choice:\n        case \"A\":\n            bar=value\n        case \"B\":\n            bar=\"fixed\"\n        case \"C\" | \"D\":\n            bar=value\n        case _:\n            bar=\"fixed\"\n    conn=codeql_ldap_match_unicode_live.helper.make_connection()\n    conn.search(\"base\", \"(uid=\"+bar+\")\")\n    return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      },
+      "namespace_package": true,
+      "rule_ids": [
+        "py/ldap-injection",
+        "pysec/ldap-factory-filter-injection"
+      ]
+    },
+    {
+      "id": "codeql-ldap-match-bytes-live",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nimport codeql_ldap_match_bytes_live.helper\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    choice=b\"AB\"[0]\n    match choice:\n        case 65:\n            bar=value\n        case _:\n            bar=\"fixed\"\n    conn=codeql_ldap_match_bytes_live.helper.make_connection()\n    conn.search(\"base\", \"(uid=\"+bar+\")\")\n    return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      },
+      "namespace_package": true,
+      "rule_ids": [
+        "py/ldap-injection",
+        "pysec/ldap-factory-filter-injection"
+      ]
+    },
+    {
+      "id": "codeql-ldap-match-guard-live",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nimport codeql_ldap_match_guard_live.helper\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    choice=\"A\"\n    match choice:\n        case \"A\" if request.args.get(\"switch\"):\n            bar=value\n        case _:\n            bar=\"fixed\"\n    conn=codeql_ldap_match_guard_live.helper.make_connection()\n    conn.search(\"base\", \"(uid=\"+bar+\")\")\n    return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      },
+      "namespace_package": true,
+      "rule_ids": [
+        "py/ldap-injection",
+        "pysec/ldap-factory-filter-injection"
+      ]
+    },
+    {
+      "id": "codeql-ldap-match-retainted",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nimport codeql_ldap_match_retainted.helper\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    choice=\"B\"\n    match choice:\n        case \"A\":\n            bar=value\n        case _:\n            bar=\"fixed\"\n    bar+=value\n    conn=codeql_ldap_match_retainted.helper.make_connection()\n    conn.search(\"base\", \"(uid=\"+bar+\")\")\n    return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      },
+      "namespace_package": true,
+      "rule_ids": [
+        "py/ldap-injection",
+        "pysec/ldap-factory-filter-injection"
+      ]
+    },
+    {
+      "id": "codeql-ldap-list-safe",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nimport codeql_ldap_list_safe.helper\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    lst.append(value)\n    lst.append(\"last\")\n    lst.pop(0)\n    bar=lst[1]\n    conn=codeql_ldap_list_safe.helper.make_connection()\n    conn.search(\"base\", \"(uid=\"+bar+\")\")\n    return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      },
+      "namespace_package": true,
+      "rule_ids": [
+        "py/ldap-injection",
+        "pysec/ldap-factory-filter-injection"
+      ]
+    },
+    {
+      "id": "codeql-ldap-list-live",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nimport codeql_ldap_list_live.helper\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    lst.append(value)\n    lst.append(\"last\")\n    lst.pop(0)\n    bar=lst[0]\n    conn=codeql_ldap_list_live.helper.make_connection()\n    conn.search(\"base\", \"(uid=\"+bar+\")\")\n    return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      },
+      "namespace_package": true,
+      "rule_ids": [
+        "py/ldap-injection",
+        "pysec/ldap-factory-filter-injection"
+      ]
+    },
+    {
+      "id": "codeql-ldap-list-safe-tail",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nimport codeql_ldap_list_safe_tail.helper\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    lst.append(value)\n    lst.pop(1)\n    bar=lst[0]\n    conn=codeql_ldap_list_safe_tail.helper.make_connection()\n    conn.search(\"base\", \"(uid=\"+bar+\")\")\n    return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      },
+      "namespace_package": true,
+      "rule_ids": [
+        "py/ldap-injection",
+        "pysec/ldap-factory-filter-injection"
+      ]
+    },
+    {
+      "id": "codeql-ldap-list-live-tail",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nimport codeql_ldap_list_live_tail.helper\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(value)\n    lst.append(\"last\")\n    lst.pop(1)\n    bar=lst[0]\n    conn=codeql_ldap_list_live_tail.helper.make_connection()\n    conn.search(\"base\", \"(uid=\"+bar+\")\")\n    return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      },
+      "namespace_package": true,
+      "rule_ids": [
+        "py/ldap-injection",
+        "pysec/ldap-factory-filter-injection"
+      ]
+    },
+    {
+      "id": "codeql-ldap-list-multiple-pops",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nimport codeql_ldap_list_multiple_pops.helper\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(value)\n    lst.append(\"middle\")\n    lst.append(\"last\")\n    lst.pop(0)\n    lst.pop(1)\n    bar=lst[0]\n    conn=codeql_ldap_list_multiple_pops.helper.make_connection()\n    conn.search(\"base\", \"(uid=\"+bar+\")\")\n    return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      },
+      "namespace_package": true,
+      "rule_ids": [
+        "py/ldap-injection",
+        "pysec/ldap-factory-filter-injection"
+      ]
+    },
+    {
+      "id": "codeql-ldap-list-rebound",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nimport codeql_ldap_list_rebound.helper\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    lst=[value]\n    bar=lst[0]\n    conn=codeql_ldap_list_rebound.helper.make_connection()\n    conn.search(\"base\", \"(uid=\"+bar+\")\")\n    return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      },
+      "namespace_package": true,
+      "rule_ids": [
+        "py/ldap-injection",
+        "pysec/ldap-factory-filter-injection"
+      ]
+    },
+    {
+      "id": "codeql-ldap-list-unknown-pop",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nimport codeql_ldap_list_unknown_pop.helper\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    lst.append(value)\n    lst.append(\"last\")\n    lst.pop(int(request.args.get(\"index\")))\n    bar=lst[0]\n    conn=codeql_ldap_list_unknown_pop.helper.make_connection()\n    conn.search(\"base\", \"(uid=\"+bar+\")\")\n    return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      },
+      "namespace_package": true,
+      "rule_ids": [
+        "py/ldap-injection",
+        "pysec/ldap-factory-filter-injection"
+      ]
+    },
+    {
+      "id": "codeql-ldap-list-retainted",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nimport codeql_ldap_list_retainted.helper\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(value)\n    lst.append(\"last\")\n    lst.pop(0)\n    bar=lst[0]\n    bar+=value\n    conn=codeql_ldap_list_retainted.helper.make_connection()\n    conn.search(\"base\", \"(uid=\"+bar+\")\")\n    return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      },
+      "namespace_package": true,
+      "rule_ids": [
+        "py/ldap-injection",
+        "pysec/ldap-factory-filter-injection"
+      ]
+    },
+    {
+      "id": "codeql-ldap-list-bound-live",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nimport codeql_ldap_list_bound_live.helper\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"fixed\")\n    lst.append(\"fixed\")\n    lst.append(\"fixed\")\n    lst.append(\"fixed\")\n    lst.append(\"fixed\")\n    lst.append(\"fixed\")\n    lst.append(\"fixed\")\n    lst.append(\"fixed\")\n    lst.append(\"fixed\")\n    lst.append(\"fixed\")\n    lst.append(\"fixed\")\n    lst.append(\"fixed\")\n    lst.append(\"fixed\")\n    lst.append(\"fixed\")\n    lst.append(\"fixed\")\n    lst.append(\"fixed\")\n    lst.append(value)\n    bar=lst[16]\n    conn=codeql_ldap_list_bound_live.helper.make_connection()\n    conn.search(\"base\", \"(uid=\"+bar+\")\")\n    return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      },
+      "namespace_package": true,
+      "rule_ids": [
+        "py/ldap-injection",
+        "pysec/ldap-factory-filter-injection"
+      ]
+    },
+    {
+      "id": "codeql-ldap-nested-args",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nimport codeql_ldap_nested_args.helper\n\napp=Flask(__name__)\ndef init(app):\n    @app.route(\"/test\")\n    def route():\n        value=request.args.get(\"input\")\n        bar=request.args.get(\"input\")\n        conn=codeql_ldap_nested_args.helper.make_connection()\n        conn.search(\"base\", \"(uid=\"+bar+\")\")\n        return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      },
+      "namespace_package": true,
+      "rule_ids": [
+        "py/ldap-injection",
+        "pysec/ldap-factory-filter-injection"
+      ]
+    },
+    {
+      "id": "codeql-ldap-nested-form",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nimport codeql_ldap_nested_form.helper\n\napp=Flask(__name__)\ndef init(app):\n    @app.route(\"/test\")\n    def route():\n        value=request.args.get(\"input\")\n        bar=request.form.getlist(\"input\")[0]\n        conn=codeql_ldap_nested_form.helper.make_connection()\n        conn.search(\"base\", \"(uid=\"+bar+\")\")\n        return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      },
+      "namespace_package": true,
+      "rule_ids": [
+        "py/ldap-injection",
+        "pysec/ldap-factory-filter-injection"
+      ]
+    },
+    {
+      "id": "codeql-ldap-nested-headers",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nimport codeql_ldap_nested_headers.helper\n\napp=Flask(__name__)\ndef init(app):\n    @app.route(\"/test\")\n    def route():\n        value=request.args.get(\"input\")\n        bar=request.headers.get(\"input\")\n        conn=codeql_ldap_nested_headers.helper.make_connection()\n        conn.search(\"base\", \"(uid=\"+bar+\")\")\n        return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      },
+      "namespace_package": true,
+      "rule_ids": [
+        "py/ldap-injection",
+        "pysec/ldap-factory-filter-injection"
+      ]
+    },
+    {
+      "id": "codeql-ldap-nested-cookies",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nimport codeql_ldap_nested_cookies.helper\n\napp=Flask(__name__)\ndef init(app):\n    @app.route(\"/test\")\n    def route():\n        value=request.args.get(\"input\")\n        bar=request.cookies.get(\"input\")\n        conn=codeql_ldap_nested_cookies.helper.make_connection()\n        conn.search(\"base\", \"(uid=\"+bar+\")\")\n        return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      },
+      "namespace_package": true,
+      "rule_ids": [
+        "py/ldap-injection",
+        "pysec/ldap-factory-filter-injection"
+      ]
+    },
+    {
+      "id": "codeql-ldap-nested-encoded",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nimport codeql_ldap_nested_encoded.helper\nfrom ldap3.utils.conv import escape_filter_chars\napp=Flask(__name__)\ndef init(app):\n    @app.route(\"/test\")\n    def route():\n        value=request.args.get(\"input\")\n        bar=escape_filter_chars(value)\n        conn=codeql_ldap_nested_encoded.helper.make_connection()\n        conn.search(\"base\", \"(uid=\"+bar+\")\")\n        return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      },
+      "namespace_package": true,
+      "rule_ids": [
+        "py/ldap-injection",
+        "pysec/ldap-factory-filter-injection"
+      ]
+    },
+    {
+      "id": "codeql-ldap-nested-helper-flow",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nimport codeql_ldap_nested_helper_flow.helper\nfrom helper import identity\napp=Flask(__name__)\ndef init(app):\n    @app.route(\"/test\")\n    def route():\n        value=request.args.get(\"input\")\n        bar=identity(value)\n        conn=codeql_ldap_nested_helper_flow.helper.make_connection()\n        conn.search(\"base\", \"(uid=\"+bar+\")\")\n        return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n\ndef identity(value):\n    return value\n"
+      },
+      "namespace_package": true,
+      "rule_ids": [
+        "py/ldap-injection",
+        "pysec/ldap-factory-filter-injection"
+      ]
+    },
+    {
+      "id": "codeql-ldap-factory-export-rebound",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nimport codeql_ldap_factory_export_rebound.helper\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    bar=value\n    conn=codeql_ldap_factory_export_rebound.helper.make_connection()\n    conn.search(\"base\", \"(uid=\"+bar+\")\")\n    return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n\nclass Dummy:\n    def search(self,*args): return \"fixed\"\ndef replacement(): return Dummy()\nmake_connection=replacement\n"
+      },
+      "namespace_package": true,
+      "rule_ids": [
+        "py/ldap-injection",
+        "pysec/ldap-factory-filter-injection"
+      ]
+    },
+    {
+      "id": "codeql-ldap-factory-decorated-safe",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nimport codeql_ldap_factory_decorated_safe.helper\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    bar=value\n    conn=codeql_ldap_factory_decorated_safe.helper.make_connection()\n    conn.search(\"base\", \"(uid=\"+bar+\")\")\n    return \"done\"\n",
+        "helper.py": "import ldap3\nclass Dummy:\n    def search(self,*args): return \"fixed\"\ndef replace(fn):\n    def wrapper(): return Dummy()\n    return wrapper\n@replace\ndef make_connection():\n    conn=ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      },
+      "namespace_package": true,
+      "rule_ids": [
+        "py/ldap-injection",
+        "pysec/ldap-factory-filter-injection"
+      ]
+    },
+    {
+      "id": "codeql-ldap-factory-import-alias",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nimport codeql_ldap_factory_import_alias.helper\nfrom helper import make_connection as factory_alias\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    conn=factory_alias()\n    conn.search(search_base=\"base\",search_filter=value)\n    return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      },
+      "namespace_package": true,
+      "rule_ids": [
+        "py/ldap-injection",
+        "pysec/ldap-factory-filter-injection"
+      ]
+    },
+    {
+      "id": "codeql-ldap-native-direct",
+      "engine": "codeql",
+      "rule_id": "py/ldap-injection",
+      "category": "CWE-90",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom helper import make_connection\nimport ldap3\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    conn=ldap3.Connection(\"host\")\n    conn.search(\"base\",value)\n    return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      },
+      "forbidden_rule_ids": [
+        "pysec/ldap-factory-filter-injection"
+      ]
+    },
+    {
+      "id": "codeql-ldap-module-alias",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nimport codeql_ldap_module_alias.helper\nclass unrelated:\n    def search(self,*args): return \"fixed\"\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    pass\n    conn=codeql_ldap_module_alias.helper.make_connection()\n    conn.search(\"base\",value)\n    return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      },
+      "namespace_package": true,
+      "rule_ids": [
+        "py/ldap-injection",
+        "pysec/ldap-factory-filter-injection"
+      ]
+    },
+    {
+      "id": "codeql-ldap-module-override",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nimport codeql_ldap_module_override.helper\nclass unrelated:\n    def search(self,*args): return \"fixed\"\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    codeql_ldap_module_override.helper.make_connection=lambda: unrelated()\n    conn=codeql_ldap_module_override.helper.make_connection()\n    conn.search(\"base\",value)\n    return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      },
+      "namespace_package": true,
+      "rule_ids": [
+        "py/ldap-injection",
+        "pysec/ldap-factory-filter-injection"
+      ]
+    },
+    {
+      "id": "codeql-ldap-module-setattr",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nimport codeql_ldap_module_setattr.helper\nclass unrelated:\n    def search(self,*args): return \"fixed\"\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    setattr(codeql_ldap_module_setattr.helper,\"make_connection\",lambda: unrelated())\n    conn=codeql_ldap_module_setattr.helper.make_connection()\n    conn.search(\"base\",value)\n    return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      },
+      "namespace_package": true,
+      "rule_ids": [
+        "py/ldap-injection",
+        "pysec/ldap-factory-filter-injection"
+      ]
+    },
+    {
+      "id": "codeql-values-path-match-safe",
+      "engine": "codeql",
+      "rule_id": "py/path-injection",
+      "category": "CWE-22",
+      "positive": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    choice=\"ABC\"[1]\n    match choice:\n        case \"A\":\n            bar=value\n        case \"B\":\n            bar=\"fixed\"\n        case \"C\" | \"D\":\n            bar=value\n        case _:\n            bar=\"fixed\"\n    return open(bar).read()\n"
+      },
+      "require_native_proof": true
+    },
+    {
+      "id": "codeql-values-xpath-match-safe",
+      "engine": "codeql",
+      "rule_id": "py/xpath-injection",
+      "category": "CWE-643",
+      "positive": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    choice=\"ABC\"[1]\n    match choice:\n        case \"A\":\n            bar=value\n        case \"B\":\n            bar=\"fixed\"\n        case \"C\" | \"D\":\n            bar=value\n        case _:\n            bar=\"fixed\"\n    return str(etree.XPath(bar))\n"
+      },
+      "require_native_proof": true
+    },
+    {
+      "id": "codeql-values-path-match-live",
+      "engine": "codeql",
+      "rule_id": "py/path-injection",
+      "category": "CWE-22",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    choice=\"ABC\"[0]\n    match choice:\n        case \"A\":\n            bar=value\n        case \"B\":\n            bar=\"fixed\"\n        case \"C\" | \"D\":\n            bar=value\n        case _:\n            bar=\"fixed\"\n    return open(bar).read()\n"
+      }
+    },
+    {
+      "id": "codeql-values-xpath-match-live",
+      "engine": "codeql",
+      "rule_id": "py/xpath-injection",
+      "category": "CWE-643",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    choice=\"ABC\"[0]\n    match choice:\n        case \"A\":\n            bar=value\n        case \"B\":\n            bar=\"fixed\"\n        case \"C\" | \"D\":\n            bar=value\n        case _:\n            bar=\"fixed\"\n    return str(etree.XPath(bar))\n"
+      }
+    },
+    {
+      "id": "codeql-values-path-match-unknown",
+      "engine": "codeql",
+      "rule_id": "py/path-injection",
+      "category": "CWE-22",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    choice=request.args.get(\"choice\")\n    match choice:\n        case \"A\":\n            bar=value\n        case \"B\":\n            bar=\"fixed\"\n        case \"C\" | \"D\":\n            bar=value\n        case _:\n            bar=\"fixed\"\n    return open(bar).read()\n"
+      }
+    },
+    {
+      "id": "codeql-values-xpath-match-unknown",
+      "engine": "codeql",
+      "rule_id": "py/xpath-injection",
+      "category": "CWE-643",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    choice=request.args.get(\"choice\")\n    match choice:\n        case \"A\":\n            bar=value\n        case \"B\":\n            bar=\"fixed\"\n        case \"C\" | \"D\":\n            bar=value\n        case _:\n            bar=\"fixed\"\n    return str(etree.XPath(bar))\n"
+      }
+    },
+    {
+      "id": "codeql-values-path-match-reassigned",
+      "engine": "codeql",
+      "rule_id": "py/path-injection",
+      "category": "CWE-22",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    choice=\"B\"\n    choice=\"A\"\n    match choice:\n        case \"A\":\n            bar=value\n        case \"B\":\n            bar=\"fixed\"\n        case \"C\" | \"D\":\n            bar=value\n        case _:\n            bar=\"fixed\"\n    return open(bar).read()\n"
+      }
+    },
+    {
+      "id": "codeql-values-xpath-match-reassigned",
+      "engine": "codeql",
+      "rule_id": "py/xpath-injection",
+      "category": "CWE-643",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    choice=\"B\"\n    choice=\"A\"\n    match choice:\n        case \"A\":\n            bar=value\n        case \"B\":\n            bar=\"fixed\"\n        case \"C\" | \"D\":\n            bar=value\n        case _:\n            bar=\"fixed\"\n    return str(etree.XPath(bar))\n"
+      }
+    },
+    {
+      "id": "codeql-values-path-match-phi",
+      "engine": "codeql",
+      "rule_id": "py/path-injection",
+      "category": "CWE-22",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    choice=\"B\"\n    if request.args.get(\"switch\"):\n        choice=\"A\"\n    match choice:\n        case \"A\":\n            bar=value\n        case \"B\":\n            bar=\"fixed\"\n        case \"C\" | \"D\":\n            bar=value\n        case _:\n            bar=\"fixed\"\n    return open(bar).read()\n"
+      }
+    },
+    {
+      "id": "codeql-values-xpath-match-phi",
+      "engine": "codeql",
+      "rule_id": "py/xpath-injection",
+      "category": "CWE-643",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    choice=\"B\"\n    if request.args.get(\"switch\"):\n        choice=\"A\"\n    match choice:\n        case \"A\":\n            bar=value\n        case \"B\":\n            bar=\"fixed\"\n        case \"C\" | \"D\":\n            bar=value\n        case _:\n            bar=\"fixed\"\n    return str(etree.XPath(bar))\n"
+      }
+    },
+    {
+      "id": "codeql-values-path-match-closure",
+      "engine": "codeql",
+      "rule_id": "py/path-injection",
+      "category": "CWE-22",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    choice=\"B\"\n    def change():\n        nonlocal choice\n        choice=\"A\"\n    change()\n    match choice:\n        case \"A\":\n            bar=value\n        case \"B\":\n            bar=\"fixed\"\n        case \"C\" | \"D\":\n            bar=value\n        case _:\n            bar=\"fixed\"\n    return open(bar).read()\n"
+      }
+    },
+    {
+      "id": "codeql-values-xpath-match-closure",
+      "engine": "codeql",
+      "rule_id": "py/xpath-injection",
+      "category": "CWE-643",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    choice=\"B\"\n    def change():\n        nonlocal choice\n        choice=\"A\"\n    change()\n    match choice:\n        case \"A\":\n            bar=value\n        case \"B\":\n            bar=\"fixed\"\n        case \"C\" | \"D\":\n            bar=value\n        case _:\n            bar=\"fixed\"\n    return str(etree.XPath(bar))\n"
+      }
+    },
+    {
+      "id": "codeql-values-path-match-unicode-live",
+      "engine": "codeql",
+      "rule_id": "py/path-injection",
+      "category": "CWE-22",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    choice=\"\ud83d\ude00A\"[1]\n    match choice:\n        case \"A\":\n            bar=value\n        case \"B\":\n            bar=\"fixed\"\n        case \"C\" | \"D\":\n            bar=value\n        case _:\n            bar=\"fixed\"\n    return open(bar).read()\n"
+      }
+    },
+    {
+      "id": "codeql-values-xpath-match-unicode-live",
+      "engine": "codeql",
+      "rule_id": "py/xpath-injection",
+      "category": "CWE-643",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    choice=\"\ud83d\ude00A\"[1]\n    match choice:\n        case \"A\":\n            bar=value\n        case \"B\":\n            bar=\"fixed\"\n        case \"C\" | \"D\":\n            bar=value\n        case _:\n            bar=\"fixed\"\n    return str(etree.XPath(bar))\n"
+      }
+    },
+    {
+      "id": "codeql-values-path-match-bytes-live",
+      "engine": "codeql",
+      "rule_id": "py/path-injection",
+      "category": "CWE-22",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    choice=b\"AB\"[0]\n    match choice:\n        case 65:\n            bar=value\n        case _:\n            bar=\"fixed\"\n    return open(bar).read()\n"
+      }
+    },
+    {
+      "id": "codeql-values-xpath-match-bytes-live",
+      "engine": "codeql",
+      "rule_id": "py/xpath-injection",
+      "category": "CWE-643",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    choice=b\"AB\"[0]\n    match choice:\n        case 65:\n            bar=value\n        case _:\n            bar=\"fixed\"\n    return str(etree.XPath(bar))\n"
+      }
+    },
+    {
+      "id": "codeql-values-path-match-guard-live",
+      "engine": "codeql",
+      "rule_id": "py/path-injection",
+      "category": "CWE-22",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    choice=\"A\"\n    match choice:\n        case \"A\" if request.args.get(\"switch\"):\n            bar=value\n        case _:\n            bar=\"fixed\"\n    return open(bar).read()\n"
+      }
+    },
+    {
+      "id": "codeql-values-xpath-match-guard-live",
+      "engine": "codeql",
+      "rule_id": "py/xpath-injection",
+      "category": "CWE-643",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    choice=\"A\"\n    match choice:\n        case \"A\" if request.args.get(\"switch\"):\n            bar=value\n        case _:\n            bar=\"fixed\"\n    return str(etree.XPath(bar))\n"
+      }
+    },
+    {
+      "id": "codeql-values-path-match-retainted",
+      "engine": "codeql",
+      "rule_id": "py/path-injection",
+      "category": "CWE-22",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    choice=\"B\"\n    match choice:\n        case \"A\":\n            bar=value\n        case _:\n            bar=\"fixed\"\n    bar+=value\n    return open(bar).read()\n"
+      }
+    },
+    {
+      "id": "codeql-values-xpath-match-retainted",
+      "engine": "codeql",
+      "rule_id": "py/xpath-injection",
+      "category": "CWE-643",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    choice=\"B\"\n    match choice:\n        case \"A\":\n            bar=value\n        case _:\n            bar=\"fixed\"\n    bar+=value\n    return str(etree.XPath(bar))\n"
+      }
+    },
+    {
+      "id": "codeql-values-path-list-safe",
+      "engine": "codeql",
+      "rule_id": "py/path-injection",
+      "category": "CWE-22",
+      "positive": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    lst.append(value)\n    lst.append(\"last\")\n    lst.pop(0)\n    bar=lst[1]\n    return open(bar).read()\n"
+      },
+      "require_native_proof": true
+    },
+    {
+      "id": "codeql-values-xpath-list-safe",
+      "engine": "codeql",
+      "rule_id": "py/xpath-injection",
+      "category": "CWE-643",
+      "positive": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    lst.append(value)\n    lst.append(\"last\")\n    lst.pop(0)\n    bar=lst[1]\n    return str(etree.XPath(bar))\n"
+      },
+      "require_native_proof": true
+    },
+    {
+      "id": "codeql-values-path-list-live",
+      "engine": "codeql",
+      "rule_id": "py/path-injection",
+      "category": "CWE-22",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    lst.append(value)\n    lst.append(\"last\")\n    lst.pop(0)\n    bar=lst[0]\n    return open(bar).read()\n"
+      }
+    },
+    {
+      "id": "codeql-values-xpath-list-live",
+      "engine": "codeql",
+      "rule_id": "py/xpath-injection",
+      "category": "CWE-643",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    lst.append(value)\n    lst.append(\"last\")\n    lst.pop(0)\n    bar=lst[0]\n    return str(etree.XPath(bar))\n"
+      }
+    },
+    {
+      "id": "codeql-values-path-list-safe-tail",
+      "engine": "codeql",
+      "rule_id": "py/path-injection",
+      "category": "CWE-22",
+      "positive": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    lst.append(value)\n    lst.pop(1)\n    bar=lst[0]\n    return open(bar).read()\n"
+      }
+    },
+    {
+      "id": "codeql-values-xpath-list-safe-tail",
+      "engine": "codeql",
+      "rule_id": "py/xpath-injection",
+      "category": "CWE-643",
+      "positive": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    lst.append(value)\n    lst.pop(1)\n    bar=lst[0]\n    return str(etree.XPath(bar))\n"
+      }
+    },
+    {
+      "id": "codeql-values-path-list-live-tail",
+      "engine": "codeql",
+      "rule_id": "py/path-injection",
+      "category": "CWE-22",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(value)\n    lst.append(\"last\")\n    lst.pop(1)\n    bar=lst[0]\n    return open(bar).read()\n"
+      }
+    },
+    {
+      "id": "codeql-values-xpath-list-live-tail",
+      "engine": "codeql",
+      "rule_id": "py/xpath-injection",
+      "category": "CWE-643",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(value)\n    lst.append(\"last\")\n    lst.pop(1)\n    bar=lst[0]\n    return str(etree.XPath(bar))\n"
+      }
+    },
+    {
+      "id": "codeql-values-path-list-multiple-pops",
+      "engine": "codeql",
+      "rule_id": "py/path-injection",
+      "category": "CWE-22",
+      "positive": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(value)\n    lst.append(\"middle\")\n    lst.append(\"last\")\n    lst.pop(0)\n    lst.pop(1)\n    bar=lst[0]\n    return open(bar).read()\n"
+      }
+    },
+    {
+      "id": "codeql-values-xpath-list-multiple-pops",
+      "engine": "codeql",
+      "rule_id": "py/xpath-injection",
+      "category": "CWE-643",
+      "positive": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(value)\n    lst.append(\"middle\")\n    lst.append(\"last\")\n    lst.pop(0)\n    lst.pop(1)\n    bar=lst[0]\n    return str(etree.XPath(bar))\n"
+      }
+    },
+    {
+      "id": "codeql-values-path-list-rebound",
+      "engine": "codeql",
+      "rule_id": "py/path-injection",
+      "category": "CWE-22",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    lst=[value]\n    bar=lst[0]\n    return open(bar).read()\n"
+      }
+    },
+    {
+      "id": "codeql-values-xpath-list-rebound",
+      "engine": "codeql",
+      "rule_id": "py/xpath-injection",
+      "category": "CWE-643",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    lst=[value]\n    bar=lst[0]\n    return str(etree.XPath(bar))\n"
+      }
+    },
+    {
+      "id": "codeql-values-path-list-unknown-pop",
+      "engine": "codeql",
+      "rule_id": "py/path-injection",
+      "category": "CWE-22",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    lst.append(value)\n    lst.append(\"last\")\n    lst.pop(int(request.args.get(\"index\")))\n    bar=lst[0]\n    return open(bar).read()\n"
+      }
+    },
+    {
+      "id": "codeql-values-xpath-list-unknown-pop",
+      "engine": "codeql",
+      "rule_id": "py/xpath-injection",
+      "category": "CWE-643",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    lst.append(value)\n    lst.append(\"last\")\n    lst.pop(int(request.args.get(\"index\")))\n    bar=lst[0]\n    return str(etree.XPath(bar))\n"
+      }
+    },
+    {
+      "id": "codeql-values-path-list-retainted",
+      "engine": "codeql",
+      "rule_id": "py/path-injection",
+      "category": "CWE-22",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(value)\n    lst.append(\"last\")\n    lst.pop(0)\n    bar=lst[0]\n    bar+=value\n    return open(bar).read()\n"
+      }
+    },
+    {
+      "id": "codeql-values-xpath-list-retainted",
+      "engine": "codeql",
+      "rule_id": "py/xpath-injection",
+      "category": "CWE-643",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(value)\n    lst.append(\"last\")\n    lst.pop(0)\n    bar=lst[0]\n    bar+=value\n    return str(etree.XPath(bar))\n"
+      }
+    },
+    {
+      "id": "codeql-values-path-list-bound-live",
+      "engine": "codeql",
+      "rule_id": "py/path-injection",
+      "category": "CWE-22",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"fixed\")\n    lst.append(\"fixed\")\n    lst.append(\"fixed\")\n    lst.append(\"fixed\")\n    lst.append(\"fixed\")\n    lst.append(\"fixed\")\n    lst.append(\"fixed\")\n    lst.append(\"fixed\")\n    lst.append(\"fixed\")\n    lst.append(\"fixed\")\n    lst.append(\"fixed\")\n    lst.append(\"fixed\")\n    lst.append(\"fixed\")\n    lst.append(\"fixed\")\n    lst.append(\"fixed\")\n    lst.append(\"fixed\")\n    lst.append(value)\n    bar=lst[16]\n    return open(bar).read()\n"
+      }
+    },
+    {
+      "id": "codeql-values-xpath-list-bound-live",
+      "engine": "codeql",
+      "rule_id": "py/xpath-injection",
+      "category": "CWE-643",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"fixed\")\n    lst.append(\"fixed\")\n    lst.append(\"fixed\")\n    lst.append(\"fixed\")\n    lst.append(\"fixed\")\n    lst.append(\"fixed\")\n    lst.append(\"fixed\")\n    lst.append(\"fixed\")\n    lst.append(\"fixed\")\n    lst.append(\"fixed\")\n    lst.append(\"fixed\")\n    lst.append(\"fixed\")\n    lst.append(\"fixed\")\n    lst.append(\"fixed\")\n    lst.append(\"fixed\")\n    lst.append(\"fixed\")\n    lst.append(value)\n    bar=lst[16]\n    return str(etree.XPath(bar))\n"
+      }
+    }
+  ]
+}

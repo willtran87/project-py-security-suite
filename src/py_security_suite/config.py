@@ -12,6 +12,7 @@ from typing import Any
 from collections.abc import Mapping
 from urllib.parse import urlsplit
 
+from .config_numbers import integer_setting, real_setting, execution_limits, protect_scan_deadline
 from .models import Severity
 from .path_safety import read_regular_file
 from .trust_policy import (
@@ -414,6 +415,8 @@ class IsolationConfig:
 class ExecutionConfig:
     max_workers: int = 4
     max_output_bytes: int = 16 * 1024 * 1024
+    max_scan_seconds: int = 0
+    max_scan_memory_bytes: int = 0
 
 
 @dataclass(slots=True)
@@ -573,9 +576,8 @@ class SuiteConfig:
 
 
 def _default_mapping() -> dict[str, Any]:
-    bundled_rules = Path(
-        str(files("py_security_suite").joinpath("rules/python-security.yml"))
-    )
+    rule_resources = files("py_security_suite").joinpath("rules")
+    bundled_rules = Path(str(rule_resources.joinpath("python-security.yml")))
     bundled_gitleaks = Path(
         str(files("py_security_suite").joinpath("rules/gitleaks.toml"))
     )
@@ -882,6 +884,7 @@ def _default_mapping() -> dict[str, Any]:
                 "enabled": True,
                 "executable": "run-codeql",
                 "timeout_seconds": 1800,
+                "rules_path": str(bundled_rules.parent / "codeql"),
                 "database_path": None,
                 "auxiliary_executable": "codeql",
             },
@@ -1262,7 +1265,7 @@ def _ensure_known(mapping: Mapping[str, Any]) -> None:
             "sandbox_arguments",
             "replay_ledger_path",
         },
-        "execution": {"max_workers", "max_output_bytes"},
+        "execution": {"max_workers", "max_output_bytes", "max_scan_seconds", "max_scan_memory_bytes"},
         "policy": {
             "required_scanners",
             "block_severities",
@@ -1388,6 +1391,10 @@ def _ensure_known(mapping: Mapping[str, Any]) -> None:
 def _reject_weaker_repository_policy(
     organization: Mapping[str, Any], repository: Mapping[str, Any]
 ) -> None:
+    try:
+        protect_scan_deadline(organization.get("execution", {}), repository.get("execution", {}))
+    except ValueError as exc:
+        raise ConfigurationError(str(exc)) from exc
     _reject_weaker_isolation(
         organization.get("isolation", {}), repository.get("isolation", {})
     )
@@ -1631,8 +1638,8 @@ def _reject_weaker_reachability(
 ) -> None:
     if "minimum_island_loc" in repository:
         try:
-            organization_threshold = int(organization.get("minimum_island_loc", 100))
-            repository_threshold = int(repository["minimum_island_loc"])
+            organization_threshold = integer_setting(organization.get("minimum_island_loc", 100), "reachability.minimum_island_loc")
+            repository_threshold = integer_setting(repository["minimum_island_loc"], "reachability.minimum_island_loc")
         except (TypeError, ValueError) as exc:
             raise ConfigurationError(
                 "reachability minimum_island_loc must be an integer"
@@ -1827,17 +1834,9 @@ def _isolation_config(data: Mapping[str, Any], profile: str) -> IsolationConfig:
 
 def _execution_config(data: Mapping[str, Any]) -> ExecutionConfig:
     try:
-        config = ExecutionConfig(
-            max_workers=int(data["max_workers"]),
-            max_output_bytes=int(data["max_output_bytes"]),
-        )
+        return ExecutionConfig(**execution_limits(data))
     except (TypeError, ValueError) as exc:
-        raise ConfigurationError("execution limits must be integers") from exc
-    if not 1 <= config.max_workers <= 16:
-        raise ConfigurationError("execution.max_workers must be between 1 and 16")
-    if config.max_output_bytes < 1024:
-        raise ConfigurationError("execution.max_output_bytes must be at least 1024")
-    return config
+        raise ConfigurationError(str(exc)) from exc
 
 
 def _policy_config(data: Mapping[str, Any], profile: str) -> PolicyConfig:
@@ -1873,7 +1872,7 @@ def _reports_config(data: Mapping[str, Any]) -> ReportsConfig:
         )
     classification = str(data.get("classification") or "").casefold()
     try:
-        retention_days = int(str(data.get("retention_days") or ""))
+        retention_days = integer_setting(data.get("retention_days"), "reports.retention_days")
     except (TypeError, ValueError) as exc:
         raise ConfigurationError("reports.retention_days must be an integer") from exc
     if classification not in {"confidential", "restricted"}:
@@ -2060,13 +2059,13 @@ def _tool_config(name: str, data: Mapping[str, Any]) -> ToolConfig:
         if not isinstance(data.get(setting, assurance_tool), bool):
             raise ConfigurationError(f"{name} {setting} must be true or false")
     try:
-        timeout = int(data["timeout_seconds"])
-        coverage_minimum = float(data.get("minimum_coverage_percent", 80.0))
-        database_maximum_age = float(data.get("maximum_database_age_days", 10.0))
-        evidence_maximum_age = float(data.get("maximum_evidence_age_days", 7.0))
-        minimum_island_loc = int(data.get("minimum_island_loc", 100))
+        timeout = integer_setting(data["timeout_seconds"], f"tools.{name}.timeout_seconds")
+        coverage_minimum = real_setting(data.get("minimum_coverage_percent", 80.0), f"tools.{name}.minimum_coverage_percent")
+        database_maximum_age = real_setting(data.get("maximum_database_age_days", 10.0), f"tools.{name}.maximum_database_age_days")
+        evidence_maximum_age = real_setting(data.get("maximum_evidence_age_days", 7.0), f"tools.{name}.maximum_evidence_age_days")
+        minimum_island_loc = integer_setting(data.get("minimum_island_loc", 100), f"tools.{name}.minimum_island_loc")
     except (TypeError, ValueError) as exc:
-        raise ConfigurationError(f"{name} numeric settings are invalid") from exc
+        raise ConfigurationError(str(exc)) from exc
     config = ToolConfig(
         enabled=bool(data["enabled"]),
         executable=str(data["executable"]),
