@@ -1,5 +1,28 @@
 # Changelog
 
+- Isolate validator and child-process bytecode caches, rejecting stale reports and
+  preserving exact wheel receipts and report bytes in unique archives.
+- Checkpoint native regressions, benchmark engines and runtime qualification;
+  expose runtime identity-check costs separately from native scan time.
+- Resolve Flask hook receivers to their native import calls, require matching
+  literal module identities and reject observed hook rebinding and overrides.
+- Add a versioned evidence aggregator that recalculates benchmark counts, checks
+  protected detections and generates documentation without hiding failed accuracy.
+- Add adversarial cache, stale-report, disk-full and concurrent-archive tests, and
+  document the remaining independent evaluation and deployment measurements.
+
+- Add native CodeQL HTML response detection for bounded dynamic Flask registration
+  hooks, with operand-aware Markup escaping and adversarial reassignment controls.
+- Validate benchmark and acceptance runs against exact installed-wheel bytes
+  before and after execution; require strict accuracy on the release builder wheel.
+- Retain atomic acceptance checkpoints, completed cases and bounded normalized
+  fixture reports in distinct run archives, including failed and interrupted runs.
+- Qualify Semgrep with its own isolated interpreter and runtime closure. Correct
+  Windows Python DLL resolution and record sampled native memory and scratch use.
+- Reject invalid bundle qualification limits before repository inventory; extract
+  platform runtime identity helpers and tighten the execution module size ratchet.
+- Document validation and release boundaries with updated Mermaid diagrams.
+
 - Track LDAP filter injection through source-verified imported connection factories,
   including module imports outside request handlers. Preserve native source-to-sink
   paths, filter escaping, receiver identity and upstream finding deduplication.

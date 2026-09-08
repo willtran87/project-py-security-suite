@@ -27,7 +27,7 @@ _FILE_LINE_LIMITS = {
     "src/py_security_suite/cli.py": 2_873,
     "src/py_security_suite/closure_plan.py": 3_043,
     "src/py_security_suite/config.py": 2_527,
-    "src/py_security_suite/execution.py": 1_230,
+    "src/py_security_suite/execution.py": 1_196,
     "src/py_security_suite/reachability.py": 2_295,
     "src/py_security_suite/cli_benchmark_arguments.py": 209,
     "src/py_security_suite/cli_release_arguments.py": 70,

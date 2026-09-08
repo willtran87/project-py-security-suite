@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import tempfile
+from functools import partial as bind_call
 from pathlib import Path
 from typing import Any
 
@@ -19,9 +20,11 @@ from py_security_suite.config import ToolConfig
 from py_security_suite.models import ToolStatus
 
 if __package__:
+    from .validation_evidence import ValidationEvidence, output_identity
     from .detection_identity import validate_semgrep_identity
     from .detection_stability import repeated_semgrep
 else:
+    from validation_evidence import ValidationEvidence, output_identity
     from detection_identity import validate_semgrep_identity
     from detection_stability import repeated_semgrep
 
@@ -44,15 +47,38 @@ CATEGORIES = {
 
 
 def run(
-    command: list[str], cwd: Path, *, timeout: int = 180, json_output: bool = False
+    command: list[str],
+    cwd: Path,
+    *,
+    timeout: int = 180,
+    json_output: bool = False,
+    evidence: ValidationEvidence | None = None,
 ) -> dict[str, Any]:
+    if evidence:
+        evidence.stage("native-command")
     result = run_command(
         command,
         cwd=cwd,
         timeout_seconds=timeout,
         max_output_bytes=8 * 1024**2,
     )
-    if result.exit_code or result.timed_out:
+    if evidence:
+        evidence.document["commands"].append(
+            {
+                "exit_code": result.exit_code,
+                "timed_out": result.timed_out,
+                "stop_reason": result.stop_reason,
+                "stdout": output_identity(result.stdout),
+                "stderr": output_identity(result.stderr),
+            }
+        )
+        evidence.save()
+    if (
+        result.exit_code
+        or result.timed_out
+        or result.stop_reason
+        or result.output_limit_exceeded
+    ):
         raise ValueError(
             f"detector exited with code {result.exit_code}: {result.stderr[-2000:]}"
         )
@@ -165,6 +191,8 @@ def metrics(outcomes: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def validate(args: argparse.Namespace) -> dict[str, Any]:
+    evidence = getattr(args, "evidence", None)
+    execute = bind_call(run, evidence=evidence)
     corpus = json.loads(CORPUS.read_text(encoding="utf-8"))
     engines = {"codeql"} if args.codeql_only else {"semgrep"}
     if args.codeql:
@@ -217,7 +245,7 @@ def validate(args: argparse.Namespace) -> dict[str, Any]:
                 str(source),
             ]
             document, stability = repeated_semgrep(
-                lambda: run(command, source, json_output=True),
+                lambda: execute(command, source, json_output=True),
                 source,
                 getattr(args, "semgrep_repetitions", 3),
             )
@@ -229,12 +257,16 @@ def validate(args: argparse.Namespace) -> dict[str, Any]:
                     "semgrep",
                 )
             )
+            if evidence:
+                evidence.stage(
+                    "semgrep:completed", cases=outcomes, semgrep_stability=stability
+                )
             broken = work / "broken"
             broken.mkdir()
             (broken / "bad.py").write_text(
                 "def invalid(:\n    pass\n", encoding="utf-8"
             )
-            document = run(
+            document = execute(
                 [args.bandit, "-r", str(broken), "-q", "-f", "json"],
                 broken,
                 json_output=True,
@@ -260,10 +292,10 @@ def validate(args: argparse.Namespace) -> dict[str, Any]:
                     )
         if "codeql" in engines:
             database, report = work / "database", work / "codeql.sarif"
-            versions["codeql"] = run(
+            versions["codeql"] = execute(
                 [args.codeql, "version", "--format=json"], work, json_output=True
             )
-            run(
+            execute(
                 [
                     args.codeql,
                     "database",
@@ -292,12 +324,13 @@ def validate(args: argparse.Namespace) -> dict[str, Any]:
                         str(query_root / "Security/CWE-022/PathInjection.ql"),
                         str(query_root / "Security/CWE-643/XpathInjection.ql"),
                         str(query_root / "Security/CWE-090/LdapInjection.ql"),
+                        str(query_root / "Security/CWE-079/ReflectedXss.ql"),
                     ],
                     report,
                 ),
                 ([str(query_copy)], supplemental),
             ):
-                run(
+                execute(
                     [
                         args.codeql,
                         "database",
@@ -411,12 +444,13 @@ def main() -> int:
     args = parser.parse_args()
     if args.codeql_only and not args.codeql:
         parser.error("--codeql-only requires --codeql")
+    args.evidence = ValidationEvidence(
+        args.output, "native developer regression validation"
+    )
     try:
-        report = validate(args)
+        report = args.evidence.finish(validate(args))
     except (ValueError, RuntimeError, OSError) as exc:
-        report = {"passed": False, "error": str(exc)}
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+        report = args.evidence.fail(exc)
     print(json.dumps(report, indent=2))
     return 0 if report["passed"] else 1
 

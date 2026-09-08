@@ -75,6 +75,14 @@ Markdown is the canonical documentation format:
 
 ## Solution overview
 
+The [validation pipeline and diagrams](docs/validation-pipeline.md) explain how
+native regressions, exact-wheel accuracy and retained acceptance evidence support
+release decisions. [Measured acceptance](docs/professional-acceptance.md) records
+completed results and remaining detection limits.
+The [generated validation results](docs/validation-results.md) bind current local
+measurements to their evidence digests. The [production evaluation work package](docs/production-evaluation.md)
+records the independent review and operating measurements still required.
+
 ```mermaid
 flowchart LR
     subgraph Prep["Connected preparation lane"]

@@ -4,6 +4,24 @@ from pathlib import Path
 
 
 def write_codeql_controls(source: Path) -> None:
+    (source / "html_bootstrap.py").write_text(
+        "import importlib, os\nfrom flask import Flask\n"
+        'plugin=importlib.import_module(os.getenv("PLUGIN_MODULE"))\n'
+        "plugin.register_html_controls(Flask(__name__))\n",
+        encoding="utf-8",
+    )
+    for variant, expression in (
+        ("unsafe", "value"),
+        ("safe", "escape(value)"),
+        ("markup_unsafe", "Markup(value)"),
+    ):
+        (source / f"html_factory_{variant}.py").write_text(
+            "from flask import request\nfrom markupsafe import Markup, escape\n"
+            'def register_html_controls(app):\n    @app.route("/html")\n    def handler():\n'
+            '        value=request.args.get("input")\n        response=""\n'
+            f"        response+={expression}\n        return response\n",
+            encoding="utf-8",
+        )
     (source / "services").mkdir()
     (source / "services/ldap_factory.py").write_text(
         "import ldap3\ndef build_connection():\n"
@@ -48,6 +66,22 @@ def write_codeql_controls(source: Path) -> None:
 def check_codeql_controls(
     findings: list[dict], diagnostic: dict, *, partial: bool
 ) -> None:
+    html = [
+        finding
+        for finding in findings
+        if any(
+            source["rule_id"] == "pysec/flask-registration-html-injection"
+            for source in finding["sources"]
+        )
+    ]
+    html_paths = {loc["path"] for finding in html for loc in finding["locations"]}
+    if (
+        not {"html_factory_unsafe.py", "html_factory_markup_unsafe.py"} <= html_paths
+        or "html_factory_safe.py" in html_paths
+    ):
+        raise ValueError("installed HTML factory positive/escaping controls failed")
+    if any(not finding["evidence"].get("sarif_code_flows") for finding in html):
+        raise ValueError("installed HTML factory finding lost its native path")
     ldap = [
         finding
         for finding in findings

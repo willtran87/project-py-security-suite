@@ -56,3 +56,28 @@ def test_release_builders_require_strict_accuracy() -> None:
     assert "accuracy_args+=(--require-accuracy)" in workflow
     assert '"${accuracy_args[@]}"' in workflow
     assert "continue-on-error" not in workflow
+
+
+def test_release_accuracy_uses_the_release_builder_wheel():
+    release = (ROOT / ".github/workflows/release-assurance.yml").read_text()
+    job = release.split("  release-wheel-accuracy:\n", 1)[1].split(
+        "\n  compare-and-exercise:", 1
+    )[0]
+    assert "needs: independent-build" in job
+    assert "uses: ./.github/workflows/detection-accuracy.yml" in job
+    assert "require_accuracy: true" in job
+    assert "wheel_artifact: release-builder-a" in job
+    comparison = release.split("  compare-and-exercise:\n", 1)[1].split(
+        "    steps:", 1
+    )[0]
+    assert "needs: [independent-build, release-wheel-accuracy]" in comparison
+    assert "if:" not in comparison
+    workflow = (ROOT / ".github/workflows/detection-accuracy.yml").read_text()
+    assert "name: ${{ inputs.wheel_artifact }}" in workflow
+    assert workflow.count("-I scripts/validate_wheel_detection.py") == 2
+    assert workflow.count('--wheel "$DETECTION_WHEEL"') == 2
+    assert "--require-hashes" in workflow
+    assert (
+        "name: external-detection-benchmark-${{ inputs.wheel_artifact || 'candidate' }}"
+        in workflow
+    )

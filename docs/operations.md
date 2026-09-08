@@ -1,5 +1,10 @@
 # Python Security Suite operations
 
+For release-wheel verification, durable acceptance evidence, runtime qualification
+and the scope of native resource measurements, see the
+[validation pipeline and diagrams](validation-pipeline.md). Completed detector
+measurements and remaining gaps are recorded in [measured acceptance](professional-acceptance.md).
+
 Last reviewed: 2026-08-26
 
 ## Operating model
@@ -1315,6 +1320,16 @@ replace its policy outcome or mask an earlier rendering error. Review retained
 paths before removing them, particularly stale publication locks.
 
 ## Measuring complete scan performance
+
+For native Semgrep qualification, `scripts/qualify_semgrep.py` records separate
+`identity_checks` and `native_invocations` durations. Use them to distinguish
+runtime verification cost from scan cost. Each repetition must reconcile the
+complete Python inventory and stable findings; identity checks remain enabled
+before and after each scan. Attempts checkpoint into unique run archives.
+See the [validation pipeline](validation-pipeline.md) for bytecode isolation,
+interruption behavior and evidence aggregation, and the
+[production evaluation work package](production-evaluation.md) for the remaining
+capacity and deployment acceptance measurements.
 
 ```text
 python scripts/benchmark_full_scan.py --samples 3 --output .artifacts/full-scan-benchmark.json

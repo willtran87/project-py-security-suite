@@ -8,48 +8,65 @@ import json
 import shutil
 import subprocess
 import tempfile
+import sys
+import atexit
 import time
 from pathlib import Path
 
+if __name__ == "__main__":
+    _cache = tempfile.TemporaryDirectory(prefix="")
+    atexit.register(_cache.cleanup)
+    sys.pycache_prefix = _cache.name
+    sys.dont_write_bytecode = True
+
 if __package__:
+    from .isolated_python import isolated_python
+    from .validation_evidence import ValidationEvidence
     from .acceptance_codeql import check_codeql_controls, write_codeql_controls
 else:
+    from isolated_python import isolated_python
+    from validation_evidence import ValidationEvidence
     from acceptance_codeql import check_codeql_controls, write_codeql_controls
 
 
 def invoke(
     python: str, arguments: list[str], cwd: Path, timeout: int = 2400
 ) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(  # noqa: S603 - pinned test interpreter, fixed CLI argument vectors
-        [python, "-I", *arguments],
-        cwd=cwd,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        timeout=timeout,
-        check=False,
-    )
+    with isolated_python(python, arguments) as command:
+        return subprocess.run(  # noqa: S603 - pinned interpreter and fixed CLI vectors
+            command,
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout,
+            check=False,
+        )
 
 
-def validate(args: argparse.Namespace) -> dict:
+def _validate(args: argparse.Namespace, evidence: ValidationEvidence) -> dict:
     with tempfile.TemporaryDirectory(prefix="pysec-installed-acceptance-") as temporary:
         work = Path(temporary)
-        info = invoke(
-            args.python,
-            [
-                "-c",
-                "import json,py_security_suite; from importlib.resources import files; from py_security_suite.config import PROFILE_TOOLS; print(json.dumps({'module':py_security_suite.__file__,'rules':str(files('py_security_suite').joinpath('rules')),'tools':PROFILE_TOOLS['deep']}))",
-            ],
-            work,
+        info = evidence.invoke(
+            "package-import",
+            lambda: invoke(
+                args.python,
+                [
+                    "-c",
+                    "import json,py_security_suite; from importlib.resources import files; from py_security_suite.config import PROFILE_TOOLS; print(json.dumps({'module':py_security_suite.__file__,'rules':str(files('py_security_suite').joinpath('rules')),'tools':PROFILE_TOOLS['deep']}))",
+                ],
+                work,
+            ),
         )
         if info.returncode:
-            raise ValueError("installed package import failed: " + info.stderr[-1500:])
+            raise ValueError("installed package import failed")
         package = json.loads(info.stdout)
         if "site-packages" not in Path(package["module"]).parts:
             raise ValueError(
                 "acceptance requires a wheel installation, not an editable source tree"
             )
+        evidence.stage("fixture-preparation", package=package)
         rules = Path(package["rules"])
         for name in (
             "EnvironmentSecretToLog.ql",
@@ -57,6 +74,8 @@ def validate(args: argparse.Namespace) -> dict:
             "ConstantPathProof.ql",
             "ConstantXpathProof.ql",
             "LdapFactoryFilter.ql",
+            "FlaskRegistrationHtml.ql",
+            "HtmlValueFacts.qll",
             "NativeValueFacts.qll",
             "qlpack.yml",
             "codeql-pack.lock.yml",
@@ -168,6 +187,7 @@ def validate(args: argparse.Namespace) -> dict:
             "partial",
             "unavailable",
         ):
+            evidence.stage(scenario + ":prepare", scenario=scenario)
             started = time.monotonic()
             selected = enabled if scenario != "partial" else {"bandit": args.bandit}
             scan_source = source
@@ -211,27 +231,31 @@ def validate(args: argparse.Namespace) -> dict:
                     ]
             config.write_text("\n".join(content) + "\n", encoding="utf-8")
             report = work / scenario
-            scan = invoke(
-                args.python,
-                [
-                    "-m",
-                    "py_security_suite",
-                    "scan",
-                    str(scan_source),
-                    "--config",
-                    str(config),
-                    "--output",
-                    str(report),
-                    "--diagnostic-without-isolation",
-                    "--progress",
-                    "none",
-                ],
-                work,
+            scan = evidence.invoke(
+                scenario + ":scan",
+                lambda scan_source=scan_source, config=config, report=report: invoke(
+                    args.python,
+                    [
+                        "-m",
+                        "py_security_suite",
+                        "scan",
+                        str(scan_source),
+                        "--config",
+                        str(config),
+                        "--output",
+                        str(report),
+                        "--diagnostic-without-isolation",
+                        "--progress",
+                        "none",
+                    ],
+                    work,
+                ),
             )
+            evidence.stage(scenario + ":retain-report")
+            evidence.retain_report(report, scenario, list(selected))
+            evidence.stage(scenario + ":assertions")
             if not (report / "scan-manifest.json").is_file():
-                raise ValueError(
-                    "scan did not publish a report: " + scan.stderr[-2500:]
-                )
+                raise ValueError("scan did not publish a report")
             manifest = json.loads(
                 (report / "scan-manifest.json").read_text(encoding="utf-8")
             )
@@ -519,14 +543,17 @@ def validate(args: argparse.Namespace) -> dict:
                 raise ValueError(
                     "diagnostic scan incorrectly represented release eligibility"
                 )
-            verification = invoke(
-                args.python,
-                [
-                    "-c",
-                    "import sys; from pathlib import Path; from py_security_suite.passport import verify_report; verify_report(Path(sys.argv[1]))",
-                    str(report),
-                ],
-                work,
+            verification = evidence.invoke(
+                scenario + ":integrity",
+                lambda report=report: invoke(
+                    args.python,
+                    [
+                        "-c",
+                        "import sys; from pathlib import Path; from py_security_suite.passport import verify_report; verify_report(Path(sys.argv[1]))",
+                        str(report),
+                    ],
+                    work,
+                ),
             )
             if verification.returncode:
                 raise ValueError("installed report integrity verification failed")
@@ -543,13 +570,24 @@ def validate(args: argparse.Namespace) -> dict:
                     ).hexdigest(),
                 }
             )
+            evidence.complete_case(outcomes[-1])
         return {
-            "schema_version": "1.0",
+            "schema_version": "1.1",
             "scope": "installed product functional acceptance; not production approval",
             "package": package,
             "cases": outcomes,
             "passed": True,
         }
+
+
+def validate(args: argparse.Namespace) -> dict:
+    evidence = ValidationEvidence(
+        args.output, "installed product functional acceptance; not production approval"
+    )
+    try:
+        return evidence.finish(_validate(args, evidence))
+    except (ValueError, OSError, KeyError, TypeError, subprocess.TimeoutExpired) as exc:
+        return evidence.fail(exc)
 
 
 def main() -> int:
@@ -561,17 +599,13 @@ def main() -> int:
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     args.python = str(Path(args.python).resolve())
-    try:
-        result = validate(args)
-    except (ValueError, OSError, KeyError, subprocess.TimeoutExpired) as exc:
-        result = {"passed": False, "error": str(exc)}
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+    result = validate(args)
     print(
         json.dumps(
             {
                 "passed": result["passed"],
-                "error": result.get("error"),
+                "error_category": result.get("error_category"),
+                "failed_stage": result.get("failed_stage"),
                 "output": str(args.output),
             }
         )

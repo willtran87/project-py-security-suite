@@ -1,6 +1,10 @@
 # Detection effectiveness and operational coverage
 
-Last reviewed: 2026-08-30
+See [measured acceptance](professional-acceptance.md) for the latest completed
+native detection measurements and [validation pipeline](validation-pipeline.md)
+for exact-wheel verification, failed-run retention and runtime qualification.
+
+Last reviewed: 2026-09-07
 
 ## Executable detection regression gate
 
@@ -26,11 +30,13 @@ replace them or turn the overall gate green. Summary digests include normalized
 classification and severity, not only finding counts. Timing is recorded but does
 not affect the equality check. This is a regression check, not a reliability SLA.
 
-The separate CodeQL gate compiles and runs the bundled global taint query against
-cross-function and cross-file credential flows. Positive findings must retain
-SARIF path traces. Both an identity redactor and a real constant-returning
-redactor are tested. CI requires both lanes through `detection-regressions` and
-retains their JSON results; this gate is included in the existing required gate.
+The separate CodeQL gate compiles the bundled global taint queries and selected
+upstream queries against credential, LDAP, HTML, path and XPath flows. Positive
+findings must retain SARIF path traces. Controls cover identity helpers, real
+escaping, source-verified imported factories and bounded value proofs. Known
+unsafe mutation misses are tracked separately and must reject constant-value
+proofs; they are not counted as detected vulnerabilities. CI requires both lanes
+through `detection-regressions` and retains their JSON results.
 
 The Semgrep rules no longer trust arbitrary function names containing `sanitize`,
 `redact`, or `allowlist`. A custom helper can therefore produce a candidate finding

@@ -52,7 +52,11 @@ def source_identity(source: Path) -> tuple[tuple[str, ...], str]:
 
 
 def repeated_semgrep(
-    execute: Callable[[], dict[str, Any]], source: Path, repetitions: int
+    execute: Callable[[], dict[str, Any]],
+    source: Path,
+    repetitions: int,
+    *,
+    checkpoint: Callable[[str, dict[str, Any]], None] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Run a fixed count, never retry until green or omit failed attempts."""
     if type(repetitions) is not int or not 1 <= repetitions <= 5:
@@ -63,6 +67,8 @@ def repeated_semgrep(
     for index in range(repetitions):
         started = time.monotonic()
         attempt: dict[str, Any] = {"attempt": index + 1, "complete": False}
+        if checkpoint:
+            checkpoint("started", dict(attempt))
         try:
             expected, before = source_identity(source)
             if initial_identity is None:
@@ -108,6 +114,8 @@ def repeated_semgrep(
             attempt["error_category"] = type(exc).__name__
         attempt["duration_seconds"] = round(time.monotonic() - started, 3)
         attempts.append(attempt)
+        if checkpoint:
+            checkpoint("finished", dict(attempt))
     signatures = {
         (attempt.get("version"), attempt.get("findings_sha256")) for attempt in attempts
     }

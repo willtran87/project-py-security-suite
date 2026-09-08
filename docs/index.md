@@ -26,6 +26,10 @@ verification happen inside an enterprise-controlled isolated boundary.
 | Guide an LLM through evidence-gated adversarial testing | [LLM-guided adversarial testing](llm-adversarial-testing.md) |
 | Understand source-to-artifact and cross-scanner joins | [Cross-tool evidence fusion](evidence-fusion.md) |
 | Measure scanner execution and labeled detection effectiveness | [Effectiveness](effectiveness.md) |
+| Verify the distributed wheel and retain failed validation evidence | [Validation pipeline and diagrams](validation-pipeline.md) |
+| Review completed native measurements and remaining detection gaps | [Measured acceptance](professional-acceptance.md) |
+| Check measurements generated from verified receipts | [Verified validation results](validation-results.md) |
+| Prepare independent review and deployment measurements | [Production evaluation](production-evaluation.md) |
 | Map controls and run governed OWASP/NIST/LLM benchmark scorecards | [Industry standards and benchmarks](industry-standards-benchmarks.md) |
 | Operate benchmark signers, replay state, trusted time, and audit anchors | [Benchmark trust operations](benchmark-operations.md) |
 | Make one fail-closed promotion decision | [Governed release readiness](release-readiness.md) |

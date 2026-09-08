@@ -163,7 +163,7 @@
       },
       "CWE-79": {
         "fp": 7,
-        "fn": 31
+        "fn": 16
       },
       "CWE-89": {
         "fp": 0,
@@ -179,7 +179,7 @@
       }
     }
   },
-  "review": "docs/professional-acceptance.md#imported-ldap-factories-and-bounded-native-value-proofs",
+  "review": "docs/professional-acceptance.md#dynamic-flask-html-and-exact-wheel-validation",
   "protected_detections": {
     "bandit": {
       "CWE-330": [
@@ -565,6 +565,23 @@
         "BenchmarkTest00824",
         "BenchmarkTest01193",
         "BenchmarkTest01200"
+      ],
+      "CWE-79": [
+        "BenchmarkTest00096",
+        "BenchmarkTest00097",
+        "BenchmarkTest00169",
+        "BenchmarkTest00187",
+        "BenchmarkTest00189",
+        "BenchmarkTest00366",
+        "BenchmarkTest00450",
+        "BenchmarkTest00453",
+        "BenchmarkTest00515",
+        "BenchmarkTest00532",
+        "BenchmarkTest00533",
+        "BenchmarkTest00669",
+        "BenchmarkTest00673",
+        "BenchmarkTest00753",
+        "BenchmarkTest01210"
       ]
     }
   }

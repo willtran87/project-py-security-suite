@@ -3,6 +3,186 @@
 The acceptance gates distinguish product correctness, public benchmark results,
 and production approval. Passing one does not establish the others.
 
+### Bytecode isolation, import identity and verified evidence — 2026-09-08 { #current-validation-increment }
+
+The validator now establishes a fresh private bytecode prefix before importing
+helpers or the verified product and disables cache writes. Its child interpreters
+use the same policy. Timestamp-valid altered product and helper caches are
+adversarial controls: the executed marker must come from the verified source.
+An incomplete initial output also prevents a driver that writes no report from
+reusing a stale success. Both the wheel receipt and exact completed report bytes
+are retained in a unique archive.
+
+Native regressions, per-engine benchmark results and runtime qualification now
+checkpoint progress. A real interrupted benchmark retained completed Bandit and
+Semgrep evidence while CodeQL and the overall run remained incomplete. Separate
+concurrency tests exposed a transient Windows replacement sharing violation;
+the writer now retries only the relevant Windows permission errors, with at most
+0.75 seconds of retry delay. Permanent failure and injected disk-full errors preserve the prior
+checkpoint. These earlier interrupted and failed runs remain retained.
+
+The Flask HTML model resolves the actual import call feeding the hook receiver.
+Literal module names must match the defining module; aliases remain supported.
+Rebound exports, duplicate definitions and observed hook overrides are excluded.
+All **197 native CodeQL detection cases pass**, including eight new paired import
+identity controls. The 15 separately tracked mutation gaps still reject unsafe
+constant-value proofs. Nonliteral dynamic imports continue to have uncertain
+module identity and retain medium precision.
+
+`scripts/aggregate_validation.py` replaces the unversioned local aggregation
+script. It verifies receipts, archived reports, current driver and query hashes,
+native controls, complete runtime repetitions and installed acceptance scenarios.
+It recalculates counts from per-case evidence, checks every protected detection
+and applies the unchanged baseline and accuracy policy. A failed accuracy gate
+cannot produce a passing aggregate result. The [generated measurements](validation-results.md)
+record the final candidate's results and input digests.
+
+The completed three-engine benchmark covers all **1,236 Python files** and
+**1,230 labeled cases**. It retains all **359 protected detections** and the
+previous totals: **323 TP, 118 FP, 129 FN and 660 TN** (73.2% precision and 71.5%
+recall). XSS remains 15/31 with seven false positives. The stricter import model
+causes no measured regression. The unchanged strict accuracy policy still fails;
+the wheel receipt records verified artifact integrity and failed accuracy.
+
+The candidate wheel SHA-256 is
+`1f95acadffa239fdfed029a3cec45af0976677cf5009e6aec1d041e5ef09e9a7`.
+Its 459 product files match the source package. The final Python suite passes
+**1,936 tests and 499 subtests**, with 20 skips. Ruff, mypy, Pyright, public API
+compatibility, architecture limits and cycles, and changed-workflow lint pass.
+
+All **five installed-wheel acceptance scenarios pass**: positive/negative controls,
+finding identity, relocation, partial analysis and unavailable tools. Both final
+receipts verify the same candidate before and after execution. The versioned
+aggregator accepts all supplied evidence with `evidence_verified: true` and
+correctly retains `passed: false` because strict accuracy fails.
+
+Current evidence is retained under `.artifacts/professional-integrity-`:
+`native.json`, `runtime-final.json`, `benchmark-final.json`,
+`benchmark-final-wheel.json`, `acceptance-final.json`,
+`acceptance-final-wheel.json`, `verification.json` and `pytest-final.log`.
+The two receipts identify their unique archives; the acceptance report also
+identifies retained normalized scenario files. The earlier interrupted runs and
+the failed Windows concurrency test remain available alongside final results.
+Strict MkDocs and the Pages artifact audit pass, and all five pipeline diagrams
+render in the browser without errors.
+
+Qualification reports now separate the cost of initial and before/after runtime
+identity checks from native scan time. Full identity verification remains enabled.
+All three native Semgrep repetitions complete over 1,236 files with identical
+179 findings and unchanged source, launcher, rules and runtime identity. Seven
+identity checks total 462.561 seconds; the three native invocations total 63.453
+seconds. Sampled process-tree memory peaks are 481,484,800–486,297,600 bytes;
+private scratch peaks are 367,089 bytes. Other validation work ran concurrently
+on this host, so these figures diagnose this run and are not isolated performance
+comparisons or capacity guarantees.
+The [pipeline diagrams](validation-pipeline.md) show the new cache boundary,
+checkpoint flow and receipt aggregation. The [production evaluation work package](production-evaluation.md)
+records the independent review, representative application holdout, operating
+range and remote release results still required. Those activities have not been
+substituted with local functional tests.
+
+The sections below preserve earlier increments and their artifact identities;
+their wheel digests and test counts are historical, not the current candidate.
+
+### Historical: dynamic Flask HTML and exact-wheel validation { #dynamic-flask-html-and-exact-wheel-validation }
+
+The current increment adds `pysec/flask-registration-html-injection` for bounded
+dynamic Flask registration hooks. Its native taint paths cover request collection
+values returned through local string accumulators. Operand-aware HTML checks
+preserve taint in unsafe Markup, including re-escaping an existing Markup value.
+The bounded selected-match proof rejects intervening writes using statement
+descendants, including assignment targets contained in AST lists.
+
+The complete benchmark verifies the exact candidate wheel before and after
+execution and reconciles all **1,236 Python files** in Bandit, Semgrep and CodeQL.
+Combined results change from 308 TP, 118 FP, 144 FN and 660 TN to
+**323 TP, 118 FP, 129 FN and 660 TN**. Precision rises from 72.3% to 73.2% and
+recall from 68.1% to 71.5%. XSS detection rises from **0/31 to 15/31**, while its
+seven existing false positives remain unchanged. The new rule introduces no
+additional false positives against the public XSS labels.
+
+All 344 protected engine/case detections survive. The baseline adds the 15 new
+CodeQL XSS cases, for **359 protections**, and tightens only its XSS FN ceiling
+from 31 to 16. The FP ceiling remains seven; other ceilings, labels and the
+accuracy policy are unchanged. The strict accuracy gate still fails across
+multiple categories, including XSS, XPath and path traversal. Its wheel receipt
+correctly records an intact artifact with a failed accuracy result.
+
+The measured wheel is
+`professional-next-final-dist/py_security_suite-0.1.0-py3-none-any.whl`, SHA-256
+`22bd40851f770dee5f61cb7da54d81cc4267e2f15a2f6561e8962bac205b3764`.
+Evidence is retained in `.artifacts/professional-next-benchmark.json`,
+`.artifacts/professional-next-benchmark-wheel.json` and
+`.artifacts/professional-next-baseline-verification.json`. The last file applies
+the tighter baseline to the completed measurement without repeating the scan.
+
+All five installed-wheel CLI acceptance scenarios pass: positive/negative
+controls, original finding identity, relocation, partial analysis and unavailable
+tools. The partial case retains valid findings and original native alerts while
+reporting incomplete coverage. HTML factory positive/escaping controls and
+unsafe Markup retain their required native paths through the installed CLI.
+Both wheel receipts verify the same 459 package files; those files also match
+the current source tree. The full report, receipts and normalized scenario
+evidence are retained under `.artifacts/professional-next-acceptance-final.json`,
+`.artifacts/professional-next-acceptance-final-wheel.json` and its unique
+`professional-next-acceptance-final-evidence` run directory.
+
+`.artifacts/professional-next-verification.json` binds the completed native,
+runtime, benchmark and acceptance records. Remote CI and cross-platform release
+jobs were not executed locally; their required workflow gates remain in place.
+
+All **189 native CodeQL detection cases pass**, including 35 new positive and
+negative HTML controls. All 15 separately tracked mutation misses reject unsafe
+constant-value proofs; these remain detection gaps. The Python suite passes
+**1,904 tests and 499 subtests**, with 20 skips. Ruff lint, mypy, Pyright, public
+API compatibility, architecture limits and cycles, workflow lint, strict MkDocs
+build and the Pages artifact audit pass. All four new Mermaid diagrams render in
+the browser without errors. The execution module is reduced to 1,196 lines and
+its existing size ratchet is tightened accordingly.
+
+Installed acceptance now checkpoints operations and completed scenarios into
+unique run archives, retaining bounded normalized fixture evidence even when a
+later assertion fails. A new isolated wrapper verifies installed product files
+against the candidate wheel before and after benchmark or acceptance execution.
+Release assurance requires strict accuracy on builder A's actual wheel before
+the final provenance, reproducibility and offline checks. Separate source and
+release-wheel runs retain distinct CI artifacts. See the
+[validation pipeline and diagrams](validation-pipeline.md) for these contracts.
+
+The final Semgrep qualification completes all three fixed repetitions over
+1,236 Python files with identical 179 findings, zero native errors, no missing
+files and unchanged launcher, rule and runtime identities. The scanner uses its
+own Python 3.13 interpreter and the installed console entry point. Windows native
+closure resolution now uses the base Python installation and pywin32's installed
+DLL directory. The closure includes the standard library and native dependencies.
+
+Native invocation durations are 13.237, 15.991 and 14.058 seconds on this host.
+Sampled peak resident memory for the driver and native children is
+484,237,312, 482,934,784 and 482,668,544 bytes; observed private scratch peaks are
+367,089 bytes in each run. Samples pause 100 ms between collections. Full attempt
+durations also include runtime identity verification and are recorded separately.
+These measurements exclude external caches and do not establish a repository
+size limit, latency percentile or production SLA.
+
+Earlier setup and native failures remain retained. They exposed unresolved
+Python/pywin32 DLLs, a deprecated Semgrep module entry point, and native RPC
+failures with a longer nested temporary path. The shorter profiling parent
+completes successfully. The earlier failed qualification was not reclassified as
+passing. The initial full Python run also exposed repository inventory occurring
+before invalid qualification limits were rejected; limits now validate first.
+
+Current native and runtime evidence is in
+`.artifacts/professional-next-native-final.json`,
+`.artifacts/professional-next-runtime-final.json` and
+`.artifacts/professional-next-full-pytest-v2.log`. Failed native revisions,
+qualification reports and the initial Python timeout log remain beside them.
+
+Independent application evaluation remains outstanding. The public corpus guided
+development and cannot be presented as a holdout. Existing XPath/path precision
+limits, unmodeled mutation flows and framework coverage gaps remain material.
+This increment does not establish independent production approval or industry
+certification. The following sections preserve prior measurements as history.
+
 ### Imported LDAP factories and bounded native value proofs
 
 `pysec/ldap-factory-filter-injection` tracks native import identities across
@@ -302,6 +482,11 @@ The engine timeout remains unresolved; no limit was raised and no failing run
 was discarded. Broad production readiness remains unestablished.
 
 ### Current qualification: native dataflow timeouts
+
+This is a historical qualification record. See
+[the current increment](#current-validation-increment) for the
+latest completed repetitions. Earlier native timeout failures remain valid
+observations and must not be erased by a later successful run.
 
 Semgrep 1.175.0 can place dataflow fixpoint timeouts in
 `time.fixpoint_timeouts` while returning exit zero, an empty `errors` array,

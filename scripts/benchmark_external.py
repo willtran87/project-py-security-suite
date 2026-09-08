@@ -23,12 +23,14 @@ from py_security_suite.execution import governed_asset_sha256
 from py_security_suite.path_safety import read_regular_file
 
 if __package__:
+    from .validation_evidence import ValidationEvidence
     from .external_benchmark_scoring import (
         accuracy_gate,
         case_outcomes,
         protected_detection_regressions,
     )
 else:
+    from validation_evidence import ValidationEvidence
     from external_benchmark_scoring import (
         accuracy_gate,
         case_outcomes,
@@ -110,6 +112,7 @@ def score(expected: list[dict], detections: set[tuple[str, str]]) -> dict:
 
 
 def evaluate(args: argparse.Namespace) -> dict:
+    evidence = getattr(args, "evidence", None)
     lock = json.loads(args.lock.read_text(encoding="utf-8"))
     root = args.source.resolve()
     digest, members = source_digest(root)
@@ -162,6 +165,8 @@ def evaluate(args: argparse.Namespace) -> dict:
             destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_bytes(data)
         for adapter in adapters:
+            if evidence:
+                evidence.stage(f"{adapter.name}:scan", measurement_complete=False)
             print(
                 f"Measuring {adapter.name} on {len(expected)} labeled cases", flush=True
             )
@@ -225,6 +230,13 @@ def evaluate(args: argparse.Namespace) -> dict:
                 "auxiliary_executable_sha256": result.tool_run.auxiliary_executable_sha256,
                 "by_cwe": score(expected, detections),
             }
+            if evidence:
+                evidence.stage(
+                    f"{adapter.name}:completed",
+                    engines=engines,
+                    cases=case_outcomes(expected, observations),
+                    measurement_complete=False,
+                )
     return {
         "schema_version": "1.1",
         "profile": "python-source-security" if args.codeql else "bandit-semgrep",
@@ -315,6 +327,10 @@ def main() -> int:
         str(Path(args.bandit).resolve()),
         str(Path(args.semgrep).resolve()),
     )
+    args.evidence = ValidationEvidence(
+        args.output, "public benchmark; not production approval"
+    )
+    args.evidence.stage("verify-corpus", measurement_complete=False)
     result = {}
     try:
         result = evaluate(args)
@@ -333,9 +349,21 @@ def main() -> int:
                 args.baseline.read_bytes()
             ).hexdigest()
     except (OSError, ValueError, TypeError, KeyError) as exc:
-        result = {**result, "measurement_complete": False, "error": str(exc)}
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+        result = {
+            **result,
+            "measurement_complete": False,
+            "error_category": type(exc).__name__,
+        }
+        args.evidence.fail(exc)
+    result["passed"] = (
+        result["measurement_complete"]
+        and result.get("regression_passed", True)
+        and (
+            not args.require_accuracy
+            or result.get("accuracy_gate", {}).get("passed") is True
+        )
+    )
+    result = args.evidence.finish(result)
     print(
         json.dumps(
             {

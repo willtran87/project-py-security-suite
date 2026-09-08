@@ -50,6 +50,32 @@ predicate constantMatchChoice(DataFlow::Node node) {
   )
 }
 
+/** A direct constant assignment in the first matching arm dominates a nearby read.
+ * This additionally handles SSA's elimination of unreachable self-assignments.
+ * Only an unguarded literal arm with one statement and no intervening writes qualifies.
+ */
+predicate constantSelectedMatchRead(DataFlow::Node node) {
+  exists(MatchStmt branch, Case selected, int arm, Assign assignment, Name binding, Name use,
+         StmtList block, int position, int readPosition, string subject |
+    selected = branch.getCase(arm) and subject = textValue(branch.getSubject(), 0) and
+    selected.getPattern().(MatchLiteralPattern).getLiteral().(StringLiteral).isUnicode() and
+    selected.getPattern().(MatchLiteralPattern).getLiteral().(StringLiteral).getText() = subject and
+    not exists(selected.getGuard()) and
+    forall(int before | before in [0 .. arm - 1] | cannotMatch(branch.getCase(before).(Case).getPattern())) and
+    assignment = selected.getAStmt() and count(selected.getAStmt()) = 1 and
+    exists(textValue(assignment.getValue(), 0)) and binding = assignment.getATarget() and
+    binding.getVariable() instanceof FastLocalVariable and not binding.getVariable().escapes() and
+    node.asExpr() = use and use.getVariable() = binding.getVariable() and
+    not use.isDefinition() and not use.isDeletion() and
+    block.getItem(position) = branch and readPosition in [position + 1 .. position + 16] and
+    block.getItem(readPosition).contains(use) and
+    not exists(Name write, int between |
+      write.getVariable() = binding.getVariable() and (write.isDefinition() or write.isDeletion()) and
+      between in [position + 1 .. readPosition] and block.getItem(between).contains(write)
+    )
+  )
+}
+
 /** Only consecutive, discarded append(value)/pop(nonnegative-index) operations. */
 private Call mutation(StmtList block, int start, int step, Name binding) {
   step in [1 .. 16] and

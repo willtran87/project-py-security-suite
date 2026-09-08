@@ -16,11 +16,23 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import IO
 
-from .process_containment import apply_windows_job_limits as _apply_windows_job_limits, close_windows_handle as _close_windows_handle
+from .process_containment import (
+    apply_windows_job_limits as _apply_windows_job_limits,
+    close_windows_handle as _close_windows_handle,
+)
+from .platform_runtime import (
+    _darwin_shared_cache_dependency,
+    _darwin_system_runtime_record,
+    _native_runtime_components,
+)
 from .process_memory import process_tree_resident_bytes as _process_tree_resident_bytes
 from .scan_control import ScanInterrupted, StopCause, stop_cause, stop_reason
 from .path_safety import read_regular_file
-from .governed_assets import sha256_file as sha256_file, governed_asset_sha256 as governed_asset_sha256, sealed_governed_assets as sealed_governed_assets
+from .governed_assets import (
+    sha256_file as sha256_file,
+    governed_asset_sha256 as governed_asset_sha256,
+    sealed_governed_assets as sealed_governed_assets,
+)
 from .command_environment import isolated_environment as isolated_environment
 from .execution_policy import validate_governed_command_input
 from .diagnostic_safety import (
@@ -163,6 +175,7 @@ def python_runtime_closure_sha256(
     executable: str,
     *,
     include_environment: bool = False,
+    include_standard_library: bool = False,
     refresh: bool = False,
     require_native_plugin_manifest: bool = False,
 ) -> str | None:
@@ -258,7 +271,7 @@ def python_runtime_closure_sha256(
         }
     )
     native_roots.add(interpreter)
-    if include_environment:
+    if include_environment or include_standard_library:
         stdlib = Path(sysconfig.get_path("stdlib")).resolve()
         stdlib_files = sorted(
             path
@@ -287,7 +300,13 @@ def python_runtime_closure_sha256(
                 }
             )
         native_roots.update(_native_runtime_components())
-    for located in _native_dependency_closure(native_roots):
+    for located in _native_dependency_closure(
+        native_roots,
+        application_root=Path(sys.base_prefix).resolve(),
+        python_search_roots=(Path(sysconfig.get_path("platlib")) / "pywin32_system32",)
+        if os.name == "nt"
+        else (),
+    ):
         _, payload = read_regular_file(
             located,
             "Python native runtime component",
@@ -548,10 +567,19 @@ def _is_native_binary(path: Path) -> bool:
     }
 
 
-def _native_dependency_closure(roots: set[Path]) -> list[Path]:
+def _native_dependency_closure(
+    roots: set[Path],
+    *,
+    application_root: Path | None = None,
+    python_search_roots: tuple[Path, ...] = (),
+) -> list[Path]:
     pending = sorted(roots)
     observed: set[Path] = set()
-    application_root = pending[0].parent if pending else Path.cwd()
+    # Python extension modules resolve the interpreter DLL from its base install,
+    # which can differ from both the venv and the first sorted native component.
+    application_root = application_root or (
+        pending[0].parent if pending else Path.cwd()
+    )
     while pending:
         path = pending.pop()
         resolved = path.resolve()
@@ -560,20 +588,31 @@ def _native_dependency_closure(roots: set[Path]) -> list[Path]:
         if len(observed) >= 4_096:
             raise ValueError("native runtime closure exceeds 4096 files")
         observed.add(resolved)
-        for dependency in _native_dependencies(resolved, application_root):
+        dependencies = (
+            _native_dependencies(
+                resolved, application_root, python_search_roots=python_search_roots
+            )
+            if python_search_roots
+            else _native_dependencies(resolved, application_root)
+        )
+        for dependency in dependencies:
             if dependency not in observed:
                 pending.append(dependency)
     return sorted(observed)
 
 
-def _native_dependencies(path: Path, application_root: Path) -> set[Path]:
+def _native_dependencies(
+    path: Path, application_root: Path, *, python_search_roots: tuple[Path, ...] = ()
+) -> set[Path]:
     try:
         with path.open("rb") as handle:
             magic = handle.read(4)
     except OSError as exc:
         raise ValueError(f"native runtime component became unreadable: {path}") from exc
     if magic[:2] == b"MZ":
-        return _pe_dependencies(path, application_root)
+        return _pe_dependencies(
+            path, application_root, python_search_roots=python_search_roots
+        )
     if magic == b"\x7fELF":
         return _elf_dependencies(path, application_root)
     if magic in {
@@ -587,7 +626,7 @@ def _native_dependencies(path: Path, application_root: Path) -> set[Path]:
     return set()
 
 
-def _pe_dependencies(path: Path, application_root: Path) -> set[Path]:  # pragma: no cover  # fmt: skip
+def _pe_dependencies(path: Path, application_root: Path, *, python_search_roots: tuple[Path, ...] = ()) -> set[Path]:  # pragma: no cover  # fmt: skip
     import pefile  # type: ignore[import-untyped]
 
     try:
@@ -616,7 +655,15 @@ def _pe_dependencies(path: Path, application_root: Path) -> set[Path]:  # pragma
     windows = Path(
         os.environ.get("SYSTEMROOT") or os.environ.get("WINDIR") or "C:/Windows"
     ).resolve()
-    roots = (path.parent, application_root, windows / "System32", windows)
+    # pywin32's installed bootstrap adds pywin32_system32 to the DLL search path.
+    # These additional roots are supplied only by Python-environment closure checks.
+    roots = (
+        path.parent,
+        application_root,
+        *python_search_roots,
+        windows / "System32",
+        windows,
+    )
     api_sets = ("api-ms-", "ext-ms-")
     return _resolve_native_names(names, roots, api_set_prefixes=api_sets) | (
         _resolve_native_names(
@@ -695,58 +742,6 @@ def _macho_dependencies(path: Path, application_root: Path) -> set[Path]:  # pra
     return resolved
 
 
-def _darwin_shared_cache_dependency(name: str) -> bool:
-    """Identify Apple system libraries supplied by the sealed dyld cache."""
-    return sys.platform == "darwin" and name.startswith(
-        ("/System/Library/", "/usr/lib/")
-    )
-
-
-def _darwin_system_runtime_record() -> dict[str, object] | None:  # pragma: no cover
-    """Bind cache-resident Mach-O dependencies to the sealed OS build identity."""
-    if sys.platform != "darwin":
-        return None
-    version_files = (
-        Path("/System/Library/CoreServices/SystemVersion.plist"),
-        Path("/System/Library/CoreServices/SystemVersionCompat.plist"),
-    )
-    identities: list[dict[str, object]] = []
-    total_bytes = 0
-    for path in version_files:
-        if not path.is_file():
-            continue
-        _, payload = read_regular_file(
-            path,
-            "Darwin sealed system version identity",
-            maximum_bytes=1024 * 1024,
-        )
-        total_bytes += len(payload)
-        identities.append(
-            {
-                "path": str(path),
-                "sha256": hashlib.sha256(payload).hexdigest(),
-                "size": len(payload),
-            }
-        )
-    if not identities:
-        raise ValueError("Darwin sealed system version identity is unavailable")
-    kernel = os.uname()
-    identity = {
-        "kernel": {
-            "machine": kernel.machine,
-            "release": kernel.release,
-            "sysname": kernel.sysname,
-            "version": kernel.version,
-        },
-        "sealed_system_versions": identities,
-    }
-    return {
-        "path": "<darwin-sealed-system-runtime>",
-        "sha256": hashlib.sha256(canonical_bytes(identity)).hexdigest(),
-        "size": total_bytes,
-    }
-
-
 def _resolve_native_names(
     names: set[str],
     roots: tuple[Path, ...] | list[Path],
@@ -778,38 +773,6 @@ def _resolve_native_names(
     return result
 
 
-def _native_runtime_components() -> list[Path]:
-    """Return native libraries that form the interpreter's platform closure."""
-    candidates: set[Path] = set()
-    prefixes = {Path(sys.prefix).resolve(), Path(sys.base_prefix).resolve()}
-    executable_parent = Path(sys.executable).resolve().parent
-    for root in prefixes | {executable_parent}:
-        for pattern in ("*.dll", "*.pyd", "libpython*.so*", "libpython*.dylib"):
-            candidates.update(path.resolve() for path in root.glob(pattern))
-        native_directory = root / "DLLs"
-        if native_directory.is_dir():
-            candidates.update(
-                path.resolve()
-                for pattern in ("*.dll", "*.pyd")
-                for path in native_directory.glob(pattern)
-            )
-    library_directory = sysconfig.get_config_var("LIBDIR")
-    library_name = sysconfig.get_config_var("LDLIBRARY")
-    if library_directory and library_name:
-        candidates.add((Path(str(library_directory)) / str(library_name)).resolve())
-    if os.name == "nt":
-        windows = Path(
-            os.environ.get("SYSTEMROOT") or os.environ.get("WINDIR") or "C:/Windows"
-        )
-        system = windows / "System32"
-        candidates.update(
-            path.resolve()
-            for name in ("ucrtbase.dll", "vcruntime140.dll", "vcruntime140_1.dll")
-            if (path := system / name).is_file()
-        )
-    return sorted(path for path in candidates if path.is_file())
-
-
 def resolve_executable(executable: str) -> str | None:
     candidate = Path(executable)
     if candidate.parent != Path(".") or candidate.is_absolute():
@@ -826,7 +789,6 @@ def resolve_executable(executable: str) -> str | None:
     # deterministic fallback so doctor and scan resolve tools consistently.
     interpreter_bin = Path(sys.executable).resolve().parent
     return shutil.which(executable, path=str(interpreter_bin))
-
 
 
 def _decode_and_cap(value: bytes, maximum: int) -> tuple[str, bool]:
@@ -893,7 +855,9 @@ def run_command(
         process_environment = isolated_environment(
             environment.extra if environment else None,
             executable=command[0] if command else None,
-            auxiliary_executables=environment.auxiliary_executables if environment else (),
+            auxiliary_executables=environment.auxiliary_executables
+            if environment
+            else (),
         )
         private_locations = {
             "HOME": private_root,
@@ -999,7 +963,9 @@ def run_command(
                 if stop_reason() or time.monotonic() >= deadline:
                     interruption = stop_reason()
                     interruption_cause = stop_cause(interruption)
-                    timed_out = not interruption or interruption_cause == StopCause.DEADLINE
+                    timed_out = (
+                        not interruption or interruption_cause == StopCause.DEADLINE
+                    )
                     terminated = terminate_tree()
                     break
                 if (
