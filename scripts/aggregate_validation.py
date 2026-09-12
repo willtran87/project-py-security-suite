@@ -145,6 +145,7 @@ def verify_benchmark(report: dict, baseline: dict, policy: dict) -> dict:
     for name in ("source_sha256", "labels_sha256"):
         require(report["upstream"][name] == baseline[name], "baseline corpus mismatch")
     totals = {}
+    regression_failures = []
     for engine in [*engines, "combined"]:
         observed = (
             report["combined_by_cwe"]
@@ -199,12 +200,13 @@ def verify_benchmark(report: dict, baseline: dict, policy: dict) -> dict:
                 ceilings = baseline["engines"][engine][cwe]
                 require(
                     all(
-                        type(ceilings.get(key)) is int
-                        and 0 <= values[key] <= ceilings[key]
+                        type(ceilings.get(key)) is int and ceilings[key] >= 0
                         for key in ("fp", "fn")
                     ),
-                    "regression ceiling exceeded",
+                    "invalid regression ceiling",
                 )
+                if any(values[key] > ceilings[key] for key in ("fp", "fn")):
+                    regression_failures.append(f"{engine}:{cwe}")
         if engine == "combined":
             totals = {
                 key: sum(v[key] for v in counts.values())
@@ -222,8 +224,11 @@ def verify_benchmark(report: dict, baseline: dict, policy: dict) -> dict:
         "protected detection lost",
     )
     require(
-        report.get("regression_passed") is True and report.get("regressions") == [],
-        "regression gate failed",
+        report.get("regression_passed") is (not regression_failures)
+        and isinstance(report.get("regressions"), list)
+        and all(isinstance(value, str) for value in report["regressions"])
+        and sorted(report["regressions"]) == sorted(regression_failures),
+        "regression result disagrees with native evidence and baseline",
     )
     gate = accuracy_gate(report, policy)
     require(report["accuracy_gate"] == gate, "accuracy result disagrees with policy")
@@ -232,6 +237,8 @@ def verify_benchmark(report: dict, baseline: dict, policy: dict) -> dict:
         "by_cwe": report["combined_by_cwe"],
         "accuracy_passed": gate["passed"],
         "accuracy_failures": gate["failures"],
+        "regression_passed": not regression_failures,
+        "regression_failures": sorted(regression_failures),
         "protected_detections": sum(
             len(names)
             for categories in baseline["protected_detections"].values()
@@ -425,7 +432,7 @@ def aggregate(args: argparse.Namespace) -> dict:
         args.benchmark,
         artifact,
         "benchmark",
-        measured["accuracy_passed"],
+        measured["accuracy_passed"] and measured["regression_passed"],
     )
     verify_acceptance(reports["acceptance"], args.acceptance)
     verify_receipt(
@@ -454,7 +461,7 @@ def aggregate(args: argparse.Namespace) -> dict:
         "schema_version": "1.0",
         "scope": "verified local evidence; not independent production approval",
         "evidence_verified": True,
-        "passed": measured["accuracy_passed"],
+        "passed": measured["accuracy_passed"] and measured["regression_passed"],
         "artifact": artifact,
         "native_cases": len(cases),
         "known_gap_proof_checks": len(native["known_gap_proof_safety"]),
@@ -478,6 +485,8 @@ def markdown(report: dict) -> str:
         f"Native regression cases: **{report['native_cases']} passing**. Installed acceptance: **{report['acceptance_scenarios']} passing**. Runtime qualification: **{report['runtime_repetitions']} complete repetitions**. Protected detections: **{report['protected_detections']} retained**.",
         "",
         f"Strict accuracy gate: **{'PASS' if report['accuracy_passed'] else 'FAIL'}**. Known gaps with proof rejection checks: **{report['known_gap_proof_checks']}**; these are not successful detections.",
+        "",
+        f"Regression gate: **{'PASS' if report['regression_passed'] else 'FAIL'}**. Exceeded baselines: {', '.join(report['regression_failures']) or 'none'}.",
         "",
         "| CWE | TP | FP | FN | TN | Precision | Recall |",
         "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",

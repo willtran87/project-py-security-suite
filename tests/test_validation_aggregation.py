@@ -101,6 +101,29 @@ def test_valid_evidence_keeps_accuracy_failure_visible(measurement):
     assert result["protected_detections"] == 1
 
 
+def test_consistent_regression_failure_is_published_as_failure(measurement):
+    report, baseline, _ = measurement
+    baseline["engines"]["codeql"]["CWE-79"]["fp"] = 0
+    report["regression_passed"] = False
+    report["regressions"] = ["codeql:CWE-79"]
+    result = aggregation.verify_benchmark(*measurement)
+    assert result["regression_passed"] is False
+    assert result["regression_failures"] == ["codeql:CWE-79"]
+    assert result["totals"]["fp"] == 1
+
+
+@pytest.mark.parametrize("claims", [[], ["codeql:CWE-79"] * 2, ["bandit:CWE-79"]])
+def test_missing_duplicate_and_invented_regression_failures_are_rejected(
+    measurement, claims
+):
+    report, baseline, _ = measurement
+    baseline["engines"]["codeql"]["CWE-79"]["fp"] = 0
+    report["regression_passed"] = False
+    report["regressions"] = claims
+    with pytest.raises(ValueError, match="regression result disagrees"):
+        aggregation.verify_benchmark(*measurement)
+
+
 @pytest.mark.parametrize(
     "change",
     [

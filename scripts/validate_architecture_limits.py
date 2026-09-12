@@ -42,7 +42,7 @@ _FUNCTION_LINE_LIMITS = {
         "src/py_security_suite/industry_assurance.py",
         "_benchmark_reproducibility_gaps",
     ): 490,
-    ("src/py_security_suite/orchestrator.py", "_scan_sealed_project"): 544,
+    ("src/py_security_suite/orchestrator.py", "_scan_sealed_project"): 523,
     ("src/py_security_suite/risk_paths.py", "build_risk_paths"): 421,
     ("src/py_security_suite/cli.py", "build_parser"): 917,
     ("src/py_security_suite/config.py", "_default_mapping"): 627,
@@ -94,7 +94,7 @@ _FUNCTION_DECISION_LIMITS = {
         "src/py_security_suite/semantic_coverage.py",
         "semantic_language_coverage_artifact",
     ): 143,
-    ("src/py_security_suite/orchestrator.py", "_scan_sealed_project"): 59,
+    ("src/py_security_suite/orchestrator.py", "_scan_sealed_project"): 56,
     (
         "src/py_security_suite/industry_assurance.py",
         "_assurance_case_assessment",

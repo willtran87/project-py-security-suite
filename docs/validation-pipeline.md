@@ -115,6 +115,12 @@ Semgrep's default test-directory exclusions therefore cannot silently reduce the
 declared scan inventory. Native errors, timeouts and missing files still make a
 scan incomplete. The mirror is removed after parsing the native result.
 
+Post-scan verification hashes both the original source and the sealed scan copy.
+Cancellation interrupts this work rather than forcing another full repository
+read. An interrupted verification records source integrity as unverified and
+keeps the outcome incomplete. The report's own checksums can still be verified;
+they do not establish an unverified source identity or authorize release.
+
 ```mermaid
 flowchart TD
     S[Sealed source inventory] --> M[Private Python mirror]
@@ -277,8 +283,11 @@ measurements for the same wheel. Supply the actual evidence paths:
 python scripts/aggregate_validation.py --wheel <candidate.whl> --native <native.json> --runtime <runtime.json> --benchmark <benchmark.json> --benchmark-receipt <benchmark-wheel.json> --acceptance <acceptance.json> --acceptance-receipt <acceptance-wheel.json> --baseline tests/fixtures/external-benchmark-source-security.baseline.json --policy tests/fixtures/external-benchmark.accuracy-policy.json --output <aggregate.json> --markdown docs/validation-results.md
 ```
 
-A fully verified measurement that fails strict accuracy still produces its table
-and exits with status 1. Rejected evidence replaces any previous generated page
+A fully verified measurement that fails strict accuracy or a regression ceiling
+still produces its table, identifies the failed gates and exits with status 1.
+The aggregator recalculates regression failures from case counts and requires the
+reported failure list to agree; missing, duplicate or invented failures are rejected.
+Protected detections must still be retained. Rejected evidence replaces any previous generated page
 with an explicit rejection notice, preventing stale success from remaining
 published. Input files cannot be selected as outputs. The resulting
 [measured results page](validation-results.md) includes input digests.

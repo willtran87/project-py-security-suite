@@ -6,6 +6,10 @@ exact = true
 forbid_circular_dependencies = false
 
 [[modules]]
+path = "py_security_suite.scan_finalization"
+depends_on = ["py_security_suite.inventory", "py_security_suite.models", "py_security_suite.scan_control"]
+
+[[modules]]
 path = "py_security_suite.platform_runtime"
 depends_on = ["py_security_suite.strict_json", "py_security_suite.path_safety"]
 
@@ -439,7 +443,7 @@ depends_on = ["py_security_suite.strict_json", "py_security_suite.passport", "py
 
 [[modules]]
 path = "py_security_suite.orchestrator"
-depends_on = ["py_security_suite.source_assurance", "py_security_suite.effectiveness", "py_security_suite.runtime_surface", "py_security_suite.structural_synthesis", "py_security_suite.capability_manifest", "py_security_suite.requirements_coverage", "py_security_suite.reports", "py_security_suite.semantic_coverage", "py_security_suite.version", "py_security_suite.trust_catalog", "py_security_suite.risk_paths", "py_security_suite.risk_intelligence", "py_security_suite.adapters", "py_security_suite.dependency_surface", "py_security_suite.isolation_probe", "py_security_suite.trust_policy", "py_security_suite.governance", "py_security_suite.runtime_reachability", "py_security_suite.config", "py_security_suite.data_exposure", "py_security_suite.inventory", "py_security_suite.source_context", "py_security_suite.advanced_analysis", "py_security_suite.finding_delta", "py_security_suite.evidence_fusion", "py_security_suite.policy", "py_security_suite.runtime_trace", "py_security_suite.graph_analysis", "py_security_suite.models", "py_security_suite.trust_attestation", "py_security_suite.correlation", "py_security_suite.path_safety", "py_security_suite.finding_validation", "py_security_suite.domain_assurance", "py_security_suite.execution", "py_security_suite.llm_adversarial", "py_security_suite.portfolio_health", "py_security_suite.admission", "py_security_suite.boundary_graph", "py_security_suite.closure_plan", "py_security_suite.scan_scheduler", "py_security_suite.scan_control", "py_security_suite.source_index", "py_security_suite.scan_governance", "py_security_suite.scan_enrichment"]
+depends_on = ["py_security_suite.source_assurance", "py_security_suite.effectiveness", "py_security_suite.runtime_surface", "py_security_suite.structural_synthesis", "py_security_suite.capability_manifest", "py_security_suite.requirements_coverage", "py_security_suite.reports", "py_security_suite.semantic_coverage", "py_security_suite.version", "py_security_suite.trust_catalog", "py_security_suite.risk_paths", "py_security_suite.risk_intelligence", "py_security_suite.adapters", "py_security_suite.dependency_surface", "py_security_suite.isolation_probe", "py_security_suite.trust_policy", "py_security_suite.governance", "py_security_suite.runtime_reachability", "py_security_suite.config", "py_security_suite.data_exposure", "py_security_suite.inventory", "py_security_suite.source_context", "py_security_suite.advanced_analysis", "py_security_suite.finding_delta", "py_security_suite.evidence_fusion", "py_security_suite.policy", "py_security_suite.runtime_trace", "py_security_suite.graph_analysis", "py_security_suite.models", "py_security_suite.trust_attestation", "py_security_suite.correlation", "py_security_suite.path_safety", "py_security_suite.finding_validation", "py_security_suite.domain_assurance", "py_security_suite.execution", "py_security_suite.llm_adversarial", "py_security_suite.portfolio_health", "py_security_suite.admission", "py_security_suite.boundary_graph", "py_security_suite.closure_plan", "py_security_suite.scan_scheduler", "py_security_suite.scan_control", "py_security_suite.source_index", "py_security_suite.scan_governance", "py_security_suite.scan_enrichment", "py_security_suite.scan_finalization"]
 
 [[modules]]
 path = "py_security_suite.organization_policy_attestation"

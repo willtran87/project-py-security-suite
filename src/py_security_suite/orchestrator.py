@@ -12,6 +12,7 @@ from datetime import timedelta
 from typing import Any
 
 from .scan_governance import production_state_errors
+from .scan_finalization import verify_final_source
 from .source_index import source_analysis_session
 from .scan_scheduler import run_adapters as _run_adapters
 from contextlib import suppress
@@ -46,7 +47,6 @@ from .evidence_fusion import build_evidence_fusion
 from .inventory import (
     inventory_target_with_evidence,
     sealed_source_snapshot,
-    source_snapshot,
 )
 from .isolation_probe import probe_isolation_boundary
 from .models import (
@@ -598,29 +598,8 @@ def _scan_sealed_project(
         )
     context_errors.extend(production_state_errors(config.profile, derived_artifacts))
 
-    (
-        inventory.source_sha256_after,
-        inventory.hashed_files_after,
-        inventory.hashed_bytes_after,
-    ) = source_snapshot(target, excluded_paths=source_exclusions, cancellable=False)
-    snapshot_after = source_snapshot(scan_target, cancellable=False)
-    snapshot_integrity_verified = snapshot_after == (
-        inventory.source_sha256,
-        inventory.hashed_files,
-        inventory.hashed_bytes,
-    )
-    if not snapshot_integrity_verified:
-        context_errors.append("sealed scan snapshot changed during scanner execution")
-    if inventory.skipped_symlinks:
-        context_errors.append(
-            f"source inventory rejected {inventory.skipped_symlinks} symbolic link(s)"
-        )
-    inventory.source_integrity_verified = (
-        inventory.source_sha256 == inventory.source_sha256_after
-        and inventory.hashed_files == inventory.hashed_files_after
-        and inventory.hashed_bytes == inventory.hashed_bytes_after
-        and snapshot_integrity_verified
-        and inventory.skipped_symlinks == 0
+    context_errors.extend(
+        verify_final_source(inventory, target, scan_target, source_exclusions)
     )
 
     if stop_reason():

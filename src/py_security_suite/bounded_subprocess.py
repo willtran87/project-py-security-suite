@@ -5,7 +5,7 @@ import math
 import os
 import signal
 import subprocess
-import sys
+import sys as sys  # Keep the Windows launcher dependency available on every platform.
 import threading
 import time
 from io import BufferedReader
