@@ -36,8 +36,11 @@ def test_parent_exit_cannot_leave_pipe_holding_children_or_reader_threads(
         assert result.returncode == 0
         assert time.monotonic() - started < 5
         child_pid = int(marker.read_text())
-        if psutil.pid_exists(child_pid):
+        try:
             assert psutil.Process(child_pid).status() == psutil.STATUS_ZOMBIE
+        except psutil.NoSuchProcess:
+            # Successful asynchronous cleanup may finish during the status read.
+            pass
         assert {thread.ident for thread in threading.enumerate()} == before
     finally:
         if marker.exists():
