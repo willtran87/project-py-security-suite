@@ -5,11 +5,13 @@ and production approval. Passing one does not establish the others.
 
 ### Native flow, complete inventory and production cache isolation — 2026-09-12 { #current-validation-increment }
 
-The current native CodeQL regression corpus has **244 passing cases**. All 15
+The current native CodeQL regression corpus has **257 passing cases**. All 15
 previously recorded collection-mutation misses are now positive regression cases,
 with 15 paired safe overwrite controls. Additional paired cases cover Flask
 session trust boundaries, exact ConfigParser section/key flow, and imported
-elementpath XPath calls. These are developer regressions, not independent accuracy
+elementpath XPath calls. Thirteen additional XPath controls distinguish a checked
+string-literal hole from an unguarded value, formatting conversion, custom object,
+wrong branch or unrelated check. These are developer regressions, not independent accuracy
 measurements. The public benchmark's labels, protected detections and strict
 accuracy thresholds remain unchanged.
 
@@ -20,29 +22,89 @@ rendering removes two observed native Semgrep solver timeouts; the local self-sc
 completes all **502 Python files with zero native errors**. A narrow live Bandit
 proof retains the native evidence when excluding interpolation-free SQL f-strings.
 
-CI repairs preserve POSIX virtual-environment interpreter paths, select Windows
-scanner executable suffixes, handle process-group cleanup permission races, and
-make the pinned corpus digest independent of Windows path sorting. The corpus
-revision and labels are unchanged. These repairs require fresh remote CI results
-before the previous failed jobs can be considered resolved.
+CI repairs canonicalize source paths while preserving POSIX virtual-environment
+interpreter identity, handle process-group cleanup permission races, and make the
+pinned corpus digest independent of Windows path sorting. CodeQL's JVM now fits
+the existing Linux address-space limit. Short private runtime roots also support
+native Semgrep sockets under nested Windows process supervision. The corpus
+revision, labels, scanner requirements and resource limits are unchanged.
 
-The local Python suite passes **1,962 tests and 499 subtests**, with 21 skips.
-Ruff, mypy, Pyright with the project interpreter, public API compatibility,
-architecture limits and cycles, changed-workflow lint, strict MkDocs and the Pages
-artifact audit pass. These checks do not replace the running exact-wheel benchmark.
+Windows, macOS and Linux tests, installed acceptance, dependency audits,
+containment and branch-coverage jobs pass on revision `08b33ac`. Quality checks
+and the production-container self-scan pass too. Complete current results are
+tracked in [CI](https://github.com/willtran87/project-py-security-suite/actions/runs/34696495722)
+and [deep assurance](https://github.com/willtran87/project-py-security-suite/actions/runs/34696495540).
+CI is complete: native detection regressions and both installed CodeQL stages
+also pass. Its overall required gate remains failed because the public detection
+benchmark fails; every other CI job passes. Deep assurance passes its production
+self-scan, all six mutation shards, mutation aggregate and required gate.
+The separate [CodeQL analysis](https://github.com/willtran87/project-py-security-suite/actions/runs/34696495535)
+and [parser fuzzing](https://github.com/willtran87/project-py-security-suite/actions/runs/34696495533)
+workflows also pass on this revision.
+The MCP dependency fix is locked on this branch; the three high-severity
+default-branch alerts remain open until the fix reaches main.
 
-The capacity driver now measures real scans through report verification. The first
-frozen full-repository pilot exceeded its 300-second scan deadline and produced a
+The final-wheel measurement retains all **359 protected detections**, with
+**356 TP, 125 FP, 96 FN and 653 TN**. That is 33 more
+true positives and seven more false positives than the historical candidate.
+Strict per-CWE accuracy still fails, as do the unchanged CodeQL path-traversal and
+XPath false-positive regression ceilings. These failures remain release blockers;
+artifact verification does not convert a failed detection result into a pass.
+
+The local Python suite passes **1,986 tests and 504 subtests**, with 22 skips.
+Ruff, mypy, Pyright, architecture limits and cycles, strict MkDocs and the Pages
+artifact audit pass. A remote Windows cleanup test exposed an observation race:
+the child process could disappear between its existence check and status read.
+The test now accepts that successful asynchronous cleanup while still rejecting
+a live child or leaked reader threads; the latest remote Windows suite passes.
+
+The capacity driver measures real scans through report verification. The first
+frozen full-repository pilot exceeded its 300-second scan deadline and retained a
 verifiable incomplete report after 352.166 seconds; no native scanner completed.
-This failed pilot is retained under `.artifacts/release-repair/capacity-probe2`.
-It establishes no passing capacity limit. Fixed repetition and concurrent-load
-qualification must pass before an operating range is declared.
+Later measurements use a predeclared 900-second budget and the same frozen
+4,200-file, 51,247,813-byte repository snapshot. The final-wheel qualification
+**passes all nine ordinary scans and its scanner-phase cancellation check**.
+Every ordinary scan completes Bandit and Semgrep and verifies its report, with
+stable finding identities and unchanged source, configuration and package bytes.
+Individual ordinary scans take 443.532–536.891 seconds. This qualifies the recorded
+Windows diagnostic workload with these two scanners; the
+[operating-range record](production-evaluation.md#measure-the-supported-operating-range)
+states the measured resource bounds and remaining deployment limits.
+
+Cancellation previously waited 50.112 seconds for unconditional final source
+hashing. Making that verification interruptible reduced cancellation-to-verified-
+report time to **12.580 seconds** in the final qualification on the same source snapshot. The report remains
+`INCOMPLETE` and source identity remains unverified; an interrupted check is not
+reported as an observed mutation. This single cancellation observation is not a
+latency percentile or production capacity approval.
+
+A separate direct probe waits for a native Bandit scan process to accumulate at
+least one CPU-second before requesting cancellation. It confirms that process
+terminates and verifies the incomplete report **6.370 seconds** after cancellation.
+The installed wheel remains unchanged and source integrity remains unverified.
+
+All **five installed-wheel acceptance scenarios pass**, including native CodeQL
+positive controls and partial-analysis evidence retention. The final benchmark and
+acceptance receipts verify wheel SHA-256
+`3b8a7848e4be8e8a18f62d44461789d304502e1c5b15306cafadbab50bcd016d`
+before and after execution. The versioned aggregator verifies all supplied records
+with `evidence_verified: true` and correctly retains `passed: false` because the
+accuracy and regression gates fail. The [generated measurements](validation-results.md)
+now describe this final wheel and bind the source, policy, baseline and evidence
+digests. Zero remaining entries in the separately tracked mutation-gap corpus do
+not mean zero detection gaps in the public benchmark.
 
 The [pipeline and diagrams](validation-pipeline.md) document the execution boundary
 and capacity procedure. Independent holdout evaluation still requires an evaluator
-who did not develop these detectors. Until refreshed exact-wheel receipts and
-aggregation are completed, [generated measurements](validation-results.md) refer
-to the historical candidate below, not the current source changes.
+who did not develop these detectors. The [evaluation work package](production-evaluation.md)
+defines the application selection, labeling and approval evidence still required.
+Final records are retained under `.artifacts/release-repair/`: `benchmark9.json`,
+`benchmark9-wheel.json`, `acceptance9.json`, `acceptance9-wheel.json`,
+`native-context-final.json`, `runtime2.json`, `verification-final.json` and
+`capacity9-final.json`. The direct active-process probe is retained in
+`active-cancel9.json`, with its probe source digest and unique report archive.
+Receipts name their unique archives. Earlier failed and interrupted runs remain
+retained separately and are not substituted for passing evidence.
 
 ### Historical: bytecode isolation, import identity and verified evidence — 2026-09-08
 

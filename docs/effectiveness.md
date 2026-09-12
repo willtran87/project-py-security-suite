@@ -4,7 +4,7 @@ See [measured acceptance](professional-acceptance.md) for the latest completed
 native detection measurements and [validation pipeline](validation-pipeline.md)
 for exact-wheel verification, failed-run retention and runtime qualification.
 
-Last reviewed: 2026-09-07
+Last reviewed: 2026-09-12
 
 ## Executable detection regression gate
 
@@ -33,9 +33,11 @@ not affect the equality check. This is a regression check, not a reliability SLA
 The separate CodeQL gate compiles the bundled global taint queries and selected
 upstream queries against credential, LDAP, HTML, path and XPath flows. Positive
 findings must retain SARIF path traces. Controls cover identity helpers, real
-escaping, source-verified imported factories and bounded value proofs. Known
-unsafe mutation misses are tracked separately and must reject constant-value
-proofs; they are not counted as detected vulnerabilities. CI requires both lanes
+escaping, source-verified imported factories and bounded value proofs. All 15
+previously tracked mutation misses now pass as positive regressions, paired with
+safe overwrite controls. The current CodeQL corpus has 257 passing cases. Future
+known-gap records must still reject unsafe constant-value proofs and cannot be
+counted as successful detections. CI requires both lanes
 through `detection-regressions` and retains their JSON results.
 
 The Semgrep rules no longer trust arbitrary function names containing `sanitize`,
@@ -70,6 +72,15 @@ The supplemental queries compare the original and refined native flows; an
 exclusion requires an explicit result showing no refined flow to any node at
 the same sink coordinates. No absence-of-results heuristic is used.
 
+XPath refinement also supports an apostrophe-rejection guard on the same SSA
+value and control-flow branch when that value occupies the sole, unconverted
+hole of a supported quoted attribute comparison. The value must have a known
+string origin. An unrelated check, wrong branch, custom object, formatting
+conversion, unquoted hole or unsupported expression retains the native finding.
+This context proof does not establish general XPath sanitization. Public XPath
+accuracy and false-positive regression gates still fail; developer controls and
+the [public measurements](validation-results.md) remain separate evidence.
+
 Live scans require complete extraction, successful invocations, unchanged assets,
 and an exact rule/file/line/column match. The original finding, resolved and
 redacted through the normal parser, and its native comparison record are retained
@@ -81,9 +92,12 @@ arbitrary Python reflection or unmodeled runtime behavior.
 Bandit and Semgrep reported native analysis errors also make the tool incomplete
 while preserving valid findings. The gate tests a mixture of malformed source and
 detectable vulnerabilities through the actual Bandit adapter; unit tests cover
-both adapters' partial-result contracts. Counts describe errors reported by the
-engine, not an independent proof that every file was analyzed. Diagnostics retain
-counts rather than raw scanner error contents.
+both adapters' partial-result contracts. Native inventory reconciliation also
+requires every maintained Python file in the private scan mirror to appear in the
+engine's analyzed-file inventory. Native errors and missing files make coverage
+incomplete. This verifies the engine's reported coverage, not the correctness of
+every analysis it performed. Diagnostics retain counts rather than raw scanner
+error contents.
 
 Semgrep dataflow fixpoint timeouts in `time.fixpoint_timeouts` also count as
 analysis failures, even with exit zero and an empty main error list. The

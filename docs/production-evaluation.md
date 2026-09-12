@@ -48,9 +48,11 @@ repository size or a latency percentile.
 
 The current increment has local regression coverage for interrupted checkpoints,
 concurrent archive creation and an injected disk-full write failure. These are
-functional controls, not completed native load or capacity measurements. Real
-capacity limits and remote release jobs remain to be established on the intended
-deployment hosts. `scripts/qualify_native_capacity.py` now provides fixed serial
+functional controls, not completed native load or capacity measurements. Capacity
+limits must be measured on the intended deployment hosts. Cross-platform CI and
+the Linux production-container self-scan are recorded separately in the
+[current acceptance evidence](professional-acceptance.md#current-validation-increment).
+`scripts/qualify_native_capacity.py` now provides fixed serial
 and concurrent real-scanner waves, report verification, resource measurements and
 a native-phase cancellation check. Run it with an installed wheel, frozen source,
 explicit scanner configuration and predeclared timeout/resource budgets. The first
@@ -61,6 +63,57 @@ The host capacity driver explicitly records missing external network-isolation
 attestation. It accepts that one policy reason for diagnostic timing only;
 missing scanner evidence, partial coverage, other incomplete reasons and invalid
 reports still fail. These host measurements never confer production qualification.
+
+For the current full-repository measurement, the frozen input contains 4,200 files
+and 51,247,813 bytes. The explicit configuration selects Bandit and Semgrep only,
+with two scanner workers per scan, a 900-second scan deadline and 180-second
+per-tool deadlines. Three serial waves and three waves of two concurrent scans
+are required, followed by scanner-phase cancellation. The wave budgets
+are 2 GiB sampled process-tree memory and 1 GiB private scratch, and cancellation
+must produce a verified incomplete report within 15 seconds. These inputs and
+budgets were fixed before the run; an unfinished or failed repetition cannot
+establish a supported range.
+
+The final wheel passes this complete diagnostic qualification. All nine ordinary
+scans complete both engines, preserve source integrity, verify their reports and
+produce identical finding identities. Source, configuration and installed package
+bytes remain unchanged. Scanner-phase cancellation takes 12.580 seconds through
+report verification and leaves source identity explicitly unverified.
+
+| Concurrent scans | Complete waves | Wave wall time (seconds) | Peak observed RSS (MiB) | Peak observed private scratch (MiB) |
+| --- | ---: | --- | ---: | ---: |
+| 1 | 3 | 455.321–541.816 | 865.0 | 66.9 |
+| 2 | 3 | 450.150–478.137 | 1,623.8 | 133.9 |
+
+Wave time includes worker supervision and startup; individual ordinary scans take
+443.532–536.891 seconds. The ten retained reports occupy approximately 867.7 MiB,
+separately from private scratch and external runtime caches. Sampling includes a
+100 ms pause plus collection overhead, so peaks between observations may be missed.
+
+The record is `.artifacts/release-repair/capacity9-final.json`, run
+`8ffbb1d16ced42778a29654653660bd5`, SHA-256
+`8756b7ce2efd8c5a479fa6d5653fd350121ccc1cf1f77af439620f8d2d5278d7`.
+It binds the same wheel as the [generated validation results](validation-results.md).
+The earlier reference wheel completed its nine ordinary scans but failed its
+47.145-second cancellation check; that failed qualification remains retained in
+`capacity2-final.json` and is not part of this passing result.
+
+A separate direct probe observes the actual native Bandit scan command after at
+least one CPU-second, requests cancellation, confirms the observed process has
+terminated and verifies the resulting incomplete report. Cancellation through
+report verification takes 6.370 seconds; the same installed wheel remains intact
+and post-scan source identity remains unverified. This distinguishes active-engine
+cancellation from the capacity driver's scanner-phase callback. The local record
+is `active-cancel9.json`, SHA-256
+`2530c2398017e17e946523cc8dbe127261248cc1ebec389f8a4fda7686e6206a`;
+it binds the retained `probe_active_cancellation.py` source by digest. This one
+Bandit observation does not qualify every engine or cancellation phase.
+
+The recorded host is Windows 10.0.19045 with Python 3.14.5. Other validation work
+is concurrent on this host, and neither the OS filesystem cache nor storage
+hardware is reset between repetitions. Even a passing run establishes only the
+recorded diagnostic workload, not cold-cache latency, a service percentile, all
+production scanners, Linux concurrency or a maximum supported repository size.
 
 ## Keep release decisions explicit
 

@@ -126,8 +126,8 @@ flowchart TD
     S[Sealed source inventory] --> M[Private Python mirror]
     M --> E[Isolated native execution]
     E --> N[Parse native findings and errors]
-    N --> C{Every expected file analyzed?}
-    C -->|Yes, no native errors| R[Complete scanner result]
+    N --> C{Full coverage and no native errors?}
+    C -->|Yes| R[Complete scanner result]
     C -->|No| I[Incomplete result with retained findings]
 ```
 
@@ -159,7 +159,7 @@ flowchart TD
     M --> C[Cancel a separate native scan]
     C --> V[Verify incomplete report and unchanged inputs]
     V --> G{All runs and resource limits pass?}
-    G -->|Yes| P[Recorded host and profile qualified]
+    G -->|Yes| P[Recorded diagnostic workload passes]
     G -->|No| F[Retain failed qualification evidence]
 ```
 
@@ -271,7 +271,7 @@ flowchart TD
     P[Unchanged baseline and accuracy policy] --> C
     C --> J[Write aggregate JSON]
     J --> M[Generate measured results page]
-    M --> G{Strict accuracy passes?}
+    M --> G{Strict accuracy and regression gates pass?}
     G -->|No| F[Publish measured limits and exit with failure]
     G -->|Yes| L[Local gates pass; independent review remains separate]
 ```
