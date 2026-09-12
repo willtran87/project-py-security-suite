@@ -1,6 +1,11 @@
 from __future__ import annotations
 
-from .source_index import SourceLimitError, parse_python, read_python_source, source_files
+from .source_index import (
+    SourceLimitError,
+    parse_python,
+    read_python_source,
+    source_files,
+)
 
 import ast
 import json
@@ -2330,7 +2335,11 @@ def _integer_set(value: Any) -> set[int]:
 
 
 def _inventory(target: Path) -> dict[str, Any]:
-    python_files = [path for path in source_files(target, _SKIP_DIRECTORIES) if path.suffix.casefold() == ".py"]
+    python_files = [
+        path
+        for path in source_files(target, _SKIP_DIRECTORIES)
+        if path.suffix.casefold() == ".py"
+    ]
     selected = python_files[:_MAX_FILES]
     sink_surfaces: list[dict[str, Any]] = []
     sdk_observations: list[dict[str, Any]] = []

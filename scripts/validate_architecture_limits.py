@@ -8,6 +8,9 @@ _ROOT = Path(__file__).resolve().parents[1]
 _MAXIMUM_UNTRACKED_FILE_LINES = 2_000
 _MAXIMUM_UNTRACKED_FUNCTION_LINES = 300
 _MAXIMUM_UNTRACKED_FUNCTION_DECISIONS = 65
+# Physical-line baselines below include the repository-wide Ruff normalization.
+# The five affected legacy modules have identical ASTs before/after formatting;
+# function decision budgets and the untracked-code limits are unchanged.
 _FILE_LINE_LIMITS = {
     "src/py_security_suite/industry_assurance.py": 5_420,
     "src/py_security_suite/industry_standards_catalog.py": 6_256,
@@ -17,17 +20,17 @@ _FILE_LINE_LIMITS = {
     "src/py_security_suite/industry_maturity_product_catalog.py": 630,
     "src/py_security_suite/industry_emerging_assurance_catalog.py": 1_188,
     "src/py_security_suite/industry_extension_evidence.py": 3_606,
-    "src/py_security_suite/risk_paths.py": 8_028,
-    "src/py_security_suite/reports.py": 7_858,
-    "src/py_security_suite/data_exposure.py": 3_769,
+    "src/py_security_suite/risk_paths.py": 7_265,
+    "src/py_security_suite/reports.py": 7_744,
+    "src/py_security_suite/data_exposure.py": 3_778,
     "src/py_security_suite/evidence_ingest.py": 2_521,
-    "src/py_security_suite/artifact_validation.py": 2_401,
+    "src/py_security_suite/artifact_validation.py": 2_405,
     "src/py_security_suite/benchmark_execution.py": 2_432,
     "src/py_security_suite/benchmark_adapters.py": 3_130,
-    "src/py_security_suite/cli.py": 2_873,
+    "src/py_security_suite/cli.py": 2_877,
     "src/py_security_suite/closure_plan.py": 3_043,
-    "src/py_security_suite/config.py": 2_527,
-    "src/py_security_suite/execution.py": 1_196,
+    "src/py_security_suite/config.py": 2_559,
+    "src/py_security_suite/execution.py": 1_191,
     "src/py_security_suite/reachability.py": 2_295,
     "src/py_security_suite/cli_benchmark_arguments.py": 209,
     "src/py_security_suite/cli_release_arguments.py": 70,
@@ -39,8 +42,8 @@ _FUNCTION_LINE_LIMITS = {
         "src/py_security_suite/industry_assurance.py",
         "_benchmark_reproducibility_gaps",
     ): 490,
-    ("src/py_security_suite/orchestrator.py", "_scan_sealed_project"): 523,
-    ("src/py_security_suite/risk_paths.py", "build_risk_paths"): 1_165,
+    ("src/py_security_suite/orchestrator.py", "_scan_sealed_project"): 544,
+    ("src/py_security_suite/risk_paths.py", "build_risk_paths"): 421,
     ("src/py_security_suite/cli.py", "build_parser"): 917,
     ("src/py_security_suite/config.py", "_default_mapping"): 627,
     (
@@ -52,7 +55,7 @@ _FUNCTION_LINE_LIMITS = {
         "add_release_check_command",
     ): 64,
     ("src/py_security_suite/industry_assurance.py", "_threat_model_assessment"): 591,
-    ("src/py_security_suite/reports.py", "_render_risk_path_summary"): 566,
+    ("src/py_security_suite/reports.py", "_render_risk_path_summary"): 68,
     ("src/py_security_suite/isolation_probe.py", "probe_isolation_boundary"): 297,
     (
         "src/py_security_suite/semantic_coverage.py",
@@ -82,9 +85,9 @@ _FUNCTION_LINE_LIMITS = {
     ("src/py_security_suite/runtime_trace.py", "runtime_trace_artifact"): 301,
 }
 _FUNCTION_DECISION_LIMITS = {
-    ("src/py_security_suite/risk_paths.py", "build_risk_paths"): 222,
+    ("src/py_security_suite/risk_paths.py", "build_risk_paths"): 31,
     ("src/py_security_suite/industry_assurance.py", "_threat_model_assessment"): 135,
-    ("src/py_security_suite/reports.py", "_render_risk_path_summary"): 121,
+    ("src/py_security_suite/reports.py", "_render_risk_path_summary"): 16,
     ("src/py_security_suite/benchmark_execution.py", "execute_benchmark_manifest"): 58,
     ("src/py_security_suite/isolation_probe.py", "probe_isolation_boundary"): 45,
     (

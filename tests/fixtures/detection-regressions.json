@@ -3776,6 +3776,486 @@
         "app.py": "from flask import request\ndef register_codeql_flask_html_module_override(app):\n    @app.get(\"/test\")\n    def handler():\n        response=\"\"\n        response+=request.args.get(\"value\")\n        return response\n",
         "other.py": "def register_codeql_flask_html_module_override(app):\n    return None\n"
       }
+    },
+    {
+      "id": "codeql-ldap-list-alias-mutation",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom helper import make_connection\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    other=lst\n    other[0]=value\n    bar=lst[0]\n    conn=make_connection()\n    conn.search(\"base\", \"(uid=\"+bar+\")\")\n    return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      }
+    },
+    {
+      "id": "codeql-ldap-list-alias-mutation-safe-overwrite",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom helper import make_connection\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    other=lst\n    other[0]=value\n    lst[0]=\"fixed\"\n    bar=lst[0]\n    conn=make_connection()\n    conn.search(\"base\", \"(uid=\"+bar+\")\")\n    return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      }
+    },
+    {
+      "id": "codeql-ldap-list-subscript-write",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom helper import make_connection\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    lst[0]=value\n    bar=lst[0]\n    conn=make_connection()\n    conn.search(\"base\", \"(uid=\"+bar+\")\")\n    return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      }
+    },
+    {
+      "id": "codeql-ldap-list-subscript-write-safe-overwrite",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom helper import make_connection\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    lst[0]=value\n    lst[0]=\"fixed\"\n    bar=lst[0]\n    conn=make_connection()\n    conn.search(\"base\", \"(uid=\"+bar+\")\")\n    return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      }
+    },
+    {
+      "id": "codeql-ldap-list-extend",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom helper import make_connection\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    lst.extend([value])\n    bar=lst[1]\n    conn=make_connection()\n    conn.search(\"base\", \"(uid=\"+bar+\")\")\n    return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      }
+    },
+    {
+      "id": "codeql-ldap-list-extend-safe-overwrite",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom helper import make_connection\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    lst.extend([value])\n    lst[1]=\"fixed\"\n    bar=lst[1]\n    conn=make_connection()\n    conn.search(\"base\", \"(uid=\"+bar+\")\")\n    return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      }
+    },
+    {
+      "id": "codeql-ldap-list-insert",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom helper import make_connection\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    lst.insert(0,value)\n    bar=lst[0]\n    conn=make_connection()\n    conn.search(\"base\", \"(uid=\"+bar+\")\")\n    return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      }
+    },
+    {
+      "id": "codeql-ldap-list-insert-safe-overwrite",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom helper import make_connection\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    lst.insert(0,value)\n    lst[0]=\"fixed\"\n    bar=lst[0]\n    conn=make_connection()\n    conn.search(\"base\", \"(uid=\"+bar+\")\")\n    return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      }
+    },
+    {
+      "id": "codeql-ldap-list-closure-mutation",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom helper import make_connection\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    def change():\n        lst[0]=value\n    change()\n    bar=lst[0]\n    conn=make_connection()\n    conn.search(\"base\", \"(uid=\"+bar+\")\")\n    return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      }
+    },
+    {
+      "id": "codeql-ldap-list-closure-mutation-safe-overwrite",
+      "engine": "codeql",
+      "rule_id": "pysec/ldap-factory-filter-injection",
+      "category": "CWE-90",
+      "positive": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom helper import make_connection\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    def change():\n        lst[0]=value\n    change()\n    lst[0]=\"fixed\"\n    bar=lst[0]\n    conn=make_connection()\n    conn.search(\"base\", \"(uid=\"+bar+\")\")\n    return \"done\"\n",
+        "helper.py": "import ldap3\ndef make_connection():\n    conn = ldap3.Connection(\"host\")\n    conn.bind()\n    return conn\n"
+      }
+    },
+    {
+      "id": "codeql-values-path-list-alias-mutation",
+      "engine": "codeql",
+      "rule_id": "pysec/collection-path-injection",
+      "category": "CWE-22",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    other=lst\n    other[0]=value\n    bar=lst[0]\n    return open(bar).read()\n"
+      }
+    },
+    {
+      "id": "codeql-values-path-list-alias-mutation-safe-overwrite",
+      "engine": "codeql",
+      "rule_id": "pysec/collection-path-injection",
+      "category": "CWE-22",
+      "positive": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    other=lst\n    other[0]=value\n    lst[0]=\"fixed\"\n    bar=lst[0]\n    return open(bar).read()\n"
+      }
+    },
+    {
+      "id": "codeql-values-xpath-list-alias-mutation",
+      "engine": "codeql",
+      "rule_id": "pysec/collection-xpath-injection",
+      "category": "CWE-643",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    other=lst\n    other[0]=value\n    bar=lst[0]\n    return str(etree.XPath(bar))\n"
+      }
+    },
+    {
+      "id": "codeql-values-xpath-list-alias-mutation-safe-overwrite",
+      "engine": "codeql",
+      "rule_id": "pysec/collection-xpath-injection",
+      "category": "CWE-643",
+      "positive": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    other=lst\n    other[0]=value\n    lst[0]=\"fixed\"\n    bar=lst[0]\n    return str(etree.XPath(bar))\n"
+      }
+    },
+    {
+      "id": "codeql-values-path-list-subscript-write",
+      "engine": "codeql",
+      "rule_id": "pysec/collection-path-injection",
+      "category": "CWE-22",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    lst[0]=value\n    bar=lst[0]\n    return open(bar).read()\n"
+      }
+    },
+    {
+      "id": "codeql-values-path-list-subscript-write-safe-overwrite",
+      "engine": "codeql",
+      "rule_id": "pysec/collection-path-injection",
+      "category": "CWE-22",
+      "positive": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    lst[0]=value\n    lst[0]=\"fixed\"\n    bar=lst[0]\n    return open(bar).read()\n"
+      }
+    },
+    {
+      "id": "codeql-values-xpath-list-subscript-write",
+      "engine": "codeql",
+      "rule_id": "pysec/collection-xpath-injection",
+      "category": "CWE-643",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    lst[0]=value\n    bar=lst[0]\n    return str(etree.XPath(bar))\n"
+      }
+    },
+    {
+      "id": "codeql-values-xpath-list-subscript-write-safe-overwrite",
+      "engine": "codeql",
+      "rule_id": "pysec/collection-xpath-injection",
+      "category": "CWE-643",
+      "positive": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    lst[0]=value\n    lst[0]=\"fixed\"\n    bar=lst[0]\n    return str(etree.XPath(bar))\n"
+      }
+    },
+    {
+      "id": "codeql-values-path-list-extend",
+      "engine": "codeql",
+      "rule_id": "pysec/collection-path-injection",
+      "category": "CWE-22",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    lst.extend([value])\n    bar=lst[1]\n    return open(bar).read()\n"
+      }
+    },
+    {
+      "id": "codeql-values-path-list-extend-safe-overwrite",
+      "engine": "codeql",
+      "rule_id": "pysec/collection-path-injection",
+      "category": "CWE-22",
+      "positive": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    lst.extend([value])\n    lst[1]=\"fixed\"\n    bar=lst[1]\n    return open(bar).read()\n"
+      }
+    },
+    {
+      "id": "codeql-values-xpath-list-extend",
+      "engine": "codeql",
+      "rule_id": "pysec/collection-xpath-injection",
+      "category": "CWE-643",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    lst.extend([value])\n    bar=lst[1]\n    return str(etree.XPath(bar))\n"
+      }
+    },
+    {
+      "id": "codeql-values-xpath-list-extend-safe-overwrite",
+      "engine": "codeql",
+      "rule_id": "pysec/collection-xpath-injection",
+      "category": "CWE-643",
+      "positive": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    lst.extend([value])\n    lst[1]=\"fixed\"\n    bar=lst[1]\n    return str(etree.XPath(bar))\n"
+      }
+    },
+    {
+      "id": "codeql-values-path-list-insert",
+      "engine": "codeql",
+      "rule_id": "pysec/collection-path-injection",
+      "category": "CWE-22",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    lst.insert(0,value)\n    bar=lst[0]\n    return open(bar).read()\n"
+      }
+    },
+    {
+      "id": "codeql-values-path-list-insert-safe-overwrite",
+      "engine": "codeql",
+      "rule_id": "pysec/collection-path-injection",
+      "category": "CWE-22",
+      "positive": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    lst.insert(0,value)\n    lst[0]=\"fixed\"\n    bar=lst[0]\n    return open(bar).read()\n"
+      }
+    },
+    {
+      "id": "codeql-values-xpath-list-insert",
+      "engine": "codeql",
+      "rule_id": "pysec/collection-xpath-injection",
+      "category": "CWE-643",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    lst.insert(0,value)\n    bar=lst[0]\n    return str(etree.XPath(bar))\n"
+      }
+    },
+    {
+      "id": "codeql-values-xpath-list-insert-safe-overwrite",
+      "engine": "codeql",
+      "rule_id": "pysec/collection-xpath-injection",
+      "category": "CWE-643",
+      "positive": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    lst.insert(0,value)\n    lst[0]=\"fixed\"\n    bar=lst[0]\n    return str(etree.XPath(bar))\n"
+      }
+    },
+    {
+      "id": "codeql-values-path-list-closure-mutation",
+      "engine": "codeql",
+      "rule_id": "pysec/collection-path-injection",
+      "category": "CWE-22",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    def change():\n        lst[0]=value\n    change()\n    bar=lst[0]\n    return open(bar).read()\n"
+      }
+    },
+    {
+      "id": "codeql-values-path-list-closure-mutation-safe-overwrite",
+      "engine": "codeql",
+      "rule_id": "pysec/collection-path-injection",
+      "category": "CWE-22",
+      "positive": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    def change():\n        lst[0]=value\n    change()\n    lst[0]=\"fixed\"\n    bar=lst[0]\n    return open(bar).read()\n"
+      }
+    },
+    {
+      "id": "codeql-values-xpath-list-closure-mutation",
+      "engine": "codeql",
+      "rule_id": "pysec/collection-xpath-injection",
+      "category": "CWE-643",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    def change():\n        lst[0]=value\n    change()\n    bar=lst[0]\n    return str(etree.XPath(bar))\n"
+      }
+    },
+    {
+      "id": "codeql-values-xpath-list-closure-mutation-safe-overwrite",
+      "engine": "codeql",
+      "rule_id": "pysec/collection-xpath-injection",
+      "category": "CWE-643",
+      "positive": false,
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\n\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    lst=[]\n    lst.append(\"first\")\n    def change():\n        lst[0]=value\n    change()\n    lst[0]=\"fixed\"\n    bar=lst[0]\n    return str(etree.XPath(bar))\n"
+      }
+    },
+    {
+      "id": "codeql-session-key-safe",
+      "engine": "codeql",
+      "category": "CWE-501",
+      "positive": false,
+      "rule_id": "pysec/session-trust-boundary",
+      "files": {
+        "app.py": "from flask import Flask, request, session\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=\"fixed\"\n    session[value] = \"fixed\"\n    return \"done\"\n"
+      }
+    },
+    {
+      "id": "codeql-session-key-unsafe",
+      "engine": "codeql",
+      "category": "CWE-501",
+      "positive": true,
+      "rule_id": "pysec/session-trust-boundary",
+      "files": {
+        "app.py": "from flask import Flask, request, session\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"value\")\n    session[value] = \"fixed\"\n    return \"done\"\n"
+      }
+    },
+    {
+      "id": "codeql-session-value-safe",
+      "engine": "codeql",
+      "category": "CWE-501",
+      "positive": false,
+      "rule_id": "pysec/session-trust-boundary",
+      "files": {
+        "app.py": "from flask import Flask, request, session\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=\"fixed\"\n    session[\"user\"] = value\n    return \"done\"\n"
+      }
+    },
+    {
+      "id": "codeql-session-value-unsafe",
+      "engine": "codeql",
+      "category": "CWE-501",
+      "positive": true,
+      "rule_id": "pysec/session-trust-boundary",
+      "files": {
+        "app.py": "from flask import Flask, request, session\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"value\")\n    session[\"user\"] = value\n    return \"done\"\n"
+      }
+    },
+    {
+      "id": "codeql-config-parser-path-tainted-key",
+      "category": "CWE-22",
+      "engine": "codeql",
+      "positive": true,
+      "rule_id": "pysec/collection-path-injection",
+      "files": {
+        "app.py": "from flask import Flask, request, session\nimport configparser, elementpath\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    parser=configparser.ConfigParser()\n    parser.add_section(\"section\")\n    parser.set(\"section\", \"keyA\", \"fixed\")\n    parser.set(\"section\", \"keyB\", value)\n    bar=parser.get(\"section\", \"keyB\")\n    return open(bar).read()\n"
+      }
+    },
+    {
+      "id": "codeql-config-parser-path-other-key",
+      "category": "CWE-22",
+      "engine": "codeql",
+      "positive": false,
+      "rule_id": "pysec/collection-path-injection",
+      "files": {
+        "app.py": "from flask import Flask, request, session\nimport configparser, elementpath\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    parser=configparser.ConfigParser()\n    parser.add_section(\"section\")\n    parser.set(\"section\", \"keyA\", \"fixed\")\n    parser.set(\"section\", \"keyB\", value)\n    bar=parser.get(\"section\", \"keyA\")\n    return open(bar).read()\n"
+      }
+    },
+    {
+      "id": "codeql-config-parser-path-safe-overwrite",
+      "category": "CWE-22",
+      "engine": "codeql",
+      "positive": false,
+      "rule_id": "pysec/collection-path-injection",
+      "files": {
+        "app.py": "from flask import Flask, request, session\nimport configparser, elementpath\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    parser=configparser.ConfigParser()\n    parser.add_section(\"section\")\n    parser.set(\"section\", \"keyA\", \"fixed\")\n    parser.set(\"section\", \"keyB\", value)\n    parser.set(\"section\", \"keyB\", \"fixed\")\n    bar=parser.get(\"section\", \"keyB\")\n    return open(bar).read()\n"
+      }
+    },
+    {
+      "id": "codeql-config-parser-xpath-tainted-key",
+      "category": "CWE-643",
+      "engine": "codeql",
+      "positive": true,
+      "rule_id": "pysec/collection-xpath-injection",
+      "files": {
+        "app.py": "from flask import Flask, request, session\nimport configparser, elementpath\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    parser=configparser.ConfigParser()\n    parser.add_section(\"section\")\n    parser.set(\"section\", \"keyA\", \"fixed\")\n    parser.set(\"section\", \"keyB\", value)\n    bar=parser.get(\"section\", \"keyB\")\n    return str(elementpath.select(root,bar))\n"
+      }
+    },
+    {
+      "id": "codeql-config-parser-xpath-other-key",
+      "category": "CWE-643",
+      "engine": "codeql",
+      "positive": false,
+      "rule_id": "pysec/collection-xpath-injection",
+      "files": {
+        "app.py": "from flask import Flask, request, session\nimport configparser, elementpath\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    parser=configparser.ConfigParser()\n    parser.add_section(\"section\")\n    parser.set(\"section\", \"keyA\", \"fixed\")\n    parser.set(\"section\", \"keyB\", value)\n    bar=parser.get(\"section\", \"keyA\")\n    return str(elementpath.select(root,bar))\n"
+      }
+    },
+    {
+      "id": "codeql-config-parser-xpath-safe-overwrite",
+      "category": "CWE-643",
+      "engine": "codeql",
+      "positive": false,
+      "rule_id": "pysec/collection-xpath-injection",
+      "files": {
+        "app.py": "from flask import Flask, request, session\nimport configparser, elementpath\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    parser=configparser.ConfigParser()\n    parser.add_section(\"section\")\n    parser.set(\"section\", \"keyA\", \"fixed\")\n    parser.set(\"section\", \"keyB\", value)\n    parser.set(\"section\", \"keyB\", \"fixed\")\n    bar=parser.get(\"section\", \"keyB\")\n    return str(elementpath.select(root,bar))\n"
+      }
+    },
+    {
+      "id": "codeql-config-parser-session-tainted-key",
+      "category": "CWE-501",
+      "engine": "codeql",
+      "positive": true,
+      "rule_id": "pysec/session-trust-boundary",
+      "files": {
+        "app.py": "from flask import Flask, request, session\nimport configparser, elementpath\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    parser=configparser.ConfigParser()\n    parser.add_section(\"section\")\n    parser.set(\"section\", \"keyA\", \"fixed\")\n    parser.set(\"section\", \"keyB\", value)\n    bar=parser.get(\"section\", \"keyB\")\n    session[\"user\"] = bar\n    return \"done\"\n"
+      }
+    },
+    {
+      "id": "codeql-config-parser-session-other-key",
+      "category": "CWE-501",
+      "engine": "codeql",
+      "positive": false,
+      "rule_id": "pysec/session-trust-boundary",
+      "files": {
+        "app.py": "from flask import Flask, request, session\nimport configparser, elementpath\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    parser=configparser.ConfigParser()\n    parser.add_section(\"section\")\n    parser.set(\"section\", \"keyA\", \"fixed\")\n    parser.set(\"section\", \"keyB\", value)\n    bar=parser.get(\"section\", \"keyA\")\n    session[\"user\"] = bar\n    return \"done\"\n"
+      }
+    },
+    {
+      "id": "codeql-config-parser-session-safe-overwrite",
+      "category": "CWE-501",
+      "engine": "codeql",
+      "positive": false,
+      "rule_id": "pysec/session-trust-boundary",
+      "files": {
+        "app.py": "from flask import Flask, request, session\nimport configparser, elementpath\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    parser=configparser.ConfigParser()\n    parser.add_section(\"section\")\n    parser.set(\"section\", \"keyA\", \"fixed\")\n    parser.set(\"section\", \"keyB\", value)\n    parser.set(\"section\", \"keyB\", \"fixed\")\n    bar=parser.get(\"section\", \"keyB\")\n    session[\"user\"] = bar\n    return \"done\"\n"
+      }
+    },
+    {
+      "id": "codeql-elementpath-tainted",
+      "category": "CWE-643",
+      "engine": "codeql",
+      "positive": true,
+      "rule_id": "pysec/collection-xpath-injection",
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom elementpath import select\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    return str(select(root, request.args.get(\"path\")))\n"
+      }
+    },
+    {
+      "id": "codeql-elementpath-literal",
+      "category": "CWE-643",
+      "engine": "codeql",
+      "positive": false,
+      "rule_id": "pysec/collection-xpath-injection",
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom elementpath import select\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    return str(select(root, \"/safe\"))\n"
+      }
+    },
+    {
+      "id": "codeql-elementpath-keyword",
+      "category": "CWE-643",
+      "engine": "codeql",
+      "positive": true,
+      "rule_id": "pysec/collection-xpath-injection",
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom elementpath import select\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    return str(select(root, path=request.args.get(\"path\")))\n"
+      }
+    },
+    {
+      "id": "codeql-elementpath-wrong-module",
+      "category": "CWE-643",
+      "engine": "codeql",
+      "positive": false,
+      "rule_id": "pysec/collection-xpath-injection",
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom fake import select\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    return str(select(root, request.args.get(\"path\")))\n"
+      }
     }
   ]
 }

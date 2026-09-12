@@ -4,10 +4,38 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import sys
 from pathlib import Path
 
 from .path_safety import read_regular_file
+
+
+def isolate_python_command(command: list[str], cache: Path) -> list[str]:
+    """Bind direct Python launches even when -I/-E ignores environment settings."""
+    if command and re.fullmatch(
+        r"python(?:\d+(?:\.\d+)*)?(?:w)?(?:\.exe)?", Path(command[0]).name, re.I
+    ):
+        return [command[0], "-B", "-X", f"pycache_prefix={cache}", *command[1:]]
+    return command
+
+
+def private_runtime_environment(env: dict[str, str], root: Path) -> None:
+    """Keep all writable scanner locations within the supervised workspace."""
+    locations = {
+        "HOME": root,
+        "USERPROFILE": root,
+        "APPDATA": root / "AppData" / "Roaming",
+        "LOCALAPPDATA": root / "AppData" / "Local",
+        "XDG_CACHE_HOME": root / "cache",
+        "PYTHONPYCACHEPREFIX": root / "bytecode",
+        "TEMP": root / "tmp",
+        "TMP": root / "tmp",
+        "TMPDIR": root / "tmp",
+    }
+    for name, path in locations.items():
+        path.mkdir(parents=True, exist_ok=True)
+        env[name] = str(path)
 
 
 def isolated_environment(
@@ -54,6 +82,7 @@ def isolated_environment(
     env.update(
         {
             "PYTHONNOUSERSITE": "1",
+            "PYTHONDONTWRITEBYTECODE": "1",
             "SEMGREP_SEND_METRICS": "off",
             "SEMGREP_ENABLE_VERSION_CHECK": "0",
         }
@@ -67,6 +96,9 @@ def isolated_environment(
             "PATH",
             "PYTHONHOME",
             "PYTHONPATH",
+            "PYTHONPYCACHEPREFIX",
+            "PYTHONDONTWRITEBYTECODE",
+            "PYTHONNOUSERSITE",
         }
         rejected = sorted(key for key in extra if key.upper() in forbidden)
         if rejected:

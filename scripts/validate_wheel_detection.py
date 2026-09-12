@@ -19,12 +19,10 @@ if __name__ == "__main__":
     atexit.register(_cache.cleanup)
     sys.pycache_prefix = _cache.name
     sys.dont_write_bytecode = True
-if __package__:
-    from .validation_evidence import ValidationEvidence, atomic_bytes, atomic_json
-else:
+if not __package__:
     # -I deliberately excludes the script directory until this explicit driver import.
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from validation_evidence import ValidationEvidence, atomic_bytes, atomic_json
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from scripts.validation_evidence import ValidationEvidence, atomic_bytes, atomic_json
 
 
 def verify_wheel(wheel: Path, package: Path) -> dict:

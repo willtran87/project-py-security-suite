@@ -18,6 +18,8 @@ import semmle.python.security.dataflow.ReflectedXssQuery
 import ConstantChoice
 import NativeValueFacts
 import HtmlValueFacts
+import CollectionValueFlow
+import ConfigParserValueFlow
 
 /** Resolve the actual import call feeding the hook receiver. Literal imports must
  * match the defining module. Unknown dynamic names retain medium-precision coverage.
@@ -68,6 +70,8 @@ module Config implements DataFlow::ConfigSig {
   predicate isSink(DataFlow::Node node) { htmlReturn(node) }
   predicate isAdditionalFlowStep(DataFlow::Node source, DataFlow::Node sink) {
     markupIdentityEscapeStep(source, sink)
+    or collectionValueFlowStep(source, sink)
+    or configParserValueFlowStep(source, sink)
   }
   predicate isBarrier(DataFlow::Node node) {
     htmlValueBarrier(node) or constantChoice(node) or constantSelectedMatchRead(node)

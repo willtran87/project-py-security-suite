@@ -12,7 +12,12 @@ from typing import Any
 from collections.abc import Mapping
 from urllib.parse import urlsplit
 
-from .config_numbers import integer_setting, real_setting, execution_limits, protect_scan_deadline
+from .config_numbers import (
+    integer_setting,
+    real_setting,
+    execution_limits,
+    protect_scan_deadline,
+)
 from .models import Severity
 from .path_safety import read_regular_file
 from .trust_policy import (
@@ -1265,7 +1270,12 @@ def _ensure_known(mapping: Mapping[str, Any]) -> None:
             "sandbox_arguments",
             "replay_ledger_path",
         },
-        "execution": {"max_workers", "max_output_bytes", "max_scan_seconds", "max_scan_memory_bytes"},
+        "execution": {
+            "max_workers",
+            "max_output_bytes",
+            "max_scan_seconds",
+            "max_scan_memory_bytes",
+        },
         "policy": {
             "required_scanners",
             "block_severities",
@@ -1392,7 +1402,9 @@ def _reject_weaker_repository_policy(
     organization: Mapping[str, Any], repository: Mapping[str, Any]
 ) -> None:
     try:
-        protect_scan_deadline(organization.get("execution", {}), repository.get("execution", {}))
+        protect_scan_deadline(
+            organization.get("execution", {}), repository.get("execution", {})
+        )
     except ValueError as exc:
         raise ConfigurationError(str(exc)) from exc
     _reject_weaker_isolation(
@@ -1638,8 +1650,13 @@ def _reject_weaker_reachability(
 ) -> None:
     if "minimum_island_loc" in repository:
         try:
-            organization_threshold = integer_setting(organization.get("minimum_island_loc", 100), "reachability.minimum_island_loc")
-            repository_threshold = integer_setting(repository["minimum_island_loc"], "reachability.minimum_island_loc")
+            organization_threshold = integer_setting(
+                organization.get("minimum_island_loc", 100),
+                "reachability.minimum_island_loc",
+            )
+            repository_threshold = integer_setting(
+                repository["minimum_island_loc"], "reachability.minimum_island_loc"
+            )
         except (TypeError, ValueError) as exc:
             raise ConfigurationError(
                 "reachability minimum_island_loc must be an integer"
@@ -1872,7 +1889,9 @@ def _reports_config(data: Mapping[str, Any]) -> ReportsConfig:
         )
     classification = str(data.get("classification") or "").casefold()
     try:
-        retention_days = integer_setting(data.get("retention_days"), "reports.retention_days")
+        retention_days = integer_setting(
+            data.get("retention_days"), "reports.retention_days"
+        )
     except (TypeError, ValueError) as exc:
         raise ConfigurationError("reports.retention_days must be an integer") from exc
     if classification not in {"confidential", "restricted"}:
@@ -2059,11 +2078,24 @@ def _tool_config(name: str, data: Mapping[str, Any]) -> ToolConfig:
         if not isinstance(data.get(setting, assurance_tool), bool):
             raise ConfigurationError(f"{name} {setting} must be true or false")
     try:
-        timeout = integer_setting(data["timeout_seconds"], f"tools.{name}.timeout_seconds")
-        coverage_minimum = real_setting(data.get("minimum_coverage_percent", 80.0), f"tools.{name}.minimum_coverage_percent")
-        database_maximum_age = real_setting(data.get("maximum_database_age_days", 10.0), f"tools.{name}.maximum_database_age_days")
-        evidence_maximum_age = real_setting(data.get("maximum_evidence_age_days", 7.0), f"tools.{name}.maximum_evidence_age_days")
-        minimum_island_loc = integer_setting(data.get("minimum_island_loc", 100), f"tools.{name}.minimum_island_loc")
+        timeout = integer_setting(
+            data["timeout_seconds"], f"tools.{name}.timeout_seconds"
+        )
+        coverage_minimum = real_setting(
+            data.get("minimum_coverage_percent", 80.0),
+            f"tools.{name}.minimum_coverage_percent",
+        )
+        database_maximum_age = real_setting(
+            data.get("maximum_database_age_days", 10.0),
+            f"tools.{name}.maximum_database_age_days",
+        )
+        evidence_maximum_age = real_setting(
+            data.get("maximum_evidence_age_days", 7.0),
+            f"tools.{name}.maximum_evidence_age_days",
+        )
+        minimum_island_loc = integer_setting(
+            data.get("minimum_island_loc", 100), f"tools.{name}.minimum_island_loc"
+        )
     except (TypeError, ValueError) as exc:
         raise ConfigurationError(str(exc)) from exc
     config = ToolConfig(

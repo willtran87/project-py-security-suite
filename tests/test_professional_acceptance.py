@@ -19,6 +19,42 @@ from py_security_suite.models import ToolStatus
 from scripts.benchmark_external import labels, score, regressions
 
 
+def test_acceptance_preserves_virtual_environment_interpreter_symlink(
+    tmp_path, monkeypatch
+):
+    from scripts import validate_product_acceptance as acceptance
+    import sys
+
+    interpreter = tmp_path / "venv-python"
+    try:
+        interpreter.symlink_to(sys.executable)
+    except OSError:
+        pytest.skip("interpreter symlinks unavailable on this host")
+    observed = []
+    monkeypatch.setattr(
+        acceptance,
+        "validate",
+        lambda args: observed.append(args.python) or {"passed": True},
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "acceptance",
+            "--python",
+            str(interpreter),
+            "--bandit",
+            "bandit",
+            "--semgrep",
+            "semgrep",
+            "--output",
+            str(tmp_path / "result.json"),
+        ],
+    )
+    assert acceptance.main() == 0
+    assert observed == [str(interpreter.absolute())]
+
+
 @pytest.mark.parametrize("engine", ["semgrep", "bandit"])
 @pytest.mark.parametrize("state", ["complete", "partial", "unknown"])
 def test_inventory_reconciliation_cannot_call_missing_files_clean(

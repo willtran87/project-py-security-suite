@@ -1,6 +1,6 @@
 # Validation pipeline and evidence boundaries
 
-Last reviewed: 2026-09-08
+Last reviewed: 2026-09-12
 
 Native detector regressions, measured accuracy and production approval are separate
 decisions. The [acceptance record](professional-acceptance.md) records completed
@@ -98,6 +98,68 @@ bounded to 16 MiB per file and 64 MiB per scenario. Raw process output is repres
 by byte counts and hashes. Failure records contain the exception category and
 stack locations, without exception text, source snippets or local variables.
 This journal is a local diagnostic record, not a signed production attestation.
+
+## Production execution and complete Python coverage
+
+The production command runner creates a private runtime home, temporary directory
+and Python bytecode prefix for every invocation. It disables bytecode writes and
+passes `-B -X pycache_prefix=...` to direct Python commands, including commands
+using `-I` or `-E`. Callers cannot override the protected cache environment keys.
+This extends the cache boundary beyond the validation drivers. Adversarial tests
+retain a timestamp-valid altered cache and require execution of the source marker.
+
+Bandit and Semgrep receive a private mirror of the suite's maintained Python
+inventory. The mirror preserves relative paths and includes an empty root
+`.semgrepignore`; Semgrep also receives `--no-git-ignore`. Repository ignores and
+Semgrep's default test-directory exclusions therefore cannot silently reduce the
+declared scan inventory. Native errors, timeouts and missing files still make a
+scan incomplete. The mirror is removed after parsing the native result.
+
+```mermaid
+flowchart LR
+    S[Sealed source inventory] --> M[Private Python mirror]
+    M --> E[Isolated native execution]
+    E --> N[Parse native findings and errors]
+    N --> C{Every expected file analyzed?}
+    C -->|Yes, no native errors| R[Complete scanner result]
+    C -->|No| I[Incomplete result with retained findings]
+```
+
+Bandit's live B608 refinement excludes only an assignment whose unchanged source
+proves an interpolation-free f-string. Dynamic interpolation, ambiguous statements
+and imported reports retain the original alert. Each exclusion retains the native
+finding and source digest; the benchmark's labels and accuracy targets are unchanged.
+
+## Measure full-pipeline capacity
+
+`scripts/qualify_native_capacity.py` runs the installed candidate through source
+sealing, native scanning, report publication and checksum/passport verification.
+It compares installed package bytes with the candidate wheel before and after the
+qualification, binds the source and configuration, and retains each worker result
+in a unique evidence directory. Workers use isolated Python with fresh caches.
+
+Fixed waves at concurrency one and the selected concurrency run at least three
+times each. Each wave samples aggregate process-tree resident memory and private
+scratch. A separate cancellation run must retain a verifiable incomplete report
+within 15 seconds of cancellation. All ordinary runs must complete every enabled
+scanner, preserve source integrity and produce stable finding identities. Invalid
+worker JSON and contradictory exit status fail qualification.
+
+```mermaid
+flowchart TD
+    W[Verify installed wheel and frozen inputs] --> L[Fixed serial and concurrent waves]
+    L --> S[Seal, scan, publish and verify each report]
+    S --> M[Measure memory, scratch and elapsed time]
+    M --> C[Cancel a separate native scan]
+    C --> V[Verify incomplete report and unchanged inputs]
+    V --> G{All runs and resource limits pass?}
+    G -->|Yes| P[Recorded host and profile qualified]
+    G -->|No| F[Retain failed qualification evidence]
+```
+
+These are measured limits for the recorded source, host and profile. They do not
+establish cold-cache behavior, a service latency percentile, physical disk-full
+recovery or an independently approved operating range.
 
 ## Qualify the scanner runtime
 

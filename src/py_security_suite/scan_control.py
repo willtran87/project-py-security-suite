@@ -74,7 +74,9 @@ class ScanControl:
     _next_memory_check: float = 0.0
     _memory_failure: str = ""
     _parent: ScanControl | None = field(default=None, repr=False)
-    _dispatcher: ProgressDispatcher[ScanProgress] | None = field(default=None, init=False, repr=False)
+    _dispatcher: ProgressDispatcher[ScanProgress] | None = field(
+        default=None, init=False, repr=False
+    )
 
     def __post_init__(self) -> None:
         for name in ("timeout_seconds", "max_memory_bytes"):
@@ -130,9 +132,11 @@ class ScanControl:
             if self.progress is not None:
                 if self._dispatcher is None:
                     self._dispatcher = ProgressDispatcher(self.progress)
-                self._dispatcher.submit(ScanProgress(
-                    stage, state, round(time.monotonic() - self.started, 3), tool
-                ))
+                self._dispatcher.submit(
+                    ScanProgress(
+                        stage, state, round(time.monotonic() - self.started, 3), tool
+                    )
+                )
 
     def finish_progress(self) -> None:
         if self._dispatcher is not None:

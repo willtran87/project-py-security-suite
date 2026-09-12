@@ -112,7 +112,9 @@ class ScannerAdapter(ABC):
     def coverage_inventory(self, target: Path) -> tuple[str, ...] | None:
         return None
 
-    def coverage_assessment(self, payload: str, target: Path, expected: tuple[str, ...]) -> dict[str, object]:
+    def coverage_assessment(
+        self, payload: str, target: Path, expected: tuple[str, ...]
+    ) -> dict[str, object]:
         return {}
 
     def result_payload(self, execution: RawExecution) -> str:
@@ -219,7 +221,8 @@ class ScannerAdapter(ABC):
             tool_run = self._tool_run(
                 execution,
                 ToolStatus.TIMED_OUT if execution.timed_out else ToolStatus.FAILED,
-                error=execution.stop_reason or f"timed out after {self.config.timeout_seconds} seconds",
+                error=execution.stop_reason
+                or f"timed out after {self.config.timeout_seconds} seconds",
                 version=version,
             )
             return AdapterResult(
@@ -272,7 +275,10 @@ class ScannerAdapter(ABC):
                 tool_run=tool_run,
                 diagnostic=self._diagnostic(tool_run, execution),
             )
-        if execution.exit_code not in self.accepted_exit_codes | self.partial_exit_codes:
+        if (
+            execution.exit_code
+            not in self.accepted_exit_codes | self.partial_exit_codes
+        ):
             tool_run = self._tool_run(
                 execution,
                 ToolStatus.FAILED,
@@ -289,7 +295,11 @@ class ScannerAdapter(ABC):
             findings = self.parse(payload, target)
             artifacts = self.derived_artifacts(payload, target)
             coverage = self.analysis_coverage(payload)
-            assessment = self.coverage_assessment(payload, target, expected_files) if expected_files is not None else {}
+            assessment = (
+                self.coverage_assessment(payload, target, expected_files)
+                if expected_files is not None
+                else {}
+            )
         except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
             tool_run = self._tool_run(
                 execution,
@@ -308,18 +318,27 @@ class ScannerAdapter(ABC):
                 if source.tool == self.name and source.version == "unknown":
                     source.version = version
 
-        partial = any(coverage.values()) or execution.exit_code in self.partial_exit_codes or (bool(assessment) and assessment.get("state") != "complete")
+        partial = (
+            any(coverage.values())
+            or execution.exit_code in self.partial_exit_codes
+            or (bool(assessment) and assessment.get("state") != "complete")
+        )
         tool_run = self._tool_run(
             execution,
             ToolStatus.PARSE_ERROR if partial else ToolStatus.COMPLETED,
             finding_count=len(findings),
             version=version,
-            error="scanner analysis incomplete; valid findings retained" if partial else None,
+            error="scanner analysis incomplete; valid findings retained"
+            if partial
+            else None,
         )
         return AdapterResult(
             findings=findings,
             tool_run=tool_run,
-            diagnostic={**self._diagnostic(tool_run, execution), "analysis_coverage": {**coverage, **assessment}},
+            diagnostic={
+                **self._diagnostic(tool_run, execution),
+                "analysis_coverage": {**coverage, **assessment},
+            },
             artifacts=artifacts,
         )
 

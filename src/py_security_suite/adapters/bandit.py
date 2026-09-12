@@ -12,9 +12,11 @@ from ..models import (
     normalize_repo_path,
 )
 from ..strict_json import loads as strict_json_loads
-from .base import ScannerAdapter
+from ..execution import sha256_file
+from .base import AdapterResult, ScannerAdapter
 from .coverage import native_coverage, reconcile_coverage
-from .staging import maintained_files
+from .staging import maintained_files, python_scan_tree
+from .literal_sql import refine_literal_sql
 from .common import map_confidence, map_severity
 
 
@@ -22,10 +24,25 @@ class BanditAdapter(ScannerAdapter):
     name = "bandit"
     accepted_exit_codes = frozenset({0, 1})
 
-    def coverage_inventory(self, target: Path) -> tuple[str, ...]:
-        return tuple(path.relative_to(target.resolve()).as_posix() for path in maintained_files(target, frozenset({".py"})))
+    def run(self, target: Path) -> AdapterResult:
+        with python_scan_tree(target) as mirror:
+            before = {
+                path.relative_to(mirror).as_posix(): sha256_file(path)
+                for path in maintained_files(mirror, frozenset({".py"}))
+            }
+            result = super().run(mirror)
+            refine_literal_sql(result, mirror, before)
+            return result
 
-    def coverage_assessment(self, payload: str, target: Path, expected: tuple[str, ...]) -> dict[str, object]:
+    def coverage_inventory(self, target: Path) -> tuple[str, ...]:
+        return tuple(
+            path.relative_to(target.resolve()).as_posix()
+            for path in maintained_files(target, frozenset({".py"}))
+        )
+
+    def coverage_assessment(
+        self, payload: str, target: Path, expected: tuple[str, ...]
+    ) -> dict[str, object]:
         return reconcile_coverage(payload, target, expected, semgrep=False)
 
     def analysis_coverage(self, payload: str) -> dict[str, int]:

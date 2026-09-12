@@ -15,7 +15,13 @@ from .scan_governance import production_state_errors
 from .source_index import source_analysis_session
 from .scan_scheduler import run_adapters as _run_adapters
 from contextlib import suppress
-from .scan_control import ScanInterrupted, analysis_checkpoint, emit_progress, stop_reason, scan_session
+from .scan_control import (
+    ScanInterrupted,
+    analysis_checkpoint,
+    emit_progress,
+    stop_reason,
+    scan_session,
+)
 from .scan_enrichment import industry_assurance_errors
 from .version import __version__
 from .adapters import ADAPTER_TYPES
@@ -88,7 +94,12 @@ def scan_project(
     adapter_types: Mapping[str, type[ScannerAdapter]] | None = None,
     replace_existing: bool = False,
 ) -> ScanResult:
-    with scan_session(config.execution.max_scan_seconds, config.execution.max_scan_memory_bytes), activated_trust_environment(config.trust_environment):
+    with (
+        scan_session(
+            config.execution.max_scan_seconds, config.execution.max_scan_memory_bytes
+        ),
+        activated_trust_environment(config.trust_environment),
+    ):
         return _scan_project_active(
             target=target,
             output=output,
@@ -124,14 +135,17 @@ def _scan_project_active(
     inventory, source_inventory = inventory_target_with_evidence(
         target, excluded_paths=source_exclusions
     )
-    with sealed_source_snapshot(
-        target,
-        source_inventory,
-        vcs_revision=(
-            inventory.vcs_revision if inventory.vcs_revision_verified else ""
-        ),
-        require_signed_git_provenance=config.profile in {"production", "release"},
-    ) as scan_target, source_analysis_session(scan_target):
+    with (
+        sealed_source_snapshot(
+            target,
+            source_inventory,
+            vcs_revision=(
+                inventory.vcs_revision if inventory.vcs_revision_verified else ""
+            ),
+            require_signed_git_provenance=config.profile in {"production", "release"},
+        ) as scan_target,
+        source_analysis_session(scan_target),
+    ):
         emit_progress("snapshot", "completed")
         return _scan_sealed_project(
             target=target,
@@ -209,7 +223,9 @@ def _scan_sealed_project(
     derived_artifacts["runtime-trace-correlation.json"] = runtime_trace
     context_errors: list[str] = []
     if derived_artifacts["dependency-surface.json"]["omitted_manifests"]:
-        context_errors.append("dependency manifest inventory exceeded its per-ecosystem limit")
+        context_errors.append(
+            "dependency manifest inventory exceeded its per-ecosystem limit"
+        )
     if config.profile in {"production", "release"} and not runtime_trace["complete"]:
         context_errors.append(
             "signed deployment-bound runtime request-to-sink trace evidence is required"
@@ -285,7 +301,8 @@ def _scan_sealed_project(
                 status=ToolStatus.SKIPPED,
                 command=[config.tools[name].executable],
                 duration_seconds=0.0,
-                error=stop_reason() or "scan not started because network isolation was not attested",
+                error=stop_reason()
+                or "scan not started because network isolation was not attested",
             )
             for name in selected
         ]
@@ -330,7 +347,10 @@ def _scan_sealed_project(
                 )
             analysis_checkpoint()
             dependency_surface = dependency_surface_artifact(
-                scan_target, tool_runs, derived_artifacts, inventory=dependency_inventory
+                scan_target,
+                tool_runs,
+                derived_artifacts,
+                inventory=dependency_inventory,
             )
             derived_artifacts["dependency-surface.json"] = dependency_surface
             if (
@@ -343,9 +363,12 @@ def _scan_sealed_project(
                     if not item["covered"]
                 )
                 context_errors.append(
-                    "multi-ecosystem dependency analysis is incomplete for: " + uncovered
+                    "multi-ecosystem dependency analysis is incomplete for: "
+                    + uncovered
                 )
-            runtime_surface = runtime_surface_binding_artifact(tool_runs, derived_artifacts)
+            runtime_surface = runtime_surface_binding_artifact(
+                tool_runs, derived_artifacts
+            )
             derived_artifacts["runtime-surface-binding.json"] = runtime_surface
             if (
                 config.profile in {"production", "release"}
@@ -356,7 +379,9 @@ def _scan_sealed_project(
                     "with independently corroborated clean claims"
                 )
             reachability_feedback = apply_runtime_trace_observations(
-                derived_artifacts.get("reachability.json"), runtime_trace, boundary_graph
+                derived_artifacts.get("reachability.json"),
+                runtime_trace,
+                boundary_graph,
             )
             if (
                 config.profile in {"production", "release"}
@@ -396,7 +421,9 @@ def _scan_sealed_project(
                 trust_environment=config.trust_environment,
             )
             context_errors.extend(intelligence_approval.errors)
-            derived_artifacts["intelligence-approval.json"] = intelligence_approval.artifact
+            derived_artifacts["intelligence-approval.json"] = (
+                intelligence_approval.artifact
+            )
             analysis_checkpoint()
             delta = apply_finding_delta(
                 findings,
@@ -418,7 +445,9 @@ def _scan_sealed_project(
             if graph_analysis is not None:
                 derived_artifacts["graph-analysis.json"] = graph_analysis
             analysis_checkpoint()
-            structural_synthesis = build_structural_synthesis(findings, derived_artifacts)
+            structural_synthesis = build_structural_synthesis(
+                findings, derived_artifacts
+            )
             if structural_synthesis is not None:
                 derived_artifacts["structural-synthesis.json"] = structural_synthesis
             analysis_checkpoint()
@@ -558,9 +587,15 @@ def _scan_sealed_project(
             and llm_adversarial_plan["complete"] is not True
         ):
             reasons = llm_adversarial_errors or ["plan is truncated or incomplete"]
-            context_errors.extend(f"LLM adversarial planning: {error}" for error in reasons)
+            context_errors.extend(
+                f"LLM adversarial planning: {error}" for error in reasons
+            )
     with suppress(ScanInterrupted):
-        context_errors.extend(industry_assurance_errors(scan_target, findings, derived_artifacts, config.profile))
+        context_errors.extend(
+            industry_assurance_errors(
+                scan_target, findings, derived_artifacts, config.profile
+            )
+        )
     context_errors.extend(production_state_errors(config.profile, derived_artifacts))
 
     (

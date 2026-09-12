@@ -3,7 +3,48 @@
 The acceptance gates distinguish product correctness, public benchmark results,
 and production approval. Passing one does not establish the others.
 
-### Bytecode isolation, import identity and verified evidence — 2026-09-08 { #current-validation-increment }
+### Native flow, complete inventory and production cache isolation — 2026-09-12 { #current-validation-increment }
+
+The current native CodeQL regression corpus has **244 passing cases**. All 15
+previously recorded collection-mutation misses are now positive regression cases,
+with 15 paired safe overwrite controls. Additional paired cases cover Flask
+session trust boundaries, exact ConfigParser section/key flow, and imported
+elementpath XPath calls. These are developer regressions, not independent accuracy
+measurements. The public benchmark's labels, protected detections and strict
+accuracy thresholds remain unchanged.
+
+Production command execution now uses private Python caches, including direct
+isolated Python launches. Bandit and Semgrep scan a private mirror of the complete
+maintained Python inventory. Decomposing risk-path summary construction and report
+rendering removes two observed native Semgrep solver timeouts; the local self-scan
+completes all **502 Python files with zero native errors**. A narrow live Bandit
+proof retains the native evidence when excluding interpolation-free SQL f-strings.
+
+CI repairs preserve POSIX virtual-environment interpreter paths, select Windows
+scanner executable suffixes, handle process-group cleanup permission races, and
+make the pinned corpus digest independent of Windows path sorting. The corpus
+revision and labels are unchanged. These repairs require fresh remote CI results
+before the previous failed jobs can be considered resolved.
+
+The local Python suite passes **1,962 tests and 499 subtests**, with 21 skips.
+Ruff, mypy, Pyright with the project interpreter, public API compatibility,
+architecture limits and cycles, changed-workflow lint, strict MkDocs and the Pages
+artifact audit pass. These checks do not replace the running exact-wheel benchmark.
+
+The capacity driver now measures real scans through report verification. The first
+frozen full-repository pilot exceeded its 300-second scan deadline and produced a
+verifiable incomplete report after 352.166 seconds; no native scanner completed.
+This failed pilot is retained under `.artifacts/release-repair/capacity-probe2`.
+It establishes no passing capacity limit. Fixed repetition and concurrent-load
+qualification must pass before an operating range is declared.
+
+The [pipeline and diagrams](validation-pipeline.md) document the execution boundary
+and capacity procedure. Independent holdout evaluation still requires an evaluator
+who did not develop these detectors. Until refreshed exact-wheel receipts and
+aggregation are completed, [generated measurements](validation-results.md) refer
+to the historical candidate below, not the current source changes.
+
+### Historical: bytecode isolation, import identity and verified evidence — 2026-09-08
 
 The validator now establishes a fresh private bytecode prefix before importing
 helpers or the verified product and disables cache writes. Its child interpreters

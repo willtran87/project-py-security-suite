@@ -125,6 +125,10 @@ def run_bounded_subprocess(
                 os.__dict__["killpg"](process.pid, signal.__dict__["SIGKILL"])
             except ProcessLookupError:
                 pass
+            except PermissionError:
+                # macOS can deny killpg after the leader exits. Still attempt
+                # termination through the exact process handles we own.
+                _kill_process_tree(process)
         if process.poll() is None:
             _kill_process_tree(process)
 

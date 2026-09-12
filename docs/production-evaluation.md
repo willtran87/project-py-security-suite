@@ -1,6 +1,6 @@
 # Production evaluation work package
 
-Last reviewed: 2026-09-08
+Last reviewed: 2026-09-12
 
 The implemented controls support a controlled professional pilot. A general
 production-readiness decision still needs the evidence below. The public OWASP
@@ -50,7 +50,12 @@ The current increment has local regression coverage for interrupted checkpoints,
 concurrent archive creation and an injected disk-full write failure. These are
 functional controls, not completed native load or capacity measurements. Real
 capacity limits and remote release jobs remain to be established on the intended
-deployment hosts.
+deployment hosts. `scripts/qualify_native_capacity.py` now provides fixed serial
+and concurrent real-scanner waves, report verification, resource measurements and
+a native-phase cancellation check. Run it with an installed wheel, frozen source,
+explicit scanner configuration and predeclared timeout/resource budgets. The first
+full-repository 300-second pilot failed before native scanning and retained a
+valid incomplete report; do not use it as a passing capacity measurement.
 
 ## Keep release decisions explicit
 
@@ -59,8 +64,10 @@ counts and per-CWE precision and recall of at least 0.8, with false-positive rat
 at most 0.1. The policy file is authoritative. Preserve all protected engine/case
 detections when improving the model; aggregate gains cannot conceal lost cases.
 
-XPath, path traversal, remaining XSS misses and unsupported mutation flows need
-further detector work. Nonliteral dynamic imports still have uncertain module
+The 15 tracked collection-mutation misses now pass native regression checks with
+paired safe overwrites. XPath, path traversal and remaining XSS benchmark errors
+still require measured evaluation against the unchanged accuracy policy.
+Nonliteral dynamic imports still have uncertain module
 identity and retain medium-precision treatment. Keep those limits visible in
 customer-facing scope and release evidence until they are measured and resolved.
 

@@ -15,9 +15,9 @@ from ..models import (
     normalize_repo_path,
 )
 from ..strict_json import loads as strict_json_loads
-from .base import ScannerAdapter
+from .base import AdapterResult, ScannerAdapter
 from .coverage import native_coverage, reconcile_coverage
-from .staging import maintained_files
+from .staging import maintained_files, python_scan_tree
 from .common import map_confidence, map_severity, string_list
 
 
@@ -27,6 +27,10 @@ SEMGREP_JOBS = 2
 class SemgrepAdapter(ScannerAdapter):
     name = "semgrep"
     partial_exit_codes = frozenset({3})
+
+    def run(self, target: Path) -> AdapterResult:
+        with python_scan_tree(target) as mirror:
+            return super().run(mirror)
 
     def coverage_inventory(self, target: Path) -> tuple[str, ...]:
         return tuple(
@@ -74,6 +78,7 @@ class SemgrepAdapter(ScannerAdapter):
             "--metrics=off",
             "--disable-version-check",
             "--strict",
+            "--no-git-ignore",
             f"--jobs={SEMGREP_JOBS}",
             "--exclude",
             ".artifacts",

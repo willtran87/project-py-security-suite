@@ -34,6 +34,7 @@ from .governed_assets import (
     sealed_governed_assets as sealed_governed_assets,
 )
 from .command_environment import isolated_environment as isolated_environment
+from .command_environment import isolate_python_command, private_runtime_environment
 from .execution_policy import validate_governed_command_input
 from .diagnostic_safety import (
     sanitize_diagnostic as sanitize_diagnostic,
@@ -859,22 +860,13 @@ def run_command(
             if environment
             else (),
         )
-        private_locations = {
-            "HOME": private_root,
-            "USERPROFILE": private_root,
-            "APPDATA": private_root / "AppData" / "Roaming",
-            "LOCALAPPDATA": private_root / "AppData" / "Local",
-            "XDG_CACHE_HOME": private_root / "cache",
-            "TEMP": private_root / "tmp",
-            "TMP": private_root / "tmp",
-            "TMPDIR": private_root / "tmp",
-        }
-        for name, path in private_locations.items():
-            path.mkdir(parents=True, exist_ok=True)
-            process_environment[name] = str(path)
+        private_runtime_environment(process_environment, private_root)
         private_command = [
             item.replace("{PYSEC_PRIVATE_ROOT}", str(private_root)) for item in command
         ]
+        private_command = isolate_python_command(
+            private_command, private_root / "bytecode"
+        )
         gate: Path | None = None
         limit_report = private_root / "limits-applied.json"
         process_command = command
@@ -882,6 +874,9 @@ def run_command(
         process_command = [
             sys.executable,
             "-I",
+            "-B",
+            "-X",
+            f"pycache_prefix={private_root / 'bytecode'}",
             "-c",
             _LIMIT_GATE_BOOTSTRAP,
             str(gate),

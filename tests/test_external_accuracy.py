@@ -16,6 +16,24 @@ from py_security_suite.adapters.codeql import CodeQlAdapter
 from py_security_suite.config import ToolConfig
 
 
+def test_source_digest_has_platform_independent_case_order(tmp_path):
+    import hashlib
+
+    for name in ("a.py", "Z.py"):
+        (tmp_path / name).write_bytes(b"pass\r\n")
+    digest, members = benchmark_external.source_digest(tmp_path)
+    assert [name for name, _ in members] == ["Z.py", "a.py"]
+    expected = [
+        (name, hashlib.sha256(b"pass\n").hexdigest()) for name in ("Z.py", "a.py")
+    ]
+    assert (
+        digest
+        == hashlib.sha256(
+            json.dumps(expected, separators=(",", ":")).encode()
+        ).hexdigest()
+    )
+
+
 def measurement():
     expected = labels(
         "BenchmarkTest00001,sql,true,89\nBenchmarkTest00002,sql,false,89\n"

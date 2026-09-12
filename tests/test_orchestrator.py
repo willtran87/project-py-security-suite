@@ -137,7 +137,9 @@ class MutatingSecrets(FakeSecrets):
 
 
 class OrchestratorTests(unittest.TestCase):
-    def test_cancelled_scan_preserves_finished_findings_in_verified_report(self) -> None:
+    def test_cancelled_scan_preserves_finished_findings_in_verified_report(
+        self,
+    ) -> None:
         control = ScanControl()
 
         class CancelAfterBandit(FakeBandit):
@@ -155,15 +157,24 @@ class OrchestratorTests(unittest.TestCase):
             config.execution.max_workers = 1
             with controlled_scan(control):
                 result = scan_project(
-                    target=target, output=root / "report", config=config,
+                    target=target,
+                    output=root / "report",
+                    config=config,
                     network_isolation_attested=True,
-                    adapter_types={"bandit": CancelAfterBandit, "detect-secrets": FakeSecrets},
+                    adapter_types={
+                        "bandit": CancelAfterBandit,
+                        "detect-secrets": FakeSecrets,
+                    },
                 )
             self.assertEqual(result.outcome, Outcome.INCOMPLETE)
             self.assertIn("scan cancelled by operator", result.manifest.policy_reasons)
-            self.assertTrue(any(item.finding_id == "PYSEC-FAKE" for item in result.findings))
+            self.assertTrue(
+                any(item.finding_id == "PYSEC-FAKE" for item in result.findings)
+            )
             self.assertEqual(result.tool_runs[1].status, ToolStatus.SKIPPED)
-            self.assertEqual(verify_report(root / "report")["scan_id"], result.manifest.scan_id)
+            self.assertEqual(
+                verify_report(root / "report")["scan_id"], result.manifest.scan_id
+            )
 
     def test_standard_profile_includes_structural_quality_evidence(self) -> None:
         self.assertIn("standard", _STRUCTURAL_QUALITY_PROFILES)

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from .report_markdown import _markdown_text, _markdown_code
+from .risk_path_report_intro import render_risk_path_intro
+
 import hashlib
 import html
 import json
@@ -1215,214 +1218,8 @@ def _render_risk_path_summary(value: dict[str, Any] | None) -> list[str]:
     )
     owner_queues = value.get("owner_work_queues")
     owner_queues = owner_queues if isinstance(owner_queues, list) else []
-    lines = [
-        "",
-        "## Static risk routes",
-        "",
-        (
-            "These bounded Graphify routes retain every matched declared Python entry point to "
-            "review targets and their owner/test evidence. A route is triage context, "
-            "not proof of attacker control, exploitability, or sensitive-data flow."
-        ),
-        "",
-        "| Signal | Count |",
-        "|---|---:|",
-        f"| Declared entry points | {int(summary.get('entry_points', 0))} |",
-        f"| Finding targets | {int(summary.get('finding_targets', 0))} |",
-        f"| Sensitive sink-surface targets | {int(summary.get('sink_surface_targets', 0))} |",
-        f"| Dependency-advisory importer targets | {int(summary.get('dependency_advisory_import_targets', 0))} |",
-        f"| Routed dependency-advisory importers | {int(summary.get('routed_dependency_advisory_imports', 0))} |",
-        f"| Retained declared-entry exposures | {int(summary.get('retained_entry_point_exposures', 0))} |",
-        f"| Entry exposures runtime observed / unobserved / unavailable | {int(summary.get('observed_entry_point_exposures', 0))} / {int(summary.get('unobserved_entry_point_exposures', 0))} / {int(summary.get('entry_point_exposures_without_runtime_evidence', 0))} |",
-        f"| Routes reached by multiple entry points | {int(summary.get('routes_with_multiple_entry_points', 0))} |",
-        f"| Multi-entry routes with unobserved interfaces | {int(summary.get('multi_entry_routes_with_unobserved_interfaces', 0))} |",
-        f"| Multi-entry routes with interface runtime-evidence gaps | {int(summary.get('multi_entry_routes_with_runtime_evidence_gaps', 0))} |",
-        f"| Security routes reached by multiple entry points | {int(summary.get('security_routes_with_multiple_entry_points', 0))} |",
-        f"| Maximum entry points for one route | {int(summary.get('maximum_entry_points_per_route', 0))} |",
-        f"| Routes with entry-point exposure truncation | {int(summary.get('routes_with_entry_point_exposure_truncation', 0))} |",
-        f"| Routes with assured scanner evidence | {int(summary.get('assured_evidence_routes', 0))} |",
-        f"| Single-perspective routes | {int(summary.get('single_perspective_routes', 0))} |",
-        f"| Independently corroborated routes | {int(summary.get('independently_corroborated_routes', 0))} |",
-        f"| Routes with scanner trust / execution gaps | {int(summary.get('routes_with_tool_trust_gaps', 0))} / {int(summary.get('routes_with_tool_execution_gaps', 0))} |",
-        f"| Routes without direct tool assurance | {int(summary.get('routes_without_tool_assurance', 0))} |",
-        f"| Finding routes with comparable lifecycle | {int(summary.get('routes_with_comparable_finding_lifecycle', 0))} |",
-        f"| Finding routes without comparable lifecycle | {int(summary.get('routes_without_comparable_finding_lifecycle', 0))} |",
-        f"| Baseline-new or regressed routes | {int(summary.get('baseline_new_or_regressed_routes', 0))} |",
-        f"| Baseline-new or regressed routes on changed lines | {int(summary.get('baseline_new_or_regressed_changed_routes', 0))} |",
-        f"| Baseline-new or regressed changed routes with validation gaps | {int(summary.get('baseline_new_or_regressed_changed_routes_with_validation_gaps', 0))} |",
-        f"| Pre-existing finding routes on changed lines | {int(summary.get('existing_finding_routes_at_changed_lines', 0))} |",
-        f"| Routes with ownership evidence | {int(summary.get('routes_with_ownership_evidence', 0))} |",
-        f"| Routes crossing ownership boundaries | {int(summary.get('routes_crossing_ownership_boundaries', 0))} |",
-        f"| Exact ownership handoffs | {int(summary.get('ownership_boundaries', 0))} |",
-        f"| Routes with unowned segments | {int(summary.get('routes_with_unowned_segments', 0))} |",
-        f"| Routes without ownership evidence | {int(summary.get('routes_without_ownership_evidence', 0))} |",
-        f"| Distinct route owners | {int(summary.get('distinct_route_owners', 0))} |",
-        f"| Unrouted dependency-advisory importers | {int(summary.get('unrouted_dependency_advisory_imports', 0))} |",
-        f"| Distinct routed dependency advisories | {int(summary.get('distinct_routed_dependency_advisories', 0))} |",
-        f"| Known-exploited / high-EPSS dependency routes | {int(summary.get('known_exploited_dependency_routes', 0))} / {int(summary.get('high_epss_dependency_routes', 0))} |",
-        f"| Dependency routes with fixed versions | {int(summary.get('dependency_routes_with_fixed_versions', 0))} |",
-        f"| Dependency routes with validation gaps | {int(summary.get('dependency_routes_with_validation_gaps', 0))} |",
-        f"| Dependency routes at changed importers | {int(summary.get('dependency_routes_at_changed_importers', 0))} |",
-        f"| Dependency routes with uncovered changed lines | {int(summary.get('dependency_routes_with_uncovered_changed_lines', 0))} |",
-        f"| Dependency routes with comparable source/artifact inventory | {int(summary.get('dependency_routes_with_comparable_package_lifecycle', 0))} |",
-        f"| Dependency routes with source/artifact version drift | {int(summary.get('dependency_routes_with_version_drift', 0))} |",
-        f"| Dependency routes source-only / artifact-only | {int(summary.get('dependency_routes_source_only_in_comparable_inventory', 0))} / {int(summary.get('dependency_routes_artifact_only_in_comparable_inventory', 0))} |",
-        f"| Dependency routes with composition evidence gaps | {int(summary.get('dependency_routes_with_composition_evidence_gaps', 0))} |",
-        f"| Dependency routes with exact fixed version in artifact | {int(summary.get('dependency_routes_with_exact_fixed_version_in_artifact', 0))} |",
-        f"| Exact-path exposure / advisory intersections | {int(summary.get('exposure_advisory_intersections', 0))} |",
-        f"| Known-exploited exposure / advisory intersections | {int(summary.get('known_exploited_exposure_advisory_intersections', 0))} |",
-        f"| Unprotected exposure / advisory intersections | {int(summary.get('unprotected_exposure_advisory_intersections', 0))} |",
-        f"| Exposure / advisory intersections with validation gaps | {int(summary.get('exposure_advisory_intersections_with_validation_gaps', 0))} |",
-        f"| End-to-end sensitive-data routes | {int(summary.get('sensitive_data_routes', 0))} |",
-        f"| Scanner-confirmed / inventory-only sensitive-data routes | {int(summary.get('scanner_confirmed_sensitive_data_routes', 0))} / {int(summary.get('inventory_sensitive_data_routes', 0))} |",
-        f"| Sensitive-data routes without observed protection | {int(summary.get('sensitive_data_routes_without_observed_protection', 0))} |",
-        f"| Sensitive-data routes with runtime-observed entry points | {int(summary.get('sensitive_data_routes_with_runtime_observed_entry_points', 0))} |",
-        f"| Sensitive-data routes with validation / scanner-assurance gaps | {int(summary.get('sensitive_data_routes_with_validation_gaps', 0))} / {int(summary.get('sensitive_data_routes_with_assurance_gaps', 0))} |",
-        f"| Sensitive-data routes crossing ownership boundaries / reached by multiple entry points | {int(summary.get('sensitive_data_routes_crossing_ownership_boundaries', 0))} / {int(summary.get('sensitive_data_routes_with_multiple_entry_points', 0))} |",
-        f"| Sensitive-data routes with / without applicable citations | {int(summary.get('sensitive_data_routes_with_citations', 0))} / {int(summary.get('sensitive_data_routes_without_citations', 0))} |",
-        f"| Secret candidates assessed / total | {int(summary.get('secret_candidates_assessed', 0))} / {int(summary.get('secret_candidates', 0))} |",
-        f"| Secret candidates in production / test / generated evidence | {int(summary.get('production_source_secret_candidates', 0))} / {int(summary.get('test_source_secret_candidates', 0))} / {int(summary.get('generated_evidence_secret_candidates', 0))} |",
-        f"| Secret candidates in artifacts / repository controls | {int(summary.get('artifact_secret_candidates', 0))} / {int(summary.get('repository_control_secret_candidates', 0))} |",
-        f"| Secret candidates with history / scanner verification | {int(summary.get('history_secret_candidates', 0))} / {int(summary.get('verified_secret_candidates', 0))} |",
-        f"| Secret candidates without verification / with multiple scanners | {int(summary.get('secret_candidates_without_verification', 0))} / {int(summary.get('multi_scanner_secret_candidates', 0))} |",
-        f"| Secret candidates with assurance gaps / without redaction marker | {int(summary.get('secret_candidates_with_assurance_gaps', 0))} / {int(summary.get('secret_candidates_without_redaction_marker', 0))} |",
-        f"| Secret / sensitive-sink route intersections | {int(summary.get('secret_exposure_intersections', 0))} |",
-        f"| Exact-path / upstream-route secret intersections | {int(summary.get('exact_path_secret_exposure_intersections', 0))} / {int(summary.get('upstream_route_secret_exposure_intersections', 0))} |",
-        f"| Verified / historical secret intersections | {int(summary.get('verified_secret_exposure_intersections', 0))} / {int(summary.get('history_secret_exposure_intersections', 0))} |",
-        f"| Unprotected / scanner-confirmed secret intersections | {int(summary.get('unprotected_secret_exposure_intersections', 0))} / {int(summary.get('scanner_confirmed_secret_exposure_intersections', 0))} |",
-        f"| Secret intersections with contributing assurance gaps | {int(summary.get('secret_exposure_intersections_with_assurance_gaps', 0))} |",
-        f"| Secret intersections with / without candidate tests | {int(summary.get('secret_exposure_intersections_with_candidate_tests', 0))} / {int(summary.get('secret_exposure_intersections_without_candidate_tests', 0))} |",
-        f"| Secret intersections with validation / revision gaps | {int(summary.get('secret_exposure_intersections_with_validation_evidence_gaps', 0))} / {int(summary.get('secret_exposure_intersections_with_revision_gaps', 0))} |",
-        f"| Secret intersections with failing tests / assurance-prerequisite gaps | {int(summary.get('secret_exposure_intersections_with_failing_tests', 0))} / {int(summary.get('secret_exposure_intersections_with_assurance_prerequisite_gaps', 0))} |",
-        f"| Secret intersections without explicit canary validation | {int(summary.get('secret_exposure_intersections_without_canary_validation', 0))} |",
-        f"| Secret / sensitive-sink / advisory intersections | {int(summary.get('secret_exposure_advisory_intersections', 0))} |",
-        f"| Known-exploited / fix-available compound intersections | {int(summary.get('known_exploited_secret_exposure_advisory_intersections', 0))} / {int(summary.get('fix_available_secret_exposure_advisory_intersections', 0))} |",
-        f"| Verified-secret / unprotected compound intersections | {int(summary.get('verified_secret_exposure_advisory_intersections', 0))} / {int(summary.get('unprotected_secret_exposure_advisory_intersections', 0))} |",
-        f"| Runtime-observed compound intersections | {int(summary.get('runtime_observed_secret_exposure_advisory_intersections', 0))} |",
-        f"| Compound intersections with validation / assurance / temporal gaps | {int(summary.get('secret_exposure_advisory_intersections_with_validation_gaps', 0))} / {int(summary.get('secret_exposure_advisory_intersections_with_assurance_gaps', 0))} / {int(summary.get('secret_exposure_advisory_intersections_with_temporal_gaps', 0))} |",
-        f"| Compound intersections without explicit canary validation | {int(summary.get('secret_exposure_advisory_intersections_without_canary_validation', 0))} |",
-        f"| Targets analyzed within bound | {int(summary.get('targets_analyzed', 0))} |",
-        f"| Python route-applicable / intentionally non-runtime targets | {int(summary.get('route_applicable_targets', 0))} / {int(summary.get('route_not_applicable_targets', 0))} |",
-        f"| Targets with a bounded route | {int(summary.get('routed_targets', 0))} |",
-        f"| Targets without a bounded route (all dispositions) | {int(summary.get('unrouted_targets', 0))} |",
-        f"| Actionable Python route gaps / expected non-runtime dispositions | {int(summary.get('unrouted_route_applicable_targets', 0))} / {int(summary.get('unrouted_expected_non_runtime_targets', 0))} |",
-        f"| Python targets absent from graph / without an entry route | {int(summary.get('unrouted_targets_missing_graph_membership', 0))} / {int(summary.get('unrouted_targets_without_entry_route', 0))} |",
-        f"| Unrouted target / structural-island intersections | {int(summary.get('unrouted_structural_intersections', 0))} |",
-        f"| Unrouted targets in disconnected islands | {int(summary.get('unrouted_targets_in_disconnected_islands', 0))} |",
-        f"| Unrouted targets with runtime counter-evidence / dead-code corroboration | {int(summary.get('unrouted_targets_with_runtime_counter_evidence', 0))} / {int(summary.get('unrouted_targets_with_dead_code_corroboration', 0))} |",
-        f"| Unrouted targets with candidate entry paths | {int(summary.get('unrouted_targets_with_candidate_entry_paths', 0))} |",
-        f"| Unrouted structural intersections with validation gaps | {int(summary.get('unrouted_structural_intersections_with_validation_gaps', 0))} |",
-        f"| Runtime-observed routes | {int(summary.get('runtime_observed_routes', 0))} |",
-        f"| Routes with line-coverage gaps | {int(summary.get('coverage_gap_routes', 0))} |",
-        f"| Routes with validation gaps | {int(summary.get('validation_gap_routes', 0))} |",
-        f"| Routes with validation evidence | {int(summary.get('validation_assessed_routes', 0))} |",
-        f"| Routes not validation-assessed | {int(summary.get('validation_unassessed_routes', 0))} |",
-        f"| Routes with an assigned owner | {int(summary.get('owned_routes', 0))} |",
-        f"| Shared route convergence hotspots | {int(summary.get('convergence_hotspots', 0))} |",
-        f"| Shared transit/control points | {int(summary.get('shared_control_points', 0))} |",
-        f"| Routes benefiting from shared remediation | {int(summary.get('routes_in_convergence_hotspots', 0))} |",
-        f"| Owner work queues | {int(summary.get('owner_work_queues', 0))} |",
-        f"| Owner queues with exposure / advisory intersections | {int(summary.get('owner_queues_with_exposure_advisory_intersections', 0))} |",
-        f"| Shared validation campaigns | {int(summary.get('validation_campaigns', 0))} |",
-        f"| Shared validation-test hotspots | {int(summary.get('shared_validation_test_hotspots', 0))} |",
-        f"| Campaigns using shared tests | {int(summary.get('campaigns_using_shared_tests', 0))} |",
-        f"| Routes using shared tests | {int(summary.get('routes_using_shared_tests', 0))} |",
-        f"| Campaigns dependent on one shared test | {int(summary.get('single_test_dependency_campaigns', 0))} |",
-        f"| Shared-test evidence strong / qualified / weak / not established | {int(summary.get('shared_test_hotspots_strong', 0))} / {int(summary.get('shared_test_hotspots_qualified', 0))} / {int(summary.get('shared_test_hotspots_weak', 0))} / {int(summary.get('shared_test_hotspots_not_established', 0))} |",
-        f"| Shared test files with findings / high-severity findings | {int(summary.get('shared_test_files_with_findings', 0))} / {int(summary.get('shared_test_files_with_high_severity_findings', 0))} |",
-        f"| Cross-owner / unowned shared test files | {int(summary.get('cross_owner_shared_test_files', 0))} / {int(summary.get('unowned_shared_test_files', 0))} |",
-        f"| Campaigns with selected tests | {int(summary.get('campaigns_with_selected_tests', 0))} |",
-        f"| Campaigns with failing tests | {int(summary.get('campaigns_with_failing_tests', 0))} |",
-        f"| Campaigns with coverage gaps | {int(summary.get('campaigns_with_coverage_gaps', 0))} |",
-        f"| Campaigns at changed control points | {int(summary.get('campaigns_with_changed_controls', 0))} |",
-        f"| Campaigns with uncovered changed lines | {int(summary.get('campaigns_with_uncovered_changed_lines', 0))} |",
-        f"| Campaigns with runtime-observation gaps | {int(summary.get('campaigns_with_runtime_observation_gaps', 0))} |",
-        f"| Campaigns with route tool-assurance prerequisite met | {int(summary.get('campaigns_with_assured_route_evidence', 0))} |",
-        f"| Campaigns blocked by route tool assurance | {int(summary.get('campaigns_blocked_by_route_assurance', 0))} |",
-        f"| Campaigns with route trust / execution / unassessed gaps | {int(summary.get('campaigns_with_route_trust_gaps', 0))} / {int(summary.get('campaigns_with_route_execution_gaps', 0))} / {int(summary.get('campaigns_with_unassessed_route_evidence', 0))} |",
-        f"| Campaigns with single-perspective routes | {int(summary.get('campaigns_with_route_perspective_gaps', 0))} |",
-        f"| Campaigns with qualified / weak shared-test evidence | {int(summary.get('campaigns_with_qualified_shared_test_evidence', 0))} / {int(summary.get('campaigns_with_weak_shared_test_evidence', 0))} |",
-        f"| Campaigns aligned in current evidence | {int(summary.get('campaigns_aligned_current_evidence', 0))} |",
-        f"| Campaigns requiring more evidence | {int(summary.get('campaigns_requiring_evidence', 0))} |",
-        f"| Unique campaign test files | {int(summary.get('unique_campaign_test_files', 0))} |",
-        f"| Critical / high review campaigns | {int((summary.get('campaigns_by_review_tier') or {}).get('critical', 0))} / {int((summary.get('campaigns_by_review_tier') or {}).get('high', 0))} |",
-        f"| Campaign evidence revision-aligned | {int(summary.get('campaigns_revision_aligned', 0))} |",
-        f"| Campaign evidence revision-mismatched | {int(summary.get('campaigns_revision_mismatched', 0))} |",
-        f"| Campaign evidence digest-matched but binding-unverified | {int(summary.get('campaigns_revision_unverified', 0))} |",
-        f"| Campaign evidence revision not established | {int(summary.get('campaigns_revision_unbound', 0))} |",
-        f"| Source-bound shared control points | {int(summary.get('campaigns_with_source_bound_control_points', 0))} |",
-        f"| Selected-test source bindings | {int(summary.get('selected_test_source_bindings', 0))} |",
-        "",
-    ]
-    if routes:
-        lines.extend(
-            [
-                "| Priority / target | Entry point and bounded route | Runtime / validation | Owner and action |",
-                "|---|---|---|---|",
-            ]
-        )
-        for route in routes[:10]:
-            if not isinstance(route, dict):
-                continue
-            target = route.get("target")
-            entry = route.get("entry_point")
-            validation = route.get("validation")
-            runtime = route.get("runtime_context")
-            assurance = route.get("evidence_assurance")
-            lifecycle = route.get("change_lifecycle_attribution")
-            ownership = route.get("ownership_context")
-            target = target if isinstance(target, dict) else {}
-            entry = entry if isinstance(entry, dict) else {}
-            validation = validation if isinstance(validation, dict) else {}
-            runtime = runtime if isinstance(runtime, dict) else {}
-            files = route.get("files")
-            file_values = files if isinstance(files, list) else []
-            route_text = " → ".join(str(item) for item in file_values[:5])
-            if len(file_values) > 5:
-                route_text += f" → … (+{len(file_values) - 5})"
-            signals = _risk_path_validation_signals(validation, runtime)
-            owners = route.get("owners")
-            owner_text = (
-                ", ".join(str(item) for item in owners[:3])
-                if isinstance(owners, list) and owners
-                else "Unassigned"
-            )
-            lines.append(
-                "| `"
-                + _markdown_code(str(route.get("priority") or "P4"))
-                + "` "
-                + _markdown_text(
-                    str(target.get("label") or target.get("id") or "target")
-                )
-                + "<br>`"
-                + _markdown_code(
-                    str(target.get("path") or "unknown")
-                    + (f":{target['line']}" if target.get("line") else "")
-                )
-                + "` | `"
-                + _markdown_code(
-                    str(entry.get("declared_as") or entry.get("id") or "unknown")
-                )
-                + "`<br>"
-                + _markdown_text(route_text or "same-file entry point")
-                + "<br>"
-                + _markdown_text(_entry_point_exposure_text(route))
-                + " | "
-                + _markdown_text(signals)
-                + "<br>evidence "
-                + _markdown_text(_evidence_assurance_text(assurance))
-                + "<br>lifecycle "
-                + _markdown_text(_change_lifecycle_text(lifecycle))
-                + "<br>ownership "
-                + _markdown_text(_route_ownership_text(ownership))
-                + " | **"
-                + _markdown_text(owner_text)
-                + "**<br>"
-                + _markdown_text(
-                    str(route.get("recommended_action") or "Review the route.")
-                )
-                + " |"
-            )
+    lines = render_risk_path_intro(summary)
+    lines.extend(_render_risk_routes_table(routes))
     lines.extend(_render_dependency_route_table(dependency_routes))
     lines.extend(_render_sensitive_data_routes(sensitive_routes))
     lines.extend(_render_secret_provenance_assessments(secret_assessments))
@@ -1433,304 +1230,12 @@ def _render_risk_path_summary(value: dict[str, Any] | None) -> list[str]:
         )
     )
     lines.extend(_render_exposure_advisory_intersections(intersections))
-    if test_hotspots:
-        lines.extend(
-            [
-                "",
-                "### Shared validation-test hotspots",
-                "",
-                "These test files are selected by multiple shared-control campaigns. Concentration coordinates regression work but does not prove independent assertions or sufficient coverage.",
-                "",
-                "| Review / test | Campaigns / controls / routes | Selection / dependency | Execution / source | Owners / action |",
-                "|---|---:|---|---|---|",
-            ]
-        )
-        for hotspot in test_hotspots[:10]:
-            if not isinstance(hotspot, dict):
-                continue
-            owners = hotspot.get("owners")
-            owner_text = (
-                ", ".join(str(owner) for owner in owners[:3])
-                if isinstance(owners, list) and owners
-                else "Unassigned"
-            )
-            test_owners = hotspot.get("test_file_owners")
-            test_owner_text = (
-                ", ".join(str(owner) for owner in test_owners[:3])
-                if isinstance(test_owners, list) and test_owners
-                else "Unassigned"
-            )
-            statuses = hotspot.get("execution_statuses")
-            status_text = (
-                ", ".join(str(status) for status in statuses[:5])
-                if isinstance(statuses, list) and statuses
-                else "not observed"
-            )
-            binding = hotspot.get("source_binding")
-            source_text = (
-                "bound"
-                if isinstance(binding, dict)
-                and hotspot.get("source_binding_consistent") is True
-                else "not established"
-                if hotspot.get("source_binding_consistent") is False
-                else "not bound"
-            )
-            lines.append(
-                "| `"
-                + _markdown_code(str(hotspot.get("highest_review_tier") or "low"))
-                + "` score `"
-                + _markdown_code(str(int(hotspot.get("highest_review_score") or 0)))
-                + "`<br>`"
-                + _markdown_code(str(hotspot.get("test_path") or "unknown"))
-                + "`<br>`"
-                + _markdown_code(str(hotspot.get("test_hotspot_id") or "unknown"))
-                + "` | "
-                + str(len(hotspot.get("campaign_ids") or []))
-                + " / "
-                + str(len(hotspot.get("control_point_paths") or []))
-                + " / "
-                + str(len(hotspot.get("route_ids") or []))
-                + " | direct/transitive/context `"
-                + _markdown_code(
-                    str(int(hotspot.get("direct_campaigns") or 0))
-                    + "/"
-                    + str(int(hotspot.get("transitive_campaigns") or 0))
-                    + "/"
-                    + str(int(hotspot.get("route_mapped_campaigns") or 0))
-                )
-                + "`<br>sole dependency `"
-                + _markdown_code(
-                    str(len(hotspot.get("single_test_dependency_campaign_ids") or []))
-                )
-                + "` | status `"
-                + _markdown_code(status_text)
-                + "`; cases `"
-                + _markdown_code(str(int(hotspot.get("observed_case_count") or 0)))
-                + "`<br>source `"
-                + _markdown_code(source_text)
-                + "`<br>quality `"
-                + _markdown_code(
-                    str(
-                        hotspot.get("validation_quality_assessment")
-                        or "not-established"
-                    )
-                )
-                + "`; test findings `"
-                + _markdown_code(str(len(hotspot.get("test_file_finding_ids") or [])))
-                + "` | **"
-                + _markdown_text(owner_text)
-                + "** campaign<br>**"
-                + _markdown_text(test_owner_text)
-                + "** test (`"
-                + _markdown_code(
-                    str(hotspot.get("test_owner_alignment") or "not-established")
-                )
-                + "`)<br>"
-                + _markdown_text(
-                    str(
-                        hotspot.get("recommended_action") or "Review shared test scope."
-                    )
-                )
-                + " |"
-            )
-    if campaigns:
-        lines.extend(
-            [
-                "",
-                "### Shared validation campaigns",
-                "",
-                "Each campaign converts one shared control point into a bounded regression plan. Test selection is static context; even passing tests with complete retained coverage do not prove security or exploitability.",
-                "",
-                "| Review / campaign | Selected tests | Execution / coverage | Evidence coherence | Owners / action |",
-                "|---|---|---|---|---|",
-            ]
-        )
-        for campaign in campaigns[:10]:
-            if not isinstance(campaign, dict):
-                continue
-            selected = campaign.get("selected_test_files")
-            selected = selected if isinstance(selected, list) else []
-            tests = ", ".join(f"`{_markdown_code(str(path))}`" for path in selected[:5])
-            if len(selected) > 5:
-                tests += f" (+{len(selected) - 5})"
-            owners = campaign.get("owners")
-            owner_text = (
-                ", ".join(str(owner) for owner in owners[:3])
-                if isinstance(owners, list) and owners
-                else "Unassigned"
-            )
-            coverage = campaign.get("coverage_percent")
-            coverage_text = (
-                f"{float(coverage):.1f}%"
-                if isinstance(coverage, (int, float))
-                else "not available"
-            )
-            snapshot = campaign.get("source_snapshot")
-            snapshot = snapshot if isinstance(snapshot, dict) else {}
-            revision = str(
-                snapshot.get("evidence_revision_binding") or "not-established"
-            )
-            route_assurance_text = _campaign_route_assurance_text(campaign)
-            context_text = _risk_campaign_control_text(campaign)
-            factor_text = _risk_campaign_factor_text(campaign)
-            lines.append(
-                "| `"
-                + _markdown_code(str(campaign.get("review_tier") or "low"))
-                + "` score `"
-                + _markdown_code(str(int(campaign.get("review_score") or 0)))
-                + "`"
-                + ("<br>factors " + _markdown_text(factor_text) if factor_text else "")
-                + "<br>route priority `"
-                + _markdown_code(str(campaign.get("priority") or "P4"))
-                + "`<br>`"
-                + _markdown_code(str(campaign.get("campaign_id") or "unknown"))
-                + "`<br>`"
-                + _markdown_code(str(campaign.get("path") or "unknown"))
-                + "` | "
-                + (tests or "No bounded test candidate")
-                + "<br>selection `"
-                + _markdown_code(
-                    str(campaign.get("test_selection_confidence") or "not-available")
-                )
-                + "` | execution `"
-                + _markdown_code(
-                    str(
-                        campaign.get("focused_test_validation_status")
-                        or "not-available"
-                    )
-                )
-                + "`<br>aggregate coverage `"
-                + _markdown_code(
-                    str(campaign.get("coverage_status") or "not-available")
-                )
-                + "` ("
-                + coverage_text
-                + ")<br>alignment `"
-                + _markdown_code(
-                    str(campaign.get("test_coverage_alignment") or "not-selected")
-                )
-                + "`"
-                + ("<br>" + _markdown_text(context_text) if context_text else "")
-                + " | revision `"
-                + _markdown_code(revision)
-                + "`<br>control bound `"
-                + _markdown_code(
-                    "yes" if snapshot.get("control_point_binding") else "no"
-                )
-                + "`; tests bound `"
-                + _markdown_code(
-                    str(int(snapshot.get("selected_test_files_bound") or 0))
-                )
-                + "`<br>route evidence "
-                + _markdown_text(route_assurance_text)
-                + "<br>shared tests "
-                + _markdown_text(_campaign_shared_test_quality_text(campaign))
-                + " | **"
-                + _markdown_text(owner_text)
-                + "**<br>"
-                + _markdown_text(
-                    str(campaign.get("recommended_action") or "Run the campaign.")
-                )
-                + " |"
-            )
-    if hotspots:
-        lines.extend(
-            [
-                "",
-                "### Shared route control points",
-                "",
-                "These files occur on multiple distinct target routes. Review shared remediation and integration-test scope before creating duplicate work.",
-                "",
-                "| Priority / control point | Role | Routes / targets | Owners | Validation | Consolidated action |",
-                "|---|---|---:|---|---|---|",
-            ]
-        )
-        for hotspot in hotspots[:10]:
-            if not isinstance(hotspot, dict):
-                continue
-            validation = hotspot.get("validation_statuses")
-            validation = validation if isinstance(validation, dict) else {}
-            owners = hotspot.get("owners")
-            owner_text = (
-                ", ".join(str(item) for item in owners[:3])
-                if isinstance(owners, list) and owners
-                else "Unassigned"
-            )
-            lines.append(
-                "| `"
-                + _markdown_code(str(hotspot.get("priority") or "P4"))
-                + "` `"
-                + _markdown_code(str(hotspot.get("path") or "unknown"))
-                + "`<br>`"
-                + _markdown_code(str(hotspot.get("hotspot_id") or "unknown"))
-                + "` | `"
-                + _markdown_code(str(hotspot.get("kind") or "unknown"))
-                + "` | "
-                + str(len(hotspot.get("route_ids") or []))
-                + " / "
-                + str(len(hotspot.get("target_ids") or []))
-                + " | "
-                + _markdown_text(owner_text)
-                + " | "
-                + _markdown_text(_validation_count_summary(validation))
-                + " | "
-                + _markdown_text(
-                    str(hotspot.get("recommended_action") or "Review shared scope.")
-                )
-                + " |"
-            )
+    lines.extend(_render_risk_test_hotspots_table(test_hotspots))
+    lines.extend(_render_risk_campaigns_table(campaigns))
+    lines.extend(_render_risk_hotspots_table(hotspots))
     lines.extend(_render_risk_owner_queues(owner_queues))
     lines.extend(_render_unrouted_structural_intersections(unrouted_structural))
-    if unrouted:
-        lines.extend(
-            [
-                "",
-                "### Unrouted target dispositions",
-                "",
-                "Only Python runtime-source targets are reachability gaps. Artifact controls, generated evidence, tests, and non-Python repository controls retain their findings but receive their native evidence-lane action instead of misleading entry-point advice.",
-                "",
-                "| Applicability | Target | Evidence | Action |",
-                "|---|---|---|---|",
-            ]
-        )
-        for item in unrouted[:10]:
-            if not isinstance(item, dict):
-                continue
-            target = item.get("target")
-            target = target if isinstance(target, dict) else {}
-            applicability = item.get("route_applicability")
-            applicability = applicability if isinstance(applicability, dict) else {}
-            lines.append(
-                "| `"
-                + _markdown_code(
-                    str(applicability.get("assessment") or "not-established")
-                )
-                + "`<br>`"
-                + _markdown_code(
-                    str(applicability.get("classification") or "not-established")
-                )
-                + "` | `"
-                + _markdown_code(str(item.get("priority") or "P4"))
-                + "` `"
-                + _markdown_code(str(target.get("path") or "unknown"))
-                + "`<br>"
-                + _markdown_text(str(item.get("reason") or "route unavailable"))
-                + " | graph/source/artifact `"
-                + _markdown_code(_route_applicability_membership_text(applicability))
-                + "`<br>scanner "
-                + _markdown_text(
-                    _evidence_assurance_text(item.get("evidence_assurance"))
-                )
-                + " | "
-                + _markdown_text(
-                    str(
-                        item.get("recommended_action")
-                        or applicability.get("recommended_action")
-                        or "Review the target in its native evidence lane."
-                    )
-                )
-                + " |"
-            )
+    lines.extend(_render_risk_unrouted_table(unrouted))
     return lines
 
 
@@ -7843,16 +7348,397 @@ def _sarif_security_score(severity: Severity) -> float:
     }[severity]
 
 
-def _markdown_text(value: str) -> str:
-    escaped = value.replace("\\", "\\\\")
-    for character in ("`", "*", "_", "{", "}", "[", "]", "<", ">", "#"):
-        escaped = escaped.replace(character, f"\\{character}")
-    return escaped.replace("\r", " ").replace("\n", " ")
-
-
-def _markdown_code(value: str) -> str:
-    return value.replace("`", "'").replace("\r", " ").replace("\n", " ")
-
-
 def _markdown_table(value: str) -> str:
     return _markdown_text(value).replace("|", "\\|")
+
+
+def _render_risk_routes_table(routes: list[dict[str, Any]]) -> list[str]:
+    lines: list[str] = []
+    if routes:
+        lines.extend(
+            [
+                "| Priority / target | Entry point and bounded route | Runtime / validation | Owner and action |",
+                "|---|---|---|---|",
+            ]
+        )
+        for route in routes[:10]:
+            if not isinstance(route, dict):
+                continue
+            target = route.get("target")
+            entry = route.get("entry_point")
+            validation = route.get("validation")
+            runtime = route.get("runtime_context")
+            assurance = route.get("evidence_assurance")
+            lifecycle = route.get("change_lifecycle_attribution")
+            ownership = route.get("ownership_context")
+            target = target if isinstance(target, dict) else {}
+            entry = entry if isinstance(entry, dict) else {}
+            validation = validation if isinstance(validation, dict) else {}
+            runtime = runtime if isinstance(runtime, dict) else {}
+            files = route.get("files")
+            file_values = files if isinstance(files, list) else []
+            route_text = " → ".join((str(item) for item in file_values[:5]))
+            if len(file_values) > 5:
+                route_text += f" → … (+{len(file_values) - 5})"
+            signals = _risk_path_validation_signals(validation, runtime)
+            owners = route.get("owners")
+            owner_text = (
+                ", ".join((str(item) for item in owners[:3]))
+                if isinstance(owners, list) and owners
+                else "Unassigned"
+            )
+            lines.append(
+                "| `"
+                + _markdown_code(str(route.get("priority") or "P4"))
+                + "` "
+                + _markdown_text(
+                    str(target.get("label") or target.get("id") or "target")
+                )
+                + "<br>`"
+                + _markdown_code(
+                    str(target.get("path") or "unknown")
+                    + (f":{target['line']}" if target.get("line") else "")
+                )
+                + "` | `"
+                + _markdown_code(
+                    str(entry.get("declared_as") or entry.get("id") or "unknown")
+                )
+                + "`<br>"
+                + _markdown_text(route_text or "same-file entry point")
+                + "<br>"
+                + _markdown_text(_entry_point_exposure_text(route))
+                + " | "
+                + _markdown_text(signals)
+                + "<br>evidence "
+                + _markdown_text(_evidence_assurance_text(assurance))
+                + "<br>lifecycle "
+                + _markdown_text(_change_lifecycle_text(lifecycle))
+                + "<br>ownership "
+                + _markdown_text(_route_ownership_text(ownership))
+                + " | **"
+                + _markdown_text(owner_text)
+                + "**<br>"
+                + _markdown_text(
+                    str(route.get("recommended_action") or "Review the route.")
+                )
+                + " |"
+            )
+    return lines
+
+
+def _render_risk_test_hotspots_table(test_hotspots: list[dict[str, Any]]) -> list[str]:
+    lines: list[str] = []
+    if test_hotspots:
+        lines.extend(
+            [
+                "",
+                "### Shared validation-test hotspots",
+                "",
+                "These test files are selected by multiple shared-control campaigns. Concentration coordinates regression work but does not prove independent assertions or sufficient coverage.",
+                "",
+                "| Review / test | Campaigns / controls / routes | Selection / dependency | Execution / source | Owners / action |",
+                "|---|---:|---|---|---|",
+            ]
+        )
+        for hotspot in test_hotspots[:10]:
+            if not isinstance(hotspot, dict):
+                continue
+            owners = hotspot.get("owners")
+            owner_text = (
+                ", ".join((str(owner) for owner in owners[:3]))
+                if isinstance(owners, list) and owners
+                else "Unassigned"
+            )
+            test_owners = hotspot.get("test_file_owners")
+            test_owner_text = (
+                ", ".join((str(owner) for owner in test_owners[:3]))
+                if isinstance(test_owners, list) and test_owners
+                else "Unassigned"
+            )
+            statuses = hotspot.get("execution_statuses")
+            status_text = (
+                ", ".join((str(status) for status in statuses[:5]))
+                if isinstance(statuses, list) and statuses
+                else "not observed"
+            )
+            binding = hotspot.get("source_binding")
+            source_text = (
+                "bound"
+                if isinstance(binding, dict)
+                and hotspot.get("source_binding_consistent") is True
+                else "not established"
+                if hotspot.get("source_binding_consistent") is False
+                else "not bound"
+            )
+            lines.append(
+                "| `"
+                + _markdown_code(str(hotspot.get("highest_review_tier") or "low"))
+                + "` score `"
+                + _markdown_code(str(int(hotspot.get("highest_review_score") or 0)))
+                + "`<br>`"
+                + _markdown_code(str(hotspot.get("test_path") or "unknown"))
+                + "`<br>`"
+                + _markdown_code(str(hotspot.get("test_hotspot_id") or "unknown"))
+                + "` | "
+                + str(len(hotspot.get("campaign_ids") or []))
+                + " / "
+                + str(len(hotspot.get("control_point_paths") or []))
+                + " / "
+                + str(len(hotspot.get("route_ids") or []))
+                + " | direct/transitive/context `"
+                + _markdown_code(
+                    str(int(hotspot.get("direct_campaigns") or 0))
+                    + "/"
+                    + str(int(hotspot.get("transitive_campaigns") or 0))
+                    + "/"
+                    + str(int(hotspot.get("route_mapped_campaigns") or 0))
+                )
+                + "`<br>sole dependency `"
+                + _markdown_code(
+                    str(len(hotspot.get("single_test_dependency_campaign_ids") or []))
+                )
+                + "` | status `"
+                + _markdown_code(status_text)
+                + "`; cases `"
+                + _markdown_code(str(int(hotspot.get("observed_case_count") or 0)))
+                + "`<br>source `"
+                + _markdown_code(source_text)
+                + "`<br>quality `"
+                + _markdown_code(
+                    str(
+                        hotspot.get("validation_quality_assessment")
+                        or "not-established"
+                    )
+                )
+                + "`; test findings `"
+                + _markdown_code(str(len(hotspot.get("test_file_finding_ids") or [])))
+                + "` | **"
+                + _markdown_text(owner_text)
+                + "** campaign<br>**"
+                + _markdown_text(test_owner_text)
+                + "** test (`"
+                + _markdown_code(
+                    str(hotspot.get("test_owner_alignment") or "not-established")
+                )
+                + "`)<br>"
+                + _markdown_text(
+                    str(
+                        hotspot.get("recommended_action") or "Review shared test scope."
+                    )
+                )
+                + " |"
+            )
+    return lines
+
+
+def _render_risk_campaigns_table(campaigns: list[dict[str, Any]]) -> list[str]:
+    lines: list[str] = []
+    if campaigns:
+        lines.extend(
+            [
+                "",
+                "### Shared validation campaigns",
+                "",
+                "Each campaign converts one shared control point into a bounded regression plan. Test selection is static context; even passing tests with complete retained coverage do not prove security or exploitability.",
+                "",
+                "| Review / campaign | Selected tests | Execution / coverage | Evidence coherence | Owners / action |",
+                "|---|---|---|---|---|",
+            ]
+        )
+        for campaign in campaigns[:10]:
+            if not isinstance(campaign, dict):
+                continue
+            selected = campaign.get("selected_test_files")
+            selected = selected if isinstance(selected, list) else []
+            tests = ", ".join(
+                (f"`{_markdown_code(str(path))}`" for path in selected[:5])
+            )
+            if len(selected) > 5:
+                tests += f" (+{len(selected) - 5})"
+            owners = campaign.get("owners")
+            owner_text = (
+                ", ".join((str(owner) for owner in owners[:3]))
+                if isinstance(owners, list) and owners
+                else "Unassigned"
+            )
+            coverage = campaign.get("coverage_percent")
+            coverage_text = (
+                f"{float(coverage):.1f}%"
+                if isinstance(coverage, (int, float))
+                else "not available"
+            )
+            snapshot = campaign.get("source_snapshot")
+            snapshot = snapshot if isinstance(snapshot, dict) else {}
+            revision = str(
+                snapshot.get("evidence_revision_binding") or "not-established"
+            )
+            route_assurance_text = _campaign_route_assurance_text(campaign)
+            context_text = _risk_campaign_control_text(campaign)
+            factor_text = _risk_campaign_factor_text(campaign)
+            lines.append(
+                "| `"
+                + _markdown_code(str(campaign.get("review_tier") or "low"))
+                + "` score `"
+                + _markdown_code(str(int(campaign.get("review_score") or 0)))
+                + "`"
+                + ("<br>factors " + _markdown_text(factor_text) if factor_text else "")
+                + "<br>route priority `"
+                + _markdown_code(str(campaign.get("priority") or "P4"))
+                + "`<br>`"
+                + _markdown_code(str(campaign.get("campaign_id") or "unknown"))
+                + "`<br>`"
+                + _markdown_code(str(campaign.get("path") or "unknown"))
+                + "` | "
+                + (tests or "No bounded test candidate")
+                + "<br>selection `"
+                + _markdown_code(
+                    str(campaign.get("test_selection_confidence") or "not-available")
+                )
+                + "` | execution `"
+                + _markdown_code(
+                    str(
+                        campaign.get("focused_test_validation_status")
+                        or "not-available"
+                    )
+                )
+                + "`<br>aggregate coverage `"
+                + _markdown_code(
+                    str(campaign.get("coverage_status") or "not-available")
+                )
+                + "` ("
+                + coverage_text
+                + ")<br>alignment `"
+                + _markdown_code(
+                    str(campaign.get("test_coverage_alignment") or "not-selected")
+                )
+                + "`"
+                + ("<br>" + _markdown_text(context_text) if context_text else "")
+                + " | revision `"
+                + _markdown_code(revision)
+                + "`<br>control bound `"
+                + _markdown_code(
+                    "yes" if snapshot.get("control_point_binding") else "no"
+                )
+                + "`; tests bound `"
+                + _markdown_code(
+                    str(int(snapshot.get("selected_test_files_bound") or 0))
+                )
+                + "`<br>route evidence "
+                + _markdown_text(route_assurance_text)
+                + "<br>shared tests "
+                + _markdown_text(_campaign_shared_test_quality_text(campaign))
+                + " | **"
+                + _markdown_text(owner_text)
+                + "**<br>"
+                + _markdown_text(
+                    str(campaign.get("recommended_action") or "Run the campaign.")
+                )
+                + " |"
+            )
+    return lines
+
+
+def _render_risk_hotspots_table(hotspots: list[dict[str, Any]]) -> list[str]:
+    lines: list[str] = []
+    if hotspots:
+        lines.extend(
+            [
+                "",
+                "### Shared route control points",
+                "",
+                "These files occur on multiple distinct target routes. Review shared remediation and integration-test scope before creating duplicate work.",
+                "",
+                "| Priority / control point | Role | Routes / targets | Owners | Validation | Consolidated action |",
+                "|---|---|---:|---|---|---|",
+            ]
+        )
+        for hotspot in hotspots[:10]:
+            if not isinstance(hotspot, dict):
+                continue
+            validation = hotspot.get("validation_statuses")
+            validation = validation if isinstance(validation, dict) else {}
+            owners = hotspot.get("owners")
+            owner_text = (
+                ", ".join((str(item) for item in owners[:3]))
+                if isinstance(owners, list) and owners
+                else "Unassigned"
+            )
+            lines.append(
+                "| `"
+                + _markdown_code(str(hotspot.get("priority") or "P4"))
+                + "` `"
+                + _markdown_code(str(hotspot.get("path") or "unknown"))
+                + "`<br>`"
+                + _markdown_code(str(hotspot.get("hotspot_id") or "unknown"))
+                + "` | `"
+                + _markdown_code(str(hotspot.get("kind") or "unknown"))
+                + "` | "
+                + str(len(hotspot.get("route_ids") or []))
+                + " / "
+                + str(len(hotspot.get("target_ids") or []))
+                + " | "
+                + _markdown_text(owner_text)
+                + " | "
+                + _markdown_text(_validation_count_summary(validation))
+                + " | "
+                + _markdown_text(
+                    str(hotspot.get("recommended_action") or "Review shared scope.")
+                )
+                + " |"
+            )
+    return lines
+
+
+def _render_risk_unrouted_table(unrouted: list[dict[str, Any]]) -> list[str]:
+    lines: list[str] = []
+    if unrouted:
+        lines.extend(
+            [
+                "",
+                "### Unrouted target dispositions",
+                "",
+                "Only Python runtime-source targets are reachability gaps. Artifact controls, generated evidence, tests, and non-Python repository controls retain their findings but receive their native evidence-lane action instead of misleading entry-point advice.",
+                "",
+                "| Applicability | Target | Evidence | Action |",
+                "|---|---|---|---|",
+            ]
+        )
+        for item in unrouted[:10]:
+            if not isinstance(item, dict):
+                continue
+            target = item.get("target")
+            target = target if isinstance(target, dict) else {}
+            applicability = item.get("route_applicability")
+            applicability = applicability if isinstance(applicability, dict) else {}
+            lines.append(
+                "| `"
+                + _markdown_code(
+                    str(applicability.get("assessment") or "not-established")
+                )
+                + "`<br>`"
+                + _markdown_code(
+                    str(applicability.get("classification") or "not-established")
+                )
+                + "` | `"
+                + _markdown_code(str(item.get("priority") or "P4"))
+                + "` `"
+                + _markdown_code(str(target.get("path") or "unknown"))
+                + "`<br>"
+                + _markdown_text(str(item.get("reason") or "route unavailable"))
+                + " | graph/source/artifact `"
+                + _markdown_code(_route_applicability_membership_text(applicability))
+                + "`<br>scanner "
+                + _markdown_text(
+                    _evidence_assurance_text(item.get("evidence_assurance"))
+                )
+                + " | "
+                + _markdown_text(
+                    str(
+                        item.get("recommended_action")
+                        or applicability.get("recommended_action")
+                        or "Review the target in its native evidence lane."
+                    )
+                )
+                + " |"
+            )
+    return lines

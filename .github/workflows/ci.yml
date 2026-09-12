@@ -46,14 +46,16 @@ jobs:
           if [ "$RUNNER_OS" = Windows ]; then
             PYTHON="$RUNNER_TEMP/acceptance/Scripts/python.exe"
             SCANNERS="$PWD/containers/scanner/.venv/Scripts"
+            EXE=".exe"
           else
             PYTHON="$RUNNER_TEMP/acceptance/bin/python"
             SCANNERS="$PWD/containers/scanner/.venv/bin"
+            EXE=""
           fi
           uv pip install --python "$PYTHON" --require-hashes -r .artifacts/acceptance-requirements.txt
           uv pip install --python "$PYTHON" --no-deps .artifacts/acceptance-dist/*.whl
           uv run --frozen python scripts/validate_product_acceptance.py \
-            --python "$PYTHON" --bandit "$SCANNERS/bandit" --semgrep "$SCANNERS/semgrep" \
+            --python "$PYTHON" --bandit "$SCANNERS/bandit$EXE" --semgrep "$SCANNERS/semgrep$EXE" \
             --output .artifacts/acceptance/product.json
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()

@@ -1538,7 +1538,11 @@ def _scan_command(args: argparse.Namespace) -> int:
         repository_config=args.config,
         profile_override=args.profile,
     )
-    control = ScanControl(config.execution.max_scan_seconds, progress_sink(args.progress), max_memory_bytes=config.execution.max_scan_memory_bytes)
+    control = ScanControl(
+        config.execution.max_scan_seconds,
+        progress_sink(args.progress),
+        max_memory_bytes=config.execution.max_scan_memory_bytes,
+    )
     with controlled_scan(control, handle_interrupt=True):
         result = scan_project(
             target=target,

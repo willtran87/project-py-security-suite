@@ -598,7 +598,9 @@ def main() -> int:
         parser.add_argument("--" + name)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    args.python = str(Path(args.python).resolve())
+    # A POSIX venv interpreter is a symlink; resolving it selects the base
+    # interpreter and loses the installed candidate's site-packages.
+    args.python = str(Path(args.python).absolute())
     result = validate(args)
     print(
         json.dumps(

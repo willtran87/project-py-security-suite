@@ -17,6 +17,8 @@ import semmle.python.security.dataflow.LdapInjectionCustomizations
 import semmle.python.security.dataflow.LdapInjectionQuery
 import semmle.python.Concepts
 import ConstantChoice
+import CollectionValueFlow
+import ConfigParserValueFlow
 
 private DataFlow::TypeTrackingNode constructed(DataFlow::TypeTracker tracker) {
   tracker.start() and result = API::moduleImport("ldap3").getMember("Connection").getACall()
@@ -89,6 +91,9 @@ module FilterConfig implements DataFlow::ConfigSig {
     )
   }
   predicate isAdditionalFlowStep(DataFlow::Node source, DataFlow::Node sink) {
+    collectionValueFlowStep(source, sink)
+    or configParserValueFlowStep(source, sink)
+    or
     // DN escaping does not make a value safe in the filter argument.
     exists(LdapDnEscaping escaping |
       source = escaping.getAnInput() and sink = escaping.getOutput())

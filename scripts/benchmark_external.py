@@ -40,7 +40,9 @@ else:
 
 def source_digest(root: Path) -> tuple[str, list[tuple[str, bytes]]]:
     members = []
-    for path in sorted(root.rglob("*.py")):
+    for path in sorted(
+        root.rglob("*.py"), key=lambda p: p.relative_to(root).as_posix()
+    ):
         _, data = read_regular_file(
             path, "external benchmark source", maximum_bytes=1024**2, boundary=root
         )

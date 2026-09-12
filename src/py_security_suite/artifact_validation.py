@@ -15,7 +15,10 @@ from jsonschema import Draft202012Validator, FormatChecker  # type: ignore[impor
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
-from .artifact_schema_catalog import _ARTIFACT_SCHEMAS as _ARTIFACT_SCHEMAS, artifact_schema_name
+from .artifact_schema_catalog import (
+    _ARTIFACT_SCHEMAS as _ARTIFACT_SCHEMAS,
+    artifact_schema_name,
+)
 from .dependency_surface import validate_dependency_accounting
 from .strict_json import loads as strict_loads
 from .strict_json import canonical_bytes
@@ -23,7 +26,6 @@ from .deployment_receipt import verify_portable_receipt
 from .operation_receipt import verify_operation_receipt
 from .checkpoint_authority import publish_checkpoint, verify_retained_checkpoint
 from .failure_domain import require_independent_failure_domains, verify_failure_domain
-
 
 
 _TYPED_VALIDATORS: dict[str, Callable[[object], None]] = {}
@@ -352,7 +354,9 @@ def validate_governed_artifacts(artifacts: dict[str, Any] | None) -> dict[str, s
             None,
         )
         if error is not None:
-            location = "/".join(str(part) for part in error.absolute_schema_path)[:512] or "/"
+            location = (
+                "/".join(str(part) for part in error.absolute_schema_path)[:512] or "/"
+            )
             raise ValueError(
                 f"derived artifact {name} violates {schema_name} at schema /{location}: "
                 f"failed {error.validator} validation"

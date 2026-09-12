@@ -209,7 +209,9 @@ def sealed_source_snapshot(
                     target / relative, target, destination=handle, maximum_bytes=size
                 )
                 if observed_size != size or observed_digest != digest:
-                    raise ValueError("source changed while the sealed snapshot was created")
+                    raise ValueError(
+                        "source changed while the sealed snapshot was created"
+                    )
                 handle.flush()
                 os.fsync(handle.fileno())
             os.chmod(destination, 0o400)
@@ -1108,7 +1110,9 @@ def _copy_regular_tree(source: Path, destination: Path) -> None:
             output = destination / relative_root / name
             with output.open("xb") as handle:
                 copied, _ = stream_source(
-                    candidate, source, destination=handle,
+                    candidate,
+                    source,
+                    destination=handle,
                     maximum_bytes=min(1024**3, 8 * 1024**3 - total_bytes),
                 )
                 total_bytes += copied
