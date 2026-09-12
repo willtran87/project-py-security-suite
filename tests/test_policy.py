@@ -96,6 +96,40 @@ class PolicyTests(unittest.TestCase):
         self.assertEqual(decision.outcome, Outcome.INCOMPLETE)
         self.assertTrue(item.blocking)
 
+    def test_unverified_source_does_not_claim_observed_mutation(self) -> None:
+        for after, files, size, changed in (
+            ("", 0, 0, False),
+            ("a" * 64, 1, 10, False),
+            ("b" * 64, 1, 10, True),
+            ("a" * 64, 2, 10, True),
+            ("a" * 64, 1, 11, True),
+        ):
+            with self.subTest(after=after, files=files, size=size):
+                decision = evaluate_policy(
+                    config=self.config,
+                    findings=[],
+                    tool_runs=self.completed,
+                    network_isolation_attested=True,
+                    inventory=Inventory(
+                        python_files=1,
+                        dependency_files=[],
+                        total_files=1,
+                        skipped_symlinks=0,
+                        source_sha256="a" * 64,
+                        source_sha256_after=after,
+                        hashed_files=1,
+                        hashed_bytes=10,
+                        hashed_files_after=files,
+                        hashed_bytes_after=size,
+                    ),
+                )
+                self.assertEqual(decision.outcome, Outcome.INCOMPLETE)
+                reasons = " ".join(decision.reasons)
+                self.assertEqual("target content changed" in reasons, changed)
+                self.assertEqual(
+                    "source integrity was not verified" in reasons, not changed
+                )
+
     def test_production_gate_requires_known_scanner_versions(self) -> None:
         config = load_config(profile_override="production")
         runs = production_runs(config)

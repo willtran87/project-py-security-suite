@@ -1370,7 +1370,9 @@ during later analysis.
 Per-tool progress emits its actual result (`completed`, `failed`, `timed_out`,
 `parse_error`, `skipped`, or `unavailable`) after the adapter result is checked.
 Optional enrichment checks for cancellation between analysis stages, then
-continues integrity checks and report finalization with an `INCOMPLETE` outcome.
+publishes an `INCOMPLETE` report. Final source verification is also interruptible;
+an aborted rehash records source integrity as unverified. Report checksums still
+verify the published artifacts without asserting an unverified source identity.
 
 ## Reviewed public digests in secret scans
 

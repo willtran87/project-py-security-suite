@@ -1250,7 +1250,7 @@ class OrchestratorTests(unittest.TestCase):
                 result.manifest.inventory.source_sha256_after,
             )
             self.assertIn(
-                "target content changed during scanner execution",
+                "sealed scan snapshot changed during scanner execution",
                 " ".join(result.manifest.policy_reasons),
             )
 

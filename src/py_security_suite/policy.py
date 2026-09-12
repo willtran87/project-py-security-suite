@@ -95,9 +95,20 @@ def evaluate_policy(
         and inventory.source_sha256
         and not inventory.source_integrity_verified
     ):
+        changed = bool(inventory.source_sha256_after) and (
+            inventory.source_sha256,
+            inventory.hashed_files,
+            inventory.hashed_bytes,
+        ) != (
+            inventory.source_sha256_after,
+            inventory.hashed_files_after,
+            inventory.hashed_bytes_after,
+        )
         reasons.append(
             "target content changed during scanner execution; discard the "
             "result and investigate scanner or concurrent-process writes"
+            if changed
+            else "post-scan source integrity was not verified; the result is incomplete"
         )
 
     explicitly_required = set(config.policy.required_scanners)
