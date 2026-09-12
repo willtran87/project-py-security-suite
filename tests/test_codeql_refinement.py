@@ -74,6 +74,21 @@ def test_exact_native_match_retains_original_and_proof():
 
 
 @pytest.mark.parametrize(
+    "marker,excluded",
+    [("pysec-xpath-context-v2:", 1), ("pysec-constant-choice-v1:", 0)],
+)
+def test_xpath_context_proof_requires_current_protocol(marker, excluded):
+    primary, extra = documents()
+    primary["runs"][0]["results"][0]["ruleId"] = "py/xpath-injection"
+    proof = extra["runs"][0]["results"][0]
+    proof["ruleId"] = "pysec/constant-xpath-proof"
+    proof["message"]["text"] = marker + "py/xpath-injection"
+    first, _, audit = apply(primary, extra)
+    assert audit["excluded_count"] == excluded
+    assert len(first) == 1 - excluded
+
+
+@pytest.mark.parametrize(
     "mutation",
     [
         "ineligible",

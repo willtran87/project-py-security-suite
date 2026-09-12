@@ -1371,3 +1371,19 @@ Per-tool progress emits its actual result (`completed`, `failed`, `timed_out`,
 `parse_error`, `skipped`, or `unavailable`) after the adapter result is checked.
 Optional enrichment checks for cancellation between analysis stages, then
 continues integrity checks and report finalization with an `INCOMPLETE` outcome.
+
+## Reviewed public digests in secret scans
+
+The optional `tools.detect-secrets.rules_path` accepts a strict JSON policy with
+`schema_version: "1.0"` and a `public_digests` list. Each entry contains exactly
+`value` (a lowercase 40- or 64-character hexadecimal digest) and `purpose` (the
+review rationale). The policy permits at most 64 unique values; empty policies,
+wildcards, arbitrary regular expressions and missing rationales are rejected.
+Bind the file with `rules_sha256` under the normal scanner-asset integrity policy.
+
+Only exact reviewed values are excluded by the native scanner. Files containing
+them remain scanned, and other credential-like values remain eligible for findings.
+Product defaults do not apply this policy. The repository's container self-scan
+uses `security/self-scan.toml` and its hash-pinned public-digest policy for the
+public benchmark revision and integrity checksums. Adding an exception requires
+review of the value and its public provenance; this is not a credential baseline.

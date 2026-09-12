@@ -48,7 +48,7 @@ docker run `
     --env PYTHONDONTWRITEBYTECODE=1 `
     $Image `
     scan /workspace `
-    --config /opt/pysec-suite/pysec.toml `
+    --config /workspace/security/self-scan.toml `
     --output "/out/$ReportName" `
     --network-isolated `
     --overwrite

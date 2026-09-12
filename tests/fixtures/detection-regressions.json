@@ -4256,6 +4256,217 @@
       "files": {
         "app.py": "from flask import Flask, request\nfrom fake import select\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    return str(select(root, request.args.get(\"path\")))\n"
       }
+    },
+    {
+      "id": "codeql-xpath-quote-guard-safe",
+      "category": "CWE-643",
+      "engine": "codeql",
+      "positive": false,
+      "rule_id": "pysec/collection-xpath-injection",
+      "files": {
+        "app.py": "from flask import Flask, request\nimport elementpath\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    if \"'\" in value:\n        return \"rejected\"\n    query = f\"/items/item[@id='{value}']\"\n    return str(elementpath.select(None, query))\n"
+      }
+    },
+    {
+      "id": "codeql-xpath-quote-guard-unguarded",
+      "category": "CWE-643",
+      "engine": "codeql",
+      "positive": true,
+      "rule_id": "pysec/collection-xpath-injection",
+      "files": {
+        "app.py": "from flask import Flask, request\nimport elementpath\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    query = f\"/items/item[@id='{value}']\"\n    return str(elementpath.select(None, query))\n"
+      }
+    },
+    {
+      "id": "codeql-xpath-quote-guard-wrong-value",
+      "category": "CWE-643",
+      "engine": "codeql",
+      "positive": true,
+      "rule_id": "pysec/collection-xpath-injection",
+      "files": {
+        "app.py": "from flask import Flask, request\nimport elementpath\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    other=request.args.get(\"other\")\n    if \"'\" in other:\n        return \"rejected\"\n    query = f\"/items/item[@id='{value}']\"\n    return str(elementpath.select(None, query))\n"
+      }
+    },
+    {
+      "id": "codeql-xpath-quote-guard-reassigned",
+      "category": "CWE-643",
+      "engine": "codeql",
+      "positive": true,
+      "rule_id": "pysec/collection-xpath-injection",
+      "files": {
+        "app.py": "from flask import Flask, request\nimport elementpath\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    if \"'\" in value:\n        return \"rejected\"\n    value=request.args.get(\"other\")\n    query = f\"/items/item[@id='{value}']\"\n    return str(elementpath.select(None, query))\n"
+      }
+    },
+    {
+      "id": "codeql-xpath-quote-guard-nonterminating",
+      "category": "CWE-643",
+      "engine": "codeql",
+      "positive": true,
+      "rule_id": "pysec/collection-xpath-injection",
+      "files": {
+        "app.py": "from flask import Flask, request\nimport elementpath\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    if \"'\" in value:\n        pass\n    query = f\"/items/item[@id='{value}']\"\n    return str(elementpath.select(None, query))\n"
+      }
+    },
+    {
+      "id": "codeql-xpath-quote-guard-unquoted",
+      "category": "CWE-643",
+      "engine": "codeql",
+      "positive": true,
+      "rule_id": "pysec/collection-xpath-injection",
+      "files": {
+        "app.py": "from flask import Flask, request\nimport elementpath\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    if \"'\" in value:\n        return \"rejected\"\n    query = f\"/items/item[@id={value}]\"\n    return str(elementpath.select(None, query))\n"
+      }
+    },
+    {
+      "id": "codeql-xpath-quote-guard-conversion",
+      "category": "CWE-643",
+      "engine": "codeql",
+      "positive": true,
+      "rule_id": "pysec/collection-xpath-injection",
+      "files": {
+        "app.py": "from flask import Flask, request\nimport elementpath\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    if \"'\" in value:\n        return \"rejected\"\n    query = f\"/items/item[@id='{value!r}']\"\n    return str(elementpath.select(None, query))\n"
+      }
+    },
+    {
+      "id": "codeql-xpath-quote-guard-comment-context",
+      "category": "CWE-643",
+      "engine": "codeql",
+      "positive": true,
+      "rule_id": "pysec/collection-xpath-injection",
+      "files": {
+        "app.py": "from flask import Flask, request\nimport elementpath\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    if \"'\" in value:\n        return \"rejected\"\n    query = f\"(: '{value}']\"\n    return str(elementpath.select(None, query))\n"
+      }
+    },
+    {
+      "id": "codeql-xpath-quote-guard-other-hole",
+      "category": "CWE-643",
+      "engine": "codeql",
+      "positive": true,
+      "rule_id": "pysec/collection-xpath-injection",
+      "files": {
+        "app.py": "from flask import Flask, request\nimport elementpath\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    if \"'\" in value:\n        return \"rejected\"\n    other=request.args.get(\"other\")\n    query = f\"/items/item[@id='{value}' or @name='{other}']\"\n    return str(elementpath.select(None, query))\n"
+      }
+    },
+    {
+      "id": "codeql-xpath-quote-guard-wrong-quote",
+      "category": "CWE-643",
+      "engine": "codeql",
+      "positive": true,
+      "rule_id": "pysec/collection-xpath-injection",
+      "files": {
+        "app.py": "from flask import Flask, request\nimport elementpath\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    if chr(34) in value:\n        return \"rejected\"\n    query = f\"/items/item[@id='{value}']\"\n    return str(elementpath.select(None, query))\n"
+      }
+    },
+    {
+      "id": "semgrep-psycopg-identifier",
+      "engine": "semgrep",
+      "category": "CWE-89",
+      "rule_id": "python.psycopg-sql-composition",
+      "positive": false,
+      "files": {
+        "app.py": "from flask import request\nfrom psycopg import sql\ndef run(cursor):\n    value=request.args.get(\"name\")\n    cursor.execute(sql.SQL(\"SELECT * FROM {}\").format(sql.Identifier(value)))\n"
+      }
+    },
+    {
+      "id": "semgrep-psycopg-literal",
+      "engine": "semgrep",
+      "category": "CWE-89",
+      "rule_id": "python.psycopg-sql-composition",
+      "positive": false,
+      "files": {
+        "app.py": "from flask import request\nfrom psycopg import sql\ndef run(cursor):\n    value=request.args.get(\"name\")\n    cursor.execute(sql.SQL(\"SELECT {}\").format(sql.Literal(value)))\n"
+      }
+    },
+    {
+      "id": "semgrep-psycopg-identifier-literal",
+      "engine": "semgrep",
+      "category": "CWE-89",
+      "rule_id": "python.psycopg-sql-composition",
+      "positive": false,
+      "files": {
+        "app.py": "from flask import request\nfrom psycopg import sql\ndef run(cursor):\n    value=request.args.get(\"name\")\n    cursor.execute(sql.SQL(\"CREATE ROLE {} PASSWORD {}\").format(sql.Identifier(value),sql.Literal(value)))\n"
+      }
+    },
+    {
+      "id": "semgrep-psycopg-three-identifiers",
+      "engine": "semgrep",
+      "category": "CWE-89",
+      "rule_id": "python.psycopg-sql-composition",
+      "positive": false,
+      "files": {
+        "app.py": "from flask import request\nfrom psycopg import sql\ndef run(cursor):\n    value=request.args.get(\"name\")\n    cursor.execute(sql.SQL(\"GRANT SELECT ON {} TO {}, {}\").format(sql.Identifier(value),sql.Identifier(value),sql.Identifier(value)))\n"
+      }
+    },
+    {
+      "id": "semgrep-psycopg-raw-template",
+      "engine": "semgrep",
+      "category": "CWE-89",
+      "rule_id": "python.psycopg-sql-composition",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import request\nfrom psycopg import sql\ndef run(cursor):\n    value=request.args.get(\"name\")\n    cursor.execute(sql.SQL(value).format(sql.Identifier(value)))\n"
+      }
+    },
+    {
+      "id": "semgrep-psycopg-raw-operand",
+      "engine": "semgrep",
+      "category": "CWE-89",
+      "rule_id": "python.psycopg-sql-composition",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import request\nfrom psycopg import sql\ndef run(cursor):\n    value=request.args.get(\"name\")\n    cursor.execute(sql.SQL(\"SELECT {}\").format(sql.SQL(value)))\n"
+      }
+    },
+    {
+      "id": "semgrep-psycopg-formatted-template",
+      "engine": "semgrep",
+      "category": "CWE-89",
+      "rule_id": "python.psycopg-sql-composition",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import request\nfrom psycopg import sql\ndef run(cursor):\n    value=request.args.get(\"name\")\n    cursor.execute(sql.SQL(f\"SELECT {value} FROM {{}}\").format(sql.Identifier(value)))\n"
+      }
+    },
+    {
+      "id": "semgrep-psycopg-string-format",
+      "engine": "semgrep",
+      "category": "CWE-89",
+      "rule_id": "python.psycopg-sql-composition",
+      "positive": true,
+      "files": {
+        "app.py": "from flask import request\nfrom psycopg import sql\ndef run(cursor):\n    value=request.args.get(\"name\")\n    cursor.execute(\"SELECT {}\".format(value))\n"
+      }
+    },
+    {
+      "id": "codeql-xpath-quote-guard-nonstring",
+      "category": "CWE-643",
+      "engine": "codeql",
+      "positive": true,
+      "rule_id": "pysec/collection-xpath-injection",
+      "files": {
+        "app.py": "from flask import Flask, request\nimport elementpath\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\").split(\",\")\n    if \"'\" in value:\n        return \"rejected\"\n    query = f\"/items/item[@id='{value}']\"\n    return str(elementpath.select(None, query))\n"
+      }
+    },
+    {
+      "id": "codeql-xpath-quote-guard-lxml-safe",
+      "category": "CWE-643",
+      "engine": "codeql",
+      "positive": false,
+      "rule_id": "py/xpath-injection",
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    if \"'\" in value:\n        return \"rejected\"\n    query = f\"/items/item[@id='{value}']\"\n    return str(etree.fromstring(b\"<items/>\").xpath(query))\n"
+      },
+      "require_native_proof": true
+    },
+    {
+      "id": "codeql-xpath-quote-guard-lxml-unguarded",
+      "category": "CWE-643",
+      "engine": "codeql",
+      "positive": true,
+      "rule_id": "py/xpath-injection",
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    query = f\"/items/item[@id='{value}']\"\n    return str(etree.fromstring(b\"<items/>\").xpath(query))\n"
+      }
     }
   ]
 }

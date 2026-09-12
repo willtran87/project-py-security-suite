@@ -57,6 +57,11 @@ explicit scanner configuration and predeclared timeout/resource budgets. The fir
 full-repository 300-second pilot failed before native scanning and retained a
 valid incomplete report; do not use it as a passing capacity measurement.
 
+The host capacity driver explicitly records missing external network-isolation
+attestation. It accepts that one policy reason for diagnostic timing only;
+missing scanner evidence, partial coverage, other incomplete reasons and invalid
+reports still fail. These host measurements never confer production qualification.
+
 ## Keep release decisions explicit
 
 The current source-security policy requires the configured engines, minimum case

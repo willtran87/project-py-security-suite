@@ -689,7 +689,7 @@ def summarize_secret_exposure_intersections(
         ),
         "verified_secret_exposure_intersections": sum(
             (
-                item["secret_verification_status"] == "verified"  # noqa: S105  # nosec B105 - assessment status
+                item["secret_verification_status"] == "verified"  # noqa: S105  # nosec B105  # pragma: allowlist secret - assessment status
                 for item in all_secret_exposure_intersections
             )
         ),
@@ -713,7 +713,7 @@ def summarize_secret_exposure_intersections(
         ),
         "secret_exposure_intersections_with_assurance_gaps": sum(
             (
-                item["secret_assurance_status"] != "assured"  # noqa: S105  # nosec B105 - assessment status
+                item["secret_assurance_status"] != "assured"  # noqa: S105  # nosec B105  # pragma: allowlist secret - assessment status
                 or item["sensitive_assurance_status"] != "assured"
                 for item in all_secret_exposure_intersections
             )

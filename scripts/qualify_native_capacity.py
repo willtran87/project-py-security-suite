@@ -59,6 +59,15 @@ def source_digest(root: Path):
     }
 
 
+def operationally_complete(manifest: dict) -> bool:
+    """Host diagnostics may lack isolation attestation, never analysis evidence."""
+    return manifest["outcome"] in {"pass", "warn", "fail"} or (
+        manifest["outcome"] == "incomplete"
+        and manifest["policy_reasons"]
+        == ["required external network-isolation attestation was not provided"]
+    )
+
+
 def worker(args) -> dict:
     source, output = args.source.absolute(), args.worker.absolute()
     config = load_config(repository_config=args.config)
@@ -68,7 +77,12 @@ def worker(args) -> dict:
 
     def progress(event):
         events.append(event)
-        if args.cancel and event.stage == "scanners" and event.state == "started":
+        if (
+            args.cancel
+            and not timers
+            and event.stage == "scanners"
+            and event.state == "started"
+        ):
 
             def cancel():
                 cancelled.append(time.monotonic())
@@ -112,6 +126,7 @@ def worker(args) -> dict:
         if args.cancel
         else set(statuses) == selected
         and set(statuses.values()) == {"completed"}
+        and operationally_complete(manifest)
         and manifest["inventory"]["source_integrity_verified"] is True
     )
     return {
@@ -123,6 +138,8 @@ def worker(args) -> dict:
         else None,
         "tool_statuses": statuses,
         "outcome": str(result.outcome),
+        "policy_reasons": manifest["policy_reasons"],
+        "production_qualified": False,
         "source_sha256": manifest["inventory"]["source_sha256"],
         "findings_sha256": hashlib.sha256(json.dumps(findings).encode()).hexdigest(),
         "manifest_sha256": hashlib.sha256(
@@ -213,6 +230,7 @@ def qualify(args):
             source_bytes=members["bytes"],
             configuration_sha256=config_sha,
             artifact_before=artifact,
+            execution_scope="host diagnostic; external network isolation is not attested",
             repetitions=args.repetitions,
             concurrency=args.concurrency,
             maximum_wave_memory_bytes=args.max_memory_mib * 1024**2,

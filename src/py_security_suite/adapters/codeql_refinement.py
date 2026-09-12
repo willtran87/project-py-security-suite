@@ -18,6 +18,10 @@ _PROOFS = {
     "pysec/constant-path-proof": "py/path-injection",
     "pysec/constant-xpath-proof": "py/xpath-injection",
 }
+_MARKERS = {
+    "pysec/constant-path-proof": "pysec-constant-choice-v1:",
+    "pysec/constant-xpath-proof": "pysec-xpath-context-v2:",
+}
 _MAX_PROOFS = 256
 _MAX_AUDIT_BYTES = 2 * 1024**2
 
@@ -122,7 +126,7 @@ def refine_native_results(
             supplemental_payload,
             {
                 "schema_version": "1.0",
-                "method": "native-constant-choice-flow-comparison-v1",
+                "method": "native-flow-comparison-v2",
                 "eligible": False,
                 "proof_count": 0,
                 "excluded_count": 0,
@@ -148,7 +152,7 @@ def refine_native_results(
         if (
             location is None
             or not isinstance(message, dict)
-            or message.get("text") != "pysec-constant-choice-v1:" + target_rule
+            or message.get("text") != _MARKERS[cast(str, rule)] + target_rule
             or result.get("kind", "fail") != "fail"
             or result.get("suppressions")
             or count > _MAX_PROOFS
@@ -198,7 +202,7 @@ def refine_native_results(
         json.dumps(extra),
         {
             "schema_version": "1.0",
-            "method": "native-constant-choice-flow-comparison-v1",
+            "method": "native-flow-comparison-v2",
             "eligible": valid,
             "proof_count": count,
             "excluded_count": len(audit),

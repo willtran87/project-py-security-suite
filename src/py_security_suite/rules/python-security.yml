@@ -77,11 +77,20 @@ rules:
       impact: Attacker-controlled values can alter the intended SQL statement and read or modify data outside the authorized operation.
       remediation: Pass values as execute parameters and use psycopg.sql.Identifier or psycopg.sql.SQL only for allowlisted structural identifiers.
       source: https://www.psycopg.org/psycopg3/docs/basic/params.html
-    pattern-either:
-      - pattern: $CURSOR.execute($QUERY % $VALUES, ...)
-      - pattern: $CURSOR.execute($QUERY.format(...), ...)
-      - pattern: $CURSOR.execute(f"...{$VALUE}...", ...)
-      - pattern: $CURSOR.execute(f'...{$VALUE}...', ...)
+    patterns:
+      - pattern-either:
+          - pattern: $CURSOR.execute($QUERY % $VALUES, ...)
+          - pattern: $CURSOR.execute($QUERY.format(...), ...)
+          - pattern: $CURSOR.execute(f"...{$VALUE}...", ...)
+          - pattern: $CURSOR.execute(f'...{$VALUE}...', ...)
+      # Psycopg's composable objects quote identifiers/literals themselves.
+      # Keep the template literal and every supported operand explicit: raw SQL
+      # operands and unknown composition shapes must still be reviewed.
+      - pattern-not: $CURSOR.execute(psycopg.sql.SQL("...").format(psycopg.sql.Identifier(...)), ...)
+      - pattern-not: $CURSOR.execute(psycopg.sql.SQL("...").format(psycopg.sql.Literal(...)), ...)
+      - pattern-not: $CURSOR.execute(psycopg.sql.SQL("...").format(psycopg.sql.Identifier(...), psycopg.sql.Literal(...)), ...)
+      - pattern-not: $CURSOR.execute(psycopg.sql.SQL("...").format(psycopg.sql.Identifier(...), psycopg.sql.Identifier(...)), ...)
+      - pattern-not: $CURSOR.execute(psycopg.sql.SQL("...").format(psycopg.sql.Identifier(...), psycopg.sql.Identifier(...), psycopg.sql.Identifier(...)), ...)
 
   - id: python.subprocess-shell-true
     languages: [python]

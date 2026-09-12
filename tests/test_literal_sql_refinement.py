@@ -80,3 +80,29 @@ def test_python_inventory_includes_tests_and_ignores_scanner_exclusions(tmp_path
         assert not (mirror / "tests" / ".gitignore").exists()
     assert not mirror.exists()
     assert (tmp_path / ".semgrepignore").read_text() == "tests/\n"
+
+
+def test_python_mirror_canonicalizes_temporary_directory_alias(tmp_path, monkeypatch):
+    from contextlib import contextmanager
+    from py_security_suite.adapters import staging
+
+    source, destination, alias = (
+        tmp_path / name for name in ("source", "real", "alias")
+    )
+    source.mkdir()
+    destination.mkdir()
+    (source / "app.py").write_bytes(b"pass\n")
+    alias.mkdir()
+    alias = alias / ".." / destination.name
+
+    @contextmanager
+    def temporary(**_):
+        yield str(alias)
+
+    monkeypatch.setattr(staging.tempfile, "TemporaryDirectory", temporary)
+    with python_scan_tree(source) as mirror:
+        assert mirror == destination.resolve()
+        assert [
+            path.relative_to(mirror).as_posix()
+            for path in staging.maintained_files(mirror, frozenset({".py"}))
+        ] == ["app.py"]

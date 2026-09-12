@@ -107,7 +107,8 @@ def evaluate(
             if rule in case.get("forbidden_rule_ids", []):
                 forbidden.append(rule)
             if (
-                engine == "semgrep" and rule.endswith(CATEGORIES[case["category"]])
+                engine == "semgrep"
+                and rule.endswith(case.get("rule_id", CATEGORIES[case["category"]]))
             ) or (
                 engine == "codeql"
                 and rule

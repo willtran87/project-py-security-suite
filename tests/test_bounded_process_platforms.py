@@ -78,3 +78,49 @@ def test_posix_group_exit_race_preserves_output_and_closes_pipes(monkeypatch, er
     assert all(
         stream.closed for stream in (process.stdin, process.stdout, process.stderr)
     )
+
+
+def test_exact_tree_cleanup_kills_descendants_before_parent(monkeypatch):
+    order = []
+    children = [MagicMock(), MagicMock()]
+    for index, child in enumerate(children):
+        child.kill.side_effect = lambda i=index: order.append(i)
+    parent = MagicMock()
+    parent.children.return_value = children
+    parent.kill.side_effect = lambda: order.append("parent")
+    monkeypatch.setattr(bounded.psutil, "Process", lambda _: parent)
+    wait = MagicMock()
+    monkeypatch.setattr(bounded.psutil, "wait_procs", wait)
+    bounded._kill_process_tree(MagicMock(pid=1234))
+    assert order == [1, 0, "parent"]
+    parent.children.assert_called_once_with(recursive=True)
+    wait.assert_called_once_with(children, timeout=2.0)
+
+
+@pytest.mark.parametrize("running", [True, False])
+def test_missing_tree_uses_owned_process_handle_only_when_running(monkeypatch, running):
+    monkeypatch.setattr(
+        bounded.psutil,
+        "Process",
+        MagicMock(side_effect=bounded.psutil.NoSuchProcess(1234)),
+    )
+    process = MagicMock(pid=1234)
+    process.poll.return_value = None if running else 0
+    bounded._kill_process_tree(process)
+    assert process.kill.call_count == int(running)
+
+
+def test_tree_cleanup_continues_when_descendants_exit_or_parent_denies_kill(
+    monkeypatch,
+):
+    child = MagicMock()
+    child.kill.side_effect = bounded.psutil.NoSuchProcess(1235)
+    parent = MagicMock()
+    parent.children.return_value = [child]
+    parent.kill.side_effect = bounded.psutil.AccessDenied(1234)
+    monkeypatch.setattr(bounded.psutil, "Process", lambda _: parent)
+    wait = MagicMock()
+    monkeypatch.setattr(bounded.psutil, "wait_procs", wait)
+    bounded._kill_process_tree(MagicMock(pid=1234))
+    parent.kill.assert_called_once()
+    wait.assert_called_once_with([child], timeout=2.0)

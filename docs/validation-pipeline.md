@@ -116,7 +116,7 @@ declared scan inventory. Native errors, timeouts and missing files still make a
 scan incomplete. The mirror is removed after parsing the native result.
 
 ```mermaid
-flowchart LR
+flowchart TD
     S[Sealed source inventory] --> M[Private Python mirror]
     M --> E[Isolated native execution]
     E --> N[Parse native findings and errors]

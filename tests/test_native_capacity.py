@@ -63,3 +63,19 @@ def test_capacity_rejects_oversized_source_file(tmp_path):
         stream.truncate(16 * 1024**2 + 1)
     with pytest.raises(ValueError):
         capacity.source_digest(tmp_path)
+
+
+def test_diagnostic_isolation_gap_cannot_hide_incomplete_analysis():
+    isolation = "required external network-isolation attestation was not provided"
+    assert capacity.operationally_complete(
+        {"outcome": "incomplete", "policy_reasons": [isolation]}
+    )
+    assert not capacity.operationally_complete(
+        {
+            "outcome": "incomplete",
+            "policy_reasons": [isolation, "partial scanner coverage"],
+        }
+    )
+    assert not capacity.operationally_complete(
+        {"outcome": "incomplete", "policy_reasons": []}
+    )

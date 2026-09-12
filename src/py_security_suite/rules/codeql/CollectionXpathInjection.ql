@@ -13,6 +13,7 @@ import python
 import ConstantChoice
 import CollectionValueFlow
 import ConfigParserValueFlow
+import QuotedXPath
 import semmle.python.ApiGraphs
 import semmle.python.security.dataflow.XpathInjectionQuery
 module Config implements DataFlow::ConfigSig {
@@ -23,7 +24,7 @@ module Config implements DataFlow::ConfigSig {
       call = API::moduleImport("elementpath").getMember(["select", "iter_select"]).getACall()
     | n in [call.getArg(1), call.getArgByName("path")])
   }
-  predicate isBarrier(DataFlow::Node n) { n instanceof Sanitizer or constantChoice(n) }
+  predicate isBarrier(DataFlow::Node n) { n instanceof Sanitizer or constantChoice(n) or quotedXPathHole(n) }
   predicate isAdditionalFlowStep(DataFlow::Node a, DataFlow::Node b) {
     collectionValueFlowStep(a, b) or configParserValueFlowStep(a, b)
   }

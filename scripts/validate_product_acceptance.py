@@ -47,7 +47,7 @@ def invoke(
 
 def _validate(args: argparse.Namespace, evidence: ValidationEvidence) -> dict:
     with tempfile.TemporaryDirectory(prefix="pysec-installed-acceptance-") as temporary:
-        work = Path(temporary)
+        work = Path(temporary).resolve()
         info = evidence.invoke(
             "package-import",
             lambda: invoke(
