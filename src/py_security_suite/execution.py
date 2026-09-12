@@ -846,7 +846,7 @@ def run_command(
             subprocess, "CREATE_NEW_PROCESS_GROUP", 0
         )
     with tempfile.TemporaryDirectory(
-        prefix="pysec-process-home-", ignore_cleanup_errors=True
+        prefix="p", ignore_cleanup_errors=True
     ) as private_home:
         # macOS exposes its temporary root through ``/var`` -> ``/private/var``.
         # Resolve that operating-system alias before establishing the private

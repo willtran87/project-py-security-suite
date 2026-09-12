@@ -116,6 +116,14 @@ class CodeQlAdapter(ScannerAdapter):
             extra={
                 "RCQL_DOWNLOAD_RETRY_ATTEMPTS": "1",
                 "RCQL_DOWNLOAD_TIMEOUT_SECONDS": "1",
+                # Bound JVM bootstrap reservations and GC threads before CodeQL
+                # can apply its query RAM budget. Default G1 reservations can
+                # exhaust the unchanged 8 GiB POSIX address-space limit.
+                "JAVA_TOOL_OPTIONS": (
+                    "-Xms64m -Xmx1536m -XX:+UseSerialGC "
+                    "-XX:CompressedClassSpaceSize=128m "
+                    "-XX:ReservedCodeCacheSize=128m -XX:ActiveProcessorCount=2"
+                ),
             },
         )
 

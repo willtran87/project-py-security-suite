@@ -1387,3 +1387,16 @@ Product defaults do not apply this policy. The repository's container self-scan
 uses `security/self-scan.toml` and its hash-pinned public-digest policy for the
 public benchmark revision and integrity checksums. Adding an exception requires
 review of the value and its public provenance; this is not a credential baseline.
+
+## Native runtime compatibility
+
+CodeQL receives fixed JVM bootstrap settings: a 64 MiB initial heap, 1,536 MiB
+bootstrap heap maximum, serial garbage collection, 128 MiB class and code caches,
+and two active processors. CodeQL still applies its separate query memory budget.
+These settings avoid default JVM reservations exhausting the existing 8 GiB
+POSIX address-space limit before query execution starts. The scanner's process,
+memory, output and scratch controls remain in effect.
+
+Private process directories use short random names. This preserves room for
+Semgrep's native socket names under nested supervision on Windows. The directories
+remain inside the supervising parent's scratch tree and are removed on cleanup.

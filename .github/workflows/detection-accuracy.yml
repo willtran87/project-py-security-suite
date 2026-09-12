@@ -20,6 +20,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: detection-accuracy-${{ github.workflow }}-${{ github.ref }}-${{ inputs.wheel_artifact || 'candidate' }}
+  cancel-in-progress: true
+
 jobs:
   measure:
     name: Pinned external Python detection benchmark

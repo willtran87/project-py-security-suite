@@ -783,7 +783,7 @@ def summarize_secret_exposure_advisory_intersections(
         ),
         "verified_secret_exposure_advisory_intersections": sum(
             (
-                item["secret_verification_status"] == "verified"  # noqa: S105  # nosec B105 - assessment status
+                item["secret_verification_status"] == "verified"  # noqa: S105  # nosec B105  # pragma: allowlist secret - assessment status
                 for item in all_secret_exposure_advisory_intersections
             )
         ),

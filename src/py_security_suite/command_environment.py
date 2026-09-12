@@ -21,7 +21,11 @@ def isolate_python_command(command: list[str], cache: Path) -> list[str]:
 
 
 def private_runtime_environment(env: dict[str, str], root: Path) -> None:
-    """Keep all writable scanner locations within the supervised workspace."""
+    """Keep writable locations within the supervised workspace.
+
+    Execution uses a short private-root prefix so nested native Unix sockets
+    (including Windows Semgrep) retain room for their bounded socket basename.
+    """
     locations = {
         "HOME": root,
         "USERPROFILE": root,
