@@ -54,7 +54,7 @@ private boolean conditionValue(Expr expr) {
 }
 
 predicate constantChoice(DataFlow::Node node) {
-  constantMatchChoice(node) or constantListRead(node)
+  constantMatchChoice(node) or constantSelectedMatchRead(node) or constantListRead(node)
   or
   exists(IfExp choice |
     node.asExpr() = choice and
@@ -84,6 +84,5 @@ predicate sameSinkCoordinates(DataFlow::Node first, DataFlow::Node second) {
     a.getEndLine() = b.getEndLine() and a.getEndColumn() = b.getEndColumn()
   )
 }
-
 
 

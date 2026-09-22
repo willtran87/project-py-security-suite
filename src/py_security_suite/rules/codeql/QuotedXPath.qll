@@ -3,6 +3,7 @@
  * Other uses, formatting conversions and multi-hole expressions remain tainted.
  */
 import python
+import TextValueFacts
 import semmle.python.ApiGraphs
 import semmle.python.frameworks.Flask
 import semmle.python.dataflow.new.DataFlow
@@ -39,14 +40,26 @@ private predicate rejectsApostrophe(DataFlow::GuardNode guard, ControlFlowNode v
 }
 
 predicate quotedXPathHole(DataFlow::Node node) {
-  exists(DataFlow::ExprNode checked, Fstring expression, Name hole, StringLiteral prefix, StringLiteral suffix,
+  exists(Fstring expression, Expr hole, StringLiteral prefix, StringLiteral suffix,
          Location before, Location value, Location after |
-    checked = DataFlow::BarrierGuard<rejectsApostrophe/3>::getABarrierNode() and
     node.asExpr() = expression and
     count(expression.getAValue()) = 3 and
     prefix = expression.getValue(0) and hole = expression.getValue(1) and suffix = expression.getValue(2) and
-    hole = checked.asExpr() and exists(checked.getALocalSource()) and
-    forall(DataFlow::LocalSourceNode source | source = checked.getALocalSource() | textOrigin(source)) and
+    (
+      exists(DataFlow::ExprNode checked |
+        checked = DataFlow::BarrierGuard<rejectsApostrophe/3>::getABarrierNode() and
+        hole = checked.asExpr() and
+        (knownText(hole, 0) or
+         exists(checked.getALocalSource()) and
+         forall(DataFlow::LocalSourceNode source | source = checked.getALocalSource() | textOrigin(source))))
+      or exists(DataFlow::MethodCallNode replace, StringLiteral replacement |
+        hole = replace.asExpr() and replace.getMethodName() = "replace" and
+        knownText(replace.getObject().asExpr(), 0) and
+        replace.getArg(0).asExpr().(StringLiteral).getText() = "'" and
+        replacement = replace.getArg(1).asExpr() and not replacement.getText().matches("%'%") and
+        not exists(replace.getArg(2)) and not exists(replace.asExpr().(Call).getANamedArg()) and
+        not exists(replace.asExpr().(Call).getStarargs()) and not exists(replace.asExpr().(Call).getKwargs()))
+    ) and
     before = prefix.getLocation() and value = hole.getLocation() and after = suffix.getLocation() and
     before.getEndLine() = value.getStartLine() and value.getEndLine() = after.getStartLine() and
     before.getEndColumn() + 1 = value.getStartColumn() and value.getEndColumn() + 1 = after.getStartColumn() and

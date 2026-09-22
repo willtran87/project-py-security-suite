@@ -4467,6 +4467,284 @@
       "files": {
         "app.py": "from flask import Flask, request\nfrom lxml import etree\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value=request.args.get(\"input\")\n    query = f\"/items/item[@id='{value}']\"\n    return str(etree.fromstring(b\"<items/>\").xpath(query))\n"
       }
+    },
+    {
+      "id": "codeql-xpath-text-replace-safe",
+      "category": "CWE-643",
+      "engine": "codeql",
+      "positive": false,
+      "rule_id": "py/xpath-injection",
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value = request.args.get(\"input\")\n    query = f\"/items/item[@id='{value.replace(\"'\", '')}']\"\n    return str(etree.fromstring(b\"<items/>\").xpath(query))\n"
+      },
+      "require_native_proof": true
+    },
+    {
+      "id": "codeql-xpath-text-replace-count-unsafe",
+      "category": "CWE-643",
+      "engine": "codeql",
+      "positive": true,
+      "rule_id": "py/xpath-injection",
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value = request.args.get(\"input\")\n    query = f\"/items/item[@id='{value.replace(\"'\", '', 1)}']\"\n    return str(etree.fromstring(b\"<items/>\").xpath(query))\n"
+      }
+    },
+    {
+      "id": "codeql-xpath-text-replace-wrong-quote",
+      "category": "CWE-643",
+      "engine": "codeql",
+      "positive": true,
+      "rule_id": "py/xpath-injection",
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value = request.args.get(\"input\")\n    query = f\"/items/item[@id='{value.replace('x', '')}']\"\n    return str(etree.fromstring(b\"<items/>\").xpath(query))\n"
+      }
+    },
+    {
+      "id": "codeql-xpath-text-replace-retains-quote",
+      "category": "CWE-643",
+      "engine": "codeql",
+      "positive": true,
+      "rule_id": "py/xpath-injection",
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value = request.args.get(\"input\")\n    query = f\"/items/item[@id='{value.replace(\"'\", \"'\")}']\"\n    return str(etree.fromstring(b\"<items/>\").xpath(query))\n"
+      }
+    },
+    {
+      "id": "codeql-xpath-text-replace-unquoted",
+      "category": "CWE-643",
+      "engine": "codeql",
+      "positive": true,
+      "rule_id": "py/xpath-injection",
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value = request.args.get(\"input\")\n    query = f\"/items/item[@id={value.replace(\"'\", '')}]\"\n    return str(etree.fromstring(b\"<items/>\").xpath(query))\n"
+      }
+    },
+    {
+      "id": "codeql-xpath-text-replace-second-hole",
+      "category": "CWE-643",
+      "engine": "codeql",
+      "positive": true,
+      "rule_id": "py/xpath-injection",
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value = request.args.get(\"input\")\n    query = f\"/items/item[@id='{value.replace(\"'\", '')}' or {value}]\"\n    return str(etree.fromstring(b\"<items/>\").xpath(query))\n"
+      }
+    },
+    {
+      "id": "codeql-xpath-text-replace-repr",
+      "category": "CWE-643",
+      "engine": "codeql",
+      "positive": true,
+      "rule_id": "py/xpath-injection",
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value = request.args.get(\"input\")\n    query = f\"/items/item[@id='{value.replace(\"'\", '')!r}']\"\n    return str(etree.fromstring(b\"<items/>\").xpath(query))\n"
+      }
+    },
+    {
+      "id": "codeql-xpath-text-replace-format",
+      "category": "CWE-643",
+      "engine": "codeql",
+      "positive": true,
+      "rule_id": "py/xpath-injection",
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value = request.args.get(\"input\")\n    query = f\"/items/item[@id='{value.replace(\"'\", ''):x}']\"\n    return str(etree.fromstring(b\"<items/>\").xpath(query))\n"
+      }
+    },
+    {
+      "id": "codeql-xpath-text-phi-guard-safe",
+      "category": "CWE-643",
+      "engine": "codeql",
+      "positive": false,
+      "rule_id": "py/xpath-injection",
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value = request.args.get(\"input\")\n    if request.args.get(\"switch\"):\n        value = \"fallback\"\n    if \"'\" in value:\n        return \"rejected\"\n    query = f\"/items/item[@id='{value}']\"\n    return str(etree.fromstring(b\"<items/>\").xpath(query))\n"
+      },
+      "require_native_proof": true
+    },
+    {
+      "id": "codeql-xpath-text-phi-replace-safe",
+      "category": "CWE-643",
+      "engine": "codeql",
+      "positive": false,
+      "rule_id": "py/xpath-injection",
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value = request.args.get(\"input\")\n    if request.args.get(\"switch\"):\n        value = \"fallback\"\n    query = f\"/items/item[@id='{value.replace(\"'\", '')}']\"\n    return str(etree.fromstring(b\"<items/>\").xpath(query))\n"
+      },
+      "require_native_proof": true
+    },
+    {
+      "id": "codeql-xpath-text-phi-unknown",
+      "category": "CWE-643",
+      "engine": "codeql",
+      "positive": true,
+      "rule_id": "py/xpath-injection",
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value = request.args.get(\"input\")\n    if request.args.get(\"switch\"):\n        value = custom(value)\n    if \"'\" in value:\n        return \"rejected\"\n    query = f\"/items/item[@id='{value}']\"\n    return str(etree.fromstring(b\"<items/>\").xpath(query))\n"
+      }
+    },
+    {
+      "id": "codeql-xpath-text-guard-reassigned",
+      "category": "CWE-643",
+      "engine": "codeql",
+      "positive": true,
+      "rule_id": "py/xpath-injection",
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value = request.args.get(\"input\")\n    if \"'\" in value:\n        return \"rejected\"\n    value = request.args.get(\"other\")\n    query = f\"/items/item[@id='{value}']\"\n    return str(etree.fromstring(b\"<items/>\").xpath(query))\n"
+      }
+    },
+    {
+      "id": "codeql-xpath-text-getlist-guard-safe",
+      "category": "CWE-643",
+      "engine": "codeql",
+      "positive": false,
+      "rule_id": "py/xpath-injection",
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    values = request.headers.getlist(\"input\")\n    value = \"\"\n    if values:\n        value = values[0]\n    if \"'\" in value:\n        return \"rejected\"\n    query = f\"/items/item[@id='{value}']\"\n    return str(etree.fromstring(b\"<items/>\").xpath(query))\n"
+      },
+      "require_native_proof": true
+    },
+    {
+      "id": "codeql-xpath-text-getlist-replace-safe",
+      "category": "CWE-643",
+      "engine": "codeql",
+      "positive": false,
+      "rule_id": "py/xpath-injection",
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    values = request.headers.getlist(\"input\")\n    value = \"\"\n    if values:\n        value = values[0]\n    query = f\"/items/item[@id='{value.replace(\"'\", '')}']\"\n    return str(etree.fromstring(b\"<items/>\").xpath(query))\n"
+      },
+      "require_native_proof": true
+    },
+    {
+      "id": "codeql-xpath-text-getlist-mutated",
+      "category": "CWE-643",
+      "engine": "codeql",
+      "positive": true,
+      "rule_id": "py/xpath-injection",
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    values = request.headers.getlist(\"input\")\n    values[0] = custom(request.args.get(\"input\"))\n    value = \"\"\n    if values:\n        value = values[0]\n    if \"'\" in value:\n        return \"rejected\"\n    query = f\"/items/item[@id='{value}']\"\n    return str(etree.fromstring(b\"<items/>\").xpath(query))\n"
+      }
+    },
+    {
+      "id": "codeql-xpath-text-getlist-escaped",
+      "category": "CWE-643",
+      "engine": "codeql",
+      "positive": true,
+      "rule_id": "py/xpath-injection",
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    values = request.headers.getlist(\"input\")\n    mutate(values)\n    value = \"\"\n    if values:\n        value = values[0]\n    if \"'\" in value:\n        return \"rejected\"\n    query = f\"/items/item[@id='{value}']\"\n    return str(etree.fromstring(b\"<items/>\").xpath(query))\n"
+      }
+    },
+    {
+      "id": "codeql-xpath-text-getter-custom-type",
+      "category": "CWE-643",
+      "engine": "codeql",
+      "positive": true,
+      "rule_id": "py/xpath-injection",
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value = request.args.get(\"input\", type=custom)\n    if \"'\" in value:\n        return \"rejected\"\n    query = f\"/items/item[@id='{value}']\"\n    return str(etree.fromstring(b\"<items/>\").xpath(query))\n"
+      }
+    },
+    {
+      "id": "codeql-xpath-text-getter-custom-default",
+      "category": "CWE-643",
+      "engine": "codeql",
+      "positive": true,
+      "rule_id": "py/xpath-injection",
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value = request.args.get(\"input\", custom())\n    if \"'\" in value:\n        return \"rejected\"\n    query = f\"/items/item[@id='{value}']\"\n    return str(etree.fromstring(b\"<items/>\").xpath(query))\n"
+      }
+    },
+    {
+      "id": "codeql-path-selected-match-safe",
+      "category": "CWE-22",
+      "engine": "codeql",
+      "positive": false,
+      "rule_id": "py/path-injection",
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value = request.args.get(\"input\")\n    choice = \"ABC\"[1]\n    match choice:\n        case \"A\":\n            bar = value\n        case \"B\":\n            bar = \"fixed\"\n        case \"C\" | \"D\":\n            bar = value\n        case _:\n            bar = \"fixed\"\n    return open(\"/tmp/\" + bar).read()\n"
+      }
+    },
+    {
+      "id": "codeql-path-selected-match-live",
+      "category": "CWE-22",
+      "engine": "codeql",
+      "positive": true,
+      "rule_id": "py/path-injection",
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value = request.args.get(\"input\")\n    choice = \"ABC\"[0]\n    match choice:\n        case \"A\":\n            bar = value\n        case \"B\":\n            bar = \"fixed\"\n        case \"C\" | \"D\":\n            bar = value\n        case _:\n            bar = \"fixed\"\n    return open(\"/tmp/\" + bar).read()\n"
+      }
+    },
+    {
+      "id": "codeql-path-selected-match-unknown",
+      "category": "CWE-22",
+      "engine": "codeql",
+      "positive": true,
+      "rule_id": "py/path-injection",
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value = request.args.get(\"input\")\n    choice = request.args.get(\"choice\")\n    match choice:\n        case \"A\":\n            bar = value\n        case \"B\":\n            bar = \"fixed\"\n        case \"C\" | \"D\":\n            bar = value\n        case _:\n            bar = \"fixed\"\n    return open(\"/tmp/\" + bar).read()\n"
+      }
+    },
+    {
+      "id": "codeql-path-selected-match-reassigned",
+      "category": "CWE-22",
+      "engine": "codeql",
+      "positive": true,
+      "rule_id": "py/path-injection",
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value = request.args.get(\"input\")\n    choice = \"ABC\"[1]\n    match choice:\n        case \"A\":\n            bar = value\n        case \"B\":\n            bar = \"fixed\"\n        case \"C\" | \"D\":\n            bar = value\n        case _:\n            bar = \"fixed\"\n    bar = value\n    return open(\"/tmp/\" + bar).read()\n"
+      }
+    },
+    {
+      "id": "codeql-xpath-text-path-phi-nonstring",
+      "category": "CWE-643",
+      "engine": "codeql",
+      "positive": true,
+      "rule_id": "py/xpath-injection",
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value = request.path\n    if request.args.get(\"switch\"):\n        value = request.args.get(\"input\").split(\",\")\n    if \"'\" in value:\n        return \"rejected\"\n    query = f\"/items/item[@id='{value}']\"\n    return str(etree.fromstring(b\"<items/>\").xpath(query))\n"
+      }
+    },
+    {
+      "id": "codeql-xpath-text-url-decoded-safe",
+      "category": "CWE-643",
+      "engine": "codeql",
+      "positive": false,
+      "rule_id": "py/xpath-injection",
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    import urllib.parse\n    value = urllib.parse.unquote_plus(request.args.get(\"input\", \"\"))\n    query = f\"/items/item[@id='{value.replace(\"'\", '')}']\"\n    return str(etree.fromstring(b\"<items/>\").xpath(query))\n"
+      },
+      "require_native_proof": true
+    },
+    {
+      "id": "codeql-xpath-text-conditional-safe",
+      "category": "CWE-643",
+      "engine": "codeql",
+      "positive": false,
+      "rule_id": "py/xpath-injection",
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value = request.args.get(\"input\") if request.args.get(\"flag\") else \"fixed\"\n    query = f\"/items/item[@id='{value.replace(\"'\", '')}']\"\n    return str(etree.fromstring(b\"<items/>\").xpath(query))\n"
+      },
+      "require_native_proof": true
+    },
+    {
+      "id": "codeql-xpath-text-match-safe",
+      "category": "CWE-643",
+      "engine": "codeql",
+      "positive": false,
+      "rule_id": "py/xpath-injection",
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    match request.args.get(\"flag\"):\n        case \"one\":\n            value = request.args.get(\"input\")\n        case _:\n            value = \"fixed\"\n    query = f\"/items/item[@id='{value.replace(\"'\", '')}']\"\n    return str(etree.fromstring(b\"<items/>\").xpath(query))\n"
+      },
+      "require_native_proof": true
+    },
+    {
+      "id": "codeql-xpath-text-match-unknown",
+      "category": "CWE-643",
+      "engine": "codeql",
+      "positive": true,
+      "rule_id": "py/xpath-injection",
+      "files": {
+        "app.py": "from flask import Flask, request\nfrom lxml import etree\napp=Flask(__name__)\n@app.get(\"/test\")\ndef route():\n    value = request.args.get(\"input\").split(\",\")\n    match request.args.get(\"flag\"):\n        case \"one\":\n            value = request.args.get(\"input\")\n    if \"'\" in value:\n        return \"rejected\"\n    query = f\"/items/item[@id='{value}']\"\n    return str(etree.fromstring(b\"<items/>\").xpath(query))\n"
+      }
     }
   ]
 }

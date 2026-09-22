@@ -35,7 +35,8 @@ upstream queries against credential, LDAP, HTML, path and XPath flows. Positive
 findings must retain SARIF path traces. Controls cover identity helpers, real
 escaping, source-verified imported factories and bounded value proofs. All 15
 previously tracked mutation misses now pass as positive regressions, paired with
-safe overwrite controls. The current CodeQL corpus has 257 passing cases. Future
+safe overwrite controls. The current CodeQL corpus has **284 passing cases**,
+including paired string-provenance and selected-match controls. Future
 known-gap records must still reject unsafe constant-value proofs and cannot be
 counted as successful detections. CI requires both lanes
 through `detection-regressions` and retains their JSON results.
@@ -68,6 +69,9 @@ handles pure integer arithmetic and a single comparison in conditional expressio
 whose selected branch is a string literal. Local SSA bindings must be unique,
 defined, non-escaping fast locals without phi inputs. Unsupported operations,
 large intermediates, unknown conditions, and other taint paths retain alerts.
+Path and XPath checks also use the bounded selected-match read proof: a literal
+arm must be the first matching arm, assign a constant, and reach the read without
+intervening writes. Unknown subjects and subsequent assignments retain alerts.
 The supplemental queries compare the original and refined native flows; an
 exclusion requires an explicit result showing no refined flow to any node at
 the same sink coordinates. No absence-of-results heuristic is used.
@@ -75,11 +79,15 @@ the same sink coordinates. No absence-of-results heuristic is used.
 XPath refinement also supports an apostrophe-rejection guard on the same SSA
 value and control-flow branch when that value occupies the sole, unconverted
 hole of a supported quoted attribute comparison. The value must have a known
-string origin. An unrelated check, wrong branch, custom object, formatting
+string origin. Bounded text provenance follows local assignments and requires
+every incoming definition at a branch join to be text. Request `getlist` elements
+qualify only when their local list has no mutation, method call or escape.
+Replacing every apostrophe with a quote-free literal also qualifies inside that
+same supported hole; partial replacement does not. An unrelated check, wrong branch, custom object, formatting
 conversion, unquoted hole or unsupported expression retains the native finding.
-This context proof does not establish general XPath sanitization. Public XPath
-accuracy and false-positive regression gates still fail; developer controls and
-the [public measurements](validation-results.md) remain separate evidence.
+This context proof does not establish general XPath sanitization. Developer
+controls and the [public measurements](validation-results.md) remain separate
+evidence, and passing regression ceilings does not establish accuracy acceptance.
 
 Live scans require complete extraction, successful invocations, unchanged assets,
 and an exact rule/file/line/column match. The original finding, resolved and

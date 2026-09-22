@@ -3,9 +3,39 @@
 The acceptance gates distinguish product correctness, public benchmark results,
 and production approval. Passing one does not establish the others.
 
-### Native flow, complete inventory and production cache isolation — 2026-09-12 { #current-validation-increment }
+### XPath precision and merge qualification — 2026-09-22 { #current-validation-increment }
 
-The current native CodeQL regression corpus has **257 passing cases**. All 15
+The native CodeQL developer suite passes **284 cases**, including 27 new controls
+for selected match arms, quoted XPath replacements, URL decoding, branch joins,
+custom objects, mutation and reassignment. Focused adapter, workflow, mutation,
+governed-model and release-contract tests pass **112 tests and 9 subtests**.
+
+The complete repository-run public measurement retains all **359 protected
+detections** and records **356 TP, 106 FP, 96 FN and 672 TN**. This removes 19
+false positives from the September 12 result without losing a true positive.
+CodeQL XPath records **31 TP, 16 FP and 20 FN**, passing its unchanged regression
+ceilings of 18 FP and 32 FN. CodeQL path traversal records **54 TP, 33 FP and
+11 FN**; its false-positive ceiling remains **32**, so the overall regression
+gate still fails. Strict per-CWE accuracy also remains failed and unchanged.
+
+The remaining path regression is a ConfigParser value derived from
+`request.path` under a literal Flask route registered through dynamic imports.
+The current native framework model does not prove that registration context.
+The finding is retained rather than excluded from decorator text alone. Any
+baseline change requires a separate, explicit review of this precision/recall
+tradeoff; no baseline or protected detection was changed by this repair.
+
+These measurements are repository-run diagnostics, not new installed-wheel
+receipts or production approval. The run identifier is
+`357bf1c11e48412f84d988d7cfb94e61`; the prior artifact-bound evidence below remains
+a historical record. The six mutation shards now allow 90 minutes each after
+one shard exhausted the previous 45-minute limit. The mutant set, completeness
+requirements and 70% aggregate score threshold remain unchanged; the updated
+workflow still requires remote verification.
+
+### Native flow, complete inventory and production cache isolation — 2026-09-12
+
+At this revision the native CodeQL regression corpus had **257 passing cases**. All 15
 previously recorded collection-mutation misses are now positive regression cases,
 with 15 paired safe overwrite controls. Additional paired cases cover Flask
 session trust boundaries, exact ConfigParser section/key flow, and imported

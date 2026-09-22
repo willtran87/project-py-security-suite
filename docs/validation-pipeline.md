@@ -1,11 +1,16 @@
 # Validation pipeline and evidence boundaries
 
-Last reviewed: 2026-09-12
+Last reviewed: 2026-09-22
 
 Native detector regressions, measured accuracy and production approval are separate
 decisions. The [acceptance record](professional-acceptance.md) records completed
 local measurements and remaining gaps. The public benchmark is development data;
 it is not an independently reviewed holdout.
+
+The six mutation shards each have a bounded 90-minute execution window to
+accommodate hosted-runner variability. All shards must finish and the aggregate
+must still satisfy the unchanged 70% mutation-score ratchet. A timeout cannot
+produce passing aggregate evidence.
 
 ## Validate the wheel that will be distributed
 
